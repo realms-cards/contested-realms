@@ -1,0 +1,88 @@
+import { NextRequest } from "next/server";
+import fs from "fs";
+import path from "path";
+
+function setDirFromSlug(slug: string): string | null {
+  const code = slug.slice(0, 3);
+  switch (code) {
+    case "alp":
+      return "alpha";
+    case "bet":
+      return "beta";
+    default:
+      return null;
+  }
+}
+
+function imageBasenameFromSlug(slug: string): string {
+  return slug.replace(/^[a-z]{3}_/, "");
+}
+
+function suffixDirFromBasename(base: string): string | null {
+  const parts = base.split("_");
+  if (parts.length < 3) return null;
+  const a = parts[parts.length - 2];
+  const b = parts[parts.length - 1];
+  return `${a}_${b}`;
+}
+
+export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
+  try {
+    const slug = decodeURIComponent(params.slug || "").toLowerCase();
+    if (!slug || !/^[a-z]{3}_[a-z0-9_]+$/.test(slug)) {
+      return new Response("Bad slug", { status: 400 });
+    }
+
+    const setDir = setDirFromSlug(slug);
+    if (!setDir) {
+      return new Response("Unknown set", { status: 404 });
+    }
+
+    const base = imageBasenameFromSlug(slug);
+    const suffix = suffixDirFromBasename(base);
+
+    const root = path.join(process.cwd(), "data", setDir);
+    const exts = ["png", "jpg", "jpeg", "webp"];
+    const candidates: string[] = [];
+
+    if (suffix) {
+      for (const ext of exts) candidates.push(path.join(root, suffix, `${base}.${ext}`));
+    }
+    // Fallback: try directly under set dir
+    for (const ext of exts) candidates.push(path.join(root, `${base}.${ext}`));
+
+    let found: string | null = null;
+    for (const p of candidates) {
+      try {
+        await fs.promises.access(p, fs.constants.R_OK);
+        found = p;
+        break;
+      } catch (_) {}
+    }
+
+    if (!found) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const buf = await fs.promises.readFile(found);
+    const ext = path.extname(found).slice(1).toLowerCase();
+    const contentType =
+      ext === "png"
+        ? "image/png"
+        : ext === "jpg" || ext === "jpeg"
+        ? "image/jpeg"
+        : ext === "webp"
+        ? "image/webp"
+        : "application/octet-stream";
+
+    return new Response(buf, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+  } catch (e) {
+    console.error("/api/images error", e);
+    return new Response("Server error", { status: 500 });
+  }
+}
