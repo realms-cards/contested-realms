@@ -7,11 +7,11 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const set = searchParams.get('set') || 'Alpha';
-    const count = Math.max(1, Math.min(36, Number(searchParams.get('count') || '1')));
+    const packs = Math.max(1, Math.min(12, Number(searchParams.get('packs') || '6')));
 
-    const packs = await generateBoosters(set, count);
+    const boosters = await generateBoosters(set, packs);
 
-    return new Response(JSON.stringify({ set, count, packs }), {
+    return new Response(JSON.stringify({ set, packs, boosters }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });

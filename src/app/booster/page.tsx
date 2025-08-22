@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 
 type BoosterCard = {
   variantId: number;
@@ -89,19 +90,65 @@ export default function BoosterPage() {
       <div className="grid gap-6">
         {packs.map((pack, idx) => (
           <div key={idx} className="border rounded p-4">
-            <div className="font-medium mb-2">Pack {idx + 1}</div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
-              {pack.map((c) => (
-                <div key={c.variantId} className="border rounded p-2">
-                  <div className="font-semibold">{c.cardName}</div>
-                  <div className="opacity-80">{c.rarity} • {c.finish}</div>
-                  <div className="opacity-70 text-xs">{c.slug}</div>
+            <div className="font-medium mb-3">Pack {idx + 1}</div>
+            {(() => {
+              const sites = pack.filter((c) => (c.type || "").toLowerCase().includes("site"));
+              const spells = pack.filter((c) => !(c.type || "").toLowerCase().includes("site"));
+              return (
+                <div className="space-y-4">
+                  {!!spells.length && (
+                    <div>
+                      <div className="text-xs uppercase opacity-70 mb-2">Spellbook</div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+                        {spells.map((c) => (
+                          <div key={c.variantId} className="border rounded p-2">
+                            <div className="relative aspect-[3/4] w-full overflow-hidden rounded bg-muted/40 mb-2">
+                              <Image
+                                src={`/api/images/${c.slug}`}
+                                alt={c.cardName}
+                                fill
+                                sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+                                className="object-cover"
+                              />
+                            </div>
+                            <div className="font-semibold">{c.cardName}</div>
+                            <div className="opacity-80">{c.rarity} • {c.finish}</div>
+                            <div className="opacity-70 text-xs">{c.slug}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!!sites.length && (
+                    <div>
+                      <div className="text-xs uppercase opacity-70 mb-2">Sites</div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+                        {sites.map((c) => (
+                          <div key={c.variantId} className="border rounded p-2">
+                            <div className="relative aspect-[4/3] w-full overflow-hidden rounded bg-muted/40 mb-2">
+                              <Image
+                                src={`/api/images/${c.slug}`}
+                                alt={c.cardName}
+                                fill
+                                sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+                                className="object-contain rotate-90 origin-center"
+                              />
+                            </div>
+                            <div className="font-semibold">{c.cardName}</div>
+                            <div className="opacity-80">{c.rarity} • {c.finish}</div>
+                            <div className="opacity-70 text-xs">{c.slug}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         ))}
       </div>
     </div>
   );
 }
+
