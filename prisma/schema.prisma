@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // For development, use a local SQLite file. You can switch to env("DATABASE_URL") later.
+  url      = "file:./dev.db"
+}
+
+// Enums for consistency with Sorcery rarities and finishes
+enum Rarity {
+  Ordinary
+  Exceptional
+  Elite
+  Unique
+}
+
+enum Finish {
+  Standard
+  Foil
+}
+
+model Set {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  releasedAt  DateTime?
+
+  cardMeta    CardSetMetadata[]
+  variants    Variant[]
+  packConfig  PackConfig?
+  deckCards   DeckCard[] @relation("DeckCardSet")
+
+  @@index([name])
+}
+
+model Card {
+  id         Int       @id @default(autoincrement())
+  name       String
+  elements   String?
+  subTypes   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  meta       CardSetMetadata[]
+  variants   Variant[]
+  deckCards  DeckCard[]
+
+  @@index([name])
+}
+
+// Per-set card metadata (rarity, rules, stats)
+model CardSetMetadata {
+  id         Int      @id @default(autoincrement())
+  cardId     Int
+  setId      Int
+  rarity     Rarity
+  type       String
+  rulesText  String?
+  cost       Int?
+  attack     Int?
+  defence    Int?
+  life       Int?
+  thresholds Json?
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set  Set  @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, setId])
+  @@index([setId, rarity])
+}
+
+// Concrete printings/variants (with slug, product, finish, artist)
+model Variant {
+  id            Int      @id @default(autoincrement())
+  cardId        Int
+  setId         Int
+  slug          String   @unique
+  finish        Finish
+  product       String
+  artist        String?
+  flavorText    String?
+  typeText      String?
+  imageBasename String?  // e.g. apprentice_wizard_b_f (for local image mapping)
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set  Set  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  deckCards DeckCard[] @relation("DeckCardVariant")
+
+  @@index([setId])
+  @@index([cardId])
+}
+
+// Booster configuration per set
+model PackConfig {
+  id                     Int     @id @default(autoincrement())
+  setId                  Int     @unique
+  ordinaryCount          Int
+  exceptionalCount       Int
+  eliteOrUniqueCount     Int
+  uniqueChance           Float   // 0..1 chance that the top rarity slot is Unique instead of Elite
+  siteOrAvatarCount      Int     @default(0) // Alpha has 1, Beta 0
+  foilChance             Float?  // Probability a foil replaces an ordinary slot (if applicable)
+  foilUniqueWeight       Int     @default(1)
+  foilEliteWeight        Int     @default(3)
+  foilExceptionalWeight  Int     @default(6)
+  foilOrdinaryWeight     Int     @default(7)
+  foilReplacesOrdinary   Boolean @default(true)
+
+  set Set @relation(fields: [setId], references: [id], onDelete: Cascade)
+}
+
+// Decks for users (owner to be added later)
+model Deck {
+  id        String     @id @default(cuid())
+  name      String
+  format    String     @default("Constructed")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  cards     DeckCard[]
+}
+
+model DeckCard {
+  id        Int     @id @default(autoincrement())
+  deckId    String
+  cardId    Int
+  setId     Int?
+  variantId Int?
+  zone      String  // Spellbook | Atlas | Sideboard
+  count     Int
+
+  deck    Deck    @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  card    Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set     Set?    @relation("DeckCardSet", fields: [setId], references: [id])
+  variant Variant? @relation("DeckCardVariant", fields: [variantId], references: [id])
+
+  @@index([deckId])
+  @@index([cardId])
+}
