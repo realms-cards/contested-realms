@@ -3,6 +3,21 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// GET /api/decks
+// Returns: [{ id, name, format }]
+export async function GET() {
+  try {
+    const decks = await prisma.deck.findMany({
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true, format: true },
+    });
+    return new Response(JSON.stringify(decks), { status: 200, headers: { 'content-type': 'application/json' } });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
+  }
+}
+
 // POST /api/decks
 // Body: { name: string, format?: string, set?: string, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
 export async function POST(req: NextRequest) {
@@ -29,7 +44,6 @@ export async function POST(req: NextRequest) {
 
     // Validate zones and normalize items
     const allowedZones = new Set(['Spellbook', 'Atlas', 'Sideboard']);
-    const items: { deckId: string; cardId: number; setId: number | null; variantId: number | null; zone: string; count: number }[] = [];
 
     // Aggregate by (cardId, zone, variantId?)
     const agg = new Map<string, { cardId: number; zone: string; count: number; variantId: number | null }>();

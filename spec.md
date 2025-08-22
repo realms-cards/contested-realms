@@ -17,7 +17,12 @@ Main functions we need to accomplish:
 - Game UI should leverage a 3D engine to render the game board and the cards
 - We can focus on sealed and draft mode where each deck has a minimum of 24 spellbook cards and 12 sites
 - It would be great to be able to save and retrieve drafted decks
-
-Fixes:
-
 - Sites have a landscape layout and should be displayed rotated 90 degrees clockwise
+- It is fine to group sites and spellbook cards to different areas to help with the mixed layout of landscape and portrait oriented cards
+
+TODO:
+
+- We need an edit mode for decks - right now when we draft we only pick but we end up with too many cards.
+- Decks should be separated into three piles: Avatars (min-max 1), Atlas (min 12), Spellbook (min 24).
+- We need to make sure the deck is checked and imported correctly when setting up a game in game mode
+- Also when drafting - the bot deck should be auto-saved when the human players deck is saved.
