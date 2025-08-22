@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+export const dynamic = "force-dynamic";
 import fs from "fs";
 import path from "path";
 
@@ -26,9 +27,10 @@ function suffixDirFromBasename(base: string): string | null {
   return `${a}_${b}`;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const slug = decodeURIComponent(params.slug || "").toLowerCase();
+    const { slug: slugRaw } = await params;
+    const slug = decodeURIComponent(slugRaw || "").toLowerCase();
     if (!slug || !/^[a-z]{3}_[a-z0-9_]+$/.test(slug)) {
       return new Response("Bad slug", { status: 400 });
     }
@@ -57,7 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
         await fs.promises.access(p, fs.constants.R_OK);
         found = p;
         break;
-      } catch (_) {}
+      } catch {}
     }
 
     if (!found) {
@@ -75,7 +77,8 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
         ? "image/webp"
         : "application/octet-stream";
 
-    return new Response(buf, {
+    const body = new Uint8Array(buf);
+    return new Response(body, {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
