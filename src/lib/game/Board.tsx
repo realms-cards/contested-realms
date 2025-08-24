@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
-import { SRGBColorSpace } from "three";
+import { SRGBColorSpace, Color, AdditiveBlending } from "three";
+import type { Object3D, Raycaster, Intersection } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
@@ -35,8 +36,22 @@ type BodyApi = {
   wakeUp: () => void;
   setLinvel: (v: { x: number; y: number; z: number }, wake: boolean) => void;
   setAngvel: (v: { x: number; y: number; z: number }, wake: boolean) => void;
-  setTranslation: (v: { x: number; y: number; z: number }, wake: boolean) => void;
+  setTranslation: (
+    v: { x: number; y: number; z: number },
+    wake: boolean
+  ) => void;
 };
+
+// No-op raycast handler to make a mesh ignore pointer events (lets objects above receive them)
+function noopRaycast(
+  this: Object3D,
+  _raycaster: Raycaster,
+  _intersects: Intersection[]
+): void {
+  // Reference params to satisfy lint rules while intentionally doing nothing
+  void _raycaster;
+  void _intersects;
+}
 
 function CardPlane({
   slug,
@@ -44,12 +59,20 @@ function CardPlane({
   height,
   rotationZ = 0,
   depthWrite = true,
+  interactive = true,
+  onContextMenu,
+  elevation = 0.001,
+  onPointerDown,
 }: {
   slug: string;
   width: number;
   height: number;
   rotationZ?: number;
   depthWrite?: boolean;
+  interactive?: boolean;
+  onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
+  elevation?: number;
+  onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
 }) {
   const tex = useTexture(`/api/images/${slug}`);
   tex.colorSpace = SRGBColorSpace;
@@ -57,11 +80,106 @@ function CardPlane({
     <mesh
       rotation-x={-Math.PI / 2}
       rotation-z={rotationZ}
-      position={[0, 0.001, 0]}
+      position={[0, elevation, 0]}
+      raycast={interactive ? undefined : noopRaycast}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
       castShadow
     >
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} />
+    </mesh>
+  );
+}
+
+function CardGlow({
+  width,
+  height,
+  rotationZ = 0,
+  elevation = 0,
+  color = "#93c5fd",
+}: {
+  width: number;
+  height: number;
+  rotationZ?: number;
+  elevation?: number;
+  color?: string;
+}) {
+  const aspect = width / height;
+  const uniforms = useMemo(
+    () => ({
+      u_color: { value: new Color(color) },
+      u_aspect: { value: aspect },
+      u_border: { value: 0.12 },
+      u_softness: { value: 0.18 },
+      u_radius: { value: 0.08 },
+    }),
+    [aspect, color]
+  );
+  return (
+    <mesh
+      rotation-x={-Math.PI / 2}
+      rotation-z={rotationZ}
+      position={[0, elevation, 0]}
+      raycast={noopRaycast}
+    >
+      {/* Slightly larger than the card so the glow sits outside the edges */}
+      <planeGeometry args={[width * 1.06, height * 1.06]} />
+      <shaderMaterial
+        uniforms={uniforms}
+        vertexShader={`
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          precision highp float;
+          varying vec2 vUv;
+          uniform vec3 u_color;
+          uniform float u_aspect;
+          uniform float u_border;
+          uniform float u_softness;
+          uniform float u_radius;
+
+          float sdRoundedBox(in vec2 p, in vec2 b, in float r) {
+            vec2 q = abs(p) - b + vec2(r);
+            return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+          }
+
+          void main() {
+            // Normalize coords to [-0.5, 0.5] with aspect correction on X
+            vec2 p = (vUv - 0.5) * 2.0;
+            p.x *= u_aspect;
+
+            // Card half-extents in this space
+            vec2 b = vec2(u_aspect, 1.0) * 0.5;
+
+            // Distance to the rounded-rect card silhouette (negative inside)
+            float d = sdRoundedBox(p, b, u_radius);
+
+            // Outside-only ring from the silhouette outward
+            float border = 1.0 - smoothstep(u_border, u_border + u_softness, d);
+            float outside = smoothstep(0.0, 0.0 + u_softness, d);
+            float a = outside * border;
+
+            // Soft glow falloff beyond the hard border
+            float glow = 1.0 - smoothstep(0.0, u_border + u_softness, d);
+            a = max(a, glow * 0.5);
+
+            if (a <= 0.001) discard;
+            gl_FragColor = vec4(u_color, a);
+          }
+        `}
+        transparent
+        depthWrite={false}
+        polygonOffset
+        polygonOffsetFactor={1}
+        polygonOffsetUnits={1}
+        blending={AdditiveBlending}
+        toneMapped={false}
+      />
     </mesh>
   );
 }
@@ -78,14 +196,13 @@ export default function Board() {
   // tap toggles are handled via context menu in PlayPage
   const moveAvatarTo = useGameStore((s) => s.moveAvatarTo);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
+  const contextMenu = useGameStore((s) => s.contextMenu);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
   const avatars = useGameStore((s) => s.avatars);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const hoverCell = useGameStore((s) => s.hoverCell);
-  const setHoverCell = useGameStore((s) => s.setHoverCell);
-  const clearHoverCell = useGameStore((s) => s.clearHoverCell);
+  // hover tracking disabled for tiles
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
@@ -126,11 +243,20 @@ export default function Board() {
   const [ghost, setGhost] = useState<{ x: number; z: number } | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const [dragAvatar, setDragAvatar] = useState<"p1" | "p2" | null>(null);
+  const avatarDragStartRef = useRef<{
+    who: "p1" | "p2";
+    start: [number, number];
+    time: number;
+  } | null>(null);
+  const [selectedAvatar, setSelectedAvatar] = useState<"p1" | "p2" | null>(
+    null
+  );
   const lastDropAt = useRef<number>(0);
   const dragStartRef = useRef<{
     at: string;
     index: number;
     start: [number, number];
+    time: number;
   } | null>(null);
   // Map of cellKey:index -> RigidBody to drive during drag
   const bodyMap = useRef<Map<string, BodyApi>>(new Map());
@@ -147,6 +273,8 @@ export default function Board() {
 
   // Require some pointer travel before starting a drag (avoid click-move)
   const DRAG_THRESHOLD = TILE_SIZE * 0.08;
+  // Require a tiny hold before allowing drag start (prevents right-click wiggle drags)
+  const DRAG_HOLD_MS = 80;
 
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
@@ -165,7 +293,12 @@ export default function Board() {
     <group>
       {/* Playmat background */}
       {showPlaymat && (
-        <mesh rotation-x={-Math.PI / 2} position={[0, 0, 0]} receiveShadow>
+        <mesh
+          rotation-x={-Math.PI / 2}
+          position={[0, 0, 0]}
+          receiveShadow
+          raycast={noopRaycast}
+        >
           <planeGeometry args={[matW, matH]} />
           <meshBasicMaterial map={tex} toneMapped={false} />
         </mesh>
@@ -175,7 +308,11 @@ export default function Board() {
       <RigidBody type="fixed" colliders={false} position={[0, 0, 0]}>
         {/* Floor: half-sizes [x, y, z]; expand with EDGE_MARGIN; top at y=0 */}
         <CuboidCollider
-          args={[matW / 2 + EDGE_MARGIN, GROUND_HALF_THICK, matH / 2 + EDGE_MARGIN]}
+          args={[
+            matW / 2 + EDGE_MARGIN,
+            GROUND_HALF_THICK,
+            matH / 2 + EDGE_MARGIN,
+          ]}
           position={[0, -GROUND_HALF_THICK, 0]}
           friction={1}
           restitution={0}
@@ -227,8 +364,8 @@ export default function Board() {
         />
       </RigidBody>
 
-      {/* Interactive tiles */}
-      <group position={[0, 0.01, 0]}>
+      {/* Interactive tiles (keep at y=0 to stay lowest) */}
+      <group position={[0, 0, 0]}>
         {" "}
         {/* slight lift to avoid z-fighting */}
         {cells.map(({ x, y, key }) => {
@@ -238,30 +375,15 @@ export default function Board() {
             offsetY + y * TILE_SIZE,
           ];
           const site = board.sites[key];
-          const isHover = !!(
-            hoverCell &&
-            hoverCell[0] === x &&
-            hoverCell[1] === y
-          );
+          const isHover = false; // hover highlighting disabled
           const base = 0.16;
-          const color = isHover
-            ? `hsl(210 40% ${base * 100 + 10}%)`
-            : `hsl(210 10% ${base * 100}%)`;
-          const opacity = isHover ? 0.25 : 0.08;
+          const color = `hsl(210 10% ${base * 100}%)`;
+          const opacity = 0; // fully transparent tile overlay to avoid distraction
           return (
             <group key={key} position={pos}>
               <mesh
                 rotation-x={-Math.PI / 2}
-                onPointerOver={(e: ThreeEvent<PointerEvent>) => {
-                  e.stopPropagation();
-                  setHoverCell(x, y);
-                }}
-                onPointerOut={(e: ThreeEvent<PointerEvent>) => {
-                  e.stopPropagation();
-                  if (hoverCell && hoverCell[0] === x && hoverCell[1] === y)
-                    clearHoverCell();
-                  setGhost(null);
-                }}
+                // hover tracking disabled to reduce interference
                 onPointerMove={(e: ThreeEvent<PointerEvent>) => {
                   // Track ghost while dragging from hand, board permanent, or avatar
                   if (dragFromHand || dragging || dragAvatar) {
@@ -274,6 +396,7 @@ export default function Board() {
                   }
                 }}
                 onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+                  if (e.button !== 0) return; // only handle left-button releases for drops
                   e.stopPropagation();
                   // Handle drop from hand or moving a dragged permanent
                   if (dragAvatar) {
@@ -295,28 +418,41 @@ export default function Board() {
                       const count = items.length;
                       const startX = -((Math.max(count, 1) - 1) * spacing) / 2;
                       const idxBase = dragging.index;
-                      const owner = (items[idxBase]?.owner) ?? (permanents[dragging.from]?.[dragging.index]?.owner) ?? 1;
-                      const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                      const owner =
+                        items[idxBase]?.owner ??
+                        permanents[dragging.from]?.[dragging.index]?.owner ??
+                        1;
+                      const zBase =
+                        owner === 1
+                          ? -TILE_SIZE * 0.5 + marginZ
+                          : TILE_SIZE * 0.5 - marginZ;
                       const xPos = startX + idxBase * spacing;
                       const baseX = pos[0] + xPos;
                       const baseZ = pos[2] + zBase;
                       const offX = world.x - baseX;
                       const offZ = world.z - baseZ;
-                      if (draggedBody.current) moveDraggedBody(world.x, world.z, false);
+                      if (draggedBody.current)
+                        moveDraggedBody(world.x, world.z, false);
                       setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
                     } else {
                       const toItems = permanents[dropKey] || [];
                       const newIndex = toItems.length; // push to end
                       const newCount = toItems.length + 1;
-                      const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
-                      const owner = (permanents[dragging.from]?.[dragging.index]?.owner) ?? 1;
-                      const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                      const startX =
+                        -((Math.max(newCount, 1) - 1) * spacing) / 2;
+                      const owner =
+                        permanents[dragging.from]?.[dragging.index]?.owner ?? 1;
+                      const zBase =
+                        owner === 1
+                          ? -TILE_SIZE * 0.5 + marginZ
+                          : TILE_SIZE * 0.5 - marginZ;
                       const xPos = startX + newIndex * spacing;
                       const baseX = pos[0] + xPos;
                       const baseZ = pos[2] + zBase;
                       const offX = world.x - baseX;
                       const offZ = world.z - baseZ;
-                      if (draggedBody.current) moveDraggedBody(world.x, world.z, false);
+                      if (draggedBody.current)
+                        moveDraggedBody(world.x, world.z, false);
                       moveSelectedPermanentToWithOffset(x, y, [offX, offZ]);
                     }
                     setDragging(null);
@@ -338,7 +474,10 @@ export default function Board() {
                     const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
                     const marginZ = TILE_SIZE * 0.1;
                     const owner = currentPlayer as 1 | 2;
-                    const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                    const zBase =
+                      owner === 1
+                        ? -TILE_SIZE * 0.5 + marginZ
+                        : TILE_SIZE * 0.5 - marginZ;
                     const xPos = startX + newIndex * spacing;
                     const baseX = pos[0] + xPos;
                     const baseZ = pos[2] + zBase;
@@ -347,12 +486,16 @@ export default function Board() {
 
                     if (selected) {
                       playSelectedTo(x, y);
-                      const type = ((selected.card?.type || "") as string).toLowerCase();
+                      const type = (
+                        (selected.card?.type || "") as string
+                      ).toLowerCase();
                       if (!type.includes("site")) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
                       }
                     } else if (dragFromPile?.card) {
-                      const type = ((dragFromPile.card.type || "") as string).toLowerCase();
+                      const type = (
+                        (dragFromPile.card.type || "") as string
+                      ).toLowerCase();
                       playFromPileTo(x, y);
                       setDragFromPile(null);
                       if (!type.includes("site")) {
@@ -368,17 +511,11 @@ export default function Board() {
                   e.stopPropagation();
                   // Prevent duplicate actions when a drop just occurred on this tile
                   if (Date.now() - lastDropAt.current < 200) return;
-                  // No default left-click action on tiles
-                }}
-                onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                  e.stopPropagation();
-                  e.nativeEvent.preventDefault();
-                  if (site) {
-                    openContextMenu(
-                      { kind: "site", x, y },
-                      { x: e.clientX, y: e.clientY }
-                    );
-                  }
+                  // Treat tile left-click as background click: deselect and close menus
+                  useGameStore.getState().clearSelection();
+                  useGameStore.getState().closeContextMenu();
+                  setSelectedAvatar(null);
+                  clearHoverPreview();
                 }}
               >
                 <planeGeometry args={[TILE_SIZE * 0.96, TILE_SIZE * 0.96]} />
@@ -393,56 +530,91 @@ export default function Board() {
 
               {site && (
                 <group>
-                  {site.card?.slug ? (
-                    <group
-                      onPointerOver={(e) => {
-                        e.stopPropagation();
-                        beginHoverPreview(site.card!);
-                      }}
-                      // Left-click no longer opens context menu on sites
-                      onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                        e.stopPropagation();
-                        e.nativeEvent.preventDefault();
-                        openContextMenu(
-                          { kind: "site", x, y },
-                          { x: e.clientX, y: e.clientY }
-                        );
-                      }}
-                    >
-                      <CardPlane
-                        slug={site.card.slug!}
-                        width={CARD_SHORT}
-                        height={CARD_LONG}
-                        depthWrite={false}
-                        rotationZ={
-                          -Math.PI / 2 +
-                          (site.owner === 1 ? 0 : Math.PI) +
-                          (site.tapped ? Math.PI / 2 : 0)
-                        }
-                      />
-                    </group>
-                  ) : (
-                    <mesh
-                      position={[0, 0.01, 0]}
-                      castShadow
-                      onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                        e.stopPropagation();
-                        e.nativeEvent.preventDefault();
-                        openContextMenu(
-                          { kind: "site", x, y },
-                          { x: e.clientX, y: e.clientY }
-                        );
-                      }}
-                    >
-                      <cylinderGeometry
-                        args={[TILE_SIZE * 0.22, TILE_SIZE * 0.22, 0.02, 24]}
-                      />
-                      <meshStandardMaterial
-                        color={site.owner === 1 ? "#2f6fed" : "#d94e4e"}
-                        depthWrite={false}
-                      />
-                    </mesh>
-                  )}
+                  {(() => {
+                    const rotZ =
+                      -Math.PI / 2 +
+                      (site.owner === 1 ? 0 : Math.PI) +
+                      (site.tapped ? Math.PI / 2 : 0);
+                    const isSel =
+                      !!contextMenu &&
+                      contextMenu.target.kind === "site" &&
+                      contextMenu.target.x === x &&
+                      contextMenu.target.y === y;
+                    return (
+                      <>
+                        {isSel && (
+                          <CardGlow
+                            width={CARD_SHORT + 0.3}
+                            height={CARD_LONG + 0.4}
+                            rotationZ={rotZ}
+                            elevation={0}
+                            color={site.owner === 1 ? "#93c5fd" : "#fca5a5"}
+                          />
+                        )}
+                        {site.card?.slug ? (
+                          <group
+                            onPointerOver={(e) => {
+                              e.stopPropagation();
+                              beginHoverPreview(site.card!);
+                            }}
+                          >
+                            <CardPlane
+                              slug={site.card.slug!}
+                              width={CARD_SHORT}
+                              height={CARD_LONG}
+                              depthWrite={false}
+                              rotationZ={rotZ}
+                              elevation={0.001}
+                              onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                                e.stopPropagation();
+                                e.nativeEvent.preventDefault();
+                                openContextMenu(
+                                  { kind: "site", x, y },
+                                  { x: e.clientX, y: e.clientY }
+                                );
+                              }}
+                            />
+                          </group>
+                        ) : (
+                          <mesh
+                            position={[0, 0.001, 0]}
+                            castShadow
+                            onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                              e.stopPropagation();
+                              e.nativeEvent.preventDefault();
+                              openContextMenu(
+                                { kind: "site", x, y },
+                                { x: e.clientX, y: e.clientY }
+                              );
+                            }}
+                            onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                              if (e.button === 2) {
+                                e.stopPropagation();
+                                e.nativeEvent.preventDefault();
+                                openContextMenu(
+                                  { kind: "site", x, y },
+                                  { x: e.clientX, y: e.clientY }
+                                );
+                              }
+                            }}
+                          >
+                            <cylinderGeometry
+                              args={[
+                                TILE_SIZE * 0.22,
+                                TILE_SIZE * 0.22,
+                                0.02,
+                                24,
+                              ]}
+                            />
+                            <meshStandardMaterial
+                              color={site.owner === 1 ? "#2f6fed" : "#d94e4e"}
+                              depthWrite={false}
+                            />
+                          </mesh>
+                        )}
+                      </>
+                    );
+                  })()}
                 </group>
               )}
 
@@ -475,7 +647,8 @@ export default function Board() {
                       key={`perm-${idx}`}
                       ref={(api) => {
                         const id = `${key}:${idx}`;
-                        if (api) bodyMap.current.set(id, api as unknown as BodyApi);
+                        if (api)
+                          bodyMap.current.set(id, api as unknown as BodyApi);
                         else bodyMap.current.delete(id);
                       }}
                       type="dynamic"
@@ -494,146 +667,76 @@ export default function Board() {
                         restitution={0}
                       />
                       <group
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        useGameStore.getState().selectPermanent(key, idx);
-                        // wait for movement beyond threshold before starting drag
-                        dragStartRef.current = {
-                          at: key,
-                          index: idx,
-                          start: [e.point.x, e.point.z],
-                        };
-                        clearHoverPreview();
-                      }}
-                      onPointerOver={(e) => {
-                        e.stopPropagation();
-                        beginHoverPreview(p.card);
-                      }}
-                      onPointerOut={(e) => {
-                        e.stopPropagation();
-                        clearHoverPreview();
-                        // cancel pending drag if pointer leaves before threshold
-                        if (
-                          dragStartRef.current &&
-                          dragStartRef.current.at === key &&
-                          dragStartRef.current.index === idx
-                        ) {
-                          dragStartRef.current = null;
-                        }
-                      }}
-                      onPointerMove={(e) => {
-                        e.stopPropagation();
-                        // Start dragging once threshold exceeded
-                        if (
-                          !dragging &&
-                          dragStartRef.current &&
-                          dragStartRef.current.at === key &&
-                          dragStartRef.current.index === idx
-                        ) {
-                          const [sx, sz] = dragStartRef.current.start;
-                          const dx = e.point.x - sx;
-                          const dz = e.point.z - sz;
-                          const dist = Math.hypot(dx, dz);
-                          if (dist > DRAG_THRESHOLD) {
-                            setDragging({ from: key, index: idx });
-                            setDragFromHand(true);
-                            setGhost({ x: e.point.x, z: e.point.z });
-                            // Grab the rigid body for this permanent and lift/move it immediately
-                            draggedBody.current = bodyMap.current.get(`${key}:${idx}`) || null;
-                            if (draggedBody.current) {
-                              moveDraggedBody(e.point.x, e.point.z, true);
-                            }
+                        onPointerDown={(e) => {
+                          // Only start potential drag on left-click
+                          if (e.button === 0) {
+                            e.stopPropagation();
+                            useGameStore.getState().selectPermanent(key, idx);
+                            // wait for small hold + movement before starting drag
+                            dragStartRef.current = {
+                              at: key,
+                              index: idx,
+                              start: [e.point.x, e.point.z],
+                              time: Date.now(),
+                            };
+                            clearHoverPreview();
                           }
-                        } else if (
-                          dragging &&
-                          dragging.from === key &&
-                          dragging.index === idx &&
-                          draggedBody.current
-                        ) {
-                          // While dragging and pointer is over the card, continue driving it
-                          setGhost({ x: e.point.x, z: e.point.z });
-                          moveDraggedBody(e.point.x, e.point.z, true);
-                        }
-                      }}
-                      onPointerUp={(e) => {
-                        e.stopPropagation();
-                        if (
-                          dragging &&
-                          dragging.from === key &&
-                          dragging.index === idx
-                        ) {
-                          // Compute nearest tile from world position and preserve exact world drop
-                          const wx = e.point.x;
-                          const wz = e.point.z;
-                          let tx = Math.round((wx - offsetX) / TILE_SIZE);
-                          let ty = Math.round((wz - offsetY) / TILE_SIZE);
-                          tx = Math.max(0, Math.min(board.size.w - 1, tx));
-                          ty = Math.max(0, Math.min(board.size.h - 1, ty));
-                          const dropKey = `${tx},${ty}`;
-                          const tileX = offsetX + tx * TILE_SIZE;
-                          const tileZ = offsetY + ty * TILE_SIZE;
-                          const spacing = TILE_SIZE * 0.28;
-                          const marginZ = TILE_SIZE * 0.1;
-                          const owner = (permanents[key]?.[idx]?.owner) ?? 1;
-                          const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
-                          if (dragging.from === dropKey) {
-                            // Staying on same tile: compute baseline using current count and index
-                            const items = permanents[dropKey] || [];
-                            const count = items.length;
-                            const startX = -((Math.max(count, 1) - 1) * spacing) / 2;
-                            const xPos = startX + idx * spacing;
-                            const baseX = tileX + xPos;
-                            const baseZ = tileZ + zBase;
-                            const offX = wx - baseX;
-                            const offZ = wz - baseZ;
-                            if (draggedBody.current) moveDraggedBody(wx, wz, false);
-                            setPermanentOffset(dropKey, idx, [offX, offZ]);
-                          } else {
-                            // Moving to another tile: baseline uses new count and new index at end
-                            const toItems = permanents[dropKey] || [];
-                            const newIndex = toItems.length;
-                            const newCount = toItems.length + 1;
-                            const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
-                            const xPos = startX + newIndex * spacing;
-                            const baseX = tileX + xPos;
-                            const baseZ = tileZ + zBase;
-                            const offX = wx - baseX;
-                            const offZ = wz - baseZ;
-                            if (draggedBody.current) moveDraggedBody(wx, wz, false);
-                            moveSelectedPermanentToWithOffset(tx, ty, [offX, offZ]);
-                          }
-                          setDragging(null);
-                          setDragFromHand(false);
-                          setGhost(null);
-                          dragStartRef.current = null;
-                          lastDropAt.current = Date.now();
-                          draggedBody.current = null;
-                        }
-                      }}
-                      >
-                        {/* Selection ring */}
-                        {isSel && (
-                          <mesh rotation-x={-Math.PI / 2} position={[0, 0.05, 0]}>
-                            <ringGeometry
-                              args={[TILE_SIZE * 0.2, TILE_SIZE * 0.22, 24]}
-                            />
-                            <meshBasicMaterial
-                              color={owner === 1 ? "#93c5fd" : "#fca5a5"}
-                            />
-                          </mesh>
-                        )}
-                        <group
-                        onClick={(e) => {
+                        }}
+                        onPointerOver={(e) => {
                           e.stopPropagation();
-                          // If dragging this item, ignore clicks
+                          beginHoverPreview(p.card);
+                        }}
+                        onPointerOut={(e) => {
+                          e.stopPropagation();
+                          clearHoverPreview();
+                          // cancel pending drag if pointer leaves before threshold
                           if (
+                            dragStartRef.current &&
+                            dragStartRef.current.at === key &&
+                            dragStartRef.current.index === idx
+                          ) {
+                            dragStartRef.current = null;
+                          }
+                        }}
+                        onPointerMove={(e) => {
+                          e.stopPropagation();
+                          // Start dragging once hold + threshold exceeded
+                          if (
+                            !dragging &&
+                            dragStartRef.current &&
+                            dragStartRef.current.at === key &&
+                            dragStartRef.current.index === idx
+                          ) {
+                            const [sx, sz] = dragStartRef.current.start;
+                            const dx = e.point.x - sx;
+                            const dz = e.point.z - sz;
+                            const dist = Math.hypot(dx, dz);
+                            const heldFor =
+                              Date.now() - dragStartRef.current.time;
+                            if (
+                              heldFor >= DRAG_HOLD_MS &&
+                              dist > DRAG_THRESHOLD
+                            ) {
+                              setDragging({ from: key, index: idx });
+                              setDragFromHand(true);
+                              setGhost({ x: e.point.x, z: e.point.z });
+                              // Grab the rigid body for this permanent and lift/move it immediately
+                              draggedBody.current =
+                                bodyMap.current.get(`${key}:${idx}`) || null;
+                              if (draggedBody.current) {
+                                moveDraggedBody(e.point.x, e.point.z, true);
+                              }
+                            }
+                          } else if (
                             dragging &&
                             dragging.from === key &&
-                            dragging.index === idx
-                          )
-                            return;
-                          // Left-click selects only; context menu via right-click
-                          useGameStore.getState().selectPermanent(key, idx);
+                            dragging.index === idx &&
+                            draggedBody.current
+                          ) {
+                            // While dragging and pointer is over the card, continue driving it
+                            setGhost({ x: e.point.x, z: e.point.z });
+                            moveDraggedBody(e.point.x, e.point.z, true);
+                          }
                         }}
                         onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                           e.stopPropagation();
@@ -646,22 +749,126 @@ export default function Board() {
                               { x: e.clientX, y: e.clientY }
                             );
                         }}
+                        onPointerUp={(e) => {
+                          if (e.button !== 0) return; // ignore non-left button releases
+                          e.stopPropagation();
+                          if (
+                            dragging &&
+                            dragging.from === key &&
+                            dragging.index === idx
+                          ) {
+                            // Compute nearest tile from world position and preserve exact world drop
+                            const wx = e.point.x;
+                            const wz = e.point.z;
+                            let tx = Math.round((wx - offsetX) / TILE_SIZE);
+                            let ty = Math.round((wz - offsetY) / TILE_SIZE);
+                            tx = Math.max(0, Math.min(board.size.w - 1, tx));
+                            ty = Math.max(0, Math.min(board.size.h - 1, ty));
+                            const dropKey = `${tx},${ty}`;
+                            const tileX = offsetX + tx * TILE_SIZE;
+                            const tileZ = offsetY + ty * TILE_SIZE;
+                            const spacing = TILE_SIZE * 0.28;
+                            const marginZ = TILE_SIZE * 0.1;
+                            const owner = permanents[key]?.[idx]?.owner ?? 1;
+                            const zBase =
+                              owner === 1
+                                ? -TILE_SIZE * 0.5 + marginZ
+                                : TILE_SIZE * 0.5 - marginZ;
+                            if (dragging.from === dropKey) {
+                              // Staying on same tile: compute baseline using current count and index
+                              const items = permanents[dropKey] || [];
+                              const count = items.length;
+                              const startX =
+                                -((Math.max(count, 1) - 1) * spacing) / 2;
+                              const xPos = startX + idx * spacing;
+                              const baseX = tileX + xPos;
+                              const baseZ = tileZ + zBase;
+                              const offX = wx - baseX;
+                              const offZ = wz - baseZ;
+                              if (draggedBody.current)
+                                moveDraggedBody(wx, wz, false);
+                              setPermanentOffset(dropKey, idx, [offX, offZ]);
+                            } else {
+                              // Moving to another tile: baseline uses new count and new index at end
+                              const toItems = permanents[dropKey] || [];
+                              const newIndex = toItems.length;
+                              const newCount = toItems.length + 1;
+                              const startX =
+                                -((Math.max(newCount, 1) - 1) * spacing) / 2;
+                              const xPos = startX + newIndex * spacing;
+                              const baseX = tileX + xPos;
+                              const baseZ = tileZ + zBase;
+                              const offX = wx - baseX;
+                              const offZ = wz - baseZ;
+                              if (draggedBody.current)
+                                moveDraggedBody(wx, wz, false);
+                              moveSelectedPermanentToWithOffset(tx, ty, [
+                                offX,
+                                offZ,
+                              ]);
+                            }
+                            setDragging(null);
+                            setDragFromHand(false);
+                            setGhost(null);
+                            dragStartRef.current = null;
+                            lastDropAt.current = Date.now();
+                            draggedBody.current = null;
+                          }
+                        }}
                       >
-                        {p.card.slug ? (
-                          <CardPlane
-                            slug={p.card.slug!}
-                            width={CARD_SHORT}
-                            height={CARD_LONG}
+                        {/* Selection glow */}
+                        {isSel && (
+                          <CardGlow
+                            width={CARD_SHORT + 0.3}
+                            height={CARD_LONG + 0.4}
                             rotationZ={rotZ}
+                            elevation={0}
+                            color={owner === 1 ? "#93c5fd" : "#fca5a5"}
                           />
-                        ) : (
-                          <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                            <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                            <meshStandardMaterial
-                              color={owner === 1 ? "#3b82f6" : "#ef4444"}
-                            />
-                          </mesh>
                         )}
+                        <group
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // If dragging this item, ignore clicks
+                            if (
+                              dragging &&
+                              dragging.from === key &&
+                              dragging.index === idx
+                            )
+                              return;
+                            // Left-click selects only; context menu via right-click
+                            useGameStore.getState().selectPermanent(key, idx);
+                          }}
+                          onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                            e.stopPropagation();
+                            e.nativeEvent.preventDefault();
+                            // Ensure the permanent is selected before opening the menu
+                            useGameStore.getState().selectPermanent(key, idx);
+                            useGameStore
+                              .getState()
+                              .openContextMenu(
+                                { kind: "permanent", at: key, index: idx },
+                                { x: e.clientX, y: e.clientY }
+                              );
+                          }}
+                        >
+                          {p.card.slug ? (
+                            <CardPlane
+                              slug={p.card.slug!}
+                              width={CARD_SHORT}
+                              height={CARD_LONG}
+                              rotationZ={rotZ}
+                            />
+                          ) : (
+                            <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
+                              <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
+                              <meshStandardMaterial
+                                color={owner === 1 ? "#3b82f6" : "#ef4444"}
+                                transparent
+                                opacity={0}
+                              />
+                            </mesh>
+                          )}
                         </group>
                       </group>
                     </RigidBody>
@@ -695,18 +902,30 @@ export default function Board() {
         const [ax, ay] = a.pos;
         const wx = offsetX + ax * TILE_SIZE;
         const wy = offsetY + ay * TILE_SIZE;
+        // While dragging anything over the board (hand card, pile card, or the avatar itself),
+        // make the avatar ignore pointer events so tiles receive drops.
+        // Only disable intersections while a drag ghost is present.
+        const disableAvatarIntersections =
+          !!ghost && (!!dragAvatar || !!dragFromHand || !!dragFromPile);
         return (
           <group
             key={`avatar-${who}`}
             position={[wx, 0.05, wy]}
             onPointerDown={(e) => {
+              if (disableAvatarIntersections) return;
+              // Left-click: arm potential drag; selection handled on pointer up if no drag starts
+              if (e.button !== 0) return;
               e.stopPropagation();
-              setDragAvatar(who);
-              useGameStore.getState().setDragFromHand(true);
+              avatarDragStartRef.current = {
+                who,
+                start: [e.point.x, e.point.z],
+                time: Date.now(),
+              };
               clearHoverPreview();
             }}
             // Left-click no longer opens context menu on avatars
             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+              if (disableAvatarIntersections) return;
               e.stopPropagation();
               e.nativeEvent.preventDefault();
               openContextMenu(
@@ -714,44 +933,125 @@ export default function Board() {
                 { x: e.clientX, y: e.clientY }
               );
             }}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              if (a.card) beginHoverPreview(a.card);
-            }}
             onPointerOut={(e) => {
+              if (disableAvatarIntersections) return;
               e.stopPropagation();
               clearHoverPreview();
+              // cancel pending drag if pointer leaves before threshold
+              if (
+                avatarDragStartRef.current &&
+                avatarDragStartRef.current.who === who
+              ) {
+                avatarDragStartRef.current = null;
+              }
+            }}
+            onPointerMove={(e) => {
+              if (disableAvatarIntersections) return;
+              e.stopPropagation();
+              if (
+                !dragAvatar &&
+                avatarDragStartRef.current &&
+                avatarDragStartRef.current.who === who
+              ) {
+                const [sx, sz] = avatarDragStartRef.current.start;
+                const dx = e.point.x - sx;
+                const dz = e.point.z - sz;
+                const dist = Math.hypot(dx, dz);
+                const heldFor = Date.now() - avatarDragStartRef.current.time;
+                if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
+                  setDragAvatar(who);
+                  setDragFromHand(true);
+                  setGhost({ x: e.point.x, z: e.point.z });
+                  setSelectedAvatar(null);
+                }
+              }
             }}
             onPointerUp={(e) => {
+              if (disableAvatarIntersections) return;
+              if (e.button !== 0) return;
               e.stopPropagation();
-              // If released on avatar itself, just end drag without moving
-              if (dragAvatar) {
+              // If released on avatar itself while dragging, just end drag without moving
+              if (dragAvatar === who) {
                 setDragAvatar(null);
                 setDragFromHand(false);
+                avatarDragStartRef.current = null;
+                return;
+              }
+              // Treat as selection if a press occurred but drag didn't start
+              if (
+                avatarDragStartRef.current &&
+                avatarDragStartRef.current.who === who
+              ) {
+                setSelectedAvatar(who);
+                avatarDragStartRef.current = null;
               }
             }}
           >
-            <mesh rotation-x={-Math.PI / 2} position={[0, -0.01, 0]}>
-              <ringGeometry args={[TILE_SIZE * 0.18, TILE_SIZE * 0.2, 24]} />
-              <meshBasicMaterial color={who === "p1" ? "#60a5fa" : "#f87171"} />
-            </mesh>
             {(() => {
               const rotZ =
-                (who === "p2" ? Math.PI : 0) + (a.tapped ? Math.PI / 2 : 0);
-              return a.card?.slug ? (
-                <CardPlane
-                  slug={a.card.slug!}
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={rotZ}
-                />
-              ) : (
-                <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                  <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                  <meshStandardMaterial
-                    color={who === "p1" ? "#60a5fa" : "#f87171"}
-                  />
-                </mesh>
+                (who === "p1" ? Math.PI : 0) + (a.tapped ? Math.PI / 2 : 0);
+              const isSel =
+                selectedAvatar === who ||
+                (!!contextMenu &&
+                  contextMenu.target.kind === "avatar" &&
+                  contextMenu.target.who === who) ||
+                dragAvatar === who;
+              return (
+                <>
+                  {isSel && (
+                    <CardGlow
+                      width={CARD_SHORT + 0.3}
+                      height={CARD_LONG + 0.4}
+                      rotationZ={rotZ}
+                      elevation={0}
+                      color={who === "p1" ? "#93c5fd" : "#fca5a5"}
+                    />
+                  )}
+                  {a.card?.slug ? (
+                    <CardPlane
+                      slug={a.card.slug!}
+                      width={CARD_SHORT}
+                      height={CARD_LONG}
+                      rotationZ={rotZ}
+                      interactive={!disableAvatarIntersections}
+                      onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                        if (disableAvatarIntersections) return;
+                        e.stopPropagation();
+                        e.nativeEvent.preventDefault();
+                        openContextMenu(
+                          { kind: "avatar", who },
+                          { x: e.clientX, y: e.clientY }
+                        );
+                      }}
+                      onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                        if (disableAvatarIntersections) return;
+                        if (e.button === 2) {
+                          e.stopPropagation();
+                          e.nativeEvent.preventDefault();
+                          openContextMenu(
+                            { kind: "avatar", who },
+                            { x: e.clientX, y: e.clientY }
+                          );
+                        }
+                      }}
+                    />
+                  ) : (
+                    <mesh
+                      rotation-x={-Math.PI / 2}
+                      rotation-z={rotZ}
+                      raycast={
+                        disableAvatarIntersections ? noopRaycast : undefined
+                      }
+                    >
+                      <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
+                      <meshStandardMaterial
+                        color={who === "p1" ? "#60a5fa" : "#f87171"}
+                        transparent
+                        opacity={0}
+                      />
+                    </mesh>
+                  )}
+                </>
               );
             })()}
           </group>
@@ -795,7 +1095,7 @@ export default function Board() {
               const a = avatars[who];
               if (!a) return null;
               const rotZ =
-                (who === "p2" ? Math.PI : 0) + (a.tapped ? Math.PI / 2 : 0);
+                (who === "p1" ? Math.PI : 0) + (a.tapped ? Math.PI / 2 : 0);
               return a.card?.slug ? (
                 <CardPlane
                   slug={a.card.slug!}
@@ -816,15 +1116,14 @@ export default function Board() {
               const isSite = (selected.card.type || "")
                 .toLowerCase()
                 .includes("site");
-              const rotZ = isSite ? Math.PI / 2 : 0;
-              const w = isSite ? CARD_LONG : CARD_SHORT;
-              const h = isSite ? CARD_SHORT : CARD_LONG;
+              const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
+              const rotZ = isSite ? -Math.PI / 2 + ownerRot : 0;
               if (!selected.card.slug) return null;
               return (
                 <CardPlane
                   slug={selected.card.slug}
-                  width={w}
-                  height={h}
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
                   rotationZ={rotZ}
                 />
               );
@@ -832,15 +1131,14 @@ export default function Board() {
             if (dragFromHand && dragFromPile?.card) {
               const c = dragFromPile.card;
               const isSite = (c.type || "").toLowerCase().includes("site");
-              const rotZ = isSite ? Math.PI / 2 : 0;
-              const w = isSite ? CARD_LONG : CARD_SHORT;
-              const h = isSite ? CARD_SHORT : CARD_LONG;
+              const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
+              const rotZ = isSite ? -Math.PI / 2 + ownerRot : 0;
               if (!c.slug) return null;
               return (
                 <CardPlane
                   slug={c.slug}
-                  width={w}
-                  height={h}
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
                   rotationZ={rotZ}
                 />
               );

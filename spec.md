@@ -24,9 +24,6 @@ CONSIDER THESE DONE:
 
 TODO:
 
-- site display on the board is still not working correctly
-- sites in the hand are smaller than spells and are rotated in the wrong direction, they are displayed "upside down"
-- sites on the board are played in portrait orientation, when it should be landscape, basically it should be exactly the same way as the hand display of sites
 - hand magnification on hover can be way smaller, magnification on click is a problem because it can inadvertedly lead to playing a card we should disable playing cards from hand with a click and use drag only
 - we should be able to move and scale the big card preview
 - for cards on the board the preview should appear much faster, maybe when the pointer lingers on a card for 1 second
@@ -58,6 +55,10 @@ TODO:
 - when a site is moved to the cemetary, hand or is banished treshold and mana should be updated accordingly
 - we want to enable the context menu only on right click, so we can left click to select a card for dragging more easily
 - Sites might need to be dragged to in rare cases
+- our card "containers" should be fully transparent, as the card art has rounded edges
+- if more than one card are overlapping a site card, we should give the site card the lowest priority for catching a selection
+- instead of the circle objects to indicate a selected card, it would be better to have a glowing outline on the card
+- when releasing a dragged card it seems to (unnecessarily) jump a little before being played down, we can remove that
 - The controls to slide and zoom the board are actually more important than the current orbit view, I would love a toggle between the current orbit controls and another mode that seems only 2d topdown, where player can only zoom and slide
 
 EDITOR:

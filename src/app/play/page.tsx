@@ -758,9 +758,15 @@ export default function PlayPage() {
       {contextMenu && (
         <div
           className="absolute inset-0 z-30"
-          onClick={() => closeContextMenu()}
+          onClick={() => {
+            clearSelection();
+            setPreviewCard(null);
+            closeContextMenu();
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
+            clearSelection();
+            setPreviewCard(null);
             closeContextMenu();
           }}
         >
@@ -1319,6 +1325,19 @@ export default function PlayPage() {
           className={`${
             dragFromHand ? "pointer-events-none" : "pointer-events-auto"
           } mx-auto max-w-5xl px-3 py-2 text-sm text-white overflow-visible`}
+          onClick={() => {
+            // Clicking empty hand area: clear UI selection/menu/preview
+            clearSelection();
+            closeContextMenu();
+            setPreviewCard(null);
+          }}
+          onContextMenu={(e) => {
+            // Right-click empty hand area should close any menu and deselect
+            e.preventDefault();
+            clearSelection();
+            closeContextMenu();
+            setPreviewCard(null);
+          }}
         >
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pt-16">
             {(zones.p1.hand || []).map((c, i) => {
@@ -1336,10 +1355,16 @@ export default function PlayPage() {
                       : "border-white/15 bg-white/10 hover:bg-white/20"
                   }`}
                   title={c.name}
-                  onClick={() =>
-                    isSel ? clearSelection() : selectHandCard("p1", i)
-                  }
-                  onMouseDown={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isSel) {
+                      clearSelection();
+                    } else {
+                      selectHandCard("p1", i);
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
                     // Start drag only if this card is already selected
                     if (
                       selected &&
@@ -1422,7 +1447,15 @@ export default function PlayPage() {
       })()}
 
       {/* Board */}
-      <Canvas camera={{ position: [0, 10, 0], fov: 50 }} shadows>
+      <Canvas
+        camera={{ position: [0, 10, 0], fov: 50 }}
+        shadows
+        onPointerMissed={() => {
+          clearSelection();
+          closeContextMenu();
+          setPreviewCard(null);
+        }}
+      >
         <color attach="background" args={["#0b0b0c"]} />
         <ambientLight intensity={0.6} />
         <directionalLight position={[10, 12, 8]} intensity={1} castShadow />
