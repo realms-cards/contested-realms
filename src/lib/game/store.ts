@@ -43,8 +43,21 @@ export type Zones = {
   banished: CardRef[]; // removed for the rest of the game
 };
 
-export type AvatarState = { card: CardRef | null; pos: [number, number] | null; tapped: boolean };
-export type PermanentItem = { owner: 1 | 2; card: CardRef; offset?: [number, number] | null; tapped?: boolean; tilt?: number };
+// Shared base for all board entities (avatars and permanents)
+export type EntityBase<TCard> = {
+  card: TCard;
+  offset?: [number, number] | null;
+  tapped?: boolean;
+};
+
+export type AvatarState = EntityBase<CardRef | null> & {
+  pos: [number, number] | null;
+};
+
+export type PermanentItem = EntityBase<CardRef> & {
+  owner: 1 | 2;
+  tilt?: number;
+};
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
 // Context menu targeting for click-driven actions
@@ -65,13 +78,10 @@ export type GameState = {
   endTurn: () => void; // auto-resolve to next player's Main
   // Board
   board: BoardState;
-  sitePlacementMode: boolean;
   showGridOverlay: boolean;
   showPlaymat: boolean;
-  toggleSitePlacement: () => void;
   toggleGridOverlay: () => void;
   togglePlaymat: () => void;
-  placeSite: (x: number, y: number) => void; // legacy quick placement (no card)
   toggleTapSite: (x: number, y: number) => void;
   // Zones and actions
   zones: Record<PlayerKey, Zones>;
@@ -102,6 +112,8 @@ export type GameState = {
   setAvatarCard: (who: PlayerKey, card: CardRef) => void;
   placeAvatarAtStart: (who: PlayerKey) => void;
   moveAvatarTo: (who: PlayerKey, x: number, y: number) => void;
+  moveAvatarToWithOffset: (who: PlayerKey, x: number, y: number, offset: [number, number]) => void;
+  setAvatarOffset: (who: PlayerKey, offset: [number, number] | null) => void;
   toggleTapAvatar: (who: PlayerKey) => void;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
@@ -143,7 +155,6 @@ export type SerializedGame = {
   currentPlayer: 1 | 2;
   phase: Phase;
   board: BoardState;
-  sitePlacementMode: boolean;
   showGridOverlay: boolean;
   showPlaymat: boolean;
   zones: Record<PlayerKey, Zones>;
@@ -160,6 +171,45 @@ export type SerializedGame = {
 // Small random visual tilt for permanents to reduce overlap uniformity (radians ~ -0.05..+0.05)
 const randomTilt = () => Math.random() * 0.1 - 0.05;
 
+// ---- Shared helpers (pure) -------------------------------------------------
+
+// Move a permanent between cells with optional new offset while preserving
+// existing behavior around tilt and offset. Returns a new permanents map and
+// the moved card's name for logging.
+function movePermanentCore(
+  perIn: Permanents,
+  fromKey: CellKey,
+  index: number,
+  toKey: CellKey,
+  newOffset: [number, number] | null
+): { per: Permanents; movedName: string } {
+  const per: Permanents = { ...perIn };
+  const fromArr = [...(per[fromKey] || [])];
+  const item = fromArr.splice(index, 1)[0]!;
+  const toArr = [...(per[toKey] || [])];
+  // When newOffset is null, keep existing offset; when provided, set it.
+  // For tilt: if item has none, assign a random one on move; otherwise keep.
+  const toPush: PermanentItem =
+    newOffset == null
+      ? (item.tilt == null ? { ...item, tilt: randomTilt() } : item)
+      : { ...item, offset: newOffset, tilt: item.tilt ?? randomTilt() };
+  toArr.push(toPush);
+  per[fromKey] = fromArr;
+  per[toKey] = toArr;
+  return { per, movedName: item.card.name };
+}
+
+// Build an updated avatars record with a new position/offset for a player.
+function buildAvatarUpdate(
+  s: GameState,
+  who: PlayerKey,
+  pos: [number, number],
+  offset: [number, number] | null
+): Record<PlayerKey, AvatarState> {
+  const next = { ...s.avatars[who], pos, offset } as AvatarState;
+  return { ...s.avatars, [who]: next } as Record<PlayerKey, AvatarState>;
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   players: {
     p1: { life: 20, mana: 0, thresholds: { air: 0, water: 0, earth: 0, fire: 0 } },
@@ -169,7 +219,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   phase: "Start",
   setPhase: (phase) => set({ phase }),
   board: { size: { w: 5, h: 4 }, sites: {} },
-  sitePlacementMode: false,
   showGridOverlay: false,
   showPlaymat: true,
   zones: {
@@ -204,7 +253,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentPlayer: s.currentPlayer,
         phase: s.phase,
         board: JSON.parse(JSON.stringify(s.board)),
-        sitePlacementMode: s.sitePlacementMode,
         showGridOverlay: s.showGridOverlay,
         showPlaymat: s.showPlaymat,
         zones: JSON.parse(JSON.stringify(s.zones)),
@@ -233,7 +281,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentPlayer: prev.currentPlayer,
         phase: prev.phase,
         board: prev.board,
-        sitePlacementMode: prev.sitePlacementMode,
         showGridOverlay: prev.showGridOverlay,
         showPlaymat: prev.showPlaymat,
         zones: prev.zones,
@@ -304,7 +351,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         phase: nextPhase,
         currentPlayer: nextPlayer,
         board: { ...s.board, sites },
-        sitePlacementMode: false,
         selectedCard: null,
       });
       get().log(`Turn passes to P${nextPlayer}`);
@@ -332,7 +378,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       phase: "Main",
       currentPlayer: nextPlayer,
       board: { ...s.board, sites },
-      sitePlacementMode: false,
       selectedCard: null,
       selectedPermanent: null,
     });
@@ -340,23 +385,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().log(`Turn passes to P${nextPlayer}`);
   },
 
-  toggleSitePlacement: () => set((s) => ({ sitePlacementMode: !s.sitePlacementMode })),
   toggleGridOverlay: () => set((s) => ({ showGridOverlay: !s.showGridOverlay })),
   togglePlaymat: () => set((s) => ({ showPlaymat: !s.showPlaymat })),
-
-  placeSite: (x, y) =>
-    set((s) => {
-      if (!s.sitePlacementMode) return s;
-      const key: CellKey = `${x},${y}`;
-      if (s.board.sites[key]) return s; // occupied
-      return {
-        board: {
-          ...s.board,
-          sites: { ...s.board.sites, [key]: { owner: s.currentPlayer } },
-        },
-        sitePlacementMode: false,
-      } as Partial<GameState> as GameState;
-    }),
 
   toggleTapSite: (x, y) =>
     set((s) => {
@@ -441,7 +471,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return { selectedCard: { who, index, card }, selectedPermanent: null };
     }),
 
-  clearSelection: () => set({ selectedCard: null, selectedPermanent: null, sitePlacementMode: false }),
+  clearSelection: () => set({ selectedCard: null, selectedPermanent: null }),
 
   playSelectedTo: (x, y) =>
     set((s) => {
@@ -518,7 +548,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
           board: { ...s.board, sites },
           selectedCard: null,
-          sitePlacementMode: false,
         } as Partial<GameState> as GameState;
       }
 
@@ -534,7 +563,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,
-        sitePlacementMode: false,
       } as Partial<GameState> as GameState;
     }),
 
@@ -612,7 +640,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           board: { ...s.board, sites },
           dragFromPile: null,
           dragFromHand: false,
-          sitePlacementMode: false,
         } as Partial<GameState> as GameState;
       }
 
@@ -628,7 +655,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         permanents: per,
         dragFromPile: null,
         dragFromHand: false,
-        sitePlacementMode: false,
       } as Partial<GameState> as GameState;
     }),
 
@@ -646,17 +672,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().pushHistory();
       const fromKey: CellKey = sel.at;
       const toKey: CellKey = `${x},${y}`;
-      const per: Permanents = { ...s.permanents };
-      const fromArr = [...(per[fromKey] || [])];
-      const item = fromArr.splice(sel.index, 1)[0];
-      if (!item) return s;
-      const toArr = [...(per[toKey] || [])];
-      const toPush: PermanentItem = item.tilt == null ? { ...item, tilt: randomTilt() } : item;
-      toArr.push(toPush);
-      per[fromKey] = fromArr;
-      per[toKey] = toArr;
+      const exists = (s.permanents[fromKey] || [])[sel.index];
+      if (!exists) return s;
+      const { per, movedName } = movePermanentCore(s.permanents, fromKey, sel.index, toKey, null);
       const cellNo = y * s.board.size.w + x + 1;
-      get().log(`Moved '${item.card.name}' to #${cellNo}`);
+      get().log(`Moved '${movedName}' to #${cellNo}`);
       return { permanents: per, selectedPermanent: null } as Partial<GameState> as GameState;
     }),
 
@@ -667,17 +687,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().pushHistory();
       const fromKey: CellKey = sel.at;
       const toKey: CellKey = `${x},${y}`;
-      const per: Permanents = { ...s.permanents };
-      const fromArr = [...(per[fromKey] || [])];
-      const item = fromArr.splice(sel.index, 1)[0];
-      if (!item) return s;
-      const toArr = [...(per[toKey] || [])];
-      const toPush: PermanentItem = { ...item, offset, tilt: item.tilt ?? randomTilt() };
-      toArr.push(toPush);
-      per[fromKey] = fromArr;
-      per[toKey] = toArr;
+      const exists = (s.permanents[fromKey] || [])[sel.index];
+      if (!exists) return s;
+      const { per, movedName } = movePermanentCore(s.permanents, fromKey, sel.index, toKey, offset);
       const cellNo = y * s.board.size.w + x + 1;
-      get().log(`Moved '${item.card.name}' to #${cellNo} (nudged)`);
+      get().log(`Moved '${movedName}' to #${cellNo} (nudged)`);
       return { permanents: per, selectedPermanent: null } as Partial<GameState> as GameState;
     }),
 
@@ -803,10 +817,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const w = s.board.size.w;
       const h = s.board.size.h;
       const x = Math.floor(w / 2);
-      const y = who === "p1" ? 0 : h - 1;
+      // Board coordinate system: y=0 is bottom row, y=h-1 is top row.
+      // Desired: p1 at TOP middle, p2 at BOTTOM middle.
+      const y = who === "p1" ? h - 1 : 0;
       const cellNo = y * w + x + 1;
       get().log(`${who.toUpperCase()} places Avatar at #${cellNo}`);
-      return { avatars: { ...s.avatars, [who]: { ...s.avatars[who], pos: [x, y] } } } as Partial<GameState> as GameState;
+      return { avatars: { ...s.avatars, [who]: { ...s.avatars[who], pos: [x, y], offset: null } } } as Partial<GameState> as GameState;
     }),
 
   moveAvatarTo: (who, x, y) =>
@@ -814,9 +830,26 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().pushHistory();
       const w = s.board.size.w;
       const cellNo = y * w + x + 1;
-      const next = { ...s.avatars[who], pos: [x, y] as [number, number] };
+      const avatars = buildAvatarUpdate(s, who, [x, y] as [number, number], null);
       get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
-      return { avatars: { ...s.avatars, [who]: next } } as Partial<GameState> as GameState;
+      return { avatars } as Partial<GameState> as GameState;
+    }),
+
+  moveAvatarToWithOffset: (who, x, y, offset) =>
+    set((s) => {
+      get().pushHistory();
+      const w = s.board.size.w;
+      const cellNo = y * w + x + 1;
+      const avatars = buildAvatarUpdate(s, who, [x, y] as [number, number], offset);
+      get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (nudged)`);
+      return { avatars } as Partial<GameState> as GameState;
+    }),
+
+  setAvatarOffset: (who, offset) =>
+    set((s) => {
+      const cur = s.avatars[who];
+      if (!cur) return s;
+      return { avatars: { ...s.avatars, [who]: { ...cur, offset } } } as Partial<GameState> as GameState;
     }),
 
   toggleTapAvatar: (who) =>
