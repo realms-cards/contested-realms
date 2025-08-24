@@ -3,33 +3,29 @@
 import { useMemo, useRef, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
-import { SRGBColorSpace, Color, AdditiveBlending } from "three";
-import type { Object3D, Raycaster, Intersection } from "three";
+import { SRGBColorSpace, type Object3D, type Raycaster, type Intersection } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-
-// Base tile size (playmat uses this); visual grid previously reduced by 15%.
-// Increase grid size by ~10% while keeping playmat size unchanged.
-const BASE_TILE_SIZE = 1.5;
-const TILE_SIZE = BASE_TILE_SIZE * 0.85 * 1.1; // world units per cell (slightly increased)
-// Playmat native pixel size and aspect ratio (must be preserved)
-const MAT_PIXEL_W = 2556;
-const MAT_PIXEL_H = 1663;
-const MAT_RATIO = MAT_PIXEL_W / MAT_PIXEL_H; // ~1.5385
-
-// Standard card size (keep long edge consistent across spells and sites)
-const CARD_LONG = TILE_SIZE * 0.55; // long edge
-const CARD_SHORT = CARD_LONG * 0.75; // 3:4 ratio
-// Thin physical thickness for card collisions
-const CARD_THICK = Math.max(0.012, CARD_LONG * 0.02);
-// Height to lift a card while dragging so it clears neighbors and the ground
-const DRAG_LIFT = CARD_THICK * 2 + 0.15;
-// Ground collider half-thickness; keep robust to avoid tunneling through a too-thin floor
-const GROUND_HALF_THICK = 0.05;
-const EDGE_MARGIN = TILE_SIZE * 0.5; // expand ground beyond mat a little
-const WALL_THICK = 0.06;
-const WALL_HALF_HEIGHT = 0.6; // 1.2 units tall walls
+import CardPlane from "@/lib/game/components/CardPlane";
+import CardGlow from "@/lib/game/components/CardGlow";
+import {
+  BASE_TILE_SIZE,
+  TILE_SIZE,
+  MAT_PIXEL_W,
+  MAT_PIXEL_H,
+  MAT_RATIO,
+  CARD_LONG,
+  CARD_SHORT,
+  CARD_THICK,
+  DRAG_LIFT,
+  GROUND_HALF_THICK,
+  EDGE_MARGIN,
+  WALL_THICK,
+  WALL_HALF_HEIGHT,
+  DRAG_THRESHOLD,
+  DRAG_HOLD_MS,
+} from "@/lib/game/constants";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
 type BodyApi = {
@@ -53,145 +49,6 @@ function noopRaycast(
   void _intersects;
 }
 
-function CardPlane({
-  slug,
-  width,
-  height,
-  rotationZ = 0,
-  depthWrite = true,
-  interactive = true,
-  onContextMenu,
-  elevation = 0.001,
-  onPointerDown,
-  onPointerOver,
-  onPointerOut,
-  onClick,
-}: {
-  slug: string;
-  width: number;
-  height: number;
-  rotationZ?: number;
-  depthWrite?: boolean;
-  interactive?: boolean;
-  onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
-  elevation?: number;
-  onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
-  onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
-  onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
-  onClick?: (e: ThreeEvent<PointerEvent>) => void;
-}) {
-  const tex = useTexture(`/api/images/${slug}`);
-  tex.colorSpace = SRGBColorSpace;
-  return (
-    <mesh
-      rotation-x={-Math.PI / 2}
-      rotation-z={rotationZ}
-      position={[0, elevation, 0]}
-      raycast={interactive ? undefined : noopRaycast}
-      onContextMenu={onContextMenu}
-      onPointerDown={onPointerDown}
-      onPointerOver={onPointerOver}
-      onPointerOut={onPointerOut}
-      onClick={onClick}
-      castShadow
-    >
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} />
-    </mesh>
-  );
-}
-
-function CardGlow({
-  width,
-  height,
-  rotationZ = 0,
-  elevation = 0,
-  color = "#93c5fd",
-}: {
-  width: number;
-  height: number;
-  rotationZ?: number;
-  elevation?: number;
-  color?: string;
-}) {
-  const aspect = width / height;
-  const uniforms = useMemo(
-    () => ({
-      u_color: { value: new Color(color) },
-      u_aspect: { value: aspect },
-      u_border: { value: 0.12 },
-      u_softness: { value: 0.18 },
-      u_radius: { value: 0.08 },
-    }),
-    [aspect, color]
-  );
-  return (
-    <mesh
-      rotation-x={-Math.PI / 2}
-      rotation-z={rotationZ}
-      position={[0, elevation, 0]}
-      raycast={noopRaycast}
-    >
-      {/* Slightly larger than the card so the glow sits outside the edges */}
-      <planeGeometry args={[width * 1.06, height * 1.06]} />
-      <shaderMaterial
-        uniforms={uniforms}
-        vertexShader={`
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `}
-        fragmentShader={`
-          precision highp float;
-          varying vec2 vUv;
-          uniform vec3 u_color;
-          uniform float u_aspect;
-          uniform float u_border;
-          uniform float u_softness;
-          uniform float u_radius;
-
-          float sdRoundedBox(in vec2 p, in vec2 b, in float r) {
-            vec2 q = abs(p) - b + vec2(r);
-            return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-          }
-
-          void main() {
-            // Normalize coords to [-0.5, 0.5] with aspect correction on X
-            vec2 p = (vUv - 0.5) * 2.0;
-            p.x *= u_aspect;
-
-            // Card half-extents in this space
-            vec2 b = vec2(u_aspect, 1.0) * 0.5;
-
-            // Distance to the rounded-rect card silhouette (negative inside)
-            float d = sdRoundedBox(p, b, u_radius);
-
-            // Outside-only ring from the silhouette outward
-            float border = 1.0 - smoothstep(u_border, u_border + u_softness, d);
-            float outside = smoothstep(0.0, 0.0 + u_softness, d);
-            float a = outside * border;
-
-            // Soft glow falloff beyond the hard border
-            float glow = 1.0 - smoothstep(0.0, u_border + u_softness, d);
-            a = max(a, glow * 0.5);
-
-            if (a <= 0.001) discard;
-            gl_FragColor = vec4(u_color, a);
-          }
-        `}
-        transparent
-        depthWrite={false}
-        polygonOffset
-        polygonOffsetFactor={1}
-        polygonOffsetUnits={1}
-        blending={AdditiveBlending}
-        toneMapped={false}
-      />
-    </mesh>
-  );
-}
 
 export default function Board() {
   const board = useGameStore((s) => s.board);
@@ -280,10 +137,6 @@ export default function Board() {
     api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.2, z }, true);
   }
 
-  // Require some pointer travel before starting a drag (avoid click-move)
-  const DRAG_THRESHOLD = TILE_SIZE * 0.08;
-  // Require a tiny hold before allowing drag start (prevents right-click wiggle drags)
-  const DRAG_HOLD_MS = 80;
 
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
