@@ -59,7 +59,12 @@ TODO:
 - if more than one card are overlapping a site card, we should give the site card the lowest priority for catching a selection
 - instead of the circle objects to indicate a selected card, it would be better to have a glowing outline on the card
 - when releasing a dragged card it seems to (unnecessarily) jump a little before being played down, we can remove that
+- I would really like for the hand, the draw piles and the graveyard to be part of the 3d engine instead of the HUD - can you assess a possible implementation and prepare
 - The controls to slide and zoom the board are actually more important than the current orbit view, I would love a toggle between the current orbit controls and another mode that seems only 2d topdown, where player can only zoom and slide
+- We can remove the toggle for the playmat
+  the area of the site itself seems to not allow right clicks at all
+  I can not drag the avatar
+  I also realized that on hover magnification is not workin for avatars but other card types
 
 EDITOR:
 
