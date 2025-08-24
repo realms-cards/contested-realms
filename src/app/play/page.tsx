@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Physics } from "@react-three/rapier";
 import { Star, Dice6 } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
@@ -57,6 +58,10 @@ export default function PlayPage() {
   const avatars = useGameStore((s) => s.avatars);
   const moveSiteToZone = useGameStore((s) => s.moveSiteToZone);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
+  const transferSiteControl = useGameStore((s) => s.transferSiteControl);
+  const transferPermanentControl = useGameStore(
+    (s) => s.transferPermanentControl
+  );
   const cur = currentPlayer === 1 ? p1 : p2;
   // Selected hand card (for magnifier)
   const selectedHandCard = (() => {
@@ -406,7 +411,9 @@ export default function PlayPage() {
                                     fill
                                     sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
                                     className={`${
-                                      isSite ? "object-contain rotate-90" : "object-cover"
+                                      isSite
+                                        ? "object-contain rotate-90"
+                                        : "object-cover"
                                     }`}
                                   />
                                 </div>
@@ -774,6 +781,8 @@ export default function PlayPage() {
               let doToHand: (() => void) | null = null;
               let doToGY: (() => void) | null = null;
               let doBanish: (() => void) | null = null;
+              let doTransfer: (() => void) | null = null;
+              let transferTo: 1 | 2 | null = null;
               if (t.kind === "site") {
                 const key = `${t.x},${t.y}`;
                 const site = board.sites[key];
@@ -784,6 +793,14 @@ export default function PlayPage() {
                   toggleTapSite(t.x, t.y);
                   closeContextMenu();
                 };
+                // Transfer
+                if (site) {
+                  transferTo = site.owner === 1 ? 2 : 1;
+                  doTransfer = () => {
+                    transferSiteControl(t.x, t.y);
+                    closeContextMenu();
+                  };
+                }
                 // Zone moves for sites
                 doToHand = () => {
                   moveSiteToZone(t.x, t.y, "hand");
@@ -805,6 +822,14 @@ export default function PlayPage() {
                   toggleTapPermanent(t.at, t.index);
                   closeContextMenu();
                 };
+                // Transfer
+                if (item) {
+                  transferTo = item.owner === 1 ? 2 : 1;
+                  doTransfer = () => {
+                    transferPermanentControl(t.at, t.index);
+                    closeContextMenu();
+                  };
+                }
                 // Zone moves for permanents
                 doToHand = () => {
                   movePermanentToZone(t.at, t.index, "hand");
@@ -844,6 +869,16 @@ export default function PlayPage() {
                     >
                       {label}
                     </button>
+                    {doTransfer && (
+                      <button
+                        className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                        onClick={doTransfer}
+                      >
+                        {`Transfer control${
+                          transferTo ? ` to P${transferTo}` : ""
+                        }`}
+                      </button>
+                    )}
                     {(doToHand || doToGY || doBanish) && (
                       <div className="space-y-2">
                         {doToHand && (
@@ -901,40 +936,53 @@ export default function PlayPage() {
                 <div className="text-lg font-mono">
                   {zones.p2.spellbook.length}
                 </div>
-                {zones.p2.spellbook.length > 0 && (() => {
-                  const top = zones.p2.spellbook[0];
-                  const isSite = (top?.type || "").toLowerCase().includes("site");
-                  return (
-                    <button
-                      className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-                      title={top.name}
-                      onMouseDown={() => {
-                        setDragFromPile({ who: "p2", from: "spellbook", card: top });
-                        setDragFromHand(true);
-                      }}
-                      onDragStart={(e) => e.preventDefault()}
-                    >
-                      {top?.slug ? (
-                        <div
-                          className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} w-20 mx-auto rounded overflow-visible`}
-                        >
-                          <Image
-                            src={`/api/images/${top.slug}`}
-                            alt={top.name}
-                            fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${isSite ? "object-contain -rotate-90" : "object-cover"}`}
-                            draggable={false}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                          {top?.name || "Top card"}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                {zones.p2.spellbook.length > 0 &&
+                  (() => {
+                    const top = zones.p2.spellbook[0];
+                    const isSite = (top?.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <button
+                        className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
+                        title={top.name}
+                        onMouseDown={() => {
+                          setDragFromPile({
+                            who: "p2",
+                            from: "spellbook",
+                            card: top,
+                          });
+                          setDragFromHand(true);
+                        }}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {top?.slug ? (
+                          <div
+                            className={`relative ${
+                              isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                            } w-20 mx-auto rounded overflow-visible`}
+                          >
+                            <Image
+                              src={`/api/images/${top.slug}`}
+                              alt={top.name}
+                              fill
+                              sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                              className={`${
+                                isSite
+                                  ? "object-contain -rotate-90"
+                                  : "object-cover"
+                              }`}
+                              draggable={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
+                            {top?.name || "Top card"}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })()}
                 <button
                   className="mt-1 w-full rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 disabled:opacity-40"
                   disabled={
@@ -951,40 +999,53 @@ export default function PlayPage() {
               <div className="rounded-lg bg-white/10 ring-1 ring-white/10 p-2 text-center">
                 <div className="opacity-80">Atlas</div>
                 <div className="text-lg font-mono">{zones.p2.atlas.length}</div>
-                {zones.p2.atlas.length > 0 && (() => {
-                  const top = zones.p2.atlas[0];
-                  const isSite = (top?.type || "").toLowerCase().includes("site");
-                  return (
-                    <button
-                      className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-                      title={top.name}
-                      onMouseDown={() => {
-                        setDragFromPile({ who: "p2", from: "atlas", card: top });
-                        setDragFromHand(true);
-                      }}
-                      onDragStart={(e) => e.preventDefault()}
-                    >
-                      {top?.slug ? (
-                        <div
-                          className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} w-20 mx-auto rounded overflow-visible`}
-                        >
-                          <Image
-                            src={`/api/images/${top.slug}`}
-                            alt={top.name}
-                            fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${isSite ? "object-contain -rotate-90" : "object-cover"}`}
-                            draggable={false}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                          {top?.name || "Top card"}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                {zones.p2.atlas.length > 0 &&
+                  (() => {
+                    const top = zones.p2.atlas[0];
+                    const isSite = (top?.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <button
+                        className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
+                        title={top.name}
+                        onMouseDown={() => {
+                          setDragFromPile({
+                            who: "p2",
+                            from: "atlas",
+                            card: top,
+                          });
+                          setDragFromHand(true);
+                        }}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {top?.slug ? (
+                          <div
+                            className={`relative ${
+                              isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                            } w-20 mx-auto rounded overflow-visible`}
+                          >
+                            <Image
+                              src={`/api/images/${top.slug}`}
+                              alt={top.name}
+                              fill
+                              sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                              className={`${
+                                isSite
+                                  ? "object-contain -rotate-90"
+                                  : "object-cover"
+                              }`}
+                              draggable={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
+                            {top?.name || "Top card"}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })()}
                 <button
                   className="mt-1 w-full rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 disabled:opacity-40"
                   disabled={
@@ -1003,40 +1064,53 @@ export default function PlayPage() {
                 <div className="text-lg font-mono">
                   {zones.p2.graveyard.length}
                 </div>
-                {zones.p2.graveyard.length > 0 && (() => {
-                  const top = zones.p2.graveyard[0];
-                  const isSite = (top?.type || "").toLowerCase().includes("site");
-                  return (
-                    <button
-                      className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-                      title={top.name}
-                      onMouseDown={() => {
-                        setDragFromPile({ who: "p2", from: "graveyard", card: top });
-                        setDragFromHand(true);
-                      }}
-                      onDragStart={(e) => e.preventDefault()}
-                    >
-                      {top?.slug ? (
-                        <div
-                          className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} w-20 mx-auto rounded overflow-visible`}
-                        >
-                          <Image
-                            src={`/api/images/${top.slug}`}
-                            alt={top.name}
-                            fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${isSite ? "object-contain -rotate-90" : "object-cover"}`}
-                            draggable={false}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                          {top?.name || "Top card"}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                {zones.p2.graveyard.length > 0 &&
+                  (() => {
+                    const top = zones.p2.graveyard[0];
+                    const isSite = (top?.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <button
+                        className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
+                        title={top.name}
+                        onMouseDown={() => {
+                          setDragFromPile({
+                            who: "p2",
+                            from: "graveyard",
+                            card: top,
+                          });
+                          setDragFromHand(true);
+                        }}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {top?.slug ? (
+                          <div
+                            className={`relative ${
+                              isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                            } w-20 mx-auto rounded overflow-visible`}
+                          >
+                            <Image
+                              src={`/api/images/${top.slug}`}
+                              alt={top.name}
+                              fill
+                              sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                              className={`${
+                                isSite
+                                  ? "object-contain -rotate-90"
+                                  : "object-cover"
+                              }`}
+                              draggable={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
+                            {top?.name || "Top card"}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })()}
               </div>
             </div>
           </div>
@@ -1058,40 +1132,53 @@ export default function PlayPage() {
                 <div className="text-lg font-mono">
                   {zones.p1.spellbook.length}
                 </div>
-                {zones.p1.spellbook.length > 0 && (() => {
-                  const top = zones.p1.spellbook[0];
-                  const isSite = (top?.type || "").toLowerCase().includes("site");
-                  return (
-                    <button
-                      className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-                      title={top.name}
-                      onMouseDown={() => {
-                        setDragFromPile({ who: "p1", from: "spellbook", card: top });
-                        setDragFromHand(true);
-                      }}
-                      onDragStart={(e) => e.preventDefault()}
-                    >
-                      {top?.slug ? (
-                        <div
-                          className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} w-20 mx-auto rounded overflow-visible`}
-                        >
-                          <Image
-                            src={`/api/images/${top.slug}`}
-                            alt={top.name}
-                            fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${isSite ? "object-contain -rotate-90" : "object-cover"}`}
-                            draggable={false}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                          {top?.name || "Top card"}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                {zones.p1.spellbook.length > 0 &&
+                  (() => {
+                    const top = zones.p1.spellbook[0];
+                    const isSite = (top?.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <button
+                        className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
+                        title={top.name}
+                        onMouseDown={() => {
+                          setDragFromPile({
+                            who: "p1",
+                            from: "spellbook",
+                            card: top,
+                          });
+                          setDragFromHand(true);
+                        }}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {top?.slug ? (
+                          <div
+                            className={`relative ${
+                              isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                            } w-20 mx-auto rounded overflow-visible`}
+                          >
+                            <Image
+                              src={`/api/images/${top.slug}`}
+                              alt={top.name}
+                              fill
+                              sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                              className={`${
+                                isSite
+                                  ? "object-contain -rotate-90"
+                                  : "object-cover"
+                              }`}
+                              draggable={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
+                            {top?.name || "Top card"}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })()}
                 <button
                   className="mt-1 w-full rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 disabled:opacity-40"
                   disabled={
@@ -1108,40 +1195,53 @@ export default function PlayPage() {
               <div className="rounded-lg bg-white/10 ring-1 ring-white/10 p-2 text-center">
                 <div className="opacity-80">Atlas</div>
                 <div className="text-lg font-mono">{zones.p1.atlas.length}</div>
-                {zones.p1.atlas.length > 0 && (() => {
-                  const top = zones.p1.atlas[0];
-                  const isSite = (top?.type || "").toLowerCase().includes("site");
-                  return (
-                    <button
-                      className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-                      title={top.name}
-                      onMouseDown={() => {
-                        setDragFromPile({ who: "p1", from: "atlas", card: top });
-                        setDragFromHand(true);
-                      }}
-                      onDragStart={(e) => e.preventDefault()}
-                    >
-                      {top?.slug ? (
-                        <div
-                          className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} w-20 mx-auto rounded overflow-visible`}
-                        >
-                          <Image
-                            src={`/api/images/${top.slug}`}
-                            alt={top.name}
-                            fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${isSite ? "object-contain -rotate-90" : "object-cover"}`}
-                            draggable={false}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                          {top?.name || "Top card"}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                {zones.p1.atlas.length > 0 &&
+                  (() => {
+                    const top = zones.p1.atlas[0];
+                    const isSite = (top?.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <button
+                        className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
+                        title={top.name}
+                        onMouseDown={() => {
+                          setDragFromPile({
+                            who: "p1",
+                            from: "atlas",
+                            card: top,
+                          });
+                          setDragFromHand(true);
+                        }}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {top?.slug ? (
+                          <div
+                            className={`relative ${
+                              isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                            } w-20 mx-auto rounded overflow-visible`}
+                          >
+                            <Image
+                              src={`/api/images/${top.slug}`}
+                              alt={top.name}
+                              fill
+                              sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                              className={`${
+                                isSite
+                                  ? "object-contain -rotate-90"
+                                  : "object-cover"
+                              }`}
+                              draggable={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
+                            {top?.name || "Top card"}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })()}
                 <button
                   className="mt-1 w-full rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 disabled:opacity-40"
                   disabled={
@@ -1160,40 +1260,53 @@ export default function PlayPage() {
                 <div className="text-lg font-mono">
                   {zones.p1.graveyard.length}
                 </div>
-                {zones.p1.graveyard.length > 0 && (() => {
-                  const top = zones.p1.graveyard[0];
-                  const isSite = (top?.type || "").toLowerCase().includes("site");
-                  return (
-                    <button
-                      className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-                      title={top.name}
-                      onMouseDown={() => {
-                        setDragFromPile({ who: "p1", from: "graveyard", card: top });
-                        setDragFromHand(true);
-                      }}
-                      onDragStart={(e) => e.preventDefault()}
-                    >
-                      {top?.slug ? (
-                        <div
-                          className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} w-20 mx-auto rounded overflow-visible`}
-                        >
-                          <Image
-                            src={`/api/images/${top.slug}`}
-                            alt={top.name}
-                            fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${isSite ? "object-contain -rotate-90" : "object-cover"}`}
-                            draggable={false}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                          {top?.name || "Top card"}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                {zones.p1.graveyard.length > 0 &&
+                  (() => {
+                    const top = zones.p1.graveyard[0];
+                    const isSite = (top?.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <button
+                        className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
+                        title={top.name}
+                        onMouseDown={() => {
+                          setDragFromPile({
+                            who: "p1",
+                            from: "graveyard",
+                            card: top,
+                          });
+                          setDragFromHand(true);
+                        }}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {top?.slug ? (
+                          <div
+                            className={`relative ${
+                              isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                            } w-20 mx-auto rounded overflow-visible`}
+                          >
+                            <Image
+                              src={`/api/images/${top.slug}`}
+                              alt={top.name}
+                              fill
+                              sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                              className={`${
+                                isSite
+                                  ? "object-contain -rotate-90"
+                                  : "object-cover"
+                              }`}
+                              draggable={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
+                            {top?.name || "Top card"}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })()}
               </div>
             </div>
           </div>
@@ -1241,9 +1354,7 @@ export default function PlayPage() {
                   {c.slug ? (
                     <div
                       className={`relative ${
-                        isSite
-                          ? "aspect-[4/3] w-28"
-                          : "aspect-[3/4] h-28"
+                        isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] h-28"
                       } rounded overflow-visible bg-muted/40`}
                     >
                       <Image
@@ -1293,7 +1404,9 @@ export default function PlayPage() {
                   alt={c.name}
                   fill
                   sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
-                  className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
+                  className={`${
+                    isSite ? "object-contain rotate-90" : "object-contain"
+                  }`}
                 />
               </div>
               <button
@@ -1314,8 +1427,10 @@ export default function PlayPage() {
         <ambientLight intensity={0.6} />
         <directionalLight position={[10, 12, 8]} intensity={1} castShadow />
 
-        {/* Interactive board */}
-        <Board />
+        {/* Interactive board (physics-enabled) */}
+        <Physics gravity={[0, -9.81, 0]}>
+          <Board />
+        </Physics>
 
         <OrbitControls
           makeDefault

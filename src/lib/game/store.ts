@@ -94,6 +94,9 @@ export type GameState = {
   // Move cards from board back to zones
   movePermanentToZone: (at: CellKey, index: number, target: 'hand' | 'graveyard' | 'banished') => void;
   moveSiteToZone: (x: number, y: number, target: 'hand' | 'graveyard' | 'banished') => void;
+  // Transfer control
+  transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
+  transferSiteControl: (x: number, y: number, to?: 1 | 2) => void;
   avatars: Record<PlayerKey, AvatarState>;
   permanents: Permanents;
   setAvatarCard: (who: PlayerKey, card: CardRef) => void;
@@ -751,6 +754,42 @@ export const useGameStore = create<GameState>((set, get) => ({
       const label = target === 'hand' ? 'hand' : target === 'graveyard' ? 'graveyard' : 'banished';
       get().log(`Moved site '${site.card.name}' from #${cellNo} to ${owner.toUpperCase()} ${label}`);
       return { board: { ...s.board, sites }, zones } as Partial<GameState> as GameState;
+    }),
+
+  // Transfer control of a permanent at a given cell/index (toggle if 'to' not provided)
+  transferPermanentControl: (at, index, to) =>
+    set((s) => {
+      get().pushHistory();
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      const item = arr[index];
+      if (!item) return s;
+      const fromOwner = item.owner;
+      const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
+      arr[index] = { ...item, owner: newOwner };
+      per[at] = arr;
+      const cell = at.split(",");
+      const x = Number(cell[0] || 0);
+      const y = Number(cell[1] || 0);
+      const cellNo = y * s.board.size.w + x + 1;
+      get().log(`Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`);
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  // Transfer control of a site at a given x,y (toggle if 'to' not provided)
+  transferSiteControl: (x, y, to) =>
+    set((s) => {
+      get().pushHistory();
+      const key: CellKey = `${x},${y}`;
+      const site = s.board.sites[key];
+      if (!site) return s;
+      const fromOwner = site.owner;
+      const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
+      const sites = { ...s.board.sites, [key]: { ...site, owner: newOwner } };
+      const cellNo = y * s.board.size.w + x + 1;
+      const name = site.card?.name || `Site #${cellNo}`;
+      get().log(`Control of '${name}' at #${cellNo} transferred to P${newOwner}`);
+      return { board: { ...s.board, sites } } as Partial<GameState> as GameState;
     }),
 
   setAvatarCard: (who, card) =>

@@ -42,7 +42,7 @@ TODO:
 - We do not need manual transition through the game phases, we only need end turn and resolve the rest according to the rules
 - We need a console on screen with transparency and collapsable, tracking all game events
 - we can also make moves to hand and cemetary part of the context menu
-- can wer disable the browser menu right click on the canvas and replace right-click with context menu?
+- can we disable the browser menu right click on the canvas and replace right-click with context menu?
 - context menu should appear at the cursor position
 - can we disable any text selection on the whole play page?
 - can we leave a card on the board exactly where the ghost was when the button of the mouse was released?
@@ -55,7 +55,10 @@ TODO:
 - cards can also be banished which is a different zone than the cemetary
 - players mana should be counted according to the sites they played
 - players mana and treshold should be displayed in the 3D viewport at the side of the respective player, not in the HUD
-- when a site is moved to the cemetary, hand or is banished treshold and manu should be updated accordingly
+- when a site is moved to the cemetary, hand or is banished treshold and mana should be updated accordingly
+- we want to enable the context menu only on right click, so we can left click to select a card for dragging more easily
+- Sites might need to be dragged to in rare cases
+- The controls to slide and zoom the board are actually more important than the current orbit view, I would love a toggle between the current orbit controls and another mode that seems only 2d topdown, where player can only zoom and slide
 
 EDITOR:
 
@@ -92,3 +95,9 @@ ONLINE MULTIPLAYER:
 - We should save decks in the players store (including automatically saved bot decks for their draft sessions)
 - Then we need a lobby system to be able to find players to play with
 - Then we need to fork our play client (which we want to preserve for offline play) and make it work with the online lobby and multiplayer over the network
+- There should be chat in a second tab of the console
+- when a player ends a turn we need a big visual signal for the other player that it is their turn now
+- We want some form of pinging the opponent on the board to signal various things in context (like a flag or a down pointing arrow)
+
+PLACEMENT:
+its actually both - placement and orientation on the grid. For example - in IRL play I would play a site to the bottom of a grid cell and a creature to the top of a grid cell, all of those cards would be oriented so I can read them. My opponent would play their cards so that they can read them (which is upside down from my perspective and expected - its very easy to track ownership of a card this way)
