@@ -6,6 +6,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { SRGBColorSpace } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
+import { RigidBody, CuboidCollider } from "@react-three/rapier";
 
 // Base tile size (playmat uses this); visual grid previously reduced by 15%.
 // Increase grid size by ~10% while keeping playmat size unchanged.
@@ -19,17 +20,36 @@ const MAT_RATIO = MAT_PIXEL_W / MAT_PIXEL_H; // ~1.5385
 // Standard card size (keep long edge consistent across spells and sites)
 const CARD_LONG = TILE_SIZE * 0.55; // long edge
 const CARD_SHORT = CARD_LONG * 0.75; // 3:4 ratio
+// Thin physical thickness for card collisions
+const CARD_THICK = Math.max(0.012, CARD_LONG * 0.02);
+// Height to lift a card while dragging so it clears neighbors and the ground
+const DRAG_LIFT = CARD_THICK * 2 + 0.15;
+// Ground collider half-thickness; keep robust to avoid tunneling through a too-thin floor
+const GROUND_HALF_THICK = 0.05;
+const EDGE_MARGIN = TILE_SIZE * 0.5; // expand ground beyond mat a little
+const WALL_THICK = 0.06;
+const WALL_HALF_HEIGHT = 0.6; // 1.2 units tall walls
+
+// Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
+type BodyApi = {
+  wakeUp: () => void;
+  setLinvel: (v: { x: number; y: number; z: number }, wake: boolean) => void;
+  setAngvel: (v: { x: number; y: number; z: number }, wake: boolean) => void;
+  setTranslation: (v: { x: number; y: number; z: number }, wake: boolean) => void;
+};
 
 function CardPlane({
   slug,
   width,
   height,
   rotationZ = 0,
+  depthWrite = true,
 }: {
   slug: string;
   width: number;
   height: number;
   rotationZ?: number;
+  depthWrite?: boolean;
 }) {
   const tex = useTexture(`/api/images/${slug}`);
   tex.colorSpace = SRGBColorSpace;
@@ -37,21 +57,19 @@ function CardPlane({
     <mesh
       rotation-x={-Math.PI / 2}
       rotation-z={rotationZ}
-      position={[0, 0.06, 0]}
+      position={[0, 0.001, 0]}
       castShadow
     >
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={tex} toneMapped={false} />
+      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} />
     </mesh>
   );
 }
 
 export default function Board() {
   const board = useGameStore((s) => s.board);
-  const sitePlacementMode = useGameStore((s) => s.sitePlacementMode);
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
-  const placeSite = useGameStore((s) => s.placeSite);
   const playSelectedTo = useGameStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useGameStore(
     (s) => s.moveSelectedPermanentToWithOffset
@@ -64,6 +82,7 @@ export default function Board() {
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
   const avatars = useGameStore((s) => s.avatars);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
   const hoverCell = useGameStore((s) => s.hoverCell);
   const setHoverCell = useGameStore((s) => s.setHoverCell);
   const clearHoverCell = useGameStore((s) => s.clearHoverCell);
@@ -113,6 +132,18 @@ export default function Board() {
     index: number;
     start: [number, number];
   } | null>(null);
+  // Map of cellKey:index -> RigidBody to drive during drag
+  const bodyMap = useRef<Map<string, BodyApi>>(new Map());
+  const draggedBody = useRef<BodyApi | null>(null);
+
+  function moveDraggedBody(x: number, z: number, lift = true) {
+    const api = draggedBody.current;
+    if (!api) return;
+    api.wakeUp();
+    api.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    api.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.2, z }, true);
+  }
 
   // Require some pointer travel before starting a drag (avoid click-move)
   const DRAG_THRESHOLD = TILE_SIZE * 0.08;
@@ -140,6 +171,62 @@ export default function Board() {
         </mesh>
       )}
 
+      {/* Physics ground collider matching the playmat extents */}
+      <RigidBody type="fixed" colliders={false} position={[0, 0, 0]}>
+        {/* Floor: half-sizes [x, y, z]; expand with EDGE_MARGIN; top at y=0 */}
+        <CuboidCollider
+          args={[matW / 2 + EDGE_MARGIN, GROUND_HALF_THICK, matH / 2 + EDGE_MARGIN]}
+          position={[0, -GROUND_HALF_THICK, 0]}
+          friction={1}
+          restitution={0}
+        />
+        {/* Boundary walls around the play area to prevent falling off */}
+        {/* Left wall */}
+        <CuboidCollider
+          args={[WALL_THICK / 2, WALL_HALF_HEIGHT, matH / 2 + EDGE_MARGIN]}
+          position={[
+            -(matW / 2 + EDGE_MARGIN + WALL_THICK / 2),
+            WALL_HALF_HEIGHT,
+            0,
+          ]}
+          friction={1}
+          restitution={0}
+        />
+        {/* Right wall */}
+        <CuboidCollider
+          args={[WALL_THICK / 2, WALL_HALF_HEIGHT, matH / 2 + EDGE_MARGIN]}
+          position={[
+            matW / 2 + EDGE_MARGIN + WALL_THICK / 2,
+            WALL_HALF_HEIGHT,
+            0,
+          ]}
+          friction={1}
+          restitution={0}
+        />
+        {/* Bottom wall */}
+        <CuboidCollider
+          args={[matW / 2 + EDGE_MARGIN, WALL_HALF_HEIGHT, WALL_THICK / 2]}
+          position={[
+            0,
+            WALL_HALF_HEIGHT,
+            -(matH / 2 + EDGE_MARGIN + WALL_THICK / 2),
+          ]}
+          friction={1}
+          restitution={0}
+        />
+        {/* Top wall */}
+        <CuboidCollider
+          args={[matW / 2 + EDGE_MARGIN, WALL_HALF_HEIGHT, WALL_THICK / 2]}
+          position={[
+            0,
+            WALL_HALF_HEIGHT,
+            matH / 2 + EDGE_MARGIN + WALL_THICK / 2,
+          ]}
+          friction={1}
+          restitution={0}
+        />
+      </RigidBody>
+
       {/* Interactive tiles */}
       <group position={[0, 0.01, 0]}>
         {" "}
@@ -156,11 +243,11 @@ export default function Board() {
             hoverCell[0] === x &&
             hoverCell[1] === y
           );
-          const base = sitePlacementMode ? 0.22 : 0.16;
+          const base = 0.16;
           const color = isHover
             ? `hsl(210 40% ${base * 100 + 10}%)`
             : `hsl(210 10% ${base * 100}%)`;
-          const opacity = sitePlacementMode || isHover ? 0.25 : 0.08;
+          const opacity = isHover ? 0.25 : 0.08;
           return (
             <group key={key} position={pos}>
               <mesh
@@ -180,6 +267,10 @@ export default function Board() {
                   if (dragFromHand || dragging || dragAvatar) {
                     const world = e.point;
                     setGhost({ x: world.x, z: world.z });
+                    // If dragging a permanent, drive its rigid body with the pointer
+                    if (dragging && draggedBody.current) {
+                      moveDraggedBody(world.x, world.z, true);
+                    }
                   }
                 }}
                 onPointerUp={(e: ThreeEvent<PointerEvent>) => {
@@ -195,15 +286,37 @@ export default function Board() {
                   }
                   if (dragging) {
                     const dropKey = `${x},${y}`;
-                    // Compute local offset within tile from center
-                    const world = e.point; // r3f ThreeEvent has .point
-                    const offX = world.x - pos[0];
-                    const offZ = world.z - pos[2];
+                    const world = e.point;
+                    // Compute offsets relative to the rendered slot baseline (row position + zBase)
+                    const spacing = TILE_SIZE * 0.28;
+                    const marginZ = TILE_SIZE * 0.1;
                     if (dragging.from === dropKey) {
-                      // Nudge in place
+                      const items = permanents[dropKey] || [];
+                      const count = items.length;
+                      const startX = -((Math.max(count, 1) - 1) * spacing) / 2;
+                      const idxBase = dragging.index;
+                      const owner = (items[idxBase]?.owner) ?? (permanents[dragging.from]?.[dragging.index]?.owner) ?? 1;
+                      const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                      const xPos = startX + idxBase * spacing;
+                      const baseX = pos[0] + xPos;
+                      const baseZ = pos[2] + zBase;
+                      const offX = world.x - baseX;
+                      const offZ = world.z - baseZ;
+                      if (draggedBody.current) moveDraggedBody(world.x, world.z, false);
                       setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
                     } else {
-                      // Move to another tile with offset
+                      const toItems = permanents[dropKey] || [];
+                      const newIndex = toItems.length; // push to end
+                      const newCount = toItems.length + 1;
+                      const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
+                      const owner = (permanents[dragging.from]?.[dragging.index]?.owner) ?? 1;
+                      const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                      const xPos = startX + newIndex * spacing;
+                      const baseX = pos[0] + xPos;
+                      const baseZ = pos[2] + zBase;
+                      const offX = world.x - baseX;
+                      const offZ = world.z - baseZ;
+                      if (draggedBody.current) moveDraggedBody(world.x, world.z, false);
                       moveSelectedPermanentToWithOffset(x, y, [offX, offZ]);
                     }
                     setDragging(null);
@@ -211,14 +324,40 @@ export default function Board() {
                     setGhost(null);
                     dragStartRef.current = null;
                     lastDropAt.current = Date.now();
+                    draggedBody.current = null;
                     return;
                   }
                   if (dragFromHand) {
+                    const dropKey = `${x},${y}`;
+                    const wx = e.point.x;
+                    const wz = e.point.z;
+                    const toItems = permanents[dropKey] || [];
+                    const newIndex = toItems.length; // will be appended
+                    const newCount = toItems.length + 1;
+                    const spacing = TILE_SIZE * 0.28;
+                    const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
+                    const marginZ = TILE_SIZE * 0.1;
+                    const owner = currentPlayer as 1 | 2;
+                    const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                    const xPos = startX + newIndex * spacing;
+                    const baseX = pos[0] + xPos;
+                    const baseZ = pos[2] + zBase;
+                    const offX = wx - baseX;
+                    const offZ = wz - baseZ;
+
                     if (selected) {
                       playSelectedTo(x, y);
+                      const type = ((selected.card?.type || "") as string).toLowerCase();
+                      if (!type.includes("site")) {
+                        setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+                      }
                     } else if (dragFromPile?.card) {
+                      const type = ((dragFromPile.card.type || "") as string).toLowerCase();
                       playFromPileTo(x, y);
                       setDragFromPile(null);
+                      if (!type.includes("site")) {
+                        setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+                      }
                     }
                     setDragFromHand(false);
                     setGhost(null);
@@ -229,14 +368,7 @@ export default function Board() {
                   e.stopPropagation();
                   // Prevent duplicate actions when a drop just occurred on this tile
                   if (Date.now() - lastDropAt.current < 200) return;
-                  if (sitePlacementMode) {
-                    placeSite(x, y);
-                  } else if (site) {
-                    openContextMenu(
-                      { kind: "site", x, y },
-                      { x: e.clientX, y: e.clientY }
-                    );
-                  }
+                  // No default left-click action on tiles
                 }}
                 onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                   e.stopPropagation();
@@ -267,13 +399,7 @@ export default function Board() {
                         e.stopPropagation();
                         beginHoverPreview(site.card!);
                       }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openContextMenu(
-                          { kind: "site", x, y },
-                          { x: e.clientX, y: e.clientY }
-                        );
-                      }}
+                      // Left-click no longer opens context menu on sites
                       onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                         e.stopPropagation();
                         e.nativeEvent.preventDefault();
@@ -287,6 +413,7 @@ export default function Board() {
                         slug={site.card.slug!}
                         width={CARD_SHORT}
                         height={CARD_LONG}
+                        depthWrite={false}
                         rotationZ={
                           -Math.PI / 2 +
                           (site.owner === 1 ? 0 : Math.PI) +
@@ -296,11 +423,11 @@ export default function Board() {
                     </group>
                   ) : (
                     <mesh
-                      position={[0, 0.07, 0]}
+                      position={[0, 0.01, 0]}
                       castShadow
-                      rotation-z={0}
-                      onClick={(e) => {
+                      onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                         e.stopPropagation();
+                        e.nativeEvent.preventDefault();
                         openContextMenu(
                           { kind: "site", x, y },
                           { x: e.clientX, y: e.clientY }
@@ -308,10 +435,11 @@ export default function Board() {
                       }}
                     >
                       <cylinderGeometry
-                        args={[TILE_SIZE * 0.22, TILE_SIZE * 0.22, 0.25, 16]}
+                        args={[TILE_SIZE * 0.22, TILE_SIZE * 0.22, 0.02, 24]}
                       />
                       <meshStandardMaterial
                         color={site.owner === 1 ? "#2f6fed" : "#d94e4e"}
+                        depthWrite={false}
                       />
                     </mesh>
                   )}
@@ -343,9 +471,29 @@ export default function Board() {
                   const offX = p.offset?.[0] ?? 0;
                   const offZ = p.offset?.[1] ?? 0;
                   return (
-                    <group
+                    <RigidBody
                       key={`perm-${idx}`}
-                      position={[xPos + offX, 0.08 + idx * 0.001, zBase + offZ]}
+                      ref={(api) => {
+                        const id = `${key}:${idx}`;
+                        if (api) bodyMap.current.set(id, api as unknown as BodyApi);
+                        else bodyMap.current.delete(id);
+                      }}
+                      type="dynamic"
+                      ccd
+                      colliders={false}
+                      position={[xPos + offX, 0.25, zBase + offZ]}
+                      linearDamping={2}
+                      angularDamping={2}
+                      canSleep={false}
+                      enabledRotations={[false, true, false]}
+                    >
+                      {/* Thin box collider to let cards stack physically */}
+                      <CuboidCollider
+                        args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
+                        friction={0.9}
+                        restitution={0}
+                      />
+                      <group
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         useGameStore.getState().selectPermanent(key, idx);
@@ -390,22 +538,91 @@ export default function Board() {
                             setDragging({ from: key, index: idx });
                             setDragFromHand(true);
                             setGhost({ x: e.point.x, z: e.point.z });
+                            // Grab the rigid body for this permanent and lift/move it immediately
+                            draggedBody.current = bodyMap.current.get(`${key}:${idx}`) || null;
+                            if (draggedBody.current) {
+                              moveDraggedBody(e.point.x, e.point.z, true);
+                            }
                           }
+                        } else if (
+                          dragging &&
+                          dragging.from === key &&
+                          dragging.index === idx &&
+                          draggedBody.current
+                        ) {
+                          // While dragging and pointer is over the card, continue driving it
+                          setGhost({ x: e.point.x, z: e.point.z });
+                          moveDraggedBody(e.point.x, e.point.z, true);
                         }
                       }}
-                    >
-                      {/* Selection ring */}
-                      {isSel && (
-                        <mesh rotation-x={-Math.PI / 2} position={[0, 0.12, 0]}>
-                          <ringGeometry
-                            args={[TILE_SIZE * 0.2, TILE_SIZE * 0.22, 24]}
-                          />
-                          <meshBasicMaterial
-                            color={owner === 1 ? "#93c5fd" : "#fca5a5"}
-                          />
-                        </mesh>
-                      )}
-                      <group
+                      onPointerUp={(e) => {
+                        e.stopPropagation();
+                        if (
+                          dragging &&
+                          dragging.from === key &&
+                          dragging.index === idx
+                        ) {
+                          // Compute nearest tile from world position and preserve exact world drop
+                          const wx = e.point.x;
+                          const wz = e.point.z;
+                          let tx = Math.round((wx - offsetX) / TILE_SIZE);
+                          let ty = Math.round((wz - offsetY) / TILE_SIZE);
+                          tx = Math.max(0, Math.min(board.size.w - 1, tx));
+                          ty = Math.max(0, Math.min(board.size.h - 1, ty));
+                          const dropKey = `${tx},${ty}`;
+                          const tileX = offsetX + tx * TILE_SIZE;
+                          const tileZ = offsetY + ty * TILE_SIZE;
+                          const spacing = TILE_SIZE * 0.28;
+                          const marginZ = TILE_SIZE * 0.1;
+                          const owner = (permanents[key]?.[idx]?.owner) ?? 1;
+                          const zBase = owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+                          if (dragging.from === dropKey) {
+                            // Staying on same tile: compute baseline using current count and index
+                            const items = permanents[dropKey] || [];
+                            const count = items.length;
+                            const startX = -((Math.max(count, 1) - 1) * spacing) / 2;
+                            const xPos = startX + idx * spacing;
+                            const baseX = tileX + xPos;
+                            const baseZ = tileZ + zBase;
+                            const offX = wx - baseX;
+                            const offZ = wz - baseZ;
+                            if (draggedBody.current) moveDraggedBody(wx, wz, false);
+                            setPermanentOffset(dropKey, idx, [offX, offZ]);
+                          } else {
+                            // Moving to another tile: baseline uses new count and new index at end
+                            const toItems = permanents[dropKey] || [];
+                            const newIndex = toItems.length;
+                            const newCount = toItems.length + 1;
+                            const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
+                            const xPos = startX + newIndex * spacing;
+                            const baseX = tileX + xPos;
+                            const baseZ = tileZ + zBase;
+                            const offX = wx - baseX;
+                            const offZ = wz - baseZ;
+                            if (draggedBody.current) moveDraggedBody(wx, wz, false);
+                            moveSelectedPermanentToWithOffset(tx, ty, [offX, offZ]);
+                          }
+                          setDragging(null);
+                          setDragFromHand(false);
+                          setGhost(null);
+                          dragStartRef.current = null;
+                          lastDropAt.current = Date.now();
+                          draggedBody.current = null;
+                        }
+                      }}
+                      >
+                        {/* Selection ring */}
+                        {isSel && (
+                          <mesh rotation-x={-Math.PI / 2} position={[0, 0.05, 0]}>
+                            <ringGeometry
+                              args={[TILE_SIZE * 0.2, TILE_SIZE * 0.22, 24]}
+                            />
+                            <meshBasicMaterial
+                              color={owner === 1 ? "#93c5fd" : "#fca5a5"}
+                            />
+                          </mesh>
+                        )}
+                        <group
                         onClick={(e) => {
                           e.stopPropagation();
                           // If dragging this item, ignore clicks
@@ -415,13 +632,8 @@ export default function Board() {
                             dragging.index === idx
                           )
                             return;
+                          // Left-click selects only; context menu via right-click
                           useGameStore.getState().selectPermanent(key, idx);
-                          useGameStore
-                            .getState()
-                            .openContextMenu(
-                              { kind: "permanent", at: key, index: idx },
-                              { x: e.clientX, y: e.clientY }
-                            );
                         }}
                         onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                           e.stopPropagation();
@@ -450,8 +662,9 @@ export default function Board() {
                             />
                           </mesh>
                         )}
+                        </group>
                       </group>
-                    </group>
+                    </RigidBody>
                   );
                 });
               })()}
@@ -485,20 +698,14 @@ export default function Board() {
         return (
           <group
             key={`avatar-${who}`}
-            position={[wx, 0.12, wy]}
+            position={[wx, 0.05, wy]}
             onPointerDown={(e) => {
               e.stopPropagation();
               setDragAvatar(who);
               useGameStore.getState().setDragFromHand(true);
               clearHoverPreview();
             }}
-            onClick={(e) => {
-              e.stopPropagation();
-              openContextMenu(
-                { kind: "avatar", who },
-                { x: e.clientX, y: e.clientY }
-              );
-            }}
+            // Left-click no longer opens context menu on avatars
             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
               e.stopPropagation();
               e.nativeEvent.preventDefault();
@@ -524,7 +731,7 @@ export default function Board() {
               }
             }}
           >
-            <mesh rotation-x={-Math.PI / 2} position={[0, -0.06, 0]}>
+            <mesh rotation-x={-Math.PI / 2} position={[0, -0.01, 0]}>
               <ringGeometry args={[TILE_SIZE * 0.18, TILE_SIZE * 0.2, 24]} />
               <meshBasicMaterial color={who === "p1" ? "#60a5fa" : "#f87171"} />
             </mesh>
@@ -553,7 +760,7 @@ export default function Board() {
 
       {/* Drag ghost while dragging */}
       {ghost && (
-        <group position={[ghost.x, 0.12, ghost.z]}>
+        <group position={[ghost.x, 0.1, ghost.z]}>
           {(() => {
             if (dragging && selectedPermanent) {
               const sel = selectedPermanent;
