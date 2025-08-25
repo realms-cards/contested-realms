@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Text, useTexture } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
-import { SRGBColorSpace, type Object3D, type Raycaster, type Intersection } from "three";
+import {
+  SRGBColorSpace,
+  type Object3D,
+  type Raycaster,
+  type Intersection,
+} from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
@@ -12,8 +17,6 @@ import CardGlow from "@/lib/game/components/CardGlow";
 import {
   BASE_TILE_SIZE,
   TILE_SIZE,
-  MAT_PIXEL_W,
-  MAT_PIXEL_H,
   MAT_RATIO,
   CARD_LONG,
   CARD_SHORT,
@@ -48,7 +51,6 @@ function noopRaycast(
   void _raycaster;
   void _intersects;
 }
-
 
 export default function Board() {
   const board = useGameStore((s) => s.board);
@@ -136,6 +138,21 @@ export default function Board() {
     api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.2, z }, true);
   }
 
+  // Ensure local drag state is cleared even if mouse is released outside the canvas
+  useEffect(() => {
+    const onUp = () => {
+      setDragging(null);
+      setDragAvatar(null);
+      setGhost(null);
+      setDragFromHand(false);
+      setDragFromPile(null);
+      dragStartRef.current = null;
+      avatarDragStartRef.current = null;
+      draggedBody.current = null;
+    };
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, [setDragging, setDragAvatar, setGhost, setDragFromHand, setDragFromPile]);
 
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
@@ -246,14 +263,19 @@ export default function Board() {
                 rotation-x={-Math.PI / 2}
                 // hover tracking disabled to reduce interference
                 onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-                  // Track ghost while dragging from hand, board permanent, or avatar
-                  if (dragFromHand || dragging || dragAvatar) {
-                    const world = e.point;
+                  // Track ghost only for hand/pile drags; still drive bodies for board/avatar drags
+                  const world = e.point;
+                  if (
+                    dragFromHand &&
+                    !dragAvatar &&
+                    !dragging &&
+                    (selected || dragFromPile?.card)
+                  ) {
                     setGhost({ x: world.x, z: world.z });
-                    // Drive the currently dragged body's position (permanent or avatar)
-                    if ((dragging || dragAvatar) && draggedBody.current) {
-                      moveDraggedBody(world.x, world.z, true);
-                    }
+                  }
+                  // Drive the currently dragged body's position (permanent or avatar)
+                  if ((dragging || dragAvatar) && draggedBody.current) {
+                    moveDraggedBody(world.x, world.z, true);
                   }
                 }}
                 onPointerUp={(e: ThreeEvent<PointerEvent>) => {
@@ -450,6 +472,8 @@ export default function Board() {
                           </group>
                         ) : (
                           <mesh
+                            rotation-x={-Math.PI / 2}
+                            rotation-z={rotZ}
                             position={[0, 0.001, 0]}
                             castShadow
                             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
@@ -461,6 +485,7 @@ export default function Board() {
                               );
                             }}
                           >
+                            <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
                             <meshStandardMaterial
                               color={site.owner === 1 ? "#2f6fed" : "#d94e4e"}
                               depthWrite={false}
@@ -578,8 +603,8 @@ export default function Board() {
                             ) {
                               setDragging({ from: key, index: idx });
                               setDragFromHand(true);
-                              setGhost({ x: e.point.x, z: e.point.z });
-                              // Grab the rigid body for this permanent and lift/move it immediately
+                              setGhost(null);
+                              // No ghost for board permanent drags; just move the body
                               draggedBody.current =
                                 bodyMap.current.get(`${key}:${idx}`) || null;
                               if (draggedBody.current) {
@@ -592,8 +617,7 @@ export default function Board() {
                             dragging.index === idx &&
                             draggedBody.current
                           ) {
-                            // While dragging and pointer is over the card, continue driving it
-                            setGhost({ x: e.point.x, z: e.point.z });
+                            // While dragging and pointer is over the card, continue driving it (no ghost)
                             moveDraggedBody(e.point.x, e.point.z, true);
                           }
                         }}
@@ -866,20 +890,16 @@ export default function Board() {
                           ) {
                             setDragAvatar(who);
                             setDragFromHand(true);
-                            setGhost({ x: e.point.x, z: e.point.z });
-                            // Grab the rigid body for this avatar and lift/move it immediately
+                            setGhost(null);
+                            // No ghost for avatar drags; just move the body
                             draggedBody.current =
                               bodyMap.current.get(`avatar:${who}`) || null;
                             if (draggedBody.current) {
                               moveDraggedBody(e.point.x, e.point.z, true);
                             }
                           }
-                        } else if (
-                          dragAvatar === who &&
-                          draggedBody.current
-                        ) {
-                          // While dragging and pointer is over the avatar, continue driving it
-                          setGhost({ x: e.point.x, z: e.point.z });
+                        } else if (dragAvatar === who && draggedBody.current) {
+                          // While dragging and pointer is over the avatar, continue driving it (no ghost)
                           moveDraggedBody(e.point.x, e.point.z, true);
                         }
                       }}
@@ -967,68 +987,49 @@ export default function Board() {
         );
       })}
 
-      {/* Drag ghost while dragging from hand or pile only */}
-      {ghost && (
-        <group position={[ghost.x, 0.1, ghost.z]}>
-          {(() => {
-            // Avatar drag ghost
-            if (dragAvatar) {
-              const who = dragAvatar;
-              const a = avatars[who];
-              if (!a) return null;
-              const rotZ =
-                (who === "p1" ? 0 : Math.PI) + (a.tapped ? Math.PI / 2 : 0);
-              return a.card?.slug ? (
-                <CardPlane
-                  slug={a.card.slug!}
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={rotZ}
-                />
-              ) : (
-                <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                  <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                  <meshStandardMaterial
-                    color={who === "p1" ? "#60a5fa" : "#f87171"}
+      {/* Drag ghost while dragging from hand or pile only (never during avatar or board drags) */}
+      {ghost &&
+        dragFromHand &&
+        !dragAvatar &&
+        !dragging &&
+        (selected || dragFromPile?.card) && (
+          <group position={[ghost.x, 0.1, ghost.z]}>
+            {(() => {
+              if (selected) {
+                const isSite = (selected.card.type || "")
+                  .toLowerCase()
+                  .includes("site");
+                const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
+                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
+                if (!selected.card.slug) return null;
+                return (
+                  <CardPlane
+                    slug={selected.card.slug}
+                    width={CARD_SHORT}
+                    height={CARD_LONG}
+                    rotationZ={rotZ}
                   />
-                </mesh>
-              );
-            }
-            if (dragFromHand && selected) {
-              const isSite = (selected.card.type || "")
-                .toLowerCase()
-                .includes("site");
-              const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-              const rotZ = isSite ? -Math.PI / 2 + ownerRot : 0;
-              if (!selected.card.slug) return null;
-              return (
-                <CardPlane
-                  slug={selected.card.slug}
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={rotZ}
-                />
-              );
-            }
-            if (dragFromHand && dragFromPile?.card) {
-              const c = dragFromPile.card;
-              const isSite = (c.type || "").toLowerCase().includes("site");
-              const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-              const rotZ = isSite ? -Math.PI / 2 + ownerRot : 0;
-              if (!c.slug) return null;
-              return (
-                <CardPlane
-                  slug={c.slug}
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={rotZ}
-                />
-              );
-            }
-            return null;
-          })()}
-        </group>
-      )}
+                );
+              }
+              if (dragFromPile?.card) {
+                const c = dragFromPile.card;
+                const isSite = (c.type || "").toLowerCase().includes("site");
+                const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
+                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
+                if (!c.slug) return null;
+                return (
+                  <CardPlane
+                    slug={c.slug}
+                    width={CARD_SHORT}
+                    height={CARD_LONG}
+                    rotationZ={rotZ}
+                  />
+                );
+              }
+              return null;
+            })()}
+          </group>
+        )}
     </group>
   );
 }

@@ -45,6 +45,7 @@ export default function CardGlow({
       rotation-x={-Math.PI / 2}
       rotation-z={rotationZ}
       position={[0, elevation, 0]}
+      renderOrder={10000}
       raycast={noopRaycast}
     >
       <planeGeometry args={[width * 1.06, height * 1.06]} />
@@ -92,6 +93,7 @@ export default function CardGlow({
         `}
         transparent
         depthWrite={false}
+        depthTest={false}
         polygonOffset
         polygonOffsetFactor={1}
         polygonOffsetUnits={1}

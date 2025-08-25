@@ -14,7 +14,7 @@ function noopRaycast(
 }
 
 interface CardPlaneProps {
-  slug: string;
+  slug: string; // used when textureUrl is not provided
   width: number;
   height: number;
   rotationZ?: number;
@@ -24,6 +24,7 @@ interface CardPlaneProps {
   elevation?: number;
   upright?: boolean; // if true, face camera (no -PI/2 tilt)
   renderOrder?: number;
+  textureUrl?: string; // optional explicit texture (e.g., pile backs)
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -42,13 +43,14 @@ export default function CardPlane({
   elevation = 0.001,
   upright = false,
   renderOrder = 0,
+  textureUrl,
   onContextMenu,
   onPointerDown,
   onPointerOver,
   onPointerOut,
   onClick,
 }: CardPlaneProps) {
-  const tex = useTexture(`/api/images/${slug}`);
+  const tex = useTexture(textureUrl ?? `/api/images/${slug}`);
   tex.colorSpace = SRGBColorSpace;
   
   return (

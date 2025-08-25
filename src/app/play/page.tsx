@@ -6,14 +6,16 @@ import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import { useGameStore } from "@/lib/game/store";
 import Board from "@/lib/game/Board";
+import Hand3D from "@/lib/game/components/Hand3D";
+import Piles3D from "@/lib/game/components/Piles3D";
+import Hud3D from "@/lib/game/components/Hud3D";
+import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
 import Image from "next/image";
 import DeckSelector from "@/components/game/DeckSelector";
 import MulliganScreen from "@/components/game/MulliganScreen";
 import StatusBar from "@/components/game/StatusBar";
 import LifeCounters from "@/components/game/LifeCounters";
 import ResourceBar from "@/components/game/ResourceBar";
-import PileZones from "@/components/game/PileZones";
-import HandPanel from "@/components/game/HandPanel";
 import ContextMenu from "@/components/game/ContextMenu";
 
 export default function PlayPage() {
@@ -74,11 +76,11 @@ export default function PlayPage() {
 
       <LifeCounters dragFromHand={dragFromHand} />
 
-      <ResourceBar dragFromHand={dragFromHand} />
+      {/* <ResourceBar dragFromHand={dragFromHand} /> */}
 
       {/* Event Console */}
       <div
-        className={`absolute right-3 bottom-24 z-10 ${
+        className={`absolute left-3 bottom-2 z-10 ${
           dragFromHand ? "pointer-events-none" : "pointer-events-auto"
         } text-white w-80`}
       >
@@ -163,10 +165,7 @@ export default function PlayPage() {
         />
       )}
 
-      <PileZones player="p2" position="top" dragFromHand={dragFromHand} />
-      <PileZones player="p1" position="bottom" dragFromHand={dragFromHand} />
-
-      <HandPanel dragFromHand={dragFromHand} />
+      {/* Replaced 2D overlays with 3D piles and hand inside Canvas */}
 
       {/* Hand Card Magnifier (selected hand card) - moved to right side */}
       {(() => {
@@ -221,6 +220,17 @@ export default function PlayPage() {
         <Physics gravity={[0, -9.81, 0]}>
           <Board />
         </Physics>
+
+        {/* 3D Piles (sides of the board) */}
+        <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+        <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+
+        {/* 3D HUD (thresholds, life, mana) */}
+        <Hud3D owner="p1" />
+        <Hud3D owner="p2" />
+
+        {/* 3D Hand anchored to the camera (local player) */}
+        <Hand3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
 
         <OrbitControls
           makeDefault

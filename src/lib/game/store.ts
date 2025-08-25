@@ -145,6 +145,10 @@ export type GameState = {
   contextMenu: { target: ContextMenuTarget; screen?: { x: number; y: number } } | null;
   openContextMenu: (target: ContextMenuTarget, screen?: { x: number; y: number }) => void;
   closeContextMenu: () => void;
+  // Derived selectors (pure getters)
+  getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
+  getUntappedSitesCount: (who: PlayerKey) => number;
+  getAvailableMana: (who: PlayerKey) => number; // default: 1 per untapped site
   // History / Undo
   history: SerializedGame[];
   pushHistory: () => void;
@@ -314,6 +318,28 @@ export const useGameStore = create<GameState>((set, get) => ({
   openContextMenu: (target, screen) => set({ contextMenu: { target, screen } }),
   closeContextMenu: () => set({ contextMenu: null }),
 
+  // Derived selectors (no state mutation)
+  getPlayerSites: (who) => {
+    const s = get();
+    const owner = who === 'p1' ? 1 : 2;
+    return Object.entries(s.board.sites).filter(([, site]) => site.owner === owner) as Array<[CellKey, SiteTile]>;
+  },
+  getUntappedSitesCount: (who) => {
+    const s = get();
+    const owner = who === 'p1' ? 1 : 2;
+    let count = 0;
+    for (const site of Object.values(s.board.sites)) {
+      if (site.owner === owner && !site.tapped) count++;
+    }
+    return count;
+  },
+  getAvailableMana: (who) => {
+    const s = get();
+    const owner = who === 'p1' ? 1 : 2;
+    // Default rule: each untapped site provides 1 mana
+    return Object.values(s.board.sites).filter((st) => st.owner === owner && !st.tapped).length;
+  },
+
   addLife: (who, delta) =>
     set((s) => ({
       players: {
@@ -481,7 +507,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => {
       const card = s.zones[who].hand[index];
       if (!card) return s;
-      return { selectedCard: { who, index, card }, selectedPermanent: null };
+      return { selectedCard: { who, index, card }, selectedPermanent: null, selectedAvatar: null };
     }),
 
   selectAvatar: (who) => set({ selectedAvatar: who, selectedCard: null, selectedPermanent: null }),
@@ -678,7 +704,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => {
       const arr = s.permanents[at] || [];
       if (!arr[index]) return s;
-      return { selectedPermanent: { at, index }, selectedCard: null };
+      return { selectedPermanent: { at, index }, selectedCard: null, selectedAvatar: null };
     }),
 
   moveSelectedPermanentTo: (x, y) =>
