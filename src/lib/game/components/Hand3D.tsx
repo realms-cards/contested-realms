@@ -52,6 +52,10 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   // Simple hover tracking for card pop-up
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
+  
+  // Smooth transition refs for animations
+  const handSpreadLerp = useRef(0); // 0 = compact, 1 = spread
+  const sitePositionLerp = useRef(0); // for site positioning transitions
   const handDragStart = useRef<{
     x: number;
     y: number;
@@ -102,6 +106,14 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         revealLerp.current = targetShown;
     }
 
+    // Smooth hand spread animation
+    const handShouldBeSpread = mouseInZone || hoveredCardCount > 0;
+    const spreadTarget = handShouldBeSpread ? 1 : 0;
+    const spreadK = 0.25; // Smooth easing for hand spread
+    handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
+    if (Math.abs(spreadTarget - handSpreadLerp.current) < 0.005)
+      handSpreadLerp.current = spreadTarget;
+
     const hiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
@@ -123,12 +135,18 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         originalIndex: number;
       }[];
 
-    // Balanced spread - wider for more cards, tighter for fewer cards
-    const maxAngle = Math.min(HAND_MAX_TOTAL_ANGLE * 1.1, n * HAND_STEP_MAX);
+    // Smooth interpolated spread using lerp values
+    const maxAngleWhenShown = Math.min(HAND_MAX_TOTAL_ANGLE * 1.5, n * HAND_STEP_MAX * 1.3);
+    const maxAngleWhenHidden = Math.min(HAND_MAX_TOTAL_ANGLE * 0.7, n * HAND_STEP_MAX * 0.8);
+    const maxAngle = maxAngleWhenHidden + (maxAngleWhenShown - maxAngleWhenHidden) * handSpreadLerp.current;
+    
+    const baseSpacingWhenShown = CARD_SHORT * HAND_OVERLAP_FRAC * 0.5;
+    const baseSpacingWhenHidden = CARD_SHORT * HAND_OVERLAP_FRAC * 0.8;
+    const baseSpacing = baseSpacingWhenHidden + (baseSpacingWhenShown - baseSpacingWhenHidden) * handSpreadLerp.current;
+
     const stepAngle = n > 1 ? maxAngle / (n - 1) : 0;
     const startAngle = -maxAngle / 2;
-    const baseSpacing = CARD_SHORT * HAND_OVERLAP_FRAC;
-
+    
     return new Array(n).fill(0).map((_, i) => {
       // Map back to original hand index
       const originalIndex = hand.findIndex(
@@ -142,11 +160,35 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
 
-      // X position: evenly spread in fan
-      const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
+      // X position with dynamic spacing away from hovered card
+      let x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
+      
+      // Add spacing effect around hovered card
+      if (hoveredCard !== null) {
+        const hoveredCardIndex = nonSites.findIndex((c) => 
+          hand.findIndex(hc => 
+            !(hc.type || "").toLowerCase().includes("site") && nonSites.indexOf(hc) === nonSites.indexOf(c)
+          ) === hoveredCard
+        );
+        
+        if (hoveredCardIndex >= 0) {
+          const distance = i - hoveredCardIndex;
+          const pushAmount = CARD_SHORT * 0.3; // How much to push away
+          const falloff = Math.max(0, 1 - Math.abs(distance) / 3); // Effect falls off over 3 cards
+          
+          if (distance > 0) {
+            x += pushAmount * falloff; // Push right cards to the right
+          } else if (distance < 0) {
+            x -= pushAmount * falloff; // Push left cards to the left
+          }
+        }
+      }
 
-      // Y position: arc + hover pop-up (more aggressive pop-up toward middle)
-      const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y;
+      // Y position: smooth interpolated arc + hover pop-up
+      const arcMultiplierWhenShown = 1.5;
+      const arcMultiplierWhenHidden = 1.0;
+      const arcMultiplier = arcMultiplierWhenHidden + (arcMultiplierWhenShown - arcMultiplierWhenHidden) * handSpreadLerp.current;
+      const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * arcMultiplier;
       const y = isHovered ? arcY + CARD_LONG * 0.35 : arcY;
 
       // Scale: hovered card slightly bigger with smoother scaling
@@ -156,7 +198,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     });
   }, [hand, nonSites, hoveredCard]);
 
-  // Site horizontal layout: sites in a horizontal row
+  // Site threshold-grouped layout: sites grouped by their threshold types
   const siteLayout = useMemo(() => {
     const n = sites.length;
     if (n === 0)
@@ -166,36 +208,69 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         rot: number;
         scale: number;
         originalIndex: number;
+        thresholdType: string;
       }[];
 
-    // Clean horizontal layout for sites - simpler and more organized
-    const siteSpacing = CARD_LONG * 0.75; // Reasonable spacing for readability
-
-    return new Array(n).fill(0).map((_, i) => {
-      // Map back to original hand index
+    // Group sites by their primary threshold type
+    const sitesByThreshold = sites.map((site, idx) => {
       const originalIndex = hand.findIndex(
-        (c) =>
-          (c.type || "").toLowerCase().includes("site") &&
-          sites.indexOf(c) === i
+        (c) => (c.type || "").toLowerCase().includes("site") && sites.indexOf(c) === idx
       );
+      
+      // Determine primary threshold type
+      const thresholds = site.thresholds || {};
+      const thresholdEntries = Object.entries(thresholds).filter(([, value]) => value && value > 0);
+      const primaryThreshold = thresholdEntries.length > 0 ? thresholdEntries[0][0] : 'neutral';
+      
+      return { site, idx, originalIndex, thresholdType: primaryThreshold };
+    });
+
+    // Sort by threshold type for consistent grouping
+    const thresholdOrder = ['air', 'water', 'earth', 'fire', 'neutral'];
+    sitesByThreshold.sort((a, b) => {
+      const aIndex = thresholdOrder.indexOf(a.thresholdType);
+      const bIndex = thresholdOrder.indexOf(b.thresholdType);
+      return aIndex - bIndex;
+    });
+
+    // Calculate layout positions
+    const spellHandWidth = nonSites.length * CARD_SHORT * HAND_OVERLAP_FRAC * 0.7;
+    const clearSeparation = CARD_SHORT * 1.5;
+    const baseRightOffset = spellHandWidth * 0.5 + clearSeparation;
+    
+    return sitesByThreshold.map((item, layoutIndex) => {
+      const { originalIndex, thresholdType } = item;
       const isHovered = originalIndex === hoveredCard;
-
-      // No fan angle - keep sites straight and organized
-      const rot = 0;
-
-      // X position: evenly spaced horizontal line
-      const x = i * siteSpacing - ((n - 1) * siteSpacing) / 2;
-
-      // Y position: separate from spell cards but stay visible when hand is shown
-      const baseY = -CARD_LONG * 0.55; // Higher up so they don't go off-screen
-      const y = isHovered ? baseY + CARD_LONG * 0.25 : baseY;
-
-      // Scale: hovered site slightly bigger with smoother scaling
+      
+      // Group sites vertically by threshold type
+      const thresholdIndex = thresholdOrder.indexOf(thresholdType);
+      const groupSpacing = CARD_SHORT * 0.4; // Vertical spacing between groups
+      const cardSpacing = CARD_SHORT * 0.8; // Spacing within groups
+      
+      // Count cards in same threshold group before this one
+      const cardsInGroupBefore = sitesByThreshold
+        .slice(0, layoutIndex)
+        .filter(s => s.thresholdType === thresholdType).length;
+      
+      // X position: slightly stagger by group for visual clarity
+      const groupOffset = thresholdIndex * CARD_SHORT * 0.1;
+      const x = baseRightOffset + groupOffset;
+      
+      // Y position: stack by threshold groups
+      const groupY = thresholdIndex * groupSpacing;
+      const inGroupY = cardsInGroupBefore * cardSpacing;
+      const baseY = -(groupY + inGroupY) * 0.5 + CARD_LONG * 0.3; // Move sites up for better positioning
+      const y = isHovered ? baseY + CARD_LONG * 0.15 : baseY;
+      
+      // Slight rotation for visual interest
+      const rot = thresholdIndex * 0.05 - 0.1; // Small rotation per group
+      
+      // Scale
       const scale = isHovered ? 1.12 : 1.0;
 
-      return { x, y, rot, scale, originalIndex };
+      return { x, y, rot, scale, originalIndex, thresholdType };
     });
-  }, [hand, sites, hoveredCard]);
+  }, [hand, sites, hoveredCard, mouseInZone, hoveredCardCount, nonSites]);
 
   // Simplified hover handling
   const hoverTimer = useRef<number | null>(null);
@@ -273,7 +348,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         const siteHandActive = hoveredCard !== null && hand[hoveredCard] && 
           (hand[hoveredCard].type || "").toLowerCase().includes("site");
         
-        const baseScale = siteHandActive ? HAND_CARD_SCALE * 0.5 : HAND_CARD_SCALE; // EXTREME shrinking when sites active
+        const baseScale = siteHandActive ? HAND_CARD_SCALE * 0.9 : HAND_CARD_SCALE; // Slight shrinking when sites active
         const scale = baseScale * layoutScale;
         const renderOrder = isCardHovered ? 3000 : siteHandActive ? 500 + originalIndex : 2000 + originalIndex; // Spell cards go behind sites when sites are active
         return (
@@ -410,11 +485,11 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         const isSite = true; // These are sites
         const isCardHovered = originalIndex === hoveredCard;
         
-        // Dynamic scaling: sites are active when any site is being hovered
+        // Sites are now in their own fan area - always reasonably sized, bigger when hovered
         const siteHandActive = hoveredCard !== null && hand[hoveredCard] && 
           (hand[hoveredCard].type || "").toLowerCase().includes("site");
         
-        const baseScale = siteHandActive ? HAND_CARD_SCALE * 0.8 : HAND_CARD_SCALE * 0.2; // EXTREME scaling: tiny when inactive, large when active
+        const baseScale = HAND_CARD_SCALE * 0.6; // Always visible but smaller than spells
         const scale = baseScale * layoutScale;
         const renderOrder = isCardHovered ? 3500 : siteHandActive ? 2000 + originalIndex : 1000 + originalIndex; // Sites render above spells when active
         return (
