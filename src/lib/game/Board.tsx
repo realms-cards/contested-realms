@@ -180,20 +180,52 @@ export default function Board() {
     });
   }
 
-  // Ensure local drag state is cleared even if mouse is released outside the canvas
+  // Ensure local/global drag state is cleared even if input ends outside the canvas
   useEffect(() => {
-    const onUp = () => {
-      setDragging(null);
-      setDragAvatar(null);
-      setGhost(null);
-      setDragFromHand(false);
-      setDragFromPile(null);
-      dragStartRef.current = null;
-      avatarDragStartRef.current = null;
-      draggedBody.current = null;
+    const reset = (reason?: string) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(`[drag] board reset via ${reason || "unknown"}`);
+      }
+      // Defer so tile/card pointerup handlers run first
+      setTimeout(() => {
+        setDragging(null);
+        setDragAvatar(null);
+        setGhost(null);
+        setDragFromHand(false);
+        setDragFromPile(null);
+        dragStartRef.current = null;
+        avatarDragStartRef.current = null;
+        draggedBody.current = null;
+      }, 0);
     };
-    window.addEventListener("mouseup", onUp);
-    return () => window.removeEventListener("mouseup", onUp);
+
+    const onPointerUp = () => reset("pointerup");
+    const onPointerCancel = () => reset("pointercancel");
+    const onMouseUp = () => reset("mouseup");
+    const onTouchEnd = () => reset("touchend");
+    const onBlur = () => reset("blur");
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") reset("visibilitychange");
+    };
+    const onPageHide = () => reset("pagehide");
+
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+
+    return () => {
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+    };
   }, [setDragging, setDragAvatar, setGhost, setDragFromHand, setDragFromPile]);
 
   function beginHoverPreview(card?: CardRef | null) {
