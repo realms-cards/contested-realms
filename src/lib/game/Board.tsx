@@ -487,7 +487,7 @@ export default function Board() {
                 <group>
                   {(() => {
                     const rotZ =
-                      Math.PI / 2 +
+                      -Math.PI / 2 +
                       (site.owner === 1 ? 0 : Math.PI) +
                       (site.tapped ? Math.PI / 2 : 0);
                     const isSel =
@@ -1089,7 +1089,7 @@ export default function Board() {
                   .toLowerCase()
                   .includes("site");
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-                const rotZ = isSite ? Math.PI / 2 + ownerRot : ownerRot;
+                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!selected.card.slug) return null;
                 return (
                   <CardPlane
@@ -1104,7 +1104,7 @@ export default function Board() {
                 const c = dragFromPile.card;
                 const isSite = (c.type || "").toLowerCase().includes("site");
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-                const rotZ = isSite ? Math.PI / 2 + ownerRot : ownerRot;
+                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!c.slug) return null;
                 return (
                   <CardPlane

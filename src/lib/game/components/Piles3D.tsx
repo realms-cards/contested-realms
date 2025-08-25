@@ -116,14 +116,11 @@ export default function Piles3D({
     setPreviewCard(null);
   }
 
-  // Ensure drag states are cleared on global mouseup - with delay to allow Board drops to complete
+  // Ensure drag states are cleared on global mouseup
   useEffect(() => {
     const handleGlobalMouseUp = () => {
-      // Small delay to allow Board drop logic to complete first
-      setTimeout(() => {
-        setDragFromPile(null);
-        setDragFromHand(false);
-      }, 50);
+      setDragFromPile(null);
+      setDragFromHand(false);
     };
 
     document.addEventListener("mouseup", handleGlobalMouseUp);
@@ -199,7 +196,6 @@ export default function Piles3D({
                       // Right click = draw to hand
                       if (e.button === 2) {
                         e.stopPropagation();
-                        e.nativeEvent.preventDefault();
                         console.log(
                           `Drawing ${key} card to hand (${owner}):`,
                           cards[0]
@@ -217,7 +213,6 @@ export default function Piles3D({
                       // Left click = drag to board
                       if (e.button === 0) {
                         e.stopPropagation();
-                        e.nativeEvent.preventDefault();
                         console.log(
                           `Dragging from ${key} to board (${owner}):`,
                           cards[0]
