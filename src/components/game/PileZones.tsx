@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { useGameStore } from "@/lib/game/store";
+import type { CardRef, PlayerKey } from "@/lib/game/store";
 
 interface PileZonesProps {
-  player: "p1" | "p2";
+  player: PlayerKey;
   position: "top" | "bottom";
   dragFromHand: boolean;
 }
@@ -24,7 +25,10 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
     ? "absolute left-3 top-20" 
     : "absolute left-3 bottom-24";
 
-  const handleDragStart = (from: "spellbook" | "atlas" | "graveyard", card: any) => {
+  const handleDragStart = (
+    from: "spellbook" | "atlas" | "graveyard",
+    card: CardRef
+  ) => {
     setDragFromPile({
       who: player,
       from,
@@ -36,7 +40,7 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
   const renderPile = (
     pileType: "spellbook" | "atlas" | "graveyard",
     displayName: string,
-    cards: any[]
+    cards: CardRef[]
   ) => {
     const topCard = cards[0];
     const canDraw = currentPlayer === playerNum && (phase === "Draw" || phase === "Main");

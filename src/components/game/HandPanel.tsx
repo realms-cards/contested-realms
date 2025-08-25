@@ -23,13 +23,15 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
           dragFromHand ? "pointer-events-none" : "pointer-events-auto"
         } mx-auto max-w-5xl px-3 py-2 text-sm text-white overflow-visible`}
         onClick={() => {
-          clearSelection();
+          // Clear hand card selection but preserve avatar selection
+          useGameStore.setState({ selectedCard: null, selectedPermanent: null });
           closeContextMenu();
           setPreviewCard(null);
         }}
         onContextMenu={(e) => {
           e.preventDefault();
-          clearSelection();
+          // Clear hand card selection but preserve avatar selection
+          useGameStore.setState({ selectedCard: null, selectedPermanent: null });
           closeContextMenu();
           setPreviewCard(null);
         }}
@@ -53,7 +55,8 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (isSel) {
-                    clearSelection();
+                    // Clear hand card selection but preserve avatar selection  
+                    useGameStore.setState({ selectedCard: null, selectedPermanent: null });
                   } else {
                     selectHandCard("p1", i);
                   }

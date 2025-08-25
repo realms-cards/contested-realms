@@ -19,8 +19,11 @@ interface CardPlaneProps {
   height: number;
   rotationZ?: number;
   depthWrite?: boolean;
+  depthTest?: boolean;
   interactive?: boolean;
   elevation?: number;
+  upright?: boolean; // if true, face camera (no -PI/2 tilt)
+  renderOrder?: number;
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -34,8 +37,11 @@ export default function CardPlane({
   height,
   rotationZ = 0,
   depthWrite = true,
+  depthTest = true,
   interactive = true,
   elevation = 0.001,
+  upright = false,
+  renderOrder = 0,
   onContextMenu,
   onPointerDown,
   onPointerOver,
@@ -47,10 +53,11 @@ export default function CardPlane({
   
   return (
     <mesh
-      rotation-x={-Math.PI / 2}
+      rotation-x={upright ? 0 : -Math.PI / 2}
       rotation-z={rotationZ}
       position={[0, elevation, 0]}
       raycast={interactive ? undefined : noopRaycast}
+      renderOrder={renderOrder}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
@@ -59,7 +66,7 @@ export default function CardPlane({
       castShadow
     >
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} />
+      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} depthTest={depthTest} />
     </mesh>
   );
 }
