@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -20,6 +20,7 @@ import ContextMenu from "@/components/game/ContextMenu";
 
 export default function PlayPage() {
   const dragFromHand = useGameStore((s) => s.dragFromHand);
+  const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const previewCard = useGameStore((s) => s.previewCard);
@@ -42,6 +43,29 @@ export default function PlayPage() {
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
   const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
+
+  // Event console: autoscroll and text formatting
+  const eventsRef = useRef<HTMLDivElement | null>(null);
+  function formatEventText(text: string): string {
+    // Redact opponent (P2) drawn card names while preserving the rest
+    let t = text || "";
+    // Case 1: P2 draws 'Card Name' ...
+    t = t.replace(/^(P2 draws )'[^']+'/i, "$1a card");
+    // Case 2: Cannot draw 'Card Name' ...: P2 is not the current player
+    t = t.replace(
+      /^Cannot draw '.*?'( from .+: P2 is not the current player)$/i,
+      "Cannot draw a card$1"
+    );
+    return t;
+  }
+
+  // Autoscroll to latest event when events change or console opens
+  useEffect(() => {
+    if (!consoleOpen) return;
+    const el = eventsRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [events.length, consoleOpen]);
 
   // End hand-drag when mouse is released anywhere
   useEffect(() => {
@@ -95,7 +119,10 @@ export default function PlayPage() {
             </button>
           </div>
           {consoleOpen && (
-            <div className="max-h-64 overflow-y-auto px-3 pb-3 text-xs space-y-1">
+            <div
+              ref={eventsRef}
+              className="max-h-64 overflow-y-auto px-3 pb-3 text-xs space-y-1"
+            >
               {events.length === 0 && (
                 <div className="opacity-60">No events yet</div>
               )}
@@ -109,7 +136,7 @@ export default function PlayPage() {
                     key={ev.id}
                     className={`opacity-85 ${isWarn ? "text-red-400" : ""}`}
                   >
-                    • {ev.text}
+                    • {formatEventText(ev.text)}
                   </div>
                 );
               })}
@@ -235,8 +262,8 @@ export default function PlayPage() {
         <OrbitControls
           makeDefault
           target={[0, 0, 0]}
-          enablePan={!dragFromHand}
-          enableRotate={!dragFromHand}
+          enablePan={!dragFromHand && !dragFromPile}
+          enableRotate={!dragFromHand && !dragFromPile}
           enableZoom
           minPolarAngle={0}
           maxPolarAngle={Math.PI / 2.05}

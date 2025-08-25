@@ -382,6 +382,8 @@ export default function Board() {
 
                     if (selected) {
                       playSelectedTo(x, y);
+                      setDragFromHand(false); // Explicitly clear drag state after hand drop
+                      setGhost(null); // Clear ghost
                       const type = (
                         (selected.card?.type || "") as string
                       ).toLowerCase();
@@ -394,6 +396,8 @@ export default function Board() {
                       ).toLowerCase();
                       playFromPileTo(x, y);
                       setDragFromPile(null);
+                      setDragFromHand(false); // Also clear dragFromHand for pile drops
+                      setGhost(null); // Also clear ghost immediately
                       if (!type.includes("site")) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
                       }
