@@ -10,7 +10,6 @@ import {
   CARD_LONG,
   CARD_SHORT,
   TILE_SIZE,
-  CARD_THICK,
 } from "@/lib/game/constants";
 
 export interface Piles3DProps {
@@ -129,7 +128,10 @@ export default function Piles3D({
         const top = cards[0];
         // Orientation: Atlas landscape, Spellbook/Cemetery portrait regardless of contents
         const isAtlas = key === "atlas";
-        const rotZ = isAtlas ? -Math.PI / 2 : 0;
+        const isCemetery = key === "graveyard";
+        // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
+        const ownerRot = owner === "p1" ? Math.PI : 0;
+        const rotZ = ownerRot + (isCemetery ? Math.PI : 0);
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         return (
@@ -138,6 +140,7 @@ export default function Piles3D({
             <Text
               position={[0, 0.002, -h * 0.7]}
               rotation-x={-Math.PI / 2}
+              rotation-z={ownerRot}
               color="#e5e7eb"
               anchorX="center"
               anchorY="middle"
@@ -153,7 +156,8 @@ export default function Piles3D({
                   const isDragging = !!dragFromHand || !!dragFromPile;
                   if (isDragging) return; // allow bubbling while dragging
                   e.stopPropagation();
-                  beginHoverPreview(top);
+                  // Only reveal preview for face-up piles (graveyard)
+                  if (isCemetery) beginHoverPreview(top);
                 }}
                 onPointerOut={(e) => {
                   const isDragging = !!dragFromHand || !!dragFromPile;
@@ -170,49 +174,26 @@ export default function Piles3D({
                   setDragFromHand(true);
                 }}
               >
-                {/* Stack base layers (non-interactive) */}
-                {(() => {
-                  const layers = Math.min(Math.max(cards.length - 1, 0), 6);
-                  // Lightweight deterministic jitter to avoid re-renders causing visible reshuffles
-                  const jitter = (seed: number) => {
-                    const s = Math.sin(seed * 9301 + 49297) * 233280;
-                    return s - Math.floor(s);
-                  };
-                  return new Array(layers).fill(0).map((_, i) => {
-                    const jx = (jitter(i + 1) - 0.5) * 0.006; // ~±0.003
-                    const jz = (jitter(i + 1.5) - 0.5) * 0.006;
-                    const jrot = (jitter(i + 2) - 0.5) * 0.03; // ~±1.7°
-                    return (
-                      <mesh
-                        key={`layer-${i}`}
-                        rotation-z={rotZ + jrot}
-                        position={[jx, (i + 1) * CARD_THICK, jz]}
-                      >
-                        <boxGeometry args={[w, CARD_THICK, h]} />
-                        <meshStandardMaterial color="#0f172a" />
-                      </mesh>
-                    );
-                  });
-                })()}
                 <CardPlane
                   slug={top.slug!}
+                  textureUrl={
+                    isCemetery
+                      ? undefined
+                      : key === "atlas"
+                      ? "/api/assets/cardback_atlas.png"
+                      : "/api/assets/cardback_spellbook.png"
+                  }
                   width={w}
                   height={h}
                   rotationZ={rotZ}
                   depthWrite={false}
                   interactive={!(dragFromHand || dragFromPile)}
                   elevation={
-                    Math.min(Math.max(cards.length - 1, 0), 6) * CARD_THICK +
                     0.003
                   }
                 />
               </group>
-            ) : (
-              <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                <planeGeometry args={[w, h]} />
-                <meshStandardMaterial color={"#111827"} />
-              </mesh>
-            )}
+            ) : null}
           </group>
         );
       })}

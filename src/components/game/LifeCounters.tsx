@@ -12,7 +12,7 @@ export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const addLife = useGameStore((s) => s.addLife);
   const addThreshold = useGameStore((s) => s.addThreshold);
-  
+
   const cur = currentPlayer === 1 ? p1 : p2;
 
   return (
@@ -21,7 +21,7 @@ export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white`}
     >
-      {/* Current player thresholds */}
+      {/* Current player thresholds 
       <div className="rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 p-3 w-48">
         <div className="text-xs opacity-80 mb-2">
           P{currentPlayer} Thresholds
@@ -109,6 +109,7 @@ export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
           </div>
         </div>
       </div>
+      */}
 
       {/* P1 Life */}
       <div className="flex items-center gap-2">
@@ -130,7 +131,7 @@ export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
           </button>
         </div>
       </div>
-      
+
       {/* P2 Life */}
       <div className="flex items-center gap-2">
         <div className="w-14 h-14 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 text-2xl font-bold">
