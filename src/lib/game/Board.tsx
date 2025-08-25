@@ -114,9 +114,8 @@ export default function Board() {
     start: [number, number];
     time: number;
   } | null>(null);
-  const [selectedAvatar, setSelectedAvatar] = useState<"p1" | "p2" | null>(
-    null
-  );
+  const selectedAvatar = useGameStore((s) => s.selectedAvatar);
+  const selectAvatar = useGameStore((s) => s.selectAvatar);
   const lastDropAt = useRef<number>(0);
   const dragStartRef = useRef<{
     at: string;
@@ -272,7 +271,7 @@ export default function Board() {
                     if (draggedBody.current) moveDraggedBody(wx, wz, false);
                     moveAvatarToWithOffset(dragAvatar, x, y, [offX, offZ]);
                     // Restore selection on the moved avatar
-                    setSelectedAvatar(dragAvatar);
+                    selectAvatar(dragAvatar);
                     // Clear drag refs/state
                     setDragAvatar(null);
                     setDragFromHand(false);
@@ -389,7 +388,6 @@ export default function Board() {
                   // Treat tile left-click as background click: deselect and close menus
                   useGameStore.getState().clearSelection();
                   useGameStore.getState().closeContextMenu();
-                  setSelectedAvatar(null);
                   clearHoverPreview();
                 }}
               >
@@ -816,24 +814,27 @@ export default function Board() {
                     )}
                     <group
                       onPointerDown={(e) => {
-                        // Left-click: arm potential drag; selection handled on pointer up if no drag starts
-                        if (e.button !== 0) return;
-                        if (dragFromHand || dragFromPile) return; // let tiles handle drops
-                        e.stopPropagation();
-                        avatarDragStartRef.current = {
-                          who,
-                          start: [e.point.x, e.point.z],
-                          time: Date.now(),
-                        };
-                        clearHoverPreview();
+                        // Only start potential drag on left-click
+                        if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
+                        if (e.button === 0) {
+                          e.stopPropagation();
+                          selectAvatar(who);
+                          // wait for small hold + movement before starting drag
+                          avatarDragStartRef.current = {
+                            who,
+                            start: [e.point.x, e.point.z],
+                            time: Date.now(),
+                          };
+                          clearHoverPreview();
+                        }
                       }}
                       onPointerOver={(e) => {
-                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles
+                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                         e.stopPropagation();
                         beginHoverPreview(a.card);
                       }}
                       onPointerOut={(e) => {
-                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles
+                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                         e.stopPropagation();
                         clearHoverPreview();
                         // cancel pending drag if pointer leaves before threshold
@@ -845,8 +846,9 @@ export default function Board() {
                         }
                       }}
                       onPointerMove={(e) => {
-                        if (dragFromHand || dragFromPile) return; // allow tiles to drive ghost/body
+                        if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                         e.stopPropagation();
+                        // Start dragging once hold + threshold exceeded
                         if (
                           !dragAvatar &&
                           avatarDragStartRef.current &&
@@ -865,82 +867,97 @@ export default function Board() {
                             setDragAvatar(who);
                             setDragFromHand(true);
                             setGhost({ x: e.point.x, z: e.point.z });
-                            setSelectedAvatar(null);
-                            // hook the avatar rigid body so tiles/group moves drive it
+                            // Grab the rigid body for this avatar and lift/move it immediately
                             draggedBody.current =
                               bodyMap.current.get(`avatar:${who}`) || null;
                             if (draggedBody.current) {
                               moveDraggedBody(e.point.x, e.point.z, true);
                             }
                           }
-                        } else if (dragAvatar === who && draggedBody.current) {
+                        } else if (
+                          dragAvatar === who &&
+                          draggedBody.current
+                        ) {
+                          // While dragging and pointer is over the avatar, continue driving it
                           setGhost({ x: e.point.x, z: e.point.z });
                           moveDraggedBody(e.point.x, e.point.z, true);
                         }
                       }}
-                      onPointerUp={(e) => {
-                        if (e.button !== 0) return;
-                        // If releasing a card dragged from hand/pile over the avatar, let the tile handle the drop
-                        if (dragFromHand || dragFromPile) return;
+                      onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                         e.stopPropagation();
-                        // If released on avatar itself while dragging, just end drag without moving
+                        e.nativeEvent.preventDefault();
+                        selectAvatar(who);
+                        openContextMenu(
+                          { kind: "avatar", who },
+                          { x: e.clientX, y: e.clientY }
+                        );
+                      }}
+                      onPointerUp={(e) => {
+                        if (e.button !== 0) return; // ignore non-left button releases
+                        if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
+                        e.stopPropagation();
                         if (dragAvatar === who) {
+                          // Compute nearest tile from world position and preserve exact world drop
+                          const wx = e.point.x;
+                          const wz = e.point.z;
+                          let tx = Math.round((wx - offsetX) / TILE_SIZE);
+                          let ty = Math.round((wz - offsetY) / TILE_SIZE);
+                          tx = Math.max(0, Math.min(board.size.w - 1, tx));
+                          ty = Math.max(0, Math.min(board.size.h - 1, ty));
+                          const tileX = offsetX + tx * TILE_SIZE;
+                          const tileZ = offsetY + ty * TILE_SIZE;
+                          const offX = wx - tileX;
+                          const offZ = wz - tileZ;
+                          if (draggedBody.current)
+                            moveDraggedBody(wx, wz, false);
+                          moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
                           setDragAvatar(null);
                           setDragFromHand(false);
+                          setGhost(null);
                           avatarDragStartRef.current = null;
+                          lastDropAt.current = Date.now();
                           draggedBody.current = null;
-                          return;
                         }
-                        // Treat as selection if a press occurred but drag didn't start
-                        if (
-                          avatarDragStartRef.current &&
-                          avatarDragStartRef.current.who === who
-                        ) {
-                          setSelectedAvatar(who);
-                          avatarDragStartRef.current = null;
-                        }
-                      }}
-                      onClick={(e) => {
-                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles
-                        e.stopPropagation();
-                        if (dragAvatar === who) return;
-                        setSelectedAvatar(who);
                       }}
                     >
-                      {a.card?.slug ? (
-                        <CardPlane
-                          slug={a.card.slug!}
-                          width={CARD_SHORT}
-                          height={CARD_LONG}
-                          rotationZ={rotZ}
-                          interactive={
-                            !dragFromHand && !dragFromPile && !dragAvatar
-                          }
-                          onClick={(e: ThreeEvent<PointerEvent>) => {
-                            if (dragFromHand || dragFromPile) return;
-                            e.stopPropagation();
-                            if (dragAvatar === who) return;
-                            setSelectedAvatar(who);
-                          }}
-                          onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                            e.stopPropagation();
-                            e.nativeEvent.preventDefault();
-                            openContextMenu(
-                              { kind: "avatar", who },
-                              { x: e.clientX, y: e.clientY }
-                            );
-                          }}
-                        />
-                      ) : (
-                        <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                          <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                          <meshStandardMaterial
-                            color={who === "p1" ? "#60a5fa" : "#f87171"}
-                            transparent
-                            opacity={0}
+                      <group
+                        onClick={(e) => {
+                          if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                          e.stopPropagation();
+                          // If dragging this avatar, ignore clicks
+                          if (dragAvatar === who) return;
+                          // Left-click selects only; context menu via right-click
+                          selectAvatar(who);
+                        }}
+                        onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                          e.stopPropagation();
+                          e.nativeEvent.preventDefault();
+                          // Ensure the avatar is selected before opening the menu
+                          selectAvatar(who);
+                          openContextMenu(
+                            { kind: "avatar", who },
+                            { x: e.clientX, y: e.clientY }
+                          );
+                        }}
+                      >
+                        {a.card?.slug ? (
+                          <CardPlane
+                            slug={a.card.slug!}
+                            width={CARD_SHORT}
+                            height={CARD_LONG}
+                            rotationZ={rotZ}
                           />
-                        </mesh>
-                      )}
+                        ) : (
+                          <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
+                            <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
+                            <meshStandardMaterial
+                              color={who === "p1" ? "#60a5fa" : "#f87171"}
+                              transparent
+                              opacity={0}
+                            />
+                          </mesh>
+                        )}
+                      </group>
                     </group>
                   </RigidBody>
                 </>
@@ -950,38 +967,11 @@ export default function Board() {
         );
       })}
 
-      {/* Drag ghost while dragging */}
+      {/* Drag ghost while dragging from hand or pile only */}
       {ghost && (
         <group position={[ghost.x, 0.1, ghost.z]}>
           {(() => {
-            if (dragging && selectedPermanent) {
-              const sel = selectedPermanent;
-              const item = permanents[sel.at]?.[sel.index];
-              if (!item) return null;
-              const owner = item.owner;
-              const rotZ =
-                (owner === 1 ? 0 : Math.PI) +
-                (item.tapped ? Math.PI / 2 : 0) +
-                (item.tilt || 0);
-              return item.card.slug ? (
-                <CardPlane
-                  slug={item.card.slug!}
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={rotZ}
-                />
-              ) : (
-                <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                  <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                  <meshStandardMaterial
-                    color={owner === 1 ? "#3b82f6" : "#ef4444"}
-                    transparent
-                    opacity={0.6}
-                  />
-                </mesh>
-              );
-            }
-            // Avatar drag ghost (unified behavior with permanents)
+            // Avatar drag ghost
             if (dragAvatar) {
               const who = dragAvatar;
               const a = avatars[who];
