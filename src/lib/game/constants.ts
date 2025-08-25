@@ -19,6 +19,15 @@ export const CARD_THICK = Math.max(0.012, CARD_LONG * 0.02); // Thin physical th
 export const DRAG_LIFT = CARD_THICK * 2 + 0.15; // Height to lift a card while dragging so it clears neighbors and the ground
 export const GROUND_HALF_THICK = 0.05; // Ground collider half-thickness; keep robust to avoid tunneling through a too-thin floor
 export const EDGE_MARGIN = TILE_SIZE * 0.5; // expand ground beyond mat a little
+
+// Hand layout constants (3D hand anchored to camera)
+export const HAND_DIST = 3.2; // world units in front of camera
+export const HAND_BOTTOM_MARGIN = 0.2; // gap from screen bottom (world units)
+export const HAND_MAX_TOTAL_ANGLE = 0.9; // radians, cap total fan angle across all cards (~51°)
+export const HAND_STEP_MAX = 0.12; // radians, max per-card step (~6.9°)
+export const HAND_OVERLAP_FRAC = 0.45; // fraction of CARD_SHORT used as horizontal overlap
+export const HAND_FAN_ARC_Y = CARD_LONG * 0.08; // world units vertical arc across fan (0 disables)
+
 export const WALL_THICK = 0.06;
 export const WALL_HALF_HEIGHT = 0.6; // 1.2 units tall walls
 

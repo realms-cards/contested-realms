@@ -80,6 +80,10 @@ export type GameState = {
   board: BoardState;
   showGridOverlay: boolean;
   showPlaymat: boolean;
+  // Camera / view mode
+  cameraMode: 'orbit' | 'topdown';
+  setCameraMode: (mode: 'orbit' | 'topdown') => void;
+  toggleCameraMode: () => void;
   toggleGridOverlay: () => void;
   togglePlaymat: () => void;
   toggleTapSite: (x: number, y: number) => void;
@@ -92,7 +96,9 @@ export type GameState = {
   drawOpening: (who: PlayerKey, spellbookCount?: number, atlasCount?: number) => void;
   selectedCard: { who: PlayerKey; index: number; card: CardRef } | null;
   selectedPermanent: { at: CellKey; index: number } | null;
+  selectedAvatar: PlayerKey | null;
   selectHandCard: (who: PlayerKey, index: number) => void;
+  selectAvatar: (who: PlayerKey) => void;
   clearSelection: () => void;
   playSelectedTo: (x: number, y: number) => void;
   playFromPileTo: (x: number, y: number) => void;
@@ -157,6 +163,7 @@ export type SerializedGame = {
   board: BoardState;
   showGridOverlay: boolean;
   showPlaymat: boolean;
+  cameraMode: 'orbit' | 'topdown';
   zones: Record<PlayerKey, Zones>;
   selectedCard: { who: PlayerKey; index: number; card: CardRef } | null;
   selectedPermanent: { at: CellKey; index: number } | null;
@@ -221,12 +228,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   board: { size: { w: 5, h: 4 }, sites: {} },
   showGridOverlay: false,
   showPlaymat: true,
+  cameraMode: 'orbit',
   zones: {
     p1: { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] },
     p2: { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] },
   },
   selectedCard: null,
   selectedPermanent: null,
+  selectedAvatar: null,
   avatars: { p1: { card: null, pos: null, tapped: false }, p2: { card: null, pos: null, tapped: false } },
   permanents: {},
   // UI state
@@ -255,6 +264,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         board: JSON.parse(JSON.stringify(s.board)),
         showGridOverlay: s.showGridOverlay,
         showPlaymat: s.showPlaymat,
+        cameraMode: s.cameraMode,
         zones: JSON.parse(JSON.stringify(s.zones)),
         selectedCard: s.selectedCard ? JSON.parse(JSON.stringify(s.selectedCard)) : null,
         selectedPermanent: s.selectedPermanent ? { ...s.selectedPermanent } : null,
@@ -283,6 +293,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         board: prev.board,
         showGridOverlay: prev.showGridOverlay,
         showPlaymat: prev.showPlaymat,
+        cameraMode: prev.cameraMode,
         zones: prev.zones,
         selectedCard: prev.selectedCard,
         selectedPermanent: prev.selectedPermanent,
@@ -387,6 +398,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleGridOverlay: () => set((s) => ({ showGridOverlay: !s.showGridOverlay })),
   togglePlaymat: () => set((s) => ({ showPlaymat: !s.showPlaymat })),
+  setCameraMode: (mode) => set({ cameraMode: mode }),
+  toggleCameraMode: () => set((s) => ({ cameraMode: s.cameraMode === 'orbit' ? 'topdown' : 'orbit' })),
 
   toggleTapSite: (x, y) =>
     set((s) => {
@@ -471,7 +484,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       return { selectedCard: { who, index, card }, selectedPermanent: null };
     }),
 
-  clearSelection: () => set({ selectedCard: null, selectedPermanent: null }),
+  selectAvatar: (who) => set({ selectedAvatar: who, selectedCard: null, selectedPermanent: null }),
+
+  clearSelection: () => set({ selectedCard: null, selectedPermanent: null, selectedAvatar: null }),
 
   playSelectedTo: (x, y) =>
     set((s) => {
@@ -548,6 +563,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
           board: { ...s.board, sites },
           selectedCard: null,
+          selectedPermanent: null,
         } as Partial<GameState> as GameState;
       }
 

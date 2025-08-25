@@ -1,5 +1,5 @@
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store";
+import type { CardRef, Phase } from "@/lib/game/store";
 
 export async function loadDeckFor(
   who: "p1" | "p2",
@@ -78,6 +78,6 @@ export async function loadDeckFor(
   }
 }
 
-export function setPhase(phase: string) {
+export function setPhase(phase: Phase) {
   useGameStore.getState().setPhase(phase);
 }
