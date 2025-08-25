@@ -149,51 +149,95 @@ export default function Piles3D({
               {label} ({cards.length})
             </Text>
 
-            {/* Top card or placeholder */}
-            {top ? (
-              <group
-                onPointerOver={(e) => {
-                  const isDragging = !!dragFromHand || !!dragFromPile;
-                  if (isDragging) return; // allow bubbling while dragging
-                  e.stopPropagation();
-                  // Only reveal preview for face-up piles (graveyard)
-                  if (isCemetery) beginHoverPreview(top);
-                }}
-                onPointerOut={(e) => {
-                  const isDragging = !!dragFromHand || !!dragFromPile;
-                  if (isDragging) return; // allow bubbling while dragging
-                  e.stopPropagation();
-                  clearHoverPreview();
-                }}
-                onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-                  const isDragging = !!dragFromHand || !!dragFromPile;
-                  if (isDragging) return; // don't start another drag
-                  if (e.button !== 0) return; // left only
-                  e.stopPropagation();
-                  setDragFromPile({ who: owner, from: key, card: top });
-                  setDragFromHand(true);
-                }}
-              >
-                <CardPlane
-                  slug={top.slug!}
-                  textureUrl={
-                    isCemetery
-                      ? undefined
-                      : key === "atlas"
-                      ? "/api/assets/cardback_atlas.png"
-                      : "/api/assets/cardback_spellbook.png"
-                  }
-                  width={w}
-                  height={h}
-                  rotationZ={rotZ}
-                  depthWrite={false}
-                  interactive={!(dragFromHand || dragFromPile)}
-                  elevation={
-                    0.003
-                  }
-                />
+            {/* Stack visualization with simpler approach */}
+            {cards.length > 0 ? (
+              <group>
+                {/* Bottom cards for stack depth (non-interactive) */}
+                {cards.slice(1, Math.min(cards.length, 4)).map((card, stackIndex) => (
+                  <CardPlane
+                    key={`stack-${card.slug}-${stackIndex}`}
+                    slug={card.slug!}
+                    textureUrl={
+                      isCemetery
+                        ? undefined
+                        : key === "atlas"
+                        ? "/api/assets/cardback_atlas.png"
+                        : "/api/assets/cardback_spellbook.png"
+                    }
+                    width={w}
+                    height={h}
+                    rotationZ={rotZ}
+                    depthWrite={false}
+                    interactive={false}
+                    elevation={stackIndex * 0.01}
+                  />
+                ))}
+                
+                {/* Top card (interactive) - add invisible mesh for reliable clicking */}
+                <group>
+                  {/* Invisible clickable area */}
+                  <mesh
+                    rotation-x={-Math.PI / 2}
+                    rotation-z={rotZ}
+                    position={[0, Math.min(cards.length - 1, 3) * 0.01 + 0.002, 0]}
+                    onPointerOver={(e) => {
+                      const isDragging = !!dragFromHand || !!dragFromPile;
+                      if (isDragging) return;
+                      e.stopPropagation();
+                      if (isCemetery) beginHoverPreview(cards[0]);
+                    }}
+                    onPointerOut={(e) => {
+                      const isDragging = !!dragFromHand || !!dragFromPile;
+                      if (isDragging) return;
+                      e.stopPropagation();
+                      clearHoverPreview();
+                    }}
+                    onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                      const isDragging = !!dragFromHand || !!dragFromPile;
+                      if (isDragging) return;
+                      if (e.button !== 0) return;
+                      e.stopPropagation();
+                      console.log(`Drawing from ${key} (${owner}):`, cards[0]);
+                      setDragFromPile({ who: owner, from: key, card: cards[0] });
+                      setDragFromHand(true);
+                      clearHoverPreview();
+                    }}
+                  >
+                    <planeGeometry args={[w, h]} />
+                    <meshBasicMaterial transparent opacity={0} />
+                  </mesh>
+                  
+                  {/* Visual card */}
+                  <CardPlane
+                    slug={cards[0].slug!}
+                    textureUrl={
+                      isCemetery
+                        ? undefined
+                        : key === "atlas"
+                        ? "/api/assets/cardback_atlas.png"
+                        : "/api/assets/cardback_spellbook.png"
+                    }
+                    width={w}
+                    height={h}
+                    rotationZ={rotZ}
+                    depthWrite={false}
+                    interactive={false}
+                    elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
+                  />
+                </group>
               </group>
-            ) : null}
+            ) : (
+              // Empty pile placeholder
+              <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ} position={[0, 0.001, 0]}>
+                <planeGeometry args={[w, h]} />
+                <meshStandardMaterial
+                  color="#374151"
+                  transparent
+                  opacity={0.3}
+                  depthWrite={false}
+                />
+              </mesh>
+            )}
           </group>
         );
       })}
