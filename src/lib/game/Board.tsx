@@ -10,7 +10,7 @@ import {
   type Intersection,
 } from "three";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store";
+import type { CardRef, PermanentItem } from "@/lib/game/store";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import CardPlane from "@/lib/game/components/CardPlane";
 import CardGlow from "@/lib/game/components/CardGlow";
@@ -79,6 +79,36 @@ export default function Board() {
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
   const tex = useTexture("/api/assets/playmat.jpg");
   tex.colorSpace = SRGBColorSpace;
+
+  // Helper function to update offsets for existing cards when a new card is added
+  const updateExistingCardOffsets = (
+    tileKey: string,
+    existingItems: PermanentItem[],
+    newTotalCount: number
+  ) => {
+    const spacing = TILE_SIZE * 0.28;
+
+    // Calculate old baseline (before new card was added)
+    const oldCount = existingItems.length;
+    const oldStartX = -((Math.max(oldCount, 1) - 1) * spacing) / 2;
+
+    // Calculate new baseline (with new card added)
+    const newStartX = -((Math.max(newTotalCount, 1) - 1) * spacing) / 2;
+
+    // Update offsets for each existing card
+    existingItems.forEach((item, idx) => {
+      if (item && item.offset) {
+        const oldBaselineX = oldStartX + idx * spacing;
+        const newBaselineX = newStartX + idx * spacing;
+        const baselineDiff = newBaselineX - oldBaselineX;
+
+        // Adjust the offset to maintain the same world position
+        const newOffsetX = item.offset[0] - baselineDiff;
+        setPermanentOffset(tileKey, idx, [newOffsetX, item.offset[1]]);
+      }
+    });
+  };
+
   // Compute mat world size using BASE tile size (keeps mat size unchanged even if TILE_SIZE changes)
   const baseGridW = board.size.w * BASE_TILE_SIZE;
   const baseGridH = board.size.h * BASE_TILE_SIZE;
@@ -135,7 +165,19 @@ export default function Board() {
     api.wakeUp();
     api.setLinvel({ x: 0, y: 0, z: 0 }, true);
     api.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.2, z }, true);
+    api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.25, z }, true);
+  }
+
+  // Snap a body (by id) to an exact world position on the next frame.
+  function snapBodyTo(id: string, x: number, z: number) {
+    requestAnimationFrame(() => {
+      const api = bodyMap.current.get(id);
+      if (!api) return;
+      api.wakeUp();
+      api.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      api.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      api.setTranslation({ x, y: 0.25, z }, false);
+    });
   }
 
   // Ensure local drag state is cleared even if mouse is released outside the canvas
@@ -292,6 +334,8 @@ export default function Board() {
                     const offZ = wz - baseZ;
                     if (draggedBody.current) moveDraggedBody(wx, wz, false);
                     moveAvatarToWithOffset(dragAvatar, x, y, [offX, offZ]);
+                    // Snap avatar body to the final drop point on next frame
+                    snapBodyTo(`avatar:${dragAvatar}`, wx, wz);
                     // Restore selection on the moved avatar
                     selectAvatar(dragAvatar);
                     // Clear drag refs/state
@@ -330,6 +374,12 @@ export default function Board() {
                       if (draggedBody.current)
                         moveDraggedBody(world.x, world.z, false);
                       setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
+                      // Ensure body is exactly at the world drop point after render
+                      snapBodyTo(
+                        `${dropKey}:${dragging.index}`,
+                        world.x,
+                        world.z
+                      );
                     } else {
                       const toItems = permanents[dropKey] || [];
                       const newIndex = toItems.length; // push to end
@@ -350,6 +400,8 @@ export default function Board() {
                       if (draggedBody.current)
                         moveDraggedBody(world.x, world.z, false);
                       moveSelectedPermanentToWithOffset(x, y, [offX, offZ]);
+                      // Snap to the new body's id at its new index
+                      snapBodyTo(`${dropKey}:${newIndex}`, world.x, world.z);
                     }
                     setDragging(null);
                     setDragFromHand(false);
@@ -389,6 +441,8 @@ export default function Board() {
                       ).toLowerCase();
                       if (!type.includes("site")) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+                        // Update offsets for existing cards to maintain their world positions
+                        updateExistingCardOffsets(dropKey, toItems, newCount);
                       }
                     } else if (dragFromPile?.card) {
                       const type = (
@@ -400,6 +454,8 @@ export default function Board() {
                       setGhost(null); // Also clear ghost immediately
                       if (!type.includes("site")) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+                        // Update offsets for existing cards to maintain their world positions
+                        updateExistingCardOffsets(dropKey, toItems, newCount);
                       }
                     }
                     setDragFromHand(false);
@@ -431,7 +487,7 @@ export default function Board() {
                 <group>
                   {(() => {
                     const rotZ =
-                      -Math.PI / 2 +
+                      Math.PI / 2 +
                       (site.owner === 1 ? 0 : Math.PI) +
                       (site.tapped ? Math.PI / 2 : 0);
                     const isSel =
@@ -676,6 +732,7 @@ export default function Board() {
                               if (draggedBody.current)
                                 moveDraggedBody(wx, wz, false);
                               setPermanentOffset(dropKey, idx, [offX, offZ]);
+                              snapBodyTo(`${dropKey}:${idx}`, wx, wz);
                             } else {
                               // Moving to another tile: baseline uses new count and new index at end
                               const toItems = permanents[dropKey] || [];
@@ -694,6 +751,7 @@ export default function Board() {
                                 offX,
                                 offZ,
                               ]);
+                              snapBodyTo(`${dropKey}:${newIndex}`, wx, wz);
                             }
                             setDragging(null);
                             setDragFromHand(false);
@@ -742,12 +800,26 @@ export default function Board() {
                           }}
                         >
                           {p.card.slug ? (
-                            <CardPlane
-                              slug={p.card.slug!}
-                              width={CARD_SHORT}
-                              height={CARD_LONG}
-                              rotationZ={rotZ}
-                            />
+                            <>
+                              {((selectedPermanent?.at === key &&
+                                selectedPermanent?.index === idx) ||
+                                (dragging?.from === key &&
+                                  dragging?.index === idx)) && (
+                                <CardGlow
+                                  width={CARD_SHORT}
+                                  height={CARD_LONG}
+                                  rotationZ={rotZ}
+                                  elevation={0.001}
+                                  color="#60a5fa"
+                                />
+                              )}
+                              <CardPlane
+                                slug={p.card.slug!}
+                                width={CARD_SHORT}
+                                height={CARD_LONG}
+                                rotationZ={rotZ}
+                              />
+                            </>
                           ) : (
                             <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
                               <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
@@ -935,6 +1007,8 @@ export default function Board() {
                           if (draggedBody.current)
                             moveDraggedBody(wx, wz, false);
                           moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
+                          // Snap avatar body to the final drop point on next frame
+                          snapBodyTo(`avatar:${who}`, wx, wz);
                           setDragAvatar(null);
                           setDragFromHand(false);
                           setGhost(null);
@@ -965,12 +1039,23 @@ export default function Board() {
                         }}
                       >
                         {a.card?.slug ? (
-                          <CardPlane
-                            slug={a.card.slug!}
-                            width={CARD_SHORT}
-                            height={CARD_LONG}
-                            rotationZ={rotZ}
-                          />
+                          <>
+                            {(selectedAvatar === who || dragAvatar === who) && (
+                              <CardGlow
+                                width={CARD_SHORT}
+                                height={CARD_LONG}
+                                rotationZ={rotZ}
+                                elevation={0.001}
+                                color="#60a5fa"
+                              />
+                            )}
+                            <CardPlane
+                              slug={a.card.slug!}
+                              width={CARD_SHORT}
+                              height={CARD_LONG}
+                              rotationZ={rotZ}
+                            />
+                          </>
                         ) : (
                           <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
                             <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
@@ -1004,7 +1089,7 @@ export default function Board() {
                   .toLowerCase()
                   .includes("site");
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
+                const rotZ = isSite ? Math.PI / 2 + ownerRot : ownerRot;
                 if (!selected.card.slug) return null;
                 return (
                   <CardPlane
@@ -1019,7 +1104,7 @@ export default function Board() {
                 const c = dragFromPile.card;
                 const isSite = (c.type || "").toLowerCase().includes("site");
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
+                const rotZ = isSite ? Math.PI / 2 + ownerRot : ownerRot;
                 if (!c.slug) return null;
                 return (
                   <CardPlane

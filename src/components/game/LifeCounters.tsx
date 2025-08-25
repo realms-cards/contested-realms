@@ -9,11 +9,8 @@ interface LifeCountersProps {
 export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
   const p1 = useGameStore((s) => s.players.p1);
   const p2 = useGameStore((s) => s.players.p2);
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
   const addLife = useGameStore((s) => s.addLife);
-  const addThreshold = useGameStore((s) => s.addThreshold);
-
-  const cur = currentPlayer === 1 ? p1 : p2;
+  // Threshold controls are currently disabled in the UI
 
   return (
     <div

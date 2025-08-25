@@ -128,12 +128,11 @@ export default function Piles3D({
 
     document.addEventListener("mouseup", handleGlobalMouseUp);
     return () => document.removeEventListener("mouseup", handleGlobalMouseUp);
-  }, []); // Empty dependency array
+  }, [setDragFromPile, setDragFromHand]);
 
   return (
     <group position={[0, 0.001, 0]}>
-      {piles.map(({ key, x, z, label, cards }) => {
-        const top = cards[0];
+      {piles.map(({ key, x, z, cards }) => {
         // Orientation: Atlas landscape, Spellbook/Cemetery portrait regardless of contents
         const isAtlas = key === "atlas";
         const isCemetery = key === "graveyard";
@@ -181,13 +180,13 @@ export default function Piles3D({
                       Math.min(cards.length - 1, 3) * 0.01 + 0.002,
                       0,
                     ]}
-                    onPointerOver={(e) => {
+                    onPointerOver={() => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
                       // Don't stop propagation - allow orbit controls
                       if (isCemetery) beginHoverPreview(cards[0]);
                     }}
-                    onPointerOut={(e) => {
+                    onPointerOut={() => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
                       // Don't stop propagation - allow orbit controls
@@ -218,6 +217,7 @@ export default function Piles3D({
                       // Left click = drag to board
                       if (e.button === 0) {
                         e.stopPropagation();
+                        e.nativeEvent.preventDefault();
                         console.log(
                           `Dragging from ${key} to board (${owner}):`,
                           cards[0]

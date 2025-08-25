@@ -15,7 +15,6 @@ import DeckSelector from "@/components/game/DeckSelector";
 import MulliganScreen from "@/components/game/MulliganScreen";
 import StatusBar from "@/components/game/StatusBar";
 import LifeCounters from "@/components/game/LifeCounters";
-import ResourceBar from "@/components/game/ResourceBar";
 import ContextMenu from "@/components/game/ContextMenu";
 
 export default function PlayPage() {
