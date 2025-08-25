@@ -154,12 +154,12 @@ export default function PlayPage() {
       )}
 
       {contextMenu && (
-        <ContextMenu 
+        <ContextMenu
           onClose={() => {
             clearSelection();
             setPreviewCard(null);
             closeContextMenu();
-          }} 
+          }}
         />
       )}
 
