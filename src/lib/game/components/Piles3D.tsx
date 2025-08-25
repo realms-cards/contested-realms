@@ -1,16 +1,11 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { Text } from "@react-three/drei";
+import { useEffect, useMemo, useRef } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
-import {
-  CARD_LONG,
-  CARD_SHORT,
-  TILE_SIZE,
-} from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 
 export interface Piles3DProps {
   matW: number;
@@ -41,6 +36,7 @@ export default function Piles3D({
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
+  const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
   // Intentionally unused in this component after layout refactor
   void _matW;
   void _matH;
@@ -71,7 +67,6 @@ export default function Piles3D({
     key: PileKey;
     x: number;
     z: number;
-    label: string;
     cards: CardRef[];
   }[] = useMemo(
     () => [
@@ -79,7 +74,6 @@ export default function Piles3D({
         key: "atlas",
         x: pilesX,
         z: startZ + step * 4.8,
-        label: labels.atlas,
         cards: playerZones.atlas,
       },
       {
@@ -122,6 +116,20 @@ export default function Piles3D({
     setPreviewCard(null);
   }
 
+  // Ensure drag states are cleared on global mouseup - with delay to allow Board drops to complete
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      // Small delay to allow Board drop logic to complete first
+      setTimeout(() => {
+        setDragFromPile(null);
+        setDragFromHand(false);
+      }, 50);
+    };
+
+    document.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => document.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []); // Empty dependency array
+
   return (
     <group position={[0, 0.001, 0]}>
       {piles.map(({ key, x, z, label, cards }) => {
@@ -131,82 +139,103 @@ export default function Piles3D({
         const isCemetery = key === "graveyard";
         // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
         const ownerRot = owner === "p1" ? Math.PI : 0;
-        const rotZ = ownerRot + (isCemetery ? Math.PI : 0);
+        const rotZ = ownerRot + Math.PI + (isCemetery ? Math.PI : 0);
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         return (
           <group key={key} position={[x, 0, z]}>
-            {/* Label and count */}
-            <Text
-              position={[0, 0.002, -h * 0.7]}
-              rotation-x={-Math.PI / 2}
-              rotation-z={ownerRot}
-              color="#e5e7eb"
-              anchorX="center"
-              anchorY="middle"
-              fontSize={0.18}
-            >
-              {label} ({cards.length})
-            </Text>
-
             {/* Stack visualization with simpler approach */}
             {cards.length > 0 ? (
               <group>
                 {/* Bottom cards for stack depth (non-interactive) */}
-                {cards.slice(1, Math.min(cards.length, 4)).map((card, stackIndex) => (
-                  <CardPlane
-                    key={`stack-${card.slug}-${stackIndex}`}
-                    slug={card.slug!}
-                    textureUrl={
-                      isCemetery
-                        ? undefined
-                        : key === "atlas"
-                        ? "/api/assets/cardback_atlas.png"
-                        : "/api/assets/cardback_spellbook.png"
-                    }
-                    width={w}
-                    height={h}
-                    rotationZ={rotZ}
-                    depthWrite={false}
-                    interactive={false}
-                    elevation={stackIndex * 0.01}
-                  />
-                ))}
-                
+                {cards
+                  .slice(1, Math.min(cards.length, 4))
+                  .map((card, stackIndex) => (
+                    <CardPlane
+                      key={`stack-${card.slug}-${stackIndex}`}
+                      slug={card.slug!}
+                      textureUrl={
+                        isCemetery
+                          ? undefined
+                          : key === "atlas"
+                          ? "/api/assets/cardback_atlas.png"
+                          : "/api/assets/cardback_spellbook.png"
+                      }
+                      width={w}
+                      height={h}
+                      rotationZ={rotZ}
+                      depthWrite={false}
+                      interactive={false}
+                      elevation={stackIndex * 0.01}
+                    />
+                  ))}
+
                 {/* Top card (interactive) - add invisible mesh for reliable clicking */}
                 <group>
                   {/* Invisible clickable area */}
                   <mesh
                     rotation-x={-Math.PI / 2}
                     rotation-z={rotZ}
-                    position={[0, Math.min(cards.length - 1, 3) * 0.01 + 0.002, 0]}
+                    position={[
+                      0,
+                      Math.min(cards.length - 1, 3) * 0.01 + 0.002,
+                      0,
+                    ]}
                     onPointerOver={(e) => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
-                      e.stopPropagation();
+                      // Don't stop propagation - allow orbit controls
                       if (isCemetery) beginHoverPreview(cards[0]);
                     }}
                     onPointerOut={(e) => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
-                      e.stopPropagation();
+                      // Don't stop propagation - allow orbit controls
                       clearHoverPreview();
                     }}
                     onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
-                      if (e.button !== 0) return;
-                      e.stopPropagation();
-                      console.log(`Drawing from ${key} (${owner}):`, cards[0]);
-                      setDragFromPile({ who: owner, from: key, card: cards[0] });
-                      setDragFromHand(true);
-                      clearHoverPreview();
+
+                      // Right click = draw to hand
+                      if (e.button === 2) {
+                        e.stopPropagation();
+                        e.nativeEvent.preventDefault();
+                        console.log(
+                          `Drawing ${key} card to hand (${owner}):`,
+                          cards[0]
+                        );
+                        setDragFromPile({
+                          who: owner,
+                          from: key,
+                          card: cards[0],
+                        });
+                        drawFromPileToHand();
+                        clearHoverPreview();
+                        return;
+                      }
+
+                      // Left click = drag to board
+                      if (e.button === 0) {
+                        e.stopPropagation();
+                        console.log(
+                          `Dragging from ${key} to board (${owner}):`,
+                          cards[0]
+                        );
+                        setDragFromPile({
+                          who: owner,
+                          from: key,
+                          card: cards[0],
+                        });
+                        setDragFromHand(true); // Required for Board drop logic to work
+                        clearHoverPreview();
+                      }
                     }}
                   >
                     <planeGeometry args={[w, h]} />
                     <meshBasicMaterial transparent opacity={0} />
                   </mesh>
-                  
+
                   {/* Visual card */}
                   <CardPlane
                     slug={cards[0].slug!}
@@ -228,7 +257,11 @@ export default function Piles3D({
               </group>
             ) : (
               // Empty pile placeholder
-              <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ} position={[0, 0.001, 0]}>
+              <mesh
+                rotation-x={-Math.PI / 2}
+                rotation-z={rotZ}
+                position={[0, 0.001, 0]}
+              >
                 <planeGeometry args={[w, h]} />
                 <meshStandardMaterial
                   color="#374151"

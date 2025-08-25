@@ -56,7 +56,9 @@ export default function DeckEditorPage() {
 
   // Prefetched standard sites for quick-add buttons (per current set)
   type StandardSiteName = (typeof STANDARD_SITE_NAMES)[number];
-  const [stdSites, setStdSites] = useState<Record<StandardSiteName, SearchResult | null>>({
+  const [stdSites, setStdSites] = useState<
+    Record<StandardSiteName, SearchResult | null>
+  >({
     Spire: null,
     Stream: null,
     Valley: null,
@@ -99,7 +101,9 @@ export default function DeckEditorPage() {
   // If we arrive with ?id=... in the URL, auto-load that deck
   useEffect(() => {
     try {
-      const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+      const sp = new URLSearchParams(
+        typeof window !== "undefined" ? window.location.search : ""
+      );
       const id = sp.get("id");
       if (id) {
         loadDeck(id);
@@ -115,7 +119,9 @@ export default function DeckEditorPage() {
         const entries = await Promise.all(
           STANDARD_SITE_NAMES.map(async (name) => {
             const res = await fetch(
-              `/api/cards/search?q=${encodeURIComponent(name)}&set=${encodeURIComponent(setName)}&type=site`
+              `/api/cards/search?q=${encodeURIComponent(
+                name
+              )}&set=${encodeURIComponent(setName)}&type=site`
             );
             const data = (await res.json()) as SearchResult[];
             return [name, res.ok && data[0] ? data[0] : null] as const;
@@ -133,7 +139,12 @@ export default function DeckEditorPage() {
         }
       } catch {
         if (!cancelled) {
-          setStdSites({ Spire: null, Stream: null, Valley: null, Wasteland: null });
+          setStdSites({
+            Spire: null,
+            Stream: null,
+            Valley: null,
+            Wasteland: null,
+          });
         }
       }
     })();
@@ -163,7 +174,8 @@ export default function DeckEditorPage() {
         atlas: ApiCardRef[];
         sideboard: ApiCardRef[];
       };
-      const toKey = (c: ApiCardRef, zone: Zone) => `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
+      const toKey = (c: ApiCardRef, zone: Zone) =>
+        `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
       const map: Record<PickKey, PickItem> = {};
       const push = (c: ApiCardRef, zone: Zone) => {
         const key = toKey(c, zone);
@@ -254,7 +266,10 @@ export default function DeckEditorPage() {
   }
 
   function increment(key: PickKey) {
-    setPicks((prev) => ({ ...prev, [key]: { ...prev[key], count: prev[key].count + 1 } }));
+    setPicks((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], count: prev[key].count + 1 },
+    }));
   }
 
   // (changeZone removed; use moveOneToSideboard/moveOneFromSideboardToDeck helpers instead)
@@ -270,7 +285,8 @@ export default function DeckEditorPage() {
       else next[key] = { ...it, count: it.count - 1 };
       // increment sideboard
       const sbKey = `${it.cardId}:Sideboard:${it.variantId ?? "x"}`;
-      if (next[sbKey]) next[sbKey] = { ...next[sbKey], count: next[sbKey].count + 1 };
+      if (next[sbKey])
+        next[sbKey] = { ...next[sbKey], count: next[sbKey].count + 1 };
       else next[sbKey] = { ...it, zone: "Sideboard", count: 1 };
       return next;
     });
@@ -298,7 +314,11 @@ export default function DeckEditorPage() {
   async function setAvatarSpellslinger() {
     try {
       setError(null);
-      const res = await fetch(`/api/cards/search?q=spellslinger&set=${encodeURIComponent(setName)}&type=avatar`);
+      const res = await fetch(
+        `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
+          setName
+        )}&type=avatar`
+      );
       const raw = await res.json();
       if (!res.ok) {
         const apiErr = (raw as { error?: string } | null)?.error;
@@ -342,7 +362,11 @@ export default function DeckEditorPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/cards/search?q=${encodeURIComponent(name)}&set=${encodeURIComponent(setName)}&type=site`);
+      const res = await fetch(
+        `/api/cards/search?q=${encodeURIComponent(
+          name
+        )}&set=${encodeURIComponent(setName)}&type=site`
+      );
       const data = (await res.json()) as SearchResult[];
       const r = res.ok && data[0] ? data[0] : null;
       if (r) addCardFromResult(r, "Atlas");
@@ -410,19 +434,21 @@ export default function DeckEditorPage() {
     ev.dataTransfer.effectAllowed = "copy";
   };
 
-  const onDragStartFromPick = (key: PickKey, it: PickItem, from: "deck" | "sideboard") => (ev: React.DragEvent) => {
-    const payload: DragPayload = {
-      from,
-      key,
-      cardId: it.cardId,
-      variantId: it.variantId,
-      name: it.name,
-      type: it.type,
-      slug: it.slug,
+  const onDragStartFromPick =
+    (key: PickKey, it: PickItem, from: "deck" | "sideboard") =>
+    (ev: React.DragEvent) => {
+      const payload: DragPayload = {
+        from,
+        key,
+        cardId: it.cardId,
+        variantId: it.variantId,
+        name: it.name,
+        type: it.type,
+        slug: it.slug,
+      };
+      ev.dataTransfer.setData("application/json", JSON.stringify(payload));
+      ev.dataTransfer.effectAllowed = from === "deck" ? "move" : "copyMove";
     };
-    ev.dataTransfer.setData("application/json", JSON.stringify(payload));
-    ev.dataTransfer.effectAllowed = from === "deck" ? "move" : "copyMove";
-  };
 
   const handleDropOnDeck = (ev: React.DragEvent) => {
     ev.preventDefault();
@@ -486,7 +512,9 @@ export default function DeckEditorPage() {
       setSaveMsg(null);
 
       if (!validation.avatar || !validation.atlas || !validation.spellbook) {
-        throw new Error("Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)");
+        throw new Error(
+          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+        );
       }
 
       const cards = Object.values(picks).map((p) => ({
@@ -500,7 +528,11 @@ export default function DeckEditorPage() {
         const res = await fetch(`/api/decks/${deckId}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: deckName || "Deck", set: setName, cards }),
+          body: JSON.stringify({
+            name: deckName || "Deck",
+            set: setName,
+            cards,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to update deck");
@@ -509,7 +541,12 @@ export default function DeckEditorPage() {
         const res = await fetch("/api/decks", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: deckName || "New Deck", format: "Constructed", set: setName, cards }),
+          body: JSON.stringify({
+            name: deckName || "New Deck",
+            format: "Constructed",
+            set: setName,
+            cards,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to save deck");
@@ -533,14 +570,43 @@ export default function DeckEditorPage() {
   const entries = Object.entries(picks);
   const deckEntries = entries.filter(([, it]) => it.zone !== "Sideboard");
   const sideEntries = entries.filter(([, it]) => it.zone === "Sideboard");
-  const avatars = deckEntries.filter(([, it]) => (it.type || "").toLowerCase().includes("avatar"));
-  const atlasCards = deckEntries.filter(([, it]) => (it.type || "").toLowerCase().includes("site"));
-  const spellbookCards = deckEntries.filter(([, it]) => it.zone === "Spellbook" && !(it.type || "").toLowerCase().includes("avatar"));
+  const avatars = deckEntries.filter(([, it]) =>
+    (it.type || "").toLowerCase().includes("avatar")
+  );
+  const atlasCards = deckEntries.filter(([, it]) =>
+    (it.type || "").toLowerCase().includes("site")
+  );
+  const spellbookCards = deckEntries.filter(
+    ([, it]) =>
+      it.zone === "Spellbook" &&
+      !(it.type || "").toLowerCase().includes("avatar")
+  );
 
-  const CardThumb: React.FC<{ slug: string | null; alt: string; isSite: boolean } & React.HTMLAttributes<HTMLDivElement>> = ({ slug, alt, isSite, className = "", ...rest }) => (
-    <div className={"relative overflow-hidden rounded bg-muted/40 " + (isSite ? "aspect-[4/3]" : "aspect-[3/4]") + (className ? " " + className : "")} {...rest}>
+  const CardThumb: React.FC<
+    {
+      slug: string | null;
+      alt: string;
+      isSite: boolean;
+    } & React.HTMLAttributes<HTMLDivElement>
+  > = ({ slug, alt, isSite, className = "", ...rest }) => (
+    <div
+      className={
+        "relative overflow-hidden rounded bg-muted/40 " +
+        (isSite ? "aspect-[4/3]" : "aspect-[3/4]") +
+        (className ? " " + className : "")
+      }
+      {...rest}
+    >
       {slug && (
-        <Image src={`/api/images/${slug}`} alt={alt} fill sizes="160px" className={isSite ? "object-contain rotate-90 origin-center" : "object-cover"} />
+        <Image
+          src={`/api/images/${slug}`}
+          alt={alt}
+          fill
+          sizes="160px"
+          className={
+            isSite ? "object-contain rotate-90 origin-center" : "object-cover"
+          }
+        />
       )}
     </div>
   );
@@ -572,44 +638,85 @@ export default function DeckEditorPage() {
                 </option>
               ))}
             </select>
-            <button onClick={clearEditor} disabled={loadingDecks} className="h-10 px-3 border rounded disabled:opacity-60">New</button>
-            {loadingDecks && <div className="self-center text-xs opacity-70">Loading...</div>}
+            <button
+              onClick={clearEditor}
+              disabled={loadingDecks}
+              className="h-10 px-3 border rounded disabled:opacity-60"
+            >
+              New
+            </button>
+            {loadingDecks && (
+              <div className="self-center text-xs opacity-70">Loading...</div>
+            )}
           </div>
         </label>
 
         <label className="flex flex-col gap-1">
           <span className="text-xs uppercase opacity-70">Name</span>
-          <input value={deckName} onChange={(e) => setDeckName(e.target.value)} className="border rounded px-3 py-2 bg-transparent" />
+          <input
+            value={deckName}
+            onChange={(e) => setDeckName(e.target.value)}
+            className="border rounded px-3 py-2 bg-transparent"
+          />
         </label>
 
         <label className="flex flex-col gap-1">
           <span className="text-xs uppercase opacity-70">Set</span>
-          <select value={setName} onChange={(e) => setSetName(e.target.value)} className="border rounded px-3 py-2 bg-transparent">
+          <select
+            value={setName}
+            onChange={(e) => setSetName(e.target.value)}
+            className="border rounded px-3 py-2 bg-transparent"
+          >
             <option value="Alpha">Alpha</option>
             <option value="Beta">Beta</option>
           </select>
         </label>
 
         <div className="ml-auto flex items-center gap-3 text-sm">
-          <div className={validation.avatar ? "text-green-600" : "text-red-600"}>Avatar: {avatarCount} / 1</div>
-          <div className={validation.atlas ? "text-green-600" : "text-red-600"}>Atlas: {zoneCounts.Atlas} / 12+</div>
-          <div className={validation.spellbook ? "text-green-600" : "text-red-600"}>Spellbook: {spellbookNonAvatar} / 24+</div>
+          <div
+            className={validation.avatar ? "text-green-600" : "text-red-600"}
+          >
+            Avatar: {avatarCount} / 1
+          </div>
+          <div className={validation.atlas ? "text-green-600" : "text-red-600"}>
+            Atlas: {zoneCounts.Atlas} / 12+
+          </div>
+          <div
+            className={validation.spellbook ? "text-green-600" : "text-red-600"}
+          >
+            Spellbook: {spellbookNonAvatar} / 24+
+          </div>
         </div>
       </div>
 
       {/* Quick actions */}
       <div className="flex flex-wrap items-center gap-3">
-        <button className="px-3 py-2 border rounded text-sm" onClick={setAvatarSpellslinger}>Set Avatar: Spellslinger</button>
+        <button
+          className="px-3 py-2 border rounded text-sm"
+          onClick={setAvatarSpellslinger}
+        >
+          Set Avatar: Spellslinger
+        </button>
         <div className="text-xs uppercase opacity-70 ml-2">Standard Sites</div>
         <div className="flex gap-2">
           {STANDARD_SITE_NAMES.map((n: StandardSiteName) => {
             const hit = stdSites[n];
             const isSite = true;
             return (
-              <button key={n} onClick={() => addStandardSiteByName(n)} className="group relative w-20">
-                <CardThumb slug={hit?.slug ?? null} alt={n} isSite={isSite} className="w-20" />
-                <div className="absolute inset-0 rounded ring-1 ring-inset ring-border/40 group-hover:ring-foreground/60" />
-                <div className="mt-1 text-[10px] text-center opacity-80">{n}</div>
+              <button
+                key={n}
+                onClick={() => addStandardSiteByName(n)}
+                className="group relative w-20"
+              >
+                <CardThumb
+                  slug={hit?.slug ?? null}
+                  alt={n}
+                  isSite={isSite}
+                  className="w-20"
+                />
+                <div className="mt-1 text-[10px] text-center opacity-80">
+                  {n}
+                </div>
               </button>
             );
           })}
@@ -620,14 +727,22 @@ export default function DeckEditorPage() {
       <div className="grid grid-cols-12 gap-4">
         {/* Deck zone */}
         <div
-          className={"col-span-12 lg:col-span-8 border rounded p-3 min-h-64 " + (isOverDeck ? "ring-2 ring-foreground/60" : "")}
-          onDragOver={(ev) => { preventDefault(ev); setIsOverDeck(true); }}
+          className={
+            "col-span-12 lg:col-span-8 border rounded p-3 min-h-64 " +
+            (isOverDeck ? "ring-2 ring-foreground/60" : "")
+          }
+          onDragOver={(ev) => {
+            preventDefault(ev);
+            setIsOverDeck(true);
+          }}
           onDragLeave={() => setIsOverDeck(false)}
           onDrop={handleDropOnDeck}
         >
           <div className="flex items-center justify-between mb-2">
             <div className="font-medium">Deck</div>
-            <div className="text-xs opacity-70">Spellbook: {zoneCounts.Spellbook} • Atlas: {zoneCounts.Atlas}</div>
+            <div className="text-xs opacity-70">
+              Spellbook: {zoneCounts.Spellbook} • Atlas: {zoneCounts.Atlas}
+            </div>
           </div>
 
           {/* Avatar */}
@@ -638,13 +753,39 @@ export default function DeckEditorPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {avatars.map(([key, it]) => (
                     <div key={key} className="relative border rounded p-2">
-                      <CardThumb slug={it.slug} alt={it.name} isSite={false} className="w-full" draggable onDragStart={onDragStartFromPick(key, it, "deck")} />
-                      <div className="mt-1 text-xs font-medium line-clamp-1">{it.name}</div>
-                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">x{it.count}</div>
+                      <CardThumb
+                        slug={it.slug}
+                        alt={it.name}
+                        isSite={false}
+                        className="w-full"
+                        draggable
+                        onDragStart={onDragStartFromPick(key, it, "deck")}
+                      />
+                      <div className="mt-1 text-xs font-medium line-clamp-1">
+                        {it.name}
+                      </div>
+                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
+                        x{it.count}
+                      </div>
                       <div className="mt-2 flex gap-1 text-xs">
-                        <button className="px-2 py-1 border rounded" onClick={() => removeOne(key)}>-</button>
-                        <button className="px-2 py-1 border rounded" onClick={() => increment(key)}>+</button>
-                        <button className="ml-auto px-2 py-1 border rounded" onClick={() => moveOneToSideboard(key)}>→ Side</button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => removeOne(key)}
+                        >
+                          -
+                        </button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => increment(key)}
+                        >
+                          +
+                        </button>
+                        <button
+                          className="ml-auto px-2 py-1 border rounded"
+                          onClick={() => moveOneToSideboard(key)}
+                        >
+                          → Side
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -655,17 +796,45 @@ export default function DeckEditorPage() {
             {/* Spellbook */}
             {!!spellbookCards.length && (
               <div>
-                <div className="text-xs uppercase opacity-70 mb-2">Spellbook</div>
+                <div className="text-xs uppercase opacity-70 mb-2">
+                  Spellbook
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {spellbookCards.map(([key, it]) => (
                     <div key={key} className="relative border rounded p-2">
-                      <CardThumb slug={it.slug} alt={it.name} isSite={false} className="w-full" draggable onDragStart={onDragStartFromPick(key, it, "deck")} />
-                      <div className="mt-1 text-xs font-medium line-clamp-1">{it.name}</div>
-                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">x{it.count}</div>
+                      <CardThumb
+                        slug={it.slug}
+                        alt={it.name}
+                        isSite={false}
+                        className="w-full"
+                        draggable
+                        onDragStart={onDragStartFromPick(key, it, "deck")}
+                      />
+                      <div className="mt-1 text-xs font-medium line-clamp-1">
+                        {it.name}
+                      </div>
+                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
+                        x{it.count}
+                      </div>
                       <div className="mt-2 flex gap-1 text-xs">
-                        <button className="px-2 py-1 border rounded" onClick={() => removeOne(key)}>-</button>
-                        <button className="px-2 py-1 border rounded" onClick={() => increment(key)}>+</button>
-                        <button className="ml-auto px-2 py-1 border rounded" onClick={() => moveOneToSideboard(key)}>→ Side</button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => removeOne(key)}
+                        >
+                          -
+                        </button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => increment(key)}
+                        >
+                          +
+                        </button>
+                        <button
+                          className="ml-auto px-2 py-1 border rounded"
+                          onClick={() => moveOneToSideboard(key)}
+                        >
+                          → Side
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -680,13 +849,39 @@ export default function DeckEditorPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {atlasCards.map(([key, it]) => (
                     <div key={key} className="relative border rounded p-2">
-                      <CardThumb slug={it.slug} alt={it.name} isSite={true} className="w-full" draggable onDragStart={onDragStartFromPick(key, it, "deck")} />
-                      <div className="mt-1 text-xs font-medium line-clamp-1">{it.name}</div>
-                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">x{it.count}</div>
+                      <CardThumb
+                        slug={it.slug}
+                        alt={it.name}
+                        isSite={true}
+                        className="w-full"
+                        draggable
+                        onDragStart={onDragStartFromPick(key, it, "deck")}
+                      />
+                      <div className="mt-1 text-xs font-medium line-clamp-1">
+                        {it.name}
+                      </div>
+                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
+                        x{it.count}
+                      </div>
                       <div className="mt-2 flex gap-1 text-xs">
-                        <button className="px-2 py-1 border rounded" onClick={() => removeOne(key)}>-</button>
-                        <button className="px-2 py-1 border rounded" onClick={() => increment(key)}>+</button>
-                        <button className="ml-auto px-2 py-1 border rounded" onClick={() => moveOneToSideboard(key)}>→ Side</button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => removeOne(key)}
+                        >
+                          -
+                        </button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => increment(key)}
+                        >
+                          +
+                        </button>
+                        <button
+                          className="ml-auto px-2 py-1 border rounded"
+                          onClick={() => moveOneToSideboard(key)}
+                        >
+                          → Side
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -698,25 +893,59 @@ export default function DeckEditorPage() {
 
         {/* Sideboard zone */}
         <div
-          className={"col-span-12 lg:col-span-4 border rounded p-3 min-h-64 " + (isOverSideboard ? "ring-2 ring-foreground/60" : "")}
-          onDragOver={(ev) => { preventDefault(ev); setIsOverSideboard(true); }}
+          className={
+            "col-span-12 lg:col-span-4 border rounded p-3 min-h-64 " +
+            (isOverSideboard ? "ring-2 ring-foreground/60" : "")
+          }
+          onDragOver={(ev) => {
+            preventDefault(ev);
+            setIsOverSideboard(true);
+          }}
           onDragLeave={() => setIsOverSideboard(false)}
           onDrop={handleDropOnSideboard}
         >
           <div className="flex items-center justify-between mb-2">
             <div className="font-medium">Sideboard</div>
-            <div className="text-xs opacity-70">{zoneCounts.Sideboard} cards</div>
+            <div className="text-xs opacity-70">
+              {zoneCounts.Sideboard} cards
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {sideEntries.map(([key, it]) => (
               <div key={key} className="relative border rounded p-2">
-                <CardThumb slug={it.slug} alt={it.name} isSite={(it.type || "").toLowerCase().includes("site")} className="w-full" draggable onDragStart={onDragStartFromPick(key, it, "sideboard")} />
-                <div className="mt-1 text-xs font-medium line-clamp-1">{it.name}</div>
-                <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">x{it.count}</div>
+                <CardThumb
+                  slug={it.slug}
+                  alt={it.name}
+                  isSite={(it.type || "").toLowerCase().includes("site")}
+                  className="w-full"
+                  draggable
+                  onDragStart={onDragStartFromPick(key, it, "sideboard")}
+                />
+                <div className="mt-1 text-xs font-medium line-clamp-1">
+                  {it.name}
+                </div>
+                <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
+                  x{it.count}
+                </div>
                 <div className="mt-2 flex gap-1 text-xs">
-                  <button className="px-2 py-1 border rounded" onClick={() => removeOne(key)}>-</button>
-                  <button className="px-2 py-1 border rounded" onClick={() => increment(key)}>+</button>
-                  <button className="ml-auto px-2 py-1 border rounded" onClick={() => moveOneFromSideboardToDeck(key)}>→ Deck</button>
+                  <button
+                    className="px-2 py-1 border rounded"
+                    onClick={() => removeOne(key)}
+                  >
+                    -
+                  </button>
+                  <button
+                    className="px-2 py-1 border rounded"
+                    onClick={() => increment(key)}
+                  >
+                    +
+                  </button>
+                  <button
+                    className="ml-auto px-2 py-1 border rounded"
+                    onClick={() => moveOneFromSideboardToDeck(key)}
+                  >
+                    → Deck
+                  </button>
                 </div>
               </div>
             ))}
@@ -726,14 +955,27 @@ export default function DeckEditorPage() {
           <div className="mt-4 border-t pt-3">
             <div className="font-medium mb-2">Search</div>
             <div className="flex flex-wrap items-end gap-2 mb-2">
-              <input value={q} onChange={(e) => setQ(e.target.value)} className="border rounded px-3 py-2 bg-transparent w-48" placeholder="Name contains..." />
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as SearchType)} className="border rounded px-3 py-2 bg-transparent">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="border rounded px-3 py-2 bg-transparent w-48"
+                placeholder="Name contains..."
+              />
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as SearchType)}
+                className="border rounded px-3 py-2 bg-transparent"
+              >
                 <option value="all">All</option>
                 <option value="avatar">Avatar</option>
                 <option value="site">Sites</option>
                 <option value="spell">Spellbook</option>
               </select>
-              <button onClick={doSearch} disabled={searching} className="h-10 px-3 rounded bg-foreground text-background disabled:opacity-50">
+              <button
+                onClick={doSearch}
+                disabled={searching}
+                className="h-10 px-3 rounded bg-foreground text-background disabled:opacity-50"
+              >
                 {searching ? "Searching..." : "Search"}
               </button>
             </div>
@@ -742,13 +984,37 @@ export default function DeckEditorPage() {
                 {results.map((c) => {
                   const isSite = (c.type || "").toLowerCase().includes("site");
                   return (
-                    <div key={c.variantId} className="border rounded p-2" draggable onDragStart={onDragStartFromSearch(c)}>
-                      <CardThumb slug={c.slug} alt={c.cardName} isSite={isSite} className="w-full mb-2" />
-                      <div className="font-semibold line-clamp-1">{c.cardName}</div>
-                      <div className="opacity-80 line-clamp-1">{c.type || ""}</div>
+                    <div
+                      key={c.variantId}
+                      className="border rounded p-2"
+                      draggable
+                      onDragStart={onDragStartFromSearch(c)}
+                    >
+                      <CardThumb
+                        slug={c.slug}
+                        alt={c.cardName}
+                        isSite={isSite}
+                        className="w-full mb-2"
+                      />
+                      <div className="font-semibold line-clamp-1">
+                        {c.cardName}
+                      </div>
+                      <div className="opacity-80 line-clamp-1">
+                        {c.type || ""}
+                      </div>
                       <div className="mt-1 flex gap-1">
-                        <button className="px-2 py-1 border rounded" onClick={() => addCardAuto(c)}>+ Deck</button>
-                        <button className="px-2 py-1 border rounded" onClick={() => addToSideboardFromSearch(c)}>+ Side</button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => addCardAuto(c)}
+                        >
+                          + Deck
+                        </button>
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => addToSideboardFromSearch(c)}
+                        >
+                          + Side
+                        </button>
                       </div>
                     </div>
                   );
@@ -760,7 +1026,11 @@ export default function DeckEditorPage() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <button onClick={saveDeck} disabled={saving} className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50">
+        <button
+          onClick={saveDeck}
+          disabled={saving}
+          className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50"
+        >
           {saving ? "Saving..." : deckId ? "Update Deck" : "Save Deck"}
         </button>
         {saveMsg && <div className="text-sm">{saveMsg}</div>}

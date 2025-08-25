@@ -37,4 +37,4 @@ export const DRAG_HOLD_MS = 80; // Require a tiny hold before allowing drag star
 
 // Hand visual scales
 export const HAND_CARD_SCALE = 1.25; // base scale factor for hand cards (bigger than default)
-export const HAND_HOVER_SCALE = 1.5; // multiplier when hovering a hand card
+export const HAND_HOVER_SCALE = 1; // multiplier when hovering a hand card
