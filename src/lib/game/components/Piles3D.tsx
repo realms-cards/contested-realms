@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { useGameStore } from "@/lib/game/store";
@@ -115,17 +115,6 @@ export default function Piles3D({
     hoverTimer.current = null;
     setPreviewCard(null);
   }
-
-  // Ensure drag states are cleared on global mouseup
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      setDragFromPile(null);
-      setDragFromHand(false);
-    };
-
-    document.addEventListener("mouseup", handleGlobalMouseUp);
-    return () => document.removeEventListener("mouseup", handleGlobalMouseUp);
-  }, [setDragFromPile, setDragFromHand]);
 
   return (
     <group position={[0, 0.001, 0]}>

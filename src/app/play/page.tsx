@@ -66,14 +66,46 @@ export default function PlayPage() {
     el.scrollTop = el.scrollHeight;
   }, [events.length, consoleOpen]);
 
-  // End hand-drag when mouse is released anywhere
+  // Robust: reset drag flags when input ends, is canceled, or tab loses focus
   useEffect(() => {
-    const onUp = () => {
-      setDragFromHand(false);
-      setDragFromPile(null);
+    const reset = (reason?: string) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(`[drag] reset via ${reason || "unknown"}`);
+      }
+      // Defer to allow any drop/pointerup handlers to run first
+      setTimeout(() => {
+        setDragFromHand(false);
+        setDragFromPile(null);
+      }, 0);
     };
-    window.addEventListener("mouseup", onUp);
-    return () => window.removeEventListener("mouseup", onUp);
+
+    const onPointerUp = () => reset("pointerup");
+    const onPointerCancel = () => reset("pointercancel");
+    const onMouseUp = () => reset("mouseup");
+    const onTouchEnd = () => reset("touchend");
+    const onBlur = () => reset("blur");
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") reset("visibilitychange");
+    };
+    const onPageHide = () => reset("pagehide");
+
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+
+    return () => {
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+    };
   }, [setDragFromHand, setDragFromPile]);
 
   function startGame() {
