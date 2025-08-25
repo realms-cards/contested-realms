@@ -168,6 +168,7 @@ export type GameState = {
   mulligan: (who: PlayerKey) => void;
   mulliganWithSelection: (who: PlayerKey, indices: number[]) => void;
   mulliganDrawn: Record<PlayerKey, CardRef[]>;
+  finalizeMulligan: () => void;
   // Events / console
   events: GameEvent[];
   eventSeq: number;
@@ -1355,4 +1356,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         mulliganDrawn: { ...s.mulliganDrawn, [who]: drawn },
       } as Partial<GameState> as GameState;
     }),
+
+  // Clear mulligan drawn cards and finalize hands after mulligan phase
+  finalizeMulligan: () =>
+    set(() => ({
+      mulliganDrawn: { p1: [], p2: [] },
+    })),
 }));

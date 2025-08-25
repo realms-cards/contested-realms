@@ -25,7 +25,7 @@ export const HAND_DIST = 3.2; // world units in front of camera
 export const HAND_BOTTOM_MARGIN = 0.2; // gap from screen bottom (world units)
 export const HAND_MAX_TOTAL_ANGLE = 0.9; // radians, cap total fan angle across all cards (~51°)
 export const HAND_STEP_MAX = 0.12; // radians, max per-card step (~6.9°)
-export const HAND_OVERLAP_FRAC = 0.45; // fraction of CARD_SHORT used as horizontal overlap
+export const HAND_OVERLAP_FRAC = 0.35; // fraction of CARD_SHORT used as horizontal overlap
 export const HAND_FAN_ARC_Y = CARD_LONG * 0.08; // world units vertical arc across fan (0 disables)
 
 export const WALL_THICK = 0.06;
