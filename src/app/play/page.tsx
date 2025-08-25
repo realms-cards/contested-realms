@@ -155,8 +155,8 @@ export default function PlayPage() {
               <div className="relative">
                 <div
                   className={`relative ${
-                    isSite ? "aspect-[4/3]" : "aspect-[3/4]"
-                  } w-[300px] md:w-[380px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
+                    isSite ? "aspect-[4/3] h-[300px] md:h-[380px]" : "aspect-[3/4] w-[300px] md:w-[380px]"
+                  } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                 >
                   <Image
                     src={`/api/images/${previewCard.slug}`}

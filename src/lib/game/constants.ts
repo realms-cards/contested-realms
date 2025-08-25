@@ -22,10 +22,10 @@ export const EDGE_MARGIN = TILE_SIZE * 0.5; // expand ground beyond mat a little
 
 // Hand layout constants (3D hand anchored to camera)
 export const HAND_DIST = 3.2; // world units in front of camera
-export const HAND_BOTTOM_MARGIN = 0.2; // gap from screen bottom (world units)
+export const HAND_BOTTOM_MARGIN = 0.1; // reduced gap from screen bottom to allow more upward expansion
 export const HAND_MAX_TOTAL_ANGLE = 0.9; // radians, cap total fan angle across all cards (~51°)
 export const HAND_STEP_MAX = 0.12; // radians, max per-card step (~6.9°)
-export const HAND_OVERLAP_FRAC = 0.35; // fraction of CARD_SHORT used as horizontal overlap
+export const HAND_OVERLAP_FRAC = 0.4; // fraction of CARD_SHORT used as horizontal overlap - back to organized setting
 export const HAND_FAN_ARC_Y = CARD_LONG * 0.08; // world units vertical arc across fan (0 disables)
 
 export const WALL_THICK = 0.06;
@@ -33,8 +33,8 @@ export const WALL_HALF_HEIGHT = 0.6; // 1.2 units tall walls
 
 // Drag interaction constants
 export const DRAG_THRESHOLD = TILE_SIZE * 0.08; // Require some pointer travel before starting a drag (avoid click-move)
-export const DRAG_HOLD_MS = 80; // Require a tiny hold before allowing drag start (prevents right-click wiggle drags)
+export const DRAG_HOLD_MS = 50; // Require a tiny hold before allowing drag start (prevents right-click wiggle drags) - reduced for responsiveness
 
 // Hand visual scales
-export const HAND_CARD_SCALE = 1.25; // base scale factor for hand cards (bigger than default)
+export const HAND_CARD_SCALE = 1.35; // balanced scale factor for hand cards - big but not overwhelming
 export const HAND_HOVER_SCALE = 1; // multiplier when hovering a hand card

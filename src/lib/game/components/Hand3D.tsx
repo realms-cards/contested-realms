@@ -37,8 +37,12 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
 
   const hand = zones[owner].hand || [];
   // Separate sites and non-sites for different display
-  const sites = hand.filter((c) => (c.type || "").toLowerCase().includes("site"));
-  const nonSites = hand.filter((c) => !(c.type || "").toLowerCase().includes("site"));
+  const sites = hand.filter((c) =>
+    (c.type || "").toLowerCase().includes("site")
+  );
+  const nonSites = hand.filter(
+    (c) => !(c.type || "").toLowerCase().includes("site")
+  );
   const rootRef = useRef<Group | null>(null);
   const { camera } = useThree();
   // Track whether mouse is in the bottom 1/4 of the screen
@@ -55,7 +59,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     index: number;
   } | null>(null);
   const revealLerp = useRef(1); // 0 hidden .. 1 shown
-  
+
   useEffect(() => {
     function onMove(e: MouseEvent) {
       const h = window.innerHeight || 1;
@@ -92,7 +96,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     if (isHandDrag) {
       revealLerp.current = 0; // Collapse for hand drags
     } else {
-      const k = 0.25; // faster lerp for more responsive feel
+      const k = 0.35; // Increased from 0.25 for even more responsive hand reveal animation
       revealLerp.current += (targetShown - revealLerp.current) * k;
       if (Math.abs(targetShown - revealLerp.current) < 0.005)
         revealLerp.current = targetShown;
@@ -110,35 +114,44 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   // Spellbook fan layout: only non-site cards in arc
   const spellbookLayout = useMemo(() => {
     const n = nonSites.length;
-    if (n === 0) return [] as { x: number; y: number; rot: number; scale: number; originalIndex: number }[];
-    
-    const maxAngle = Math.min(HAND_MAX_TOTAL_ANGLE, n * HAND_STEP_MAX);
+    if (n === 0)
+      return [] as {
+        x: number;
+        y: number;
+        rot: number;
+        scale: number;
+        originalIndex: number;
+      }[];
+
+    // Balanced spread - wider for more cards, tighter for fewer cards
+    const maxAngle = Math.min(HAND_MAX_TOTAL_ANGLE * 1.1, n * HAND_STEP_MAX);
     const stepAngle = n > 1 ? maxAngle / (n - 1) : 0;
     const startAngle = -maxAngle / 2;
     const baseSpacing = CARD_SHORT * HAND_OVERLAP_FRAC;
-    
+
     return new Array(n).fill(0).map((_, i) => {
       // Map back to original hand index
-      const originalIndex = hand.findIndex((c) => 
-        !(c.type || "").toLowerCase().includes("site") && 
-        nonSites.indexOf(c) === i
+      const originalIndex = hand.findIndex(
+        (c) =>
+          !(c.type || "").toLowerCase().includes("site") &&
+          nonSites.indexOf(c) === i
       );
       const isHovered = originalIndex === hoveredCard;
-      
+
       // Fan angle
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
-      
+
       // X position: evenly spread in fan
       const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
-      
-      // Y position: arc + hover pop-up
+
+      // Y position: arc + hover pop-up (more aggressive pop-up toward middle)
       const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y;
-      const y = isHovered ? arcY + CARD_LONG * 0.2 : arcY;
-      
-      // Scale: hovered card slightly bigger
-      const scale = isHovered ? 1.05 : 1.0;
-      
+      const y = isHovered ? arcY + CARD_LONG * 0.35 : arcY;
+
+      // Scale: hovered card slightly bigger with smoother scaling
+      const scale = isHovered ? 1.08 : 1.0;
+
       return { x, y, rot, scale, originalIndex };
     });
   }, [hand, nonSites, hoveredCard]);
@@ -146,30 +159,40 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   // Site horizontal layout: sites in a horizontal row
   const siteLayout = useMemo(() => {
     const n = sites.length;
-    if (n === 0) return [] as { x: number; y: number; rot: number; scale: number; originalIndex: number }[];
-    
-    const siteSpacing = CARD_LONG * 0.8; // Sites are wider, so more spacing
-    
+    if (n === 0)
+      return [] as {
+        x: number;
+        y: number;
+        rot: number;
+        scale: number;
+        originalIndex: number;
+      }[];
+
+    // Clean horizontal layout for sites - simpler and more organized
+    const siteSpacing = CARD_LONG * 0.75; // Reasonable spacing for readability
+
     return new Array(n).fill(0).map((_, i) => {
       // Map back to original hand index
-      const originalIndex = hand.findIndex((c) => 
-        (c.type || "").toLowerCase().includes("site") && 
-        sites.indexOf(c) === i
+      const originalIndex = hand.findIndex(
+        (c) =>
+          (c.type || "").toLowerCase().includes("site") &&
+          sites.indexOf(c) === i
       );
       const isHovered = originalIndex === hoveredCard;
-      
-      // X position: horizontal line
-      const x = i * siteSpacing - ((n - 1) * siteSpacing) / 2;
-      
-      // Y position: lower than main hand, slight hover pop-up
-      const y = isHovered ? -CARD_LONG * 0.7 : -CARD_LONG * 0.8;
-      
-      // No rotation for sites
+
+      // No fan angle - keep sites straight and organized
       const rot = 0;
-      
-      // Scale: hovered site slightly bigger
-      const scale = isHovered ? 1.1 : 1.0;
-      
+
+      // X position: evenly spaced horizontal line
+      const x = i * siteSpacing - ((n - 1) * siteSpacing) / 2;
+
+      // Y position: separate from spell cards but stay visible when hand is shown
+      const baseY = -CARD_LONG * 0.55; // Higher up so they don't go off-screen
+      const y = isHovered ? baseY + CARD_LONG * 0.25 : baseY;
+
+      // Scale: hovered site slightly bigger with smoother scaling
+      const scale = isHovered ? 1.12 : 1.0;
+
       return { x, y, rot, scale, originalIndex };
     });
   }, [hand, sites, hoveredCard]);
@@ -177,11 +200,14 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   // Simplified hover handling
   const hoverTimer = useRef<number | null>(null);
 
-  const beginHoverPreview = useCallback((card?: CardRef | null) => {
-    if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
-    if (!card?.slug) return;
-    hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 600);
-  }, [setPreviewCard]);
+  const beginHoverPreview = useCallback(
+    (card?: CardRef | null) => {
+      if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+      if (!card?.slug) return;
+      hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400); // Reduced from 600ms for more responsive preview
+    },
+    [setPreviewCard]
+  );
   const clearHoverPreview = useCallback(() => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
@@ -235,15 +261,21 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
       {nonSites.map((c, i) => {
         const layoutInfo = spellbookLayout[i];
         if (!layoutInfo) return null;
-        
+
         const { x, y, rot, scale: layoutScale, originalIndex } = layoutInfo;
         const isHandDrag = dragFromHand && selected && selected.who === owner;
         const isPileDrag = dragFromHand && dragFromPile && !selected;
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = false; // These are non-sites
         const isCardHovered = originalIndex === hoveredCard;
-        const scale = HAND_CARD_SCALE * layoutScale;
-        const renderOrder = isCardHovered ? 3000 : 1000 + originalIndex;
+        
+        // Shrink spell cards when site hand is being shown (any site hovered)
+        const siteHandActive = hoveredCard !== null && hand[hoveredCard] && 
+          (hand[hoveredCard].type || "").toLowerCase().includes("site");
+        
+        const baseScale = siteHandActive ? HAND_CARD_SCALE * 0.5 : HAND_CARD_SCALE; // EXTREME shrinking when sites active
+        const scale = baseScale * layoutScale;
+        const renderOrder = isCardHovered ? 3000 : siteHandActive ? 500 + originalIndex : 2000 + originalIndex; // Spell cards go behind sites when sites are active
         return (
           <group
             key={`${c.cardId}-${i}`}
@@ -262,12 +294,12 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
               onPointerOver={(e) => {
                 if (isDragging) return; // allow bubbling while dragging
                 e.stopPropagation();
-                
+
                 // Clear any existing hover timeout
                 if (hoverTimeoutRef.current) {
                   window.clearTimeout(hoverTimeoutRef.current);
                 }
-                
+
                 setHoveredCardCount((prev) => prev + 1);
                 setHoveredCard(originalIndex); // Set the hovered card immediately for responsive feel
                 beginHoverPreview(c);
@@ -275,27 +307,29 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
               onPointerOut={(e) => {
                 if (isDragging) return; // allow bubbling while dragging
                 e.stopPropagation();
-                
+
                 setHoveredCardCount((prev) => Math.max(0, prev - 1));
-                
+
                 // Add small delay before clearing hover to prevent flicker between cards
                 if (hoverTimeoutRef.current) {
                   window.clearTimeout(hoverTimeoutRef.current);
                 }
                 hoverTimeoutRef.current = window.setTimeout(() => {
-                  setHoveredCard((prev) => prev === originalIndex ? null : prev);
-                }, 50); // 50ms delay to prevent flickering
-                
+                  setHoveredCard((prev) =>
+                    prev === originalIndex ? null : prev
+                  );
+                }, 30); // Reduced to 30ms delay for more responsive transitions
+
                 clearHoverPreview();
               }}
               onPointerDown={(e) => {
                 if (isDragging) return; // don't start another drag
                 if (e.button !== 0) return;
                 e.stopPropagation();
-                
+
                 // Select the card first
                 selectHandCard(owner, originalIndex);
-                
+
                 // Record potential drag start
                 handDragStart.current = {
                   x: e.clientX,
@@ -313,18 +347,20 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                 const dx = e.clientX - s.x;
                 const dy = e.clientY - s.y;
                 const dist = Math.hypot(dx, dy);
-                const PIX_THRESH = 8; // pixels
+                const PIX_THRESH = 6; // pixels - reduced for more responsive drag initiation
                 if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
                   // Start dragging - card is already selected
                   setDragFromHand(true);
                 }
               }}
             >
-              <boxGeometry args={[
-                (isSite ? CARD_LONG : CARD_SHORT) * 1.2, // 20% larger interaction area
-                (isSite ? CARD_SHORT : CARD_LONG) * 1.2,
-                0.01
-              ]} />
+              <boxGeometry
+                args={[
+                  CARD_SHORT * 1.1, // Modest interaction area - reduce collision
+                  CARD_LONG * 1.1,
+                  0.01,
+                ]}
+              />
               <meshBasicMaterial transparent opacity={0} /> {/* Invisible */}
             </mesh>
 
@@ -332,9 +368,9 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
               {c.slug ? (
                 <CardPlane
                   slug={c.slug}
-                  width={isSite ? CARD_LONG : CARD_SHORT}
-                  height={isSite ? CARD_SHORT : CARD_LONG}
-                  rotationZ={-rot} // No special rotation for sites, let width/height handle orientation
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={isSite ? -rot - Math.PI / 2 : -rot} // Sites need -90° rotation for correct art orientation
                   upright
                   depthWrite={false}
                   depthTest={false}
@@ -349,12 +385,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                   position={[0, isCardHovered ? 0.02 : 0.002, 0]}
                   renderOrder={renderOrder}
                 >
-                  <planeGeometry
-                    args={[
-                      isSite ? CARD_LONG : CARD_SHORT,
-                      isSite ? CARD_SHORT : CARD_LONG,
-                    ]}
-                  />
+                  <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
                   <meshBasicMaterial
                     color={"#1f2937"}
                     depthTest={false}
@@ -366,20 +397,26 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
           </group>
         );
       })}
-      
+
       {/* Site cards in horizontal row */}
       {sites.map((c, i) => {
         const layoutInfo = siteLayout[i];
         if (!layoutInfo) return null;
-        
+
         const { x, y, rot, scale: layoutScale, originalIndex } = layoutInfo;
         const isHandDrag = dragFromHand && selected && selected.who === owner;
         const isPileDrag = dragFromHand && dragFromPile && !selected;
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = true; // These are sites
         const isCardHovered = originalIndex === hoveredCard;
-        const scale = HAND_CARD_SCALE * layoutScale;
-        const renderOrder = isCardHovered ? 3000 : 1000 + originalIndex;
+        
+        // Dynamic scaling: sites are active when any site is being hovered
+        const siteHandActive = hoveredCard !== null && hand[hoveredCard] && 
+          (hand[hoveredCard].type || "").toLowerCase().includes("site");
+        
+        const baseScale = siteHandActive ? HAND_CARD_SCALE * 0.8 : HAND_CARD_SCALE * 0.2; // EXTREME scaling: tiny when inactive, large when active
+        const scale = baseScale * layoutScale;
+        const renderOrder = isCardHovered ? 3500 : siteHandActive ? 2000 + originalIndex : 1000 + originalIndex; // Sites render above spells when active
         return (
           <group
             key={`site-${c.cardId}-${i}`}
@@ -398,12 +435,12 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
               onPointerOver={(e) => {
                 if (isDragging) return; // allow bubbling while dragging
                 e.stopPropagation();
-                
+
                 // Clear any existing hover timeout
                 if (hoverTimeoutRef.current) {
                   window.clearTimeout(hoverTimeoutRef.current);
                 }
-                
+
                 setHoveredCardCount((prev) => prev + 1);
                 setHoveredCard(originalIndex); // Set the hovered card immediately for responsive feel
                 beginHoverPreview(c);
@@ -411,27 +448,29 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
               onPointerOut={(e) => {
                 if (isDragging) return; // allow bubbling while dragging
                 e.stopPropagation();
-                
+
                 setHoveredCardCount((prev) => Math.max(0, prev - 1));
-                
+
                 // Add small delay before clearing hover to prevent flicker between cards
                 if (hoverTimeoutRef.current) {
                   window.clearTimeout(hoverTimeoutRef.current);
                 }
                 hoverTimeoutRef.current = window.setTimeout(() => {
-                  setHoveredCard((prev) => prev === originalIndex ? null : prev);
-                }, 50); // 50ms delay to prevent flickering
-                
+                  setHoveredCard((prev) =>
+                    prev === originalIndex ? null : prev
+                  );
+                }, 30); // Reduced to 30ms delay for more responsive transitions
+
                 clearHoverPreview();
               }}
               onPointerDown={(e) => {
                 if (isDragging) return; // don't start another drag
                 if (e.button !== 0) return;
                 e.stopPropagation();
-                
+
                 // Select the card first
                 selectHandCard(owner, originalIndex);
-                
+
                 // Record potential drag start
                 handDragStart.current = {
                   x: e.clientX,
@@ -449,18 +488,20 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                 const dx = e.clientX - s.x;
                 const dy = e.clientY - s.y;
                 const dist = Math.hypot(dx, dy);
-                const PIX_THRESH = 8; // pixels
+                const PIX_THRESH = 6; // pixels - reduced for more responsive drag initiation
                 if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
                   // Start dragging - card is already selected
                   setDragFromHand(true);
                 }
               }}
             >
-              <boxGeometry args={[
-                (isSite ? CARD_LONG : CARD_SHORT) * 1.2, // 20% larger interaction area
-                (isSite ? CARD_SHORT : CARD_LONG) * 1.2,
-                0.01
-              ]} />
+              <boxGeometry
+                args={[
+                  CARD_SHORT * 1.1, // Modest interaction area - reduce collision
+                  CARD_LONG * 1.1,
+                  0.01,
+                ]}
+              />
               <meshBasicMaterial transparent opacity={0} /> {/* Invisible */}
             </mesh>
 
@@ -468,9 +509,9 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
               {c.slug ? (
                 <CardPlane
                   slug={c.slug}
-                  width={isSite ? CARD_LONG : CARD_SHORT}
-                  height={isSite ? CARD_SHORT : CARD_LONG}
-                  rotationZ={-rot} // No rotation for sites in their dedicated area
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={isSite ? -rot - Math.PI / 2 : -rot} // Sites need -90° rotation for correct art orientation
                   upright
                   depthWrite={false}
                   depthTest={false}
@@ -485,12 +526,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                   position={[0, isCardHovered ? 0.02 : 0.002, 0]}
                   renderOrder={renderOrder}
                 >
-                  <planeGeometry
-                    args={[
-                      isSite ? CARD_LONG : CARD_SHORT,
-                      isSite ? CARD_SHORT : CARD_LONG,
-                    ]}
-                  />
+                  <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
                   <meshBasicMaterial
                     color={"#1f2937"}
                     depthTest={false}
