@@ -162,10 +162,17 @@ export default function PlayPage() {
                 const low = t.toLowerCase();
                 const isWarn =
                   low.startsWith("warning") || low.startsWith("cannot");
+                const isSearch = low.startsWith("search:");
                 return (
                   <div
                     key={ev.id}
-                    className={`opacity-85 ${isWarn ? "text-red-400" : ""}`}
+                    className={`opacity-85 ${
+                      isWarn 
+                        ? "text-red-400" 
+                        : isSearch 
+                        ? "text-yellow-400" 
+                        : ""
+                    }`}
                   >
                     • {formatEventText(ev.text)}
                   </div>

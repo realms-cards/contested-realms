@@ -163,7 +163,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
       const rot = angle; // Positive for upward fan
 
       // X position with dynamic spacing away from hovered card
-      let x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
+      const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
       
 
       // Y position: smooth interpolated arc + hover pop-up
