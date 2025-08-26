@@ -114,9 +114,9 @@ export default function OnlineLifeCounters({
 }: OnlineLifeCountersProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   
-  // In online multiplayer, only the current player can modify life totals
-  // This prevents accidental changes and ensures proper turn-based play
-  const canModifyLife = myPlayerKey ? (currentPlayer === (myPlayerKey === 'p1' ? 1 : 2)) : false;
+  // In online multiplayer, both players can modify life totals
+  // (life changes can come from spells, abilities, etc. from either player)
+  const canModifyLife = !!myPlayerKey;
 
   return (
     <div
@@ -141,13 +141,6 @@ export default function OnlineLifeCounters({
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === 'p2'}
       />
-      
-      {/* Turn indicator for life changes */}
-      {!canModifyLife && (
-        <div className="text-xs opacity-60 bg-black/50 rounded px-2 py-1 text-center">
-          Only current player<br />can modify life
-        </div>
-      )}
     </div>
   );
 }
