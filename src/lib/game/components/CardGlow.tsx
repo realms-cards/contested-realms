@@ -18,6 +18,7 @@ interface CardGlowProps {
   rotationZ?: number;
   elevation?: number;
   color?: string;
+  renderOrder?: number;
 }
 
 export default function CardGlow({
@@ -26,6 +27,7 @@ export default function CardGlow({
   rotationZ = 0,
   elevation = 0,
   color = "#93c5fd",
+  renderOrder = 10000,
 }: CardGlowProps) {
   const aspect = width / height;
   
@@ -45,7 +47,7 @@ export default function CardGlow({
       rotation-x={-Math.PI / 2}
       rotation-z={rotationZ}
       position={[0, elevation, 0]}
-      renderOrder={10000}
+      renderOrder={renderOrder}
       raycast={noopRaycast}
     >
       <planeGeometry args={[width * 1.06, height * 1.06]} />

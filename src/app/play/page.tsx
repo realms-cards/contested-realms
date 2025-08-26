@@ -43,11 +43,23 @@ export default function PlayPage() {
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   // Selected hand card (for magnifier) - show for current player
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
+  const [magnifierDelay, setMagnifierDelay] = useState(false);
   const selectedHandCard = (() => {
     if (!selected || selected.who !== currentPlayerKey) return null;
     const hand = zones[currentPlayerKey].hand || [];
     return hand[selected.index] ?? null;
   })();
+
+  // Delay showing the magnifier to prevent it from competing with preview
+  useEffect(() => {
+    if (selectedHandCard) {
+      setMagnifierDelay(false);
+      const timer = setTimeout(() => setMagnifierDelay(true), 100);
+      return () => clearTimeout(timer);
+    } else {
+      setMagnifierDelay(false);
+    }
+  }, [selectedHandCard]);
 
   // Setup state
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
@@ -56,6 +68,9 @@ export default function PlayPage() {
 
   // Event console: autoscroll and text formatting
   const eventsRef = useRef<HTMLDivElement | null>(null);
+  // Camera controls ref for reset functionality
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controlsRef = useRef<any>(null);
   function formatEventText(text: string): string {
     // Redact opponent (P2) drawn card names while preserving the rest
     let t = text || "";
@@ -124,6 +139,13 @@ export default function PlayPage() {
     setPhase("Main");
   }
 
+  function resetCamera() {
+    if (controlsRef.current) {
+      // Reset camera position and rotation to default
+      controlsRef.current.reset();
+    }
+  }
+
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full">
       {/* Setup Overlay */}
@@ -138,7 +160,7 @@ export default function PlayPage() {
       )}
 
       {/* HUD */}
-      <StatusBar dragFromHand={dragFromHand} />
+      <StatusBar dragFromHand={dragFromHand} onCameraReset={resetCamera} />
 
       <LifeCounters dragFromHand={dragFromHand} />
 
@@ -271,7 +293,7 @@ export default function PlayPage() {
       {/* Hand Card Magnifier (selected hand card) - moved to right side */}
       {(() => {
         const c = selectedHandCard;
-        if (!c?.slug || dragFromHand || contextMenu) return null;
+        if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay) return null;
         const isSite = (c.type || "").toLowerCase().includes("site");
         return (
           <div className="absolute right-3 top-20 z-20 pointer-events-none">
@@ -345,6 +367,7 @@ export default function PlayPage() {
         <TextureCache />
 
         <OrbitControls
+          ref={controlsRef}
           makeDefault
           target={[0, 0, 0]}
           enabled={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
