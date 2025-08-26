@@ -1,9 +1,9 @@
 "use client";
 
-import { useLoader } from "@react-three/fiber";
+import { useTexture } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
-import { SRGBColorSpace, TextureLoader, type Object3D, type Raycaster, type Intersection } from "three";
-import { Suspense, useState, useEffect } from "react";
+import { SRGBColorSpace, type Object3D, type Raycaster, type Intersection } from "three";
+import { Suspense } from "react";
 
 function noopRaycast(
   this: Object3D,
@@ -75,7 +75,7 @@ function CardFallback({
   );
 }
 
-// Inner component that uses texture loader with loading events
+// Simplified component that relies on texture cache
 function CardWithTexture(props: CardPlaneProps) {
   const {
     slug,
@@ -96,22 +96,9 @@ function CardWithTexture(props: CardPlaneProps) {
     onClick,
   } = props;
 
-  const [isReady, setIsReady] = useState(false);
   const url = textureUrl ?? `/api/images/${slug}`;
-  
-  const tex = useLoader(TextureLoader, url);
-  
-  useEffect(() => {
-    if (tex) {
-      tex.colorSpace = SRGBColorSpace;
-      setIsReady(true);
-    }
-  }, [tex]);
-
-  // Show fallback until texture is ready
-  if (!isReady) {
-    return <CardFallback {...props} />;
-  }
+  const tex = useTexture(url);
+  tex.colorSpace = SRGBColorSpace;
   
   return (
     <mesh

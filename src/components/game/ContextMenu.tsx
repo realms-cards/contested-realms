@@ -114,7 +114,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       onClose();
     };
 
-    if (site?.card?.name && (site.card?.type || "").toLowerCase().includes("site")) {
+    if (
+      site?.card?.name &&
+      (site.card?.type || "").toLowerCase().includes("site")
+    ) {
       doAddToAtlas = () => {
         const cardName = site.card!.name;
         openPlacementDialog(cardName, "Atlas", (position) => {
@@ -289,20 +292,20 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     Move to Spellbook
                   </button>
                 )}
-                {doBanish && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doBanish}
-                  >
-                    Banish Card
-                  </button>
-                )}
                 {doAddToAtlas && (
                   <button
                     className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
                     onClick={doAddToAtlas}
                   >
                     Move to Atlas
+                  </button>
+                )}
+                {doBanish && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doBanish}
+                  >
+                    Banish Card
                   </button>
                 )}
               </div>
@@ -336,13 +339,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 )}
               </div>
             )}
-
-            <button
-              className="w-full text-left rounded bg-white/5 hover:bg-white/15 px-3 py-1"
-              onClick={onClose}
-            >
-              Close
-            </button>
           </div>
         </div>
       </div>

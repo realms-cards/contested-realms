@@ -9,6 +9,7 @@ import Board from "@/lib/game/Board";
 import Hand3D from "@/lib/game/components/Hand3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import Hud3D from "@/lib/game/components/Hud3D";
+import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
 import Image from "next/image";
 import DeckSelector from "@/components/game/DeckSelector";
@@ -38,6 +39,8 @@ export default function PlayPage() {
   const searchDialog = useGameStore((s) => s.searchDialog);
   const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const selectedPermanent = useGameStore((s) => s.selectedPermanent);
+  const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   // Selected hand card (for magnifier) - show for current player
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const selectedHandCard = (() => {
@@ -310,9 +313,12 @@ export default function PlayPage() {
           alpha: false
         }}
         onPointerMissed={() => {
-          clearSelection();
-          closeContextMenu();
-          setPreviewCard(null);
+          // Don't clear selection during drags to prevent orbit interference
+          if (!dragFromHand && !dragFromPile) {
+            clearSelection();
+            closeContextMenu();
+            setPreviewCard(null);
+          }
         }}
       >
         <color attach="background" args={["#0b0b0c"]} />
@@ -335,12 +341,17 @@ export default function PlayPage() {
         {/* 3D Hand anchored to the camera (current player) */}
         <Hand3D owner={currentPlayerKey} matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
 
+        {/* Invisible texture cache for smooth loading */}
+        <TextureCache />
+
         <OrbitControls
           makeDefault
           target={[0, 0, 0]}
-          enablePan={!dragFromHand && !dragFromPile}
-          enableRotate={!dragFromHand && !dragFromPile}
-          enableZoom
+          enabled={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+          enablePan={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+          enableRotate={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+          enableZoom={!dragFromHand && !dragFromPile}
+          enableDamping={false}
           minPolarAngle={0}
           maxPolarAngle={Math.PI / 2.05}
         />
