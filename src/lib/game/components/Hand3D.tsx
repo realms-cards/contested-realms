@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
+import { useTexture } from "@react-three/drei";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
@@ -13,7 +14,6 @@ import {
   HAND_BOTTOM_MARGIN,
   HAND_MAX_TOTAL_ANGLE,
   HAND_STEP_MAX,
-  HAND_OVERLAP_FRAC,
   HAND_FAN_ARC_Y,
   HAND_CARD_SCALE,
 } from "@/lib/game/constants";
@@ -34,6 +34,36 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
+
+  // Preload next few cards from spellbook and atlas to prevent flash when drawing
+  const preloadUrls = useMemo(() => {
+    const playerZones = zones[owner];
+    const urls: string[] = [];
+    
+    // Preload next 3 cards from spellbook
+    for (let i = 0; i < Math.min(3, playerZones.spellbook.length); i++) {
+      const card = playerZones.spellbook[i];
+      if (card?.slug) {
+        urls.push(`/api/images/${card.slug}`);
+      }
+    }
+    
+    // Preload next 3 cards from atlas
+    for (let i = 0; i < Math.min(3, playerZones.atlas.length); i++) {
+      const card = playerZones.atlas[i];
+      if (card?.slug) {
+        urls.push(`/api/images/${card.slug}`);
+      }
+    }
+    
+    return urls.length > 0 ? urls : undefined;
+  }, [zones, owner]);
+
+  // Preload textures to prevent flash when drawing cards
+  // Always call useTexture with at least an empty array to satisfy hooks rules
+  const preloadTextures = useTexture(preloadUrls || []);
+  // Use void to avoid unused variable warning
+  void preloadTextures;
 
   const hand = zones[owner].hand || [];
   // Sort hand with sites first, then spells

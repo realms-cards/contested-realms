@@ -142,12 +142,14 @@ export type GameState = {
   movePermanentToZone: (
     at: CellKey,
     index: number,
-    target: "hand" | "graveyard" | "banished" | "spellbook"
+    target: "hand" | "graveyard" | "banished" | "spellbook",
+    position?: "top" | "bottom"
   ) => void;
   moveSiteToZone: (
     x: number,
     y: number,
-    target: "hand" | "graveyard" | "banished" | "atlas"
+    target: "hand" | "graveyard" | "banished" | "atlas",
+    position?: "top" | "bottom"
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
@@ -1131,7 +1133,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
 
   // Move a permanent from the board to a target zone
-  movePermanentToZone: (at, index, target) =>
+  movePermanentToZone: (at, index, target, position) =>
     set((s) => {
       get().pushHistory();
       const per: Permanents = { ...s.permanents };
@@ -1144,7 +1146,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const z = { ...zones[owner] };
       if (target === "hand") z.hand = [...z.hand, item.card];
       else if (target === "graveyard") z.graveyard = [...z.graveyard, item.card];
-      else if (target === "spellbook") z.spellbook = [...z.spellbook, item.card];
+      else if (target === "spellbook") {
+        const pile = [...z.spellbook];
+        if (position === "top") pile.unshift(item.card);
+        else pile.push(item.card);
+        z.spellbook = pile;
+      }
       else z.banished = [...z.banished, item.card];
       zones[owner] = z;
       const cell = at.split(",");
@@ -1168,7 +1175,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
 
   // Move a site from the board to a target zone
-  moveSiteToZone: (x, y, target) =>
+  moveSiteToZone: (x, y, target, position) =>
     set((s) => {
       get().pushHistory();
       const key: CellKey = `${x},${y}`;
@@ -1182,7 +1189,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const z = { ...zones[owner] };
       if (target === "hand") z.hand = [...z.hand, site.card];
       else if (target === "graveyard") z.graveyard = [...z.graveyard, site.card];
-      else if (target === "atlas") z.atlas = [...z.atlas, site.card];
+      else if (target === "atlas") {
+        const pile = [...z.atlas];
+        if (position === "top") pile.unshift(site.card);
+        else pile.push(site.card);
+        z.atlas = pile;
+      }
       else z.banished = [...z.banished, site.card];
       zones[owner] = z;
       const cellNo = y * s.board.size.w + x + 1;

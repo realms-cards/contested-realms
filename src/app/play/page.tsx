@@ -16,6 +16,8 @@ import MulliganScreen from "@/components/game/MulliganScreen";
 import StatusBar from "@/components/game/StatusBar";
 import LifeCounters from "@/components/game/LifeCounters";
 import ContextMenu from "@/components/game/ContextMenu";
+import PlacementDialog from "@/components/game/PlacementDialog";
+import PileSearchDialog from "@/components/game/PileSearchDialog";
 
 export default function PlayPage() {
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -31,6 +33,10 @@ export default function PlayPage() {
   const zones = useGameStore((s) => s.zones);
   const events = useGameStore((s) => s.events);
   const setPhase = useGameStore((s) => s.setPhase);
+  const placementDialog = useGameStore((s) => s.placementDialog);
+  const closePlacementDialog = useGameStore((s) => s.closePlacementDialog);
+  const searchDialog = useGameStore((s) => s.searchDialog);
+  const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
   // Selected hand card (for magnifier)
   const selectedHandCard = (() => {
     if (!selected || selected.who !== "p1") return null;
@@ -230,6 +236,31 @@ export default function PlayPage() {
         />
       )}
 
+      {/* Global dialogs */}
+      {placementDialog && (
+        <PlacementDialog
+          cardName={placementDialog.cardName}
+          pileName={placementDialog.pileName}
+          onChoice={(pos) => {
+            placementDialog.onPlace(pos);
+            closePlacementDialog();
+          }}
+          onCancel={() => closePlacementDialog()}
+        />
+      )}
+
+      {searchDialog && (
+        <PileSearchDialog
+          pileName={searchDialog.pileName}
+          cards={searchDialog.cards}
+          onSelectCard={(card) => {
+            searchDialog.onSelectCard(card);
+            closeSearchDialog();
+          }}
+          onClose={() => closeSearchDialog()}
+        />
+      )}
+
       {/* Replaced 2D overlays with 3D piles and hand inside Canvas */}
 
       {/* Hand Card Magnifier (selected hand card) - moved to right side */}
@@ -271,6 +302,11 @@ export default function PlayPage() {
       <Canvas
         camera={{ position: [0, 10, 0], fov: 50 }}
         shadows
+        gl={{ 
+          preserveDrawingBuffer: true,
+          antialias: true,
+          alpha: false
+        }}
         onPointerMissed={() => {
           clearSelection();
           closeContextMenu();
