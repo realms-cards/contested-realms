@@ -29,6 +29,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const shuffleSpellbook = useGameStore((s) => s.shuffleSpellbook);
   const shuffleAtlas = useGameStore((s) => s.shuffleAtlas);
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
+  const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const log = useGameStore((s) => s.log);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -113,9 +114,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       onClose();
     };
 
-    if (site?.card?.type === "Site") {
+    if (site?.card?.type === "Site" && site.card?.name) {
       doAddToAtlas = () => {
-        moveSiteToZone(t.x, t.y, "atlas");
+        const cardName = site.card!.name;
+        openPlacementDialog(cardName, "Atlas", (position) => {
+          moveSiteToZone(t.x, t.y, "atlas", position);
+        });
         onClose();
       };
     }
@@ -145,10 +149,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       movePermanentToZone(t.at, t.index, "graveyard");
       onClose();
     };
-    doToSpellbook = () => {
-      movePermanentToZone(t.at, t.index, "spellbook");
-      onClose();
-    };
+    if (item?.card?.name) {
+      doToSpellbook = () => {
+        const cardName = item.card!.name;
+        openPlacementDialog(cardName, "Spellbook", (position) => {
+          movePermanentToZone(t.at, t.index, "spellbook", position);
+        });
+        onClose();
+      };
+    }
     doBanish = () => {
       movePermanentToZone(t.at, t.index, "banished");
       onClose();

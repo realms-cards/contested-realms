@@ -1,8 +1,9 @@
 "use client";
 
-import { useTexture } from "@react-three/drei";
+import { useLoader } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { SRGBColorSpace, type Object3D, type Raycaster, type Intersection } from "three";
+import { SRGBColorSpace, TextureLoader, type Object3D, type Raycaster, type Intersection } from "three";
+import { Suspense, useState, useEffect } from "react";
 
 function noopRaycast(
   this: Object3D,
@@ -32,26 +33,85 @@ interface CardPlaneProps {
   onClick?: (e: ThreeEvent<PointerEvent>) => void;
 }
 
-export default function CardPlane({
-  slug,
+// Fallback component while texture loads
+function CardFallback({
   width,
   height,
   rotationZ = 0,
-  depthWrite = true,
-  depthTest = true,
-  interactive = true,
   elevation = 0.001,
   upright = false,
   renderOrder = 0,
-  textureUrl,
+  interactive = true,
+  depthWrite = true,
+  depthTest = true,
   onContextMenu,
   onPointerDown,
   onPointerOver,
   onPointerOut,
   onClick,
-}: CardPlaneProps) {
-  const tex = useTexture(textureUrl ?? `/api/images/${slug}`);
-  tex.colorSpace = SRGBColorSpace;
+}: Omit<CardPlaneProps, 'slug' | 'textureUrl'>) {
+  return (
+    <mesh
+      rotation-x={upright ? 0 : -Math.PI / 2}
+      rotation-z={rotationZ}
+      position={[0, elevation, 0]}
+      raycast={interactive ? undefined : noopRaycast}
+      renderOrder={renderOrder}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+      onPointerOver={onPointerOver}
+      onPointerOut={onPointerOut}
+      onClick={onClick}
+      castShadow
+    >
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial 
+        color="#1f2937" 
+        toneMapped={false} 
+        depthWrite={depthWrite} 
+        depthTest={depthTest} 
+      />
+    </mesh>
+  );
+}
+
+// Inner component that uses texture loader with loading events
+function CardWithTexture(props: CardPlaneProps) {
+  const {
+    slug,
+    width,
+    height,
+    rotationZ = 0,
+    depthWrite = true,
+    depthTest = true,
+    interactive = true,
+    elevation = 0.001,
+    upright = false,
+    renderOrder = 0,
+    textureUrl,
+    onContextMenu,
+    onPointerDown,
+    onPointerOver,
+    onPointerOut,
+    onClick,
+  } = props;
+
+  const [isReady, setIsReady] = useState(false);
+  const url = textureUrl ?? `/api/images/${slug}`;
+  
+  const tex = useLoader(TextureLoader, url);
+  
+  useEffect(() => {
+    if (tex) {
+      tex.colorSpace = SRGBColorSpace;
+      setIsReady(true);
+    }
+  }, [tex]);
+
+  // Show fallback until texture is ready
+  if (!isReady) {
+    return <CardFallback {...props} />;
+  }
   
   return (
     <mesh
@@ -70,5 +130,13 @@ export default function CardPlane({
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} depthTest={depthTest} />
     </mesh>
+  );
+}
+
+export default function CardPlane(props: CardPlaneProps) {
+  return (
+    <Suspense fallback={<CardFallback {...props} />}>
+      <CardWithTexture {...props} />
+    </Suspense>
   );
 }
