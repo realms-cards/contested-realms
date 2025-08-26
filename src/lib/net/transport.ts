@@ -22,7 +22,7 @@ export type TransportEvent = keyof TransportEventMap;
 export type TransportHandler<E extends TransportEvent> = (payload: TransportEventMap[E]) => void;
 
 export interface GameTransport {
-  connect(opts: { displayName: string }): Promise<void>;
+  connect(opts: { displayName: string; playerId?: string }): Promise<void>;
   disconnect(): void;
 
   joinLobby(lobbyId?: string): Promise<{ lobbyId: string }>; // if omitted, auto-join/create

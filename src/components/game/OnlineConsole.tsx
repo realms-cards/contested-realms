@@ -1,0 +1,219 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { useGameStore } from "@/lib/game/store";
+import { LogOut, MessageCircle, ScrollText } from "lucide-react";
+import { useRouter } from "next/navigation";
+import type { ServerChatPayloadT } from "@/lib/net/protocol";
+
+interface OnlineConsoleProps {
+  dragFromHand: boolean;
+  chatLog: ServerChatPayloadT[];
+  chatInput: string;
+  setChatInput: (value: string) => void;
+  onSendChat: (message: string) => void;
+  onLeaveMatch: () => void;
+  connected: boolean;
+}
+
+type TabType = 'events' | 'chat';
+
+export default function OnlineConsole({
+  dragFromHand,
+  chatLog,
+  chatInput,
+  setChatInput,
+  onSendChat,
+  onLeaveMatch,
+  connected
+}: OnlineConsoleProps) {
+  const router = useRouter();
+  const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<TabType>('events');
+  
+  // Game events
+  const events = useGameStore((s) => s.events);
+  const eventsRef = useRef<HTMLDivElement | null>(null);
+  const chatRef = useRef<HTMLDivElement | null>(null);
+
+  // Format event text (same logic as offline console)
+  function formatEventText(text: string): string {
+    let t = text || "";
+    // Case 1: P2 draws 'Card Name' ...
+    t = t.replace(/^(P2 draws )'[^']+'/i, "$1a card");
+    // Case 2: Cannot draw 'Card Name' ...: P2 is not the current player
+    t = t.replace(
+      /^Cannot draw '.*?'( from .+: P2 is not the current player)$/i,
+      "Cannot draw a card$1"
+    );
+    return t;
+  }
+
+  // Auto-scroll to latest content when tab changes or new content arrives
+  useEffect(() => {
+    if (!consoleOpen) return;
+    const targetRef = activeTab === 'events' ? eventsRef : chatRef;
+    const el = targetRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [events.length, chatLog.length, activeTab, consoleOpen]);
+
+  const handleSendChat = () => {
+    const msg = chatInput.trim();
+    if (!msg) return;
+    onSendChat(msg);
+    setChatInput("");
+  };
+
+  const handleLeaveMatch = () => {
+    if (confirm("Are you sure you want to leave this match? You can rejoin from the lobby.")) {
+      onLeaveMatch();
+      router.push('/online/lobby');
+    }
+  };
+
+  return (
+    <div
+      className={`absolute left-3 bottom-2 z-10 ${
+        dragFromHand ? "pointer-events-none" : "pointer-events-auto"
+      } text-white w-80`}
+    >
+      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
+        {/* Header with tabs */}
+        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <button
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                activeTab === 'events' 
+                  ? 'bg-white/20 text-white' 
+                  : 'hover:bg-white/10 opacity-70'
+              }`}
+              onClick={() => setActiveTab('events')}
+            >
+              <ScrollText className="w-3 h-3" />
+              Events
+              {events.length > 0 && (
+                <span className="bg-blue-500 text-white text-xs px-1 rounded-full">
+                  {events.length}
+                </span>
+              )}
+            </button>
+            <button
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                activeTab === 'chat' 
+                  ? 'bg-white/20 text-white' 
+                  : 'hover:bg-white/10 opacity-70'
+              }`}
+              onClick={() => setActiveTab('chat')}
+            >
+              <MessageCircle className="w-3 h-3" />
+              Chat
+              {chatLog.length > 0 && (
+                <span className="bg-green-500 text-white text-xs px-1 rounded-full">
+                  {chatLog.length}
+                </span>
+              )}
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <button
+              className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
+              onClick={handleLeaveMatch}
+              title="Leave match and return to lobby"
+            >
+              <LogOut className="w-3 h-3" />
+              Leave
+            </button>
+            <button
+              className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
+              onClick={() => setConsoleOpen((o) => !o)}
+            >
+              {consoleOpen ? "Collapse" : "Expand"}
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        {consoleOpen && (
+          <div className="max-h-64">
+            {/* Events Tab */}
+            {activeTab === 'events' && (
+              <div
+                ref={eventsRef}
+                className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-64"
+              >
+                {events.length === 0 && (
+                  <div className="opacity-60">No events yet</div>
+                )}
+                {events.slice(-100).map((ev) => {
+                  const t = ev.text || "";
+                  const low = t.toLowerCase();
+                  const isWarn = low.startsWith("warning") || low.startsWith("cannot");
+                  const isSearch = low.startsWith("search:");
+                  return (
+                    <div
+                      key={ev.id}
+                      className={`opacity-85 ${
+                        isWarn 
+                          ? "text-red-400" 
+                          : isSearch 
+                          ? "text-yellow-400" 
+                          : ""
+                      }`}
+                    >
+                      • {formatEventText(ev.text)}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Chat Tab */}
+            {activeTab === 'chat' && (
+              <>
+                <div
+                  ref={chatRef}
+                  className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-48"
+                >
+                  {chatLog.length === 0 && (
+                    <div className="opacity-60">No messages</div>
+                  )}
+                  {chatLog.map((m, i) => (
+                    <div key={i} className="opacity-90">
+                      <span className="text-slate-300/80">[{m.scope}]</span>{" "}
+                      <span className="font-medium">{m.from?.displayName ?? "System"}</span>: {m.content}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Chat input */}
+                <div className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2">
+                  <input
+                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                    placeholder="Type a message..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSendChat();
+                      }
+                    }}
+                    disabled={!connected}
+                  />
+                  <button
+                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs transition-colors"
+                    onClick={handleSendChat}
+                    disabled={!connected || !chatInput.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

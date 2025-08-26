@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { GameTransport } from "@/lib/net/transport";
 
-export type Phase = "Start" | "Draw" | "Main" | "Combat" | "End";
+export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
 export type PlayerKey = "p1" | "p2";
 
 export type Thresholds = {
@@ -11,8 +11,11 @@ export type Thresholds = {
   fire: number;
 };
 
+export type LifeState = 'alive' | 'dd' | 'dead';
+
 export type PlayerState = {
   life: number;
+  lifeState: LifeState; // 'alive', 'dd' (Death's Door), 'dead'
   mana: number;
   thresholds: Thresholds;
 };
@@ -77,12 +80,21 @@ export type GameState = {
   currentPlayer: 1 | 2;
   phase: Phase;
   setPhase: (phase: Phase) => void;
+  // D20 Setup phase
+  d20Rolls: Record<PlayerKey, number | null>;
+  rollD20: (who: PlayerKey) => void;
+  setupWinner: PlayerKey | null;
+  choosePlayerOrder: (winner: PlayerKey, wantsToGoFirst: boolean) => void;
   // Server patch integration
   applyServerPatch: (patch: unknown, t?: number) => void;
   lastServerTs: number;
   // Multiplayer transport (null => offline)
   transport: GameTransport | null;
   setTransport: (t: GameTransport | null) => void;
+  // Match end detection
+  matchEnded: boolean;
+  winner: PlayerKey | null;
+  checkMatchEnd: () => void;
   // Safe patch sending
   pendingPatches: ServerPatchT[];
   trySendPatch: (patch: ServerPatchT) => boolean;
@@ -258,7 +270,7 @@ export type GameState = {
   undo: () => void;
 };
 
-const phases: Phase[] = ["Start", "Draw", "Main", "Combat", "End"];
+const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "Combat", "End"];
 
 export type GameEvent = { id: number; ts: number; text: string };
 
@@ -267,6 +279,8 @@ export type SerializedGame = {
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
   phase: Phase;
+  d20Rolls: Record<PlayerKey, number | null>;
+  setupWinner: PlayerKey | null;
   board: BoardState;
   showGridOverlay: boolean;
   showPlaymat: boolean;
@@ -287,6 +301,8 @@ export type ServerPatchT = Partial<{
   players: GameState["players"];
   currentPlayer: GameState["currentPlayer"];
   phase: GameState["phase"];
+  d20Rolls: GameState["d20Rolls"];
+  setupWinner: GameState["setupWinner"];
   board: GameState["board"];
   zones: GameState["zones"];
   avatars: GameState["avatars"];
@@ -364,22 +380,30 @@ export const useGameStore = create<GameState>((set, get) => ({
   players: {
     p1: {
       life: 20,
+      lifeState: 'alive',
       mana: 0,
       thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
     },
     p2: {
       life: 20,
+      lifeState: 'alive',
       mana: 0,
       thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
     },
   },
   currentPlayer: 1,
-  phase: "Start",
+  phase: "Setup",
   setPhase: (phase) => set({ phase }),
+  // D20 Setup phase
+  d20Rolls: { p1: null, p2: null },
+  setupWinner: null,
   // Track last applied server timestamp to drop stale patches
   lastServerTs: 0,
   // Multiplayer transport (injected by online play UI)
   transport: null,
+  // Match end state
+  matchEnded: false,
+  winner: null,
   setTransport: (t) => {
     set({ transport: t });
     if (t) {
@@ -426,6 +450,30 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     if (sentAll) set({ pendingPatches: [] });
   },
+
+  checkMatchEnd: () => {
+    const state = get();
+    const p1LifeState = state.players.p1.lifeState;
+    const p2LifeState = state.players.p2.lifeState;
+
+    // Check if either player is dead
+    if (p1LifeState === 'dead' && p2LifeState !== 'dead') {
+      set({ matchEnded: true, winner: 'p2' });
+      return;
+    }
+    if (p2LifeState === 'dead' && p1LifeState !== 'dead') {
+      set({ matchEnded: true, winner: 'p1' });
+      return;
+    }
+    if (p1LifeState === 'dead' && p2LifeState === 'dead') {
+      set({ matchEnded: true, winner: null }); // Draw
+      return;
+    }
+
+    // Match continues
+    set({ matchEnded: false, winner: null });
+  },
+
   board: { size: { w: 5, h: 4 }, sites: {} },
   showGridOverlay: false,
   showPlaymat: true,
@@ -498,6 +546,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       if (p.phase !== undefined) {
         next.phase = p.phase;
+      }
+      if (p.d20Rolls !== undefined) {
+        next.d20Rolls = p.d20Rolls;
+      }
+      if (p.setupWinner !== undefined) {
+        next.setupWinner = p.setupWinner;
       }
       if (p.board !== undefined) {
         next.board = deepMergeReplaceArrays(s.board, p.board);
@@ -625,15 +679,50 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   addLife: (who, delta) =>
-    set((s) => ({
-      players: {
-        ...s.players,
-        [who]: {
-          ...s.players[who],
-          life: Math.max(0, s.players[who].life + delta),
+    set((s) => {
+      const currentLife = s.players[who].life;
+      const currentLifeState = s.players[who].lifeState;
+      let newLife = currentLife + delta;
+      let newLifeState: LifeState = currentLifeState;
+
+      // Sorcery life system rules:
+      // - Life is capped at 20
+      // - Cannot go below 1 when alive
+      // - At 0 life, player goes to DD (Death's Door)
+      // - From DD, losing life results in D (Death)
+      
+      if (newLife > 20) {
+        newLife = 20; // Hard cap at 20
+      } else if (newLife <= 0) {
+        if (currentLifeState === 'alive') {
+          newLife = 0;
+          newLifeState = 'dd'; // Death's Door
+        } else if (currentLifeState === 'dd') {
+          newLife = 0;
+          newLifeState = 'dead'; // Death
+          get().log(`${who.toUpperCase()} has died! Match ended.`);
+        }
+      } else if (newLife > 0 && currentLifeState === 'dd') {
+        // Recovering from Death's Door
+        newLifeState = 'alive';
+      }
+
+      const newState = {
+        players: {
+          ...s.players,
+          [who]: {
+            ...s.players[who],
+            life: newLife,
+            lifeState: newLifeState,
+          },
         },
-      },
-    })),
+      };
+      
+      // Check for match end after state update
+      setTimeout(() => get().checkMatchEnd(), 0);
+      
+      return newState;
+    }),
 
   addMana: (who, delta) =>
     set((s) => ({
@@ -732,6 +821,57 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
 
     get().log(`Turn passes to P${nextPlayer}`);
+  },
+
+  // D20 Setup phase functions
+  rollD20: (who) => {
+    const roll = Math.floor(Math.random() * 20) + 1;
+    const s = get();
+    const newRolls = { ...s.d20Rolls, [who]: roll };
+    
+    // Check if both players have rolled
+    if (newRolls.p1 !== null && newRolls.p2 !== null) {
+      let winner: PlayerKey | null = null;
+      if (newRolls.p1 > newRolls.p2) {
+        winner = "p1";
+      } else if (newRolls.p2 > newRolls.p1) {
+        winner = "p2";
+      }
+      // If tie, re-roll automatically
+      if (newRolls.p1 === newRolls.p2) {
+        get().log(`Both players rolled ${newRolls.p1}! Rolling again...`);
+        set({ d20Rolls: { p1: null, p2: null } });
+        return;
+      }
+      
+      const patch: ServerPatchT = {
+        d20Rolls: newRolls,
+        setupWinner: winner,
+      };
+      get().trySendPatch(patch);
+      set({ d20Rolls: newRolls, setupWinner: winner });
+      get().log(`Player ${newRolls.p1 > newRolls.p2 ? "1" : "2"} wins the roll (${newRolls.p1 > newRolls.p2 ? newRolls.p1 : newRolls.p2} vs ${newRolls.p1 > newRolls.p2 ? newRolls.p2 : newRolls.p1})!`);
+    } else {
+      const patch: ServerPatchT = { d20Rolls: newRolls };
+      get().trySendPatch(patch);
+      set({ d20Rolls: newRolls });
+      get().log(`Player ${who === "p1" ? "1" : "2"} rolled a ${roll}`);
+    }
+  },
+
+  choosePlayerOrder: (winner, wantsToGoFirst) => {
+    const firstPlayer = wantsToGoFirst ? (winner === "p1" ? 1 : 2) : (winner === "p1" ? 2 : 1);
+    
+    const patch: ServerPatchT = {
+      phase: "Start",
+      currentPlayer: firstPlayer,
+    };
+    get().trySendPatch(patch);
+    set({ phase: "Start", currentPlayer: firstPlayer });
+    
+    const winnerNum = winner === "p1" ? 1 : 2;
+    const choiceText = wantsToGoFirst ? "goes first" : "goes second";
+    get().log(`Player ${winnerNum} chooses to ${choiceText}. Player ${firstPlayer} starts!`);
   },
 
   toggleGridOverlay: () =>

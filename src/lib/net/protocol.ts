@@ -34,7 +34,10 @@ export const MatchInfoSchema = z.object({
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 
 // Client -> Server payloads
-export const HelloPayload = z.object({ displayName: z.string() });
+export const HelloPayload = z.object({ 
+  displayName: z.string(),
+  playerId: z.string().optional() // Persistent player ID for reconnection
+});
 export const CreateLobbyPayload = z.object({});
 export const JoinLobbyPayload = z.object({ lobbyId: z.string().optional() });
 export const LeaveLobbyPayload = z.object({});

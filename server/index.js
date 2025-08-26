@@ -148,7 +148,7 @@ function startMatchFromLobby(requestingPlayer) {
     id: rid("match"),
     lobbyId: lobby.id,
     playerIds: Array.from(lobby.playerIds),
-    status: "in_progress",
+    status: "waiting",
     seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
     turn: Array.from(lobby.playerIds)[0],
     winnerId: null,
@@ -290,11 +290,13 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     const player = players.get(socket.id);
     if (!player) return;
-    // Remove from lobby and match
+    
+    // Remove from lobby when disconnecting
     if (player.lobbyId) {
       leaveLobby(socket, player);
     }
-    // For matches, just flag that player left; future: end match or hand to AI
+    
+    // Remove player from lookup
     players.delete(socket.id);
   });
 });
