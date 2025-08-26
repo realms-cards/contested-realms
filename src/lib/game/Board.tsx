@@ -11,7 +11,6 @@ import {
 } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PermanentItem } from "@/lib/game/store";
-import D20Dice from "@/lib/game/components/D20Dice";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import CardPlane from "@/lib/game/components/CardPlane";
 import CardGlow from "@/lib/game/components/CardGlow";
@@ -57,21 +56,6 @@ export default function Board() {
   const board = useGameStore((s) => s.board);
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
-  // D20 setup phase
-  const phase = useGameStore((s) => s.phase);
-  const d20Rolls = useGameStore((s) => s.d20Rolls);
-  const rollD20 = useGameStore((s) => s.rollD20);
-  const [rollingStates, setRollingStates] = useState<Record<string, boolean>>({ p1: false, p2: false });
-
-  // Handle dice rolling with animation
-  const handleDiceRoll = (player: "p1" | "p2") => {
-    setRollingStates(prev => ({ ...prev, [player]: true }));
-    rollD20(player);
-  };
-
-  const handleRollComplete = (player: "p1" | "p2") => {
-    setRollingStates(prev => ({ ...prev, [player]: false }));
-  };
   const playSelectedTo = useGameStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useGameStore(
     (s) => s.moveSelectedPermanentToWithOffset
@@ -1177,27 +1161,6 @@ export default function Board() {
           </group>
         )}
 
-        {/* D20 Dice for Setup Phase */}
-        {phase === "Setup" && (
-          <>
-            <D20Dice
-              player="p1"
-              position={[-4, 1, 0]}
-              roll={d20Rolls.p1}
-              isRolling={rollingStates.p1}
-              onRollComplete={() => handleRollComplete("p1")}
-              onRoll={() => handleDiceRoll("p1")}
-            />
-            <D20Dice
-              player="p2"
-              position={[4, 1, 0]}
-              roll={d20Rolls.p2}
-              isRolling={rollingStates.p2}
-              onRollComplete={() => handleRollComplete("p2")}
-              onRoll={() => handleDiceRoll("p2")}
-            />
-          </>
-        )}
     </group>
   );
 }

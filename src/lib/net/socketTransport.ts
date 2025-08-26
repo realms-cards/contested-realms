@@ -2,13 +2,20 @@
 
 import { io, Socket } from "socket.io-client";
 import { Protocol } from "@/lib/net/protocol";
-import type { GameTransport, TransportEvent, TransportEventMap, TransportHandler } from "@/lib/net/transport";
+import type {
+  GameTransport,
+  TransportEvent,
+  TransportEventMap,
+  TransportHandler,
+} from "@/lib/net/transport";
 
 export class SocketTransport implements GameTransport {
   private socket?: Socket;
-  private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
+  private handlers: Partial<
+    Record<TransportEvent, Set<(payload: unknown) => void>>
+  > = {};
 
-  async connect(opts: { displayName: string }): Promise<void> {
+  async connect(opts: { playerId: any; displayName: string }): Promise<void> {
     if (this.socket && this.socket.connected) return;
 
     const url = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
@@ -22,10 +29,13 @@ export class SocketTransport implements GameTransport {
     await new Promise<void>((resolve, reject) => {
       let resolved = false;
       const sendHello = () => {
-        socket.emit("hello", Protocol.HelloPayload.parse({ 
-          displayName: opts.displayName,
-          playerId: opts.playerId 
-        }));
+        socket.emit(
+          "hello",
+          Protocol.HelloPayload.parse({
+            displayName: opts.displayName,
+            playerId: opts.playerId,
+          })
+        );
         if (!resolved) {
           resolved = true;
           resolve();
@@ -40,14 +50,39 @@ export class SocketTransport implements GameTransport {
       socket.once("connect_error", onError);
 
       // Wire server events
-      socket.on("welcome", (payload) => this.dispatch("welcome", Protocol.WelcomePayload.parse(payload)));
-      socket.on("lobbyUpdated", (payload) => this.dispatch("lobbyUpdated", Protocol.LobbyUpdatedPayload.parse(payload)));
-      socket.on("joinedLobby", (payload) => this.dispatch("lobbyUpdated", Protocol.JoinedLobbyPayload.parse(payload)));
-      socket.on("matchStarted", (payload) => this.dispatch("matchStarted", Protocol.MatchStartedPayload.parse(payload)));
-      socket.on("statePatch", (payload) => this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload)));
-      socket.on("chat", (payload) => this.dispatch("chat", Protocol.ServerChatPayload.parse(payload)));
-      socket.on("resyncResponse", (payload) => this.dispatch("resync", Protocol.ResyncResponsePayload.parse(payload)));
-      socket.on("error", (payload) => this.dispatch("error", Protocol.ErrorPayload.parse(payload)));
+      socket.on("welcome", (payload) =>
+        this.dispatch("welcome", Protocol.WelcomePayload.parse(payload))
+      );
+      socket.on("lobbyUpdated", (payload) =>
+        this.dispatch(
+          "lobbyUpdated",
+          Protocol.LobbyUpdatedPayload.parse(payload)
+        )
+      );
+      socket.on("joinedLobby", (payload) =>
+        this.dispatch(
+          "lobbyUpdated",
+          Protocol.JoinedLobbyPayload.parse(payload)
+        )
+      );
+      socket.on("matchStarted", (payload) =>
+        this.dispatch(
+          "matchStarted",
+          Protocol.MatchStartedPayload.parse(payload)
+        )
+      );
+      socket.on("statePatch", (payload) =>
+        this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
+      );
+      socket.on("chat", (payload) =>
+        this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
+      );
+      socket.on("resyncResponse", (payload) =>
+        this.dispatch("resync", Protocol.ResyncResponsePayload.parse(payload))
+      );
+      socket.on("error", (payload) =>
+        this.dispatch("error", Protocol.ErrorPayload.parse(payload))
+      );
       socket.on("connect_error", (err: unknown) => {
         this.dispatch("error", { message: String(err) });
       });
@@ -55,7 +90,10 @@ export class SocketTransport implements GameTransport {
   }
 
   leaveLobby(): void {
-    this.requireSocket().emit("leaveLobby", Protocol.LeaveLobbyPayload.parse({}));
+    this.requireSocket().emit(
+      "leaveLobby",
+      Protocol.LeaveLobbyPayload.parse({})
+    );
   }
 
   disconnect(): void {
@@ -98,11 +136,17 @@ export class SocketTransport implements GameTransport {
   }
 
   startMatch(): void {
-    this.requireSocket().emit("startMatch", Protocol.StartMatchPayload.parse({}));
+    this.requireSocket().emit(
+      "startMatch",
+      Protocol.StartMatchPayload.parse({})
+    );
   }
 
   sendAction(action: unknown): void {
-    this.requireSocket().emit("action", Protocol.ActionPayload.parse({ action }));
+    this.requireSocket().emit(
+      "action",
+      Protocol.ActionPayload.parse({ action })
+    );
   }
 
   sendChat(content: string): void {
@@ -110,10 +154,16 @@ export class SocketTransport implements GameTransport {
   }
 
   resync(): void {
-    this.requireSocket().emit("resyncRequest", Protocol.ResyncRequestPayload.parse({}));
+    this.requireSocket().emit(
+      "resyncRequest",
+      Protocol.ResyncRequestPayload.parse({})
+    );
   }
 
-  on<E extends TransportEvent>(event: E, handler: TransportHandler<E>): () => void {
+  on<E extends TransportEvent>(
+    event: E,
+    handler: TransportHandler<E>
+  ): () => void {
     const set = (this.handlers[event] ??= new Set());
     // Store as unknown-typed wrapper to satisfy our internal map
     const wrapper: (payload: unknown) => void = (payload) =>
@@ -122,7 +172,10 @@ export class SocketTransport implements GameTransport {
     return () => set.delete(wrapper);
   }
 
-  private dispatch<E extends TransportEvent>(event: E, payload: TransportEventMap[E]) {
+  private dispatch<E extends TransportEvent>(
+    event: E,
+    payload: TransportEventMap[E]
+  ) {
     const set = this.handlers[event];
     if (!set) return;
     for (const h of Array.from(set)) h(payload as unknown);

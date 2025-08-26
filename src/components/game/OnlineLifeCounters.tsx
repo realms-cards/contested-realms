@@ -26,7 +26,7 @@ function getLifeStateColor(lifeState: LifeState): string {
 
 function getLifeStateIcon(lifeState: LifeState) {
   switch (lifeState) {
-    case 'alive': return <Heart className="w-4 h-4" />;
+    case 'alive': return null; // No icon for alive state, just show numbers
     case 'dd': return <AlertTriangle className="w-4 h-4 text-orange-400" />;
     case 'dead': return <Skull className="w-4 h-4 text-red-400" />;
   }
@@ -68,9 +68,9 @@ function LifeCounter({ player, playerName, canModify, dragFromHand, isMe }: Life
         lifeState === 'dead' ? 'ring-red-400/50 bg-red-900/20' : 
         'ring-white/10'
       }`}>
-        <div className="flex flex-col items-center gap-0.5">
+        <div className="flex flex-col items-center justify-center gap-0.5">
           {getLifeStateIcon(lifeState)}
-          <span className={`text-xl font-bold ${colorClass}`}>
+          <span className={`${lifeState === 'alive' ? 'text-2xl' : 'text-xl'} font-bold ${colorClass}`}>
             {lifeDisplay}
           </span>
         </div>

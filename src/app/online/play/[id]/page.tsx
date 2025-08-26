@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useOnline } from "../../layout";
 import { useGameStore } from "@/lib/game/store";
 import { Canvas } from "@react-three/fiber";
@@ -18,6 +18,7 @@ import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
+import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
@@ -27,6 +28,7 @@ import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 
 export default function OnlineMatchPage() {
   const params = useParams();
+  const router = useRouter();
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
     return Array.isArray(idParam) ? idParam[0] : idParam;
@@ -78,6 +80,7 @@ export default function OnlineMatchPage() {
   // Setup state (like offline play) - but skip for ongoing matches
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
+  const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
   
   // Skip setup if rejoining an in-progress match
   useEffect(() => {
@@ -95,6 +98,7 @@ export default function OnlineMatchPage() {
   
   // Match end overlay
   const [matchEndOverlayOpen, setMatchEndOverlayOpen] = useState<boolean>(false);
+  const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] = useState<boolean>(false);
 
   // 3D Board UI/store bindings
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -177,16 +181,22 @@ export default function OnlineMatchPage() {
   }, [setDragFromHand, setDragFromPile]);
 
   function startGame() {
+    // Don't close setup overlay - we need it for D20 rolling
+    setPhase("Setup"); // Start with D20 roll to determine first player
+    // setupOpen stays true so D20Screen can be shown
+  }
+  
+  function finishSetup() {
     setSetupOpen(false);
-    setPhase("Main");
+    setPhase("Main"); // Start the actual game
   }
 
-  // Show match end overlay when match ends
+  // Show match end overlay when match ends (but only if not already dismissed)
   useEffect(() => {
-    if (matchEnded && !matchEndOverlayOpen) {
+    if (matchEnded && !matchEndOverlayOpen && !matchEndOverlayDismissed) {
       setMatchEndOverlayOpen(true);
     }
-  }, [matchEnded, matchEndOverlayOpen]);
+  }, [matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
 
   // Check if we're in the correct match
   const inThisMatch = !!matchId && match?.id === matchId;
@@ -278,11 +288,17 @@ export default function OnlineMatchPage() {
               playerNames={playerNames}
               onPrepareComplete={() => setPrepared(true)} 
             />
+          ) : !d20RollingComplete ? (
+            <OnlineD20Screen 
+              myPlayerKey={myPlayerKey}
+              playerNames={playerNames}
+              onRollingComplete={() => setD20RollingComplete(true)} 
+            />
           ) : (
             <OnlineMulliganScreen 
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
-              onStartGame={startGame} 
+              onStartGame={finishSetup} 
             />
           )}
         </div>
@@ -433,7 +449,14 @@ export default function OnlineMatchPage() {
             winner={winner}
             playerNames={playerNames}
             myPlayerKey={myPlayerKey}
-            onClose={() => setMatchEndOverlayOpen(false)}
+            onClose={() => {
+              setMatchEndOverlayOpen(false);
+              setMatchEndOverlayDismissed(true);
+            }}
+            onLeave={() => {
+              leaveMatch();
+              router.push('/online/lobby');
+            }}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}

@@ -55,8 +55,8 @@ export default function LobbyPage() {
 
   return (
     <div className="space-y-6">
-      {/* Match Section */}
-      {match?.id && (
+      {/* Match Section - only show for joinable matches */}
+      {match?.id && (match.status === 'waiting' || match.status === 'in_progress') && (
         <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
           <div className="flex items-center justify-between">
             <div>

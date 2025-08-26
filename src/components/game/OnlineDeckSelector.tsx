@@ -49,7 +49,7 @@ export default function OnlineDeckSelector({
       const success = await loadDeckFor(myPlayerKey, selectedDeck, setDeckError);
       
       if (success) {
-        useGameStore.getState().setPhase("Start");
+        useGameStore.getState().setPhase("Setup");
         onPrepareComplete();
       }
     } catch (err) {
