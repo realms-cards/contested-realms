@@ -303,6 +303,8 @@ export type ServerPatchT = Partial<{
   phase: GameState["phase"];
   d20Rolls: GameState["d20Rolls"];
   setupWinner: GameState["setupWinner"];
+  matchEnded: GameState["matchEnded"];
+  winner: GameState["winner"];
   board: GameState["board"];
   zones: GameState["zones"];
   avatars: GameState["avatars"];
@@ -459,14 +461,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Check if either player is dead
     if (p1LifeState === 'dead' && p2LifeState !== 'dead') {
       set({ matchEnded: true, winner: 'p2' });
+      const patch = { matchEnded: true, winner: 'p2' as PlayerKey };
+      get().trySendPatch(patch);
       return;
     }
     if (p2LifeState === 'dead' && p1LifeState !== 'dead') {
       set({ matchEnded: true, winner: 'p1' });
+      const patch = { matchEnded: true, winner: 'p1' as PlayerKey };
+      get().trySendPatch(patch);
       return;
     }
     if (p1LifeState === 'dead' && p2LifeState === 'dead') {
-      set({ matchEnded: true, winner: null }); // Draw
+      set({ matchEnded: true, winner: null });
+      const patch = { matchEnded: true, winner: null as PlayerKey | null };
+      get().trySendPatch(patch);
       return;
     }
 
@@ -552,6 +560,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       if (p.setupWinner !== undefined) {
         next.setupWinner = p.setupWinner;
+      }
+      if (p.matchEnded !== undefined) {
+        next.matchEnded = p.matchEnded;
+      }
+      if (p.winner !== undefined) {
+        next.winner = p.winner;
       }
       if (p.board !== undefined) {
         next.board = deepMergeReplaceArrays(s.board, p.board);

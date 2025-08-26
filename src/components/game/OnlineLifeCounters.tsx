@@ -47,8 +47,10 @@ function LifeCounter({ player, playerName, canModify, dragFromHand, isMe }: Life
   const { life, lifeState } = playerState;
   const lifeDisplay = formatLifeDisplay(life, lifeState);
   const colorClass = getLifeStateColor(lifeState);
-  const canIncrease = canModify && lifeState !== 'dead' && life < 20;
-  const canDecrease = canModify && lifeState !== 'dead';
+  // Only allow modifying your own life
+  const canModifyThisPlayer = canModify && isMe;
+  const canIncrease = canModifyThisPlayer && lifeState !== 'dead' && life < 20;
+  const canDecrease = canModifyThisPlayer && lifeState !== 'dead';
 
   return (
     <div className="flex items-center gap-2">
@@ -81,7 +83,7 @@ function LifeCounter({ player, playerName, canModify, dragFromHand, isMe }: Life
             className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             onClick={() => addLife(player, +1)}
             disabled={dragFromHand || !canIncrease}
-            title={!canIncrease ? 'Cannot increase life (max 20 or player is dead)' : 'Increase life'}
+            title={!canIncrease ? (isMe ? 'Cannot increase life (max 20 or dead)' : 'Can only modify your own life') : 'Increase life'}
           >
             +
           </button>
@@ -89,7 +91,7 @@ function LifeCounter({ player, playerName, canModify, dragFromHand, isMe }: Life
             className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             onClick={() => addLife(player, -1)}
             disabled={dragFromHand || !canDecrease}
-            title={!canDecrease ? 'Player is dead' : 'Decrease life'}
+            title={!canDecrease ? (isMe ? 'Cannot decrease life (dead)' : 'Can only modify your own life') : 'Decrease life'}
           >
             -
           </button>
