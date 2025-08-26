@@ -649,7 +649,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   openPlacementDialog: (cardName, pileName, onPlace) => set({ placementDialog: { cardName, pileName, onPlace } }),
   closePlacementDialog: () => set({ placementDialog: null }),
   searchDialog: null,
-  openSearchDialog: (pileName, cards, onSelectCard) => set({ searchDialog: { pileName, cards, onSelectCard } }),
+  openSearchDialog: (pileName, cards, onSelectCard) => {
+    set({ searchDialog: { pileName, cards, onSelectCard } });
+    get().log(`Viewing ${pileName} (${cards.length} cards)`);
+  },
   closeSearchDialog: () => set({ searchDialog: null }),
 
   // Derived selectors (no state mutation)
@@ -700,7 +703,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else if (currentLifeState === 'dd') {
           newLife = 0;
           newLifeState = 'dead'; // Death
-          get().log(`${who.toUpperCase()} has died! Match ended.`);
         }
       } else if (newLife > 0 && currentLifeState === 'dd') {
         // Recovering from Death's Door
@@ -717,6 +719,27 @@ export const useGameStore = create<GameState>((set, get) => ({
           },
         },
       };
+
+      // Send patch to other players in multiplayer
+      const patch = { players: newState.players };
+      get().trySendPatch(patch);
+      
+      // Log life changes 
+      if (currentLife !== newLife) {
+        const changeText = delta > 0 ? `gains ${delta}` : `loses ${Math.abs(delta)}`;
+        get().log(`${who.toUpperCase()} ${changeText} life (${currentLife} → ${newLife})`);
+      }
+      
+      // Log state transitions
+      if (currentLifeState !== newLifeState) {
+        if (newLifeState === 'dd') {
+          get().log(`${who.toUpperCase()} enters Death's Door!`);
+        } else if (newLifeState === 'alive' && currentLifeState === 'dd') {
+          get().log(`${who.toUpperCase()} recovers from Death's Door`);
+        } else if (newLifeState === 'dead') {
+          get().log(`${who.toUpperCase()} has died! Match ended.`);
+        }
+      }
       
       // Check for match end after state update
       setTimeout(() => get().checkMatchEnd(), 0);
@@ -736,18 +759,36 @@ export const useGameStore = create<GameState>((set, get) => ({
     })),
 
   addThreshold: (who, element, delta) =>
-    set((s) => ({
-      players: {
-        ...s.players,
-        [who]: {
-          ...s.players[who],
-          thresholds: {
-            ...s.players[who].thresholds,
-            [element]: Math.max(0, s.players[who].thresholds[element] + delta),
+    set((s) => {
+      const currentThreshold = s.players[who].thresholds[element];
+      const newThreshold = Math.max(0, currentThreshold + delta);
+      
+      const newState = {
+        players: {
+          ...s.players,
+          [who]: {
+            ...s.players[who],
+            thresholds: {
+              ...s.players[who].thresholds,
+              [element]: newThreshold,
+            },
           },
         },
-      },
-    })),
+      };
+
+      // Send patch to other players in multiplayer
+      const patch = { players: newState.players };
+      get().trySendPatch(patch);
+      
+      // Log threshold changes
+      if (currentThreshold !== newThreshold) {
+        const changeText = delta > 0 ? `gains` : `loses`;
+        const elementEmoji = element === 'fire' ? '🔥' : element === 'water' ? '💧' : element === 'earth' ? '🌍' : '💨';
+        get().log(`${who.toUpperCase()} ${changeText} ${Math.abs(delta)} ${elementEmoji} ${element} threshold (${currentThreshold} → ${newThreshold})`);
+      }
+
+      return newState;
+    }),
 
   nextPhase: () => {
     const s = get();
