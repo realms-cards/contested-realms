@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Head from "next/head";
 import { useOnline } from "../layout";
 
 export default function LobbyPage() {
@@ -17,6 +18,7 @@ export default function LobbyPage() {
     leaveLobby,
     startMatch,
     joinMatch,
+    leaveMatch,
     sendChat,
     chatLog,
     resync,
@@ -26,14 +28,69 @@ export default function LobbyPage() {
   const [matchIdInput, setMatchIdInput] = useState("");
   const [chatInput, setChatInput] = useState("");
 
-  // If a match is already active, go to it
+  // Note: Removed match leaving tracking since we don't have persistent sessions
+
+  // Note: Removed auto-redirect to match to allow players to choose whether to rejoin
+
+  // Dynamic page title
   useEffect(() => {
-    if (match?.id) router.push(`/online/play/${encodeURIComponent(match.id)}`);
-  }, [match?.id, router]);
+    const baseTitle = "Sorcery Online";
+    let title = `${baseTitle} - Lobby`;
+    
+    if (lobby) {
+      title = `${baseTitle} - Lobby ${lobby.id} (${lobby.players.length}/${lobby.maxPlayers})`;
+    }
+    
+    if (match) {
+      const playerNames = match.players?.map(p => p.displayName).join(' vs ') || 'Players';
+      title = `${baseTitle} - ${playerNames} (${match.status})`;
+    }
+    
+    if (!connected) {
+      title = `${baseTitle} - Disconnected`;
+    }
+    
+    document.title = title;
+  }, [connected, lobby, match]);
 
   return (
     <div className="space-y-6">
-      {/* Display Name is controlled in the Online layout header */}
+      {/* Match Section */}
+      {match?.id && (
+        <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-orange-200 mb-1">
+                {match.status === 'waiting' ? 'New Match Starting' : 'Ongoing Match Found'}
+              </div>
+              <div className="text-xs opacity-70">
+                Match ID: {match.id}
+              </div>
+              <div className="text-xs opacity-70">
+                Status: {match.status} • Players: {match.players?.map(p => p.displayName).join(', ') || 'Loading...'}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="rounded bg-orange-600/80 hover:bg-orange-600 px-4 py-2 text-sm font-medium transition-colors"
+                onClick={() => router.push(`/online/play/${encodeURIComponent(match.id)}`)}
+              >
+Join Match
+              </button>
+              <button
+                className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
+                onClick={() => {
+                  if (confirm('Are you sure you want to permanently leave this match? This cannot be undone.')) {
+                    leaveMatch();
+                  }
+                }}
+              >
+                Leave Match
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">

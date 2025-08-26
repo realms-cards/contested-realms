@@ -41,6 +41,7 @@ export default function PlayPage() {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
+  const players = useGameStore((s) => s.players);
   // Selected hand card (for magnifier) - show for current player
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const [magnifierDelay, setMagnifierDelay] = useState(false);
@@ -145,6 +146,36 @@ export default function PlayPage() {
       controlsRef.current.reset();
     }
   }
+
+  // Dynamic page title for offline play
+  useEffect(() => {
+    const baseTitle = "Sorcery";
+    
+    if (setupOpen) {
+      document.title = `${baseTitle} - Game Setup`;
+      return;
+    }
+    
+    const p1Life = players.p1?.life;
+    const p2Life = players.p2?.life;
+    
+    let title = `${baseTitle} - Offline`;
+    
+    // Add life info if available
+    if (p1Life !== undefined && p2Life !== undefined) {
+      title += ` (P1: ${p1Life} vs P2: ${p2Life})`;
+    }
+    
+    // Add turn info
+    title += ` - P${currentPlayer}'s Turn`;
+    
+    document.title = title;
+  }, [
+    setupOpen,
+    players.p1?.life,
+    players.p2?.life, 
+    currentPlayer
+  ]);
 
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full">

@@ -17,10 +17,13 @@ import Image from "next/image";
 import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
-import StatusBar from "@/components/game/StatusBar";
-import LifeCounters from "@/components/game/LifeCounters";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
+import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import OnlineConsole from "@/components/game/OnlineConsole";
+import MatchInfoPopup from "@/components/game/MatchInfoPopup";
+import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -29,7 +32,7 @@ export default function OnlineMatchPage() {
     return Array.isArray(idParam) ? idParam[0] : idParam;
   }, [params]);
 
-  const { connected, match, joinMatch, chatLog, sendChat, me } = useOnline();
+  const { connected, match, joinMatch, chatLog, sendChat, leaveMatch, resync, me } = useOnline();
   
   // Determine which player this client is
   const myPlayerId = me?.id;
@@ -55,13 +58,43 @@ export default function OnlineMatchPage() {
     void joinMatch(matchId);
   }, [connected, match?.id, matchId, joinMatch]);
 
-  // Setup state (like offline play)
+  // Request full state sync when successfully joining a match
+  useEffect(() => {
+    if (connected && match?.id === matchId) {
+      // Request full game state sync to ensure rejoining players get complete state
+      resync();
+      
+      // Notify other players that we joined (but only if we're rejoining, not starting new)
+      if (match?.status === 'in_progress') {
+        const myName = me?.displayName || "A player";
+        sendChat(`${myName} has rejoined the match.`);
+      }
+    }
+  }, [connected, match?.id, matchId, resync, match?.status, me?.displayName, sendChat]);
+
+  // Game store selectors needed for setup
+  const setPhase = useGameStore((s) => s.setPhase);
+
+  // Setup state (like offline play) - but skip for ongoing matches
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
+  
+  // Skip setup if rejoining an in-progress match
+  useEffect(() => {
+    if (match?.status === 'in_progress' && setupOpen) {
+      setSetupOpen(false);
+      setPhase("Main"); // Initialize phase for ongoing game
+    }
+  }, [match?.status, setupOpen, setPhase]);
 
   // Chat
   const [chatInput, setChatInput] = useState("");
-  const [chatOpen, setChatOpen] = useState<boolean>(false);
+  
+  // Match info popup
+  const [matchInfoOpen, setMatchInfoOpen] = useState<boolean>(false);
+  
+  // Match end overlay
+  const [matchEndOverlayOpen, setMatchEndOverlayOpen] = useState<boolean>(false);
 
   // 3D Board UI/store bindings
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -82,7 +115,8 @@ export default function OnlineMatchPage() {
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const setPhase = useGameStore((s) => s.setPhase);
+  const matchEnded = useGameStore((s) => s.matchEnded);
+  const winner = useGameStore((s) => s.winner);
 
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,10 +181,85 @@ export default function OnlineMatchPage() {
     setPhase("Main");
   }
 
+  // Show match end overlay when match ends
+  useEffect(() => {
+    if (matchEnded && !matchEndOverlayOpen) {
+      setMatchEndOverlayOpen(true);
+    }
+  }, [matchEnded, matchEndOverlayOpen]);
+
+  // Check if we're in the correct match
   const inThisMatch = !!matchId && match?.id === matchId;
 
+  // Dynamic page title with comprehensive match info
+  useEffect(() => {
+    const baseTitle = "Sorcery";
+    
+    if (!connected) {
+      document.title = `${baseTitle} - Disconnected`;
+      return;
+    }
+    
+    if (!inThisMatch) {
+      document.title = `${baseTitle} - Joining Match...`;
+      return;
+    }
+    
+    if (!match || !myPlayerKey) {
+      document.title = `${baseTitle} - Loading Match...`;
+      return;
+    }
+
+    const players = useGameStore.getState().players;
+    const currentPlayerNum = useGameStore.getState().currentPlayer;
+    const myLife = players[myPlayerKey]?.life;
+    const opponentKey = myPlayerKey === 'p1' ? 'p2' : 'p1';
+    const opponentLife = players[opponentKey]?.life;
+    const opponentName = playerNames[opponentKey];
+    
+    let title = `${baseTitle} vs ${opponentName}`;
+    
+    // Add life info
+    if (myLife !== undefined && opponentLife !== undefined) {
+      title += ` (${myLife} vs ${opponentLife})`;
+    }
+    
+    // Add turn info
+    const isMyTurn = myPlayerNumber === currentPlayerNum;
+    if (isMyTurn) {
+      title += ` - Your Turn`;
+    } else {
+      title += ` - ${opponentName}'s Turn`;
+    }
+    
+    // Add match end state
+    if (matchEnded) {
+      if (winner === myPlayerKey) {
+        title = `${baseTitle} - Victory! vs ${opponentName}`;
+      } else if (winner === opponentKey) {
+        title = `${baseTitle} - Defeat vs ${opponentName}`;
+      } else {
+        title = `${baseTitle} - Draw vs ${opponentName}`;
+      }
+    }
+    
+    document.title = title;
+  }, [
+    connected, 
+    inThisMatch, 
+    match, 
+    myPlayerKey, 
+    myPlayerNumber, 
+    playerNames, 
+    matchEnded, 
+    winner,
+    // Re-run when game state changes
+    useGameStore((s) => s.players),
+    useGameStore((s) => s.currentPlayer)
+  ]);
+
   return (
-    <div className="relative h-[calc(100vh-4rem)] w-full">
+    <div className="fixed inset-0 w-screen h-screen">
       {!inThisMatch && (
         <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="text-center">
@@ -179,89 +288,36 @@ export default function OnlineMatchPage() {
         </div>
       )}
 
-      {/* Match Info Overlay */}
-      <div className="absolute top-3 left-3 z-10 bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow px-3 py-2">
-        <div className="text-sm font-semibold mb-1">Online Match</div>
-        <div className="text-xs space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-blue-400">{playerNames.p1}</span>
-            {myPlayerNumber === 1 && <span className="text-green-400">(You)</span>}
-            <span className="opacity-50">vs</span>
-            <span className="text-red-400">{playerNames.p2}</span>
-            {myPlayerNumber === 2 && <span className="text-green-400">(You)</span>}
-          </div>
-          <div className="font-mono opacity-60">ID: {matchId}</div>
-        </div>
-        {!inThisMatch && (
-          <div className="text-xs opacity-60 mt-1">Joining…</div>
-        )}
-      </div>
 
-      {/* Chat Toggle Button */}
-      <button
-        className="absolute top-3 right-3 z-10 bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow px-3 py-2 text-sm hover:bg-black/80"
-        onClick={() => setChatOpen(!chatOpen)}
-      >
-        Chat {chatLog.length > 0 && `(${chatLog.length})`}
-      </button>
-
-      {/* Chat Overlay - positioned like the event console in offline play */}
-      {chatOpen && (
-        <div className="absolute left-3 bottom-2 z-10 text-white w-80 bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
-          <div className="flex items-center justify-between px-3 py-2 text-sm">
-            <span className="font-semibold opacity-90">Chat</span>
-            <button
-              className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs"
-              onClick={() => setChatOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-          <div className="max-h-64 overflow-y-auto px-3 pb-3 text-xs space-y-1">
-            {chatLog.length === 0 && <div className="opacity-60">No messages</div>}
-            {chatLog.map((m, i) => (
-              <div key={i} className="opacity-90">
-                <span className="text-slate-300/80">[{m.scope}]</span>{" "}
-                <span className="font-medium">{m.from?.displayName ?? "System"}</span>: {m.content}
-              </div>
-            ))}
-          </div>
-          <div className="px-3 pb-3 flex gap-2">
-            <input
-              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
-              placeholder="Type a message"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const msg = chatInput.trim();
-                  if (!msg) return;
-                  sendChat(msg);
-                  setChatInput("");
-                }
-              }}
-            />
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs"
-              onClick={() => {
-                const msg = chatInput.trim();
-                if (!msg) return;
-                sendChat(msg);
-                setChatInput("");
-              }}
-              disabled={!connected}
-            >
-              Send
-            </button>
-          </div>
-        </div>
-      )}
 
       {inThisMatch && (
         <>
-          {/* HUD overlays - same as offline */}
-          <StatusBar dragFromHand={dragFromHand} onCameraReset={resetCamera} />
-          <LifeCounters dragFromHand={dragFromHand} />
+          {/* Online Status Bar with turn restrictions */}
+          {myPlayerNumber && (
+            <OnlineStatusBar 
+              dragFromHand={dragFromHand} 
+              myPlayerNumber={myPlayerNumber}
+              playerNames={playerNames}
+              onCameraReset={resetCamera}
+              onOpenMatchInfo={() => setMatchInfoOpen(true)}
+            />
+          )}
+          <OnlineLifeCounters 
+            dragFromHand={dragFromHand}
+            myPlayerKey={myPlayerKey}
+            playerNames={playerNames}
+          />
+
+          {/* Online Console with Events and Chat tabs */}
+          <OnlineConsole
+            dragFromHand={dragFromHand}
+            chatLog={chatLog}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            onSendChat={sendChat}
+            onLeaveMatch={leaveMatch}
+            connected={connected}
+          />
 
             {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
             {previewCard?.slug && !contextMenu && !selectedHandCard && (
@@ -361,24 +417,44 @@ export default function OnlineMatchPage() {
               );
             })()}
 
-          {/* 3D Board Canvas - full screen */}
-          <Canvas
-            camera={{ 
-              // Position camera based on player seat
-              // P1 looks from south to north, P2 looks from north to south
-              position: myPlayerNumber === 1 ? [0, 10, 5] : [0, 10, -5], 
-              fov: 50 
-            }}
-            shadows
-            gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
-            onPointerMissed={() => {
-              if (!dragFromHand && !dragFromPile) {
-                clearSelection();
-                closeContextMenu();
-                setPreviewCard(null);
-              }
-            }}
-          >
+          {/* Match Info Popup */}
+          <MatchInfoPopup
+            isOpen={matchInfoOpen}
+            onClose={() => setMatchInfoOpen(false)}
+            matchId={matchId || ""}
+            playerNames={playerNames}
+            myPlayerNumber={myPlayerNumber}
+            connected={connected}
+          />
+
+          {/* Match End Overlay */}
+          <MatchEndOverlay
+            isVisible={matchEndOverlayOpen}
+            winner={winner}
+            playerNames={playerNames}
+            myPlayerKey={myPlayerKey}
+            onClose={() => setMatchEndOverlayOpen(false)}
+          />
+
+          {/* 3D Board Canvas - fills entire viewport */}
+          <div className="absolute inset-0 w-full h-full">
+            <Canvas
+              camera={{ 
+                // Position camera based on player seat
+                // P1 looks from south to north, P2 looks from north to south
+                position: myPlayerNumber === 1 ? [0, 10, 5] : [0, 10, -5], 
+                fov: 50 
+              }}
+              shadows
+              gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+              onPointerMissed={() => {
+                if (!dragFromHand && !dragFromPile) {
+                  clearSelection();
+                  closeContextMenu();
+                  setPreviewCard(null);
+                }
+              }}
+            >
             <color attach="background" args={["#0b0b0c"]} />
             <ambientLight intensity={0.6} />
             <directionalLight position={[10, 12, 8]} intensity={1} castShadow />
@@ -419,7 +495,8 @@ export default function OnlineMatchPage() {
               minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
               maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
             />
-          </Canvas>
+            </Canvas>
+          </div>
         </>
       )}
     </div>

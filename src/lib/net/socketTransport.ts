@@ -22,7 +22,10 @@ export class SocketTransport implements GameTransport {
     await new Promise<void>((resolve, reject) => {
       let resolved = false;
       const sendHello = () => {
-        socket.emit("hello", Protocol.HelloPayload.parse({ displayName: opts.displayName }));
+        socket.emit("hello", Protocol.HelloPayload.parse({ 
+          displayName: opts.displayName,
+          playerId: opts.playerId 
+        }));
         if (!resolved) {
           resolved = true;
           resolve();
