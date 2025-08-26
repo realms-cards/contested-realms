@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
+import type { CardRef } from "@/lib/game/store";
 
 interface ContextMenuProps {
   onClose: () => void;
@@ -12,27 +13,39 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
   const avatars = useGameStore((s) => s.avatars);
+  const zones = useGameStore((s) => s.zones);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
   const toggleTapSite = useGameStore((s) => s.toggleTapSite);
   const toggleTapPermanent = useGameStore((s) => s.toggleTapPermanent);
   const toggleTapAvatar = useGameStore((s) => s.toggleTapAvatar);
   const moveSiteToZone = useGameStore((s) => s.moveSiteToZone);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
   const transferSiteControl = useGameStore((s) => s.transferSiteControl);
-  const transferPermanentControl = useGameStore((s) => s.transferPermanentControl);
-  
+  const transferPermanentControl = useGameStore(
+    (s) => s.transferPermanentControl
+  );
+  const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
+  const setDragFromPile = useGameStore((s) => s.setDragFromPile);
+  const shuffleSpellbook = useGameStore((s) => s.shuffleSpellbook);
+  const shuffleAtlas = useGameStore((s) => s.shuffleAtlas);
+  const openSearchDialog = useGameStore((s) => s.openSearchDialog);
+  const log = useGameStore((s) => s.log);
+
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
+    null
+  );
 
   useLayoutEffect(() => {
     if (!contextMenu) {
       setMenuPos(null);
       return;
     }
-    
+
     const margin = 8;
     const sx = contextMenu.screen?.x ?? window.innerWidth / 2;
     const sy = contextMenu.screen?.y ?? window.innerHeight / 2;
-    
+
     const compute = () => {
       const el = menuRef.current;
       const w = el?.offsetWidth ?? 224;
@@ -43,7 +56,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       const top = Math.min(Math.max(sy, margin), maxTop);
       setMenuPos({ left, top });
     };
-    
+
     compute();
     const onResize = () => compute();
     window.addEventListener("resize", onResize);
@@ -55,23 +68,30 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const t = contextMenu.target;
   let header = "";
   let tapped = false;
-  let doToggle: () => void = () => {};
+  let hasToggle = false;
+  let doToggle: (() => void) | null = null;
   let doToHand: (() => void) | null = null;
   let doToGY: (() => void) | null = null;
+  let doToSpellbook: (() => void) | null = null;
   let doBanish: (() => void) | null = null;
   let doTransfer: (() => void) | null = null;
   let transferTo: 1 | 2 | null = null;
+  let doDrawFromPile: (() => void) | null = null;
+  let doShufflePile: (() => void) | null = null;
+  let doAddToAtlas: (() => void) | null = null;
+  let doSearchPile: (() => void) | null = null;
 
   if (t.kind === "site") {
     const key = `${t.x},${t.y}`;
     const site = board.sites[key];
     header = site?.card?.name || `Site #${t.y * board.size.w + t.x + 1}`;
     tapped = !!site?.tapped;
+    hasToggle = true;
     doToggle = () => {
       toggleTapSite(t.x, t.y);
       onClose();
     };
-    
+
     if (site) {
       transferTo = site.owner === 1 ? 2 : 1;
       doTransfer = () => {
@@ -79,7 +99,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
-    
+
     doToHand = () => {
       moveSiteToZone(t.x, t.y, "hand");
       onClose();
@@ -92,15 +112,23 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       moveSiteToZone(t.x, t.y, "banished");
       onClose();
     };
+
+    if (site?.card?.type === "Site") {
+      doAddToAtlas = () => {
+        moveSiteToZone(t.x, t.y, "atlas");
+        onClose();
+      };
+    }
   } else if (t.kind === "permanent") {
     const item = (permanents[t.at] || [])[t.index];
     header = item?.card?.name || "Permanent";
     tapped = !!item?.tapped;
+    hasToggle = true;
     doToggle = () => {
       toggleTapPermanent(t.at, t.index);
       onClose();
     };
-    
+
     if (item) {
       transferTo = item.owner === 1 ? 2 : 1;
       doTransfer = () => {
@@ -108,13 +136,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
-    
+
     doToHand = () => {
       movePermanentToZone(t.at, t.index, "hand");
       onClose();
     };
     doToGY = () => {
       movePermanentToZone(t.at, t.index, "graveyard");
+      onClose();
+    };
+    doToSpellbook = () => {
+      movePermanentToZone(t.at, t.index, "spellbook");
       onClose();
     };
     doBanish = () => {
@@ -125,10 +157,58 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const a = avatars[t.who];
     header = a?.card?.name || `${t.who.toUpperCase()} Avatar`;
     tapped = !!a?.tapped;
+    hasToggle = true;
     doToggle = () => {
       toggleTapAvatar(t.who);
       onClose();
     };
+  } else if (t.kind === "pile") {
+    const pile: CardRef[] = zones[t.who][t.from];
+    const count = pile.length;
+    const name =
+      t.from === "spellbook"
+        ? "Spellbook"
+        : t.from === "atlas"
+        ? "Atlas"
+        : "Cemetery";
+    header = `${name} (${count} cards)`;
+    const isCurrent = (t.who === "p1" ? 1 : 2) === currentPlayer;
+    if (isCurrent && count > 0) {
+      doDrawFromPile = () => {
+        const top: CardRef = pile[0]!;
+        setDragFromPile({ who: t.who, from: t.from, card: top });
+        drawFromPileToHand();
+        onClose();
+      };
+    }
+    if (isCurrent && t.from !== "graveyard") {
+      doShufflePile = () => {
+        if (t.from === "spellbook") shuffleSpellbook(t.who);
+        else shuffleAtlas(t.who);
+        onClose();
+      };
+    }
+    if (isCurrent && count > 0) {
+      doSearchPile = () => {
+        const displayName =
+          t.from === "spellbook"
+            ? "Spellbook"
+            : t.from === "atlas"
+            ? "Atlas"
+            : "Cemetery";
+        openSearchDialog(displayName, pile, (selectedCard) => {
+          // Draw the selected card to hand
+          setDragFromPile({ who: t.who, from: t.from, card: selectedCard });
+          drawFromPileToHand();
+        });
+        // Log opening of search dialog for Spellbook/Atlas in yellow via PlayPage style
+        if (t.from === "spellbook" || t.from === "atlas") {
+          const whoDisplay = t.who.toUpperCase();
+          log(`Search: ${whoDisplay} has looked at their ${displayName}`);
+        }
+        onClose();
+      };
+    }
   }
 
   const label = tapped ? "Untap" : "Tap";
@@ -156,13 +236,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             {header}
           </div>
           <div className="space-y-2">
-            <button
-              className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-              onClick={doToggle}
-            >
-              {label}
-            </button>
-            
+            {hasToggle && doToggle && (
+              <button
+                className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                onClick={doToggle}
+              >
+                {label}
+              </button>
+            )}
+
             {doTransfer && (
               <button
                 className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
@@ -171,8 +253,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 {`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
               </button>
             )}
-            
-            {(doToHand || doToGY || doBanish) && (
+
+            {(doToHand || doToGY || doToSpellbook || doBanish) && (
               <div className="space-y-2">
                 {doToHand && (
                   <button
@@ -190,6 +272,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     Move to Cemetery
                   </button>
                 )}
+                {doToSpellbook && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doToSpellbook}
+                  >
+                    Move to Spellbook
+                  </button>
+                )}
                 {doBanish && (
                   <button
                     className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
@@ -198,9 +288,46 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     Banish Card
                   </button>
                 )}
+                {doAddToAtlas && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doAddToAtlas}
+                  >
+                    Add to Atlas
+                  </button>
+                )}
               </div>
             )}
-            
+
+            {(doDrawFromPile || doShufflePile || doSearchPile) && (
+              <div className="space-y-2">
+                {doDrawFromPile && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doDrawFromPile}
+                  >
+                    Draw top
+                  </button>
+                )}
+                {doSearchPile && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doSearchPile}
+                  >
+                    Search pile
+                  </button>
+                )}
+                {doShufflePile && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doShufflePile}
+                  >
+                    Shuffle
+                  </button>
+                )}
+              </div>
+            )}
+
             <button
               className="w-full text-left rounded bg-white/5 hover:bg-white/15 px-3 py-1"
               onClick={onClose}

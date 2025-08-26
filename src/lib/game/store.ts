@@ -68,7 +68,8 @@ export type Permanents = Record<CellKey, PermanentItem[]>;
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
   | { kind: "permanent"; at: CellKey; index: number }
-  | { kind: "avatar"; who: PlayerKey };
+  | { kind: "avatar"; who: PlayerKey }
+  | { kind: "pile"; who: PlayerKey; from: "spellbook" | "atlas" | "graveyard" };
 
 export type GameState = {
   players: Record<PlayerKey, PlayerState>;
@@ -123,6 +124,7 @@ export type GameState = {
   playSelectedTo: (x: number, y: number) => void;
   playFromPileTo: (x: number, y: number) => void;
   drawFromPileToHand: () => void;
+  moveCardFromHandToPile: (who: PlayerKey, pile: "spellbook" | "atlas", position: "top" | "bottom") => void;
   selectPermanent: (at: CellKey, index: number) => void;
   moveSelectedPermanentTo: (x: number, y: number) => void;
   moveSelectedPermanentToWithOffset: (
@@ -140,12 +142,12 @@ export type GameState = {
   movePermanentToZone: (
     at: CellKey,
     index: number,
-    target: "hand" | "graveyard" | "banished"
+    target: "hand" | "graveyard" | "banished" | "spellbook"
   ) => void;
   moveSiteToZone: (
     x: number,
     y: number,
-    target: "hand" | "graveyard" | "banished"
+    target: "hand" | "graveyard" | "banished" | "atlas"
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
@@ -204,6 +206,30 @@ export type GameState = {
     screen?: { x: number; y: number }
   ) => void;
   closeContextMenu: () => void;
+  // Placement dialog for cards to piles
+  placementDialog: {
+    cardName: string;
+    pileName: string;
+    onPlace: (position: "top" | "bottom") => void;
+  } | null;
+  openPlacementDialog: (
+    cardName: string,
+    pileName: string,
+    onPlace: (position: "top" | "bottom") => void
+  ) => void;
+  closePlacementDialog: () => void;
+  // Search dialog for pile contents
+  searchDialog: {
+    pileName: string;
+    cards: CardRef[];
+    onSelectCard: (card: CardRef) => void;
+  } | null;
+  openSearchDialog: (
+    pileName: string,
+    cards: CardRef[],
+    onSelectCard: (card: CardRef) => void
+  ) => void;
+  closeSearchDialog: () => void;
   // Derived selectors (pure getters)
   getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
   getUntappedSitesCount: (who: PlayerKey) => number;
@@ -410,6 +436,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   setPreviewCard: (card) => set({ previewCard: card }),
   openContextMenu: (target, screen) => set({ contextMenu: { target, screen } }),
   closeContextMenu: () => set({ contextMenu: null }),
+  placementDialog: null,
+  openPlacementDialog: (cardName, pileName, onPlace) => set({ placementDialog: { cardName, pileName, onPlace } }),
+  closePlacementDialog: () => set({ placementDialog: null }),
+  searchDialog: null,
+  openSearchDialog: (pileName, cards, onSelectCard) => set({ searchDialog: { pileName, cards, onSelectCard } }),
+  closeSearchDialog: () => set({ searchDialog: null }),
 
   // Derived selectors (no state mutation)
   getPlayerSites: (who) => {
@@ -966,6 +998,48 @@ export const useGameStore = create<GameState>((set, get) => ({
       } as Partial<GameState> as GameState;
     }),
 
+  // Move a card from hand to a pile (spellbook or atlas)
+  moveCardFromHandToPile: (who, pile, position) =>
+    set((s) => {
+      const selectedCard = s.selectedCard;
+      if (!selectedCard || selectedCard.who !== who) return s;
+      
+      const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
+      if (!isCurrent) {
+        get().log(`Cannot move card to ${pile}: ${who.toUpperCase()} is not the current player`);
+        return s;
+      }
+
+      get().pushHistory();
+
+      const zones = { ...s.zones[who] };
+      const hand = [...zones.hand];
+      const targetPile = [...(zones[pile] as CardRef[])];
+      
+      // Remove card from hand
+      const cardToMove = hand.splice(selectedCard.index, 1)[0];
+      if (!cardToMove) {
+        get().log(`Card at index ${selectedCard.index} not found in hand`);
+        return s;
+      }
+
+      // Add to pile at specified position
+      if (position === "top") {
+        targetPile.unshift(cardToMove);
+      } else {
+        targetPile.push(cardToMove);
+      }
+
+      get().log(
+        `${who.toUpperCase()} moves '${cardToMove.name}' from hand to ${position} of ${pile}`
+      );
+
+      return {
+        zones: { ...s.zones, [who]: { ...zones, hand, [pile]: targetPile } },
+        selectedCard: null,
+      } as Partial<GameState> as GameState;
+    }),
+
   selectPermanent: (at, index) =>
     set((s) => {
       const arr = s.permanents[at] || [];
@@ -1069,8 +1143,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const zones = { ...s.zones } as Record<PlayerKey, Zones>;
       const z = { ...zones[owner] };
       if (target === "hand") z.hand = [...z.hand, item.card];
-      else if (target === "graveyard")
-        z.graveyard = [...z.graveyard, item.card];
+      else if (target === "graveyard") z.graveyard = [...z.graveyard, item.card];
+      else if (target === "spellbook") z.spellbook = [...z.spellbook, item.card];
       else z.banished = [...z.banished, item.card];
       zones[owner] = z;
       const cell = at.split(",");
@@ -1082,6 +1156,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? "hand"
           : target === "graveyard"
           ? "graveyard"
+          : target === "spellbook"
+          ? "spellbook"
           : "banished";
       get().log(
         `Moved '${
@@ -1105,8 +1181,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const zones = { ...s.zones } as Record<PlayerKey, Zones>;
       const z = { ...zones[owner] };
       if (target === "hand") z.hand = [...z.hand, site.card];
-      else if (target === "graveyard")
-        z.graveyard = [...z.graveyard, site.card];
+      else if (target === "graveyard") z.graveyard = [...z.graveyard, site.card];
+      else if (target === "atlas") z.atlas = [...z.atlas, site.card];
       else z.banished = [...z.banished, site.card];
       zones[owner] = z;
       const cellNo = y * s.board.size.w + x + 1;
@@ -1115,6 +1191,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? "hand"
           : target === "graveyard"
           ? "graveyard"
+          : target === "atlas"
+          ? "atlas"
           : "banished";
       get().log(
         `Moved site '${
