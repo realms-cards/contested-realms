@@ -114,7 +114,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       onClose();
     };
 
-    if (site?.card?.type === "Site" && site.card?.name) {
+    if (site?.card?.name && (site.card?.type || "").toLowerCase().includes("site")) {
       doAddToAtlas = () => {
         const cardName = site.card!.name;
         openPlacementDialog(cardName, "Atlas", (position) => {
@@ -302,7 +302,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
                     onClick={doAddToAtlas}
                   >
-                    Add to Atlas
+                    Move to Atlas
                   </button>
                 )}
               </div>

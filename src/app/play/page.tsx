@@ -37,10 +37,12 @@ export default function PlayPage() {
   const closePlacementDialog = useGameStore((s) => s.closePlacementDialog);
   const searchDialog = useGameStore((s) => s.searchDialog);
   const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
-  // Selected hand card (for magnifier)
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
+  // Selected hand card (for magnifier) - show for current player
+  const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const selectedHandCard = (() => {
-    if (!selected || selected.who !== "p1") return null;
-    const hand = zones.p1.hand || [];
+    if (!selected || selected.who !== currentPlayerKey) return null;
+    const hand = zones[currentPlayerKey].hand || [];
     return hand[selected.index] ?? null;
   })();
 
@@ -330,8 +332,8 @@ export default function PlayPage() {
         <Hud3D owner="p1" />
         <Hud3D owner="p2" />
 
-        {/* 3D Hand anchored to the camera (local player) */}
-        <Hand3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+        {/* 3D Hand anchored to the camera (current player) */}
+        <Hand3D owner={currentPlayerKey} matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
 
         <OrbitControls
           makeDefault
