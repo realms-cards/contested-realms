@@ -26,7 +26,7 @@ export default function MatchEndOverlay({
 
   return (
     <div 
-      className="absolute inset-0 z-40 bg-black/80 backdrop-blur flex items-center justify-center"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur flex items-center justify-center"
       onClick={onClose}
     >
       <div 
