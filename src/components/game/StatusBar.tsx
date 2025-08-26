@@ -1,20 +1,20 @@
 "use client";
 
-import { Star } from "lucide-react";
+import { Star, RotateCcw } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 
 interface StatusBarProps {
   dragFromHand: boolean;
+  onCameraReset?: () => void;
 }
 
-export default function StatusBar({ dragFromHand }: StatusBarProps) {
+export default function StatusBar({ dragFromHand, onCameraReset }: StatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const phase = useGameStore((s) => s.phase);
+  const nextPhase = useGameStore((s) => s.nextPhase);
   const endTurn = useGameStore((s) => s.endTurn);
   const undo = useGameStore((s) => s.undo);
   const history = useGameStore((s) => s.history);
-  const showGrid = useGameStore((s) => s.showGridOverlay);
-  const toggleGrid = useGameStore((s) => s.toggleGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
   const togglePlaymat = useGameStore((s) => s.togglePlaymat);
 
@@ -33,6 +33,13 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
         <span className="font-semibold">{phase}</span>
         
         <button
+          className="rounded-full bg-blue-600/90 hover:bg-blue-500 text-white px-3 py-1"
+          onClick={() => nextPhase()}
+        >
+          Next
+        </button>
+        
+        <button
           className="ml-2 rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-1"
           onClick={() => endTurn()}
         >
@@ -47,16 +54,16 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
           Undo
         </button>
         
-        <button
-          className={`rounded-full px-3 py-1 ${
-            showGrid
-              ? "bg-indigo-500 text-white"
-              : "bg-white/15 hover:bg-white/25"
-          }`}
-          onClick={() => toggleGrid()}
-        >
-          {showGrid ? "Grid On" : "Grid Off"}
-        </button>
+        {onCameraReset && (
+          <button
+            className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 flex items-center gap-1.5"
+            onClick={() => onCameraReset()}
+            title="Reset Camera"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset Cam
+          </button>
+        )}
         
         <button
           className={`rounded-full px-3 py-1 ${

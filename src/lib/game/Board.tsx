@@ -72,6 +72,10 @@ export default function Board() {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   // hover tracking disabled for tiles
   const dragFromHand = useGameStore((s) => s.dragFromHand);
+  // Hand visibility state to disable glows when hand is shown
+  const mouseInHandZone = useGameStore((s) => s.mouseInHandZone);
+  const handHoverCount = useGameStore((s) => s.handHoverCount);
+  const isHandVisible = mouseInHandZone || handHoverCount > 0;
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
@@ -529,13 +533,14 @@ export default function Board() {
                       contextMenu.target.y === y;
                     return (
                       <>
-                        {isSel && (
+                        {isSel && !isHandVisible && (
                           <CardGlow
                             width={CARD_SHORT + 0.3}
                             height={CARD_LONG + 0.4}
                             rotationZ={rotZ}
                             elevation={0}
                             color={site.owner === 1 ? "#93c5fd" : "#fca5a5"}
+                            renderOrder={500}
                           />
                         )}
                         {site.card?.slug ? (
@@ -795,13 +800,14 @@ export default function Board() {
                         }}
                       >
                         {/* Selection glow */}
-                        {isSel && (
+                        {isSel && !isHandVisible && (
                           <CardGlow
                             width={CARD_SHORT + 0.3}
                             height={CARD_LONG + 0.4}
                             rotationZ={rotZ}
                             elevation={0}
                             color={owner === 1 ? "#93c5fd" : "#fca5a5"}
+                            renderOrder={500}
                           />
                         )}
                         <group
@@ -836,13 +842,14 @@ export default function Board() {
                               {((selectedPermanent?.at === key &&
                                 selectedPermanent?.index === idx) ||
                                 (dragging?.from === key &&
-                                  dragging?.index === idx)) && (
+                                  dragging?.index === idx)) && !isHandVisible && (
                                 <CardGlow
                                   width={CARD_SHORT}
                                   height={CARD_LONG}
                                   rotationZ={rotZ}
                                   elevation={0.001}
                                   color="#60a5fa"
+                                  renderOrder={600}
                                 />
                               )}
                               <CardPlane
@@ -935,13 +942,14 @@ export default function Board() {
                       friction={0.9}
                       restitution={0}
                     />
-                    {isSel && (
+                    {isSel && !isHandVisible && (
                       <CardGlow
                         width={CARD_SHORT + 0.3}
                         height={CARD_LONG + 0.4}
                         rotationZ={rotZ}
                         elevation={0}
                         color={who === "p1" ? "#93c5fd" : "#fca5a5"}
+                        renderOrder={500}
                       />
                     )}
                     <group
@@ -1072,13 +1080,14 @@ export default function Board() {
                       >
                         {a.card?.slug ? (
                           <>
-                            {(selectedAvatar === who || dragAvatar === who) && (
+                            {(selectedAvatar === who || dragAvatar === who) && !isHandVisible && (
                               <CardGlow
                                 width={CARD_SHORT}
                                 height={CARD_LONG}
                                 rotationZ={rotZ}
                                 elevation={0.001}
                                 color="#60a5fa"
+                                renderOrder={600}
                               />
                             )}
                             <CardPlane

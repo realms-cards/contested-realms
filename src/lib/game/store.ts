@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { GameTransport } from "@/lib/net/transport";
 
 export type Phase = "Start" | "Draw" | "Main" | "Combat" | "End";
 export type PlayerKey = "p1" | "p2";
@@ -76,6 +77,16 @@ export type GameState = {
   currentPlayer: 1 | 2;
   phase: Phase;
   setPhase: (phase: Phase) => void;
+  // Server patch integration
+  applyServerPatch: (patch: unknown, t?: number) => void;
+  lastServerTs: number;
+  // Multiplayer transport (null => offline)
+  transport: GameTransport | null;
+  setTransport: (t: GameTransport | null) => void;
+  // Safe patch sending
+  pendingPatches: ServerPatchT[];
+  trySendPatch: (patch: ServerPatchT) => boolean;
+  flushPendingPatches: () => void;
   addLife: (who: PlayerKey, delta: number) => void;
   addMana: (who: PlayerKey, delta: number) => void;
   addThreshold: (
@@ -118,6 +129,11 @@ export type GameState = {
   selectedCard: { who: PlayerKey; index: number; card: CardRef } | null;
   selectedPermanent: { at: CellKey; index: number } | null;
   selectedAvatar: PlayerKey | null;
+  // Hand visibility state
+  mouseInHandZone: boolean;
+  handHoverCount: number;
+  setMouseInHandZone: (inZone: boolean) => void;
+  setHandHoverCount: (count: number) => void;
   selectHandCard: (who: PlayerKey, index: number) => void;
   selectAvatar: (who: PlayerKey) => void;
   clearSelection: () => void;
@@ -266,6 +282,21 @@ export type SerializedGame = {
   eventSeq: number;
 };
 
+// Typed view of server patchable fields (subset of GameState, pure data only)
+export type ServerPatchT = Partial<{
+  players: GameState["players"];
+  currentPlayer: GameState["currentPlayer"];
+  phase: GameState["phase"];
+  board: GameState["board"];
+  zones: GameState["zones"];
+  avatars: GameState["avatars"];
+  permanents: GameState["permanents"];
+  mulligans: GameState["mulligans"];
+  mulliganDrawn: GameState["mulliganDrawn"];
+  events: GameState["events"];
+  eventSeq: GameState["eventSeq"];
+}>;
+
 // Small random visual tilt for permanents to reduce overlap uniformity (radians ~ -0.05..+0.05)
 const randomTilt = () => Math.random() * 0.1 - 0.05;
 
@@ -310,6 +341,25 @@ function buildAvatarUpdate(
   return { ...s.avatars, [who]: next } as Record<PlayerKey, AvatarState>;
 }
 
+// Deep merge utility that replaces arrays and merges plain objects.
+// Primitives and nulls overwrite. Undefined in patch leaves value as-is.
+function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
+  if (patch === undefined) return base as T;
+  if (patch === null) return null as unknown as T;
+  if (Array.isArray(patch)) return patch as unknown as T; // replace arrays
+  if (typeof patch !== "object") return patch as T; // primitives overwrite
+
+  const baseObj = (base && typeof base === "object" && !Array.isArray(base))
+    ? (base as Record<string, unknown>)
+    : {} as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...baseObj };
+  for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+    const cur = out[k];
+    out[k] = deepMergeReplaceArrays(cur as unknown, v as unknown) as unknown;
+  }
+  return out as unknown as T;
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   players: {
     p1: {
@@ -326,6 +376,56 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentPlayer: 1,
   phase: "Start",
   setPhase: (phase) => set({ phase }),
+  // Track last applied server timestamp to drop stale patches
+  lastServerTs: 0,
+  // Multiplayer transport (injected by online play UI)
+  transport: null,
+  setTransport: (t) => {
+    set({ transport: t });
+    if (t) {
+      try {
+        get().flushPendingPatches();
+      } catch {}
+    }
+  },
+  // Pending patches queue for offline/error cases
+  pendingPatches: [],
+  // Centralized, safe patch sender. Returns true if sent immediately, false if queued.
+  trySendPatch: (patch) => {
+    const tr = get().transport;
+    if (!patch || typeof patch !== "object") return false;
+    if (!tr) {
+      set((s) => ({ pendingPatches: [...s.pendingPatches, patch] }));
+      get().log("Transport unavailable: queued patch");
+      return false;
+    }
+    try {
+      tr.sendAction(patch);
+      return true;
+    } catch (err) {
+      set((s) => ({ pendingPatches: [...s.pendingPatches, patch] }));
+      get().log(`Send failed, queued patch: ${String(err)}`);
+      return false;
+    }
+  },
+  // Attempt to flush any queued patches when transport is available
+  flushPendingPatches: () => {
+    const tr = get().transport;
+    if (!tr) return;
+    const queue = get().pendingPatches;
+    if (!Array.isArray(queue) || queue.length === 0) return;
+    let sentAll = true;
+    for (const p of queue) {
+      try {
+        tr.sendAction(p);
+      } catch (err) {
+        get().log(`Flush failed: ${String(err)}`);
+        sentAll = false;
+        break;
+      }
+    }
+    if (sentAll) set({ pendingPatches: [] });
+  },
   board: { size: { w: 5, h: 4 }, sites: {} },
   showGridOverlay: false,
   showPlaymat: true,
@@ -351,6 +451,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectedCard: null,
   selectedPermanent: null,
   selectedAvatar: null,
+  // Hand visibility state
+  mouseInHandZone: false,
+  handHoverCount: 0,
   avatars: {
     p1: { card: null, pos: null, tapped: false },
     p2: { card: null, pos: null, tapped: false },
@@ -374,6 +477,56 @@ export const useGameStore = create<GameState>((set, get) => ({
       events: [...s.events, { id: s.eventSeq + 1, ts: Date.now(), text }],
       eventSeq: s.eventSeq + 1,
     })),
+
+  // Apply an incremental server patch into the store.
+  // - Only whitelisted game-state fields are updated
+  // - Arrays are replaced; objects are deep-merged
+  // - UI/transient fields (drag, dialogs, selection, overlays, camera, history) are untouched
+  applyServerPatch: (patch, t) =>
+    set((s) => {
+      if (!patch || typeof patch !== "object") return s as GameState;
+      if (typeof t === "number" && t < (s.lastServerTs ?? 0)) return s as GameState;
+
+      const p = patch as ServerPatchT;
+      const next: Partial<GameState> = {};
+
+      if (p.players !== undefined) {
+        next.players = deepMergeReplaceArrays(s.players, p.players);
+      }
+      if (p.currentPlayer !== undefined) {
+        next.currentPlayer = p.currentPlayer;
+      }
+      if (p.phase !== undefined) {
+        next.phase = p.phase;
+      }
+      if (p.board !== undefined) {
+        next.board = deepMergeReplaceArrays(s.board, p.board);
+      }
+      if (p.zones !== undefined) {
+        next.zones = deepMergeReplaceArrays(s.zones, p.zones);
+      }
+      if (p.avatars !== undefined) {
+        next.avatars = deepMergeReplaceArrays(s.avatars, p.avatars);
+      }
+      if (p.permanents !== undefined) {
+        next.permanents = deepMergeReplaceArrays(s.permanents, p.permanents);
+      }
+      if (p.mulligans !== undefined) {
+        next.mulligans = deepMergeReplaceArrays(s.mulligans, p.mulligans);
+      }
+      if (p.mulliganDrawn !== undefined) {
+        next.mulliganDrawn = deepMergeReplaceArrays(s.mulliganDrawn, p.mulliganDrawn);
+      }
+      if (p.events !== undefined) {
+        next.events = deepMergeReplaceArrays(s.events, p.events);
+      }
+      if (p.eventSeq !== undefined) {
+        next.eventSeq = Number(p.eventSeq) || s.eventSeq;
+      }
+
+      if (typeof t === "number") next.lastServerTs = Math.max(s.lastServerTs ?? 0, t);
+      return next as Partial<GameState> as GameState;
+    }),
 
   // History helpers
   pushHistory: () =>
@@ -522,6 +675,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (sites[key].owner === nextPlayer)
           sites[key] = { ...sites[key], tapped: false };
       }
+      {
+        const patch: ServerPatchT = {
+          phase: nextPhase,
+          currentPlayer: nextPlayer,
+          board: { ...s.board, sites } as GameState["board"],
+        };
+        get().trySendPatch(patch);
+      }
       set({
         phase: nextPhase,
         currentPlayer: nextPlayer,
@@ -530,6 +691,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
       get().log(`Turn passes to P${nextPlayer}`);
     } else {
+      {
+        const patch: ServerPatchT = { phase: nextPhase };
+        get().trySendPatch(patch);
+      }
       set({ phase: nextPhase });
     }
   },
@@ -550,6 +715,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         sites[key] = { ...sites[key], tapped: false };
     }
 
+    {
+      const patch: ServerPatchT = {
+        phase: "Main",
+        currentPlayer: nextPlayer,
+        board: { ...s.board, sites } as GameState["board"],
+      };
+      get().trySendPatch(patch);
+    }
     set({
       phase: "Main",
       currentPlayer: nextPlayer,
@@ -579,26 +752,37 @@ export const useGameStore = create<GameState>((set, get) => ({
       const next = { ...site, tapped: !site.tapped };
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Site #${cellNo} ${next.tapped ? "tapped" : "untapped"}`);
+      const boardNext = { ...s.board, sites: { ...s.board.sites, [key]: next } } as GameState["board"];
+      {
+        const patch: ServerPatchT = { board: boardNext };
+        get().trySendPatch(patch);
+      }
       return {
-        board: { ...s.board, sites: { ...s.board.sites, [key]: next } },
+        board: boardNext,
       } as GameState;
     }),
 
   initLibraries: (who, spellbook, atlas) =>
-    set((s) => ({
-      zones: {
-        ...s.zones,
-        [who]: {
-          ...s.zones[who],
-          spellbook: [...spellbook],
-          atlas: [...atlas],
-          hand: [],
-          graveyard: [],
-          battlefield: [],
-          banished: [],
-        },
-      },
-    })),
+    set((s) => {
+      const sub = {
+        ...s.zones[who],
+        spellbook: [...spellbook],
+        atlas: [...atlas],
+        hand: [],
+        graveyard: [],
+        battlefield: [],
+        banished: [],
+      };
+      const zonesNext = { ...s.zones, [who]: sub } as GameState["zones"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
+    }),
 
   shuffleSpellbook: (who) =>
     set((s) => {
@@ -608,9 +792,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         [pile[i], pile[j]] = [pile[j], pile[i]];
       }
       get().log(`${who.toUpperCase()} shuffles Spellbook (${pile.length})`);
-      return {
-        zones: { ...s.zones, [who]: { ...s.zones[who], spellbook: pile } },
-      };
+      const zonesNext = { ...s.zones, [who]: { ...s.zones[who], spellbook: pile } } as GameState["zones"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
     }),
 
   shuffleAtlas: (who) =>
@@ -621,7 +811,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         [pile[i], pile[j]] = [pile[j], pile[i]];
       }
       get().log(`${who.toUpperCase()} shuffles Atlas (${pile.length})`);
-      return { zones: { ...s.zones, [who]: { ...s.zones[who], atlas: pile } } };
+      const zonesNext = { ...s.zones, [who]: { ...s.zones[who], atlas: pile } } as GameState["zones"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
     }),
 
   drawFrom: (who, from, count = 1) =>
@@ -669,12 +867,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `${who.toUpperCase()} draws opening hand (${sbCount} SB + ${atCount} AT)`
       );
-      return {
-        zones: {
-          ...s.zones,
-          [who]: { ...s.zones[who], spellbook: sb, atlas: at, hand },
-        },
-      };
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...s.zones[who], spellbook: sb, atlas: at, hand },
+      } as GameState["zones"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
     }),
 
   selectHandCard: (who, index) =>
@@ -685,14 +889,18 @@ export const useGameStore = create<GameState>((set, get) => ({
         selectedCard: { who, index, card },
         selectedPermanent: null,
         selectedAvatar: null,
+        previewCard: null,
       };
     }),
 
   selectAvatar: (who) =>
-    set({ selectedAvatar: who, selectedCard: null, selectedPermanent: null }),
+    set({ selectedAvatar: who, selectedCard: null, selectedPermanent: null, previewCard: null }),
 
   clearSelection: () =>
     set({ selectedCard: null, selectedPermanent: null, selectedAvatar: null }),
+  // Hand visibility setters
+  setMouseInHandZone: (inZone) => set({ mouseInHandZone: inZone }),
+  setHandHoverCount: (count) => set({ handHoverCount: count }),
 
   playSelectedTo: (x, y) =>
     set((s) => {
@@ -784,6 +992,17 @@ export const useGameStore = create<GameState>((set, get) => ({
             Object.keys(add).length ? " (thresholds updated)" : ""
           }`
         );
+        {
+          const tr = get().transport;
+          if (tr) {
+            const patch: ServerPatchT = {
+              players: { ...s.players, [who]: nextP } as GameState["players"],
+              zones: { ...s.zones, [who]: { ...s.zones[who], hand } } as GameState["zones"],
+              board: { ...s.board, sites } as GameState["board"],
+            };
+            get().trySendPatch(patch);
+          }
+        }
         return {
           players: { ...s.players, [who]: nextP },
           zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
@@ -804,6 +1023,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
       per[key] = arr;
       get().log(`${who.toUpperCase()} plays '${card.name}' at #${cellNo}`);
+
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            zones: { ...s.zones, [who]: { ...s.zones[who], hand } } as GameState["zones"],
+            permanents: per as GameState["permanents"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
 
       return {
         zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
@@ -915,6 +1145,18 @@ export const useGameStore = create<GameState>((set, get) => ({
             Object.keys(add).length ? " (thresholds updated)" : ""
           }`
         );
+        {
+          const tr = get().transport;
+          if (tr) {
+            const zonesNext = { ...s.zones, [who]: { ...z, [pileName]: pile } } as GameState["zones"];
+            const patch: ServerPatchT = {
+              players: { ...s.players, [who]: nextP } as GameState["players"],
+              zones: zonesNext,
+              board: { ...s.board, sites } as GameState["board"],
+            };
+            get().trySendPatch(patch);
+          }
+        }
         return {
           players: { ...s.players, [who]: nextP },
           zones: { ...s.zones, [who]: { ...z, [pileName]: pile } },
@@ -937,6 +1179,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `${who.toUpperCase()} plays '${card.name}' from ${from} at #${cellNo}`
       );
+
+      {
+        const tr = get().transport;
+        if (tr) {
+          const zonesNext = { ...s.zones, [who]: { ...z, [pileName]: pile } } as GameState["zones"];
+          const patch: ServerPatchT = {
+            zones: zonesNext,
+            permanents: per as GameState["permanents"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
 
       return {
         zones: { ...s.zones, [who]: { ...z, [pileName]: pile } },
@@ -1050,6 +1304,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         selectedPermanent: { at, index },
         selectedCard: null,
         selectedAvatar: null,
+        previewCard: null,
       };
     }),
 
@@ -1071,6 +1326,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Moved '${movedName}' to #${cellNo}`);
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            permanents: per as GameState["permanents"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return {
         permanents: per,
         selectedPermanent: null,
@@ -1095,6 +1359,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Moved '${movedName}' to #${cellNo}`);
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            permanents: per as GameState["permanents"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return {
         permanents: per,
         selectedPermanent: null,
@@ -1129,6 +1402,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           cur.card.name
         }' at #${cellNo}`
       );
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -1171,6 +1448,13 @@ export const useGameStore = create<GameState>((set, get) => ({
           item.card.name
         }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
+      {
+        const patch: ServerPatchT = {
+          permanents: per as GameState["permanents"],
+          zones: zones as GameState["zones"],
+        };
+        get().trySendPatch(patch);
+      }
       return { permanents: per, zones } as Partial<GameState> as GameState;
     }),
 
@@ -1211,6 +1495,14 @@ export const useGameStore = create<GameState>((set, get) => ({
           site.card.name
         }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
+      {
+        const boardNext = { ...s.board, sites } as GameState["board"];
+        const patch: ServerPatchT = {
+          board: boardNext,
+          zones: zones as GameState["zones"],
+        };
+        get().trySendPatch(patch);
+      }
       return {
         board: { ...s.board, sites },
         zones,
@@ -1236,6 +1528,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
       );
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -1254,6 +1550,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `Control of '${name}' at #${cellNo} transferred to P${newOwner}`
       );
+      {
+        const boardNext = { ...s.board, sites } as GameState["board"];
+        const patch: ServerPatchT = { board: boardNext };
+        get().trySendPatch(patch);
+      }
       return {
         board: { ...s.board, sites },
       } as Partial<GameState> as GameState;
@@ -1262,7 +1563,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   setAvatarCard: (who, card) =>
     set((s) => {
       get().log(`${who.toUpperCase()} sets Avatar to '${card.name}'`);
-      return { avatars: { ...s.avatars, [who]: { ...s.avatars[who], card } } };
+      const avatarsNext = { ...s.avatars, [who]: { ...s.avatars[who], card } } as GameState["avatars"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { avatars: avatarsNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
 
   placeAvatarAtStart: (who) =>
@@ -1275,12 +1584,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       const y = who === "p1" ? h - 1 : 0;
       const cellNo = y * w + x + 1;
       get().log(`${who.toUpperCase()} places Avatar at #${cellNo}`);
-      return {
-        avatars: {
-          ...s.avatars,
-          [who]: { ...s.avatars[who], pos: [x, y], offset: null },
-        },
-      } as Partial<GameState> as GameState;
+      const avatarsNext = {
+        ...s.avatars,
+        [who]: { ...s.avatars[who], pos: [x, y], offset: null },
+      } as GameState["avatars"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { avatars: avatarsNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
 
   moveAvatarTo: (who, x, y) =>
@@ -1295,6 +1610,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         null
       );
       get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            avatars: avatars as GameState["avatars"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return { avatars } as Partial<GameState> as GameState;
     }),
 
@@ -1310,6 +1634,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         offset
       );
       get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            avatars: avatars as GameState["avatars"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return { avatars } as Partial<GameState> as GameState;
     }),
 
@@ -1375,13 +1708,27 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `${who.toUpperCase()} mulligans (draws ${sbCount} SB + ${atCount} AT)`
       );
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...s.zones[who], spellbook: sb, atlas: at, hand: newHand },
+      } as GameState["zones"];
+      const mulligansNext = m as GameState["mulligans"];
+      const mulliganDrawnNext = { ...s.mulliganDrawn, [who]: newHand } as GameState["mulliganDrawn"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            zones: zonesNext,
+            mulligans: mulligansNext,
+            mulliganDrawn: mulliganDrawnNext,
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return {
-        zones: {
-          ...s.zones,
-          [who]: { ...s.zones[who], spellbook: sb, atlas: at, hand: newHand },
-        },
-        mulligans: m,
-        mulliganDrawn: { ...s.mulliganDrawn, [who]: newHand },
+        zones: zonesNext,
+        mulligans: mulligansNext,
+        mulliganDrawn: mulliganDrawnNext,
       } as Partial<GameState> as GameState;
     }),
 
@@ -1437,19 +1784,41 @@ export const useGameStore = create<GameState>((set, get) => ({
         get().log(
           `${who.toUpperCase()} draws ${drawn.length} replacement card(s)`
         );
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...s.zones[who], spellbook: sb, atlas: at, hand: kept },
+      } as GameState["zones"];
+      const mulligansNext = m as GameState["mulligans"];
+      const mulliganDrawnNext = { ...s.mulliganDrawn, [who]: drawn } as GameState["mulliganDrawn"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            zones: zonesNext,
+            mulligans: mulligansNext,
+            mulliganDrawn: mulliganDrawnNext,
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return {
-        zones: {
-          ...s.zones,
-          [who]: { ...s.zones[who], spellbook: sb, atlas: at, hand: kept },
-        },
-        mulligans: m,
-        mulliganDrawn: { ...s.mulliganDrawn, [who]: drawn },
+        zones: zonesNext,
+        mulligans: mulligansNext,
+        mulliganDrawn: mulliganDrawnNext,
       } as Partial<GameState> as GameState;
     }),
 
   // Clear mulligan drawn cards and finalize hands after mulligan phase
   finalizeMulligan: () =>
-    set(() => ({
-      mulliganDrawn: { p1: [], p2: [] },
-    })),
+    set(() => {
+      const next = { p1: [], p2: [] } as Record<PlayerKey, CardRef[]>;
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { mulliganDrawn: next };
+          get().trySendPatch(patch);
+        }
+      }
+      return { mulliganDrawn: next } as Partial<GameState> as GameState;
+    }),
 }));

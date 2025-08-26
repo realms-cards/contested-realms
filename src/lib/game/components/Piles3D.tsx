@@ -319,7 +319,7 @@ export default function Piles3D({
                     width={w}
                     height={h}
                     rotationZ={rotZ}
-                    depthWrite={false}
+                    depthWrite={true}
                     interactive={false}
                     elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
                   />
@@ -393,7 +393,7 @@ export default function Piles3D({
                   color="#374151"
                   transparent
                   opacity={0.3}
-                  depthWrite={false}
+                  depthWrite={true}
                 />
               </mesh>
             )}

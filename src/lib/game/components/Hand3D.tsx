@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import type { ThreeEvent } from "@react-three/fiber";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
@@ -28,11 +27,15 @@ export interface Hand3DProps {
 export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
+  const selectedPermanent = useGameStore((s) => s.selectedPermanent);
+  const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const selectHandCard = useGameStore((s) => s.selectHandCard);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
+  const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
+  const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
 
 
   const hand = zones[owner].hand || [];
@@ -49,10 +52,10 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   }, [hand]);
   const rootRef = useRef<Group | null>(null);
   const { camera } = useThree();
-  // Track whether mouse is in the bottom 1/4 of the screen
-  const [mouseInZone, setMouseInZone] = useState(true);
-  // Track the number of cards being hovered (simpler than insideHand)
-  const [hoveredCardCount, setHoveredCardCount] = useState(0);
+  // Get mouse zone state from store
+  const mouseInZone = useGameStore((s) => s.mouseInHandZone);
+  // Get hover count state from store  
+  const hoveredCardCount = useGameStore((s) => s.handHoverCount);
   // Simple hover tracking for card pop-up
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
@@ -67,15 +70,50 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   } | null>(null);
   const revealLerp = useRef(1); // 0 hidden .. 1 shown
 
+  // Timeout ref for delayed hover cleanup
+  const hoverCleanupTimeoutRef = useRef<number | null>(null);
+  // Aggressive cleanup interval to prevent stuck states
+  const forceCleanupIntervalRef = useRef<number | null>(null);
+  // Track last mouse position for stuck state detection
+  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   useEffect(() => {
     function onMove(e: MouseEvent) {
       const h = window.innerHeight || 1;
       const inZone = e.clientY >= h * 0.75;
-      setMouseInZone(inZone);
+      
+      // Update last known mouse position
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      
+      setMouseInHandZone(inZone);
+      
+      // Clear any pending cleanup when mouse re-enters zone
+      if (inZone && hoverCleanupTimeoutRef.current) {
+        window.clearTimeout(hoverCleanupTimeoutRef.current);
+        hoverCleanupTimeoutRef.current = null;
+      }
+      
+      // Schedule hover count reset when mouse leaves hand zone
+      // Small delay to prevent flicker when moving between cards
+      if (!inZone && hoveredCardCount > 0) {
+        if (hoverCleanupTimeoutRef.current) {
+          window.clearTimeout(hoverCleanupTimeoutRef.current);
+        }
+        hoverCleanupTimeoutRef.current = window.setTimeout(() => {
+          setHandHoverCount(0);
+          setHoveredCard(null);
+          hoverCleanupTimeoutRef.current = null;
+        }, 100); // 100ms grace period
+      }
     }
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
-  }, []);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (hoverCleanupTimeoutRef.current) {
+        window.clearTimeout(hoverCleanupTimeoutRef.current);
+      }
+    };
+  }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount]);
   // Clear local hand drag start when mouse is released anywhere
   useEffect(() => {
     const onUp = () => {
@@ -197,14 +235,21 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     setPreviewCard(null);
   }, [setPreviewCard]);
 
+  // Clear preview when any selection changes
+  useEffect(() => {
+    if (selected || selectedPermanent || selectedAvatar) {
+      clearHoverPreview();
+    }
+  }, [selected, selectedPermanent, selectedAvatar, clearHoverPreview]);
+
   // Simple state management - no complex cursor selection
   useEffect(() => {
     if (hand.length === 0) {
-      setHoveredCardCount(0);
+      setHandHoverCount(0);
       setHoveredCard(null);
       clearHoverPreview();
     }
-  }, [hand.length, clearHoverPreview]);
+  }, [hand.length, clearHoverPreview, setHandHoverCount]);
 
   useEffect(() => {
     if (!dragFromHand && !dragFromPile) {
@@ -215,23 +260,125 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     }
   }, [dragFromHand, dragFromPile]);
 
+  // Additional cleanup: reset hover state when switching players or other major state changes
+  useEffect(() => {
+    // Reset hover state when the current player changes (for hotseat)
+    setHandHoverCount(0);
+    setHoveredCard(null);
+    // Clear any pending hover cleanup timeout
+    if (hoverCleanupTimeoutRef.current) {
+      window.clearTimeout(hoverCleanupTimeoutRef.current);
+      hoverCleanupTimeoutRef.current = null;
+    }
+  }, [owner, setHandHoverCount]);
+
+  // Emergency cleanup on any significant game state change
+  useEffect(() => {
+    // Force cleanup when drags start, selections change, or other major state shifts occur
+    if (dragFromHand || dragFromPile || selected || selectedPermanent || selectedAvatar) {
+      if (hoveredCardCount > 0) {
+        console.debug('[Hand] Emergency cleanup due to game state change');
+        setHandHoverCount(0);
+        setHoveredCard(null);
+      }
+    }
+  }, [dragFromHand, dragFromPile, selected, selectedPermanent, selectedAvatar, hoveredCardCount, setHandHoverCount]);
+
   // Additional failsafe for stuck drag states - no dependencies to prevent re-registration
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       handDragStart.current = null;
       setHoveredCard(null);
-      setHoveredCardCount(0); // Reset hover count on global mouse up
+      setHandHoverCount(0); // Reset hover count on global mouse up
       // Note: Don't clear drag states here as it may interfere with Board drop logic
       // Let the Board component be authoritative for clearing drag states after drops
     };
 
     document.addEventListener("mouseup", handleGlobalMouseUp);
     return () => document.removeEventListener("mouseup", handleGlobalMouseUp);
-  }, []); // No dependencies to prevent handler re-registration
+  }, [setHandHoverCount]); // Include setHandHoverCount dependency
+
+  // Aggressive periodic cleanup to prevent stuck states
+  useEffect(() => {
+    forceCleanupIntervalRef.current = window.setInterval(() => {
+      // If we have hover count but mouse is clearly not in hand zone, force reset
+      if (hoveredCardCount > 0 && !mouseInZone) {
+        // Double-check using last known mouse position
+        const h = window.innerHeight || 1;
+        const lastY = lastMousePosRef.current.y;
+        const isActuallyInZone = lastY >= h * 0.75;
+        
+        if (!isActuallyInZone || lastY === 0) {
+          console.debug('[Hand] Force cleaning stuck hover state', { lastY, threshold: h * 0.75, hoveredCardCount });
+          setHandHoverCount(0);
+          setHoveredCard(null);
+          if (hoverCleanupTimeoutRef.current) {
+            window.clearTimeout(hoverCleanupTimeoutRef.current);
+            hoverCleanupTimeoutRef.current = null;
+          }
+        }
+      }
+    }, 500); // Check every 500ms
+
+    return () => {
+      if (forceCleanupIntervalRef.current) {
+        window.clearInterval(forceCleanupIntervalRef.current);
+        forceCleanupIntervalRef.current = null;
+      }
+    };
+  }, [hoveredCardCount, mouseInZone, setHandHoverCount]);
+
+  // Emergency keyboard shortcut to force hand hiding
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && (hoveredCardCount > 0 || mouseInZone)) {
+        console.debug('[Hand] Emergency cleanup via Escape key');
+        setHandHoverCount(0);
+        setHoveredCard(null);
+        setMouseInHandZone(false);
+        if (hoverCleanupTimeoutRef.current) {
+          window.clearTimeout(hoverCleanupTimeoutRef.current);
+          hoverCleanupTimeoutRef.current = null;
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hoveredCardCount, mouseInZone, setHandHoverCount, setMouseInHandZone]);
+
+  // Cleanup on window focus/blur events to handle edge cases
+  useEffect(() => {
+    const handleBlur = () => {
+      if (hoveredCardCount > 0) {
+        console.debug('[Hand] Cleanup on window blur');
+        setHandHoverCount(0);
+        setHoveredCard(null);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && hoveredCardCount > 0) {
+        console.debug('[Hand] Cleanup on visibility hidden');
+        setHandHoverCount(0);
+        setHoveredCard(null);
+      }
+    };
+
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [hoveredCardCount, setHandHoverCount]);
 
   useEffect(
     () => () => {
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+      if (hoverCleanupTimeoutRef.current) window.clearTimeout(hoverCleanupTimeoutRef.current);
+      if (forceCleanupIntervalRef.current) window.clearInterval(forceCleanupIntervalRef.current);
     },
     []
   );
@@ -266,12 +413,6 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             <mesh
               position={[0, 0, 0.01]}
-              onClick={(e: ThreeEvent<PointerEvent>) => {
-                if (isDragging) return; // let events bubble during drags
-                e.stopPropagation();
-                // Select the clicked card using original hand index
-                selectHandCard(owner, originalIndex);
-              }}
               onPointerOver={(e) => {
                 if (isDragging) return; // allow bubbling while dragging
                 e.stopPropagation();
@@ -281,7 +422,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                   window.clearTimeout(hoverTimeoutRef.current);
                 }
 
-                setHoveredCardCount((prev) => prev + 1);
+                setHandHoverCount(hoveredCardCount + 1);
                 setHoveredCard(originalIndex); // Set the hovered card immediately for responsive feel
                 beginHoverPreview(c);
               }}
@@ -289,7 +430,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                 if (isDragging) return; // allow bubbling while dragging
                 e.stopPropagation();
 
-                setHoveredCardCount((prev) => Math.max(0, prev - 1));
+                setHandHoverCount(Math.max(0, hoveredCardCount - 1));
 
                 // Add small delay before clearing hover to prevent flicker between cards
                 if (hoverTimeoutRef.current) {
@@ -308,10 +449,10 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                 if (e.button !== 0) return;
                 e.stopPropagation();
 
-                // Select the card first
-                selectHandCard(owner, originalIndex);
+                // Clear preview when starting potential drag
+                clearHoverPreview();
 
-                // Record potential drag start
+                // Record potential drag start (no selection needed)
                 handDragStart.current = {
                   x: e.clientX,
                   y: e.clientY,
@@ -330,8 +471,11 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                 const dist = Math.hypot(dx, dy);
                 const PIX_THRESH = 6; // pixels - reduced for more responsive drag initiation
                 if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
-                  // Start dragging - card is already selected
+                  // Select the card only when drag actually starts
+                  selectHandCard(owner, originalIndex);
                   setDragFromHand(true);
+                  // Clear preview when drag starts
+                  clearHoverPreview();
                 }
               }}
             >

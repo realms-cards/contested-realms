@@ -115,7 +115,7 @@ function CardWithTexture(props: CardPlaneProps) {
       castShadow
     >
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} depthTest={depthTest} />
+      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} depthTest={depthTest} transparent={true} />
     </mesh>
   );
 }
