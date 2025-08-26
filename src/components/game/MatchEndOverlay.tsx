@@ -9,6 +9,7 @@ interface MatchEndOverlayProps {
   playerNames: { p1: string; p2: string };
   myPlayerKey: PlayerKey | null;
   onClose: () => void;
+  onLeave?: () => void;
 }
 
 export default function MatchEndOverlay({
@@ -16,7 +17,8 @@ export default function MatchEndOverlay({
   winner,
   playerNames,
   myPlayerKey,
-  onClose
+  onClose,
+  onLeave
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -78,13 +80,24 @@ export default function MatchEndOverlay({
           </div>
         </div>
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
-        >
-          Close
-        </button>
+        {/* Action Buttons */}
+        <div className="space-y-3">
+          <button
+            onClick={onClose}
+            className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
+          >
+            Continue Examining Board
+          </button>
+          
+          {onLeave && (
+            <button
+              onClick={onLeave}
+              className="w-full bg-red-700 hover:bg-red-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
+            >
+              Leave Match & Return to Lobby
+            </button>
+          )}
+        </div>
 
         <div className="mt-4 text-xs opacity-60">
           The match has ended. Players can still examine the board.
