@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
-import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import {
+  CARD_LONG,
+  CARD_SHORT,
+  TILE_SIZE,
+} from "@/lib/game/constants";
 
 export interface Piles3DProps {
   matW: number;
@@ -36,7 +40,8 @@ export default function Piles3D({
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
-  const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
+  const openContextMenu = useGameStore((s) => s.openContextMenu);
+  const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   // Intentionally unused in this component after layout refactor
   void _matW;
   void _matH;
@@ -116,6 +121,29 @@ export default function Piles3D({
     setPreviewCard(null);
   }
 
+  const pileDragStartRef = useRef<{
+    who: PlayerKey;
+    key: PileKey;
+    start: [number, number];
+    time: number;
+  } | null>(null);
+
+  // Targeted cleanup for pile drag gating only during focus/visibility changes
+  useEffect(() => {
+    const resetPileDrag = () => {
+      pileDragStartRef.current = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") resetPileDrag();
+    };
+    window.addEventListener("blur", resetPileDrag);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("blur", resetPileDrag);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
   return (
     <group position={[0, 0.001, 0]}>
       {piles.map(({ key, x, z, cards }) => {
@@ -177,44 +205,102 @@ export default function Piles3D({
                       if (isDragging) return;
                       // Don't stop propagation - allow orbit controls
                       clearHoverPreview();
+                      // Cancel pending drag gating if pointer leaves before threshold
+                      if (
+                        pileDragStartRef.current &&
+                        pileDragStartRef.current.key === key &&
+                        pileDragStartRef.current.who === owner
+                      ) {
+                        pileDragStartRef.current = null;
+                      }
                     }}
-                    onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                    onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                      // Right-click context menu for piles (top card)
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
+                      e.nativeEvent.preventDefault();
+                      e.stopPropagation();
+                      // Cancel any pending drag gating when opening the menu
+                      pileDragStartRef.current = null;
+                      const pileType =
+                        key === "atlas"
+                          ? "atlas"
+                          : key === "graveyard"
+                          ? "graveyard"
+                          : "spellbook";
+                      openContextMenu(
+                        { kind: "pile", who: owner, from: pileType },
+                        { x: e.clientX, y: e.clientY }
+                      );
+                      clearHoverPreview();
+                    }}
+                    // Dragging from piles is disabled
+                    onPointerMove={(_e: ThreeEvent<PointerEvent>) => {
+                      // touch the arg to avoid unused-var lint
+                      void _e;
+                      // Keep allowing propagation for orbit/ghost updates, but do nothing here
+                    }}
+                    onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+                      if (e.button !== 0) return; // only handle left-button releases for drops
+                      // Always clear any pending drag gating on release
+                      pileDragStartRef.current = null;
+                      const isDragging = !!dragFromHand || !!dragFromPile;
+                      if (!isDragging) return;
+                      // Don't stop propagation - allow orbit controls
 
-                      // Right click = draw to hand
-                      if (e.button === 2) {
-                        e.stopPropagation();
-                        console.log(
-                          `Drawing ${key} card to hand (${owner}):`,
-                          cards[0]
-                        );
-                        setDragFromPile({
-                          who: owner,
-                          from: key,
-                          card: cards[0],
-                        });
-                        drawFromPileToHand();
-                        clearHoverPreview();
-                        return;
-                      }
+                      // Handle drops to piles
+                      const store = useGameStore.getState();
+                      if (dragFromHand && store.selectedCard) {
+                        const card = store.selectedCard;
+                        const cardType = card.card?.type;
 
-                      // Left click = drag to board
-                      if (e.button === 0) {
-                        e.stopPropagation();
-                        console.log(
-                          `Dragging from ${key} to board (${owner}):`,
-                          cards[0]
-                        );
-                        setDragFromPile({
-                          who: owner,
-                          from: key,
-                          card: cards[0],
-                        });
-                        setDragFromHand(true); // Required for Board drop logic to work
-                        clearHoverPreview();
+                        // Only allow appropriate cards to appropriate piles
+                        if (key === "spellbook" && cardType === "Spell") {
+                          const pileName = "Spellbook";
+                          openPlacementDialog(
+                            card.card?.name || "Card",
+                            pileName,
+                            (position) => {
+                              store.moveCardFromHandToPile(
+                                owner,
+                                "spellbook",
+                                position
+                              );
+                              setDragFromHand(false);
+                              store.clearSelection();
+                              store.closePlacementDialog();
+                            }
+                          );
+                        } else if (key === "atlas" && cardType === "Site") {
+                          const pileName = "Atlas";
+                          openPlacementDialog(
+                            card.card?.name || "Card",
+                            pileName,
+                            (position) => {
+                              store.moveCardFromHandToPile(
+                                owner,
+                                "atlas",
+                                position
+                              );
+                              setDragFromHand(false);
+                              store.clearSelection();
+                              store.closePlacementDialog();
+                            }
+                          );
+                        } else {
+                          // Invalid drop - just cancel
+                          setDragFromHand(false);
+                          store.clearSelection();
+                        }
+                      } else if (dragFromPile) {
+                        // Handle pile-to-pile moves if needed
+                        // For now, just cancel the drag
+                        setDragFromPile(null);
+                        setDragFromHand(false);
+                        store.clearSelection();
                       }
                     }}
+                    // Drag gating removed to prevent dragging from piles
                   >
                     <planeGeometry args={[w, h]} />
                     <meshBasicMaterial transparent opacity={0} />
@@ -245,6 +331,62 @@ export default function Piles3D({
                 rotation-x={-Math.PI / 2}
                 rotation-z={rotZ}
                 position={[0, 0.001, 0]}
+                onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                  // Right click: open context menu for empty pile
+                  const isDragging = !!dragFromHand || !!dragFromPile;
+                  if (isDragging) return;
+                  e.nativeEvent.preventDefault();
+                  e.stopPropagation();
+                  // Cancel any pending drag gating when opening the menu
+                  pileDragStartRef.current = null;
+                  const pileType =
+                    key === "atlas" ? "atlas" : key === "graveyard" ? "graveyard" : "spellbook";
+                  openContextMenu(
+                    { kind: "pile", who: owner, from: pileType },
+                    { x: e.clientX, y: e.clientY }
+                  );
+                  clearHoverPreview();
+                }}
+                onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+                  if (e.button !== 0) return; // left button release only
+                  const isDragging = !!dragFromHand || !!dragFromPile;
+                  if (!isDragging) return;
+                  // Don't stop propagation - allow orbit controls
+
+                  // Handle drops to empty piles
+                  const store = useGameStore.getState();
+                  if (dragFromHand && store.selectedCard) {
+                    const card = store.selectedCard;
+                    const cardType = card.card?.type;
+
+                    if (key === "spellbook" && cardType === "Spell") {
+                      const pileName = "Spellbook";
+                      openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
+                        store.moveCardFromHandToPile(owner, "spellbook", position);
+                        setDragFromHand(false);
+                        store.clearSelection();
+                        store.closePlacementDialog();
+                      });
+                    } else if (key === "atlas" && cardType === "Site") {
+                      const pileName = "Atlas";
+                      openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
+                        store.moveCardFromHandToPile(owner, "atlas", position);
+                        setDragFromHand(false);
+                        store.clearSelection();
+                        store.closePlacementDialog();
+                      });
+                    } else {
+                      // Invalid drop - cancel
+                      setDragFromHand(false);
+                      store.clearSelection();
+                    }
+                  } else if (dragFromPile) {
+                    // For now, cancel pile-to-pile on empty placeholder
+                    setDragFromPile(null);
+                    setDragFromHand(false);
+                    store.clearSelection();
+                  }
+                }}
               >
                 <planeGeometry args={[w, h]} />
                 <meshStandardMaterial
