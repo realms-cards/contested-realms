@@ -1175,24 +1175,50 @@ export default function Draft3DPage() {
                   const usedElsewhere = packChoice.some(
                     (v, idx) => idx !== packIndex && v === i
                   );
-                  const product =
-                    seatPacks[0]?.[i]?.[0]?.product || "Booster Pack";
                   const setName =
                     seatPacks[0]?.[i]?.[0]?.setName || setNames[i] || "";
+                  const assetName = (() => {
+                    const s = (setName || "").toLowerCase();
+                    if (s.includes("arthur")) return "arthurian-booster.png";
+                    if (s.includes("alpha")) return "alphabeta-booster.png";
+                    if (s.includes("beta")) return "alphabeta-booster.png";
+                    return null;
+                  })();
                   return (
                     <button
                       key={`pack-opt-${i}`}
                       onClick={() => choosePackToCrack(i)}
                       disabled={usedElsewhere}
-                      className={`rounded-lg p-4 bg-black/60 ring-1 ring-white/25 hover:bg-black/50 text-left ${
+                      className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 hover:bg-black/50 text-left ${
                         usedElsewhere ? "opacity-40 cursor-not-allowed" : ""
                       }`}
+                      aria-label={`Open ${setName || "pack"} option ${i + 1}`}
                     >
-                      <div className="text-sm opacity-80">Option {i + 1}</div>
-                      <div className="text-base font-semibold">{product}</div>
-                      <div className="text-xs opacity-80">Set: {setName}</div>
-                      <div className="mt-1 text-xs opacity-70">
-                        Click to open
+                      <div className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
+                        usedElsewhere ? "" : "group-hover:ring-white/30"
+                      }`}>
+                        {assetName ? (
+                          <Image
+                            src={`/api/assets/${assetName}`}
+                            alt={`${setName} booster pack`}
+                            fill
+                            sizes="(max-width:640px) 80vw, (max-width:1024px) 30vw, 20vw"
+                            className="object-contain"
+                            priority
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center w-full h-full text-sm opacity-70">
+                            {setName || "Booster"}
+                          </div>
+                        )}
+                        {/* Set label badge */}
+                        <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded bg-black/60 text-white text-center pointer-events-none">
+                          {setName || "Booster"}
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs opacity-70">
+                        {usedElsewhere ? "Already used this round" : "Click to open"}
                       </div>
                     </button>
                   );

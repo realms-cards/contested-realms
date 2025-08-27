@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import DeckItem from "./DeckItem";
+import DeckImportCuriosa from "./DeckImportCuriosa";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,9 @@ export default async function DecksPage() {
           New Deck
         </Link>
       </div>
+
+      {/* Curiosa import panel */}
+      <DeckImportCuriosa />
 
       {decks.length === 0 ? (
         <div className="text-sm opacity-80">
