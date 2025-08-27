@@ -411,7 +411,7 @@ export default function Draft3DPage() {
     const spacing = CARD_SHORT * 1.05; // horizontal spacing
     const arcDepth = CARD_LONG * 0.35; // curve towards/away from camera
     const centerX = 0;
-    const centerZ = 0; // keep interaction in the middle of the board
+    const centerZ = -1.4; // Move fan towards top of board to make room
     return new Array(n).fill(0).map((_, i) => {
       const a = start + i * step;
       const x = centerX + (i - (n - 1) / 2) * spacing;
@@ -586,9 +586,18 @@ export default function Draft3DPage() {
   const [metaByCardId, setMetaByCardId] = useState<
     Record<
       number,
-      { cost: number | null; thresholds: Record<string, number> | null }
+      {
+        cost: number | null;
+        thresholds: Record<string, number> | null;
+        attack: number | null;
+        defence: number | null;
+      }
     >
   >({});
+
+  // Sorting state
+  const [isSortingEnabled, setIsSortingEnabled] = useState(false);
+  const [infoBoxVisible, setInfoBoxVisible] = useState(true);
   useEffect(() => {
     if (!yourPicks.length) {
       setMetaByCardId({});
@@ -614,6 +623,8 @@ export default function Draft3DPage() {
               cardId: number;
               cost: number | null;
               thresholds: Record<string, number> | null;
+              attack: number | null;
+              defence: number | null;
             }[]
           ) => rows
         )
@@ -623,21 +634,212 @@ export default function Draft3DPage() {
               cardId: number;
               cost: number | null;
               thresholds: Record<string, number> | null;
+              attack: number | null;
+              defence: number | null;
             }[]
         );
     });
     Promise.all(requests).then((chunks) => {
       const next: Record<
         number,
-        { cost: number | null; thresholds: Record<string, number> | null }
+        {
+          cost: number | null;
+          thresholds: Record<string, number> | null;
+          attack: number | null;
+          defence: number | null;
+        }
       > = {};
       for (const rows of chunks) {
         for (const m of rows)
-          next[m.cardId] = { cost: m.cost, thresholds: m.thresholds };
+          next[m.cardId] = {
+            cost: m.cost,
+            thresholds: m.thresholds,
+            attack: m.attack,
+            defence: m.defence,
+          };
       }
       setMetaByCardId(next);
     });
   }, [yourPicks, setNames]);
+
+  // Card categorization functions
+  const categorizeCard = (
+    card: BoosterCard,
+    meta?: {
+      cost: number | null;
+      thresholds: Record<string, number> | null;
+      attack: number | null;
+      defence: number | null;
+    }
+  ) => {
+    const type = (card.type || "").toLowerCase();
+
+    if (type.includes("site")) return "sites";
+    if (type.includes("avatar")) return "avatars";
+
+    // Creatures have attack/defence values
+    const isCreature = meta && (meta.attack !== null || meta.defence !== null);
+    if (isCreature) return "creatures";
+
+    return "spells";
+  };
+
+  const getThresholdElements = (
+    card: BoosterCard,
+    meta?: { thresholds: Record<string, number> | null }
+  ) => {
+    const thresholds = meta?.thresholds || {};
+    return Object.keys(thresholds).filter((element) => thresholds[element] > 0);
+  };
+
+  // Sort picks by category and mana cost
+  const sortedPicks = useMemo(() => {
+    if (!isSortingEnabled) return pick3D;
+
+    const categorized = pick3D.reduce((acc, pick) => {
+      const meta = metaByCardId[pick.card.cardId];
+      const category = categorizeCard(pick.card, meta);
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(pick);
+      return acc;
+    }, {} as Record<string, Pick3D[]>);
+
+    // Sort within each category by mana cost
+    for (const category in categorized) {
+      categorized[category].sort((a, b) => {
+        const metaA = metaByCardId[a.card.cardId];
+        const metaB = metaByCardId[b.card.cardId];
+        const costA = metaA?.cost || 0;
+        const costB = metaB?.cost || 0;
+        return costA - costB;
+      });
+    }
+
+    return categorized;
+  }, [pick3D, isSortingEnabled, metaByCardId]);
+
+  // Calculate threshold summary
+  const thresholdSummary = useMemo(() => {
+    const summary = { air: 0, water: 0, earth: 0, fire: 0 };
+    const elements = new Set<string>();
+
+    for (const pick of yourPicks) {
+      const meta = metaByCardId[pick.cardId];
+      if (meta?.thresholds) {
+        Object.keys(meta.thresholds).forEach((element) => {
+          if (meta.thresholds![element] > 0) {
+            elements.add(element);
+            summary[element as keyof typeof summary] = Math.max(
+              summary[element as keyof typeof summary],
+              meta.thresholds![element]
+            );
+          }
+        });
+      }
+    }
+
+    return { summary, elements: Array.from(elements) };
+  }, [yourPicks, metaByCardId]);
+
+  // Calculate picks by type
+  const picksByType = useMemo(() => {
+    const counts = { creatures: 0, spells: 0, sites: 0, avatars: 0 };
+
+    for (const pick of yourPicks) {
+      const meta = metaByCardId[pick.cardId];
+      const category = categorizeCard(pick, meta);
+      counts[category as keyof typeof counts]++;
+    }
+
+    return counts;
+  }, [yourPicks, metaByCardId]);
+
+  // Create sorted stack positions
+  const stackPositions = useMemo(() => {
+    if (!isSortingEnabled) return null;
+
+    const positions = new Map<
+      number,
+      { x: number; z: number; stackIndex: number; isVisible: boolean }
+    >();
+    const stackStartZ = 0.5; // Start stacks in the center area
+    const stackSpacing = 1.0; // Closer spacing between different stacks
+    const cardFanSpacing = 0.12; // Vertical fan spacing so tops are visible
+
+    let currentStackX = -2.5; // Start position for stacks
+
+    // Only proceed if sortedPicks is a categorized object (not the original Pick3D array)
+    const categorizedPicks = Array.isArray(sortedPicks) ? {} : sortedPicks;
+
+    // Group all creatures and spells by their threshold elements
+    const allCards = [
+      ...(categorizedPicks.creatures || []),
+      ...(categorizedPicks.spells || []),
+    ];
+
+    const elementGroups = allCards.reduce((acc, pick) => {
+      const meta = metaByCardId[pick.card.cardId];
+      const elements = getThresholdElements(pick.card, meta);
+      const key = elements.length > 0 ? elements.sort().join("-") : "colorless";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(pick);
+      return acc;
+    }, {} as Record<string, Pick3D[]>);
+
+    // Create vertical fans for each element group
+    Object.keys(elementGroups)
+      .sort()
+      .forEach((elementKey) => {
+        const cards = elementGroups[elementKey];
+        if (cards.length === 0) return;
+
+        cards.forEach((pick, idx) => {
+          positions.set(pick.id, {
+            x: currentStackX,
+            z: stackStartZ + idx * cardFanSpacing,
+            stackIndex: idx,
+            isVisible: true, // All cards visible in vertical fan
+          });
+        });
+        currentStackX += stackSpacing;
+      });
+
+    // Sites stack - vertical fan with bottoms visible (reverse z order)
+    const sites = categorizedPicks.sites || [];
+    if (sites.length > 0) {
+      sites.forEach((pick, idx) => {
+        positions.set(pick.id, {
+          x: currentStackX,
+          // Reverse the z ordering for sites so bottom cards are in front
+          z: stackStartZ + (sites.length - 1 - idx) * cardFanSpacing,
+          stackIndex: idx,
+          isVisible: true, // All sites visible
+        });
+      });
+      currentStackX += stackSpacing;
+    }
+
+    // Artifacts stack (if any cards have artifact in type)
+    const artifacts = Object.values(categorizedPicks)
+      .flat()
+      .filter((pick) => {
+        const type = (pick.card.type || "").toLowerCase();
+        return type.includes("artifact");
+      });
+
+    if (artifacts.length > 0) {
+      artifacts.forEach((pick, idx) => {
+        positions.set(pick.id, {
+          x: currentStackX,
+          z: stackStartZ + idx * cardFanSpacing,
+          stackIndex: idx,
+          isVisible: true,
+        });
+      });
+    }
+
+    return positions;
+  }, [sortedPicks, isSortingEnabled, metaByCardId]);
 
   async function saveDeck() {
     try {
@@ -789,23 +991,33 @@ export default function Draft3DPage() {
                 const isSite = (p.card.type || "")
                   .toLowerCase()
                   .includes("site");
+
+                // Use sorted position if sorting is enabled
+                const stackPos = stackPositions?.get(p.id);
+                const x = stackPos ? stackPos.x : p.x;
+                const z = stackPos ? stackPos.z : p.z;
+                const isVisible = stackPos ? stackPos.isVisible : true;
+
                 return (
                   <DraggableCard3D
                     key={`pick-${p.id}`}
                     slug={p.card.slug}
                     isSite={isSite}
-                    x={p.x}
-                    z={p.z}
+                    x={x}
+                    z={z}
                     onDrop={(wx, wz) => {
-                      setPick3D((prev) =>
-                        prev.map((it) =>
-                          it.id === p.id ? { ...it, x: wx, z: wz } : it
-                        )
-                      );
+                      if (!isSortingEnabled) {
+                        setPick3D((prev) =>
+                          prev.map((it) =>
+                            it.id === p.id ? { ...it, x: wx, z: wz } : it
+                          )
+                        );
+                      }
                     }}
                     onDragChange={setOrbitLocked}
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
+                    disabled={isSortingEnabled && !isVisible}
                     onHoverChange={(hover) => {
                       if (hover && !orbitLocked)
                         setHoverPreview({
@@ -853,6 +1065,28 @@ export default function Draft3DPage() {
           <div className="text-xl font-semibold text-white">
             Draft Mode (3D)
           </div>
+
+          {/* Sorting controls */}
+          {pick3D.length > 0 && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsSortingEnabled(!isSortingEnabled)}
+                className={`h-10 px-4 rounded font-medium transition-colors ${
+                  isSortingEnabled
+                    ? "bg-emerald-500 text-black hover:bg-emerald-400"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                {isSortingEnabled ? "Unsort Cards" : "Sort Cards"}
+              </button>
+              <button
+                onClick={() => setInfoBoxVisible(!infoBoxVisible)}
+                className="h-10 px-4 rounded bg-white/10 text-white hover:bg-white/20 font-medium"
+              >
+                {infoBoxVisible ? "Hide Info" : "Show Info"}
+              </button>
+            </div>
+          )}
           {!inProgress && (
             <>
               <div className="flex flex-wrap items-end gap-3 text-white">
@@ -1194,9 +1428,11 @@ export default function Draft3DPage() {
                       }`}
                       aria-label={`Open ${setName || "pack"} option ${i + 1}`}
                     >
-                      <div className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
-                        usedElsewhere ? "" : "group-hover:ring-white/30"
-                      }`}>
+                      <div
+                        className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
+                          usedElsewhere ? "" : "group-hover:ring-white/30"
+                        }`}
+                      >
                         {assetName ? (
                           <Image
                             src={`/api/assets/${assetName}`}
@@ -1218,11 +1454,59 @@ export default function Draft3DPage() {
                         </div>
                       </div>
                       <div className="mt-2 text-xs opacity-70">
-                        {usedElsewhere ? "Already used this round" : "Click to open"}
+                        {usedElsewhere
+                          ? "Already used this round"
+                          : "Click to open"}
                       </div>
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Draft Statistics - Bottom Left */}
+        {infoBoxVisible && pick3D.length > 0 && (
+          <div className="bottom-6 left-6 pointer-events-auto select-none absolute">
+            <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg w-72">
+              <div className="font-medium mb-2 text-white">
+                Draft Statistics
+              </div>
+              <div className="text-sm text-white/90 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>Creatures: {picksByType.creatures}</div>
+                  <div>Spells: {picksByType.spells}</div>
+                  <div>Sites: {picksByType.sites}</div>
+                  <div>Avatars: {picksByType.avatars}</div>
+                </div>
+
+                {thresholdSummary.elements.length > 0 && (
+                  <div>
+                    <div className="font-medium mb-1">Threshold Elements:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {thresholdSummary.elements.map((element) => (
+                        <div key={element} className="flex items-center gap-1">
+                          <Image
+                            src={`/api/assets/${element}.png`}
+                            alt={element}
+                            width={16}
+                            height={16}
+                            className="pointer-events-none select-none"
+                          />
+                          <span className="capitalize">
+                            {element}:{" "}
+                            {
+                              thresholdSummary.summary[
+                                element as keyof typeof thresholdSummary.summary
+                              ]
+                            }
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
