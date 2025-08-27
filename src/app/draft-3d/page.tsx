@@ -7,7 +7,6 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
-import Hud3D from "@/lib/game/components/Hud3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import CardPlane from "@/lib/game/components/CardPlane";
@@ -577,7 +576,7 @@ export default function Draft3DPage() {
 
   // Collapsible picks panel + metadata (cost/thresholds) for your picks
   const [picksOpen, setPicksOpen] = useState(true);
-  const [compactPicks, setCompactPicks] = useState(false);
+  const [compactPicks, setCompactPicks] = useState(true);
   // Hover preview card (like play page previewCard without magnifier logic)
   const [hoverPreview, setHoverPreview] = useState<{
     slug: string;
@@ -724,11 +723,9 @@ export default function Draft3DPage() {
             <Board />
           </Physics>
 
-          {/* 3D Piles + HUD for atmosphere */}
+          {/* 3D piles for atmosphere (HUD hidden in draft mode) */}
           <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
           <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
-          <Hud3D owner="p1" />
-          <Hud3D owner="p2" />
 
           <TextureCache />
           {/* Threshold ring and per-card glow removed for cleaner draft UI */}
@@ -856,53 +853,62 @@ export default function Draft3DPage() {
           <div className="text-xl font-semibold text-white">
             Draft Mode (3D)
           </div>
+          {!inProgress && (
+            <>
+              <div className="flex flex-wrap items-end gap-3 text-white">
+                {[0, 1, 2].map((i) => (
+                  <label key={`set-${i}`} className="flex flex-col gap-1">
+                    <span className="text-xs opacity-80">Pack {i + 1} Set</span>
+                    <select
+                      value={setNames[i]}
+                      onChange={(e) =>
+                        setSetNames((prev) => {
+                          const next = [...prev];
+                          next[i] = e.target.value;
+                          return next;
+                        })
+                      }
+                      className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
+                    >
+                      <option value="Alpha">Alpha</option>
+                      <option value="Beta">Beta</option>
+                      <option value="Arthurian Legends">
+                        Arthurian Legends
+                      </option>
+                    </select>
+                  </label>
+                ))}
+              </div>
 
-          <div className="flex flex-wrap items-end gap-3 text-white">
-            {[0, 1, 2].map((i) => (
-              <label key={`set-${i}`} className="flex flex-col gap-1">
-                <span className="text-xs opacity-80">Pack {i + 1} Set</span>
-                <select
-                  value={setNames[i]}
+              <label className="flex flex-col gap-1 text-white">
+                <span className="text-xs opacity-80">Players</span>
+                <input
+                  type="number"
+                  min={2}
+                  max={12}
+                  value={players}
                   onChange={(e) =>
-                    setSetNames((prev) => {
-                      const next = [...prev];
-                      next[i] = e.target.value;
-                      return next;
-                    })
+                    setPlayers(
+                      Math.max(2, Math.min(12, Number(e.target.value)))
+                    )
                   }
-                  className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
-                >
-                  <option value="Alpha">Alpha</option>
-                  <option value="Beta">Beta</option>
-                  <option value="Arthurian Legends">Arthurian Legends</option>
-                </select>
+                  className="rounded px-3 py-2 bg-black/70 text-white w-28 ring-1 ring-white/20 backdrop-blur"
+                />
               </label>
-            ))}
-          </div>
 
-          <label className="flex flex-col gap-1 text-white">
-            <span className="text-xs opacity-80">Players</span>
-            <input
-              type="number"
-              min={2}
-              max={12}
-              value={players}
-              onChange={(e) =>
-                setPlayers(Math.max(2, Math.min(12, Number(e.target.value))))
-              }
-              className="rounded px-3 py-2 bg-black/70 text-white w-28 ring-1 ring-white/20 backdrop-blur"
-            />
-          </label>
+              <button
+                onClick={startDraft}
+                disabled={starting}
+                className="h-12 px-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold shadow-lg ring-1 ring-black/20 disabled:opacity-50"
+              >
+                {starting ? "Starting..." : "Start Draft"}
+              </button>
 
-          <button
-            onClick={startDraft}
-            disabled={starting}
-            className="h-12 px-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold shadow-lg ring-1 ring-black/20 disabled:opacity-50"
-          >
-            {starting ? "Starting..." : "Start Draft"}
-          </button>
-
-          {error && <div className="text-red-300 text-sm">Error: {error}</div>}
+              {error && (
+                <div className="text-red-300 text-sm">Error: {error}</div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Pack status + Picks summary (no 2D pack grid; cards are on the mat) */}
@@ -915,7 +921,6 @@ export default function Draft3DPage() {
                     Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing{" "}
                     {dir === 1 ? "Left" : "Right"}
                   </div>
-                  <div>Your picks: {yourPicks.length}</div>
                 </div>
                 <div className="text-white text-sm">
                   Drag a card outward to stage it, then click <b>Pick & Pass</b>
@@ -943,7 +948,9 @@ export default function Draft3DPage() {
                     </div>
                   </div>
                   {picksOpen && (
-                    <div className="max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 text-xs pointer-events-auto">
+                    <div
+                      className={`max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
+                    >
                       {yourCounts.map((it) => {
                         const meta = metaByCardId[it.cardId];
                         const t =
@@ -1032,8 +1039,8 @@ export default function Draft3DPage() {
                                   <div
                                     className={`relative flex-none ${
                                       isSite
-                                        ? "aspect-[4/3] w-20"
-                                        : "aspect-[3/4] w-16 md:w-20"
+                                        ? "aspect-[4/3] w-14"
+                                        : "aspect-[3/4] w-12"
                                     } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
                                   >
                                     <Image
@@ -1134,7 +1141,7 @@ export default function Draft3DPage() {
                 .includes("site");
               // Clamp size and preserve aspect; use padding-bottom to enforce aspect box
               const base = isSite
-                ? "w-[28vw] max-w-[500px] min-w-[200px] aspect-[4/3]" // matches rotated site (4:3)
+                ? "w-[30vw] max-w-[600px] min-w-[200px] aspect-[4/3]" // matches rotated site (4:3)
                 : "w-[22vw] max-w-[360px] min-w-[180px] aspect-[3/4]"; // portrait cards
               return (
                 <div
@@ -1170,6 +1177,8 @@ export default function Draft3DPage() {
                   );
                   const product =
                     seatPacks[0]?.[i]?.[0]?.product || "Booster Pack";
+                  const setName =
+                    seatPacks[0]?.[i]?.[0]?.setName || setNames[i] || "";
                   return (
                     <button
                       key={`pack-opt-${i}`}
@@ -1181,6 +1190,7 @@ export default function Draft3DPage() {
                     >
                       <div className="text-sm opacity-80">Option {i + 1}</div>
                       <div className="text-base font-semibold">{product}</div>
+                      <div className="text-xs opacity-80">Set: {setName}</div>
                       <div className="mt-1 text-xs opacity-70">
                         Click to open
                       </div>
