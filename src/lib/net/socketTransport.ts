@@ -10,10 +10,8 @@ import type {
 } from "@/lib/net/transport";
 
 export class SocketTransport implements GameTransport {
+  private listeners: { [key: string]: ((data: unknown) => void)[] } = {};
   private socket?: Socket;
-  private handlers: Partial<
-    Record<TransportEvent, Set<(payload: unknown) => void>>
-  > = {};
 
   async connect(opts: { playerId: any; displayName: string }): Promise<void> {
     if (this.socket && this.socket.connected) return;

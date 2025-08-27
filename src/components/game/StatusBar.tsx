@@ -68,7 +68,7 @@ export default function StatusBar({ dragFromHand, onCameraReset }: StatusBarProp
           </>
         ) : (
           <>
-            <span className="opacity-80">Player {currentPlayer}'s Turn</span>
+            <span className="opacity-80">Player {currentPlayer}&apos;s Turn</span>
             
             <button
               className="rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-1"

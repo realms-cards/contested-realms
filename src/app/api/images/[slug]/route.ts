@@ -10,6 +10,8 @@ function setDirFromSlug(slug: string): string | null {
       return "alpha";
     case "bet":
       return "beta";
+    case "art":
+      return "arthurian_legends";
     default:
       return null;
   }

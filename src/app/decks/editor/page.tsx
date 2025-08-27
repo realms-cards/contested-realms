@@ -50,7 +50,9 @@ export default function DeckEditorPage() {
 
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckName, setDeckName] = useState<string>("New Deck");
-  const [setName, setSetName] = useState<string>("Alpha");
+  const [deckFormat, setDeckFormat] = useState<string>("Constructed");
+  // Always use Beta set for deck editor
+  const setName = "Beta";
 
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
@@ -76,6 +78,12 @@ export default function DeckEditorPage() {
   // DnD hover states for visual feedback
   const [isOverDeck, setIsOverDeck] = useState(false);
   const [isOverSideboard, setIsOverSideboard] = useState(false);
+
+  // Check if we're in restricted mode (Draft/Sealed)
+  const isRestrictedMode = deckFormat === "Draft" || deckFormat === "Sealed";
+
+  // Magnifier state
+  const [hoveredCard, setHoveredCard] = useState<{slug: string; alt: string; isSite: boolean; x: number; y: number} | null>(null);
 
   // Load deck list on mount
   useEffect(() => {
@@ -156,6 +164,7 @@ export default function DeckEditorPage() {
   function clearEditor() {
     setDeckId(null);
     setDeckName("New Deck");
+    setDeckFormat("Constructed");
     setPicks({});
     setSaveMsg(null);
   }
@@ -167,9 +176,10 @@ export default function DeckEditorPage() {
       const res = await fetch(`/api/decks/${id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to load deck");
-      const { name, spellbook, atlas, sideboard } = data as {
+      const { name, format, spellbook, atlas, sideboard } = data as {
         id: string;
         name: string;
+        format: string;
         spellbook: ApiCardRef[];
         atlas: ApiCardRef[];
         sideboard: ApiCardRef[];
@@ -196,6 +206,7 @@ export default function DeckEditorPage() {
       for (const c of sideboard) push(c, "Sideboard");
       setDeckId(id);
       setDeckName(name);
+      setDeckFormat(format || "Constructed");
       setPicks(map);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -574,7 +585,7 @@ export default function DeckEditorPage() {
     (it.type || "").toLowerCase().includes("avatar")
   );
   const atlasCards = deckEntries.filter(([, it]) =>
-    (it.type || "").toLowerCase().includes("site")
+    it.zone === "Atlas"
   );
   const spellbookCards = deckEntries.filter(
     ([, it]) =>
@@ -588,13 +599,30 @@ export default function DeckEditorPage() {
       alt: string;
       isSite: boolean;
     } & React.HTMLAttributes<HTMLDivElement>
-  > = ({ slug, alt, isSite, className = "", ...rest }) => (
+  > = ({ slug, alt, isSite, className = "", onMouseEnter, onMouseLeave, ...rest }) => (
     <div
       className={
         "relative overflow-hidden rounded bg-muted/40 " +
         (isSite ? "aspect-[4/3]" : "aspect-[3/4]") +
         (className ? " " + className : "")
       }
+      onMouseEnter={(e) => {
+        if (slug) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setHoveredCard({
+            slug,
+            alt,
+            isSite,
+            x: rect.right + 10,
+            y: rect.top
+          });
+        }
+        onMouseEnter?.(e);
+      }}
+      onMouseLeave={(e) => {
+        setHoveredCard(null);
+        onMouseLeave?.(e);
+      }}
       {...rest}
     >
       {slug && (
@@ -660,17 +688,6 @@ export default function DeckEditorPage() {
           />
         </label>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs uppercase opacity-70">Set</span>
-          <select
-            value={setName}
-            onChange={(e) => setSetName(e.target.value)}
-            className="border rounded px-3 py-2 bg-transparent"
-          >
-            <option value="Alpha">Alpha</option>
-            <option value="Beta">Beta</option>
-          </select>
-        </label>
 
         <div className="ml-auto flex items-center gap-3 text-sm">
           <div
@@ -689,8 +706,13 @@ export default function DeckEditorPage() {
         </div>
       </div>
 
-      {/* Quick actions */}
+      {/* Format indicator and quick actions */}
       <div className="flex flex-wrap items-center gap-3">
+        {isRestrictedMode && (
+          <div className="px-3 py-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded text-sm text-amber-800 dark:text-amber-200">
+            📋 {deckFormat} Mode - Card pool is locked (cannot add/remove drafted cards, but can set avatar and add standard sites)
+          </div>
+        )}
         <button
           className="px-3 py-2 border rounded text-sm"
           onClick={setAvatarSpellslinger}
@@ -768,18 +790,22 @@ export default function DeckEditorPage() {
                         x{it.count}
                       </div>
                       <div className="mt-2 flex gap-1 text-xs">
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => removeOne(key)}
-                        >
-                          -
-                        </button>
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => increment(key)}
-                        >
-                          +
-                        </button>
+                        {!isRestrictedMode && (
+                          <>
+                            <button
+                              className="px-2 py-1 border rounded"
+                              onClick={() => removeOne(key)}
+                            >
+                              -
+                            </button>
+                            <button
+                              className="px-2 py-1 border rounded"
+                              onClick={() => increment(key)}
+                            >
+                              +
+                            </button>
+                          </>
+                        )}
                         <button
                           className="ml-auto px-2 py-1 border rounded"
                           onClick={() => moveOneToSideboard(key)}
@@ -817,18 +843,22 @@ export default function DeckEditorPage() {
                         x{it.count}
                       </div>
                       <div className="mt-2 flex gap-1 text-xs">
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => removeOne(key)}
-                        >
-                          -
-                        </button>
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => increment(key)}
-                        >
-                          +
-                        </button>
+                        {!isRestrictedMode && (
+                          <>
+                            <button
+                              className="px-2 py-1 border rounded"
+                              onClick={() => removeOne(key)}
+                            >
+                              -
+                            </button>
+                            <button
+                              className="px-2 py-1 border rounded"
+                              onClick={() => increment(key)}
+                            >
+                              +
+                            </button>
+                          </>
+                        )}
                         <button
                           className="ml-auto px-2 py-1 border rounded"
                           onClick={() => moveOneToSideboard(key)}
@@ -928,18 +958,22 @@ export default function DeckEditorPage() {
                   x{it.count}
                 </div>
                 <div className="mt-2 flex gap-1 text-xs">
-                  <button
-                    className="px-2 py-1 border rounded"
-                    onClick={() => removeOne(key)}
-                  >
-                    -
-                  </button>
-                  <button
-                    className="px-2 py-1 border rounded"
-                    onClick={() => increment(key)}
-                  >
-                    +
-                  </button>
+                  {!isRestrictedMode && (
+                    <>
+                      <button
+                        className="px-2 py-1 border rounded"
+                        onClick={() => removeOne(key)}
+                      >
+                        -
+                      </button>
+                      <button
+                        className="px-2 py-1 border rounded"
+                        onClick={() => increment(key)}
+                      >
+                        +
+                      </button>
+                    </>
+                  )}
                   <button
                     className="ml-auto px-2 py-1 border rounded"
                     onClick={() => moveOneFromSideboardToDeck(key)}
@@ -952,33 +986,34 @@ export default function DeckEditorPage() {
           </div>
 
           {/* Search within sideboard column for compactness */}
-          <div className="mt-4 border-t pt-3">
-            <div className="font-medium mb-2">Search</div>
-            <div className="flex flex-wrap items-end gap-2 mb-2">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="border rounded px-3 py-2 bg-transparent w-48"
-                placeholder="Name contains..."
-              />
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as SearchType)}
-                className="border rounded px-3 py-2 bg-transparent"
-              >
-                <option value="all">All</option>
-                <option value="avatar">Avatar</option>
-                <option value="site">Sites</option>
-                <option value="spell">Spellbook</option>
-              </select>
-              <button
-                onClick={doSearch}
-                disabled={searching}
-                className="h-10 px-3 rounded bg-foreground text-background disabled:opacity-50"
-              >
-                {searching ? "Searching..." : "Search"}
-              </button>
-            </div>
+          {!isRestrictedMode && (
+            <div className="mt-4 border-t pt-3">
+              <div className="font-medium mb-2">Search</div>
+              <div className="flex flex-wrap items-end gap-2 mb-2">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="border rounded px-3 py-2 bg-transparent w-48"
+                  placeholder="Name contains..."
+                />
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as SearchType)}
+                  className="border rounded px-3 py-2 bg-transparent"
+                >
+                  <option value="all">All</option>
+                  <option value="avatar">Avatar</option>
+                  <option value="site">Sites</option>
+                  <option value="spell">Spellbook</option>
+                </select>
+                <button
+                  onClick={doSearch}
+                  disabled={searching}
+                  className="h-10 px-3 rounded bg-foreground text-background disabled:opacity-50"
+                >
+                  {searching ? "Searching..." : "Search"}
+                </button>
+              </div>
             {!!results.length && (
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {results.map((c) => {
@@ -1021,7 +1056,8 @@ export default function DeckEditorPage() {
                 })}
               </div>
             )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1033,8 +1069,41 @@ export default function DeckEditorPage() {
         >
           {saving ? "Saving..." : deckId ? "Update Deck" : "Save Deck"}
         </button>
-        {saveMsg && <div className="text-sm">{saveMsg}</div>}
+        {saveMsg && <div className="text-green-600 text-sm">{saveMsg}</div>}
       </div>
+
+      {/* Card Magnifier */}
+      {hoveredCard && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{
+            left: Math.min(hoveredCard.x, window.innerWidth - 320),
+            top: Math.min(hoveredCard.y, window.innerHeight - (hoveredCard.isSite ? 240 : 320))
+          }}
+        >
+          <div className="bg-background border border-border rounded-lg shadow-xl p-2">
+            <div
+              className={
+                "relative overflow-hidden rounded " +
+                (hoveredCard.isSite ? "w-80 h-60" : "w-60 h-80")
+              }
+            >
+              <Image
+                src={`/api/images/${hoveredCard.slug}`}
+                alt={hoveredCard.alt}
+                fill
+                sizes="320px"
+                className={
+                  hoveredCard.isSite
+                    ? "object-contain rotate-90 origin-center bg-muted/20"
+                    : "object-cover bg-muted/20"
+                }
+                priority
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

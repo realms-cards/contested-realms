@@ -136,6 +136,7 @@ export default function SealedPage() {
           >
             <option value="Alpha">Alpha</option>
             <option value="Beta">Beta</option>
+            <option value="Arthurian Legends">Arthurian Legends</option>
           </select>
         </label>
 

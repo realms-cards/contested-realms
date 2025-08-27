@@ -55,7 +55,23 @@ async function main() {
     foilReplacesOrdinary: true,
   });
 
-  console.log("Seeded PackConfig for Alpha and Beta.");
+  // Arthurian Legends
+  const arthurian = await upsertSet("Arthurian Legends");
+  await upsertPackConfig(arthurian.id, {
+    ordinaryCount: 11,
+    exceptionalCount: 3,
+    eliteOrUniqueCount: 1,
+    uniqueChance: 0.2, // standard rate
+    siteOrAvatarCount: 0,
+    foilChance: 0.25, // standard rate
+    foilUniqueWeight: 1,
+    foilEliteWeight: 3,
+    foilExceptionalWeight: 6,
+    foilOrdinaryWeight: 7,
+    foilReplacesOrdinary: true,
+  });
+
+  console.log("Seeded PackConfig for Alpha, Beta, and Arthurian Legends.");
 }
 
 main()

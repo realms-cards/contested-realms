@@ -51,7 +51,7 @@ export default function OnlineStatusBar({
 
         {/* Game Status */}
         <Star className={`w-4 h-4 ${isMyTurn ? 'fill-green-400 text-green-400' : 'fill-yellow-400 text-yellow-400'}`} />
-        <span className="opacity-80">{currentPlayerName}'s Turn</span>
+        <span className="opacity-80">{currentPlayerName}&apos;s Turn</span>
         
         {/* Turn Controls - Only for current player */}
         {canControlTurn && (
