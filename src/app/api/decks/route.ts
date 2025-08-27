@@ -20,6 +20,9 @@ export async function GET() {
 
 // POST /api/decks
 // Body: { name: string, format?: string, set?: string, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
+// Notes:
+// - For backward compatibility, a top-level 'set' may be provided; if present, it will be used as the default set for cards that do not specify a variantId.
+// - If a card has a variantId, its set will be inferred from that variant, overriding the top-level 'set' for that card.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -63,6 +66,18 @@ export async function POST(req: NextRequest) {
       if (prev) prev.count += count; else agg.set(key, { cardId, zone, count, variantId });
     }
 
+    // If any items have variantId, prefetch their setIds to infer per-card set
+    const variantIds = Array.from(new Set(
+      Array.from(agg.values())
+        .map(v => v.variantId)
+        .filter((id): id is number => id != null)
+    ));
+    const variants = variantIds.length
+      ? await prisma.variant.findMany({ where: { id: { in: variantIds } }, select: { id: true, setId: true } })
+      : [];
+    const setByVariant = new Map<number, number>();
+    for (const v of variants) setByVariant.set(v.id, v.setId);
+
     const deck = await prisma.deck.create({ data: { name, format } });
 
     for (const { cardId, zone, count, variantId } of agg.values()) {
@@ -70,7 +85,8 @@ export async function POST(req: NextRequest) {
         data: {
           deckId: deck.id,
           cardId,
-          setId: setId ?? null,
+          // Prefer per-variant setId if available; otherwise fall back to top-level set
+          setId: (variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null)),
           variantId: variantId ?? null,
           zone,
           count,
