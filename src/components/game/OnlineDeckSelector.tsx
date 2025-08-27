@@ -20,10 +20,16 @@ export default function OnlineDeckSelector({
   playerNames, 
   onPrepareComplete 
 }: OnlineDeckSelectorProps) {
+  const curiosaEnabled = process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
   const [decks, setDecks] = useState<DeckInfo[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<string>("");
   const [deckError, setDeckError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [impUrl, setImpUrl] = useState("");
+  const [impName, setImpName] = useState("");
+  const [impTts, setImpTts] = useState("");
+  const [impLoading, setImpLoading] = useState(false);
+  const [impError, setImpError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -52,10 +58,40 @@ export default function OnlineDeckSelector({
         useGameStore.getState().setPhase("Setup");
         onPrepareComplete();
       }
-    } catch (err) {
+    } catch {
       setDeckError("Failed to load deck");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const importFromCuriosa = async () => {
+    if (!impUrl.trim() && !impTts.trim()) return;
+    setImpLoading(true);
+    setImpError(null);
+    try {
+      const res = await fetch("/api/decks/import/curiosa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: impUrl.trim(), name: impName.trim() || undefined, tts: impTts.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data && data.error) || "Import failed";
+        setImpError(typeof msg === "string" ? msg : "Import failed");
+        return;
+      }
+      // data: { id, name, format }
+      const newDeck: DeckInfo = { id: String(data.id), name: String(data.name), format: String(data.format) };
+      setDecks((prev) => [newDeck, ...prev]);
+      setSelectedDeck(newDeck.id);
+      setImpUrl("");
+      setImpName("");
+      setImpTts("");
+    } catch {
+      setImpError("Network error during import");
+    } finally {
+      setImpLoading(false);
     }
   };
 
@@ -69,6 +105,52 @@ export default function OnlineDeckSelector({
       </div>
       
       <div className="space-y-4">
+        {/* Curiosa import inline panel */}
+        {curiosaEnabled && (
+        <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
+          <div className="text-sm font-medium">Import from Curiosa</div>
+          <div className="grid gap-2 sm:grid-cols-5">
+            <input
+              className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+              placeholder="Curiosa deck URL"
+              value={impUrl}
+              onChange={(e) => setImpUrl(e.target.value)}
+              disabled={impLoading || isLoading}
+            />
+            <input
+              className="sm:col-span-2 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+              placeholder="Optional name"
+              value={impName}
+              onChange={(e) => setImpName(e.target.value)}
+              disabled={impLoading || isLoading}
+            />
+          </div>
+          <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-2">
+            <summary className="cursor-pointer text-xs font-medium">Paste TTS JSON (fallback if the deck is private)</summary>
+            <textarea
+              className="mt-2 w-full h-24 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-2 py-2 text-white font-mono text-xs"
+              placeholder="Paste the Tabletop Simulator JSON exported from Curiosa"
+              value={impTts}
+              onChange={(e) => setImpTts(e.target.value)}
+              disabled={impLoading || isLoading}
+            />
+          </details>
+          {impError && (
+            <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">{impError}</div>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              onClick={importFromCuriosa}
+              disabled={(!impUrl.trim() && !impTts.trim()) || impLoading || isLoading}
+            >
+              {impLoading ? "Importing..." : "Import"}
+            </button>
+          </div>
+        </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium mb-2">Choose Deck</label>
           <select
