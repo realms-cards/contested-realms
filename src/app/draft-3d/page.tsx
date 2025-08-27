@@ -1062,8 +1062,8 @@ export default function Draft3DPage() {
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
         {/* Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
-          <div className="text-xl font-semibold text-white">
-            Draft Mode (3D)
+          <div className="text-3xl font-fantaisie text-white">
+            Draft
           </div>
 
           {/* Sorting controls */}
