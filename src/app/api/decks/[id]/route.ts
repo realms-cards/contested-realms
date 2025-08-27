@@ -95,6 +95,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
+// DELETE /api/decks/[id]
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
+
+    const res = await prisma.deck.deleteMany({ where: { id } });
+    if (res.count === 0) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    return new Response(null, { status: 204 });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
+  }
+}
+
 // PUT /api/decks/[id]
 // Body: { name?: string, format?: string, set?: string, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

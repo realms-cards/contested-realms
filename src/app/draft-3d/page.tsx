@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -19,7 +20,8 @@ import {
 import type { ThreeEvent } from "@react-three/fiber";
 import type { Group } from "three";
 import { MOUSE } from "three";
-import CardGlow from "@/lib/game/components/CardGlow";
+import { NumberBadge } from "@/components/game/manacost";
+import type { Digit } from "@/components/game/manacost";
 
 // --- Draft data types (mirrors /draft 2D) ---
 
@@ -35,6 +37,8 @@ type BoosterCard = {
   type: string | null;
   cardId: number;
   cardName: string;
+  // Local enrichment: which set this card came from (for multi-set drafts)
+  setName?: string;
 };
 
 function weightForRarity(r: Rarity) {
@@ -74,8 +78,9 @@ function DraggableCard3D({
   rotationZ: extraRotZ = 0,
   onDragMove,
   onRelease,
-  highlight,
   getTopRenderOrder,
+  onHoverChange,
+  lockUpright,
 }: {
   slug: string;
   isSite: boolean;
@@ -87,8 +92,9 @@ function DraggableCard3D({
   rotationZ?: number;
   onDragMove?: (wx: number, wz: number) => void;
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
-  highlight?: boolean;
   getTopRenderOrder?: () => number;
+  onHoverChange?: (hovering: boolean) => void;
+  lockUpright?: boolean;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -101,13 +107,17 @@ function DraggableCard3D({
   const dragging = useRef(false);
   const upCleanupRef = useRef<(() => void) | null>(null);
   const roRef = useRef<number>(1500);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uprightLocked, setUprightLocked] = useState(false);
 
   const setPos = useCallback((wx: number, wz: number, lift = false) => {
     if (!ref.current) return;
     ref.current.position.set(wx, lift ? 0.25 : 0.002, wz);
   }, []);
 
-  const rotZ = (isSite ? -Math.PI / 2 : 0) + extraRotZ;
+  const rotZ =
+    (isSite ? -Math.PI / 2 : 0) +
+    (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
 
   return (
     <group ref={ref} position={[x, 0.002, z]}>
@@ -118,6 +128,7 @@ function DraggableCard3D({
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
           e.stopPropagation();
+          onHoverChange?.(false);
           // Record potential drag start in both world and screen space
           dragStart.current = {
             x: e.point.x,
@@ -139,6 +150,7 @@ function DraggableCard3D({
               onDragChange?.(false);
               dragStart.current = null;
               dragging.current = false;
+              setIsDragging(false);
               if (upCleanupRef.current) {
                 upCleanupRef.current();
                 upCleanupRef.current = null;
@@ -161,12 +173,15 @@ function DraggableCard3D({
           const PIX_THRESH = 6;
           if (!dragging.current && held >= 50 && dist > PIX_THRESH) {
             dragging.current = true;
+            setIsDragging(true);
+            setUprightLocked(true);
             // Bind a global pointerup fallback
             const handleUp = () => {
               // Ensure cleanup even if pointer up occurs off the mesh
               onDragChange?.(false);
               dragStart.current = null;
               dragging.current = false;
+              setIsDragging(false);
               if (upCleanupRef.current) {
                 upCleanupRef.current();
                 upCleanupRef.current = null;
@@ -195,6 +210,7 @@ function DraggableCard3D({
           setPos(wx, wz, false);
           dragStart.current = null;
           dragging.current = false;
+          setIsDragging(false);
           onDragChange?.(false);
           if (upCleanupRef.current) {
             upCleanupRef.current();
@@ -202,6 +218,13 @@ function DraggableCard3D({
           }
           if (onDrop && wasDragging) onDrop(wx, wz);
           onRelease?.(wx, wz, wasDragging);
+        }}
+        onPointerOver={() => {
+          if (disabled) return;
+          onHoverChange?.(true);
+        }}
+        onPointerOut={() => {
+          onHoverChange?.(false);
         }}
       >
         <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
@@ -215,16 +238,7 @@ function DraggableCard3D({
 
       {/* Visual card */}
       <group>
-        {/* Pick-ready glow */}
-        {highlight && (
-          <CardGlow
-            width={CARD_SHORT * 1.1}
-            height={CARD_LONG * 1.1}
-            rotationZ={rotZ}
-            elevation={0.0015}
-            renderOrder={roRef.current - 1}
-          />
-        )}
+        {/* CardGlow removed for draft3d per request */}
         <CardPlane
           slug={slug}
           width={CARD_SHORT}
@@ -245,7 +259,12 @@ function DraggableCard3D({
 export default function Draft3DPage() {
   const router = useRouter();
   // --- Draft state (mirrors /draft 2D page) ---
-  const [setName, setSetName] = useState("Alpha");
+  // Multi-set support: choose a set per pack column
+  const [setNames, setSetNames] = useState<string[]>([
+    "Alpha",
+    "Alpha",
+    "Alpha",
+  ]);
   const [players, setPlayers] = useState(8);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,25 +314,54 @@ export default function Draft3DPage() {
       setPickNumber(1);
       setPackChoice([null, null, null]);
 
-      const totalPacks = players * 3;
-      const res = await fetch(
-        `/api/booster?set=${encodeURIComponent(setName)}&count=${totalPacks}`
-      );
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data?.error || "Failed to generate boosters");
+      // Generate packs per selected set (one column per round)
+      const [setA, setB, setC] = setNames;
+      const [respA, respB, respC] = await Promise.all([
+        fetch(`/api/booster?set=${encodeURIComponent(setA)}&count=${players}`),
+        fetch(`/api/booster?set=${encodeURIComponent(setB)}&count=${players}`),
+        fetch(`/api/booster?set=${encodeURIComponent(setC)}&count=${players}`),
+      ]);
+      const [dataA, dataB, dataC] = await Promise.all([
+        respA.json(),
+        respB.json(),
+        respC.json(),
+      ]);
+      if (!respA.ok)
+        throw new Error(
+          dataA?.error || `Failed to generate boosters for ${setA}`
+        );
+      if (!respB.ok)
+        throw new Error(
+          dataB?.error || `Failed to generate boosters for ${setB}`
+        );
+      if (!respC.ok)
+        throw new Error(
+          dataC?.error || `Failed to generate boosters for ${setC}`
+        );
 
-      const packs: BoosterCard[][] = data.packs;
-      // Assign 3 packs per seat
+      const packsA: BoosterCard[][] = (dataA.packs || []).map(
+        (pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setA }))
+      );
+      const packsB: BoosterCard[][] = (dataB.packs || []).map(
+        (pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setB }))
+      );
+      const packsC: BoosterCard[][] = (dataC.packs || []).map(
+        (pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setC }))
+      );
+
+      // Assign 3 packs per seat, preserving per-column sets
       const seats: BoosterCard[][][] = Array.from({ length: players }, () => [
         [],
         [],
         [],
       ]);
       for (let s = 0; s < players; s++) {
-        seats[s][0] = packs[s * 3 + 0] ?? [];
-        seats[s][1] = packs[s * 3 + 1] ?? [];
-        seats[s][2] = packs[s * 3 + 2] ?? [];
+        seats[s][0] = packsA[s] ?? [];
+        seats[s][1] = packsB[s] ?? [];
+        seats[s][2] = packsC[s] ?? [];
       }
       setSeatPacks(seats);
       setCurrentPacks(seats.map((seat) => [...seat[0]]));
@@ -419,88 +467,7 @@ export default function Draft3DPage() {
     [seatPacks, packChoice, packIndex]
   );
 
-  // Commit only your pick (no pass yet). Place at given world position.
-  const commitPickOnly = useCallback(
-    (cardIdx: number, wx: number, wz: number) => {
-      const cur = currentPacks.map((p) => [...p]);
-      const myPack = cur[0];
-      if (!myPack || cardIdx < 0 || cardIdx >= myPack.length) return;
-      const picked = myPack.splice(cardIdx, 1)[0];
-      setCurrentPacks(cur);
-      setYourPicks((prev) => [...prev, picked]);
-      setPick3D((prev) => [
-        ...prev,
-        { id: nextPickId, card: picked, x: wx, z: wz },
-      ]);
-      setNextPickId((n) => n + 1);
-      setPickedThisTurn(true);
-      setStaged(null);
-      setReadyIdx(null);
-    },
-    [currentPacks, nextPickId]
-  );
-
-  // Pass packs after exactly one pick committed
-  const passAfterPick = useCallback(() => {
-    if (!inProgress || !pickedThisTurn) return;
-    const cur = currentPacks.map((p) => [...p]);
-    // Bots pick simultaneously now
-    const botChosen: { botIdx: number; card: BoosterCard | null }[] = [];
-    for (let s = 1; s < cur.length; s++) {
-      const idx = botPickFrom(cur[s]);
-      let chosen: BoosterCard | null = null;
-      if (idx >= 0 && idx < cur[s].length) {
-        chosen = cur[s].splice(idx, 1)[0];
-      }
-      botChosen.push({ botIdx: s - 1, card: chosen });
-    }
-    if (botChosen.length) {
-      setBotPicks((prev) => {
-        const out =
-          prev.length === botChosen.length
-            ? prev.map((arr) => [...arr])
-            : Array.from({ length: botChosen.length }, (_, i) =>
-                prev[i] ? [...prev[i]] : []
-              );
-        for (const { botIdx, card } of botChosen) {
-          if (card) out[botIdx].push(card);
-        }
-        return out;
-      });
-    }
-    // Rotate packs
-    const passed = rotatePacks(cur, dir);
-    const myNewPack = passed[0];
-    let nextPi = packIndex;
-    let nextPn = pickNumber + 1;
-    if (myNewPack.length === 0) {
-      const np = packIndex + 1;
-      nextPi = np;
-      if (np >= 3) {
-        setCurrentPacks([]);
-      } else {
-        setCurrentPacks(seatPacks.map((seat) => [...seat[np]]));
-      }
-      nextPn = 1;
-    } else {
-      setCurrentPacks(passed);
-    }
-    setPackIndex(nextPi);
-    setPickNumber(nextPn);
-    setPickedThisTurn(false);
-    setStaged(null);
-    setReadyIdx(null);
-  }, [
-    inProgress,
-    pickedThisTurn,
-    currentPacks,
-    dir,
-    rotatePacks,
-    seatPacks,
-    packIndex,
-    pickNumber,
-    botPickFrom,
-  ]);
+  // commitPickOnly/passAfterPick removed; using staged Pick & Pass flow via commitPickAndPass
 
   // Pick + pass in a single action using the current state snapshot
   const commitPickAndPass = useCallback(
@@ -599,8 +566,24 @@ export default function Draft3DPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [yourPicks]);
 
+  // Map cardId -> { slug, type } for quick lookup (for previews in picks panel)
+  const cardInfoById = useMemo(() => {
+    const m: Record<number, { slug: string; type: string | null }> = {};
+    for (const c of yourPicks) {
+      if (!m[c.cardId]) m[c.cardId] = { slug: c.slug, type: c.type };
+    }
+    return m;
+  }, [yourPicks]);
+
   // Collapsible picks panel + metadata (cost/thresholds) for your picks
   const [picksOpen, setPicksOpen] = useState(true);
+  const [compactPicks, setCompactPicks] = useState(false);
+  // Hover preview card (like play page previewCard without magnifier logic)
+  const [hoverPreview, setHoverPreview] = useState<{
+    slug: string;
+    name: string;
+    type: string | null;
+  } | null>(null);
   const [metaByCardId, setMetaByCardId] = useState<
     Record<
       number,
@@ -608,35 +591,54 @@ export default function Draft3DPage() {
     >
   >({});
   useEffect(() => {
-    const ids = yourCounts.map((it) => it.cardId);
-    if (!ids.length) {
+    if (!yourPicks.length) {
       setMetaByCardId({});
       return;
     }
-    const params = new URLSearchParams();
-    params.set("set", setName);
-    params.set("ids", ids.join(","));
-    fetch(`/api/cards/meta?${params.toString()}`)
-      .then((r) => r.json())
-      .then(
-        (
-          rows: {
-            cardId: number;
-            cost: number | null;
-            thresholds: Record<string, number> | null;
-          }[]
-        ) => {
-          const next: Record<
-            number,
-            { cost: number | null; thresholds: Record<string, number> | null }
-          > = {};
-          for (const m of rows)
-            next[m.cardId] = { cost: m.cost, thresholds: m.thresholds };
-          setMetaByCardId(next);
-        }
-      )
-      .catch(() => {});
-  }, [setName, yourCounts]);
+    // Group cardIds by set for mixed-set meta queries
+    const groups = new Map<string, Set<number>>();
+    for (const c of yourPicks) {
+      const s = c.setName || setNames[0] || "Alpha";
+      const setIds = groups.get(s) || new Set<number>();
+      setIds.add(c.cardId);
+      groups.set(s, setIds);
+    }
+    const requests = Array.from(groups.entries()).map(([s, ids]) => {
+      const params = new URLSearchParams();
+      params.set("set", s);
+      params.set("ids", Array.from(ids).join(","));
+      return fetch(`/api/cards/meta?${params.toString()}`)
+        .then((r) => r.json())
+        .then(
+          (
+            rows: {
+              cardId: number;
+              cost: number | null;
+              thresholds: Record<string, number> | null;
+            }[]
+          ) => rows
+        )
+        .catch(
+          () =>
+            [] as {
+              cardId: number;
+              cost: number | null;
+              thresholds: Record<string, number> | null;
+            }[]
+        );
+    });
+    Promise.all(requests).then((chunks) => {
+      const next: Record<
+        number,
+        { cost: number | null; thresholds: Record<string, number> | null }
+      > = {};
+      for (const rows of chunks) {
+        for (const m of rows)
+          next[m.cardId] = { cost: m.cost, thresholds: m.thresholds };
+      }
+      setMetaByCardId(next);
+    });
+  }, [yourPicks, setNames]);
 
   async function saveDeck() {
     try {
@@ -646,16 +648,21 @@ export default function Draft3DPage() {
       const cards = yourPicks.map((c) => ({
         cardId: c.cardId,
         variantId: c.variantId,
-        zone: "Spellbook" as const,
+        zone: "Sideboard" as const,
         count: 1,
       }));
+      const uniqueSets = Array.from(
+        new Set(yourPicks.map((c) => c.setName).filter(Boolean))
+      );
+      const topLevelSet =
+        uniqueSets.length === 1 ? String(uniqueSets[0]) : undefined;
       const res = await fetch("/api/decks", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: deckName || "Draft Deck",
           format: "Draft",
-          set: setName,
+          ...(topLevelSet ? { set: topLevelSet } : {}),
           cards,
         }),
       });
@@ -669,7 +676,7 @@ export default function Draft3DPage() {
         const botCards = firstBot.map((c) => ({
           cardId: c.cardId,
           variantId: c.variantId,
-          zone: "Spellbook" as const,
+          zone: "Sideboard" as const,
           count: 1,
         }));
         const resBot = await fetch("/api/decks", {
@@ -678,7 +685,7 @@ export default function Draft3DPage() {
           body: JSON.stringify({
             name: `${deckName || "Draft Deck"} (Bot)`,
             format: "Draft",
-            set: setName,
+            // Omit top-level set for mixed bot picks; server will infer via variantId
             cards: botCards,
           }),
         });
@@ -724,7 +731,7 @@ export default function Draft3DPage() {
           <Hud3D owner="p2" />
 
           <TextureCache />
-          {/* Threshold ring removed in favor of per-card glow */}
+          {/* Threshold ring and per-card glow removed for cleaner draft UI */}
 
           {/* 3D Draft: current pack cards fanned near the board center */}
           {inProgress && !needsPackChoice && (
@@ -743,9 +750,15 @@ export default function Draft3DPage() {
                     onDragChange={setOrbitLocked}
                     rotationZ={pos.rot}
                     getTopRenderOrder={getTopRenderOrder}
-                    highlight={
-                      readyIdx === idx || (staged ? staged.idx === idx : false)
-                    }
+                    onHoverChange={(hover) => {
+                      if (hover && !orbitLocked)
+                        setHoverPreview({
+                          slug: c.slug,
+                          name: c.cardName,
+                          type: c.type,
+                        });
+                      else setHoverPreview(null);
+                    }}
                     onDragMove={(wx, wz) => {
                       const d = Math.hypot(
                         wx - PICK_CENTER.x,
@@ -795,6 +808,16 @@ export default function Draft3DPage() {
                     }}
                     onDragChange={setOrbitLocked}
                     getTopRenderOrder={getTopRenderOrder}
+                    lockUpright
+                    onHoverChange={(hover) => {
+                      if (hover && !orbitLocked)
+                        setHoverPreview({
+                          slug: p.card.slug,
+                          name: p.card.cardName,
+                          type: p.card.type,
+                        });
+                      else setHoverPreview(null);
+                    }}
                   />
                 );
               })}
@@ -834,18 +857,28 @@ export default function Draft3DPage() {
             Draft Mode (3D)
           </div>
 
-          <label className="flex flex-col gap-1 text-white">
-            <span className="text-xs opacity-80">Set</span>
-            <select
-              value={setName}
-              onChange={(e) => setSetName(e.target.value)}
-              className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
-            >
-              <option value="Alpha">Alpha</option>
-              <option value="Beta">Beta</option>
-              <option value="Arthurian Legends">Arthurian Legends</option>
-            </select>
-          </label>
+          <div className="flex flex-wrap items-end gap-3 text-white">
+            {[0, 1, 2].map((i) => (
+              <label key={`set-${i}`} className="flex flex-col gap-1">
+                <span className="text-xs opacity-80">Pack {i + 1} Set</span>
+                <select
+                  value={setNames[i]}
+                  onChange={(e) =>
+                    setSetNames((prev) => {
+                      const next = [...prev];
+                      next[i] = e.target.value;
+                      return next;
+                    })
+                  }
+                  className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
+                >
+                  <option value="Alpha">Alpha</option>
+                  <option value="Beta">Beta</option>
+                  <option value="Arthurian Legends">Arthurian Legends</option>
+                </select>
+              </label>
+            ))}
+          </div>
 
           <label className="flex flex-col gap-1 text-white">
             <span className="text-xs opacity-80">Players</span>
@@ -873,7 +906,7 @@ export default function Draft3DPage() {
         </div>
 
         {/* Pack status + Picks summary (no 2D pack grid; cards are on the mat) */}
-        <div className="max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-auto select-none">
+        <div className="max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
           {inProgress ? (
             <div className="grid grid-cols-12 gap-6">
               <div className="col-span-12 lg:col-span-8">
@@ -885,23 +918,32 @@ export default function Draft3DPage() {
                   <div>Your picks: {yourPicks.length}</div>
                 </div>
                 <div className="text-white text-sm">
-                  Drag a card outward to stage it (it will glow), then click{" "}
-                  <b>Pick & Pass</b>. Drag it back inward to unstage.
+                  Drag a card outward to stage it, then click <b>Pick & Pass</b>
+                  . Drag it back inward to unstage.
                 </div>
               </div>
               <div className="col-span-12 lg:col-span-4">
-                <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg">
+                <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
                   <div className="font-medium mb-2 text-white flex items-center justify-between">
                     <span>Your Picks ({yourPicks.length})</span>
-                    <button
-                      onClick={() => setPicksOpen((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20"
-                    >
-                      {picksOpen ? "Hide" : "Show"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCompactPicks((v) => !v)}
+                        className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                        title="Toggle compact view"
+                      >
+                        {compactPicks ? "Comfort" : "Compact"}
+                      </button>
+                      <button
+                        onClick={() => setPicksOpen((v) => !v)}
+                        className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                      >
+                        {picksOpen ? "Hide" : "Show"}
+                      </button>
+                    </div>
                   </div>
                   {picksOpen && (
-                    <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-2 text-sm">
+                    <div className="max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 text-xs pointer-events-auto">
                       {yourCounts.map((it) => {
                         const meta = metaByCardId[it.cardId];
                         const t =
@@ -914,46 +956,159 @@ export default function Draft3DPage() {
                           "earth",
                           "fire",
                         ] as const;
+                        const info = cardInfoById[it.cardId];
+                        const slug = info?.slug;
+                        const isSite = (info?.type || "")
+                          .toLowerCase()
+                          .includes("site");
                         return (
                           <div
                             key={it.cardId}
-                            className="rounded p-2 bg-black/70 ring-1 ring-white/25 text-white"
+                            className={`rounded ${
+                              compactPicks ? "p-1" : "p-2"
+                            } bg-black/70 ring-1 ring-white/25 text-white`}
+                            onMouseEnter={() => {
+                              if (slug) {
+                                setHoverPreview({
+                                  slug,
+                                  name: it.name,
+                                  type: info?.type || null,
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => setHoverPreview(null)}
                           >
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <div className="font-semibold">{it.name}</div>
-                                <div className="opacity-90 text-xs">
-                                  {it.rarity}
+                            {compactPicks ? (
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="truncate max-w-[60%] font-medium">
+                                  {it.name}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1 opacity-90">
+                                    {order.map((k) =>
+                                      t[k] ? (
+                                        <span
+                                          key={k}
+                                          className="inline-flex items-center gap-0.5"
+                                        >
+                                          {Array.from({ length: t[k] }).map(
+                                            (_, i) => (
+                                              <Image
+                                                key={`${k}-${i}`}
+                                                src={`/api/assets/${k}.png`}
+                                                alt={k}
+                                                width={12}
+                                                height={12}
+                                                className="pointer-events-none select-none"
+                                                priority={false}
+                                              />
+                                            )
+                                          )}
+                                        </span>
+                                      ) : null
+                                    )}
+                                  </div>
+                                  {meta?.cost != null &&
+                                    meta.cost > 0 &&
+                                    (meta.cost >= 1 && meta.cost <= 9 ? (
+                                      <NumberBadge
+                                        value={meta.cost as Digit}
+                                        size={20}
+                                        strokeWidth={6}
+                                      />
+                                    ) : (
+                                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-black text-[11px] font-bold">
+                                        {meta.cost}
+                                      </span>
+                                    ))}
+                                  <div className="text-right font-semibold">
+                                    x{it.count}
+                                  </div>
                                 </div>
                               </div>
-                              <div className="text-right font-semibold">
-                                x{it.count}
+                            ) : (
+                              <div className="flex items-start gap-2">
+                                {slug ? (
+                                  <div
+                                    className={`relative flex-none ${
+                                      isSite
+                                        ? "aspect-[4/3] w-20"
+                                        : "aspect-[3/4] w-16 md:w-20"
+                                    } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
+                                  >
+                                    <Image
+                                      src={`/api/images/${slug}`}
+                                      alt={it.name}
+                                      fill
+                                      className={`${
+                                        isSite
+                                          ? "object-cover rotate-90"
+                                          : "object-cover"
+                                      }`}
+                                      sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
+                                      priority={false}
+                                    />
+                                  </div>
+                                ) : null}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between">
+                                    <div className="min-w-0">
+                                      <div
+                                        className="font-semibold truncate"
+                                        title={it.name}
+                                      >
+                                        {it.name}
+                                      </div>
+                                      <div className="opacity-90 text-xs">
+                                        {it.rarity}
+                                      </div>
+                                    </div>
+                                    <div className="text-right font-semibold">
+                                      x{it.count}
+                                    </div>
+                                  </div>
+                                  <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
+                                    <div className="flex items-center gap-2">
+                                      {order.map((k) =>
+                                        t[k] ? (
+                                          <span
+                                            key={k}
+                                            className="inline-flex items-center gap-1"
+                                          >
+                                            {Array.from({ length: t[k] }).map(
+                                              (_, i) => (
+                                                <Image
+                                                  key={`${k}-${i}`}
+                                                  src={`/api/assets/${k}.png`}
+                                                  alt={k}
+                                                  width={16}
+                                                  height={16}
+                                                  className="pointer-events-none select-none"
+                                                  priority={false}
+                                                />
+                                              )
+                                            )}
+                                          </span>
+                                        ) : null
+                                      )}
+                                    </div>
+                                    {meta?.cost != null &&
+                                      meta.cost > 0 &&
+                                      (meta.cost >= 1 && meta.cost <= 9 ? (
+                                        <NumberBadge
+                                          value={meta.cost as Digit}
+                                          size={24}
+                                          strokeWidth={6}
+                                        />
+                                      ) : (
+                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white text-black text-xs font-bold">
+                                          {meta.cost}
+                                        </span>
+                                      ))}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
-                              {meta?.cost != null && (
-                                <span className="text-xs">
-                                  Cost {meta.cost}
-                                </span>
-                              )}
-                              <div className="flex items-center gap-2">
-                                {order.map((k) =>
-                                  t[k] ? (
-                                    <span
-                                      key={k}
-                                      className="inline-flex items-center gap-1"
-                                    >
-                                      <img
-                                        src={`/api/assets/${k}.png`}
-                                        className="w-4 h-4 pointer-events-none select-none"
-                                        alt={k}
-                                      />
-                                      <span className="text-xs">{t[k]}</span>
-                                    </span>
-                                  ) : null
-                                )}
-                              </div>
-                            </div>
+                            )}
                           </div>
                         );
                       })}
@@ -969,6 +1124,37 @@ export default function Draft3DPage() {
             </div>
           )}
         </div>
+
+        {/* Hover Preview Overlay (hidden while dragging) */}
+        {hoverPreview && !orbitLocked && (
+          <div className="absolute right-3 bottom-3 z-20 pointer-events-none">
+            {(() => {
+              const isSite = (hoverPreview.type || "")
+                .toLowerCase()
+                .includes("site");
+              // Clamp size and preserve aspect; use padding-bottom to enforce aspect box
+              const base = isSite
+                ? "w-[28vw] max-w-[500px] min-w-[200px] aspect-[4/3]" // matches rotated site (4:3)
+                : "w-[22vw] max-w-[360px] min-w-[180px] aspect-[3/4]"; // portrait cards
+              return (
+                <div
+                  className={`relative ${base} rounded-xl overflow-hidden shadow-2xl ${
+                    isSite ? "rotate-90" : ""
+                  }`}
+                >
+                  <Image
+                    src={`/api/images/${hoverPreview.slug}`}
+                    alt={hoverPreview.name}
+                    fill
+                    sizes="(max-width:640px) 50vw, (max-width:1024px) 30vw, 25vw"
+                    className={`${isSite ? "object-contain" : "object-cover"}`}
+                    priority
+                  />
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Pack selection overlay at start of each round */}
         {needsPackChoice && (
@@ -1011,7 +1197,7 @@ export default function Draft3DPage() {
           <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center pointer-events-auto select-none">
             <div className="flex flex-wrap gap-3 bg-black/70 ring-1 ring-white/20 px-4 py-3 rounded-lg text-white shadow-lg">
               <div className="text-sm opacity-90 self-center hidden sm:block">
-                Drag a card outward until it glows to stage a pick.
+                Drag a card outward to stage a pick.
               </div>
               <button
                 onClick={() =>

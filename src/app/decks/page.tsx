@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import DeckItem from "./DeckItem";
 
 export const dynamic = "force-dynamic";
 
@@ -26,15 +27,15 @@ export default async function DecksPage() {
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
           {decks.map((d: DeckRow) => (
-            <Link
+            <DeckItem
               key={d.id}
-              href={`/decks/editor?id=${encodeURIComponent(d.id)}`}
-              className="border rounded p-3 hover:bg-muted"
-            >
-              <div className="font-medium line-clamp-1">{d.name}</div>
-              <div className="opacity-80">{d.format}</div>
-              <div className="opacity-70 text-xs mt-1">Updated {new Date(d.updatedAt).toLocaleString()}</div>
-            </Link>
+              deck={{
+                id: d.id,
+                name: d.name,
+                format: d.format,
+                updatedAt: d.updatedAt.toISOString(),
+              }}
+            />
           ))}
         </div>
       )}
