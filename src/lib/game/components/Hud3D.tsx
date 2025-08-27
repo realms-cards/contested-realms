@@ -58,10 +58,13 @@ export default function Hud3D({ owner }: Hud3DProps) {
           position={[0, 0.003, 0]}
           rotation-x={-Math.PI / 2}
           rotation-z={ownerRot + Math.PI * 1.5}
-          color="#a7f3d0"
+          color="#ffffff"
           anchorX="center"
           anchorY="middle"
-          fontSize={0.22}
+          fontSize={0.28}
+          outlineWidth={0.02}
+          outlineColor="#000000"
+          renderOrder={2100}
           raycast={noopRaycast}
         >
           {`Mana ${manaPool} (avail ${manaAvail})`}

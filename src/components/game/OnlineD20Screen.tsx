@@ -203,7 +203,7 @@ export default function OnlineD20Screen({
           </div>
         )}
         
-        {choiceMade && (
+        {choiceMade && setupWinner && (
           <div className="text-center text-sm text-green-400">
             {playerNames[setupWinner]} chose {phase === "Start" ? "their seat" : "to make a choice"}. Starting game...
           </div>
