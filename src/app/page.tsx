@@ -79,7 +79,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="text-xs text-slate-500 space-y-1">
-          <p>Sorcery: Contested Realm is a trademark of Erik's Curiosa.</p>
+          <p>Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa.</p>
           <p>This is an unofficial digital client for educational and entertainment purposes.</p>
         </div>
       </div>

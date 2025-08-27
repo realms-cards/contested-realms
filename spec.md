@@ -3,6 +3,14 @@ Main functions we need to accomplish:
 
 CONSIDER THESE DONE:
 
+- First we need a way for players to register in the database, including their player name
+- We should save decks in the players store (including automatically saved bot decks for their draft sessions)
+- Then we need a lobby system to be able to find players to play with
+- Then we need to fork our play client (which we want to preserve for offline play) and make it work with the online lobby and multiplayer over the network
+- There should be chat in a second tab of the console
+- when a player ends a turn we need a big visual signal for the other player that it is their turn now
+- We want some form of pinging the opponent on the board to signal various things in context (like a flag or a down pointing arrow)
+  its actually both - placement and orientation on the grid. For example - in IRL play I would play a site to the bottom of a grid cell and a creature to the top of a grid cell, all of those cards would be oriented so I can read them. My opponent would play their cards so that they can read them (which is upside down from my perspective and expected - its very easy to track ownership of a card this way)
 - luckily there is an api to get all the card texts: https://api.sorcerytcg.com/
 - also there is an official folder with all card images:
   https://drive.google.com/drive/folders/17IrJkRGmIU9fDSTU2JQEU9JlFzb5liLJ?usp=sharing
@@ -85,6 +93,10 @@ EDITOR:
 
 REFERENCE:
 
+- luckily there is an api to get all the card texts: https://api.sorcerytcg.com/
+- also there is an official folder with all card images:
+  https://drive.google.com/drive/folders/17IrJkRGmIU9fDSTU2JQEU9JlFzb5liLJ?usp=sharing
+- I downloaded and save the cards to files on our server
 - it is possible to completely eliminate snapping in place of dragged cards and exactly leave them at the positon of the ghost on mouse button lift?
 - site cards are never tapped
 - site cards always should be landscape 4:3, not portrait 3:4
@@ -94,16 +106,3 @@ REFERENCE:
   https://drive.google.com/file/d/1sgQo0xf0N2teIR0zlyl91g9j6LVncZnr/view
 - Max life in Sorcery is 20
 - Once a player reaches 0 life, they are considered to be at deaths door (symbolized by DD), can not heal anymore and become immune to damage for the rest of the round, they can only be killed by taking another damage directly to their avatar in subsequent turns
-
-ONLINE MULTIPLAYER:
-
-- First we need a way for players to register in the database, including their player name
-- We should save decks in the players store (including automatically saved bot decks for their draft sessions)
-- Then we need a lobby system to be able to find players to play with
-- Then we need to fork our play client (which we want to preserve for offline play) and make it work with the online lobby and multiplayer over the network
-- There should be chat in a second tab of the console
-- when a player ends a turn we need a big visual signal for the other player that it is their turn now
-- We want some form of pinging the opponent on the board to signal various things in context (like a flag or a down pointing arrow)
-
-PLACEMENT:
-its actually both - placement and orientation on the grid. For example - in IRL play I would play a site to the bottom of a grid cell and a creature to the top of a grid cell, all of those cards would be oriented so I can read them. My opponent would play their cards so that they can read them (which is upside down from my perspective and expected - its very easy to track ownership of a card this way)
