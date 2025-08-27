@@ -82,9 +82,6 @@ export default function DeckEditorPage() {
   // Check if we're in restricted mode (Draft/Sealed)
   const isRestrictedMode = deckFormat === "Draft" || deckFormat === "Sealed";
 
-  // Magnifier state
-  const [hoveredCard, setHoveredCard] = useState<{slug: string; alt: string; isSite: boolean; x: number; y: number} | null>(null);
-
   // Load deck list on mount
   useEffect(() => {
     let ignore = false;
@@ -338,26 +335,22 @@ export default function DeckEditorPage() {
       const data = raw as SearchResult[];
       const hit = data[0];
       if (!hit) throw new Error("Spellslinger not found in this set");
-      // Remove any existing avatar picks and set to exactly one spellslinger in Spellbook
-      setPicks((prev) => {
-        const next: Record<PickKey, PickItem> = {};
-        for (const [k, it] of Object.entries(prev)) {
-          const t = (it.type || "").toLowerCase();
-          if (t.includes("avatar")) continue; // drop
-          next[k] = it;
-        }
-        const key = `${hit.cardId}:Spellbook:${hit.variantId ?? "x"}`;
-        next[key] = {
-          cardId: hit.cardId,
-          variantId: hit.variantId ?? null,
-          name: hit.cardName,
-          type: hit.type ?? null,
-          slug: hit.slug ?? null,
-          zone: "Spellbook",
-          count: 1,
-        };
-        return next;
-      });
+      // Add spellslinger to spellbook without removing other avatars
+      const key = `${hit.cardId}:Spellbook:${hit.variantId ?? "x"}`;
+      setPicks((prev) => ({
+        ...prev,
+        [key]: prev[key]
+          ? { ...prev[key], count: prev[key].count + 1 }
+          : {
+              cardId: hit.cardId,
+              variantId: hit.variantId ?? null,
+              name: hit.cardName,
+              type: hit.type ?? null,
+              slug: hit.slug ?? null,
+              zone: "Spellbook",
+              count: 1,
+            },
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -599,30 +592,13 @@ export default function DeckEditorPage() {
       alt: string;
       isSite: boolean;
     } & React.HTMLAttributes<HTMLDivElement>
-  > = ({ slug, alt, isSite, className = "", onMouseEnter, onMouseLeave, ...rest }) => (
+  > = ({ slug, alt, isSite, className = "", ...rest }) => (
     <div
       className={
         "relative overflow-hidden rounded bg-muted/40 " +
         (isSite ? "aspect-[4/3]" : "aspect-[3/4]") +
         (className ? " " + className : "")
       }
-      onMouseEnter={(e) => {
-        if (slug) {
-          const rect = e.currentTarget.getBoundingClientRect();
-          setHoveredCard({
-            slug,
-            alt,
-            isSite,
-            x: rect.right + 10,
-            y: rect.top
-          });
-        }
-        onMouseEnter?.(e);
-      }}
-      onMouseLeave={(e) => {
-        setHoveredCard(null);
-        onMouseLeave?.(e);
-      }}
       {...rest}
     >
       {slug && (
@@ -1072,38 +1048,6 @@ export default function DeckEditorPage() {
         {saveMsg && <div className="text-green-600 text-sm">{saveMsg}</div>}
       </div>
 
-      {/* Card Magnifier */}
-      {hoveredCard && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{
-            left: Math.min(hoveredCard.x, window.innerWidth - 320),
-            top: Math.min(hoveredCard.y, window.innerHeight - (hoveredCard.isSite ? 240 : 320))
-          }}
-        >
-          <div className="bg-background border border-border rounded-lg shadow-xl p-2">
-            <div
-              className={
-                "relative overflow-hidden rounded " +
-                (hoveredCard.isSite ? "w-80 h-60" : "w-60 h-80")
-              }
-            >
-              <Image
-                src={`/api/images/${hoveredCard.slug}`}
-                alt={hoveredCard.alt}
-                fill
-                sizes="320px"
-                className={
-                  hoveredCard.isSite
-                    ? "object-contain rotate-90 origin-center bg-muted/20"
-                    : "object-cover bg-muted/20"
-                }
-                priority
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

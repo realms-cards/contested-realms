@@ -10,10 +10,10 @@ import type {
 } from "@/lib/net/transport";
 
 export class SocketTransport implements GameTransport {
-  private listeners: { [key: string]: ((data: unknown) => void)[] } = {};
+  private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
   private socket?: Socket;
 
-  async connect(opts: { playerId: any; displayName: string }): Promise<void> {
+  async connect(opts: { playerId?: string; displayName: string }): Promise<void> {
     if (this.socket && this.socket.connected) return;
 
     const url = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
