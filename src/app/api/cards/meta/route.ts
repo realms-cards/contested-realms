@@ -38,13 +38,15 @@ export async function GET(req: NextRequest) {
 
     const metas = await prisma.cardSetMetadata.findMany({
       where: { setId: set.id, cardId: { in: ids } },
-      select: { cardId: true, cost: true, thresholds: true },
+      select: { cardId: true, cost: true, thresholds: true, attack: true, defence: true },
     });
 
     const out = metas.map((m) => ({
       cardId: m.cardId,
       cost: m.cost ?? null,
       thresholds: (m.thresholds as unknown as Record<string, number> | null) ?? null,
+      attack: m.attack ?? null,
+      defence: m.defence ?? null,
     }));
 
     return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });
