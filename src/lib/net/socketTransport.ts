@@ -173,6 +173,10 @@ export class SocketTransport implements GameTransport {
     });
   }
 
+  leaveMatch(): void {
+    this.requireSocket().emit("leaveMatch", Protocol.LeaveMatchPayload.parse({}));
+  }
+
   ready(ready: boolean): void {
     this.requireSocket().emit("ready", Protocol.ReadyPayload.parse({ ready }));
   }
@@ -188,6 +192,14 @@ export class SocketTransport implements GameTransport {
     this.requireSocket().emit(
       "action",
       Protocol.ActionPayload.parse({ action })
+    );
+  }
+
+  // Explicit mulligan completion signal (per-player)
+  mulliganDone(): void {
+    this.requireSocket().emit(
+      "mulliganDone",
+      Protocol.MulliganDonePayload.parse({})
     );
   }
 

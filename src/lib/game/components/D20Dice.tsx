@@ -15,7 +15,14 @@ interface D20DiceProps {
   onRoll?: () => void;
 }
 
-export default function D20Dice({ player, position, roll, isRolling, onRollComplete, onRoll }: D20DiceProps) {
+export default function D20Dice({
+  player,
+  position,
+  roll,
+  isRolling,
+  onRollComplete,
+  onRoll,
+}: D20DiceProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [rollStartTime, setRollStartTime] = useState<number>(0);
   const [hasCompletedRoll, setHasCompletedRoll] = useState(false);
@@ -57,8 +64,8 @@ export default function D20Dice({ player, position, roll, isRolling, onRollCompl
   return (
     <group position={position}>
       {/* D20 Mesh */}
-      <mesh 
-        ref={meshRef} 
+      <mesh
+        ref={meshRef}
         geometry={d20Geometry}
         onClick={(e) => {
           e.stopPropagation();
@@ -68,20 +75,22 @@ export default function D20Dice({ player, position, roll, isRolling, onRollCompl
         }}
         onPointerEnter={(e) => {
           if (!isRolling && roll === null && onRoll) {
-            document.body.style.cursor = 'pointer';
+            document.body.style.cursor = "pointer";
           }
         }}
         onPointerLeave={() => {
-          document.body.style.cursor = 'default';
+          document.body.style.cursor = "default";
         }}
       >
-        <meshStandardMaterial 
-          color={diceColor} 
-          emissive={!isRolling && roll === null && onRoll ? diceColor : "#000000"}
+        <meshStandardMaterial
+          color={diceColor}
+          emissive={
+            !isRolling && roll === null && onRoll ? diceColor : "#000000"
+          }
           emissiveIntensity={!isRolling && roll === null && onRoll ? 0.1 : 0}
         />
       </mesh>
-      
+
       {/* Show the result number above the dice */}
       {roll !== null && hasCompletedRoll && (
         <Text
@@ -96,7 +105,7 @@ export default function D20Dice({ player, position, roll, isRolling, onRollCompl
           {roll}
         </Text>
       )}
-      
+
       {/* Player label */}
       <Text
         position={[0, -1.2, 0]}

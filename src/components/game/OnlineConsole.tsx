@@ -68,7 +68,7 @@ export default function OnlineConsole({
   };
 
   const handleLeaveMatch = () => {
-    if (confirm("Are you sure you want to leave this match? You can rejoin from the lobby.")) {
+    if (confirm("Leave match? You won't be prompted to rejoin automatically. You can still join again later from the lobby by entering the match ID.")) {
       onLeaveMatch();
       router.push('/online/lobby');
     }

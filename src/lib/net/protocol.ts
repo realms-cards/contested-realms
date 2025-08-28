@@ -52,6 +52,7 @@ export const CreateLobbyPayload = z.object({
 });
 export const JoinLobbyPayload = z.object({ lobbyId: z.string().optional() });
 export const LeaveLobbyPayload = z.object({});
+export const LeaveMatchPayload = z.object({});
 export const ReadyPayload = z.object({ ready: z.boolean() });
 export const StartMatchPayload = z.object({});
 export const JoinMatchPayload = z.object({ matchId: z.string() });
@@ -59,6 +60,8 @@ export const ActionPayload = z.object({ action: z.any() });
 export const ChatPayload = z.object({ content: z.string().min(1), scope: ChatScopeSchema.optional() });
 export const ResyncRequestPayload = z.object({});
 export const PingPayload = z.object({ t: z.number() });
+// Mulligan sync: explicit per-player completion signal
+export const MulliganDonePayload = z.object({});
 
 // New Client -> Server payloads
 export const SetLobbyVisibilityPayload = z.object({
@@ -75,6 +78,7 @@ export type HelloPayloadT = z.infer<typeof HelloPayload>;
 export type CreateLobbyPayloadT = z.infer<typeof CreateLobbyPayload>;
 export type JoinLobbyPayloadT = z.infer<typeof JoinLobbyPayload>;
 export type LeaveLobbyPayloadT = z.infer<typeof LeaveLobbyPayload>;
+export type LeaveMatchPayloadT = z.infer<typeof LeaveMatchPayload>;
 export type ReadyPayloadT = z.infer<typeof ReadyPayload>;
 export type StartMatchPayloadT = z.infer<typeof StartMatchPayload>;
 export type JoinMatchPayloadT = z.infer<typeof JoinMatchPayload>;
@@ -82,6 +86,7 @@ export type ActionPayloadT = z.infer<typeof ActionPayload>;
 export type ChatPayloadT = z.infer<typeof ChatPayload>;
 export type ResyncRequestPayloadT = z.infer<typeof ResyncRequestPayload>;
 export type PingPayloadT = z.infer<typeof PingPayload>;
+export type MulliganDonePayloadT = z.infer<typeof MulliganDonePayload>;
 export type SetLobbyVisibilityPayloadT = z.infer<typeof SetLobbyVisibilityPayload>;
 export type InviteToLobbyPayloadT = z.infer<typeof InviteToLobbyPayload>;
 export type RequestLobbiesPayloadT = z.infer<typeof RequestLobbiesPayload>;
@@ -92,6 +97,7 @@ export type ClientEventMap = {
   createLobby: CreateLobbyPayloadT;
   joinLobby: JoinLobbyPayloadT;
   leaveLobby: LeaveLobbyPayloadT;
+  leaveMatch: LeaveMatchPayloadT;
   ready: ReadyPayloadT;
   startMatch: StartMatchPayloadT;
   joinMatch: JoinMatchPayloadT;
@@ -103,6 +109,7 @@ export type ClientEventMap = {
   inviteToLobby: InviteToLobbyPayloadT;
   requestLobbies: RequestLobbiesPayloadT;
   requestPlayers: RequestPlayersPayloadT;
+  mulliganDone: MulliganDonePayloadT;
 };
 
 // Server -> Client payloads
@@ -170,6 +177,7 @@ export const Protocol = {
   CreateLobbyPayload,
   JoinLobbyPayload,
   LeaveLobbyPayload,
+  LeaveMatchPayload,
   ReadyPayload,
   StartMatchPayload,
   JoinMatchPayload,
@@ -181,6 +189,7 @@ export const Protocol = {
   InviteToLobbyPayload,
   RequestLobbiesPayload,
   RequestPlayersPayload,
+  MulliganDonePayload,
   // Server -> Client
   WelcomePayload,
   JoinedLobbyPayload,

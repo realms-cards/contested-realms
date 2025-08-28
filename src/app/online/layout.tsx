@@ -174,6 +174,17 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         });
       }),
       transport.on("matchStarted", (p) => {
+        // If we've previously declined to rejoin this match locally, ensure we leave and suppress UI
+        try {
+          const key = `sorcery:declinedRejoin:${p.match.id}`;
+          const declined = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+          if (declined) {
+            try { transport.leaveMatch(); } catch {}
+            setMatch(null);
+            return;
+          }
+        } catch {}
+
         setMatch(p.match);
         // Log match start
         if (p.match.status === 'waiting') {
@@ -195,7 +206,21 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       transport.on("resync", (p) => {
         const snap = p.snapshot as { lobby?: LobbyInfo; match?: MatchInfo };
         if (snap?.lobby) setLobby(snap.lobby);
-        if (snap?.match) setMatch(snap.match);
+        if (snap?.match) {
+          // Respect locally-declined rejoin state and immediately leave/suppress if present
+          try {
+            const key = `sorcery:declinedRejoin:${snap.match.id}`;
+            const declined = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+            if (declined) {
+              try { transport.leaveMatch(); } catch {}
+              setMatch(null);
+            } else {
+              setMatch(snap.match);
+            }
+          } catch {
+            setMatch(snap.match);
+          }
+        }
         if (!snap?.lobby && !snap?.match) {
           setLobby(null);
           setMatch(null);
@@ -268,25 +293,35 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       transport.startMatch();
     },
     joinMatch: async (id: string) => {
+      try {
+        // Clear any previously declined rejoin flag for this match
+        try { localStorage.removeItem(`sorcery:declinedRejoin:${id}`); } catch {}
+      } catch {}
       await transport.joinMatch(id);
     },
     leaveMatch: () => {
       try {
         const myName = me?.displayName || "A player";
+        const matchId = match?.id;
         
         // Send a chat message to notify other players
         if (me) {
           transport.sendChat(`${myName} has left the match.`, "match");
         }
         
+        // Tell the server we've left the match so it doesn't prompt rejoin on reconnect
+        try { transport.leaveMatch(); } catch {}
+
+        // Persist declined rejoin decision locally for this match
+        if (matchId) {
+          try { localStorage.setItem(`sorcery:declinedRejoin:${matchId}`, "1"); } catch {}
+        }
+
         // Clear match state
         setMatch(null);
         
         // Log the leave event locally
         useGameStore.getState().log(`You left the match.`);
-        
-        // Note: We don't call transport.leaveMatch() because there's no such method
-        // The server will handle cleanup when the connection is lost
       } catch {}
     },
     sendChat: (msg: string, scope?: ChatScope) => {
