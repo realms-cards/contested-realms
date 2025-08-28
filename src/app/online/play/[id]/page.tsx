@@ -34,7 +34,7 @@ export default function OnlineMatchPage() {
     return Array.isArray(idParam) ? idParam[0] : idParam;
   }, [params]);
 
-  const { connected, match, joinMatch, chatLog, sendChat, leaveMatch, resync, me } = useOnline();
+  const { connected, match, joinMatch, chatLog, sendChat, leaveMatch, resync, me, resyncing } = useOnline();
   
   // Determine which player this client is
   const myPlayerId = me?.id;
@@ -44,6 +44,14 @@ export default function OnlineMatchPage() {
     return index === 0 ? 1 : index === 1 ? 2 : null;
   }, [match?.players, myPlayerId]);
   const myPlayerKey = myPlayerNumber === 1 ? "p1" : myPlayerNumber === 2 ? "p2" : null;
+
+  // One-shot guards for rejoin flow per connection
+  const lastConnectedRef = useRef<boolean>(false);
+  const resyncSentForRef = useRef<string | null>(null);
+  const rejoinChatSentForRef = useRef<string | null>(null);
+  const prevMatchIdRef = useRef<string | null>(null);
+  const prevMatchStatusRef = useRef<'waiting'|'in_progress'|'ended'|null>(null);
+  const joinAttemptedForRef = useRef<string | null>(null);
 
   // Get player nicknames
   const playerNames = useMemo(() => {
@@ -56,23 +64,63 @@ export default function OnlineMatchPage() {
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
     if (!connected || !matchId) return;
-    if (match?.id === matchId) return;
+    if (match?.id === matchId) {
+      // Arrived or already in: clear join attempt flag
+      if (joinAttemptedForRef.current === matchId) joinAttemptedForRef.current = null;
+      return;
+    }
+    if (joinAttemptedForRef.current === matchId) return;
+    try { console.debug('[online] joinMatch ->', { matchId }); } catch {}
+    joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
   }, [connected, match?.id, matchId, joinMatch]);
 
-  // Request full state sync when successfully joining a match
+  // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
-    if (connected && match?.id === matchId) {
-      // Request full game state sync to ensure rejoining players get complete state
-      resync();
-      
-      // Notify other players that we joined (but only if we're rejoining, not starting new)
-      if (match?.status === 'in_progress') {
-        const myName = me?.displayName || "A player";
-        sendChat(`${myName} has rejoined the match.`, 'match');
-      }
+    if (connected && !lastConnectedRef.current) {
+      // Rising edge: just connected, clear per-connection guards
+      resyncSentForRef.current = null;
+      rejoinChatSentForRef.current = null;
+      joinAttemptedForRef.current = null;
     }
-  }, [connected, match?.id, matchId, resync, match?.status, me?.displayName, sendChat]);
+    lastConnectedRef.current = connected;
+  }, [connected]);
+
+  // Also reset one-shot guards if we are no longer in this match (e.g., user left)
+  useEffect(() => {
+    if (!matchId) return;
+    if (match?.id !== matchId) {
+      if (resyncSentForRef.current === matchId) resyncSentForRef.current = null;
+      if (rejoinChatSentForRef.current === matchId) rejoinChatSentForRef.current = null;
+    }
+  }, [match?.id, matchId]);
+
+  // Request full state sync and send rejoin chat exactly once per connection and match
+  useEffect(() => {
+    if (!connected || match?.id !== matchId) return;
+
+    // One-shot resync per connection for this match id
+    if (resyncSentForRef.current !== matchId) {
+      // Debug: track resync emission
+      try { console.debug('[online] resync ->', { matchId, because: 'joined or rejoined' }); } catch {}
+      resync();
+      resyncSentForRef.current = matchId;
+    }
+
+    // One-shot chat per connection if rejoining an in-progress match
+    const prevStatus = prevMatchIdRef.current === matchId ? prevMatchStatusRef.current : null;
+    const transitioningFromWaiting = prevStatus === 'waiting' && match?.status === 'in_progress';
+    if (match?.status === 'in_progress' && rejoinChatSentForRef.current !== matchId && !transitioningFromWaiting) {
+      const myName = me?.displayName || "A player";
+      try { console.debug('[online] rejoin chat ->', { matchId, name: myName }); } catch {}
+      sendChat(`${myName} has rejoined the match.`, 'match');
+      rejoinChatSentForRef.current = matchId;
+    }
+
+    // Update previous status tracking for next pass
+    prevMatchIdRef.current = matchId;
+    prevMatchStatusRef.current = match?.status ?? null;
+  }, [connected, match?.id, matchId, match?.status, me?.displayName, resync, sendChat]);
 
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
@@ -124,6 +172,26 @@ export default function OnlineMatchPage() {
   // Match end overlay
   const [matchEndOverlayOpen, setMatchEndOverlayOpen] = useState<boolean>(false);
   const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] = useState<boolean>(false);
+
+  // Debug: page mount/unmount
+  useEffect(() => {
+    try { console.debug('[page] OnlineMatchPage mount'); } catch {}
+    return () => { try { console.debug('[page] OnlineMatchPage unmount'); } catch {} };
+  }, []);
+
+  // Debug: resyncing transitions (controls Physics mount/unmount)
+  useEffect(() => {
+    try { console.debug('[physics] resyncing ->', { resyncing, matchId }); } catch {}
+  }, [resyncing, matchId]);
+
+  // Tiny helper component to log Physics world lifecycle
+  function PhysicsProbe({ mid }: { mid: string | undefined | null }) {
+    useEffect(() => {
+      try { console.debug('[physics] mount', { matchId: mid }); } catch {}
+      return () => { try { console.debug('[physics] unmount', { matchId: mid }); } catch {} };
+    }, [mid]);
+    return null;
+  }
 
   // 3D Board UI/store bindings
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -505,9 +573,12 @@ export default function OnlineMatchPage() {
             <directionalLight position={[10, 12, 8]} intensity={1} castShadow />
 
             {/* Interactive board (physics-enabled) */}
-            <Physics gravity={[0, -9.81, 0]}>
-              <Board />
-            </Physics>
+            {!resyncing && (
+              <Physics key={match?.id || 'no-match'} gravity={[0, -9.81, 0]}>
+                <PhysicsProbe mid={match?.id} />
+                <Board />
+              </Physics>
+            )}
 
             {/* 3D Piles (sides of the board) */}
             <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
@@ -529,10 +600,10 @@ export default function OnlineMatchPage() {
               ref={controlsRef}
               makeDefault
               target={[0, 0, 0]}
-              enabled={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-              enablePan={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-              enableRotate={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-              enableZoom={!dragFromHand && !dragFromPile}
+              enabled={!resyncing && !dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+              enablePan={!resyncing && !dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+              enableRotate={!resyncing && !dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+              enableZoom={!resyncing && !dragFromHand && !dragFromPile}
               enableDamping={false}
               minPolarAngle={0}
               maxPolarAngle={Math.PI / 2.05}

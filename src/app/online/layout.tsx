@@ -35,6 +35,7 @@ type OnlineContextValue = {
   leaveMatch: () => void;
   sendChat: (msg: string, scope?: ChatScope) => void;
   resync: () => void;
+  resyncing: boolean;
   chatLog: ServerChatPayloadT[];
   // Extended state
   lobbies: LobbyInfo[];
@@ -90,6 +91,7 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
   const [lobbies, setLobbies] = useState<LobbyInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
+  const [resyncing, setResyncing] = useState<boolean>(false);
 
   const gamePhase = useGameStore((s) => s.phase);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
@@ -103,6 +105,30 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
     if (!transportRef.current) transportRef.current = new SocketTransport();
     return transportRef.current;
   }, []);
+
+  // Monotonic token to guard resync state across overlapping attempts
+  const resyncGenRef = useRef<number>(0);
+
+  // Batch incoming server patches to a single RAF to avoid rapid re-entrancy during reconnects
+  const patchQueueRef = useRef<Array<{ patch: unknown; t?: number }>>([]);
+  const patchFlushScheduledRef = useRef<boolean>(false);
+  const queueServerPatch = (patch: unknown, t?: number) => {
+    patchQueueRef.current.push({ patch, t });
+    if (patchFlushScheduledRef.current) return;
+    patchFlushScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      patchFlushScheduledRef.current = false;
+      const items = patchQueueRef.current;
+      patchQueueRef.current = [];
+      for (const it of items) {
+        try {
+          useGameStore.getState().applyServerPatch(it.patch, it.t);
+        } catch (e) {
+          console.warn("applyServerPatch failed", e);
+        }
+      }
+    });
+  };
 
   // Inject transport into store once; remove on unmount
   useEffect(() => {
@@ -193,7 +219,7 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       }),
       // Apply incremental game state patches into the Zustand store
       transport.on("statePatch", (p) => {
-        useGameStore.getState().applyServerPatch(p.patch, p.t);
+        queueServerPatch(p.patch, p.t);
       }),
       transport.on("chat", (p) => setChatLog((prev) => {
         // Don't add duplicate messages
@@ -204,7 +230,20 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         return [...prev, p];
       })),
       transport.on("resync", (p) => {
+        // Enter resync mode to pause physics world on clients
+        const gen = ++resyncGenRef.current;
+        setResyncing(true);
         const snap = p.snapshot as { lobby?: LobbyInfo; match?: MatchInfo; game?: unknown; t?: number };
+        // Debug: server-initiated resync snapshot received
+        try {
+          console.debug('[online] resync start (server snapshot) ->', {
+            matchInSnap: snap?.match?.id,
+            hasLobby: !!snap?.lobby,
+            hasGame: !!snap?.game,
+            t: snap?.t,
+            gen,
+          });
+        } catch {}
         if (snap?.lobby) setLobby(snap.lobby);
 
         // Track whether we should apply the game snapshot
@@ -239,9 +278,31 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         // Apply full game snapshot if provided and allowed
         if (allowApplyGame && snap?.game) {
           try {
-            useGameStore.getState().applyServerPatch(snap.game, typeof snap.t === 'number' ? snap.t : undefined);
+            queueServerPatch(snap.game, typeof snap.t === 'number' ? snap.t : undefined);
           } catch (e) {
             console.warn('Failed to apply resync game snapshot', e);
+          }
+        }
+        // Debug: report whether we applied the snapshot
+        try {
+          console.debug('[online] resync apply ->', { allowApplyGame, hasGame: !!snap?.game, gen });
+        } catch {}
+        // Clear resyncing on the next frame after queueing applies
+        try {
+          requestAnimationFrame(() => {
+            if (resyncGenRef.current !== gen) {
+              try { console.debug('[online] resync stop ignored (newer resync started)', { gen, current: resyncGenRef.current }); } catch {}
+              return;
+            }
+            try { console.debug('[online] resync stop (server)', { gen }); } catch {}
+            setResyncing(false);
+          });
+        } catch {
+          if (resyncGenRef.current === gen) {
+            try { console.debug('[online] resync stop (server, immediate)', { gen }); } catch {}
+            setResyncing(false);
+          } else {
+            try { console.debug('[online] resync stop immediate ignored (superseded)', { gen, current: resyncGenRef.current }); } catch {}
           }
         }
       }),
@@ -347,7 +408,25 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       if (!msg.trim()) return;
       transport.sendChat(msg.trim(), scope);
     },
-    resync: () => transport.resync(),
+    resync: () => {
+      const gen = ++resyncGenRef.current;
+      setResyncing(true);
+      // Debug: client-initiated resync start
+      try { console.debug('[online] resync start (client request) ->', { matchId: match?.id, gen }); } catch {}
+      try { transport.resync(); } catch {}
+      // Fallback safety: clear resyncing if server doesn't respond, but only if no newer resync started
+      try {
+        setTimeout(() => {
+          if (resyncGenRef.current !== gen) {
+            try { console.debug('[online] resync fallback ignored (superseded)', { gen, current: resyncGenRef.current }); } catch {}
+            return;
+          }
+          try { console.debug('[online] resync fallback clear (no server response)', { gen }); } catch {}
+          setResyncing(false);
+        }, 2500);
+      } catch {}
+    },
+    resyncing,
     chatLog,
     lobbies,
     players,

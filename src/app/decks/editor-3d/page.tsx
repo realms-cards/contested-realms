@@ -91,6 +91,7 @@ function DraggableCard3D({
   onHoverChange,
   lockUpright,
   onDoubleClick,
+  baseRenderOrder = 1500,
 }: {
   slug: string;
   isSite: boolean;
@@ -107,6 +108,7 @@ function DraggableCard3D({
   onHoverChange?: (hovering: boolean) => void;
   lockUpright?: boolean;
   onDoubleClick?: () => void;
+  baseRenderOrder?: number;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -118,10 +120,17 @@ function DraggableCard3D({
   } | null>(null);
   const dragging = useRef(false);
   const upCleanupRef = useRef<(() => void) | null>(null);
-  const roRef = useRef<number>(1500);
+  const roRef = useRef<number>(baseRenderOrder);
   const [isDragging, setIsDragging] = useState(false);
   const [uprightLocked, setUprightLocked] = useState(false);
   const lastClickTime = useRef<number>(0);
+
+  // Reset render order to base when not dragging
+  useEffect(() => {
+    if (!isDragging) {
+      roRef.current = baseRenderOrder;
+    }
+  }, [baseRenderOrder, isDragging]);
 
   const setPos = useCallback((wx: number, wz: number, lift = false) => {
     if (!ref.current) return;
@@ -314,6 +323,16 @@ export default function DeckEditor3DPage() {
 
   // Feedback message system
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  
+  // Context menu for duplicate card selection
+  const [contextMenu, setContextMenu] = useState<{
+    cardId: number;
+    cardName: string;
+    x: number;
+    y: number;
+    deckCards: Pick3D[];
+    sideboardCards: Pick3D[];
+  } | null>(null);
 
   // Hover preview (exact same as draft-3d)
   const [hoverPreview, setHoverPreview] = useState<{
@@ -352,9 +371,21 @@ export default function DeckEditor3DPage() {
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
   const getTopRenderOrder = useCallback(() => {
+    // When sorting is enabled, use much higher temporary render order for dragging
+    // This ensures dragged cards appear above stacks during interaction
+    if (isSortingEnabled) {
+      return 9999; // High temporary order for dragging
+    }
     nextRenderOrder.current += 1;
     return nextRenderOrder.current;
-  }, []);
+  }, [isSortingEnabled]);
+  
+  // Reset render orders when sorting is toggled to ensure proper stacking
+  useEffect(() => {
+    if (isSortingEnabled) {
+      nextRenderOrder.current = 1500; // Reset base render order
+    }
+  }, [isSortingEnabled]); // Only reset when sorting is toggled, not when cards change
 
   // Convert deck picks to Pick3D format - all start in sideboard (upper third)
   useEffect(() => {
@@ -645,14 +676,8 @@ export default function DeckEditor3DPage() {
     const updated = cards.map(card => {
       const stackPos = stackPositions?.get(card.id);
       if (stackPos) {
-        // Find how many cards are in this stack position to determine Y elevation
-        const cardsInSameStack = cards.filter(otherCard => 
-          otherCard.id !== card.id && 
-          stackPositions?.get(otherCard.id) &&
-          Math.abs((stackPositions?.get(otherCard.id)?.x || 0) - stackPos.x) < 0.05
-        ).length;
-        
         // Calculate Y elevation based on position within stack
+        // Lower Z values (closer to front of board) should be higher in stack
         const stackIndex = cards.filter(otherCard => {
           const otherStackPos = stackPositions?.get(otherCard.id);
           return otherStackPos && 
@@ -1173,6 +1198,58 @@ export default function DeckEditor3DPage() {
     [isDraftMode]
   );
 
+  // Close context menu when clicking elsewhere
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
+
+  // Helper function to move specific card by its unique ID
+  const moveSpecificCardToSideboard = useCallback((pickId: number) => {
+    setPick3D((prev) => {
+      const updated = [...prev];
+      const cardIndex = updated.findIndex(p => p.id === pickId);
+      
+      if (cardIndex === -1) return prev;
+      
+      const newZ = 1.5 + Math.random() * 0.5;
+      const newX = 0.5 + Math.random() * 3;
+      
+      updated[cardIndex] = {
+        ...updated[cardIndex],
+        x: newX,
+        z: newZ,
+        y: undefined
+      };
+      
+      return updated;
+    });
+  }, []);
+
+  const moveSpecificCardToDeck = useCallback((pickId: number) => {
+    setPick3D((prev) => {
+      const updated = [...prev];
+      const cardIndex = updated.findIndex(p => p.id === pickId);
+      
+      if (cardIndex === -1) return prev;
+      
+      const newZ = -1.5 - Math.random() * 0.5;
+      const newX = -2 + Math.random() * 4;
+      
+      updated[cardIndex] = {
+        ...updated[cardIndex],
+        x: newX,
+        z: newZ,
+        y: undefined
+      };
+      
+      return updated;
+    });
+  }, []);
+
   return (
     <div className="fixed inset-0 w-screen h-screen">
       {/* 3D Game View as the stage - EXACT same as draft-3d */}
@@ -1193,9 +1270,16 @@ export default function DeckEditor3DPage() {
           <Physics gravity={[0, -9.81, 0]}>
             <Board />
 
-            {/* 3D Cards - EXACT same rendering as draft-3d */}
+            {/* 3D Cards with proper stacking order */}
             <group>
-              {pick3D.map((p) => {
+              {pick3D
+                .sort((a, b) => {
+                  // Sort by Y position so cards with lower Y render first (appear behind)
+                  const aY = isSortingEnabled ? (a.y || 0.002) : 0.002;
+                  const bY = isSortingEnabled ? (b.y || 0.002) : 0.002;
+                  return aY - bY; // Lower Y values render first (behind higher Y values)
+                })
+                .map((p, renderIndex) => {
                 const isSite = (p.card.type || "")
                   .toLowerCase()
                   .includes("site");
@@ -1205,6 +1289,9 @@ export default function DeckEditor3DPage() {
                 const x = stackPos ? stackPos.x : p.x;
                 const z = stackPos ? stackPos.z : p.z;
                 const y = isSortingEnabled ? (p.y || 0.002) : 0.002; // Use Y elevation only when sorting
+                
+                // Calculate base render order from Y position for proper stacking
+                const baseRenderOrder = isSortingEnabled ? 1500 + Math.floor(y * 1000) : 1500;
 
                 return (
                   <DraggableCard3D
@@ -1214,6 +1301,7 @@ export default function DeckEditor3DPage() {
                     x={x}
                     z={z}
                     y={y}
+                    baseRenderOrder={baseRenderOrder}
                     onDrop={(wx, wz) => {
                       // Move card to drop position - only sort if sorting is enabled and this is a manual drag
                       const newZone = wz < 0 ? "Deck" : "Sideboard";
@@ -1228,8 +1316,8 @@ export default function DeckEditor3DPage() {
                         // Move the card to the drop position
                         updated[cardIndex] = { ...updated[cardIndex], x: wx, z: wz, y: undefined };
 
-                        // Only apply sorting if sorting is currently enabled (but don't auto-trigger)
-                        return isSortingEnabled ? applySortingIfEnabled(updated) : updated;
+                        // Don't auto-apply sorting on manual drags - let user control positioning
+                        return updated;
                       });
 
                       // Show feedback message for zone changes
@@ -1505,27 +1593,44 @@ export default function DeckEditor3DPage() {
                         const cardInDeck = pick3D.filter(p => p.card.cardId === it.cardId && p.z < 0).length;
                         const cardInSideboard = pick3D.filter(p => p.card.cardId === it.cardId && p.z >= 0).length;
 
-                        // Enhanced right-click handler with accurate feedback messages
+                        // Enhanced right-click handler with context menu for duplicates
                         const handleContextMenu = (e: React.MouseEvent) => {
                           e.preventDefault();
                           
-                          // Calculate correct remaining counts after the move
-                          if (cardInDeck > 0) {
-                            moveOneToSideboard(it.cardId);
-                            const remaining = cardInDeck - 1;
-                            const message = remaining > 0 
-                              ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-                              : `Moved "${it.name}" to Sideboard (deck now empty)`;
-                            setFeedbackMessage(message);
-                            setTimeout(() => setFeedbackMessage(null), 2000);
-                          } else if (cardInSideboard > 0) {
-                            moveOneFromSideboardToDeck(it.cardId);
-                            const remaining = cardInSideboard - 1;
-                            const message = remaining > 0
-                              ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
-                              : `Moved "${it.name}" to Deck (sideboard now empty)`;
-                            setFeedbackMessage(message);
-                            setTimeout(() => setFeedbackMessage(null), 2000);
+                          const totalCopies = cardInDeck + cardInSideboard;
+                          
+                          // If only one copy total, or all copies are in the same zone, use simple move
+                          if (totalCopies === 1 || (cardInDeck === 0) || (cardInSideboard === 0)) {
+                            if (cardInDeck > 0) {
+                              moveOneToSideboard(it.cardId);
+                              const remaining = cardInDeck - 1;
+                              const message = remaining > 0 
+                                ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+                                : `Moved "${it.name}" to Sideboard (deck now empty)`;
+                              setFeedbackMessage(message);
+                              setTimeout(() => setFeedbackMessage(null), 2000);
+                            } else if (cardInSideboard > 0) {
+                              moveOneFromSideboardToDeck(it.cardId);
+                              const remaining = cardInSideboard - 1;
+                              const message = remaining > 0
+                                ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
+                                : `Moved "${it.name}" to Deck (sideboard now empty)`;
+                              setFeedbackMessage(message);
+                              setTimeout(() => setFeedbackMessage(null), 2000);
+                            }
+                          } else {
+                            // Multiple copies in different zones - show context menu
+                            const deckCards = pick3D.filter(p => p.card.cardId === it.cardId && p.z < 0);
+                            const sideboardCards = pick3D.filter(p => p.card.cardId === it.cardId && p.z >= 0);
+                            
+                            setContextMenu({
+                              cardId: it.cardId,
+                              cardName: it.name,
+                              x: e.clientX,
+                              y: e.clientY,
+                              deckCards,
+                              sideboardCards
+                            });
                           }
                         };
 
@@ -1756,6 +1861,65 @@ export default function DeckEditor3DPage() {
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {/* Context Menu for Duplicate Cards */}
+        {contextMenu && (
+          <div 
+            className="fixed z-50 pointer-events-auto"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-black/90 backdrop-blur-sm rounded-lg shadow-xl border border-white/20 min-w-48 p-2">
+              <div className="text-white text-sm font-medium mb-2 px-2">
+                Move "{contextMenu.cardName}"
+              </div>
+              
+              {contextMenu.deckCards.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-green-300 text-xs px-2 mb-1">
+                    From Deck ({contextMenu.deckCards.length}):
+                  </div>
+                  {contextMenu.deckCards.map((card, index) => (
+                    <button
+                      key={card.id}
+                      className="w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                      onClick={() => {
+                        moveSpecificCardToSideboard(card.id);
+                        setFeedbackMessage(`Moved "${contextMenu.cardName}" to Sideboard`);
+                        setTimeout(() => setFeedbackMessage(null), 2000);
+                        setContextMenu(null);
+                      }}
+                    >
+                      Copy {index + 1} → Sideboard
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {contextMenu.sideboardCards.length > 0 && (
+                <div>
+                  <div className="text-blue-300 text-xs px-2 mb-1">
+                    From Sideboard ({contextMenu.sideboardCards.length}):
+                  </div>
+                  {contextMenu.sideboardCards.map((card, index) => (
+                    <button
+                      key={card.id}
+                      className="w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                      onClick={() => {
+                        moveSpecificCardToDeck(card.id);
+                        setFeedbackMessage(`Moved "${contextMenu.cardName}" to Deck`);
+                        setTimeout(() => setFeedbackMessage(null), 2000);
+                        setContextMenu(null);
+                      }}
+                    >
+                      Copy {index + 1} → Deck
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
