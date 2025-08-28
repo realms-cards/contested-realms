@@ -696,10 +696,173 @@ export default function DeckEditor3DPage() {
     return updated;
   }, [isSortingEnabled, stackPositions]);
 
-  // Force re-sorting function
+  // Force re-sorting function - recalculates positions based on current card zones
   const forceSorting = useCallback(() => {
-    setPick3D((prev) => applySortingIfEnabled(prev));
-  }, [applySortingIfEnabled]);
+    if (!isSortingEnabled) return;
+    
+    setPick3D((prev) => {
+      // Recalculate sorting based on current card positions (zones)
+      const deckCards = prev.filter((pick) => pick.z < 0);
+      const sideboardCards = prev.filter((pick) => pick.z >= 0);
+
+      // Create fresh categories based on current positions
+      const deckCategories = deckCards.reduce((acc, pick) => {
+        const meta = metaByCardId[pick.card.cardId];
+        const category = categorizeCard(pick.card, meta, "Deck");
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(pick);
+        return acc;
+      }, {} as Record<string, Pick3D[]>);
+
+      const sideboardCategories = sideboardCards.reduce((acc, pick) => {
+        const meta = metaByCardId[pick.card.cardId];
+        const category = categorizeCard(pick.card, meta, "Sideboard");
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(pick);
+        return acc;
+      }, {} as Record<string, Pick3D[]>);
+
+      // Sort within each category
+      Object.values(deckCategories).forEach((cards) => {
+        cards.sort((a, b) => a.card.cardName.localeCompare(b.card.cardName));
+      });
+
+      Object.values(sideboardCategories).forEach((cards) => {
+        cards.sort((a, b) => {
+          const metaA = metaByCardId[a.card.cardId];
+          const metaB = metaByCardId[b.card.cardId];
+          const costA = metaA?.cost ?? 0;
+          const costB = metaB?.cost ?? 0;
+          return costA - costB;
+        });
+      });
+
+      // Recalculate positions based on current categories
+      const positions = new Map<number, { x: number; z: number }>();
+      const cardSpacing = 0.15;
+
+      // Deck positioning
+      const deckZStart = -2;
+      let deckXStart = -4;
+      const deckSpacing = 0.8;
+
+      // Position mana cost stacks
+      const manaCosts = Object.keys(deckCategories)
+        .filter((key) => key.startsWith("mana-"))
+        .sort((a, b) => parseInt(a.split("-")[1]) - parseInt(b.split("-")[1]));
+
+      manaCosts.forEach((manaKey) => {
+        const cards = deckCategories[manaKey];
+        if (cards) {
+          cards.forEach((card, index) => {
+            positions.set(card.id, {
+              x: deckXStart,
+              z: deckZStart + index * cardSpacing,
+            });
+          });
+          deckXStart += deckSpacing;
+        }
+      });
+
+      // Position site stacks by element in deck
+      const siteElements = ["air", "water", "earth", "fire", "colorless"];
+      siteElements.forEach((element) => {
+        const siteKey = `sites-${element}`;
+        if (deckCategories[siteKey]) {
+          deckCategories[siteKey].forEach((card, index) => {
+            positions.set(card.id, {
+              x: deckXStart,
+              z: deckZStart + index * cardSpacing,
+            });
+          });
+          deckXStart += deckSpacing;
+        }
+      });
+
+      // Handle avatars in deck
+      if (deckCategories["avatars"]) {
+        deckCategories["avatars"].forEach((card, index) => {
+          positions.set(card.id, {
+            x: deckXStart,
+            z: deckZStart + index * cardSpacing,
+          });
+        });
+      }
+
+      // Sideboard positioning
+      const sideboardZStart = 1;
+      let sideboardXStart = 0;
+      const sideboardSpacing = 0.7;
+
+      const elementOrder = ["air", "water", "earth", "fire", "colorless"];
+      elementOrder.forEach((element) => {
+        // Creatures stack
+        const creatureKey = `${element}-creatures`;
+        if (sideboardCategories[creatureKey]) {
+          sideboardCategories[creatureKey].forEach((card, index) => {
+            positions.set(card.id, {
+              x: sideboardXStart,
+              z: sideboardZStart + index * cardSpacing,
+            });
+          });
+        }
+
+        // Spells stack
+        const spellKey = `${element}-spells`;
+        if (sideboardCategories[spellKey]) {
+          const creatureCount = sideboardCategories[creatureKey]?.length || 0;
+          sideboardCategories[spellKey].forEach((card, index) => {
+            positions.set(card.id, {
+              x: sideboardXStart,
+              z: sideboardZStart + (creatureCount + index + 0.5) * cardSpacing,
+            });
+          });
+        }
+
+        sideboardXStart += sideboardSpacing;
+      });
+
+      // Handle sites and avatars in sideboard
+      if (sideboardCategories["sites"]) {
+        sideboardCategories["sites"].forEach((card, index) => {
+          positions.set(card.id, {
+            x: sideboardXStart,
+            z: sideboardZStart + index * cardSpacing,
+          });
+        });
+        sideboardXStart += sideboardSpacing;
+      }
+
+      if (sideboardCategories["avatars"]) {
+        sideboardCategories["avatars"].forEach((card, index) => {
+          positions.set(card.id, {
+            x: sideboardXStart,
+            z: sideboardZStart + index * cardSpacing,
+          });
+        });
+      }
+
+      // Apply positions and calculate Y elevation
+      return prev.map(card => {
+        const stackPos = positions.get(card.id);
+        if (stackPos) {
+          // Calculate Y elevation based on position within stack
+          const stackIndex = prev.filter(otherCard => {
+            const otherStackPos = positions.get(otherCard.id);
+            return otherStackPos && 
+                   Math.abs(otherStackPos.x - stackPos.x) < 0.05 && 
+                   (otherStackPos.z < stackPos.z || (otherStackPos.z === stackPos.z && otherCard.id < card.id));
+          }).length;
+          
+          const yElevation = 0.002 + stackIndex * 0.01;
+          
+          return { ...card, x: stackPos.x, z: stackPos.z, y: yElevation };
+        } else {
+          return { ...card, y: undefined };
+        }
+      });
+    });
+  }, [isSortingEnabled, metaByCardId, categorizeCard]);
 
   // Zone movement functions without auto-sorting - let users control when to sort
   const moveOneToSideboard = useCallback((cardId: number) => {
