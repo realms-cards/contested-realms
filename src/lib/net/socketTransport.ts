@@ -2,6 +2,7 @@
 
 import { io, Socket } from "socket.io-client";
 import { Protocol } from "@/lib/net/protocol";
+import type { LobbyVisibility, ChatScope } from "@/lib/net/protocol";
 import type {
   GameTransport,
   TransportEvent,
@@ -16,7 +17,13 @@ export class SocketTransport implements GameTransport {
   async connect(opts: { playerId?: string; displayName: string }): Promise<void> {
     if (this.socket && this.socket.connected) return;
 
-    const url = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
+    // Prefer explicit env; otherwise pick a sensible default based on current dev port
+    // If Next dev runs on 3002, we default WS to 3010 to avoid conflicts with other local apps
+    const defaultUrl =
+      typeof window !== "undefined" && window.location && window.location.port === "3002"
+        ? "http://localhost:3010"
+        : "http://localhost:3001";
+    const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
     const socket = io(url, {
       transports: ["websocket"],
       autoConnect: true,
@@ -61,6 +68,24 @@ export class SocketTransport implements GameTransport {
         this.dispatch(
           "lobbyUpdated",
           Protocol.JoinedLobbyPayload.parse(payload)
+        )
+      );
+      socket.on("lobbiesUpdated", (payload) =>
+        this.dispatch(
+          "lobbiesUpdated",
+          Protocol.LobbiesUpdatedPayload.parse(payload)
+        )
+      );
+      socket.on("playerList", (payload) =>
+        this.dispatch(
+          "playerList",
+          Protocol.PlayerListPayload.parse(payload)
+        )
+      );
+      socket.on("lobbyInvite", (payload) =>
+        this.dispatch(
+          "lobbyInvite",
+          Protocol.LobbyInvitePayload.parse(payload)
         )
       );
       socket.on("matchStarted", (payload) =>
@@ -115,6 +140,25 @@ export class SocketTransport implements GameTransport {
     });
   }
 
+  async createLobby(options?: { visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }> {
+    const s = this.requireSocket();
+    const visibility = options?.visibility;
+    const maxPlayers = options?.maxPlayers;
+    return new Promise((resolve) => {
+      const onJoin = (payload: unknown) => {
+        const parsed = Protocol.JoinedLobbyPayload.parse(payload);
+        this.dispatch("lobbyUpdated", parsed);
+        s.off("joinedLobby", onJoin);
+        resolve({ lobbyId: parsed.lobby.id });
+      };
+      s.on("joinedLobby", onJoin);
+      s.emit(
+        "createLobby",
+        Protocol.CreateLobbyPayload.parse({ visibility, maxPlayers })
+      );
+    });
+  }
+
   async joinMatch(matchId: string): Promise<void> {
     const s = this.requireSocket();
     return new Promise((resolve) => {
@@ -147,14 +191,42 @@ export class SocketTransport implements GameTransport {
     );
   }
 
-  sendChat(content: string): void {
-    this.requireSocket().emit("chat", Protocol.ChatPayload.parse({ content }));
+  sendChat(content: string, scope?: ChatScope): void {
+    this.requireSocket().emit("chat", Protocol.ChatPayload.parse({ content, scope }));
   }
 
   resync(): void {
     this.requireSocket().emit(
       "resyncRequest",
       Protocol.ResyncRequestPayload.parse({})
+    );
+  }
+
+  requestLobbies(): void {
+    this.requireSocket().emit(
+      "requestLobbies",
+      Protocol.RequestLobbiesPayload.parse({})
+    );
+  }
+
+  requestPlayers(): void {
+    this.requireSocket().emit(
+      "requestPlayers",
+      Protocol.RequestPlayersPayload.parse({})
+    );
+  }
+
+  setLobbyVisibility(visibility: LobbyVisibility): void {
+    this.requireSocket().emit(
+      "setLobbyVisibility",
+      Protocol.SetLobbyVisibilityPayload.parse({ visibility })
+    );
+  }
+
+  inviteToLobby(targetPlayerId: string, lobbyId?: string): void {
+    this.requireSocket().emit(
+      "inviteToLobby",
+      Protocol.InviteToLobbyPayload.parse({ targetPlayerId, lobbyId })
     );
   }
 

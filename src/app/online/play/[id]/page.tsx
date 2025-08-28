@@ -69,7 +69,7 @@ export default function OnlineMatchPage() {
       // Notify other players that we joined (but only if we're rejoining, not starting new)
       if (match?.status === 'in_progress') {
         const myName = me?.displayName || "A player";
-        sendChat(`${myName} has rejoined the match.`);
+        sendChat(`${myName} has rejoined the match.`, 'match');
       }
     }
   }, [connected, match?.id, matchId, resync, match?.status, me?.displayName, sendChat]);

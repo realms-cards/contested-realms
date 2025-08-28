@@ -895,8 +895,8 @@ export default function Draft3DPage() {
           botMsg = ` and bot deck ${dataBot.name} (id: ${dataBot.id})`;
       }
       setSaveMsg(`Saved deck ${data.name} (id: ${data.id})${botMsg}`);
-      // Navigate to deck editor with new deck loaded
-      router.push(`/decks/editor?id=${encodeURIComponent(data.id)}`);
+      // Navigate to 3D deck editor with new deck loaded in draft completion mode
+      router.push(`/decks/editor-3d?id=${encodeURIComponent(data.id)}&from=draft`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1555,7 +1555,13 @@ export default function Draft3DPage() {
                   disabled={saving}
                   className="h-10 px-4 rounded bg-white/90 text-black disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save Deck"}
+                  {saving ? "Saving..." : "Build Deck (3D)"}
+                </button>
+                <button
+                  onClick={() => router.push("/decks/editor-3d")}
+                  className="h-10 px-4 rounded border border-white/30 text-white"
+                >
+                  Deck Editor (3D)
                 </button>
                 {saveMsg && <div className="text-sm">{saveMsg}</div>}
               </div>
