@@ -40,7 +40,7 @@ interface LifeCounterProps {
   isMe: boolean;
 }
 
-function LifeCounter({ player, playerName, canModify, dragFromHand, isMe }: LifeCounterProps) {
+function LifeCounter({ player, playerName, canModify, dragFromHand, isMe, showNameAbove }: LifeCounterProps & { showNameAbove: boolean }) {
   const playerState = useGameStore((s) => s.players[player]);
   const addLife = useGameStore((s) => s.addLife);
   
@@ -53,56 +53,71 @@ function LifeCounter({ player, playerName, canModify, dragFromHand, isMe }: Life
   const canDecrease = canModifyThisPlayer && lifeState !== 'dead';
 
   return (
-    <div className="flex items-center gap-2">
-      {/* Player indicator */}
-      <div className={`text-xs font-medium px-2 py-1 rounded-full ${
-        isMe ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
-      }`}>
-        {playerName}
-        {isMe && " (You)"}
-      </div>
-      
-      {/* Life counter */}
-      <div className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
-        lifeState === 'dd' ? 'ring-orange-400/50 bg-orange-900/20' : 
-        lifeState === 'dead' ? 'ring-red-400/50 bg-red-900/20' : 
-        'ring-white/10'
-      }`}>
-        <div className="flex flex-col items-center justify-center gap-0.5">
-          {getLifeStateIcon(lifeState)}
-          <span className={`${lifeState === 'alive' ? 'text-2xl' : 'text-xl'} font-bold ${colorClass}`}>
-            {lifeDisplay}
-          </span>
-        </div>
-      </div>
-      
-      {/* Life modification buttons */}
-      {canModify && (
-        <div className="flex flex-col gap-1">
-          <button
-            className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            onClick={() => addLife(player, +1)}
-            disabled={dragFromHand || !canIncrease}
-            title={!canIncrease ? (isMe ? 'Cannot increase life (max 20 or dead)' : 'Can only modify your own life') : 'Increase life'}
-          >
-            +
-          </button>
-          <button
-            className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            onClick={() => addLife(player, -1)}
-            disabled={dragFromHand || !canDecrease}
-            title={!canDecrease ? (isMe ? 'Cannot decrease life (dead)' : 'Can only modify your own life') : 'Decrease life'}
-          >
-            -
-          </button>
+    <div className="flex flex-col items-center gap-2">
+      {/* Player name above counter (for upper player) */}
+      {showNameAbove && (
+        <div className={`text-xs font-medium px-2 py-1 rounded-full ${
+          isMe ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+        }`}>
+          {playerName}
+          {isMe && " (You)"}
         </div>
       )}
       
-      {/* Life state description */}
-      {lifeState !== 'alive' && (
-        <div className="text-xs opacity-80">
-          {lifeState === 'dd' && "Death's Door"}
-          {lifeState === 'dead' && "Dead"}
+      {/* Main counter row */}
+      <div className="flex items-center gap-2">
+        {/* Life counter */}
+        <div className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
+          lifeState === 'dd' ? 'ring-orange-400/50 bg-orange-900/20' : 
+          lifeState === 'dead' ? 'ring-red-400/50 bg-red-900/20' : 
+          'ring-white/10'
+        }`}>
+          <div className="flex flex-col items-center justify-center gap-0.5">
+            {getLifeStateIcon(lifeState)}
+            <span className={`${lifeState === 'alive' ? 'text-2xl' : 'text-xl'} font-bold ${colorClass}`}>
+              {lifeDisplay}
+            </span>
+          </div>
+        </div>
+        
+        {/* Life modification buttons */}
+        {canModify && (
+          <div className="flex flex-col gap-1">
+            <button
+              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => addLife(player, +1)}
+              disabled={dragFromHand || !canIncrease}
+              title={!canIncrease ? (isMe ? 'Cannot increase life (max 20 or dead)' : 'Can only modify your own life') : 'Increase life'}
+            >
+              +
+            </button>
+            <button
+              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => addLife(player, -1)}
+              disabled={dragFromHand || !canDecrease}
+              title={!canDecrease ? (isMe ? 'Cannot decrease life (dead)' : 'Can only modify your own life') : 'Decrease life'}
+            >
+              -
+            </button>
+          </div>
+        )}
+        
+        {/* Life state description */}
+        {lifeState !== 'alive' && (
+          <div className="text-xs opacity-80">
+            {lifeState === 'dd' && "Death's Door"}
+            {lifeState === 'dead' && "Dead"}
+          </div>
+        )}
+      </div>
+      
+      {/* Player name below counter (for lower player) */}
+      {!showNameAbove && (
+        <div className={`text-xs font-medium px-2 py-1 rounded-full ${
+          isMe ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+        }`}>
+          {playerName}
+          {isMe && " (You)"}
         </div>
       )}
     </div>
@@ -126,22 +141,24 @@ export default function OnlineLifeCounters({
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white`}
     >
-      {/* P1 Life */}
+      {/* P1 Life - name above */}
       <LifeCounter
         player="p1"
         playerName={playerNames.p1}
         canModify={canModifyLife}
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === 'p1'}
+        showNameAbove={true}
       />
 
-      {/* P2 Life */}
+      {/* P2 Life - name below */}
       <LifeCounter
         player="p2"
         playerName={playerNames.p2}
         canModify={canModifyLife}
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === 'p2'}
+        showNameAbove={false}
       />
     </div>
   );
