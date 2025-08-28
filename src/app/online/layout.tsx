@@ -9,16 +9,20 @@ import type {
   MatchInfo,
   ServerChatPayloadT,
   PlayerInfo,
+  LobbyInvitePayloadT,
+  LobbyVisibility,
+  ChatScope,
 } from "@/lib/net/protocol";
 import { useGameStore } from "@/lib/game/store";
 
 const PLAYER_NAME_KEY = "sorcery:playerName";
+const PLAYER_ID_KEY = "sorcery:playerId";
 
 type OnlineContextValue = {
   transport: SocketTransport | null;
   connected: boolean;
   displayName: string;
-  setDisplayName: (name: string) => void;
+  setDisplayName: () => void;
   me: PlayerInfo | null;
   lobby: LobbyInfo | null;
   match: MatchInfo | null;
@@ -29,9 +33,19 @@ type OnlineContextValue = {
   startMatch: () => void;
   joinMatch: (id: string) => Promise<void>;
   leaveMatch: () => void;
-  sendChat: (msg: string) => void;
+  sendChat: (msg: string, scope?: ChatScope) => void;
   resync: () => void;
   chatLog: ServerChatPayloadT[];
+  // Extended state
+  lobbies: LobbyInfo[];
+  players: PlayerInfo[];
+  invites: LobbyInvitePayloadT[];
+  // Extended actions
+  requestLobbies: () => void;
+  requestPlayers: () => void;
+  setLobbyVisibility: (visibility: LobbyVisibility) => void;
+  inviteToLobby: (targetPlayerId: string, lobbyId?: string) => void;
+  dismissInvite: (lobbyId: string, fromId: string) => void;
 };
 
 const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);
@@ -73,6 +87,9 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
   const [ready, setReady] = useState<boolean>(false);
   const [chatLog, setChatLog] = useState<ServerChatPayloadT[]>([]);
   const [me, setMe] = useState<PlayerInfo | null>(null);
+  const [lobbies, setLobbies] = useState<LobbyInfo[]>([]);
+  const [players, setPlayers] = useState<PlayerInfo[]>([]);
+  const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
 
   const gamePhase = useGameStore((s) => s.phase);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
@@ -107,7 +124,21 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
 
     (async () => {
       try {
-        await transport.connect({ displayName });
+        // Ensure we have a stable player id for reconnects
+        const getOrCreatePlayerId = (): string | undefined => {
+          try {
+            let pid = localStorage.getItem(PLAYER_ID_KEY);
+            if (!pid) {
+              pid = `p_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
+              localStorage.setItem(PLAYER_ID_KEY, pid);
+            }
+            return pid;
+          } catch {
+            return undefined;
+          }
+        };
+
+        await transport.connect({ displayName, playerId: getOrCreatePlayerId() });
         setConnected(true);
       } catch (e) {
         console.error("connect failed", e);
@@ -118,9 +149,29 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       transport.on("welcome", (p) => {
         setMe(p.you);
         // Note: Removed auto-rejoin logic as it causes loops without persistent player IDs
+        // Fetch initial lists
+        try {
+          transport.requestLobbies();
+          transport.requestPlayers();
+        } catch {}
       }),
       transport.on("lobbyUpdated", (p) => {
         setLobby(p.lobby);
+      }),
+      transport.on("lobbiesUpdated", (p) => {
+        setLobbies(p.lobbies);
+      }),
+      transport.on("playerList", (p) => {
+        setPlayers(p.players);
+      }),
+      transport.on("lobbyInvite", (p) => {
+        setInvites((prev) => {
+          // de-dup by lobbyId + from.id
+          const key = `${p.lobbyId}:${p.from.id}`;
+          const exists = prev.some((i) => `${i.lobbyId}:${i.from.id}` === key);
+          if (exists) return prev;
+          return [...prev, p];
+        });
       }),
       transport.on("matchStarted", (p) => {
         setMatch(p.match);
@@ -157,6 +208,9 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       unsubscribers.forEach((u) => u());
       transport.disconnect();
       setConnected(false);
+      setLobbies([]);
+      setPlayers([]);
+      setInvites([]);
     };
   }, [transport, displayName, nameSubmitted]);
 
@@ -186,7 +240,7 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
     transport,
     connected,
     displayName,
-    setDisplayName: changeDisplayName, // Now this triggers name change mode
+    setDisplayName: changeDisplayName, // Triggers name change mode
     me,
     lobby,
     match,
@@ -222,7 +276,7 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         
         // Send a chat message to notify other players
         if (me) {
-          transport.sendChat(`${myName} has left the match.`);
+          transport.sendChat(`${myName} has left the match.`, "match");
         }
         
         // Clear match state
@@ -235,12 +289,30 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         // The server will handle cleanup when the connection is lost
       } catch {}
     },
-    sendChat: (msg: string) => {
+    sendChat: (msg: string, scope?: ChatScope) => {
       if (!msg.trim()) return;
-      transport.sendChat(msg.trim());
+      transport.sendChat(msg.trim(), scope);
     },
     resync: () => transport.resync(),
     chatLog,
+    lobbies,
+    players,
+    invites,
+    requestLobbies: () => {
+      try { transport.requestLobbies(); } catch {}
+    },
+    requestPlayers: () => {
+      try { transport.requestPlayers(); } catch {}
+    },
+    setLobbyVisibility: (visibility: LobbyVisibility) => {
+      try { transport.setLobbyVisibility(visibility); } catch {}
+    },
+    inviteToLobby: (targetPlayerId: string, lobbyId?: string) => {
+      try { transport.inviteToLobby(targetPlayerId, lobbyId); } catch {}
+    },
+    dismissInvite: (lobbyId: string, fromId: string) => {
+      setInvites((prev) => prev.filter((i) => !(i.lobbyId === lobbyId && i.from.id === fromId)));
+    },
   };
 
   return (

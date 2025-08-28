@@ -1,9 +1,11 @@
-"use client";
+  "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Head from "next/head";
 import { useOnline } from "../layout";
+import LobbyList from "@/components/online/LobbyList";
+import InvitesPanel from "@/components/online/InvitesPanel";
+import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 
 export default function LobbyPage() {
   const router = useRouter();
@@ -22,11 +24,47 @@ export default function LobbyPage() {
     sendChat,
     chatLog,
     resync,
+    // New context state/actions
+    lobbies,
+    players,
+    invites,
+    requestLobbies,
+    requestPlayers,
+    setLobbyVisibility,
+    inviteToLobby,
+    dismissInvite,
   } = useOnline();
 
   const [lobbyIdInput, setLobbyIdInput] = useState("");
   const [matchIdInput, setMatchIdInput] = useState("");
   const [chatInput, setChatInput] = useState("");
+  // Default to global when not in a lobby; will auto-switch on join/leave transitions
+  const [chatTab, setChatTab] = useState<'lobby' | 'global'>('global');
+  const chatRef = useRef<HTMLDivElement | null>(null);
+  const prevLobbyIdRef = useRef<string | null>(null);
+
+  const lobbyMessages = chatLog.filter((m) => m.scope === 'lobby');
+  const globalMessages = chatLog.filter((m) => m.scope === 'global');
+  const activeMessages = chatTab === 'lobby' ? lobbyMessages : globalMessages;
+
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chatTab, activeMessages.length]);
+
+  // Switch default chat scope on lobby join/leave transitions only (not on every update)
+  useEffect(() => {
+    const prevId = prevLobbyIdRef.current;
+    const currId = lobby?.id ?? null;
+    if (!prevId && currId) {
+      // Joined or created a lobby
+      setChatTab('lobby');
+    } else if (prevId && !currId) {
+      // Left a lobby
+      setChatTab('global');
+    }
+    prevLobbyIdRef.current = currId;
+  }, [lobby]);
 
   // Note: Removed match leaving tracking since we don't have persistent sessions
 
@@ -55,6 +93,34 @@ export default function LobbyPage() {
 
   return (
     <div className="space-y-6">
+      {/* Top summary of active lobbies and invites */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold opacity-90">Active Lobbies</div>
+            <button
+              className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
+              onClick={() => requestLobbies()}
+              disabled={!connected}
+            >
+              Refresh
+            </button>
+          </div>
+          <LobbyList lobbies={lobbies} onJoin={(id) => joinLobby(id)} />
+        </div>
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
+          <div className="text-sm font-semibold opacity-90">Invites</div>
+          <InvitesPanel
+            invites={invites}
+            onAccept={async (inv) => {
+              await joinLobby(inv.lobbyId);
+              dismissInvite(inv.lobbyId, inv.from.id);
+            }}
+            onDecline={(inv) => dismissInvite(inv.lobbyId, inv.from.id)}
+          />
+        </div>
+      </div>
+
       {/* Match Section - only show for joinable matches */}
       {match?.id && (match.status === 'waiting' || match.status === 'in_progress') && (
         <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
@@ -210,6 +276,34 @@ Join Match
               <div>
                 <span className="opacity-70">Status:</span> {lobby.status}
               </div>
+              <div className="flex items-center gap-2">
+                <span className="opacity-70">Visibility:</span>
+                <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                  lobby.visibility === "open"
+                    ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30"
+                    : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
+                }`}>
+                  {lobby.visibility}
+                </span>
+                <div className="ml-auto flex gap-1">
+                  <button
+                    className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-0.5 text-xs disabled:opacity-40"
+                    onClick={() => setLobbyVisibility("open")}
+                    disabled={lobby.hostId !== me?.id}
+                    title={lobby.hostId !== me?.id ? "Only host can change" : "Set lobby to open"}
+                  >
+                    Open
+                  </button>
+                  <button
+                    className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-0.5 text-xs disabled:opacity-40"
+                    onClick={() => setLobbyVisibility("private")}
+                    disabled={lobby.hostId !== me?.id}
+                    title={lobby.hostId !== me?.id ? "Only host can change" : "Set lobby to private"}
+                  >
+                    Private
+                  </button>
+                </div>
+              </div>
               <div>
                 <span className="opacity-70">Max Players:</span> {lobby.maxPlayers}
               </div>
@@ -260,36 +354,89 @@ Join Match
         </div>
       </div>
 
-      <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-        <div className="text-sm font-semibold opacity-90 mb-2">Chat</div>
-        <div className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1">
-          {chatLog.length === 0 && <div className="opacity-60">No messages</div>}
-          {chatLog.map((m, i) => (
-            <div key={i} className="opacity-90">
-              <span className="text-slate-300/80">[{m.scope}]</span>{" "}
-              <span className="font-medium">{m.from?.displayName ?? "System"}</span>: {m.content}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold opacity-90">Chat</div>
+            <div className="flex items-center gap-1">
+              <button
+                className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                  chatTab === 'lobby' ? 'bg-white/15' : 'hover:bg-white/10 opacity-80'
+                }`}
+                onClick={() => setChatTab('lobby')}
+              >
+                Lobby
+                {lobbyMessages.length > 0 && (
+                  <span className="ml-1 bg-emerald-500/70 text-white text-[10px] px-1 rounded-full">
+                    {lobbyMessages.length}
+                  </span>
+                )}
+              </button>
+              <button
+                className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                  chatTab === 'global' ? 'bg-white/15' : 'hover:bg-white/10 opacity-80'
+                }`}
+                onClick={() => setChatTab('global')}
+              >
+                Global
+                {globalMessages.length > 0 && (
+                  <span className="ml-1 bg-sky-500/70 text-white text-[10px] px-1 rounded-full">
+                    {globalMessages.length}
+                  </span>
+                )}
+              </button>
             </div>
-          ))}
+          </div>
+
+          <div ref={chatRef} className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1">
+            {activeMessages.length === 0 && (
+              <div className="opacity-60">No messages</div>
+            )}
+            {activeMessages.map((m, i) => (
+              <div key={i} className="opacity-90">
+                <span className="font-medium">{m.from?.displayName ?? "System"}</span>: {m.content}
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder={chatTab === 'global' ? 'Type a global message' : 'Type a message'}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && connected) {
+                  const msg = chatInput.trim();
+                  if (!msg) return;
+                  sendChat(msg, chatTab);
+                  setChatInput('');
+                }
+              }}
+              disabled={!connected}
+            />
+            <button
+              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => {
+                const msg = chatInput.trim();
+                if (!msg) return;
+                sendChat(msg, chatTab);
+                setChatInput('');
+              }}
+              disabled={!connected || !chatInput.trim()}
+            >
+              Send
+            </button>
+          </div>
         </div>
-        <div className="mt-2 flex gap-2">
-          <input
-            className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-            placeholder="Type a message"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
+        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
+          <div className="text-sm font-semibold opacity-90 mb-2">Players</div>
+          <PlayersInvitePanel
+            players={players}
+            me={me}
+            lobby={lobby}
+            onInvite={(pid, lid) => inviteToLobby(pid, lid)}
+            onRefresh={() => requestPlayers()}
           />
-          <button
-            className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm"
-            onClick={() => {
-              const msg = chatInput.trim();
-              if (!msg) return;
-              sendChat(msg);
-              setChatInput("");
-            }}
-            disabled={!connected}
-          >
-            Send
-          </button>
         </div>
       </div>
     </div>

@@ -4,14 +4,14 @@ import { useState, useRef, useEffect } from "react";
 import { useGameStore } from "@/lib/game/store";
 import { LogOut, MessageCircle, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { ServerChatPayloadT } from "@/lib/net/protocol";
+import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
 
 interface OnlineConsoleProps {
   dragFromHand: boolean;
   chatLog: ServerChatPayloadT[];
   chatInput: string;
   setChatInput: (value: string) => void;
-  onSendChat: (message: string) => void;
+  onSendChat: (message: string, scope?: ChatScope) => void;
   onLeaveMatch: () => void;
   connected: boolean;
 }
@@ -30,6 +30,8 @@ export default function OnlineConsole({
   const router = useRouter();
   const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>('events');
+  // Only show match chat in match console
+  const matchChat = chatLog.filter((m) => m.scope === 'match');
   
   // Game events
   const events = useGameStore((s) => s.events);
@@ -56,12 +58,12 @@ export default function OnlineConsole({
     const el = targetRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [events.length, chatLog.length, activeTab, consoleOpen]);
+  }, [events.length, matchChat.length, activeTab, consoleOpen]);
 
   const handleSendChat = () => {
     const msg = chatInput.trim();
     if (!msg) return;
-    onSendChat(msg);
+    onSendChat(msg, 'match');
     setChatInput("");
   };
 
@@ -108,9 +110,9 @@ export default function OnlineConsole({
             >
               <MessageCircle className="w-3 h-3" />
               Chat
-              {chatLog.length > 0 && (
+              {matchChat.length > 0 && (
                 <span className="bg-green-500 text-white text-xs px-1 rounded-full">
-                  {chatLog.length}
+                  {matchChat.length}
                 </span>
               )}
             </button>
@@ -176,12 +178,11 @@ export default function OnlineConsole({
                   ref={chatRef}
                   className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-48"
                 >
-                  {chatLog.length === 0 && (
+                  {matchChat.length === 0 && (
                     <div className="opacity-60">No messages</div>
                   )}
-                  {chatLog.map((m, i) => (
+                  {matchChat.map((m, i) => (
                     <div key={i} className="opacity-90">
-                      <span className="text-slate-300/80">[{m.scope}]</span>{" "}
                       <span className="font-medium">{m.from?.displayName ?? "System"}</span>: {m.content}
                     </div>
                   ))}
