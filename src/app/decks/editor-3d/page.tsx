@@ -671,46 +671,205 @@ export default function DeckEditor3DPage() {
     return updated;
   }, [isSortingEnabled, stackPositions]);
 
-  // Working zone movement functions from 2D editor
+  // Force re-sorting function
+  const forceSorting = useCallback(() => {
+    setPick3D((prev) => applySortingIfEnabled(prev));
+  }, [applySortingIfEnabled]);
+
+  // Zone movement functions without auto-sorting - let users control when to sort
   const moveOneToSideboard = useCallback((cardId: number) => {
     setPick3D((prev) => {
       const deckCard = prev.find(p => p.card.cardId === cardId && p.z < 0);
-      if (!deckCard) return prev;
+      
+      if (!deckCard) {
+        return prev;
+      }
 
       const updated = [...prev];
       const cardIndex = updated.findIndex(p => p.id === deckCard.id);
       
-      // Move card to sideboard zone (z >= 0)
+      const newZ = 1.5 + Math.random() * 0.5;
+      const newX = 0.5 + Math.random() * 3;
+      
+      // Move card to sideboard zone (z >= 0) - no auto-sorting
       updated[cardIndex] = {
         ...updated[cardIndex],
-        x: 0.5 + Math.random() * 3,
-        z: 1.5 + Math.random() * 0.5,
+        x: newX,
+        z: newZ,
         y: undefined
       };
-
-      return applySortingIfEnabled(updated);
+      
+      return updated;
     });
-  }, [applySortingIfEnabled]);
+  }, []);
 
   const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
     setPick3D((prev) => {
       const sideboardCard = prev.find(p => p.card.cardId === cardId && p.z >= 0);
-      if (!sideboardCard) return prev;
+      
+      if (!sideboardCard) {
+        return prev;
+      }
 
       const updated = [...prev];
       const cardIndex = updated.findIndex(p => p.id === sideboardCard.id);
       
-      // Move card to deck zone (z < 0)
+      const newZ = -1.5 - Math.random() * 0.5;
+      const newX = -2 + Math.random() * 4;
+      
+      // Move card to deck zone (z < 0) - no auto-sorting
       updated[cardIndex] = {
         ...updated[cardIndex],
-        x: -2 + Math.random() * 4,
-        z: -1.5 - Math.random() * 0.5,
+        x: newX,
+        z: newZ,
         y: undefined
       };
+      
+      return updated;
+    });
+  }, []);
 
+  // Add card functions from 2D editor
+  const addCardAuto = useCallback((r: SearchResult) => {
+    const t = (r.type || "").toLowerCase();
+    const isSite = t.includes("site");
+    
+    // Add to appropriate zone
+    const targetZ = isSite ? -1.5 : -1.0; // Sites and spells both go to deck initially
+    const targetX = -2 + Math.random() * 4;
+    const finalZ = targetZ - Math.random() * 0.5; // Ensure deck zone (z < 0)
+    
+    const newCard: Pick3D = {
+      id: nextPickId,
+      card: {
+        cardId: r.cardId,
+        cardName: r.cardName,
+        type: r.type,
+        slug: r.slug
+      },
+      x: targetX,
+      z: finalZ,
+      y: undefined
+    };
+
+    setPick3D((prev) => {
+      const updated = [...prev, newCard];
       return applySortingIfEnabled(updated);
     });
-  }, [applySortingIfEnabled]);
+    
+    setNextPickId(prev => prev + 1);
+    setFeedbackMessage(`Added "${r.cardName}" to Deck`);
+    setTimeout(() => setFeedbackMessage(null), 2000);
+  }, [applySortingIfEnabled, nextPickId]);
+
+  const addToSideboardFromSearch = useCallback((r: SearchResult) => {
+    const targetZ = 1.5 + Math.random() * 0.5; // Sideboard zone (z >= 0)
+    const targetX = 0.5 + Math.random() * 3;
+    
+    const newCard: Pick3D = {
+      id: nextPickId,
+      card: {
+        cardId: r.cardId,
+        cardName: r.cardName,
+        type: r.type,
+        slug: r.slug
+      },
+      x: targetX,
+      z: targetZ,
+      y: undefined
+    };
+
+    setPick3D((prev) => {
+      const updated = [...prev, newCard];
+      return applySortingIfEnabled(updated);
+    });
+    
+    setNextPickId(prev => prev + 1);
+    setFeedbackMessage(`Added "${r.cardName}" to Sideboard`);
+    setTimeout(() => setFeedbackMessage(null), 2000);
+  }, [applySortingIfEnabled, nextPickId]);
+
+  // Save deck function from 2D editor
+  async function saveDeck() {
+    try {
+      setSaving(true);
+      setError(null);
+      setSaveMsg(null);
+
+      if (!validation.avatar || !validation.atlas || !validation.spellbook) {
+        throw new Error(
+          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+        );
+      }
+
+      // Convert Pick3D to the API format expected by the backend
+      const cards: Array<{cardId: number, zone: string, count: number, variantId?: number}> = [];
+      
+      // Group cards by cardId and zone
+      const cardGroups = new Map<string, {cardId: number, zone: string, count: number, variantId?: number}>();
+      
+      pick3D.forEach(pick => {
+        const zone = pick.z < 0 ? 
+          ((pick.card.type || "").toLowerCase().includes("site") ? "Atlas" : "Spellbook") : 
+          "Sideboard";
+        const key = `${pick.card.cardId}-${zone}`;
+        
+        if (cardGroups.has(key)) {
+          cardGroups.get(key)!.count += 1;
+        } else {
+          cardGroups.set(key, {
+            cardId: pick.card.cardId,
+            zone: zone,
+            count: 1,
+            variantId: undefined // We don't track variants in 3D editor yet
+          });
+        }
+      });
+
+      cards.push(...cardGroups.values());
+
+      if (deckId) {
+        const res = await fetch(`/api/decks/${deckId}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: deckName || "Deck",
+            set: setName,
+            cards,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to update deck");
+        setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
+      } else {
+        const res = await fetch("/api/decks", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: deckName || "New Deck",
+            format: "Constructed",
+            set: setName,
+            cards,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to save deck");
+        setDeckId(data.id);
+        setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
+        
+        // Update the URL to include the deck id
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.searchParams.set('id', data.id);
+          window.history.replaceState({}, '', url.toString());
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Effect to apply sorting only when sorting is first enabled
   useEffect(() => {
@@ -962,30 +1121,45 @@ export default function DeckEditor3DPage() {
 
   const avatarCount = useMemo(() => {
     let n = 0;
-    for (const it of Object.values(picks)) {
-      const t = (it.type || "").toLowerCase();
-      if (t.includes("avatar")) n += it.count;
+    for (const pick of pick3D) {
+      // Only count cards in deck zone (z < 0)
+      if (pick.z >= 0) continue;
+      const t = (pick.card.type || "").toLowerCase();
+      if (t.includes("avatar")) n += 1;
     }
     return n;
-  }, [picks]);
+  }, [pick3D]);
 
   const spellbookNonAvatar = useMemo(() => {
     let n = 0;
-    for (const it of Object.values(picks)) {
-      if (it.zone !== "Spellbook") continue;
-      const t = (it.type || "").toLowerCase();
-      if (!t.includes("avatar")) n += it.count;
+    for (const pick of pick3D) {
+      // Only count non-avatar cards in deck zone (z < 0)
+      if (pick.z >= 0) continue;
+      const t = (pick.card.type || "").toLowerCase();
+      if (!t.includes("avatar")) n += 1;
     }
     return n;
-  }, [picks]);
+  }, [pick3D]);
+
+  // Count sites in deck zone for Atlas validation
+  const atlasCount = useMemo(() => {
+    let n = 0;
+    for (const pick of pick3D) {
+      // Only count sites in deck zone (z < 0)
+      if (pick.z >= 0) continue;
+      const t = (pick.card.type || "").toLowerCase();
+      if (t.includes("site")) n += 1;
+    }
+    return n;
+  }, [pick3D]);
 
   const validation = useMemo(() => {
     return {
       avatar: avatarCount === 1,
-      atlas: zoneCounts.Atlas >= 12,
+      atlas: atlasCount >= 12,
       spellbook: spellbookNonAvatar >= 24,
     };
-  }, [avatarCount, zoneCounts, spellbookNonAvatar]);
+  }, [avatarCount, atlasCount, spellbookNonAvatar]);
 
   // Check if a card can be added/removed in draft mode
   const canModifyCard = useCallback(
@@ -1041,9 +1215,10 @@ export default function DeckEditor3DPage() {
                     z={z}
                     y={y}
                     onDrop={(wx, wz) => {
-                      // Simple approach: just move card to drop position, then apply sorting if enabled
+                      // Move card to drop position - only sort if sorting is enabled and this is a manual drag
                       const newZone = wz < 0 ? "Deck" : "Sideboard";
                       const oldZone = p.z < 0 ? "Deck" : "Sideboard";
+                      const zoneChanged = oldZone !== newZone;
 
                       setPick3D((prev) => {
                         const updated = [...prev];
@@ -1053,12 +1228,12 @@ export default function DeckEditor3DPage() {
                         // Move the card to the drop position
                         updated[cardIndex] = { ...updated[cardIndex], x: wx, z: wz, y: undefined };
 
-                        // Apply sorting if enabled (this will automatically position it correctly)
-                        return applySortingIfEnabled(updated);
+                        // Only apply sorting if sorting is currently enabled (but don't auto-trigger)
+                        return isSortingEnabled ? applySortingIfEnabled(updated) : updated;
                       });
 
                       // Show feedback message for zone changes
-                      if (oldZone !== newZone) {
+                      if (zoneChanged) {
                         setFeedbackMessage(
                           `Moved "${p.card.cardName}" to ${newZone}`
                         );
@@ -1081,34 +1256,20 @@ export default function DeckEditor3DPage() {
                       else setHoverPreview(null);
                     }}
                     onRelease={(wx, wz, wasDragging) => {
-                      // Click to move between deck/sideboard
+                      // Click to move between deck/sideboard using the same functions as sidebar
                       if (!wasDragging) {
                         const currentZone = p.z < 0 ? "Deck" : "Sideboard";
-                        const newZone = currentZone === "Deck" ? "Sideboard" : "Deck";
                         
-                        setPick3D((prev) => {
-                          const updated = [...prev];
-                          const cardIndex = updated.findIndex(it => it.id === p.id);
-                          if (cardIndex === -1) return prev;
-
-                          // Simple approach: just move to basic position in target zone
-                          // Ensure we use the correct Z boundaries: Deck < 0, Sideboard >= 0
-                          const basicTargetZ = newZone === "Deck" ? -1.5 : 1.5;
-                          const basicTargetX = -2 + Math.random() * 4; // Random X position
-                          
-                          updated[cardIndex] = { 
-                            ...updated[cardIndex], 
-                            x: basicTargetX,
-                            z: basicTargetZ + (newZone === "Deck" ? -Math.random() * 0.5 : Math.random() * 0.5), // Ensure deck stays < 0
-                            y: undefined // Reset Y elevation
-                          };
-
-                          // Apply sorting if enabled (this will automatically position it correctly)
-                          return applySortingIfEnabled(updated);
-                        });
-
-                        // Show feedback message
-                        setFeedbackMessage(`Moved "${p.card.cardName}" to ${newZone}`);
+                        if (currentZone === "Deck") {
+                          // Move from deck to sideboard
+                          moveOneToSideboard(p.card.cardId);
+                          setFeedbackMessage(`Moved "${p.card.cardName}" to Sideboard`);
+                        } else {
+                          // Move from sideboard to deck
+                          moveOneFromSideboardToDeck(p.card.cardId);
+                          setFeedbackMessage(`Moved "${p.card.cardName}" to Deck`);
+                        }
+                        
                         setTimeout(() => setFeedbackMessage(null), 2000);
                       }
                     }}
@@ -1201,9 +1362,18 @@ export default function DeckEditor3DPage() {
               </button>
 
               {isSortingEnabled && (
-                <div className="text-sm text-white/80 px-3 py-2">
-                  📋 Deck: Mana + Sites by Element • Sideboard: Elements
-                </div>
+                <>
+                  <div className="text-sm text-white/80 px-3 py-2">
+                    📋 Deck: Mana + Sites by Element • Sideboard: Elements
+                  </div>
+                  <button
+                    onClick={forceSorting}
+                    className="h-10 px-4 rounded bg-blue-600 text-white hover:bg-blue-500 font-medium"
+                    title="Re-apply sorting to all cards"
+                  >
+                    Re-sort
+                  </button>
+                </>
               )}
 
               <button
@@ -1225,7 +1395,7 @@ export default function DeckEditor3DPage() {
             <div
               className={validation.atlas ? "text-green-400" : "text-red-400"}
             >
-              Atlas: {zoneCounts.Atlas} / 12+
+              Atlas: {atlasCount} / 12+
             </div>
             <div
               className={
@@ -1335,50 +1505,26 @@ export default function DeckEditor3DPage() {
                         const cardInDeck = pick3D.filter(p => p.card.cardId === it.cardId && p.z < 0).length;
                         const cardInSideboard = pick3D.filter(p => p.card.cardId === it.cardId && p.z >= 0).length;
 
-                        // Right-click context menu handler
+                        // Enhanced right-click handler with accurate feedback messages
                         const handleContextMenu = (e: React.MouseEvent) => {
                           e.preventDefault();
                           
-                          // Prefer moving from deck to sideboard, but if no deck cards, move from sideboard
-                          let cardToMove: Pick3D | undefined;
-                          let currentZone: "Deck" | "Sideboard";
-                          let targetZone: "Deck" | "Sideboard";
-                          
+                          // Calculate correct remaining counts after the move
                           if (cardInDeck > 0) {
-                            // Move from deck to sideboard
-                            currentZone = "Deck";
-                            targetZone = "Sideboard";
-                            cardToMove = pick3D.find(p => p.card.cardId === it.cardId && p.z < 0);
+                            moveOneToSideboard(it.cardId);
+                            const remaining = cardInDeck - 1;
+                            const message = remaining > 0 
+                              ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+                              : `Moved "${it.name}" to Sideboard (deck now empty)`;
+                            setFeedbackMessage(message);
+                            setTimeout(() => setFeedbackMessage(null), 2000);
                           } else if (cardInSideboard > 0) {
-                            // Move from sideboard to deck
-                            currentZone = "Sideboard";
-                            targetZone = "Deck";
-                            cardToMove = pick3D.find(p => p.card.cardId === it.cardId && p.z >= 0);
-                          }
-                          
-                          if (cardToMove) {
-                            setPick3D((prev) => {
-                              const updated = [...prev];
-                              const cardIndex = updated.findIndex(c => c.id === cardToMove.id);
-                              if (cardIndex === -1) return prev;
-
-                              // Move to target zone with clear boundaries
-                              const basicTargetZ = targetZone === "Deck" ? -1.5 : 1.5;
-                              const basicTargetX = -2 + Math.random() * 4;
-                              const finalZ = basicTargetZ + (targetZone === "Deck" ? -Math.random() * 0.5 : Math.random() * 0.5);
-                              
-                              updated[cardIndex] = { 
-                                ...updated[cardIndex], 
-                                x: basicTargetX,
-                                z: finalZ,
-                                y: undefined
-                              };
-
-                              // Apply sorting if enabled
-                              return applySortingIfEnabled(updated);
-                            });
-
-                            setFeedbackMessage(`Moved "${it.name}" to ${targetZone}`);
+                            moveOneFromSideboardToDeck(it.cardId);
+                            const remaining = cardInSideboard - 1;
+                            const message = remaining > 0
+                              ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
+                              : `Moved "${it.name}" to Deck (sideboard now empty)`;
+                            setFeedbackMessage(message);
                             setTimeout(() => setFeedbackMessage(null), 2000);
                           }
                         };
@@ -1688,6 +1834,65 @@ export default function DeckEditor3DPage() {
                   </div>
                 )}
 
+                {/* Search Results */}
+                {!!results.length && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-white font-medium">
+                        Search Results ({results.length} cards)
+                      </div>
+                      <button
+                        onClick={() => setResults([])}
+                        className="text-white/60 hover:text-white text-sm px-2 py-1 rounded hover:bg-white/10"
+                        title="Close search results"
+                      >
+                        ✕ Close
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-96 overflow-y-auto">
+                    {results.map((r) => {
+                      const isSite = (r.type || "").toLowerCase().includes("site");
+                      return (
+                        <div
+                          key={r.variantId}
+                          className="border border-white/30 rounded p-2 bg-black/70 text-white text-xs"
+                        >
+                          <div className="relative aspect-[3/4] mb-2 rounded overflow-hidden bg-black/40">
+                            <Image
+                              src={`/api/images/${r.slug}`}
+                              alt={r.cardName}
+                              fill
+                              className={isSite ? "object-contain rotate-90" : "object-cover"}
+                              sizes="120px"
+                            />
+                          </div>
+                          <div className="font-semibold line-clamp-1 mb-1">
+                            {r.cardName}
+                          </div>
+                          <div className="opacity-80 line-clamp-1 mb-2">
+                            {r.type || ""}
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              className="px-2 py-1 border border-white/30 rounded hover:bg-white/10"
+                              onClick={() => addCardAuto(r)}
+                            >
+                              + Deck
+                            </button>
+                            <button
+                              className="px-2 py-1 border border-white/30 rounded hover:bg-white/10"
+                              onClick={() => addToSideboardFromSearch(r)}
+                            >
+                              + Side
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Usage instructions */}
                 <div className="text-white text-sm opacity-80">
                   {isDraftMode
@@ -1706,12 +1911,6 @@ export default function DeckEditor3DPage() {
                       Exit Draft Mode
                     </button>
                   )}
-                  <button
-                    onClick={clearEditor}
-                    className="h-10 px-4 rounded border border-white/30 text-white"
-                  >
-                    Clear
-                  </button>
                   <button
                     onClick={saveDeck}
                     disabled={saving}
