@@ -12,38 +12,47 @@ interface OnlineD20ScreenProps {
   onRollingComplete: () => void;
 }
 
-export default function OnlineD20Screen({ 
-  myPlayerKey, 
-  playerNames, 
-  onRollingComplete 
+export default function OnlineD20Screen({
+  myPlayerKey,
+  playerNames,
+  onRollingComplete,
 }: OnlineD20ScreenProps) {
   const d20Rolls = useGameStore((s) => s.d20Rolls);
   const rollD20 = useGameStore((s) => s.rollD20);
   const setupWinner = useGameStore((s) => s.setupWinner);
   const choosePlayerOrder = useGameStore((s) => s.choosePlayerOrder);
   const phase = useGameStore((s) => s.phase);
-  
+
   const myRoll = d20Rolls[myPlayerKey];
   const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
   const opponentRoll = d20Rolls[opponentKey];
   const opponentName = playerNames[opponentKey];
-  
+
   const bothRolled = myRoll !== null && opponentRoll !== null;
   const canChoose = setupWinner === myPlayerKey;
-  
+
   // Track when both dice have completed their roll animations
   const [myDiceComplete, setMyDiceComplete] = useState(false);
   const [opponentDiceComplete, setOpponentDiceComplete] = useState(false);
   const bothDiceComplete = myDiceComplete && opponentDiceComplete;
-  
+
   // Track when choice was made and add delay to show the selection
   const [choiceMade, setChoiceMade] = useState(false);
-  
+
   // Monitor for when choice is made (phase changes to Start) and advance both players
   useEffect(() => {
-    console.log("useEffect triggered - Phase:", phase, "SetupWinner:", setupWinner, "ChoiceMade:", choiceMade);
+    console.log(
+      "useEffect triggered - Phase:",
+      phase,
+      "SetupWinner:",
+      setupWinner,
+      "ChoiceMade:",
+      choiceMade
+    );
     if (phase === "Start" && setupWinner && !choiceMade) {
-      console.log("CONDITIONS MET! Setting choiceMade=true and starting 2s timeout");
+      console.log(
+        "CONDITIONS MET! Setting choiceMade=true and starting 2s timeout"
+      );
       setChoiceMade(true);
       // Show choice confirmation for 2 seconds, then advance
       setTimeout(() => {
@@ -52,7 +61,7 @@ export default function OnlineD20Screen({
       }, 2000);
     }
   }, [phase, setupWinner, choiceMade, onRollingComplete]);
-  
+
   // Reset dice completion when rolls are reset (for ties)
   useEffect(() => {
     if (myRoll === null) {
@@ -66,17 +75,17 @@ export default function OnlineD20Screen({
       setChoiceMade(false);
     }
   }, [myRoll, opponentRoll]);
-  
+
   const handleRoll = () => {
     if (myRoll === null) {
       rollD20(myPlayerKey);
     }
   };
-  
+
   const handleMyDiceComplete = () => {
     setMyDiceComplete(true);
   };
-  
+
   const handleOpponentDiceComplete = () => {
     setOpponentDiceComplete(true);
   };
@@ -88,7 +97,7 @@ export default function OnlineD20Screen({
       const wantsToGoFirst = chosenSeat === "p1";
       choosePlayerOrder(myPlayerKey, wantsToGoFirst);
       // TODO: Add actual seat reassignment logic
-      
+
       // Don't call onRollingComplete here - let the useEffect handle it when phase changes
     }
   };
@@ -96,23 +105,29 @@ export default function OnlineD20Screen({
   return (
     <div className="w-full max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
       <div className="mb-6 text-center">
-        <div className="text-lg font-semibold mb-1">
-          Roll for First Player
+        <div className="text-lg font-semibold mb-1 font-fantaisie text-xl">
+          Roll D20
         </div>
         <div className="text-sm opacity-80">
-          Playing as: <span className="font-medium text-blue-400">{playerNames[myPlayerKey]}</span>
+          Playing as:{" "}
+          <span className="font-medium text-blue-400">
+            {playerNames[myPlayerKey]}
+          </span>
         </div>
         <div className="text-xs opacity-60 mt-1">
           Click your die to roll. Highest roll gets to choose player order.
         </div>
       </div>
-      
+
       {/* 3D Canvas for dice rolling */}
-      <div className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6" style={{ height: "300px" }}>
+      <div
+        className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6"
+        style={{ height: "300px" }}
+      >
         <Canvas camera={{ position: [0, 0, 4], fov: 60 }}>
           <ambientLight intensity={0.4} />
           <directionalLight position={[5, 5, 5]} intensity={0.8} />
-          
+
           {/* Player 1 die - left side */}
           <D20Dice
             player="p1"
@@ -120,9 +135,13 @@ export default function OnlineD20Screen({
             roll={d20Rolls.p1}
             isRolling={d20Rolls.p1 !== null}
             onRoll={myPlayerKey === "p1" ? handleRoll : undefined}
-            onRollComplete={myPlayerKey === "p1" ? handleMyDiceComplete : handleOpponentDiceComplete}
+            onRollComplete={
+              myPlayerKey === "p1"
+                ? handleMyDiceComplete
+                : handleOpponentDiceComplete
+            }
           />
-          
+
           {/* Player 2 die - right side */}
           <D20Dice
             player="p2"
@@ -130,49 +149,59 @@ export default function OnlineD20Screen({
             roll={d20Rolls.p2}
             isRolling={d20Rolls.p2 !== null}
             onRoll={myPlayerKey === "p2" ? handleRoll : undefined}
-            onRollComplete={myPlayerKey === "p2" ? handleMyDiceComplete : handleOpponentDiceComplete}
+            onRollComplete={
+              myPlayerKey === "p2"
+                ? handleMyDiceComplete
+                : handleOpponentDiceComplete
+            }
           />
         </Canvas>
       </div>
-      
+
       {/* Status and controls */}
       <div className="space-y-4">
         <div className="flex justify-between items-center text-sm">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${myPlayerKey === "p1" ? "bg-blue-500" : "bg-gray-500"}`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                myPlayerKey === "p1" ? "bg-blue-500" : "bg-gray-500"
+              }`}
+            />
             <span>{playerNames.p1}</span>
             <span className="font-mono">{d20Rolls.p1 ?? "—"}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${myPlayerKey === "p2" ? "bg-red-500" : "bg-gray-500"}`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                myPlayerKey === "p2" ? "bg-red-500" : "bg-gray-500"
+              }`}
+            />
             <span>{playerNames.p2}</span>
             <span className="font-mono">{d20Rolls.p2 ?? "—"}</span>
           </div>
         </div>
-        
+
         {!bothRolled && (
           <div className="text-center text-sm opacity-70">
-            {myRoll === null ? "Click your die to roll!" : `Waiting for ${opponentName} to roll...`}
+            {myRoll === null
+              ? "Click your die to roll!"
+              : `Waiting for ${opponentName} to roll...`}
           </div>
         )}
-        
+
         {bothRolled && bothDiceComplete && !setupWinner && (
-          <div className="text-center text-sm opacity-70">
+          <div className="text-center text-sm opacity-70 font-fantaisie text-xl">
             Tied! Rolling again...
           </div>
         )}
-        
-        {/* Debug info */}
-        <div className="text-xs opacity-50 text-center mb-2">
-          Debug: bothRolled={bothRolled ? 'true' : 'false'} | bothDiceComplete={bothDiceComplete ? 'true' : 'false'} | setupWinner={setupWinner || 'null'} | choiceMade={choiceMade ? 'true' : 'false'} | phase={phase}
-        </div>
 
         {bothRolled && bothDiceComplete && setupWinner && !choiceMade && (
           <div className="text-center space-y-3">
-            <div className="text-sm text-yellow-400 font-medium">
-              🎉 {playerNames[setupWinner]} wins the roll! (rolled {setupWinner === "p1" ? d20Rolls.p1 : d20Rolls.p2})
+            <div className="text-yellow-400 font-fantaisie text-xl">
+              {playerNames[setupWinner]} wins the roll! (rolled{" "}
+              {setupWinner === "p1" ? d20Rolls.p1 : d20Rolls.p2})
             </div>
-            
+
             {canChoose && (
               <>
                 <div className="text-sm text-green-400 font-medium">
@@ -194,7 +223,7 @@ export default function OnlineD20Screen({
                 </div>
               </>
             )}
-            
+
             {!canChoose && (
               <div className="text-sm opacity-70">
                 Waiting for {playerNames[setupWinner]} to choose their seat...
@@ -202,10 +231,12 @@ export default function OnlineD20Screen({
             )}
           </div>
         )}
-        
+
         {choiceMade && setupWinner && (
           <div className="text-center text-sm text-green-400">
-            {playerNames[setupWinner]} chose {phase === "Start" ? "their seat" : "to make a choice"}. Starting game...
+            {playerNames[setupWinner]} chose{" "}
+            {phase === "Start" ? "their seat" : "to make a choice"}. Starting
+            game...
           </div>
         )}
       </div>

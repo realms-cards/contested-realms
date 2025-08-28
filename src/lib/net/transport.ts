@@ -36,11 +36,14 @@ export interface GameTransport {
   createLobby(options?: { visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }>;
   joinLobby(lobbyId?: string): Promise<{ lobbyId: string }>; // if omitted, auto-join/create
   joinMatch(matchId: string): Promise<void>;
+  leaveMatch(): void;
   leaveLobby(): void;
   ready(ready: boolean): void;
   startMatch(): void;
 
   sendAction(action: unknown): void;
+  // Explicit mulligan completion signal (per-player)
+  mulliganDone(): void;
   sendChat(content: string, scope?: ChatScope): void;
 
   resync(): void;

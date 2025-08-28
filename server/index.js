@@ -292,6 +292,33 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Per-player mulligan completion. When all players are done, advance to Main.
+  socket.on("mulliganDone", () => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const match = matches.get(player.matchId);
+    if (!match) return;
+    if (match.status !== 'waiting') return; // Only relevant during setup
+
+    // Track per-player mulligan completion for this match
+    if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
+      match.mulliganDone = new Set();
+    }
+    match.mulliganDone.add(player.id);
+
+    // If all current players have finished mulligans, start the game
+    const allDone = Array.isArray(match.playerIds) && match.playerIds.every((pid) => match.mulliganDone.has(pid));
+    if (allDone) {
+      const room = `match:${match.id}`;
+      // Flip match status and broadcast updated match info for strict sync
+      match.status = 'in_progress';
+      io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+      // Broadcast a deterministic patch to set phase to Main
+      io.to(room).emit("statePatch", { patch: { phase: 'Main' }, t: Date.now() });
+    }
+  });
+
   socket.on("createLobby", (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
@@ -401,8 +428,31 @@ io.on("connection", (socket) => {
     const player = getPlayerBySocket(socket);
     if (!player) return;
     player.matchId = match.id;
-    socket.join(`match:${match.id}`);
-    socket.emit("matchStarted", { match: getMatchInfo(match) });
+    // Ensure roster contains the player exactly once
+    if (!match.playerIds.includes(player.id)) {
+      match.playerIds.push(player.id);
+    }
+    const room = `match:${match.id}`;
+    socket.join(room);
+    // Broadcast updated match info to everyone in the match (including this socket)
+    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+  });
+
+  socket.on("leaveMatch", () => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const matchId = player.matchId;
+    const match = matches.get(matchId);
+    // Clear player association first
+    player.matchId = null;
+    // Leave the match room
+    socket.leave(`match:${matchId}`);
+    // Remove from match roster and broadcast updated info
+    if (match) {
+      match.playerIds = match.playerIds.filter((pid) => pid !== player.id);
+      io.to(`match:${matchId}`).emit("matchStarted", { match: getMatchInfo(match) });
+    }
   });
 
   socket.on("action", (payload) => {
@@ -410,8 +460,24 @@ io.on("connection", (socket) => {
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
     const matchRoom = `match:${player.matchId}`;
-    // MVP: relay as a statePatch for clients to handle deterministically
-    io.to(matchRoom).emit("statePatch", { patch: payload ? payload.action : null, t: Date.now() });
+    // If this is the first transition to main phase, mark match as in_progress and broadcast updated match info
+    try {
+      const match = matches.get(player.matchId);
+      const action = payload ? payload.action : null;
+      if (
+        match &&
+        match.status === 'waiting' &&
+        action && typeof action === 'object' && action.phase === 'Main'
+      ) {
+        match.status = 'in_progress';
+        io.to(matchRoom).emit("matchStarted", { match: getMatchInfo(match) });
+      }
+      // Relay the action as a deterministic statePatch to all clients
+      io.to(matchRoom).emit("statePatch", { patch: action, t: Date.now() });
+    } catch {
+      // Fallback relay if any unexpected error occurs
+      io.to(matchRoom).emit("statePatch", { patch: payload ? payload.action : null, t: Date.now() });
+    }
   });
 
   socket.on("chat", (payload = {}) => {

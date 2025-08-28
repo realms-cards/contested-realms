@@ -65,12 +65,13 @@ type BoosterCard = {
   setName?: string;
 };
 
-// Exact same Pick3D structure as draft-3d
+// Enhanced Pick3D structure with y coordinate for stacking
 type Pick3D = {
   id: number;
   card: BoosterCard;
   x: number;
   z: number;
+  y?: number;
 };
 
 // Enhanced DraggableCard3D with double-click support
@@ -79,6 +80,7 @@ function DraggableCard3D({
   isSite,
   x,
   z,
+  y = 0.002,
   onDrop,
   disabled,
   onDragChange,
@@ -94,6 +96,7 @@ function DraggableCard3D({
   isSite: boolean;
   x: number;
   z: number;
+  y?: number;
   onDrop?: (wx: number, wz: number) => void;
   disabled?: boolean;
   onDragChange?: (dragging: boolean) => void;
@@ -130,7 +133,7 @@ function DraggableCard3D({
     (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
 
   return (
-    <group ref={ref} position={[x, 0.002, z]}>
+    <group ref={ref} position={[x, y, z]}>
       {/* Larger invisible hitbox for easier interaction */}
       <mesh
         position={[0, 0.01, 0]}
@@ -152,8 +155,7 @@ function DraggableCard3D({
             const next = getTopRenderOrder();
             roRef.current = next;
           }
-          // Lock orbit immediately while pointer is held on a card to prevent camera orbiting
-          onDragChange?.(true);
+          // Don't lock orbit immediately - wait for actual drag to start
           // Ensure we always unlock if pointerup happens off the mesh before drag begins
           if (!upCleanupRef.current) {
             const earlyUp = () => {
@@ -185,6 +187,8 @@ function DraggableCard3D({
             dragging.current = true;
             setIsDragging(true);
             setUprightLocked(true);
+            // Lock orbit controls when dragging actually starts
+            onDragChange?.(true);
             // Bind a global pointerup fallback
             const handleUp = () => {
               // Ensure cleanup even if pointer up occurs off the mesh
@@ -301,9 +305,8 @@ export default function DeckEditor3DPage() {
 
   // Exact same 3D state as draft-3d
   const [orbitLocked, setOrbitLocked] = useState(false);
-  const [isSortingEnabled, setIsSortingEnabled] = useState(false);
+  const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [infoBoxVisible, setInfoBoxVisible] = useState(true);
-  const [compactPicks, setCompactPicks] = useState(true);
   const [picksOpen, setPicksOpen] = useState(true);
 
   // Tab state for cards view - default to "Your Deck"
@@ -345,43 +348,6 @@ export default function DeckEditor3DPage() {
     [deckItems]
   );
 
-  // Helper function to move cards between deck and sideboard
-  const moveCardBetweenZones = useCallback(
-    (
-      cardId: number,
-      fromZone: "Deck" | "Sideboard",
-      toZone: "Deck" | "Sideboard"
-    ) => {
-      const cardIndex = pick3D.findIndex(
-        (item) =>
-          item.id === cardId && (item.z < 0 ? "Deck" : "Sideboard") === fromZone
-      );
-      if (cardIndex === -1) return;
-
-      // Get card name before updating
-      const cardName = pick3D[cardIndex]?.card?.cardName || "Card";
-
-      setPick3D((prev) => {
-        const updated = [...prev];
-        // Move to appropriate zone: deck is z < 0, sideboard is z >= 0
-        updated[cardIndex] = {
-          ...updated[cardIndex],
-          z:
-            toZone === "Deck"
-              ? -1 + Math.random() * 1.8
-              : 0.5 + Math.random() * 3,
-        };
-        return updated;
-      });
-
-      // Show feedback message
-      setFeedbackMessage(`Moved "${cardName}" to ${toZone}`);
-      setTimeout(() => setFeedbackMessage(null), 2000);
-
-      console.log(`Moved card ${cardId} from ${fromZone} to ${toZone}`);
-    },
-    [pick3D]
-  );
 
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
@@ -667,132 +633,96 @@ export default function DeckEditor3DPage() {
     return positions;
   }, [sortedPicks, isSortingEnabled]);
 
-  // Smart positioning helper - finds best stack position when dragging in sorted mode
-  const findSmartPosition = useCallback(
-    (
-      targetX: number,
-      targetZ: number,
-      cardId: number,
-      cardMeta?: any,
-      cardType?: string
-    ) => {
-      if (!isSortingEnabled) return { x: targetX, z: targetZ };
 
-      // Find the closest stack based on target position
-      const currentCardZone = targetZ < 0 ? "Deck" : "Sideboard";
-      let bestStackX = targetX;
-      let bestStackZ = targetZ;
-      let minDistance = Infinity;
+  // Simple helper function to apply current sorting positions if sorting is enabled
+  const applySortingIfEnabled = useCallback((cards: Pick3D[]) => {
+    if (!isSortingEnabled) {
+      // When sorting is disabled, reset all Y coordinates to ground level
+      return cards.map(card => ({ ...card, y: undefined }));
+    }
 
-      // Check all existing stack positions to find the closest one
-      const stackEntries = Array.from(stackPositions?.entries() || []).filter(
-        ([id]) => id !== cardId
-      ); // Don't compare to self
-
-      for (const [, pos] of stackEntries) {
-        const distance = Math.hypot(pos.x - targetX, pos.z - targetZ);
-        const posZone = pos.z < 0 ? "Deck" : "Sideboard";
-
-        // Only consider stacks in the same zone
-        if (posZone === currentCardZone && distance < minDistance) {
-          minDistance = distance;
-          bestStackX = pos.x;
-          bestStackZ = pos.z;
-        }
-      }
-
-      // If we found a nearby stack within reasonable distance, join it
-      if (minDistance < 1.5) {
-        // Count cards already in this stack to determine position
-        const cardsInStack = stackEntries.filter(
-          ([, pos]) => Math.abs(pos.x - bestStackX) < 0.1
+    // Apply the current stackPositions with proper Y elevation for stacking
+    const updated = cards.map(card => {
+      const stackPos = stackPositions?.get(card.id);
+      if (stackPos) {
+        // Find how many cards are in this stack position to determine Y elevation
+        const cardsInSameStack = cards.filter(otherCard => 
+          otherCard.id !== card.id && 
+          stackPositions?.get(otherCard.id) &&
+          Math.abs((stackPositions?.get(otherCard.id)?.x || 0) - stackPos.x) < 0.05
         ).length;
-
-        return {
-          x: bestStackX,
-          z: bestStackZ + cardsInStack * 0.15, // Stack cards vertically
-        };
-      }
-
-      // Otherwise, determine appropriate stack based on card properties
-      if (currentCardZone === "Deck") {
-        const meta = cardMeta || metaByCardId[cardId];
-        const cost = meta?.cost ?? 0;
-
-        if ((cardType || "").toLowerCase().includes("site")) {
-          // Sites go to element-based stacks
-          const thresholds = meta?.thresholds as
-            | Record<string, number>
-            | undefined;
-          let primaryElement = "colorless";
-
-          if (thresholds) {
-            const elements = ["air", "water", "earth", "fire"];
-            const maxElement = elements.reduce((max, element) =>
-              (thresholds[element] || 0) > (thresholds[max] || 0)
-                ? element
-                : max
-            );
-            if (thresholds[maxElement] > 0) {
-              primaryElement = maxElement;
-            }
-          }
-
-          // Find x position for this element's site stack
-          const elementIndex = [
-            "air",
-            "water",
-            "earth",
-            "fire",
-            "colorless",
-          ].indexOf(primaryElement);
-          const manaStackCount = Object.keys(sortedPicks.deck).filter((key) =>
-            key.startsWith("mana-")
-          ).length;
-          return {
-            x: -6 + (manaStackCount + elementIndex) * 0.8,
-            z: -1,
-          };
-        } else {
-          // Non-sites go to mana cost stacks
-          return {
-            x: -6 + cost * 0.8,
-            z: -1,
-          };
-        }
+        
+        // Calculate Y elevation based on position within stack
+        const stackIndex = cards.filter(otherCard => {
+          const otherStackPos = stackPositions?.get(otherCard.id);
+          return otherStackPos && 
+                 Math.abs(otherStackPos.x - stackPos.x) < 0.05 && 
+                 (otherStackPos.z < stackPos.z || (otherStackPos.z === stackPos.z && otherCard.id < card.id));
+        }).length;
+        
+        const yElevation = 0.002 + stackIndex * 0.01;
+        
+        return { ...card, x: stackPos.x, z: stackPos.z, y: yElevation };
       } else {
-        // Sideboard - place in appropriate element stack
-        const meta = cardMeta || metaByCardId[cardId];
-        const thresholds = meta?.thresholds as
-          | Record<string, number>
-          | undefined;
-        let primaryElement = "colorless";
-
-        if (thresholds) {
-          const elements = ["air", "water", "earth", "fire"];
-          const maxElement = elements.reduce((max, element) =>
-            (thresholds[element] || 0) > (thresholds[max] || 0) ? element : max
-          );
-          if (thresholds[maxElement] > 0) {
-            primaryElement = maxElement;
-          }
-        }
-
-        const elementIndex = [
-          "air",
-          "water",
-          "earth",
-          "fire",
-          "colorless",
-        ].indexOf(primaryElement);
-        return {
-          x: 1 + elementIndex * 0.7,
-          z: 1,
-        };
+        return { ...card, y: undefined }; // Reset Y if no stack position
       }
-    },
-    [isSortingEnabled, stackPositions, sortedPicks, metaByCardId]
-  );
+    });
+
+    return updated;
+  }, [isSortingEnabled, stackPositions]);
+
+  // Working zone movement functions from 2D editor
+  const moveOneToSideboard = useCallback((cardId: number) => {
+    setPick3D((prev) => {
+      const deckCard = prev.find(p => p.card.cardId === cardId && p.z < 0);
+      if (!deckCard) return prev;
+
+      const updated = [...prev];
+      const cardIndex = updated.findIndex(p => p.id === deckCard.id);
+      
+      // Move card to sideboard zone (z >= 0)
+      updated[cardIndex] = {
+        ...updated[cardIndex],
+        x: 0.5 + Math.random() * 3,
+        z: 1.5 + Math.random() * 0.5,
+        y: undefined
+      };
+
+      return applySortingIfEnabled(updated);
+    });
+  }, [applySortingIfEnabled]);
+
+  const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
+    setPick3D((prev) => {
+      const sideboardCard = prev.find(p => p.card.cardId === cardId && p.z >= 0);
+      if (!sideboardCard) return prev;
+
+      const updated = [...prev];
+      const cardIndex = updated.findIndex(p => p.id === sideboardCard.id);
+      
+      // Move card to deck zone (z < 0)
+      updated[cardIndex] = {
+        ...updated[cardIndex],
+        x: -2 + Math.random() * 4,
+        z: -1.5 - Math.random() * 0.5,
+        y: undefined
+      };
+
+      return applySortingIfEnabled(updated);
+    });
+  }, [applySortingIfEnabled]);
+
+  // Effect to apply sorting only when sorting is first enabled
+  useEffect(() => {
+    if (isSortingEnabled && pick3D.length > 0) {
+      // Only apply sorting when first turning it on
+      const timeoutId = setTimeout(() => {
+        setPick3D((prev) => applySortingIfEnabled(prev));
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isSortingEnabled]); // Only run when sorting is toggled
 
   // Exact same counts and stats as draft-3d
   const yourCounts = useMemo(() => {
@@ -1096,10 +1026,11 @@ export default function DeckEditor3DPage() {
                   .toLowerCase()
                   .includes("site");
 
-                // Use sorted position if sorting is enabled
+                // Use sorted position if sorting is enabled, otherwise use card's position
                 const stackPos = stackPositions?.get(p.id);
                 const x = stackPos ? stackPos.x : p.x;
                 const z = stackPos ? stackPos.z : p.z;
+                const y = isSortingEnabled ? (p.y || 0.002) : 0.002; // Use Y elevation only when sorting
 
                 return (
                   <DraggableCard3D
@@ -1108,20 +1039,23 @@ export default function DeckEditor3DPage() {
                     isSite={isSite}
                     x={x}
                     z={z}
+                    y={y}
                     onDrop={(wx, wz) => {
-                      const smartPos = findSmartPosition(wx, wz, p.id);
-
-                      // Clear zone determination: deck zone is z < 0, sideboard is z >= 0
-                      const newZone = smartPos.z < 0 ? "Deck" : "Sideboard";
+                      // Simple approach: just move card to drop position, then apply sorting if enabled
+                      const newZone = wz < 0 ? "Deck" : "Sideboard";
                       const oldZone = p.z < 0 ? "Deck" : "Sideboard";
 
-                      setPick3D((prev) =>
-                        prev.map((it) =>
-                          it.id === p.id
-                            ? { ...it, x: smartPos.x, z: smartPos.z }
-                            : it
-                        )
-                      );
+                      setPick3D((prev) => {
+                        const updated = [...prev];
+                        const cardIndex = updated.findIndex(it => it.id === p.id);
+                        if (cardIndex === -1) return prev;
+
+                        // Move the card to the drop position
+                        updated[cardIndex] = { ...updated[cardIndex], x: wx, z: wz, y: undefined };
+
+                        // Apply sorting if enabled (this will automatically position it correctly)
+                        return applySortingIfEnabled(updated);
+                      });
 
                       // Show feedback message for zone changes
                       if (oldZone !== newZone) {
@@ -1129,9 +1063,6 @@ export default function DeckEditor3DPage() {
                           `Moved "${p.card.cardName}" to ${newZone}`
                         );
                         setTimeout(() => setFeedbackMessage(null), 2000);
-                        console.log(
-                          `Moved ${p.card.cardName} from ${oldZone} to ${newZone}`
-                        );
                       }
                     }}
                     getTopRenderOrder={getTopRenderOrder}
@@ -1153,9 +1084,32 @@ export default function DeckEditor3DPage() {
                       // Click to move between deck/sideboard
                       if (!wasDragging) {
                         const currentZone = p.z < 0 ? "Deck" : "Sideboard";
-                        const newZone =
-                          currentZone === "Deck" ? "Sideboard" : "Deck";
-                        moveCardBetweenZones(p.id, currentZone, newZone);
+                        const newZone = currentZone === "Deck" ? "Sideboard" : "Deck";
+                        
+                        setPick3D((prev) => {
+                          const updated = [...prev];
+                          const cardIndex = updated.findIndex(it => it.id === p.id);
+                          if (cardIndex === -1) return prev;
+
+                          // Simple approach: just move to basic position in target zone
+                          // Ensure we use the correct Z boundaries: Deck < 0, Sideboard >= 0
+                          const basicTargetZ = newZone === "Deck" ? -1.5 : 1.5;
+                          const basicTargetX = -2 + Math.random() * 4; // Random X position
+                          
+                          updated[cardIndex] = { 
+                            ...updated[cardIndex], 
+                            x: basicTargetX,
+                            z: basicTargetZ + (newZone === "Deck" ? -Math.random() * 0.5 : Math.random() * 0.5), // Ensure deck stays < 0
+                            y: undefined // Reset Y elevation
+                          };
+
+                          // Apply sorting if enabled (this will automatically position it correctly)
+                          return applySortingIfEnabled(updated);
+                        });
+
+                        // Show feedback message
+                        setFeedbackMessage(`Moved "${p.card.cardName}" to ${newZone}`);
+                        setTimeout(() => setFeedbackMessage(null), 2000);
                       }
                     }}
                   />
@@ -1303,7 +1257,7 @@ export default function DeckEditor3DPage() {
                             : "text-white/80 hover:bg-white/10"
                         }`}
                       >
-                        Your Deck ({picksByType.deck})
+                        Your Deck ({picksByType.deck + picksByType.sideboard})
                       </button>
                       <button
                         onClick={() => setCardsTab("all")}
@@ -1319,13 +1273,6 @@ export default function DeckEditor3DPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setCompactPicks((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
-                      title="Toggle compact view"
-                    >
-                      {compactPicks ? "Comfort" : "Compact"}
-                    </button>
-                    <button
                       onClick={() => setPicksOpen((v) => !v)}
                       className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
                     >
@@ -1333,6 +1280,23 @@ export default function DeckEditor3DPage() {
                     </button>
                   </div>
                 </div>
+                
+                {/* Deck/Sideboard Summary */}
+                {cardsTab === "deck" && picksOpen && (
+                  <div className="mb-3 pointer-events-auto">
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-600 rounded"></div>
+                        <span className="text-green-300">Deck: {picksByType.deck}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-600 rounded"></div>
+                        <span className="text-blue-300">Sideboard: {picksByType.sideboard}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {picksOpen && (
                   <div
                     className={`max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
@@ -1340,9 +1304,9 @@ export default function DeckEditor3DPage() {
                     {yourCounts
                       .filter((it) => {
                         if (cardsTab === "all") return true;
-                        // For "deck" tab, only show cards that are in the deck zone
+                        // For "deck" tab, show cards that are in either deck or sideboard zones
                         return pick3D.some(
-                          (pick) => pick.card.cardId === it.cardId && pick.z < 0
+                          (pick) => pick.card.cardId === it.cardId
                         );
                       })
                       .map((it) => {
@@ -1367,12 +1331,62 @@ export default function DeckEditor3DPage() {
                           .toLowerCase()
                           .includes("site");
 
+                        // Get zone information for this card
+                        const cardInDeck = pick3D.filter(p => p.card.cardId === it.cardId && p.z < 0).length;
+                        const cardInSideboard = pick3D.filter(p => p.card.cardId === it.cardId && p.z >= 0).length;
+
+                        // Right-click context menu handler
+                        const handleContextMenu = (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          
+                          // Prefer moving from deck to sideboard, but if no deck cards, move from sideboard
+                          let cardToMove: Pick3D | undefined;
+                          let currentZone: "Deck" | "Sideboard";
+                          let targetZone: "Deck" | "Sideboard";
+                          
+                          if (cardInDeck > 0) {
+                            // Move from deck to sideboard
+                            currentZone = "Deck";
+                            targetZone = "Sideboard";
+                            cardToMove = pick3D.find(p => p.card.cardId === it.cardId && p.z < 0);
+                          } else if (cardInSideboard > 0) {
+                            // Move from sideboard to deck
+                            currentZone = "Sideboard";
+                            targetZone = "Deck";
+                            cardToMove = pick3D.find(p => p.card.cardId === it.cardId && p.z >= 0);
+                          }
+                          
+                          if (cardToMove) {
+                            setPick3D((prev) => {
+                              const updated = [...prev];
+                              const cardIndex = updated.findIndex(c => c.id === cardToMove.id);
+                              if (cardIndex === -1) return prev;
+
+                              // Move to target zone with clear boundaries
+                              const basicTargetZ = targetZone === "Deck" ? -1.5 : 1.5;
+                              const basicTargetX = -2 + Math.random() * 4;
+                              const finalZ = basicTargetZ + (targetZone === "Deck" ? -Math.random() * 0.5 : Math.random() * 0.5);
+                              
+                              updated[cardIndex] = { 
+                                ...updated[cardIndex], 
+                                x: basicTargetX,
+                                z: finalZ,
+                                y: undefined
+                              };
+
+                              // Apply sorting if enabled
+                              return applySortingIfEnabled(updated);
+                            });
+
+                            setFeedbackMessage(`Moved "${it.name}" to ${targetZone}`);
+                            setTimeout(() => setFeedbackMessage(null), 2000);
+                          }
+                        };
+
                         return (
                           <div
                             key={it.cardId}
-                            className={`rounded ${
-                              compactPicks ? "p-1" : "p-2"
-                            } bg-black/70 ring-1 ring-white/25 text-white`}
+                            className="rounded p-2 bg-black/70 ring-1 ring-white/25 text-white cursor-pointer hover:bg-black/50"
                             onMouseEnter={() => {
                               if (slug) {
                                 setHoverPreview({
@@ -1383,19 +1397,65 @@ export default function DeckEditor3DPage() {
                               }
                             }}
                             onMouseLeave={() => setHoverPreview(null)}
+                            onContextMenu={handleContextMenu}
+                            title={`Right-click to move between Deck/Sideboard`}
                           >
-                            {compactPicks ? (
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="truncate max-w-[60%] font-medium">
-                                  {it.name}
+                            <div className="flex items-start gap-2">
+                              {slug ? (
+                                <div
+                                  className={`relative flex-none ${
+                                    isSite
+                                      ? "aspect-[4/3] w-14"
+                                      : "aspect-[3/4] w-12"
+                                  } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
+                                >
+                                  <Image
+                                    src={`/api/images/${slug}`}
+                                    alt={it.name}
+                                    fill
+                                    className={`${
+                                      isSite
+                                        ? "object-cover rotate-90"
+                                        : "object-cover"
+                                    }`}
+                                    sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
+                                    priority={false}
+                                  />
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="flex items-center gap-1 opacity-90">
+                              ) : null}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between">
+                                  <div className="min-w-0">
+                                    <div
+                                      className="font-semibold truncate"
+                                      title={it.name}
+                                    >
+                                      {it.name}
+                                    </div>
+                                    <div className="text-xs opacity-90 flex items-center gap-2">
+                                      {cardInDeck > 0 && (
+                                        <span className="bg-green-600/20 text-green-300 px-1 py-0.5 rounded text-[10px]">
+                                          Deck: {cardInDeck}
+                                        </span>
+                                      )}
+                                      {cardInSideboard > 0 && (
+                                        <span className="bg-blue-600/20 text-blue-300 px-1 py-0.5 rounded text-[10px]">
+                                          Sideboard: {cardInSideboard}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-right font-semibold">
+                                    x{it.count}
+                                  </div>
+                                </div>
+                                <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
+                                  <div className="flex items-center gap-2">
                                     {order.map((k) =>
                                       t[k] ? (
                                         <span
                                           key={k}
-                                          className="inline-flex items-center gap-0.5"
+                                          className="inline-flex items-center gap-1"
                                         >
                                           {Array.from({ length: t[k] }).map(
                                             (_, i) => (
@@ -1403,8 +1463,8 @@ export default function DeckEditor3DPage() {
                                                 key={`${k}-${i}`}
                                                 src={`/api/assets/${k}.png`}
                                                 alt={k}
-                                                width={12}
-                                                height={12}
+                                                width={16}
+                                                height={16}
                                                 className="pointer-events-none select-none"
                                                 priority={false}
                                               />
@@ -1419,102 +1479,17 @@ export default function DeckEditor3DPage() {
                                     (meta.cost >= 1 && meta.cost <= 9 ? (
                                       <NumberBadge
                                         value={meta.cost as Digit}
-                                        size={20}
-                                        strokeWidth={6}
+                                        size={24}
+                                        strokeWidth={8}
                                       />
                                     ) : (
-                                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-black text-[11px] font-bold">
+                                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white text-black text-xs font-bold">
                                         {meta.cost}
                                       </span>
                                     ))}
-                                  <div className="text-right font-semibold">
-                                    x{it.count}
-                                  </div>
                                 </div>
                               </div>
-                            ) : (
-                              <div className="flex items-start gap-2">
-                                {slug ? (
-                                  <div
-                                    className={`relative flex-none ${
-                                      isSite
-                                        ? "aspect-[4/3] w-14"
-                                        : "aspect-[3/4] w-12"
-                                    } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
-                                  >
-                                    <Image
-                                      src={`/api/images/${slug}`}
-                                      alt={it.name}
-                                      fill
-                                      className={`${
-                                        isSite
-                                          ? "object-cover rotate-90"
-                                          : "object-cover"
-                                      }`}
-                                      sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
-                                      priority={false}
-                                    />
-                                  </div>
-                                ) : null}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between">
-                                    <div className="min-w-0">
-                                      <div
-                                        className="font-semibold truncate"
-                                        title={it.name}
-                                      >
-                                        {it.name}
-                                      </div>
-                                      <div className="opacity-90 text-xs">
-                                        {it.rarity}
-                                      </div>
-                                    </div>
-                                    <div className="text-right font-semibold">
-                                      x{it.count}
-                                    </div>
-                                  </div>
-                                  <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
-                                    <div className="flex items-center gap-2">
-                                      {order.map((k) =>
-                                        t[k] ? (
-                                          <span
-                                            key={k}
-                                            className="inline-flex items-center gap-1"
-                                          >
-                                            {Array.from({ length: t[k] }).map(
-                                              (_, i) => (
-                                                <Image
-                                                  key={`${k}-${i}`}
-                                                  src={`/api/assets/${k}.png`}
-                                                  alt={k}
-                                                  width={16}
-                                                  height={16}
-                                                  className="pointer-events-none select-none"
-                                                  priority={false}
-                                                />
-                                              )
-                                            )}
-                                          </span>
-                                        ) : null
-                                      )}
-                                    </div>
-                                    {meta?.cost != null &&
-                                      meta.cost > 0 &&
-                                      (meta.cost >= 1 && meta.cost <= 9 ? (
-                                        <NumberBadge
-                                          value={meta.cost as Digit}
-                                          size={24}
-                                          strokeWidth={8}
-                                        />
-                                      ) : (
-                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white text-black text-xs font-bold">
-                                          {meta.cost}
-                                        </span>
-                                      ))}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                            </div>
                           </div>
                         );
                       })}
@@ -1738,10 +1713,11 @@ export default function DeckEditor3DPage() {
                     Clear
                   </button>
                   <button
-                    onClick={() => router.push("/draft-3d")}
-                    className="h-10 px-4 rounded bg-green-600 text-white"
+                    onClick={saveDeck}
+                    disabled={saving}
+                    className="h-10 px-4 rounded bg-green-600 text-white disabled:opacity-50"
                   >
-                    Draft 3D
+                    {saving ? "Saving..." : deckId ? "Update Deck" : "Save Deck"}
                   </button>
                 </div>
               </div>

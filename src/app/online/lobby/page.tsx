@@ -42,6 +42,7 @@ export default function LobbyPage() {
   const [chatTab, setChatTab] = useState<'lobby' | 'global'>('global');
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
+  const [declinedRejoin, setDeclinedRejoin] = useState(false);
 
   const lobbyMessages = chatLog.filter((m) => m.scope === 'lobby');
   const globalMessages = chatLog.filter((m) => m.scope === 'global');
@@ -70,6 +71,22 @@ export default function LobbyPage() {
 
   // Note: Removed auto-redirect to match to allow players to choose whether to rejoin
 
+  // Track if the user explicitly left this match and declined rejoin (persisted)
+  useEffect(() => {
+    try {
+      const id = match?.id;
+      if (!id) {
+        setDeclinedRejoin(false);
+        return;
+      }
+      const key = `sorcery:declinedRejoin:${id}`;
+      const flag = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      setDeclinedRejoin(!!flag);
+    } catch {
+      setDeclinedRejoin(false);
+    }
+  }, [match?.id]);
+
   // Dynamic page title
   useEffect(() => {
     const baseTitle = "Sorcery Online";
@@ -90,6 +107,11 @@ export default function LobbyPage() {
     
     document.title = title;
   }, [connected, lobby, match]);
+
+  // Determine if this client is rejoining an ongoing match
+  const isRejoin = !!(match && !declinedRejoin && match.status === 'in_progress' && me?.id && match.players?.some(p => p.id === me.id));
+  const matchJoinLabel = isRejoin ? 'Rejoin' : 'Join Match';
+  const manualJoinLabel = (matchIdInput.trim() && match?.id === matchIdInput.trim() && isRejoin) ? 'Rejoin' : 'Join Match';
 
   return (
     <div className="space-y-6">
@@ -121,8 +143,8 @@ export default function LobbyPage() {
         </div>
       </div>
 
-      {/* Match Section - only show for joinable matches */}
-      {match?.id && (match.status === 'waiting' || match.status === 'in_progress') && (
+      {/* Match Section - only show for joinable matches and not when user declined rejoin */}
+      {match?.id && !declinedRejoin && (match.status === 'waiting' || match.status === 'in_progress') && (
         <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -141,7 +163,7 @@ export default function LobbyPage() {
                 className="rounded bg-orange-600/80 hover:bg-orange-600 px-4 py-2 text-sm font-medium transition-colors"
                 onClick={() => router.push(`/online/play/${encodeURIComponent(match.id)}`)}
               >
-Join Match
+                {matchJoinLabel}
               </button>
               <button
                 className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
@@ -247,7 +269,7 @@ Join Match
               }}
               disabled={!connected || !matchIdInput.trim()}
             >
-              Join Match
+              {manualJoinLabel}
             </button>
             {match && (
               <button

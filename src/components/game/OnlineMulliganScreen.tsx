@@ -18,12 +18,12 @@ export default function OnlineMulliganScreen({
 }: OnlineMulliganScreenProps) {
   const zones = useGameStore((s) => s.zones);
   const mulligans = useGameStore((s) => s.mulligans);
-  const mulliganDrawn = useGameStore((s) => s.mulliganDrawn);
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
   const finalizeMulligan = useGameStore((s) => s.finalizeMulligan);
   
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
+  const [submitted, setSubmitted] = useState<boolean>(false);
   
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
@@ -48,7 +48,12 @@ export default function OnlineMulliganScreen({
   };
 
   const handleFinalize = () => {
+    if (submitted) return;
+    setSubmitted(true);
+    setDone(true);
     finalizeMulligan();
+    // Inform parent that we've completed local mulligan; parent will not close overlay
+    // and will wait for server to advance phase/match status
     onStartGame();
   };
 
@@ -146,10 +151,12 @@ export default function OnlineMulliganScreen({
             
             {(done || myMulligans === 0) && (
               <button
-                className="bg-green-600 hover:bg-green-700 rounded px-4 py-2 text-sm font-medium transition-colors"
+                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${submitted ? "bg-green-700/60 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
                 onClick={handleFinalize}
+                disabled={submitted}
+                title={submitted ? "Waiting for other players to finish mulligans" : undefined}
               >
-                Start Game
+                {submitted ? "Ready — Waiting for others…" : "Start Game"}
               </button>
             )}
           </div>
@@ -157,7 +164,7 @@ export default function OnlineMulliganScreen({
       </div>
       
       <div className="mt-4 text-xs opacity-60 text-center">
-        Other players are making their mulligan decisions...
+        {submitted ? "You are ready. Waiting for other players to finish mulligans…" : "Other players are making their mulligan decisions..."}
       </div>
     </div>
   );

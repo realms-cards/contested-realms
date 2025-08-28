@@ -2016,6 +2016,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (tr) {
           const patch: ServerPatchT = { mulliganDrawn: next };
           get().trySendPatch(patch);
+          // Explicitly notify the server that this player has completed mulligans
+          try {
+            tr.mulliganDone();
+          } catch {}
         }
       }
       return { mulliganDrawn: next } as Partial<GameState> as GameState;

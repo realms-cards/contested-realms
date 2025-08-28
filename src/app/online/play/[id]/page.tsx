@@ -75,20 +75,45 @@ export default function OnlineMatchPage() {
   }, [connected, match?.id, matchId, resync, match?.status, me?.displayName, sendChat]);
 
   // Game store selectors needed for setup
-  const setPhase = useGameStore((s) => s.setPhase);
+  const serverPhase = useGameStore((s) => s.phase);
 
-  // Setup state (like offline play) - but skip for ongoing matches
-  const [setupOpen, setSetupOpen] = useState<boolean>(true);
+  // Setup state (like offline play)
+  // Default CLOSED to avoid flashing overlay on rejoin; we'll open it for new/waiting matches
+  const [setupOpen, setSetupOpen] = useState<boolean>(false);
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
   
-  // Skip setup if rejoining an in-progress match
+  // Control setup overlay based on match status
   useEffect(() => {
-    if (match?.status === 'in_progress' && setupOpen) {
-      setSetupOpen(false);
-      setPhase("Main"); // Initialize phase for ongoing game
+    // Only react once we know we're in this specific match
+    if (!matchId || match?.id !== matchId) return;
+    if (!match) return;
+
+    if (match.status === 'in_progress') {
+      // Ongoing match: ensure overlay is closed; do NOT override phase here
+      if (setupOpen) setSetupOpen(false);
+    } else if (match.status === 'waiting') {
+      // During setup (including mulligan), keep overlay open until server flips to in_progress
+      if (!setupOpen) setSetupOpen(true);
+    } else {
+      // Ended or unknown: keep overlay closed
+      if (setupOpen) setSetupOpen(false);
     }
-  }, [match?.status, setupOpen, setPhase]);
+  }, [matchId, match, match?.id, match?.status, setupOpen]);
+
+  // Reset setup wizard when entering a different match (fresh waiting match)
+  useEffect(() => {
+    // When match id changes, restart the setup steps so we don't skip phases
+    setPrepared(false);
+    setD20RollingComplete(false);
+  }, [match?.id]);
+
+  // Also close setup if server advances phase to Main (in case match.status races)
+  useEffect(() => {
+    if (setupOpen && serverPhase === 'Main') {
+      setSetupOpen(false);
+    }
+  }, [serverPhase, setupOpen]);
 
   // Chat
   const [chatInput, setChatInput] = useState("");
@@ -121,6 +146,9 @@ export default function OnlineMatchPage() {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const matchEnded = useGameStore((s) => s.matchEnded);
   const winner = useGameStore((s) => s.winner);
+  // Extract store-derived dependencies for effects to satisfy ESLint
+  const playersState = useGameStore((s) => s.players);
+  const currentPlayerState = useGameStore((s) => s.currentPlayer);
 
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -180,15 +208,10 @@ export default function OnlineMatchPage() {
     };
   }, [setDragFromHand, setDragFromPile]);
 
-  function startGame() {
-    // Don't close setup overlay - we need it for D20 rolling
-    setPhase("Setup"); // Start with D20 roll to determine first player
-    // setupOpen stays true so D20Screen can be shown
-  }
-  
   function finishSetup() {
-    setSetupOpen(false);
-    setPhase("Main"); // Start the actual game
+    // Do not close overlay or advance phase locally.
+    // finalizeMulligan() already notified the server via transport.mulliganDone().
+    // Wait for server 'matchStarted' and/or 'statePatch' to flip status/phase.
   }
 
   // Show match end overlay when match ends (but only if not already dismissed)
@@ -263,9 +286,8 @@ export default function OnlineMatchPage() {
     playerNames, 
     matchEnded, 
     winner,
-    // Re-run when game state changes
-    useGameStore((s) => s.players),
-    useGameStore((s) => s.currentPlayer)
+    playersState,
+    currentPlayerState
   ]);
 
   return (
