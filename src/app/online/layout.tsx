@@ -204,14 +204,19 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         return [...prev, p];
       })),
       transport.on("resync", (p) => {
-        const snap = p.snapshot as { lobby?: LobbyInfo; match?: MatchInfo };
+        const snap = p.snapshot as { lobby?: LobbyInfo; match?: MatchInfo; game?: unknown; t?: number };
         if (snap?.lobby) setLobby(snap.lobby);
+
+        // Track whether we should apply the game snapshot
+        let allowApplyGame = true;
+
         if (snap?.match) {
           // Respect locally-declined rejoin state and immediately leave/suppress if present
           try {
             const key = `sorcery:declinedRejoin:${snap.match.id}`;
             const declined = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
             if (declined) {
+              allowApplyGame = false;
               try { transport.leaveMatch(); } catch {}
               setMatch(null);
             } else {
@@ -220,10 +225,24 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
           } catch {
             setMatch(snap.match);
           }
+        } else {
+          // No match in snapshot means we're not in a game; do not apply snapshot
+          allowApplyGame = false;
         }
+
         if (!snap?.lobby && !snap?.match) {
           setLobby(null);
           setMatch(null);
+          allowApplyGame = false;
+        }
+
+        // Apply full game snapshot if provided and allowed
+        if (allowApplyGame && snap?.game) {
+          try {
+            useGameStore.getState().applyServerPatch(snap.game, typeof snap.t === 'number' ? snap.t : undefined);
+          } catch (e) {
+            console.warn('Failed to apply resync game snapshot', e);
+          }
         }
       }),
       transport.on("error", (p) => console.warn("server error", p))

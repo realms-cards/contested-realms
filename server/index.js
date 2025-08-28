@@ -83,6 +83,23 @@ function getMatchInfo(match) {
   };
 }
 
+// Deep merge that replaces arrays and merges plain objects.
+// Primitives and nulls overwrite. Undefined in patch leaves value as-is.
+function deepMergeReplaceArrays(base, patch) {
+  if (patch === undefined) return base;
+  if (patch === null) return null;
+  if (Array.isArray(patch)) return patch; // replace arrays fully
+  if (typeof patch !== 'object') return patch; // primitives overwrite
+
+  const baseObj = base && typeof base === 'object' && !Array.isArray(base) ? base : {};
+  const out = { ...baseObj };
+  for (const [k, v] of Object.entries(patch)) {
+    const cur = out[k];
+    out[k] = deepMergeReplaceArrays(cur, v);
+  }
+  return out;
+}
+
 function findOpenLobby() {
   for (const lobby of lobbies.values()) {
     if (
@@ -213,6 +230,9 @@ function startMatchFromLobby(requestingPlayer) {
     seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
     turn: Array.from(lobby.playerIds)[0],
     winnerId: null,
+    // Server-side aggregated game snapshot and timestamp
+    game: {},
+    lastTs: 0,
   };
   matches.set(match.id, match);
 
@@ -315,7 +335,11 @@ io.on("connection", (socket) => {
       match.status = 'in_progress';
       io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
       // Broadcast a deterministic patch to set phase to Main
-      io.to(room).emit("statePatch", { patch: { phase: 'Main' }, t: Date.now() });
+      const now = Date.now();
+      // Update server-side aggregated snapshot
+      match.game = deepMergeReplaceArrays(match.game || {}, { phase: 'Main' });
+      match.lastTs = now;
+      io.to(room).emit("statePatch", { patch: { phase: 'Main' }, t: now });
     }
   });
 
@@ -463,17 +487,23 @@ io.on("connection", (socket) => {
     // If this is the first transition to main phase, mark match as in_progress and broadcast updated match info
     try {
       const match = matches.get(player.matchId);
-      const action = payload ? payload.action : null;
+      const patch = payload ? payload.action : null;
+      const now = Date.now();
       if (
         match &&
         match.status === 'waiting' &&
-        action && typeof action === 'object' && action.phase === 'Main'
+        patch && typeof patch === 'object' && patch.phase === 'Main'
       ) {
         match.status = 'in_progress';
         io.to(matchRoom).emit("matchStarted", { match: getMatchInfo(match) });
       }
+      // Update server-side aggregated snapshot
+      if (match && patch && typeof patch === 'object') {
+        match.game = deepMergeReplaceArrays(match.game || {}, patch);
+        match.lastTs = now;
+      }
       // Relay the action as a deterministic statePatch to all clients
-      io.to(matchRoom).emit("statePatch", { patch: action, t: Date.now() });
+      io.to(matchRoom).emit("statePatch", { patch, t: now });
     } catch {
       // Fallback relay if any unexpected error occurs
       io.to(matchRoom).emit("statePatch", { patch: payload ? payload.action : null, t: Date.now() });
@@ -524,7 +554,12 @@ io.on("connection", (socket) => {
     const player = getPlayerBySocket(socket);
     if (player && player.matchId && matches.has(player.matchId)) {
       const match = matches.get(player.matchId);
-      socket.emit("resyncResponse", { snapshot: { match: getMatchInfo(match) } });
+      const snap = { match: getMatchInfo(match) };
+      if (match && match.game) {
+        snap.game = match.game;
+        snap.t = typeof match.lastTs === 'number' ? match.lastTs : Date.now();
+      }
+      socket.emit("resyncResponse", { snapshot: snap });
     } else if (player && player.lobbyId && lobbies.has(player.lobbyId)) {
       const lobby = lobbies.get(player.lobbyId);
       socket.emit("resyncResponse", { snapshot: { lobby: getLobbyInfo(lobby) } });

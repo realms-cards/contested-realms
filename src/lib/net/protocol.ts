@@ -127,6 +127,10 @@ export const ServerChatPayload = z.object({
 export const ResyncSnapshotSchema = z.object({
   lobby: LobbyInfoSchema.optional(),
   match: MatchInfoSchema.optional(),
+  // Full game snapshot (server-aggregated), schema-less for now
+  game: z.any().optional(),
+  // Server timestamp of the snapshot (monotonic per match on this server)
+  t: z.number().optional(),
 });
 export type ResyncSnapshot = z.infer<typeof ResyncSnapshotSchema>;
 export const ResyncResponsePayload = z.object({ snapshot: ResyncSnapshotSchema });
