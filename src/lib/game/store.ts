@@ -1580,6 +1580,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (!arr[index]) return s;
       arr[index] = { ...arr[index], offset };
       per[at] = arr;
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            permanents: per as GameState["permanents"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -1849,9 +1858,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => {
       const cur = s.avatars[who];
       if (!cur) return s;
-      return {
-        avatars: { ...s.avatars, [who]: { ...cur, offset } },
-      } as Partial<GameState> as GameState;
+      const avatarsNext = {
+        ...s.avatars,
+        [who]: { ...cur, offset },
+      } as GameState["avatars"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { avatars: avatarsNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
 
   toggleTapAvatar: (who) =>
