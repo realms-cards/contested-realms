@@ -1537,7 +1537,7 @@ export default function DeckEditor3DPage() {
             target={[0, 0, 0]}
             enabled={!orbitLocked}
             enablePan
-            enableRotate
+            enableRotate={false}
             enableZoom
             enableDamping
             dampingFactor={0.08}
@@ -1546,11 +1546,11 @@ export default function DeckEditor3DPage() {
             zoomSpeed={0.75}
             minDistance={1}
             maxDistance={36}
-            minPolarAngle={Math.PI / 2.05}
+            minPolarAngle={0}
             maxPolarAngle={Math.PI / 2.05}
             mouseButtons={{
               LEFT: MOUSE.PAN,
-              MIDDLE: MOUSE.PAN,
+              MIDDLE: MOUSE.DOLLY,
               RIGHT: MOUSE.ROTATE,
             }}
           />
