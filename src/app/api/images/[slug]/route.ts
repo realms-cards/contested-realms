@@ -45,7 +45,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     const base = imageBasenameFromSlug(slug);
     const suffix = suffixDirFromBasename(base);
 
-    const root = path.join(process.cwd(), "data", setDir);
     // If explicitly requesting KTX2, only check for .ktx2 and return 404 if missing.
     const wantKtx2 = (() => {
       try {
@@ -56,14 +55,24 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         return false;
       }
     })();
+    // Roots to search. For KTX2, prefer data-ktx2 output dir then fallback to data.
+    const roots = wantKtx2
+      ? [
+          path.join(process.cwd(), "data-ktx2", setDir),
+          path.join(process.cwd(), "data", setDir),
+        ]
+      : [path.join(process.cwd(), "data", setDir)];
+
     const exts = wantKtx2 ? ["ktx2"] : ["png", "jpg", "jpeg", "webp"];
     const candidates: string[] = [];
 
-    if (suffix) {
-      for (const ext of exts) candidates.push(path.join(root, suffix, `${base}.${ext}`));
+    for (const root of roots) {
+      if (suffix) {
+        for (const ext of exts) candidates.push(path.join(root, suffix, `${base}.${ext}`));
+      }
+      // Also try directly under set dir
+      for (const ext of exts) candidates.push(path.join(root, `${base}.${ext}`));
     }
-    // Fallback: try directly under set dir
-    for (const ext of exts) candidates.push(path.join(root, `${base}.${ext}`));
 
     let found: string | null = null;
     for (const p of candidates) {
