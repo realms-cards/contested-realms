@@ -149,33 +149,28 @@ export default function PlayPage() {
 
   // Dynamic page title for offline play
   useEffect(() => {
-    const baseTitle = "Sorcery";
-    
+    const baseTitle = "Contested Realms";
+
     if (setupOpen) {
       document.title = `${baseTitle} - Game Setup`;
       return;
     }
-    
+
     const p1Life = players.p1?.life;
     const p2Life = players.p2?.life;
-    
+
     let title = `${baseTitle} - Offline`;
-    
+
     // Add life info if available
     if (p1Life !== undefined && p2Life !== undefined) {
       title += ` (P1: ${p1Life} vs P2: ${p2Life})`;
     }
-    
+
     // Add turn info
     title += ` - P${currentPlayer}'s Turn`;
-    
+
     document.title = title;
-  }, [
-    setupOpen,
-    players.p1?.life,
-    players.p2?.life, 
-    currentPlayer
-  ]);
+  }, [setupOpen, players.p1?.life, players.p2?.life, currentPlayer]);
 
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full">
@@ -231,10 +226,10 @@ export default function PlayPage() {
                   <div
                     key={ev.id}
                     className={`opacity-85 ${
-                      isWarn 
-                        ? "text-red-400" 
-                        : isSearch 
-                        ? "text-yellow-400" 
+                      isWarn
+                        ? "text-red-400"
+                        : isSearch
+                        ? "text-yellow-400"
                         : ""
                     }`}
                   >
@@ -258,7 +253,9 @@ export default function PlayPage() {
               <div className="relative">
                 <div
                   className={`relative ${
-                    isSite ? "aspect-[4/3] h-[300px] md:h-[380px]" : "aspect-[3/4] w-[300px] md:w-[380px]"
+                    isSite
+                      ? "aspect-[4/3] h-[300px] md:h-[380px]"
+                      : "aspect-[3/4] w-[300px] md:w-[380px]"
                   } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                 >
                   <Image
@@ -324,7 +321,8 @@ export default function PlayPage() {
       {/* Hand Card Magnifier (selected hand card) - moved to right side */}
       {(() => {
         const c = selectedHandCard;
-        if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay) return null;
+        if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay)
+          return null;
         const isSite = (c.type || "").toLowerCase().includes("site");
         return (
           <div className="absolute right-3 top-20 z-20 pointer-events-none">
@@ -360,10 +358,10 @@ export default function PlayPage() {
       <Canvas
         camera={{ position: [0, 10, 0], fov: 50 }}
         shadows
-        gl={{ 
+        gl={{
           preserveDrawingBuffer: true,
           antialias: true,
-          alpha: false
+          alpha: false,
         }}
         onPointerMissed={() => {
           // Don't clear selection during drags to prevent orbit interference
@@ -392,7 +390,11 @@ export default function PlayPage() {
         <Hud3D owner="p2" />
 
         {/* 3D Hand anchored to the camera (current player) */}
-        <Hand3D owner={currentPlayerKey} matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+        <Hand3D
+          owner={currentPlayerKey}
+          matW={MAT_PIXEL_W}
+          matH={MAT_PIXEL_H}
+        />
 
         {/* Invisible texture cache for smooth loading */}
         <TextureCache />
@@ -401,9 +403,27 @@ export default function PlayPage() {
           ref={controlsRef}
           makeDefault
           target={[0, 0, 0]}
-          enabled={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-          enablePan={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-          enableRotate={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
+          enabled={
+            !dragFromHand &&
+            !dragFromPile &&
+            !selected &&
+            !selectedPermanent &&
+            !selectedAvatar
+          }
+          enablePan={
+            !dragFromHand &&
+            !dragFromPile &&
+            !selected &&
+            !selectedPermanent &&
+            !selectedAvatar
+          }
+          enableRotate={
+            !dragFromHand &&
+            !dragFromPile &&
+            !selected &&
+            !selectedPermanent &&
+            !selectedAvatar
+          }
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
           minPolarAngle={0}

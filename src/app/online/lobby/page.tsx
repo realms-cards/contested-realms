@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -39,14 +39,14 @@ export default function LobbyPage() {
   const [matchIdInput, setMatchIdInput] = useState("");
   const [chatInput, setChatInput] = useState("");
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
-  const [chatTab, setChatTab] = useState<'lobby' | 'global'>('global');
+  const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
   const [declinedRejoin, setDeclinedRejoin] = useState(false);
 
-  const lobbyMessages = chatLog.filter((m) => m.scope === 'lobby');
-  const globalMessages = chatLog.filter((m) => m.scope === 'global');
-  const activeMessages = chatTab === 'lobby' ? lobbyMessages : globalMessages;
+  const lobbyMessages = chatLog.filter((m) => m.scope === "lobby");
+  const globalMessages = chatLog.filter((m) => m.scope === "global");
+  const activeMessages = chatTab === "lobby" ? lobbyMessages : globalMessages;
 
   useEffect(() => {
     const el = chatRef.current;
@@ -59,10 +59,10 @@ export default function LobbyPage() {
     const currId = lobby?.id ?? null;
     if (!prevId && currId) {
       // Joined or created a lobby
-      setChatTab('lobby');
+      setChatTab("lobby");
     } else if (prevId && !currId) {
       // Left a lobby
-      setChatTab('global');
+      setChatTab("global");
     }
     prevLobbyIdRef.current = currId;
   }, [lobby]);
@@ -80,7 +80,8 @@ export default function LobbyPage() {
         return;
       }
       const key = `sorcery:declinedRejoin:${id}`;
-      const flag = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      const flag =
+        typeof window !== "undefined" ? localStorage.getItem(key) : null;
       setDeclinedRejoin(!!flag);
     } catch {
       setDeclinedRejoin(false);
@@ -89,29 +90,39 @@ export default function LobbyPage() {
 
   // Dynamic page title
   useEffect(() => {
-    const baseTitle = "Sorcery Online";
+    const baseTitle = "Contested Realms";
     let title = `${baseTitle} - Lobby`;
-    
+
     if (lobby) {
       title = `${baseTitle} - Lobby ${lobby.id} (${lobby.players.length}/${lobby.maxPlayers})`;
     }
-    
+
     if (match) {
-      const playerNames = match.players?.map(p => p.displayName).join(' vs ') || 'Players';
+      const playerNames =
+        match.players?.map((p) => p.displayName).join(" vs ") || "Players";
       title = `${baseTitle} - ${playerNames} (${match.status})`;
     }
-    
+
     if (!connected) {
       title = `${baseTitle} - Disconnected`;
     }
-    
+
     document.title = title;
   }, [connected, lobby, match]);
 
   // Determine if this client is rejoining an ongoing match
-  const isRejoin = !!(match && !declinedRejoin && match.status === 'in_progress' && me?.id && match.players?.some(p => p.id === me.id));
-  const matchJoinLabel = isRejoin ? 'Rejoin' : 'Join Match';
-  const manualJoinLabel = (matchIdInput.trim() && match?.id === matchIdInput.trim() && isRejoin) ? 'Rejoin' : 'Join Match';
+  const isRejoin = !!(
+    match &&
+    !declinedRejoin &&
+    match.status === "in_progress" &&
+    me?.id &&
+    match.players?.some((p) => p.id === me.id)
+  );
+  const matchJoinLabel = isRejoin ? "Rejoin" : "Join Match";
+  const manualJoinLabel =
+    matchIdInput.trim() && match?.id === matchIdInput.trim() && isRejoin
+      ? "Rejoin"
+      : "Join Match";
 
   return (
     <div className="space-y-6">
@@ -119,7 +130,9 @@ export default function LobbyPage() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold opacity-90">Active Lobbies</div>
+            <div className="text-sm font-semibold opacity-90">
+              Active Lobbies
+            </div>
             <button
               className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
               onClick={() => requestLobbies()}
@@ -144,41 +157,51 @@ export default function LobbyPage() {
       </div>
 
       {/* Match Section - only show for joinable matches and not when user declined rejoin */}
-      {match?.id && !declinedRejoin && (match.status === 'waiting' || match.status === 'in_progress') && (
-        <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-orange-200 mb-1">
-                {match.status === 'waiting' ? 'New Match Starting' : 'Ongoing Match Found'}
+      {match?.id &&
+        !declinedRejoin &&
+        (match.status === "waiting" || match.status === "in_progress") && (
+          <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-orange-200 mb-1">
+                  {match.status === "waiting"
+                    ? "New Match Starting"
+                    : "Ongoing Match Found"}
+                </div>
+                <div className="text-xs opacity-70">Match ID: {match.id}</div>
+                <div className="text-xs opacity-70">
+                  Status: {match.status} • Players:{" "}
+                  {match.players?.map((p) => p.displayName).join(", ") ||
+                    "Loading..."}
+                </div>
               </div>
-              <div className="text-xs opacity-70">
-                Match ID: {match.id}
-              </div>
-              <div className="text-xs opacity-70">
-                Status: {match.status} • Players: {match.players?.map(p => p.displayName).join(', ') || 'Loading...'}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="rounded bg-orange-600/80 hover:bg-orange-600 px-4 py-2 text-sm font-medium transition-colors"
-                onClick={() => router.push(`/online/play/${encodeURIComponent(match.id)}`)}
-              >
-                {matchJoinLabel}
-              </button>
-              <button
-                className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
-                onClick={() => {
-                  if (confirm('Are you sure you want to permanently leave this match? This cannot be undone.')) {
-                    leaveMatch();
+              <div className="flex gap-2">
+                <button
+                  className="rounded bg-orange-600/80 hover:bg-orange-600 px-4 py-2 text-sm font-medium transition-colors"
+                  onClick={() =>
+                    router.push(`/online/play/${encodeURIComponent(match.id)}`)
                   }
-                }}
-              >
-                Leave Match
-              </button>
+                >
+                  {matchJoinLabel}
+                </button>
+                <button
+                  className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Are you sure you want to permanently leave this match? This cannot be undone."
+                      )
+                    ) {
+                      leaveMatch();
+                    }
+                  }}
+                >
+                  Leave Match
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
@@ -216,7 +239,9 @@ export default function LobbyPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              className={`rounded px-3 py-1 text-sm ${ready ? "bg-emerald-600/70" : "bg-slate-700 hover:bg-slate-600"}`}
+              className={`rounded px-3 py-1 text-sm ${
+                ready ? "bg-emerald-600/70" : "bg-slate-700 hover:bg-slate-600"
+              }`}
               onClick={toggleReady}
               disabled={!lobby}
             >
@@ -226,7 +251,11 @@ export default function LobbyPage() {
               className="rounded bg-violet-600/80 hover:bg-violet-600 px-3 py-1 text-sm disabled:opacity-40"
               onClick={startMatch}
               disabled={!lobby || lobby.hostId !== me?.id}
-              title={lobby && lobby.hostId !== me?.id ? "Only the host can start" : "Start match"}
+              title={
+                lobby && lobby.hostId !== me?.id
+                  ? "Only the host can start"
+                  : "Start match"
+              }
             >
               Start Match (host)
             </button>
@@ -235,7 +264,8 @@ export default function LobbyPage() {
                 className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm"
                 onClick={() => {
                   try {
-                    if (navigator.clipboard && lobby?.id) void navigator.clipboard.writeText(lobby.id);
+                    if (navigator.clipboard && lobby?.id)
+                      void navigator.clipboard.writeText(lobby.id);
                   } catch {}
                 }}
               >
@@ -276,7 +306,8 @@ export default function LobbyPage() {
                 className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm"
                 onClick={() => {
                   try {
-                    if (navigator.clipboard && match?.id) void navigator.clipboard.writeText(match.id);
+                    if (navigator.clipboard && match?.id)
+                      void navigator.clipboard.writeText(match.id);
                   } catch {}
                 }}
               >
@@ -293,18 +324,21 @@ export default function LobbyPage() {
           {lobby ? (
             <div className="mt-3 text-sm space-y-2">
               <div>
-                <span className="opacity-70">ID:</span> <span className="font-mono">{lobby.id}</span>
+                <span className="opacity-70">ID:</span>{" "}
+                <span className="font-mono">{lobby.id}</span>
               </div>
               <div>
                 <span className="opacity-70">Status:</span> {lobby.status}
               </div>
               <div className="flex items-center gap-2">
                 <span className="opacity-70">Visibility:</span>
-                <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
-                  lobby.visibility === "open"
-                    ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30"
-                    : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
-                }`}>
+                <span
+                  className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                    lobby.visibility === "open"
+                      ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30"
+                      : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
+                  }`}
+                >
                   {lobby.visibility}
                 </span>
                 <div className="ml-auto flex gap-1">
@@ -312,7 +346,11 @@ export default function LobbyPage() {
                     className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-0.5 text-xs disabled:opacity-40"
                     onClick={() => setLobbyVisibility("open")}
                     disabled={lobby.hostId !== me?.id}
-                    title={lobby.hostId !== me?.id ? "Only host can change" : "Set lobby to open"}
+                    title={
+                      lobby.hostId !== me?.id
+                        ? "Only host can change"
+                        : "Set lobby to open"
+                    }
                   >
                     Open
                   </button>
@@ -320,14 +358,19 @@ export default function LobbyPage() {
                     className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-0.5 text-xs disabled:opacity-40"
                     onClick={() => setLobbyVisibility("private")}
                     disabled={lobby.hostId !== me?.id}
-                    title={lobby.hostId !== me?.id ? "Only host can change" : "Set lobby to private"}
+                    title={
+                      lobby.hostId !== me?.id
+                        ? "Only host can change"
+                        : "Set lobby to private"
+                    }
                   >
                     Private
                   </button>
                 </div>
               </div>
               <div>
-                <span className="opacity-70">Max Players:</span> {lobby.maxPlayers}
+                <span className="opacity-70">Max Players:</span>{" "}
+                {lobby.maxPlayers}
               </div>
               <div className="mt-2">
                 <div className="font-medium">Players</div>
@@ -350,13 +393,15 @@ export default function LobbyPage() {
           {match ? (
             <div className="mt-3 text-sm space-y-2">
               <div>
-                <span className="opacity-70">ID:</span> <span className="font-mono">{match.id}</span>
+                <span className="opacity-70">ID:</span>{" "}
+                <span className="font-mono">{match.id}</span>
               </div>
               <div>
                 <span className="opacity-70">Status:</span> {match.status}
               </div>
               <div>
-                <span className="opacity-70">Seed:</span> <span className="font-mono">{match.seed}</span>
+                <span className="opacity-70">Seed:</span>{" "}
+                <span className="font-mono">{match.seed}</span>
               </div>
               <div>
                 <span className="opacity-70">Turn:</span> {match.turn}
@@ -383,9 +428,11 @@ export default function LobbyPage() {
             <div className="flex items-center gap-1">
               <button
                 className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                  chatTab === 'lobby' ? 'bg-white/15' : 'hover:bg-white/10 opacity-80'
+                  chatTab === "lobby"
+                    ? "bg-white/15"
+                    : "hover:bg-white/10 opacity-80"
                 }`}
-                onClick={() => setChatTab('lobby')}
+                onClick={() => setChatTab("lobby")}
               >
                 Lobby
                 {lobbyMessages.length > 0 && (
@@ -396,9 +443,11 @@ export default function LobbyPage() {
               </button>
               <button
                 className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                  chatTab === 'global' ? 'bg-white/15' : 'hover:bg-white/10 opacity-80'
+                  chatTab === "global"
+                    ? "bg-white/15"
+                    : "hover:bg-white/10 opacity-80"
                 }`}
-                onClick={() => setChatTab('global')}
+                onClick={() => setChatTab("global")}
               >
                 Global
                 {globalMessages.length > 0 && (
@@ -410,28 +459,38 @@ export default function LobbyPage() {
             </div>
           </div>
 
-          <div ref={chatRef} className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1">
+          <div
+            ref={chatRef}
+            className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1"
+          >
             {activeMessages.length === 0 && (
               <div className="opacity-60">No messages</div>
             )}
             {activeMessages.map((m, i) => (
               <div key={i} className="opacity-90">
-                <span className="font-medium">{m.from?.displayName ?? "System"}</span>: {m.content}
+                <span className="font-medium">
+                  {m.from?.displayName ?? "System"}
+                </span>
+                : {m.content}
               </div>
             ))}
           </div>
           <div className="mt-2 flex gap-2">
             <input
               className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder={chatTab === 'global' ? 'Type a global message' : 'Type a message'}
+              placeholder={
+                chatTab === "global"
+                  ? "Type a global message"
+                  : "Type a message"
+              }
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && connected) {
+                if (e.key === "Enter" && connected) {
                   const msg = chatInput.trim();
                   if (!msg) return;
                   sendChat(msg, chatTab);
-                  setChatInput('');
+                  setChatInput("");
                 }
               }}
               disabled={!connected}
@@ -442,7 +501,7 @@ export default function LobbyPage() {
                 const msg = chatInput.trim();
                 if (!msg) return;
                 sendChat(msg, chatTab);
-                setChatInput('');
+                setChatInput("");
               }}
               disabled={!connected || !chatInput.trim()}
             >
