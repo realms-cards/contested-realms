@@ -47,3 +47,4 @@ next-env.d.ts
 /data/arthurian_legends
 
 /.playwright-mcp
+dev.db
