@@ -273,6 +273,7 @@ export type GameState = {
 const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "Combat", "End"];
 
 export type GameEvent = { id: number; ts: number; text: string };
+const MAX_EVENTS = 200;
 
 // Snapshot of serializable game state we can restore on undo
 export type SerializedGame = {
@@ -378,6 +379,21 @@ function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   return out as unknown as T;
 }
 
+// Merge console events by stable key and chronological order, trimming to MAX_EVENTS.
+function mergeEvents(prev: GameEvent[], add: GameEvent[]): GameEvent[] {
+  const m = new Map<string, GameEvent>();
+  for (const e of Array.isArray(prev) ? prev : []) {
+    if (!e) continue;
+    m.set(`${e.id}|${e.ts}|${e.text}`, e);
+  }
+  for (const e of Array.isArray(add) ? add : []) {
+    if (!e) continue;
+    m.set(`${e.id}|${e.ts}|${e.text}`, e);
+  }
+  const merged = Array.from(m.values()).sort((a, b) => (a.ts - b.ts) || (a.id - b.id));
+  return merged.length > MAX_EVENTS ? merged.slice(-MAX_EVENTS) : merged;
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   players: {
     p1: {
@@ -422,7 +438,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!patch || typeof patch !== "object") return false;
     if (!tr) {
       set((s) => ({ pendingPatches: [...s.pendingPatches, patch] }));
-      get().log("Transport unavailable: queued patch");
+      try { console.warn("[net] Transport unavailable: queued patch"); } catch {}
       return false;
     }
     try {
@@ -430,7 +446,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return true;
     } catch (err) {
       set((s) => ({ pendingPatches: [...s.pendingPatches, patch] }));
-      get().log(`Send failed, queued patch: ${String(err)}`);
+      try { console.warn(`[net] Send failed, queued patch: ${String(err)}`); } catch {}
       return false;
     }
   },
@@ -445,7 +461,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       try {
         tr.sendAction(p);
       } catch (err) {
-        get().log(`Flush failed: ${String(err)}`);
+        try { console.warn(`[net] Flush failed: ${String(err)}`); } catch {}
         sentAll = false;
         break;
       }
@@ -529,10 +545,17 @@ export const useGameStore = create<GameState>((set, get) => ({
   events: [],
   eventSeq: 0,
   log: (text: string) =>
-    set((s) => ({
-      events: [...s.events, { id: s.eventSeq + 1, ts: Date.now(), text }],
-      eventSeq: s.eventSeq + 1,
-    })),
+    set((s) => {
+      const nextId = s.eventSeq + 1;
+      const e = { id: nextId, ts: Date.now(), text };
+      const eventsAll = [...s.events, e];
+      const events =
+        eventsAll.length > MAX_EVENTS ? eventsAll.slice(-MAX_EVENTS) : eventsAll;
+      // Sync console events across players
+      const patch: ServerPatchT = { events, eventSeq: nextId };
+      get().trySendPatch(patch);
+      return { events, eventSeq: nextId } as Partial<GameState> as GameState;
+    }),
 
   // Apply an incremental server patch into the store.
   // - Only whitelisted game-state fields are updated
@@ -586,10 +609,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.mulliganDrawn = deepMergeReplaceArrays(s.mulliganDrawn, p.mulliganDrawn);
       }
       if (p.events !== undefined) {
-        next.events = deepMergeReplaceArrays(s.events, p.events);
-      }
-      if (p.eventSeq !== undefined) {
-        next.eventSeq = Number(p.eventSeq) || s.eventSeq;
+        const merged = mergeEvents(s.events, (p.events as GameEvent[]) || []);
+        next.events = merged;
+        // If eventSeq provided, take the max with existing and merged max id
+        const mergedMaxId = merged.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0);
+        const candidateSeq = Math.max(s.eventSeq, mergedMaxId);
+        next.eventSeq = p.eventSeq !== undefined
+          ? Math.max(candidateSeq, Number(p.eventSeq) || 0)
+          : candidateSeq;
+      } else if (p.eventSeq !== undefined) {
+        next.eventSeq = Math.max(s.eventSeq, Number(p.eventSeq) || 0);
       }
 
       if (typeof t === "number") next.lastServerTs = Math.max(s.lastServerTs ?? 0, t);
