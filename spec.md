@@ -106,3 +106,13 @@ REFERENCE:
   https://drive.google.com/file/d/1sgQo0xf0N2teIR0zlyl91g9j6LVncZnr/view
 - Max life in Sorcery is 20
 - Once a player reaches 0 life, they are considered to be at deaths door (symbolized by DD), can not heal anymore and become immune to damage for the rest of the round, they can only be killed by taking another damage directly to their avatar in subsequent turns
+
+POLISH:
+
+- it all happens at loading of the textures I am sure, the old image orientations are fine (used in previews for example)
+- I think the placeholder for the cards should be transparent, the black does not look too good - or we use the card backgrounds
+- in a offline or online game on the board, when dragging a card it "jumps up" before being placed, that seems like a redundant animation, we can lose it
+- when the same players repeat matches it seems like the game and board state is not fully cleared when beginning the new match
+- card previews should also use ktx textures with fallback
+- card preview for board should be reimplemented from the editor-3d one, it is much better
+- Is our state management working well enough to be able to save (complteted only) matches for replay?

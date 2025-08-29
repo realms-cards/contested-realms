@@ -7,6 +7,7 @@ import * as THREE from "three";
 import type { PlayerKey } from "../store";
 
 interface D20DiceProps {
+  playerName: string;
   player: PlayerKey;
   position: [number, number, number];
   roll: number | null;
@@ -22,6 +23,7 @@ export default function D20Dice({
   isRolling,
   onRollComplete,
   onRoll,
+  playerName,
 }: D20DiceProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [rollStartTime, setRollStartTime] = useState<number>(0);
@@ -30,12 +32,13 @@ export default function D20Dice({
   // D20 geometry - icosahedron (bigger size for visibility)
   const d20Geometry = new THREE.IcosahedronGeometry(0.8, 0);
 
-  // Start rolling animation when isRolling becomes true
+  // Start rolling when isRolling becomes true; reset completion state for new rolls
   useEffect(() => {
-    if (isRolling && !hasCompletedRoll) {
+    if (isRolling) {
+      setHasCompletedRoll(false);
       setRollStartTime(Date.now());
     }
-  }, [isRolling, roll, hasCompletedRoll]);
+  }, [isRolling]);
 
   // Simple rotation animation
   useFrame(() => {
@@ -73,7 +76,7 @@ export default function D20Dice({
             onRoll();
           }
         }}
-        onPointerEnter={(e) => {
+        onPointerEnter={() => {
           if (!isRolling && roll === null && onRoll) {
             document.body.style.cursor = "pointer";
           }
@@ -116,7 +119,7 @@ export default function D20Dice({
         outlineWidth={0.02}
         outlineColor="#000000"
       >
-        P{player === "p1" ? "1" : "2"}
+        {playerName}
       </Text>
     </group>
   );

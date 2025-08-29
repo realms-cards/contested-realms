@@ -130,6 +130,7 @@ export default function OnlineD20Screen({
 
           {/* Player 1 die - left side */}
           <D20Dice
+            playerName={playerNames.p1}
             player="p1"
             position={[-2, 0, 0]}
             roll={d20Rolls.p1}
@@ -144,6 +145,7 @@ export default function OnlineD20Screen({
 
           {/* Player 2 die - right side */}
           <D20Dice
+            playerName={playerNames.p2}
             player="p2"
             position={[2, 0, 0]}
             roll={d20Rolls.p2}
