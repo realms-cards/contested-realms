@@ -20,7 +20,7 @@ const fantaisieArtistique = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Sorcery - TCG Client",
+  title: "Contested Realms",
   description: "Play Sorcery: Contested Realm online and offline",
 };
 
