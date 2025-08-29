@@ -7,7 +7,7 @@ import { Gamepad2, Users, Zap } from "lucide-react";
 export default function Home() {
   // Set home page title
   useEffect(() => {
-    document.title = "Sorcery - TCG Client";
+    document.title = "Contested Realms";
   }, []);
 
   return (
@@ -22,7 +22,9 @@ export default function Home() {
             Contested Realm • Digital Client
           </p>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-            Experience the strategic depth of Sorcery: Contested Realm with this immersive 3D digital client. Play online with friends or practice offline.
+            Experience the strategic depth of Sorcery: Contested Realm with this
+            immersive 3D digital client. Play online with friends or practice
+            offline.
           </p>
         </div>
 
@@ -37,9 +39,12 @@ export default function Home() {
               <div className="p-4 bg-blue-500/20 rounded-full group-hover:bg-blue-500/30 transition-colors">
                 <Gamepad2 className="w-8 h-8 text-blue-400" />
               </div>
-              <h3 className="text-2xl font-semibold text-blue-100">Offline Play</h3>
+              <h3 className="text-2xl font-semibold text-blue-100">
+                Offline Play
+              </h3>
               <p className="text-blue-200/80 text-center">
-                Play locally with hot-seat multiplayer. Perfect for learning the game or playing with friends at the same computer.
+                Play locally with hot-seat multiplayer. Perfect for learning the
+                game or playing with friends at the same computer.
               </p>
             </div>
           </Link>
@@ -53,9 +58,12 @@ export default function Home() {
               <div className="p-4 bg-emerald-500/20 rounded-full group-hover:bg-emerald-500/30 transition-colors">
                 <Users className="w-8 h-8 text-emerald-400" />
               </div>
-              <h3 className="text-2xl font-semibold text-emerald-100">Online Multiplayer</h3>
+              <h3 className="text-2xl font-semibold text-emerald-100">
+                Online Multiplayer
+              </h3>
               <p className="text-emerald-200/80 text-center">
-                Connect with players worldwide. Create or join matches, chat with opponents, and compete online.
+                Connect with players worldwide. Create or join matches, chat
+                with opponents, and compete online.
               </p>
             </div>
           </Link>
@@ -80,7 +88,10 @@ export default function Home() {
         {/* Footer */}
         <div className="text-xs text-slate-500 space-y-1">
           <p>Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa.</p>
-          <p>This is an unofficial digital client for educational and entertainment purposes.</p>
+          <p>
+            This is an unofficial digital client for educational and
+            entertainment purposes.
+          </p>
         </div>
       </div>
     </div>

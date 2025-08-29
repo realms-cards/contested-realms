@@ -34,23 +34,36 @@ export default function OnlineMatchPage() {
     return Array.isArray(idParam) ? idParam[0] : idParam;
   }, [params]);
 
-  const { connected, match, joinMatch, chatLog, sendChat, leaveMatch, resync, me, resyncing } = useOnline();
-  
+  const {
+    connected,
+    match,
+    joinMatch,
+    chatLog,
+    sendChat,
+    leaveMatch,
+    resync,
+    me,
+    resyncing,
+  } = useOnline();
+
   // Determine which player this client is
   const myPlayerId = me?.id;
   const myPlayerNumber = useMemo(() => {
     if (!match?.players || !myPlayerId) return null;
-    const index = match.players.findIndex(p => p.id === myPlayerId);
+    const index = match.players.findIndex((p) => p.id === myPlayerId);
     return index === 0 ? 1 : index === 1 ? 2 : null;
   }, [match?.players, myPlayerId]);
-  const myPlayerKey = myPlayerNumber === 1 ? "p1" : myPlayerNumber === 2 ? "p2" : null;
+  const myPlayerKey =
+    myPlayerNumber === 1 ? "p1" : myPlayerNumber === 2 ? "p2" : null;
 
   // One-shot guards for rejoin flow per connection
   const lastConnectedRef = useRef<boolean>(false);
   const resyncSentForRef = useRef<string | null>(null);
   const rejoinChatSentForRef = useRef<string | null>(null);
   const prevMatchIdRef = useRef<string | null>(null);
-  const prevMatchStatusRef = useRef<'waiting'|'in_progress'|'ended'|null>(null);
+  const prevMatchStatusRef = useRef<"waiting" | "in_progress" | "ended" | null>(
+    null
+  );
   const joinAttemptedForRef = useRef<string | null>(null);
 
   // Get player nicknames
@@ -66,11 +79,14 @@ export default function OnlineMatchPage() {
     if (!connected || !matchId) return;
     if (match?.id === matchId) {
       // Arrived or already in: clear join attempt flag
-      if (joinAttemptedForRef.current === matchId) joinAttemptedForRef.current = null;
+      if (joinAttemptedForRef.current === matchId)
+        joinAttemptedForRef.current = null;
       return;
     }
     if (joinAttemptedForRef.current === matchId) return;
-    try { console.debug('[online] joinMatch ->', { matchId }); } catch {}
+    try {
+      console.debug("[online] joinMatch ->", { matchId });
+    } catch {}
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
   }, [connected, match?.id, matchId, joinMatch]);
@@ -91,7 +107,8 @@ export default function OnlineMatchPage() {
     if (!matchId) return;
     if (match?.id !== matchId) {
       if (resyncSentForRef.current === matchId) resyncSentForRef.current = null;
-      if (rejoinChatSentForRef.current === matchId) rejoinChatSentForRef.current = null;
+      if (rejoinChatSentForRef.current === matchId)
+        rejoinChatSentForRef.current = null;
     }
   }, [match?.id, matchId]);
 
@@ -102,25 +119,46 @@ export default function OnlineMatchPage() {
     // One-shot resync per connection for this match id
     if (resyncSentForRef.current !== matchId) {
       // Debug: track resync emission
-      try { console.debug('[online] resync ->', { matchId, because: 'joined or rejoined' }); } catch {}
+      try {
+        console.debug("[online] resync ->", {
+          matchId,
+          because: "joined or rejoined",
+        });
+      } catch {}
       resync();
       resyncSentForRef.current = matchId;
     }
 
     // One-shot chat per connection if rejoining an in-progress match
-    const prevStatus = prevMatchIdRef.current === matchId ? prevMatchStatusRef.current : null;
-    const transitioningFromWaiting = prevStatus === 'waiting' && match?.status === 'in_progress';
-    if (match?.status === 'in_progress' && rejoinChatSentForRef.current !== matchId && !transitioningFromWaiting) {
+    const prevStatus =
+      prevMatchIdRef.current === matchId ? prevMatchStatusRef.current : null;
+    const transitioningFromWaiting =
+      prevStatus === "waiting" && match?.status === "in_progress";
+    if (
+      match?.status === "in_progress" &&
+      rejoinChatSentForRef.current !== matchId &&
+      !transitioningFromWaiting
+    ) {
       const myName = me?.displayName || "A player";
-      try { console.debug('[online] rejoin chat ->', { matchId, name: myName }); } catch {}
-      sendChat(`${myName} has rejoined the match.`, 'match');
+      try {
+        console.debug("[online] rejoin chat ->", { matchId, name: myName });
+      } catch {}
+      sendChat(`${myName} has rejoined the match.`, "match");
       rejoinChatSentForRef.current = matchId;
     }
 
     // Update previous status tracking for next pass
     prevMatchIdRef.current = matchId;
     prevMatchStatusRef.current = match?.status ?? null;
-  }, [connected, match?.id, matchId, match?.status, me?.displayName, resync, sendChat]);
+  }, [
+    connected,
+    match?.id,
+    matchId,
+    match?.status,
+    me?.displayName,
+    resync,
+    sendChat,
+  ]);
 
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
@@ -130,17 +168,17 @@ export default function OnlineMatchPage() {
   const [setupOpen, setSetupOpen] = useState<boolean>(false);
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
-  
+
   // Control setup overlay based on match status
   useEffect(() => {
     // Only react once we know we're in this specific match
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
-    if (match.status === 'in_progress') {
+    if (match.status === "in_progress") {
       // Ongoing match: ensure overlay is closed; do NOT override phase here
       if (setupOpen) setSetupOpen(false);
-    } else if (match.status === 'waiting') {
+    } else if (match.status === "waiting") {
       // During setup (including mulligan), keep overlay open until server flips to in_progress
       if (!setupOpen) setSetupOpen(true);
     } else {
@@ -158,37 +196,53 @@ export default function OnlineMatchPage() {
 
   // Also close setup if server advances phase to Main (in case match.status races)
   useEffect(() => {
-    if (setupOpen && serverPhase === 'Main') {
+    if (setupOpen && serverPhase === "Main") {
       setSetupOpen(false);
     }
   }, [serverPhase, setupOpen]);
 
   // Chat
   const [chatInput, setChatInput] = useState("");
-  
+
   // Match info popup
   const [matchInfoOpen, setMatchInfoOpen] = useState<boolean>(false);
-  
+
   // Match end overlay
-  const [matchEndOverlayOpen, setMatchEndOverlayOpen] = useState<boolean>(false);
-  const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] = useState<boolean>(false);
+  const [matchEndOverlayOpen, setMatchEndOverlayOpen] =
+    useState<boolean>(false);
+  const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] =
+    useState<boolean>(false);
 
   // Debug: page mount/unmount
   useEffect(() => {
-    try { console.debug('[page] OnlineMatchPage mount'); } catch {}
-    return () => { try { console.debug('[page] OnlineMatchPage unmount'); } catch {} };
+    try {
+      console.debug("[page] OnlineMatchPage mount");
+    } catch {}
+    return () => {
+      try {
+        console.debug("[page] OnlineMatchPage unmount");
+      } catch {}
+    };
   }, []);
 
   // Debug: resyncing transitions (controls Physics mount/unmount)
   useEffect(() => {
-    try { console.debug('[physics] resyncing ->', { resyncing, matchId }); } catch {}
+    try {
+      console.debug("[physics] resyncing ->", { resyncing, matchId });
+    } catch {}
   }, [resyncing, matchId]);
 
   // Tiny helper component to log Physics world lifecycle
   function PhysicsProbe({ mid }: { mid: string | undefined | null }) {
     useEffect(() => {
-      try { console.debug('[physics] mount', { matchId: mid }); } catch {}
-      return () => { try { console.debug('[physics] unmount', { matchId: mid }); } catch {} };
+      try {
+        console.debug("[physics] mount", { matchId: mid });
+      } catch {}
+      return () => {
+        try {
+          console.debug("[physics] unmount", { matchId: mid });
+        } catch {}
+      };
     }, [mid]);
     return null;
   }
@@ -294,18 +348,18 @@ export default function OnlineMatchPage() {
 
   // Dynamic page title with comprehensive match info
   useEffect(() => {
-    const baseTitle = "Sorcery";
-    
+    const baseTitle = "Contested Realms";
+
     if (!connected) {
       document.title = `${baseTitle} - Disconnected`;
       return;
     }
-    
+
     if (!inThisMatch) {
       document.title = `${baseTitle} - Joining Match...`;
       return;
     }
-    
+
     if (!match || !myPlayerKey) {
       document.title = `${baseTitle} - Loading Match...`;
       return;
@@ -314,17 +368,17 @@ export default function OnlineMatchPage() {
     const players = useGameStore.getState().players;
     const currentPlayerNum = useGameStore.getState().currentPlayer;
     const myLife = players[myPlayerKey]?.life;
-    const opponentKey = myPlayerKey === 'p1' ? 'p2' : 'p1';
+    const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
     const opponentLife = players[opponentKey]?.life;
     const opponentName = playerNames[opponentKey];
-    
+
     let title = `${baseTitle} vs ${opponentName}`;
-    
+
     // Add life info
     if (myLife !== undefined && opponentLife !== undefined) {
       title += ` (${myLife} vs ${opponentLife})`;
     }
-    
+
     // Add turn info
     const isMyTurn = myPlayerNumber === currentPlayerNum;
     if (isMyTurn) {
@@ -332,7 +386,7 @@ export default function OnlineMatchPage() {
     } else {
       title += ` - ${opponentName}'s Turn`;
     }
-    
+
     // Add match end state
     if (matchEnded) {
       if (winner === myPlayerKey) {
@@ -343,19 +397,19 @@ export default function OnlineMatchPage() {
         title = `${baseTitle} - Draw vs ${opponentName}`;
       }
     }
-    
+
     document.title = title;
   }, [
-    connected, 
-    inThisMatch, 
-    match, 
-    myPlayerKey, 
-    myPlayerNumber, 
-    playerNames, 
-    matchEnded, 
+    connected,
+    inThisMatch,
+    match,
+    myPlayerKey,
+    myPlayerNumber,
+    playerNames,
+    matchEnded,
     winner,
     playersState,
-    currentPlayerState
+    currentPlayerState,
   ]);
 
   return (
@@ -373,42 +427,40 @@ export default function OnlineMatchPage() {
       {inThisMatch && setupOpen && myPlayerKey && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
-            <OnlineDeckSelector 
+            <OnlineDeckSelector
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
-              onPrepareComplete={() => setPrepared(true)} 
+              onPrepareComplete={() => setPrepared(true)}
             />
           ) : !d20RollingComplete ? (
-            <OnlineD20Screen 
+            <OnlineD20Screen
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
-              onRollingComplete={() => setD20RollingComplete(true)} 
+              onRollingComplete={() => setD20RollingComplete(true)}
             />
           ) : (
-            <OnlineMulliganScreen 
+            <OnlineMulliganScreen
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
-              onStartGame={finishSetup} 
+              onStartGame={finishSetup}
             />
           )}
         </div>
       )}
 
-
-
       {inThisMatch && (
         <>
           {/* Online Status Bar with turn restrictions */}
           {myPlayerNumber && (
-            <OnlineStatusBar 
-              dragFromHand={dragFromHand} 
+            <OnlineStatusBar
+              dragFromHand={dragFromHand}
               myPlayerNumber={myPlayerNumber}
               playerNames={playerNames}
               onCameraReset={resetCamera}
               onOpenMatchInfo={() => setMatchInfoOpen(true)}
             />
           )}
-          <OnlineLifeCounters 
+          <OnlineLifeCounters
             dragFromHand={dragFromHand}
             myPlayerKey={myPlayerKey}
             playerNames={playerNames}
@@ -425,103 +477,116 @@ export default function OnlineMatchPage() {
             connected={connected}
           />
 
-            {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
-            {previewCard?.slug && !contextMenu && !selectedHandCard && (
-              <div className="absolute right-3 top-20 z-20 pointer-events-none">
-                {(() => {
-                  const isSite = (previewCard?.type || "").toLowerCase().includes("site");
-                  return (
-                    <div className="relative">
-                      <div
-                        className={`relative ${isSite ? "aspect-[4/3] h-[300px] md:h-[380px]" : "aspect-[3/4] w-[300px] md:w-[380px]"} rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
-                      >
-                        <Image
-                          src={`/api/images/${previewCard.slug}`}
-                          alt={previewCard.name}
-                          fill
-                          sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
-                          className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
-                        />
-                      </div>
-                      <button
-                        className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
-                        onClick={() => setPreviewCard(null)}
-                        title="Close preview"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Context Menu */}
-            {contextMenu && (
-              <ContextMenu
-                onClose={() => {
-                  clearSelection();
-                  setPreviewCard(null);
-                  closeContextMenu();
-                }}
-              />
-            )}
-
-            {/* Global dialogs */}
-            {placementDialog && (
-              <PlacementDialog
-                cardName={placementDialog.cardName}
-                pileName={placementDialog.pileName}
-                onChoice={(pos) => {
-                  placementDialog.onPlace(pos);
-                  closePlacementDialog();
-                }}
-                onCancel={() => closePlacementDialog()}
-              />
-            )}
-
-            {searchDialog && (
-              <PileSearchDialog
-                pileName={searchDialog.pileName}
-                cards={searchDialog.cards}
-                onSelectCard={(card) => {
-                  searchDialog.onSelectCard(card);
-                  closeSearchDialog();
-                }}
-                onClose={() => closeSearchDialog()}
-              />
-            )}
-
-            {/* Hand Card Magnifier (selected hand card) */}
-            {(() => {
-              const c = selectedHandCard;
-              if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay) return null;
-              const isSite = (c.type || "").toLowerCase().includes("site");
-              return (
-                <div className="absolute right-3 top-20 z-20 pointer-events-none">
+          {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
+          {previewCard?.slug && !contextMenu && !selectedHandCard && (
+            <div className="absolute right-3 top-20 z-20 pointer-events-none">
+              {(() => {
+                const isSite = (previewCard?.type || "")
+                  .toLowerCase()
+                  .includes("site");
+                return (
                   <div className="relative">
                     <div
-                      className={`relative ${isSite ? "aspect-[4/3]" : "aspect-[3/4]"} h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
+                      className={`relative ${
+                        isSite
+                          ? "aspect-[4/3] h-[300px] md:h-[380px]"
+                          : "aspect-[3/4] w-[300px] md:w-[380px]"
+                      } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                     >
                       <Image
-                        src={`/api/images/${c.slug}`}
-                        alt={c.name}
+                        src={`/api/images/${previewCard.slug}`}
+                        alt={previewCard.name}
                         fill
-                        sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
-                        className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
+                        sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
+                        className={`${
+                          isSite ? "object-contain rotate-90" : "object-contain"
+                        }`}
                       />
                     </div>
                     <button
                       className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
-                      onClick={() => clearSelection()}
-                      title="Close magnifier"
+                      onClick={() => setPreviewCard(null)}
+                      title="Close preview"
                     >
                       ×
                     </button>
                   </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Context Menu */}
+          {contextMenu && (
+            <ContextMenu
+              onClose={() => {
+                clearSelection();
+                setPreviewCard(null);
+                closeContextMenu();
+              }}
+            />
+          )}
+
+          {/* Global dialogs */}
+          {placementDialog && (
+            <PlacementDialog
+              cardName={placementDialog.cardName}
+              pileName={placementDialog.pileName}
+              onChoice={(pos) => {
+                placementDialog.onPlace(pos);
+                closePlacementDialog();
+              }}
+              onCancel={() => closePlacementDialog()}
+            />
+          )}
+
+          {searchDialog && (
+            <PileSearchDialog
+              pileName={searchDialog.pileName}
+              cards={searchDialog.cards}
+              onSelectCard={(card) => {
+                searchDialog.onSelectCard(card);
+                closeSearchDialog();
+              }}
+              onClose={() => closeSearchDialog()}
+            />
+          )}
+
+          {/* Hand Card Magnifier (selected hand card) */}
+          {(() => {
+            const c = selectedHandCard;
+            if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay)
+              return null;
+            const isSite = (c.type || "").toLowerCase().includes("site");
+            return (
+              <div className="absolute right-3 top-20 z-20 pointer-events-none">
+                <div className="relative">
+                  <div
+                    className={`relative ${
+                      isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                    } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
+                  >
+                    <Image
+                      src={`/api/images/${c.slug}`}
+                      alt={c.name}
+                      fill
+                      sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
+                      className={`${
+                        isSite ? "object-contain rotate-90" : "object-contain"
+                      }`}
+                    />
+                  </div>
+                  <button
+                    className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
+                    onClick={() => clearSelection()}
+                    title="Close magnifier"
+                  >
+                    ×
+                  </button>
                 </div>
-              );
-            })()}
+              </div>
+            );
+          })()}
 
           {/* Match Info Popup */}
           <MatchInfoPopup
@@ -545,21 +610,25 @@ export default function OnlineMatchPage() {
             }}
             onLeave={() => {
               leaveMatch();
-              router.push('/online/lobby');
+              router.push("/online/lobby");
             }}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}
           <div className="absolute inset-0 w-full h-full">
             <Canvas
-              camera={{ 
+              camera={{
                 // Position camera based on player seat
                 // P1 looks from south to north, P2 looks from north to south
-                position: myPlayerNumber === 1 ? [0, 10, 5] : [0, 10, -5], 
-                fov: 50 
+                position: myPlayerNumber === 1 ? [0, 10, 5] : [0, 10, -5],
+                fov: 50,
               }}
               shadows
-              gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+              gl={{
+                preserveDrawingBuffer: true,
+                antialias: true,
+                alpha: false,
+              }}
               onPointerMissed={() => {
                 if (!dragFromHand && !dragFromPile) {
                   clearSelection();
@@ -568,49 +637,78 @@ export default function OnlineMatchPage() {
                 }
               }}
             >
-            <color attach="background" args={["#0b0b0c"]} />
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[10, 12, 8]} intensity={1} castShadow />
+              <color attach="background" args={["#0b0b0c"]} />
+              <ambientLight intensity={0.6} />
+              <directionalLight
+                position={[10, 12, 8]}
+                intensity={1}
+                castShadow
+              />
 
-            {/* Interactive board (physics-enabled) */}
-            {!resyncing && (
-              <Physics key={match?.id || 'no-match'} gravity={[0, -9.81, 0]}>
-                <PhysicsProbe mid={match?.id} />
-                <Board />
-              </Physics>
-            )}
+              {/* Interactive board (physics-enabled) */}
+              {!resyncing && (
+                <Physics key={match?.id || "no-match"} gravity={[0, -9.81, 0]}>
+                  <PhysicsProbe mid={match?.id} />
+                  <Board />
+                </Physics>
+              )}
 
-            {/* 3D Piles (sides of the board) */}
-            <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
-            <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+              {/* 3D Piles (sides of the board) */}
+              <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+              <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
 
-            {/* 3D HUD (thresholds, life, mana) */}
-            <Hud3D owner="p1" />
-            <Hud3D owner="p2" />
+              {/* 3D HUD (thresholds, life, mana) */}
+              <Hud3D owner="p1" />
+              <Hud3D owner="p2" />
 
-            {/* 3D Hands - only show my hand in online play */}
-            {myPlayerKey && (
-              <Hand3D owner={myPlayerKey} matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
-            )}
+              {/* 3D Hands - only show my hand in online play */}
+              {myPlayerKey && (
+                <Hand3D
+                  owner={myPlayerKey}
+                  matW={MAT_PIXEL_W}
+                  matH={MAT_PIXEL_H}
+                />
+              )}
 
-            {/* Invisible texture cache for smooth loading */}
-            <TextureCache />
+              {/* Invisible texture cache for smooth loading */}
+              <TextureCache />
 
-            <OrbitControls
-              ref={controlsRef}
-              makeDefault
-              target={[0, 0, 0]}
-              enabled={!resyncing && !dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-              enablePan={!resyncing && !dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-              enableRotate={!resyncing && !dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar}
-              enableZoom={!resyncing && !dragFromHand && !dragFromPile}
-              enableDamping={false}
-              minPolarAngle={0}
-              maxPolarAngle={Math.PI / 2.05}
-              // Adjust rotation constraints based on player position
-              minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
-              maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
-            />
+              <OrbitControls
+                ref={controlsRef}
+                makeDefault
+                target={[0, 0, 0]}
+                enabled={
+                  !resyncing &&
+                  !dragFromHand &&
+                  !dragFromPile &&
+                  !selected &&
+                  !selectedPermanent &&
+                  !selectedAvatar
+                }
+                enablePan={
+                  !resyncing &&
+                  !dragFromHand &&
+                  !dragFromPile &&
+                  !selected &&
+                  !selectedPermanent &&
+                  !selectedAvatar
+                }
+                enableRotate={
+                  !resyncing &&
+                  !dragFromHand &&
+                  !dragFromPile &&
+                  !selected &&
+                  !selectedPermanent &&
+                  !selectedAvatar
+                }
+                enableZoom={!resyncing && !dragFromHand && !dragFromPile}
+                enableDamping={false}
+                minPolarAngle={0}
+                maxPolarAngle={Math.PI / 2.05}
+                // Adjust rotation constraints based on player position
+                minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
+                maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
+              />
             </Canvas>
           </div>
         </>
