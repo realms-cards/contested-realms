@@ -300,7 +300,7 @@ export default function DeckEditor3DPage() {
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckName, setDeckName] = useState<string>("New Deck");
   const [deckFormat, setDeckFormat] = useState<string>("Constructed");
-  const setName = "Beta";
+  const setName = null; // Allow searching all sets
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
   // Search state
