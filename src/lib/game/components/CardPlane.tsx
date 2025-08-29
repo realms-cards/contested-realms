@@ -1,9 +1,9 @@
 "use client";
 
-import { useTexture } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
-import { SRGBColorSpace, type Object3D, type Raycaster, type Intersection } from "three";
+import { type Object3D, type Raycaster, type Intersection } from "three";
 import { Suspense } from "react";
+import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 
 function noopRaycast(
   this: Object3D,
@@ -96,9 +96,11 @@ function CardWithTexture(props: CardPlaneProps) {
     onClick,
   } = props;
 
-  const url = textureUrl ?? `/api/images/${slug}`;
-  const tex = useTexture(url);
-  tex.colorSpace = SRGBColorSpace;
+  const tex = useCardTexture({ slug, textureUrl });
+
+  if (!tex) {
+    return <CardFallback {...props} />;
+  }
   
   return (
     <mesh

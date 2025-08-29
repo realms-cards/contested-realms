@@ -46,7 +46,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     const suffix = suffixDirFromBasename(base);
 
     const root = path.join(process.cwd(), "data", setDir);
-    const exts = ["png", "jpg", "jpeg", "webp"];
+    // If explicitly requesting KTX2, only check for .ktx2 and return 404 if missing.
+    const wantKtx2 = (() => {
+      try {
+        const u = new URL(_req.url);
+        const v = u.searchParams.get("ktx2");
+        return v === "1" || v === "true";
+      } catch {
+        return false;
+      }
+    })();
+    const exts = wantKtx2 ? ["ktx2"] : ["png", "jpg", "jpeg", "webp"];
     const candidates: string[] = [];
 
     if (suffix) {
@@ -77,6 +87,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         ? "image/jpeg"
         : ext === "webp"
         ? "image/webp"
+        : ext === "ktx2"
+        ? "image/ktx2"
         : "application/octet-stream";
 
     const body = new Uint8Array(buf);
