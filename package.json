@@ -12,7 +12,10 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:push": "prisma db push",
     "ingest:cards": "node scripts/ingest-cards.js",
-    "seed:packs": "node scripts/seed-pack-config.js"
+    "seed:packs": "node scripts/seed-pack-config.js",
+    "assets:compress": "node scripts/compress-ktx2.js",
+    "assets:compress:out": "node scripts/compress-ktx2.js --input data --outDir data-ktx2",
+    "assets:compress:etc1s": "node scripts/compress-ktx2.js --format etc1s"
   },
   "dependencies": {
     "@prisma/client": "^6.14.0",

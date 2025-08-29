@@ -46,5 +46,6 @@ next-env.d.ts
 /data/beta
 /data/arthurian_legends
 
+/data-ktx2
 /.playwright-mcp
 dev.db

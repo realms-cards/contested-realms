@@ -5,7 +5,7 @@ import path from "path";
 export const dynamic = "force-dynamic";
 
 const ROOT = path.join(process.cwd(), "data");
-const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp"]);
+const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "ktx2"]);
 
 function contentTypeFor(ext: string): string {
   switch (ext) {
@@ -16,6 +16,8 @@ function contentTypeFor(ext: string): string {
       return "image/jpeg";
     case "webp":
       return "image/webp";
+    case "ktx2":
+      return "image/ktx2";
     default:
       return "application/octet-stream";
   }

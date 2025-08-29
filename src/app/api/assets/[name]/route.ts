@@ -9,6 +9,7 @@ function contentTypeFor(name: string) {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.ktx2')) return 'image/ktx2';
   return 'application/octet-stream';
 }
 
