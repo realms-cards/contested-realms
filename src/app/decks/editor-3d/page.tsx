@@ -977,17 +977,28 @@ export default function DeckEditor3DPage() {
     setTimeout(() => setFeedbackMessage(null), 2000);
   }, [applySortingIfEnabled, nextPickId]);
 
-  // Save deck function from 2D editor
+  // Save deck function with conditional validation
   async function saveDeck() {
     try {
       setSaving(true);
       setError(null);
       setSaveMsg(null);
 
-      if (!validation.avatar || !validation.atlas || !validation.spellbook) {
+      const isValid = validation.avatar && validation.atlas && validation.spellbook;
+      
+      // In draft/sealed/locked mode, enforce strict validation
+      if (isDraftMode && !isValid) {
         throw new Error(
-          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+          "Cannot save invalid deck in draft mode. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
         );
+      }
+      
+      // In normal mode, warn but allow saving invalid decks
+      if (!isValid && !isDraftMode) {
+        const warningMsg = "⚠️ Warning: Deck is invalid but was saved anyway. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)";
+        setSaveMsg(warningMsg);
+        // Clear warning after longer duration (8 seconds instead of typical 2 seconds)
+        setTimeout(() => setSaveMsg(null), 8000);
       }
 
       // Convert Pick3D to the API format expected by the backend
@@ -1029,6 +1040,8 @@ export default function DeckEditor3DPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to update deck");
         setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
+        // Clear success message after 4 seconds
+        setTimeout(() => setSaveMsg(null), 4000);
       } else {
         const res = await fetch("/api/decks", {
           method: "POST",
@@ -1044,6 +1057,8 @@ export default function DeckEditor3DPage() {
         if (!res.ok) throw new Error(data?.error || "Failed to save deck");
         setDeckId(data.id);
         setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
+        // Clear success message after 4 seconds
+        setTimeout(() => setSaveMsg(null), 4000);
         
         // Update the URL to include the deck id
         if (typeof window !== "undefined") {
@@ -2240,8 +2255,13 @@ export default function DeckEditor3DPage() {
                   )}
                   <button
                     onClick={saveDeck}
-                    disabled={saving}
+                    disabled={saving || (isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook))}
                     className="h-10 px-4 rounded bg-green-600 text-white disabled:opacity-50"
+                    title={
+                      isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook)
+                        ? "Cannot save invalid deck in draft mode"
+                        : undefined
+                    }
                   >
                     {saving ? "Saving..." : deckId ? "Update Deck" : "Save Deck"}
                   </button>
