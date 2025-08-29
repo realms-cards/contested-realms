@@ -100,6 +100,27 @@ function deepMergeReplaceArrays(base, patch) {
   return out;
 }
 
+// Cap for multiplayer console events to avoid unbounded growth
+const MAX_EVENTS = 200;
+// Merge console events by stable key and chronological order, trimming to MAX_EVENTS.
+function mergeEvents(prev, add) {
+  const m = new Map();
+  if (Array.isArray(prev)) {
+    for (const e of prev) {
+      if (!e) continue;
+      m.set(`${e.id}|${e.ts}|${e.text}`, e);
+    }
+  }
+  if (Array.isArray(add)) {
+    for (const e of add) {
+      if (!e) continue;
+      m.set(`${e.id}|${e.ts}|${e.text}`, e);
+    }
+  }
+  const merged = Array.from(m.values()).sort((a, b) => (a.ts - b.ts) || (a.id - b.id));
+  return merged.length > MAX_EVENTS ? merged.slice(-MAX_EVENTS) : merged;
+}
+
 function findOpenLobby() {
   for (const lobby of lobbies.values()) {
     if (
@@ -499,11 +520,23 @@ io.on("connection", (socket) => {
       }
       // Update server-side aggregated snapshot
       if (match && patch && typeof patch === 'object') {
-        match.game = deepMergeReplaceArrays(match.game || {}, patch);
+        let patchToApply = patch;
+        // Special-case: merge events arrays to prevent overwriting on concurrent logs
+        if (Array.isArray(patch.events)) {
+          const prev = Array.isArray(match.game && match.game.events) ? match.game.events : [];
+          const mergedEvents = mergeEvents(prev, patch.events);
+          const mergedMaxId = mergedEvents.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0);
+          const seq = Math.max(mergedMaxId, Number(patch.eventSeq || 0) || 0);
+          patchToApply = { ...patchToApply, events: mergedEvents, eventSeq: seq };
+        }
+        match.game = deepMergeReplaceArrays(match.game || {}, patchToApply);
         match.lastTs = now;
+        // Relay the merged action to all clients
+        io.to(matchRoom).emit("statePatch", { patch: patchToApply, t: now });
+      } else {
+        // Relay the action as-is if not mergeable
+        io.to(matchRoom).emit("statePatch", { patch, t: now });
       }
-      // Relay the action as a deterministic statePatch to all clients
-      io.to(matchRoom).emit("statePatch", { patch, t: now });
     } catch {
       // Fallback relay if any unexpected error occurs
       io.to(matchRoom).emit("statePatch", { patch: payload ? payload.action : null, t: Date.now() });
