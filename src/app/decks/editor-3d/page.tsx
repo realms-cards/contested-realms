@@ -300,7 +300,7 @@ export default function DeckEditor3DPage() {
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckName, setDeckName] = useState<string>("New Deck");
   const [deckFormat, setDeckFormat] = useState<string>("Constructed");
-  const setName = null; // Allow searching all sets
+  const setName = "Beta"; // Use Beta set for metadata (required by API)
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
   // Search state
@@ -1209,23 +1209,55 @@ export default function DeckEditor3DPage() {
 
   // Load deck data and meta
   useEffect(() => {
-    if (!yourCounts.length) {
+    // Get unique card IDs from pick3D array if yourCounts is empty
+    const cardIds = yourCounts.length > 0 
+      ? yourCounts.map((c) => c.cardId)
+      : [...new Set(pick3D.map((p) => p.card.cardId))]; // Remove duplicates
+
+    if (!cardIds.length) {
       setMetaByCardId({});
       return;
     }
 
-    const cardIds = yourCounts.map((c) => c.cardId);
-    fetch(`/api/cards/meta?set=${setName}&ids=${cardIds.join(",")}`)
+    console.log('Fetching metadata for', cardIds.length, 'unique card IDs:', cardIds);
+    const params = new URLSearchParams();
+    params.set("ids", cardIds.join(","));
+    if (setName) params.set("set", setName);
+    
+    fetch(`/api/cards/meta?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
-        const metaMap = data.reduce((acc: any, meta: any) => {
-          acc[meta.cardId] = meta;
+        console.log('=== API Response Debug ===');
+        console.log('Raw API response:', data);
+        console.log('First card structure:', JSON.stringify(data[0], null, 2));
+        
+        const metaMap = data.reduce((acc: any, cardData: any) => {
+          console.log(`Processing card ID ${cardData.cardId}:`, cardData);
+          
+          // API returns metadata directly in the response
+          if (cardData.cardId) {
+            const processedMeta = {
+              cardId: cardData.cardId,
+              cost: cardData.cost ?? null,
+              attack: cardData.attack ?? null,
+              defence: cardData.defence ?? null,
+              thresholds: cardData.thresholds ?? null,
+            };
+            console.log(`Extracted metadata for card ${cardData.cardId}:`, processedMeta);
+            acc[cardData.cardId] = processedMeta;
+          } else {
+            console.warn(`No cardId found in response:`, cardData);
+          }
+          
           return acc;
         }, {});
+        console.log('Final MetaByCardId:', metaMap);
         setMetaByCardId(metaMap);
       })
-      .catch(() => {});
-  }, [yourCounts, setName]);
+      .catch((error) => {
+        console.error('Metadata fetch failed:', error);
+      });
+  }, [yourCounts, pick3D, setName]);
 
   // Load deck list
   useEffect(() => {
