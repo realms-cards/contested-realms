@@ -19,6 +19,11 @@ import {
   CardMeta,
   computeStackPositions,
 } from "@/lib/game/cardSorting";
+import {
+  TournamentControls,
+  DeckValidation,
+  type StandardSiteName,
+} from "@/components/deck-editor";
 
 // Stable constant for standard site names (tournament legal)
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
@@ -1353,24 +1358,14 @@ export default function DeckEditor3DPage() {
           )}
 
           {/* Validation status */}
-          <div className="flex items-center gap-4 text-sm ml-auto">
-            <div
-              className={validation.avatar ? "text-green-400" : "text-red-400"}
-            >
-              Avatar: {avatarCount} / 1
-            </div>
-            <div
-              className={validation.atlas ? "text-green-400" : "text-red-400"}
-            >
-              Atlas: {atlasCount} / 12+
-            </div>
-            <div
-              className={
-                validation.spellbook ? "text-green-400" : "text-red-400"
-              }
-            >
-              Spellbook: {spellbookNonAvatar} / 24+
-            </div>
+          <div className="ml-auto">
+            <DeckValidation
+              avatarCount={avatarCount}
+              atlasCount={atlasCount}
+              spellbookCount={spellbookNonAvatar}
+              validation={validation}
+              isDraftMode={isDraftMode}
+            />
           </div>
         </div>
 
@@ -2121,92 +2116,15 @@ export default function DeckEditor3DPage() {
         </div>
       </div>
 
-      {/* Tournament Legal Controls - Floating panel on left side */}
-      {tournamentControlsVisible && (
-        <div className="absolute top-20 left-6 z-30 pointer-events-auto">
-          <div className="bg-black/90 backdrop-blur-sm rounded-lg p-4 ring-1 ring-white/30 shadow-xl max-w-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-white text-sm font-medium">
-                Tournament Legal Cards
-              </div>
-              <button
-                onClick={() => setTournamentControlsVisible(false)}
-                className="text-white/60 hover:text-white text-xl leading-none"
-                title="Close"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Spellslinger Avatar - Display as card */}
-            <div className="mb-4">
-              <div className="text-xs uppercase opacity-70 text-white mb-2">
-                Default Avatar
-              </div>
-              <div className="flex justify-center">
-                <button
-                  onClick={addSpellslinger}
-                  className="group relative hover:bg-white/10 rounded p-1 transition-colors"
-                  title="Add Spellslinger avatar to your deck"
-                >
-                  <div className="relative aspect-[3/4] rounded overflow-hidden bg-black/40">
-                    <Image
-                      src={
-                        spellslingerCard?.slug
-                          ? `/api/images/${spellslingerCard.slug}`
-                          : "/api/assets/card-back.png"
-                      }
-                      alt="Spellslinger"
-                      fill
-                      className="object-contain"
-                      sizes="120px"
-                    />
-                  </div>
-                  <div className="mt-1 text-[10px] text-center opacity-80 text-white">
-                    Spellslinger
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Standard Sites */}
-            <div className="text-xs uppercase opacity-70 text-white mb-2">
-              Standard Sites
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {STANDARD_SITE_NAMES.map((name: StandardSiteName) => {
-                const hit = stdSites[name];
-                const isSite = true;
-                return (
-                  <button
-                    key={name}
-                    onClick={() => addStandardSiteByName(name)}
-                    className="group relative hover:bg-white/10 rounded p-1 transition-colors"
-                    title={`Add ${name} to your Atlas`}
-                  >
-                    <div className="relative aspect-[4/3] rounded overflow-hidden bg-black/40 transform rotate-90">
-                      <Image
-                        src={
-                          hit?.slug
-                            ? `/api/images/${hit.slug}`
-                            : "/api/assets/card-back.png"
-                        }
-                        alt={name}
-                        fill
-                        className="object-contain"
-                        sizes="80px"
-                      />
-                    </div>
-                    <div className="mt-1 text-[10px] text-center opacity-80 text-white">
-                      {name}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tournament Legal Controls */}
+      <TournamentControls
+        isVisible={tournamentControlsVisible}
+        onClose={() => setTournamentControlsVisible(false)}
+        spellslingerCard={spellslingerCard}
+        standardSites={stdSites}
+        onAddSpellslinger={addSpellslinger}
+        onAddStandardSite={addStandardSiteByName}
+      />
     </div>
   );
 }
