@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
@@ -9,17 +8,17 @@ import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
 import TextureCache from "@/lib/game/components/TextureCache";
 import CardPlane from "@/lib/game/components/CardPlane";
-import {
-  MAT_PIXEL_W,
-  MAT_PIXEL_H,
-  CARD_LONG,
-  CARD_SHORT,
-} from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { Group } from "three";
 import { MOUSE } from "three";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import {
+  Pick3D,
+  CardMeta,
+  computeStackPositions,
+} from "@/lib/game/cardSorting";
 
 // --- Deck Editor data types (same as 2D editor) ---
 
@@ -38,6 +37,16 @@ type SearchResult = {
   rarity: string | null;
 };
 
+// Matches server shape from GET /api/decks/[id]
+type ApiCardRef = {
+  cardId: number;
+  variantId?: number | null;
+  name: string;
+  type: string | null;
+  slug?: string | null;
+  thresholds?: Record<string, number> | null;
+};
+
 type DeckListItem = { id: string; name: string; format: string };
 
 type PickKey = string; // `${cardId}:${zone}:${variantId??x}`
@@ -52,27 +61,7 @@ type PickItem = {
   count: number;
 };
 
-// Exact same card structure as draft-3d
-type BoosterCard = {
-  variantId: number;
-  slug: string;
-  finish: "Standard" | "Foil";
-  product: string;
-  rarity: string;
-  type: string | null;
-  cardId: number;
-  cardName: string;
-  setName?: string;
-};
-
-// Enhanced Pick3D structure with y coordinate for stacking
-type Pick3D = {
-  id: number;
-  card: BoosterCard;
-  x: number;
-  z: number;
-  y?: number;
-};
+// Using shared card types from '@/lib/game/cardSorting' (Pick3D, CardMeta)
 
 // Enhanced DraggableCard3D with double-click support
 function DraggableCard3D({
@@ -91,6 +80,7 @@ function DraggableCard3D({
   onHoverChange,
   lockUpright,
   onDoubleClick,
+  onContextMenu,
   baseRenderOrder = 1500,
 }: {
   slug: string;
@@ -108,6 +98,7 @@ function DraggableCard3D({
   onHoverChange?: (hovering: boolean) => void;
   lockUpright?: boolean;
   onDoubleClick?: () => void;
+  onContextMenu?: (clientX: number, clientY: number) => void;
   baseRenderOrder?: number;
 }) {
   const ref = useRef<Group | null>(null);
@@ -136,6 +127,8 @@ function DraggableCard3D({
     if (!ref.current) return;
     ref.current.position.set(wx, lift ? 0.25 : 0.002, wz);
   }, []);
+
+  // Note: move helpers are defined in parent and used there.
 
   const rotZ =
     (isSite ? -Math.PI / 2 : 0) +
@@ -262,6 +255,12 @@ function DraggableCard3D({
         onPointerOut={() => {
           onHoverChange?.(false);
         }}
+        onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+          if (disabled) return;
+          e.stopPropagation();
+          e.nativeEvent.preventDefault();
+          onContextMenu?.(e.clientX, e.clientY);
+        }}
       >
         <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
         <meshBasicMaterial
@@ -292,14 +291,12 @@ function DraggableCard3D({
 }
 
 export default function DeckEditor3DPage() {
-  const router = useRouter();
 
   // Deck editor state (same as 2D version)
   const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(false);
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckName, setDeckName] = useState<string>("New Deck");
-  const [deckFormat, setDeckFormat] = useState<string>("Constructed");
   const setName = "Beta"; // Use Beta set for metadata (required by API)
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
@@ -313,11 +310,34 @@ export default function DeckEditor3DPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // Load list of decks on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingDecks(true);
+        const res = await fetch("/api/decks");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to load decks");
+        if (mounted) setDecks(data as DeckListItem[]);
+      } catch (e) {
+        if (mounted) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (mounted) setLoadingDecks(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Exact same 3D state as draft-3d
   const [orbitLocked, setOrbitLocked] = useState(false);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [infoBoxVisible, setInfoBoxVisible] = useState(true);
   const [picksOpen, setPicksOpen] = useState(true);
+  // Draft-completion mode flag (off by default)
+  const [isDraftMode, setIsDraftMode] = useState(false);
 
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
@@ -335,38 +355,238 @@ export default function DeckEditor3DPage() {
     sideboardCards: Pick3D[];
   } | null>(null);
 
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
+
+  // Convert picks to Pick3D format (exact same structure as draft-3d)
+  const [pick3D, setPick3D] = useState<Pick3D[]>([]);
+  const [, setNextPickId] = useState(1);
+
+  // Open duplicate-move context menu for a given card at screen coords
+  const openContextMenuForCard = useCallback(
+    (cardId: number, cardName: string, clientX: number, clientY: number) => {
+      const deckCards = pick3D.filter(
+        (p) => p.card.cardId === cardId && p.z < 0
+      );
+      const sideboardCards = pick3D.filter(
+        (p) => p.card.cardId === cardId && p.z >= 0
+      );
+      // Only open context menu if there are copies of this card in BOTH zones
+      if (deckCards.length > 0 && sideboardCards.length > 0) {
+        setContextMenu({
+          cardId,
+          cardName,
+          x: clientX,
+          y: clientY,
+          deckCards,
+          sideboardCards,
+        });
+      }
+    },
+    [pick3D]
+  );
+
   // Hover preview (exact same as draft-3d)
   const [hoverPreview, setHoverPreview] = useState<{
     slug: string;
     name: string;
     type: string | null;
   } | null>(null);
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, any>>({});
 
-  // Convert picks to Pick3D format (exact same structure as draft-3d)
-  const [pick3D, setPick3D] = useState<Pick3D[]>([]);
-  const [nextPickId, setNextPickId] = useState(1);
+  // (Removed unused deckItems/deckCards/sideboardCards memos)
 
-  // Deck/sideboard data for zones - consistent zone boundaries
-  const deckItems = useMemo(
-    () =>
-      pick3D.map((pick) => ({
-        ...pick,
-        zone: pick.z < 0 ? "Deck" : ("Sideboard" as "Deck" | "Sideboard"), // Deck is z < 0, Sideboard is z >= 0
-        cardType: pick.card.type,
-      })),
-    [pick3D]
+  // Derived summaries for HUD panels
+  const picksByType = useMemo(() => {
+    const res = {
+      deck: 0,
+      sideboard: 0,
+      creatures: 0,
+      spells: 0,
+      sites: 0,
+      avatars: 0,
+    };
+    for (const p of pick3D) {
+      if (p.z < 0) res.deck += 1;
+      else res.sideboard += 1;
+      const t = (p.card.type || "").toLowerCase();
+      if (t.includes("avatar")) res.avatars += 1;
+      else if (t.includes("site")) res.sites += 1;
+      else if (t.includes("creature") || t.includes("minion")) res.creatures += 1;
+      else if (t.includes("spell")) res.spells += 1;
+    }
+    return res;
+  }, [pick3D]);
+
+  const yourCounts = useMemo(() => {
+    const m = new Map<number, { cardId: number; name: string; count: number }>();
+    Object.values(picks).forEach((it) => {
+      const cur = m.get(it.cardId) || { cardId: it.cardId, name: it.name, count: 0 };
+      cur.count += it.count;
+      m.set(it.cardId, cur);
+    });
+    return Array.from(m.values());
+  }, [picks]);
+
+  const manaCurve = useMemo(() => {
+    const curve: Record<number, number> = {};
+    for (const p of pick3D) {
+      if (p.z >= 0) continue; // deck zone only
+      const meta = metaByCardId[p.card.cardId];
+      const c = meta?.cost;
+      if (typeof c === "number") {
+        const k = Math.max(0, Math.min(9, Math.floor(c)));
+        curve[k] = (curve[k] || 0) + 1;
+      }
+    }
+    return curve;
+  }, [pick3D, metaByCardId]);
+
+  const thresholdSummary = useMemo(() => {
+    const summary: Record<string, number> = {};
+    const elements = new Set<string>();
+    for (const p of pick3D) {
+      if (p.z >= 0) continue; // deck zone only
+      const th = metaByCardId[p.card.cardId]?.thresholds as
+        | Record<string, number>
+        | undefined
+        | null;
+      if (!th) continue;
+      for (const k of Object.keys(th)) {
+        elements.add(k);
+        summary[k] = (summary[k] || 0) + (th[k] || 0);
+      }
+    }
+    return { elements: Array.from(elements), summary };
+  }, [pick3D, metaByCardId]);
+
+  // Basic add-card helpers for the search UI
+  const addCardAuto = useCallback(
+    (r: SearchResult) => {
+      const isSite = (r.type || "").toLowerCase().includes("site");
+      const zone: Zone = isSite ? "Atlas" : "Spellbook";
+      const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+      setPicks((prev) => {
+        const exists = prev[key];
+        const next: PickItem = exists
+          ? { ...exists, count: exists.count + 1 }
+          : {
+              cardId: r.cardId,
+              variantId: r.variantId ?? null,
+              name: r.cardName,
+              type: r.type,
+              slug: r.slug,
+              zone,
+              count: 1,
+            };
+        return { ...prev, [key]: next };
+      });
+    },
+    [setPicks]
   );
 
-  // Calculate deck/sideboard split - clear way to add/remove cards
-  const deckCards = useMemo(
-    () => deckItems.filter((item) => item.zone === "Deck"),
-    [deckItems]
+  const addToSideboardFromSearch = useCallback(
+    (r: SearchResult) => {
+      const zone: Zone = "Sideboard";
+      const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+      setPicks((prev) => {
+        const exists = prev[key];
+        const next: PickItem = exists
+          ? { ...exists, count: exists.count + 1 }
+          : {
+              cardId: r.cardId,
+              variantId: r.variantId ?? null,
+              name: r.cardName,
+              type: r.type,
+              slug: r.slug,
+              zone,
+              count: 1,
+            };
+        return { ...prev, [key]: next };
+      });
+    },
+    [setPicks]
   );
-  const sideboardCards = useMemo(
-    () => deckItems.filter((item) => item.zone === "Sideboard"),
-    [deckItems]
-  );
+
+  // Minimal deck actions
+  const saveDeck = useCallback(async () => {
+    setSaving(true);
+    try {
+      // TODO: hook up to API
+      setSaveMsg("Saved.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(null), 1500);
+    }
+  }, []);
+
+  const loadDeck = useCallback(async (id: string) => {
+    setDeckId(id);
+    try {
+      const res = await fetch(`/api/decks/${id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to load deck");
+
+      // Populate deck name
+      if (typeof data?.name === "string") setDeckName(data.name);
+
+      // Build picks from zones
+      const next: Record<PickKey, PickItem> = {};
+      const addZone = (zone: Zone, arr: ApiCardRef[] | undefined) => {
+        if (!arr || !Array.isArray(arr)) return;
+        for (const c of arr) {
+          const key: PickKey = `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
+          const exists = next[key];
+          next[key] = exists
+            ? { ...exists, count: exists.count + 1 }
+            : {
+                cardId: c.cardId,
+                variantId: c.variantId ?? null,
+                name: c.name,
+                type: c.type ?? null,
+                slug: c.slug ?? null,
+                zone,
+                count: 1,
+              };
+        }
+      };
+      addZone("Atlas", data?.atlas as ApiCardRef[]);
+      addZone("Spellbook", data?.spellbook as ApiCardRef[]);
+      addZone("Sideboard", data?.sideboard as ApiCardRef[]);
+      setPicks(next);
+
+      // Optional: prime metaByCardId with thresholds for sorting/grouping
+      const meta: Record<number, CardMeta> = {};
+      const all: ApiCardRef[] = [
+        ...(Array.isArray(data?.atlas) ? (data.atlas as ApiCardRef[]) : []),
+        ...(Array.isArray(data?.spellbook) ? (data.spellbook as ApiCardRef[]) : []),
+        ...(Array.isArray(data?.sideboard) ? (data.sideboard as ApiCardRef[]) : []),
+      ];
+      for (const c of all) {
+        if (c.thresholds && meta[c.cardId] == null) {
+          meta[c.cardId] = {
+            cardId: c.cardId,
+            cost: null,
+            attack: null,
+            defence: null,
+            thresholds: c.thresholds,
+          };
+        }
+      }
+      setMetaByCardId(meta);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  const clearEditor = useCallback(() => {
+    setDeckId(null);
+    setDeckName("New Deck");
+    setPicks({});
+    setPick3D([]);
+    setMetaByCardId({});
+    setResults([]);
+  }, []);
 
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
@@ -387,16 +607,22 @@ export default function DeckEditor3DPage() {
     }
   }, [isSortingEnabled]); // Only reset when sorting is toggled, not when cards change
 
+  // Create sorted stack positions using the shared utility
+  const stackPositions = useMemo(() => {
+    return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
+  }, [pick3D, isSortingEnabled, metaByCardId]);
+
+  // Button handler to re-trigger sorting computation
+  const forceSorting = useCallback(() => {
+    setPick3D((prev) => [...prev]);
+  }, []);
+
   // Convert deck picks to Pick3D format - all start in sideboard (upper third)
   useEffect(() => {
     const newPick3D: Pick3D[] = [];
     let id = 1;
 
     // Check if deck is already valid/edited
-    const totalCards = Object.values(picks).reduce(
-      (sum, item) => sum + item.count,
-      0
-    );
     const avatarCount = Object.values(picks)
       .filter((item) => (item.type || "").toLowerCase().includes("avatar"))
       .reduce((sum, item) => sum + item.count, 0);
@@ -410,7 +636,7 @@ export default function DeckEditor3DPage() {
     const isDeckValid =
       avatarCount === 1 && atlasCount >= 12 && spellbookCount >= 24;
 
-    Object.entries(picks).forEach(([key, item]) => {
+    for (const item of Object.values(picks)) {
       for (let i = 0; i < item.count; i++) {
         newPick3D.push({
           id: id++,
@@ -432,780 +658,11 @@ export default function DeckEditor3DPage() {
               : 0.5 + Math.random() * 3, // Sideboard zone: z from 0.5 to 3.5
         });
       }
-    });
+    }
 
     setPick3D(newPick3D);
     setNextPickId(id);
   }, [picks]);
-
-  // Enhanced categorization for deck vs sideboard sorting
-  const categorizeCard = (
-    card: Pick3D["card"],
-    meta?: {
-      attack?: number | null;
-      defence?: number | null;
-      thresholds?: any;
-      cost?: number | null;
-    },
-    zone?: "Deck" | "Sideboard"
-  ) => {
-    const type = (card.type || "").toLowerCase();
-
-    if (type.includes("avatar")) return "avatars";
-
-    // Sites get special handling based on zone
-    if (type.includes("site")) {
-      if (zone === "Deck") {
-        // For deck, sites are grouped by element
-        const thresholds = meta?.thresholds as
-          | Record<string, number>
-          | undefined;
-        let primaryElement = "colorless";
-
-        if (thresholds) {
-          const elements = ["air", "water", "earth", "fire"];
-          const maxElement = elements.reduce((max, element) =>
-            (thresholds[element] || 0) > (thresholds[max] || 0) ? element : max
-          );
-          if (thresholds[maxElement] > 0) {
-            primaryElement = maxElement;
-          }
-        }
-
-        return `sites-${primaryElement}`;
-      } else {
-        return "sites"; // Sideboard sites grouped together
-      }
-    }
-
-    if (zone === "Deck") {
-      // For deck, group by mana cost
-      const cost = meta?.cost ?? 0;
-      return `mana-${cost}`;
-    } else {
-      // For sideboard, group by element and creature/spell type
-      const thresholds = meta?.thresholds as Record<string, number> | undefined;
-      let primaryElement = "colorless";
-
-      if (thresholds) {
-        const elements = ["air", "water", "earth", "fire"];
-        const maxElement = elements.reduce((max, element) =>
-          (thresholds[element] || 0) > (thresholds[max] || 0) ? element : max
-        );
-        if (thresholds[maxElement] > 0) {
-          primaryElement = maxElement;
-        }
-      }
-
-      // Check if creature based on attack/defence
-      const isCreature =
-        meta && (meta.attack !== null || meta.defence !== null);
-
-      return `${primaryElement}-${isCreature ? "creatures" : "spells"}`;
-    }
-  };
-
-  // New sorting logic - separate deck and sideboard with different categorization
-  const sortedPicks = useMemo(() => {
-    if (!isSortingEnabled) return { deck: {}, sideboard: {} };
-
-    // Separate cards by zone first
-    const deckCards = pick3D.filter((pick) => pick.z < 0);
-    const sideboardCards = pick3D.filter((pick) => pick.z >= 0);
-
-    // Categorize deck cards by mana cost and sites by element
-    const deckCategories = deckCards.reduce((acc, pick) => {
-      const meta = metaByCardId[pick.card.cardId];
-      const category = categorizeCard(pick.card, meta, "Deck");
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(pick);
-      return acc;
-    }, {} as Record<string, Pick3D[]>);
-
-    // Categorize sideboard cards by element and creature/spell type
-    const sideboardCategories = sideboardCards.reduce((acc, pick) => {
-      const meta = metaByCardId[pick.card.cardId];
-      const category = categorizeCard(pick.card, meta, "Sideboard");
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(pick);
-      return acc;
-    }, {} as Record<string, Pick3D[]>);
-
-    // Sort within each category
-    Object.values(deckCategories).forEach((cards) => {
-      cards.sort((a, b) => a.card.cardName.localeCompare(b.card.cardName));
-    });
-
-    Object.values(sideboardCategories).forEach((cards) => {
-      cards.sort((a, b) => {
-        const metaA = metaByCardId[a.card.cardId];
-        const metaB = metaByCardId[b.card.cardId];
-        const costA = metaA?.cost ?? 0;
-        const costB = metaB?.cost ?? 0;
-        return costA - costB;
-      });
-    });
-
-    return { deck: deckCategories, sideboard: sideboardCategories };
-  }, [pick3D, isSortingEnabled, metaByCardId]);
-
-  // New stack positioning system for deck and sideboard
-  const stackPositions = useMemo(() => {
-    if (!isSortingEnabled) return null;
-
-    const positions = new Map<number, { x: number; z: number }>();
-    const cardSpacing = 0.15; // Vertical spacing between cards
-
-    // Deck positioning - LEFT HALF of board
-    const deckZStart = -2;
-    let deckXStart = -4; // Start further left
-    const deckSpacing = 0.8;
-
-    // First, position mana cost stacks
-    const manaCosts = Object.keys(sortedPicks.deck)
-      .filter((key) => key.startsWith("mana-"))
-      .sort((a, b) => {
-        const costA = parseInt(a.split("-")[1]);
-        const costB = parseInt(b.split("-")[1]);
-        return costA - costB;
-      });
-
-    manaCosts.forEach((manaKey) => {
-      const cards = sortedPicks.deck[manaKey];
-      if (cards) {
-        cards.forEach((card, index) => {
-          positions.set(card.id, {
-            x: deckXStart,
-            z: deckZStart + index * cardSpacing,
-          });
-        });
-        deckXStart += deckSpacing;
-      }
-    });
-
-    // Then, position site stacks by element in deck
-    const siteElements = ["air", "water", "earth", "fire", "colorless"];
-    siteElements.forEach((element) => {
-      const siteKey = `sites-${element}`;
-      if (sortedPicks.deck[siteKey]) {
-        sortedPicks.deck[siteKey].forEach((card, index) => {
-          positions.set(card.id, {
-            x: deckXStart,
-            z: deckZStart + index * cardSpacing,
-          });
-        });
-        deckXStart += deckSpacing;
-      }
-    });
-
-    // Handle avatars in deck (should be rare but possible)
-    if (sortedPicks.deck["avatars"]) {
-      sortedPicks.deck["avatars"].forEach((card, index) => {
-        positions.set(card.id, {
-          x: deckXStart,
-          z: deckZStart + index * cardSpacing,
-        });
-      });
-    }
-
-    // Sideboard positioning - RIGHT HALF of board
-    const sideboardZStart = 1;
-    let sideboardXStart = 0; // Start on right side
-    const sideboardSpacing = 0.7;
-
-    const elementOrder = ["air", "water", "earth", "fire", "colorless"];
-    elementOrder.forEach((element) => {
-      // Creatures stack
-      const creatureKey = `${element}-creatures`;
-      if (sortedPicks.sideboard[creatureKey]) {
-        sortedPicks.sideboard[creatureKey].forEach((card, index) => {
-          positions.set(card.id, {
-            x: sideboardXStart,
-            z: sideboardZStart + index * cardSpacing,
-          });
-        });
-      }
-
-      // Spells stack (below creatures)
-      const spellKey = `${element}-spells`;
-      if (sortedPicks.sideboard[spellKey]) {
-        const creatureCount = sortedPicks.sideboard[creatureKey]?.length || 0;
-        sortedPicks.sideboard[spellKey].forEach((card, index) => {
-          positions.set(card.id, {
-            x: sideboardXStart,
-            z: sideboardZStart + (creatureCount + index + 0.5) * cardSpacing,
-          });
-        });
-      }
-
-      sideboardXStart += sideboardSpacing;
-    });
-
-    // Handle sites and avatars in sideboard
-    if (sortedPicks.sideboard["sites"]) {
-      sortedPicks.sideboard["sites"].forEach((card, index) => {
-        positions.set(card.id, {
-          x: sideboardXStart,
-          z: sideboardZStart + index * cardSpacing,
-        });
-      });
-      sideboardXStart += sideboardSpacing;
-    }
-
-    if (sortedPicks.sideboard["avatars"]) {
-      sortedPicks.sideboard["avatars"].forEach((card, index) => {
-        positions.set(card.id, {
-          x: sideboardXStart,
-          z: sideboardZStart + index * cardSpacing,
-        });
-      });
-    }
-
-    return positions;
-  }, [sortedPicks, isSortingEnabled]);
-
-  // Simple helper function to apply current sorting positions if sorting is enabled
-  const applySortingIfEnabled = useCallback(
-    (cards: Pick3D[]) => {
-      if (!isSortingEnabled) {
-        // When sorting is disabled, reset all Y coordinates to ground level
-        return cards.map((card) => ({ ...card, y: undefined }));
-      }
-
-      // Apply the current stackPositions with proper Y elevation for stacking
-      const updated = cards.map((card) => {
-        const stackPos = stackPositions?.get(card.id);
-        if (stackPos) {
-          // Calculate Y elevation based on position within stack
-          // Lower Z values (closer to front of board) should be higher in stack
-          const stackIndex = cards.filter((otherCard) => {
-            const otherStackPos = stackPositions?.get(otherCard.id);
-            return (
-              otherStackPos &&
-              Math.abs(otherStackPos.x - stackPos.x) < 0.05 &&
-              (otherStackPos.z < stackPos.z ||
-                (otherStackPos.z === stackPos.z && otherCard.id < card.id))
-            );
-          }).length;
-
-          const yElevation = 0.002 + stackIndex * 0.01;
-
-          return { ...card, x: stackPos.x, z: stackPos.z, y: yElevation };
-        } else {
-          return { ...card, y: undefined }; // Reset Y if no stack position
-        }
-      });
-
-      return updated;
-    },
-    [isSortingEnabled, stackPositions]
-  );
-
-  // Force re-sorting function - recalculates positions based on current card zones
-  const forceSorting = useCallback(() => {
-    if (!isSortingEnabled) return;
-
-    setPick3D((prev) => {
-      // Recalculate sorting based on current card positions (zones)
-      const deckCards = prev.filter((pick) => pick.z < 0);
-      const sideboardCards = prev.filter((pick) => pick.z >= 0);
-
-      // Create fresh categories based on current positions
-      const deckCategories = deckCards.reduce((acc, pick) => {
-        const meta = metaByCardId[pick.card.cardId];
-        const category = categorizeCard(pick.card, meta, "Deck");
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(pick);
-        return acc;
-      }, {} as Record<string, Pick3D[]>);
-
-      const sideboardCategories = sideboardCards.reduce((acc, pick) => {
-        const meta = metaByCardId[pick.card.cardId];
-        const category = categorizeCard(pick.card, meta, "Sideboard");
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(pick);
-        return acc;
-      }, {} as Record<string, Pick3D[]>);
-
-      // Sort within each category
-      Object.values(deckCategories).forEach((cards) => {
-        cards.sort((a, b) => a.card.cardName.localeCompare(b.card.cardName));
-      });
-
-      Object.values(sideboardCategories).forEach((cards) => {
-        cards.sort((a, b) => {
-          const metaA = metaByCardId[a.card.cardId];
-          const metaB = metaByCardId[b.card.cardId];
-          const costA = metaA?.cost ?? 0;
-          const costB = metaB?.cost ?? 0;
-          return costA - costB;
-        });
-      });
-
-      // Recalculate positions based on current categories
-      const positions = new Map<number, { x: number; z: number }>();
-      const cardSpacing = 0.15;
-
-      // Deck positioning
-      const deckZStart = -2;
-      let deckXStart = -4;
-      const deckSpacing = 0.8;
-
-      // Position mana cost stacks
-      const manaCosts = Object.keys(deckCategories)
-        .filter((key) => key.startsWith("mana-"))
-        .sort((a, b) => parseInt(a.split("-")[1]) - parseInt(b.split("-")[1]));
-
-      manaCosts.forEach((manaKey) => {
-        const cards = deckCategories[manaKey];
-        if (cards) {
-          cards.forEach((card, index) => {
-            positions.set(card.id, {
-              x: deckXStart,
-              z: deckZStart + index * cardSpacing,
-            });
-          });
-          deckXStart += deckSpacing;
-        }
-      });
-
-      // Position site stacks by element in deck
-      const siteElements = ["air", "water", "earth", "fire", "colorless"];
-      siteElements.forEach((element) => {
-        const siteKey = `sites-${element}`;
-        if (deckCategories[siteKey]) {
-          deckCategories[siteKey].forEach((card, index) => {
-            positions.set(card.id, {
-              x: deckXStart,
-              z: deckZStart + index * cardSpacing,
-            });
-          });
-          deckXStart += deckSpacing;
-        }
-      });
-
-      // Handle avatars in deck
-      if (deckCategories["avatars"]) {
-        deckCategories["avatars"].forEach((card, index) => {
-          positions.set(card.id, {
-            x: deckXStart,
-            z: deckZStart + index * cardSpacing,
-          });
-        });
-      }
-
-      // Sideboard positioning
-      const sideboardZStart = 1;
-      let sideboardXStart = 0;
-      const sideboardSpacing = 0.7;
-
-      const elementOrder = ["air", "water", "earth", "fire", "colorless"];
-      elementOrder.forEach((element) => {
-        // Creatures stack
-        const creatureKey = `${element}-creatures`;
-        if (sideboardCategories[creatureKey]) {
-          sideboardCategories[creatureKey].forEach((card, index) => {
-            positions.set(card.id, {
-              x: sideboardXStart,
-              z: sideboardZStart + index * cardSpacing,
-            });
-          });
-        }
-
-        // Spells stack
-        const spellKey = `${element}-spells`;
-        if (sideboardCategories[spellKey]) {
-          const creatureCount = sideboardCategories[creatureKey]?.length || 0;
-          sideboardCategories[spellKey].forEach((card, index) => {
-            positions.set(card.id, {
-              x: sideboardXStart,
-              z: sideboardZStart + (creatureCount + index + 0.5) * cardSpacing,
-            });
-          });
-        }
-
-        sideboardXStart += sideboardSpacing;
-      });
-
-      // Handle sites and avatars in sideboard
-      if (sideboardCategories["sites"]) {
-        sideboardCategories["sites"].forEach((card, index) => {
-          positions.set(card.id, {
-            x: sideboardXStart,
-            z: sideboardZStart + index * cardSpacing,
-          });
-        });
-        sideboardXStart += sideboardSpacing;
-      }
-
-      if (sideboardCategories["avatars"]) {
-        sideboardCategories["avatars"].forEach((card, index) => {
-          positions.set(card.id, {
-            x: sideboardXStart,
-            z: sideboardZStart + index * cardSpacing,
-          });
-        });
-      }
-
-      // Apply positions and calculate Y elevation
-      return prev.map((card) => {
-        const stackPos = positions.get(card.id);
-        if (stackPos) {
-          // Calculate Y elevation based on position within stack
-          const stackIndex = prev.filter((otherCard) => {
-            const otherStackPos = positions.get(otherCard.id);
-            return (
-              otherStackPos &&
-              Math.abs(otherStackPos.x - stackPos.x) < 0.05 &&
-              (otherStackPos.z < stackPos.z ||
-                (otherStackPos.z === stackPos.z && otherCard.id < card.id))
-            );
-          }).length;
-
-          const yElevation = 0.002 + stackIndex * 0.01;
-
-          return { ...card, x: stackPos.x, z: stackPos.z, y: yElevation };
-        } else {
-          return { ...card, y: undefined };
-        }
-      });
-    });
-  }, [isSortingEnabled, metaByCardId, categorizeCard]);
-
-  // Zone movement functions without auto-sorting - let users control when to sort
-  const moveOneToSideboard = useCallback((cardId: number) => {
-    setPick3D((prev) => {
-      const deckCard = prev.find((p) => p.card.cardId === cardId && p.z < 0);
-
-      if (!deckCard) {
-        return prev;
-      }
-
-      const updated = [...prev];
-      const cardIndex = updated.findIndex((p) => p.id === deckCard.id);
-
-      const newZ = 1.5 + Math.random() * 0.5;
-      const newX = 0.5 + Math.random() * 3;
-
-      // Move card to sideboard zone (z >= 0) - no auto-sorting
-      updated[cardIndex] = {
-        ...updated[cardIndex],
-        x: newX,
-        z: newZ,
-        y: undefined,
-      };
-
-      return updated;
-    });
-  }, []);
-
-  const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
-    setPick3D((prev) => {
-      const sideboardCard = prev.find(
-        (p) => p.card.cardId === cardId && p.z >= 0
-      );
-
-      if (!sideboardCard) {
-        return prev;
-      }
-
-      const updated = [...prev];
-      const cardIndex = updated.findIndex((p) => p.id === sideboardCard.id);
-
-      const newZ = -1.5 - Math.random() * 0.5;
-      const newX = -2 + Math.random() * 4;
-
-      // Move card to deck zone (z < 0) - no auto-sorting
-      updated[cardIndex] = {
-        ...updated[cardIndex],
-        x: newX,
-        z: newZ,
-        y: undefined,
-      };
-
-      return updated;
-    });
-  }, []);
-
-  // Add card functions from 2D editor
-  const addCardAuto = useCallback(
-    (r: SearchResult) => {
-      const t = (r.type || "").toLowerCase();
-      const isSite = t.includes("site");
-
-      // Add to appropriate zone
-      const targetZ = isSite ? -1.5 : -1.0; // Sites and spells both go to deck initially
-      const targetX = -2 + Math.random() * 4;
-      const finalZ = targetZ - Math.random() * 0.5; // Ensure deck zone (z < 0)
-
-      const newCard: Pick3D = {
-        id: nextPickId,
-        card: {
-          cardId: r.cardId,
-          cardName: r.cardName,
-          type: r.type,
-          slug: r.slug,
-        },
-        x: targetX,
-        z: finalZ,
-        y: undefined,
-      };
-
-      setPick3D((prev) => {
-        const updated = [...prev, newCard];
-        return applySortingIfEnabled(updated);
-      });
-
-      setNextPickId((prev) => prev + 1);
-      setFeedbackMessage(`Added "${r.cardName}" to Deck`);
-      setTimeout(() => setFeedbackMessage(null), 2000);
-    },
-    [applySortingIfEnabled, nextPickId]
-  );
-
-  const addToSideboardFromSearch = useCallback(
-    (r: SearchResult) => {
-      const targetZ = 1.5 + Math.random() * 0.5; // Sideboard zone (z >= 0)
-      const targetX = 0.5 + Math.random() * 3;
-
-      const newCard: Pick3D = {
-        id: nextPickId,
-        card: {
-          cardId: r.cardId,
-          cardName: r.cardName,
-          type: r.type,
-          slug: r.slug,
-        },
-        x: targetX,
-        z: targetZ,
-        y: undefined,
-      };
-
-      setPick3D((prev) => {
-        const updated = [...prev, newCard];
-        return applySortingIfEnabled(updated);
-      });
-
-      setNextPickId((prev) => prev + 1);
-      setFeedbackMessage(`Added "${r.cardName}" to Sideboard`);
-      setTimeout(() => setFeedbackMessage(null), 2000);
-    },
-    [applySortingIfEnabled, nextPickId]
-  );
-
-  // Save deck function with conditional validation
-  async function saveDeck() {
-    try {
-      setSaving(true);
-      setError(null);
-      setSaveMsg(null);
-
-      const isValid =
-        validation.avatar && validation.atlas && validation.spellbook;
-
-      // In draft/sealed/locked mode, enforce strict validation
-      if (isDraftMode && !isValid) {
-        throw new Error(
-          "Cannot save invalid deck in draft mode. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
-        );
-      }
-
-      // In normal mode, warn but allow saving invalid decks
-      if (!isValid && !isDraftMode) {
-        const warningMsg =
-          "⚠️ Warning: Deck is invalid but was saved anyway. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)";
-        setSaveMsg(warningMsg);
-        // Clear warning after longer duration (8 seconds instead of typical 2 seconds)
-        setTimeout(() => setSaveMsg(null), 8000);
-      }
-
-      // Convert Pick3D to the API format expected by the backend
-      const cards: Array<{
-        cardId: number;
-        zone: string;
-        count: number;
-        variantId?: number;
-      }> = [];
-
-      // Group cards by cardId and zone
-      const cardGroups = new Map<
-        string,
-        { cardId: number; zone: string; count: number; variantId?: number }
-      >();
-
-      pick3D.forEach((pick) => {
-        const zone =
-          pick.z < 0
-            ? (pick.card.type || "").toLowerCase().includes("site")
-              ? "Atlas"
-              : "Spellbook"
-            : "Sideboard";
-        const key = `${pick.card.cardId}-${zone}`;
-
-        if (cardGroups.has(key)) {
-          cardGroups.get(key)!.count += 1;
-        } else {
-          cardGroups.set(key, {
-            cardId: pick.card.cardId,
-            zone: zone,
-            count: 1,
-            variantId: undefined, // We don't track variants in 3D editor yet
-          });
-        }
-      });
-
-      cards.push(...cardGroups.values());
-
-      if (deckId) {
-        const res = await fetch(`/api/decks/${deckId}`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: deckName || "Deck",
-            set: setName,
-            cards,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Failed to update deck");
-        setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
-        // Clear success message after 4 seconds
-        setTimeout(() => setSaveMsg(null), 4000);
-      } else {
-        const res = await fetch("/api/decks", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: deckName || "New Deck",
-            format: "Constructed",
-            set: setName,
-            cards,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Failed to save deck");
-        setDeckId(data.id);
-        setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
-        // Clear success message after 4 seconds
-        setTimeout(() => setSaveMsg(null), 4000);
-
-        // Update the URL to include the deck id
-        if (typeof window !== "undefined") {
-          const url = new URL(window.location.href);
-          url.searchParams.set("id", data.id);
-          window.history.replaceState({}, "", url.toString());
-        }
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // Effect to apply sorting only when sorting is first enabled
-  useEffect(() => {
-    if (isSortingEnabled && pick3D.length > 0) {
-      // Only apply sorting when first turning it on
-      const timeoutId = setTimeout(() => {
-        setPick3D((prev) => applySortingIfEnabled(prev));
-      }, 100);
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isSortingEnabled]); // Only run when sorting is toggled
-
-  // Exact same counts and stats as draft-3d
-  const yourCounts = useMemo(() => {
-    const counts = new Map<
-      number,
-      { cardId: number; name: string; rarity: string; count: number }
-    >();
-
-    Object.values(picks).forEach((item) => {
-      const key = item.cardId;
-      if (counts.has(key)) {
-        counts.get(key)!.count += item.count;
-      } else {
-        counts.set(key, {
-          cardId: item.cardId,
-          name: item.name,
-          rarity: "Ordinary", // Default
-          count: item.count,
-        });
-      }
-    });
-
-    return Array.from(counts.values());
-  }, [picks]);
-
-  const picksByType = useMemo(() => {
-    const counts = {
-      creatures: 0,
-      spells: 0,
-      sites: 0,
-      avatars: 0,
-      deck: 0,
-      sideboard: 0,
-    };
-
-    pick3D.forEach((pick) => {
-      const meta = metaByCardId[pick.card.cardId];
-      const category = categorizeCard(pick.card, meta);
-      if (category === "creatures") counts.creatures++;
-      else if (category === "spells") counts.spells++;
-      else if (category === "sites") counts.sites++;
-      else if (category === "avatars") counts.avatars++;
-
-      // Count deck vs sideboard based on position - deck zone is z < 0
-      if (pick.z < 0) {
-        counts.deck++;
-      } else {
-        counts.sideboard++;
-      }
-    });
-
-    return counts;
-  }, [pick3D, metaByCardId]);
-
-  // Threshold summary (simplified for deck editor)
-  const thresholdSummary = useMemo(() => {
-    const summary: Record<string, number> = {};
-    const elements: string[] = [];
-
-    Object.values(picks).forEach((item) => {
-      const meta = metaByCardId[item.cardId];
-      if (meta?.thresholds) {
-        const thresholds = meta.thresholds as Record<string, number>;
-        Object.entries(thresholds).forEach(([element, count]) => {
-          if (count > 0) {
-            summary[element] = (summary[element] || 0) + count * item.count;
-            if (!elements.includes(element)) {
-              elements.push(element);
-            }
-          }
-        });
-      }
-    });
-
-    return { summary, elements };
-  }, [picks, metaByCardId]);
-
-  // Mana curve calculation for deck zone cards
-  const manaCurve = useMemo(() => {
-    const curve: Record<number, number> = {};
-
-    pick3D.forEach((pick) => {
-      // Only count cards in deck zone (z < 0)
-      if (pick.z < 0) {
-        const meta = metaByCardId[pick.card.cardId];
-        const cost = meta?.cost ?? 0;
-        curve[cost] = (curve[cost] || 0) + 1;
-      }
-    });
-
-    return curve;
-  }, [pick3D, metaByCardId]);
 
   // Load deck data and meta
   useEffect(() => {
@@ -1259,104 +716,6 @@ export default function DeckEditor3DPage() {
       });
   }, [yourCounts, pick3D, setName]);
 
-  // Load deck list
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      try {
-        setLoadingDecks(true);
-        const res = await fetch("/api/decks");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Failed to load decks");
-        if (!ignore) setDecks(data as DeckListItem[]);
-      } catch (e) {
-        if (!ignore) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!ignore) setLoadingDecks(false);
-      }
-    })();
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  // Detect draft completion mode and auto-load deck from URL params
-  const [isDraftMode, setIsDraftMode] = useState(false);
-
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(
-        typeof window !== "undefined" ? window.location.search : ""
-      );
-      const id = sp.get("id");
-      const fromDraft = sp.get("from") === "draft";
-
-      if (fromDraft) {
-        setIsDraftMode(true);
-      }
-
-      if (id) {
-        loadDeck(id);
-      }
-    } catch {}
-  }, []);
-
-  function clearEditor() {
-    setDeckId(null);
-    setDeckName("New Deck");
-    setDeckFormat("Constructed");
-    setPicks({});
-    setSaveMsg(null);
-  }
-
-  async function loadDeck(id: string) {
-    try {
-      setError(null);
-      setSaveMsg(null);
-      const res = await fetch(`/api/decks/${id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load deck");
-
-      const { name, format, spellbook, atlas, sideboard } = data as {
-        id: string;
-        name: string;
-        format: string;
-        spellbook: any[];
-        atlas: any[];
-        sideboard: any[];
-      };
-
-      const toKey = (c: any, zone: Zone) =>
-        `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
-      const map: Record<PickKey, PickItem> = {};
-      const push = (c: any, zone: Zone) => {
-        const key = toKey(c, zone);
-        map[key] = map[key]
-          ? { ...map[key], count: map[key].count + 1 }
-          : {
-              cardId: c.cardId,
-              variantId: c.variantId ?? null,
-              name: c.name,
-              type: c.type,
-              slug: c.slug ?? null,
-              zone,
-              count: 1,
-            };
-      };
-
-      for (const c of spellbook) push(c, "Spellbook");
-      for (const c of atlas) push(c, "Atlas");
-      for (const c of sideboard) push(c, "Sideboard");
-
-      setDeckId(id);
-      setDeckName(name);
-      setDeckFormat(format || "Constructed");
-      setPicks(map);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
   async function doSearch() {
     try {
       setSearching(true);
@@ -1376,12 +735,6 @@ export default function DeckEditor3DPage() {
       setSearching(false);
     }
   }
-
-  const zoneCounts = useMemo(() => {
-    const res: Record<Zone, number> = { Spellbook: 0, Atlas: 0, Sideboard: 0 };
-    for (const it of Object.values(picks)) res[it.zone] += it.count;
-    return res;
-  }, [picks]);
 
   const avatarCount = useMemo(() => {
     let n = 0;
@@ -1425,17 +778,7 @@ export default function DeckEditor3DPage() {
     };
   }, [avatarCount, atlasCount, spellbookNonAvatar]);
 
-  // Check if a card can be added/removed in draft mode
-  const canModifyCard = useCallback(
-    (cardType: string | null) => {
-      if (!isDraftMode) return true; // Full editing in normal mode
-
-      const type = (cardType || "").toLowerCase();
-      // In draft mode, only allow adding spellslinger spells and standard sites
-      return type.includes("spell") || type.includes("site");
-    },
-    [isDraftMode]
-  );
+  // (Removed unused canModifyCard callback)
 
   // Close context menu when clicking elsewhere
   useEffect(() => {
@@ -1445,6 +788,35 @@ export default function DeckEditor3DPage() {
       return () => document.removeEventListener("click", handleClickOutside);
     }
   }, [contextMenu]);
+
+  // Convenience helpers to move any one copy by cardId between zones
+  const moveOneToSideboard = useCallback((cardId: number) => {
+    setPick3D((prev) => {
+      const updated = [...prev];
+      const idx = updated.findIndex(
+        (p) => p.card.cardId === cardId && p.z < 0
+      );
+      if (idx === -1) return prev;
+      const newZ = 1.5 + Math.random() * 0.5;
+      const newX = 0.5 + Math.random() * 3;
+      updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
+      return updated;
+    });
+  }, []);
+
+  const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
+    setPick3D((prev) => {
+      const updated = [...prev];
+      const idx = updated.findIndex(
+        (p) => p.card.cardId === cardId && p.z >= 0
+      );
+      if (idx === -1) return prev;
+      const newZ = -1.5 - Math.random() * 0.5;
+      const newX = -2 + Math.random() * 4;
+      updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
+      return updated;
+    });
+  }, []);
 
   // Helper function to move specific card by its unique ID
   const moveSpecificCardToSideboard = useCallback((pickId: number) => {
@@ -1518,7 +890,7 @@ export default function DeckEditor3DPage() {
                   const bY = isSortingEnabled ? b.y || 0.002 : 0.002;
                   return aY - bY; // Lower Y values render first (behind higher Y values)
                 })
-                .map((p, renderIndex) => {
+                .map((p) => {
                   const isSite = (p.card.type || "")
                     .toLowerCase()
                     .includes("site");
@@ -1543,6 +915,14 @@ export default function DeckEditor3DPage() {
                       z={z}
                       y={y}
                       baseRenderOrder={baseRenderOrder}
+                      onContextMenu={(cx, cy) =>
+                        openContextMenuForCard(
+                          p.card.cardId,
+                          p.card.cardName,
+                          cx,
+                          cy
+                        )
+                      }
                       onDrop={(wx, wz) => {
                         // Move card to drop position - only sort if sorting is enabled and this is a manual drag
                         const newZone = wz < 0 ? "Deck" : "Sideboard";
@@ -1578,7 +958,7 @@ export default function DeckEditor3DPage() {
                       }}
                       getTopRenderOrder={getTopRenderOrder}
                       lockUpright={false}
-                      disabled={false} // Allow dragging in sorted view
+                      disabled={isSortingEnabled && stackPos ? !stackPos.isVisible : false} // Disable dragging for hidden stacked cards
                       onDragChange={(dragging) => {
                         setOrbitLocked(dragging);
                       }}
@@ -2143,7 +1523,7 @@ export default function DeckEditor3DPage() {
           >
             <div className="bg-black/90 backdrop-blur-sm rounded-lg shadow-xl border border-white/20 min-w-48 p-2">
               <div className="text-white text-sm font-medium mb-2 px-2">
-                Move "{contextMenu.cardName}"
+                Move &quot;{contextMenu.cardName}&quot;
               </div>
 
               {contextMenu.deckCards.length > 0 && (

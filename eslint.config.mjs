@@ -20,6 +20,9 @@ const eslintConfig = [
       "next-env.d.ts",
       "scripts/**",
       "server/**",
+      // Ignore local debug/test helpers executed with Node (CommonJS)
+      "debug-*.js",
+      "test-*.js",
     ],
   },
 ];
