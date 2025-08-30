@@ -10,6 +10,7 @@ import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 export default function LobbyPage() {
   const router = useRouter();
   const {
+    transport,
     connected,
     lobby,
     match,
@@ -18,7 +19,7 @@ export default function LobbyPage() {
     toggleReady,
     joinLobby,
     leaveLobby,
-    startMatch,
+    startMatch: startMatchOriginal,
     joinMatch,
     leaveMatch,
     sendChat,
@@ -40,6 +41,14 @@ export default function LobbyPage() {
   const [chatInput, setChatInput] = useState("");
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
   const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
+  
+  // Match type and sealed configuration
+  const [matchType, setMatchType] = useState<"constructed" | "sealed">("constructed");
+  const [sealedConfig, setSealedConfig] = useState({
+    packCount: 6,
+    setMix: ["Alpha/Beta"],
+    timeLimit: 40 // minutes
+  });
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
   const [declinedRejoin, setDeclinedRejoin] = useState(false);
@@ -124,6 +133,26 @@ export default function LobbyPage() {
       ? "Rejoin"
       : "Join Match";
 
+  const startSealedMatch = () => {
+    // Validate sealed configuration
+    if (sealedConfig.setMix.length === 0) {
+      alert("Please select at least one set for sealed play.");
+      return;
+    }
+    if (sealedConfig.packCount < 3 || sealedConfig.packCount > 8) {
+      alert("Pack count must be between 3 and 8.");
+      return;
+    }
+    
+    // Send startMatch with sealed configuration
+    if (transport) {
+      transport.startMatch({
+        matchType: "sealed",
+        sealedConfig
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top summary of active lobbies and invites */}
@@ -157,15 +186,17 @@ export default function LobbyPage() {
       </div>
 
       {/* Match Section - only show for joinable matches and not when user declined rejoin */}
-      {match?.id &&
+      {match &&
         !declinedRejoin &&
-        (match.status === "waiting" || match.status === "in_progress") && (
+        (match.status === "waiting" || match.status === "in_progress" || match.status === "deck_construction") && (
           <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold text-orange-200 mb-1">
                   {match.status === "waiting"
                     ? "New Match Starting"
+                    : match.status === "deck_construction"
+                    ? "Sealed Deck Construction"
                     : "Ongoing Match Found"}
                 </div>
                 <div className="text-xs opacity-70">Match ID: {match.id}</div>
@@ -202,6 +233,97 @@ export default function LobbyPage() {
             </div>
           </div>
         )}
+
+      {/* Match Type Selection */}
+      {lobby && lobby.hostId === me?.id && (
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
+          <div className="text-sm font-semibold opacity-90 mb-3">Match Configuration (Host Only)</div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium mb-2">Match Type</label>
+              <div className="flex gap-2">
+                <button
+                  className={`px-3 py-2 text-sm rounded transition-colors ${
+                    matchType === "constructed"
+                      ? "bg-indigo-600/80 text-white"
+                      : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                  }`}
+                  onClick={() => setMatchType("constructed")}
+                >
+                  Constructed
+                </button>
+                <button
+                  className={`px-3 py-2 text-sm rounded transition-colors ${
+                    matchType === "sealed"
+                      ? "bg-indigo-600/80 text-white"
+                      : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                  }`}
+                  onClick={() => setMatchType("sealed")}
+                >
+                  Sealed
+                </button>
+              </div>
+            </div>
+            
+            {matchType === "sealed" && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium mb-2">
+                    Packs per Player (3-8)
+                  </label>
+                  <input
+                    type="number"
+                    min="3"
+                    max="8"
+                    value={sealedConfig.packCount}
+                    onChange={(e) => setSealedConfig(prev => ({ ...prev, packCount: parseInt(e.target.value) || 6 }))}
+                    className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium mb-2">Set Mix</label>
+                  <div className="space-y-2">
+                    {["Alpha/Beta", "Arthurian Legends"].map(set => (
+                      <label key={set} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={sealedConfig.setMix.includes(set)}
+                          onChange={(e) => {
+                            setSealedConfig(prev => ({
+                              ...prev,
+                              setMix: e.target.checked
+                                ? [...prev.setMix, set]
+                                : prev.setMix.filter(s => s !== set)
+                            }));
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-sm">{set}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium mb-2">
+                    Deck Construction Time Limit (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min="15"
+                    max="90"
+                    step="5"
+                    value={sealedConfig.timeLimit}
+                    onChange={(e) => setSealedConfig(prev => ({ ...prev, timeLimit: parseInt(e.target.value) || 40 }))}
+                    className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
@@ -249,15 +371,21 @@ export default function LobbyPage() {
             </button>
             <button
               className="rounded bg-violet-600/80 hover:bg-violet-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={startMatch}
+              onClick={() => {
+                if (matchType === "constructed") {
+                  startMatchOriginal();
+                } else {
+                  startSealedMatch();
+                }
+              }}
               disabled={!lobby || lobby.hostId !== me?.id}
               title={
                 lobby && lobby.hostId !== me?.id
                   ? "Only the host can start"
-                  : "Start match"
+                  : `Start ${matchType} match`
               }
             >
-              Start Match (host)
+              Start {matchType === "constructed" ? "Match" : "Sealed"} (host)
             </button>
             {lobby && (
               <button

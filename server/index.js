@@ -33,7 +33,7 @@ const players = new Map();
 const playerIdBySocket = new Map();
 /** @type {Map<string, { id: string, hostId: string, playerIds: Set<string>, status: 'open'|'started'|'closed', maxPlayers: number, ready: Set<string>, visibility: 'open'|'private' }>} */
 const lobbies = new Map();
-/** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null }>} */
+/** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'deck_construction'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null, matchType?: 'constructed'|'sealed', sealedConfig?: { packCount: number, setMix: string[], timeLimit: number, constructionStartTime?: number }, playerDecks?: Map<string, any> }>} */
 const matches = new Map();
 /** @type {Map<string, Set<string>>} lobbyId -> set of invited playerIds */
 const lobbyInvites = new Map();
@@ -80,6 +80,10 @@ function getMatchInfo(match) {
     seed: match.seed,
     turn: match.turn,
     winnerId: match.winnerId ?? null,
+    matchType: match.matchType || 'constructed',
+    sealedConfig: match.sealedConfig,
+    deckSubmissions: match.playerDecks ? Array.from(match.playerDecks.keys()) : [],
+    playerDecks: match.playerDecks ? Object.fromEntries(match.playerDecks) : undefined,
   };
 }
 
@@ -231,7 +235,7 @@ function leaveLobby(socket, player) {
   broadcastLobbies();
 }
 
-function startMatchFromLobby(requestingPlayer) {
+function startMatchFromLobby(requestingPlayer, matchType = 'constructed', sealedConfig = null) {
   const lobbyId = requestingPlayer.lobbyId;
   if (!lobbyId) return { ok: false, error: "Not in a lobby" };
   const lobby = lobbies.get(lobbyId);
@@ -247,10 +251,16 @@ function startMatchFromLobby(requestingPlayer) {
     id: rid("match"),
     lobbyId: lobby.id,
     playerIds: Array.from(lobby.playerIds),
-    status: "waiting",
+    status: matchType === 'sealed' ? 'deck_construction' : 'waiting',
     seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
     turn: Array.from(lobby.playerIds)[0],
     winnerId: null,
+    matchType,
+    sealedConfig: matchType === 'sealed' ? {
+      ...sealedConfig,
+      constructionStartTime: Date.now()
+    } : null,
+    playerDecks: matchType === 'sealed' ? new Map() : null,
     // Server-side aggregated game snapshot and timestamp
     game: {},
     lastTs: 0,
@@ -264,15 +274,23 @@ function startMatchFromLobby(requestingPlayer) {
     const s = io.sockets.sockets.get(p.socketId);
     if (s) s.join(`match:${match.id}`);
     p.matchId = match.id;
-    p.lobbyId = null;
+    // For sealed matches, keep lobby association during deck construction
+    // For constructed matches, clear lobby association immediately
+    if (matchType === 'constructed') {
+      p.lobbyId = null;
+    }
   }
 
-  // Close and remove the lobby immediately once a match starts
-  lobby.status = "closed";
-  lobbies.delete(lobby.id);
+  // For sealed matches, keep lobby active during deck construction
+  // For constructed matches, close lobby immediately
+  if (matchType === 'constructed') {
+    lobby.status = "closed";
+    lobbies.delete(lobby.id);
+    broadcastLobbies();
+  }
+  
   const matchInfo = getMatchInfo(match);
   io.to(`match:${match.id}`).emit("matchStarted", { match: matchInfo });
-  broadcastLobbies();
 
   return { ok: true, matchId: match.id };
 }
@@ -456,11 +474,22 @@ io.on("connection", (socket) => {
     io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
   });
 
-  socket.on("startMatch", () => {
+  socket.on("startMatch", (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    const res = startMatchFromLobby(player);
+    const matchType = payload.matchType || 'constructed';
+    const sealedConfig = payload.sealedConfig || null;
+    
+    // Debug logging
+    console.log(`[DEBUG] startMatch request from player ${player?.id}, lobbyId: ${player?.lobbyId}, matchType: ${matchType}`);
+    if (player?.lobbyId) {
+      const lobby = lobbies.get(player.lobbyId);
+      console.log(`[DEBUG] lobby found: ${!!lobby}, lobby status: ${lobby?.status}, players in lobby: ${lobby?.playerIds?.size}`);
+    }
+    
+    const res = startMatchFromLobby(player, matchType, sealedConfig);
     if (!res.ok) {
+      console.log(`[DEBUG] startMatchFromLobby failed: ${res.error}`);
       socket.emit("error", { message: res.error || "Unable to start match" });
     }
   });
@@ -598,6 +627,51 @@ io.on("connection", (socket) => {
       socket.emit("resyncResponse", { snapshot: { lobby: getLobbyInfo(lobby) } });
     } else {
       socket.emit("resyncResponse", { snapshot: {} });
+    }
+  });
+
+  // Submit sealed deck during deck construction phase
+  socket.on("submitDeck", (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const match = matches.get(player.matchId);
+    if (!match || match.status !== 'deck_construction') return;
+    
+    const deck = payload && payload.deck;
+    if (!deck) return;
+    
+    // Store the player's deck
+    match.playerDecks.set(player.id, deck);
+    
+    // Check if all players have submitted decks
+    const allSubmitted = match.playerIds.every(pid => match.playerDecks.has(pid));
+    
+    // Broadcast deck submission update
+    const room = `match:${match.id}`;
+    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+    
+    if (allSubmitted) {
+      // All decks submitted, transition to waiting phase for game start
+      match.status = 'waiting';
+      
+      // Clear lobby associations for all players in this sealed match
+      for (const pid of match.playerIds) {
+        const p = players.get(pid);
+        if (p) {
+          p.lobbyId = null;
+        }
+      }
+      
+      // Now that sealed deck construction is complete, close the lobby
+      const lobby = lobbies.get(match.lobbyId);
+      if (lobby) {
+        lobby.status = "closed";
+        lobbies.delete(lobby.id);
+        broadcastLobbies();
+      }
+      
+      io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
     }
   });
 

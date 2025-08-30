@@ -148,14 +148,14 @@ export default function OnlineConsole({
                 {events.length === 0 && (
                   <div className="opacity-60">No events yet</div>
                 )}
-                {events.slice(-100).map((ev) => {
+                {events.slice(-100).map((ev, index) => {
                   const t = ev.text || "";
                   const low = t.toLowerCase();
                   const isWarn = low.startsWith("warning") || low.startsWith("cannot");
                   const isSearch = low.startsWith("search:");
                   return (
                     <div
-                      key={ev.id}
+                      key={`${ev.id}-${index}-${ev.timestamp || Date.now()}`}
                       className={`opacity-85 ${
                         isWarn 
                           ? "text-red-400" 

@@ -23,8 +23,16 @@ export const LobbyInfoSchema = z.object({
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
-export const MatchStatusSchema = z.enum(["waiting", "in_progress", "ended"]);
+export const MatchStatusSchema = z.enum(["waiting", "deck_construction", "in_progress", "ended"]);
 export type MatchStatus = z.infer<typeof MatchStatusSchema>;
+
+export const SealedConfigSchema = z.object({
+  packCount: z.number().int().min(3).max(8),
+  setMix: z.array(z.string()),
+  timeLimit: z.number().int().min(15).max(90),
+  constructionStartTime: z.number().optional(),
+});
+export type SealedConfig = z.infer<typeof SealedConfigSchema>;
 
 export const MatchInfoSchema = z.object({
   id: z.string(),
@@ -34,6 +42,10 @@ export const MatchInfoSchema = z.object({
   seed: z.string(),
   turn: z.string().optional(),
   winnerId: z.string().nullable().optional(),
+  matchType: z.enum(["constructed", "sealed"]).optional(),
+  sealedConfig: SealedConfigSchema.nullable().optional(),
+  deckSubmissions: z.array(z.string()).optional(),
+  playerDecks: z.record(z.string(), z.unknown()).optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 

@@ -181,10 +181,10 @@ export class SocketTransport implements GameTransport {
     this.requireSocket().emit("ready", Protocol.ReadyPayload.parse({ ready }));
   }
 
-  startMatch(): void {
+  startMatch(matchConfig?: { matchType?: string; sealedConfig?: { packCount: number; setMix: string[]; timeLimit: number } }): void {
     this.requireSocket().emit(
-      "startMatch",
-      Protocol.StartMatchPayload.parse({})
+      "startMatch", 
+      matchConfig ? matchConfig : Protocol.StartMatchPayload.parse({})
     );
   }
 
@@ -240,6 +240,10 @@ export class SocketTransport implements GameTransport {
       "inviteToLobby",
       Protocol.InviteToLobbyPayload.parse({ targetPlayerId, lobbyId })
     );
+  }
+
+  submitDeck(deck: unknown): void {
+    this.requireSocket().emit("submitDeck", { deck });
   }
 
   on<E extends TransportEvent>(
