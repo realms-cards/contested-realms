@@ -296,7 +296,6 @@ function DraggableCard3D({
 }
 
 export default function DeckEditor3DPage() {
-
   // Deck editor state (same as 2D version)
   const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(false);
@@ -326,7 +325,9 @@ export default function DeckEditor3DPage() {
   });
 
   // Prefetch Spellslinger avatar
-  const [spellslingerCard, setSpellslingerCard] = useState<SearchResult | null>(null);
+  const [spellslingerCard, setSpellslingerCard] = useState<SearchResult | null>(
+    null
+  );
 
   // Load list of decks on mount
   useEffect(() => {
@@ -371,9 +372,9 @@ export default function DeckEditor3DPage() {
             `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
               setName
             )}&type=avatar`
-          )
+          ),
         ]);
-        
+
         if (!cancelled) {
           // Set standard sites
           const next: Record<StandardSiteName, SearchResult | null> = {
@@ -384,10 +385,11 @@ export default function DeckEditor3DPage() {
           };
           for (const [k, v] of siteEntries) next[k] = v;
           setStdSites(next);
-          
+
           // Set Spellslinger
           if (spellslingerRes.ok) {
-            const spellslingerData = (await spellslingerRes.json()) as SearchResult[];
+            const spellslingerData =
+              (await spellslingerRes.json()) as SearchResult[];
             setSpellslingerCard(spellslingerData[0] || null);
           } else {
             setSpellslingerCard(null);
@@ -425,7 +427,8 @@ export default function DeckEditor3DPage() {
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
   // Tournament legal controls visibility
-  const [tournamentControlsVisible, setTournamentControlsVisible] = useState(false);
+  const [tournamentControlsVisible, setTournamentControlsVisible] =
+    useState(false);
 
   // Context menu for duplicate card selection
   const [contextMenu, setContextMenu] = useState<{
@@ -437,7 +440,9 @@ export default function DeckEditor3DPage() {
     sideboardCards: Pick3D[];
   } | null>(null);
 
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
+    {}
+  );
 
   // Convert picks to Pick3D format (exact same structure as draft-3d)
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
@@ -492,16 +497,24 @@ export default function DeckEditor3DPage() {
       const t = (p.card.type || "").toLowerCase();
       if (t.includes("avatar")) res.avatars += 1;
       else if (t.includes("site")) res.sites += 1;
-      else if (t.includes("creature") || t.includes("minion")) res.creatures += 1;
+      else if (t.includes("creature") || t.includes("minion"))
+        res.creatures += 1;
       else if (t.includes("spell")) res.spells += 1;
     }
     return res;
   }, [pick3D]);
 
   const yourCounts = useMemo(() => {
-    const m = new Map<number, { cardId: number; name: string; count: number }>();
+    const m = new Map<
+      number,
+      { cardId: number; name: string; count: number }
+    >();
     Object.values(picks).forEach((it) => {
-      const cur = m.get(it.cardId) || { cardId: it.cardId, name: it.name, count: 0 };
+      const cur = m.get(it.cardId) || {
+        cardId: it.cardId,
+        name: it.name,
+        count: 0,
+      };
       cur.count += it.count;
       m.set(it.cardId, cur);
     });
@@ -590,17 +603,86 @@ export default function DeckEditor3DPage() {
 
   // Minimal deck actions
   const saveDeck = useCallback(async () => {
-    setSaving(true);
     try {
-      // TODO: hook up to API
-      setSaveMsg("Saved.");
+      setSaving(true);
+      setError(null);
+      setSaveMsg(null);
+
+      // Local validation derived from current 3D layout
+      let avatar = 0;
+      let atlas = 0;
+      let spellbookNonAvatar = 0;
+      for (const p of pick3D) {
+        if (p.z >= 0) continue; // only deck zone
+        const t = (p.card.type || "").toLowerCase();
+        if (t.includes("avatar")) avatar += 1;
+        else if (t.includes("site")) atlas += 1;
+        else spellbookNonAvatar += 1;
+      }
+      if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
+        throw new Error(
+          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+        );
+      }
+
+      // Build cards payload from 3D picks so zones reflect current board state
+      // z < 0 => Deck zone (Atlas if Site, else Spellbook); z >= 0 => Sideboard
+      const agg = new Map<string, { cardId: number; zone: Zone; count: number; variantId?: number }>();
+      for (const p of pick3D) {
+        const inDeck = p.z < 0;
+        const t = (p.card.type || "").toLowerCase();
+        const zone: Zone = inDeck ? (t.includes("site") ? "Atlas" : "Spellbook") : "Sideboard";
+        const variantId = p.card.variantId || undefined; // treat 0/undefined as absent
+        const key = `${p.card.cardId}:${zone}:${variantId ?? "x"}`;
+        const prev = agg.get(key);
+        if (prev) prev.count += 1;
+        else agg.set(key, { cardId: p.card.cardId, zone, count: 1, variantId });
+      }
+      const cards = Array.from(agg.values());
+
+      if (deckId) {
+        const res = await fetch(`/api/decks/${deckId}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: deckName || "Deck",
+            set: setName,
+            cards,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to update deck");
+        setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
+      } else {
+        const res = await fetch("/api/decks", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: deckName || "New Deck",
+            format: isDraftMode ? "Sealed" : "Constructed",
+            set: setName,
+            cards,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to save deck");
+        setDeckId(data.id);
+        setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
+        // Refresh deck list
+        try {
+          const res2 = await fetch("/api/decks");
+          const list = await res2.json();
+          if (res2.ok) setDecks(list as DeckListItem[]);
+        } catch {}
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+      // auto-clear success message after a short delay
       setTimeout(() => setSaveMsg(null), 1500);
     }
-  }, []);
+  }, [pick3D, deckId, deckName, isDraftMode, setName]);
 
   const loadDeck = useCallback(async (id: string) => {
     setDeckId(id);
@@ -641,8 +723,12 @@ export default function DeckEditor3DPage() {
       const meta: Record<number, CardMeta> = {};
       const all: ApiCardRef[] = [
         ...(Array.isArray(data?.atlas) ? (data.atlas as ApiCardRef[]) : []),
-        ...(Array.isArray(data?.spellbook) ? (data.spellbook as ApiCardRef[]) : []),
-        ...(Array.isArray(data?.sideboard) ? (data.sideboard as ApiCardRef[]) : []),
+        ...(Array.isArray(data?.spellbook)
+          ? (data.spellbook as ApiCardRef[])
+          : []),
+        ...(Array.isArray(data?.sideboard)
+          ? (data.sideboard as ApiCardRef[])
+          : []),
       ];
       for (const c of all) {
         if (c.thresholds && meta[c.cardId] == null) {
@@ -680,26 +766,29 @@ export default function DeckEditor3DPage() {
   }, [spellslingerCard, addCardAuto]);
 
   // Quick-add a specific standard site by name
-  const addStandardSiteByName = useCallback(async (name: StandardSiteName) => {
-    const hit = stdSites[name];
-    if (hit) {
-      addCardAuto(hit);
-      return;
-    }
-    try {
-      const res = await fetch(
-        `/api/cards/search?q=${encodeURIComponent(
-          name
-        )}&set=${encodeURIComponent(setName)}&type=site`
-      );
-      const data = (await res.json()) as SearchResult[];
-      const r = res.ok && data[0] ? data[0] : null;
-      if (r) addCardAuto(r);
-      else setError(`Site ${name} not found in set ${setName}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [stdSites, addCardAuto, setName]);
+  const addStandardSiteByName = useCallback(
+    async (name: StandardSiteName) => {
+      const hit = stdSites[name];
+      if (hit) {
+        addCardAuto(hit);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/cards/search?q=${encodeURIComponent(
+            name
+          )}&set=${encodeURIComponent(setName)}&type=site`
+        );
+        const data = (await res.json()) as SearchResult[];
+        const r = res.ok && data[0] ? data[0] : null;
+        if (r) addCardAuto(r);
+        else setError(`Site ${name} not found in set ${setName}`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [stdSites, addCardAuto, setName]
+  );
 
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
@@ -780,30 +869,36 @@ export default function DeckEditor3DPage() {
   // Load deck data and meta
   useEffect(() => {
     // Get unique card IDs from pick3D array if yourCounts is empty
-    const cardIds = yourCounts.length > 0 
-      ? yourCounts.map((c) => c.cardId)
-      : [...new Set(pick3D.map((p) => p.card.cardId))]; // Remove duplicates
+    const cardIds =
+      yourCounts.length > 0
+        ? yourCounts.map((c) => c.cardId)
+        : [...new Set(pick3D.map((p) => p.card.cardId))]; // Remove duplicates
 
     if (!cardIds.length) {
       setMetaByCardId({});
       return;
     }
 
-    console.log('Fetching metadata for', cardIds.length, 'unique card IDs:', cardIds);
+    console.log(
+      "Fetching metadata for",
+      cardIds.length,
+      "unique card IDs:",
+      cardIds
+    );
     const params = new URLSearchParams();
     params.set("ids", cardIds.join(","));
     if (setName) params.set("set", setName);
-    
+
     fetch(`/api/cards/meta?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
-        console.log('=== API Response Debug ===');
-        console.log('Raw API response:', data);
-        console.log('First card structure:', JSON.stringify(data[0], null, 2));
-        
+        console.log("=== API Response Debug ===");
+        console.log("Raw API response:", data);
+        console.log("First card structure:", JSON.stringify(data[0], null, 2));
+
         const metaMap = data.reduce((acc: any, cardData: any) => {
           console.log(`Processing card ID ${cardData.cardId}:`, cardData);
-          
+
           // API returns metadata directly in the response
           if (cardData.cardId) {
             const processedMeta = {
@@ -813,19 +908,22 @@ export default function DeckEditor3DPage() {
               defence: cardData.defence ?? null,
               thresholds: cardData.thresholds ?? null,
             };
-            console.log(`Extracted metadata for card ${cardData.cardId}:`, processedMeta);
+            console.log(
+              `Extracted metadata for card ${cardData.cardId}:`,
+              processedMeta
+            );
             acc[cardData.cardId] = processedMeta;
           } else {
             console.warn(`No cardId found in response:`, cardData);
           }
-          
+
           return acc;
         }, {});
-        console.log('Final MetaByCardId:', metaMap);
+        console.log("Final MetaByCardId:", metaMap);
         setMetaByCardId(metaMap);
       })
       .catch((error) => {
-        console.error('Metadata fetch failed:', error);
+        console.error("Metadata fetch failed:", error);
       });
   }, [yourCounts, pick3D, setName]);
 
@@ -904,35 +1002,38 @@ export default function DeckEditor3DPage() {
 
   // Helper to check if a card is a standard site (tournament legal)
   const isStandardSite = useCallback((cardName: string) => {
-    return STANDARD_SITE_NAMES.some(siteName => 
+    return STANDARD_SITE_NAMES.some((siteName) =>
       cardName.toLowerCase().includes(siteName.toLowerCase())
     );
   }, []);
 
   // Convenience helpers to move any one copy by cardId between zones
-  const moveOneToSideboard = useCallback((cardId: number) => {
-    setPick3D((prev) => {
-      const updated = [...prev];
-      const idx = updated.findIndex(
-        (p) => p.card.cardId === cardId && p.z < 0
-      );
-      if (idx === -1) return prev;
-      
-      const card = updated[idx];
-      // Special behavior for standard sites: remove them instead of moving to sideboard
-      if (isStandardSite(card.card.cardName)) {
-        // Remove the card entirely
-        updated.splice(idx, 1);
+  const moveOneToSideboard = useCallback(
+    (cardId: number) => {
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const idx = updated.findIndex(
+          (p) => p.card.cardId === cardId && p.z < 0
+        );
+        if (idx === -1) return prev;
+
+        const card = updated[idx];
+        // Special behavior for standard sites: remove them instead of moving to sideboard
+        if (isStandardSite(card.card.cardName)) {
+          // Remove the card entirely
+          updated.splice(idx, 1);
+          return updated;
+        }
+
+        // Normal behavior: move to sideboard
+        const newZ = 1.5 + Math.random() * 0.5;
+        const newX = 0.5 + Math.random() * 3;
+        updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
         return updated;
-      }
-      
-      // Normal behavior: move to sideboard
-      const newZ = 1.5 + Math.random() * 0.5;
-      const newX = 0.5 + Math.random() * 3;
-      updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
-      return updated;
-    });
-  }, [isStandardSite]);
+      });
+    },
+    [isStandardSite]
+  );
 
   const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
     setPick3D((prev) => {
@@ -949,35 +1050,38 @@ export default function DeckEditor3DPage() {
   }, []);
 
   // Helper function to move specific card by its unique ID
-  const moveSpecificCardToSideboard = useCallback((pickId: number) => {
-    setPick3D((prev) => {
-      const updated = [...prev];
-      const cardIndex = updated.findIndex((p) => p.id === pickId);
+  const moveSpecificCardToSideboard = useCallback(
+    (pickId: number) => {
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const cardIndex = updated.findIndex((p) => p.id === pickId);
 
-      if (cardIndex === -1) return prev;
-      
-      const card = updated[cardIndex];
-      // Special behavior for standard sites: remove them instead of moving to sideboard
-      if (isStandardSite(card.card.cardName)) {
-        // Remove the card entirely
-        updated.splice(cardIndex, 1);
+        if (cardIndex === -1) return prev;
+
+        const card = updated[cardIndex];
+        // Special behavior for standard sites: remove them instead of moving to sideboard
+        if (isStandardSite(card.card.cardName)) {
+          // Remove the card entirely
+          updated.splice(cardIndex, 1);
+          return updated;
+        }
+
+        // Normal behavior: move to sideboard
+        const newZ = 1.5 + Math.random() * 0.5;
+        const newX = 0.5 + Math.random() * 3;
+
+        updated[cardIndex] = {
+          ...updated[cardIndex],
+          x: newX,
+          z: newZ,
+          y: undefined,
+        };
+
         return updated;
-      }
-
-      // Normal behavior: move to sideboard
-      const newZ = 1.5 + Math.random() * 0.5;
-      const newX = 0.5 + Math.random() * 3;
-
-      updated[cardIndex] = {
-        ...updated[cardIndex],
-        x: newX,
-        z: newZ,
-        y: undefined,
-      };
-
-      return updated;
-    });
-  }, [isStandardSite]);
+      });
+    },
+    [isStandardSite]
+  );
 
   const moveSpecificCardToDeck = useCallback((pickId: number) => {
     setPick3D((prev) => {
@@ -1097,7 +1201,11 @@ export default function DeckEditor3DPage() {
                       }}
                       getTopRenderOrder={getTopRenderOrder}
                       lockUpright={false}
-                      disabled={isSortingEnabled && stackPos ? !stackPos.isVisible : false} // Disable dragging for hidden stacked cards
+                      disabled={
+                        isSortingEnabled && stackPos
+                          ? !stackPos.isVisible
+                          : false
+                      } // Disable dragging for hidden stacked cards
                       onDragChange={(dragging) => {
                         setOrbitLocked(dragging);
                       }}
@@ -1296,7 +1404,7 @@ export default function DeckEditor3DPage() {
                             : "text-white/80 hover:bg-white/10"
                         }`}
                       >
-                        All Cards ({yourCounts.length})
+                        All Cards ({yourCounts.reduce((sum, card) => sum + card.count, 0)})
                       </button>
                     </div>
                   </div>
@@ -1737,7 +1845,11 @@ export default function DeckEditor3DPage() {
                     {isDraftMode ? (
                       pick3D.length > 0 && (
                         <button
-                          onClick={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+                          onClick={() =>
+                            setTournamentControlsVisible(
+                              !tournamentControlsVisible
+                            )
+                          }
                           className={`flex items-center gap-2 h-10 px-4 rounded-lg transition-all duration-200 shadow-lg ${
                             tournamentControlsVisible
                               ? "bg-yellow-600 text-white hover:bg-yellow-500"
@@ -1785,7 +1897,11 @@ export default function DeckEditor3DPage() {
                         {/* Tournament Legal Controls Button next to search */}
                         {pick3D.length > 0 && (
                           <button
-                            onClick={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+                            onClick={() =>
+                              setTournamentControlsVisible(
+                                !tournamentControlsVisible
+                              )
+                            }
                             className={`h-10 px-4 rounded font-medium transition-colors ${
                               tournamentControlsVisible
                                 ? "bg-yellow-600 text-white hover:bg-yellow-500"
@@ -1950,7 +2066,6 @@ export default function DeckEditor3DPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 ml-auto">
-                  
                   {isDraftMode && (
                     <button
                       onClick={() => setIsDraftMode(false)}
@@ -2008,7 +2123,7 @@ export default function DeckEditor3DPage() {
 
       {/* Tournament Legal Controls - Floating panel on left side */}
       {tournamentControlsVisible && (
-        <div className="absolute top-20 left-4 z-30 pointer-events-auto">
+        <div className="absolute top-20 left-6 z-30 pointer-events-auto">
           <div className="bg-black/90 backdrop-blur-sm rounded-lg p-4 ring-1 ring-white/30 shadow-xl max-w-sm">
             <div className="flex items-center justify-between mb-3">
               <div className="text-white text-sm font-medium">
@@ -2022,7 +2137,7 @@ export default function DeckEditor3DPage() {
                 ×
               </button>
             </div>
-            
+
             {/* Spellslinger Avatar - Display as card */}
             <div className="mb-4">
               <div className="text-xs uppercase opacity-70 text-white mb-2">
@@ -2034,19 +2149,23 @@ export default function DeckEditor3DPage() {
                   className="group relative hover:bg-white/10 rounded p-1 transition-colors"
                   title="Add Spellslinger avatar to your deck"
                 >
-                <div className="relative aspect-[3/4] rounded overflow-hidden bg-black/40">
-                  <Image
-                    src={spellslingerCard?.slug ? `/api/images/${spellslingerCard.slug}` : '/api/assets/card-back.png'}
-                    alt="Spellslinger"
-                    fill
-                    className="object-contain"
-                    sizes="120px"
-                  />
-                </div>
-                <div className="mt-1 text-[10px] text-center opacity-80 text-white">
-                  Spellslinger
-                </div>
-              </button>
+                  <div className="relative aspect-[3/4] rounded overflow-hidden bg-black/40">
+                    <Image
+                      src={
+                        spellslingerCard?.slug
+                          ? `/api/images/${spellslingerCard.slug}`
+                          : "/api/assets/card-back.png"
+                      }
+                      alt="Spellslinger"
+                      fill
+                      className="object-contain"
+                      sizes="120px"
+                    />
+                  </div>
+                  <div className="mt-1 text-[10px] text-center opacity-80 text-white">
+                    Spellslinger
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -2067,7 +2186,11 @@ export default function DeckEditor3DPage() {
                   >
                     <div className="relative aspect-[4/3] rounded overflow-hidden bg-black/40 transform rotate-90">
                       <Image
-                        src={hit?.slug ? `/api/images/${hit.slug}` : '/api/assets/card-back.png'}
+                        src={
+                          hit?.slug
+                            ? `/api/images/${hit.slug}`
+                            : "/api/assets/card-back.png"
+                        }
                         alt={name}
                         fill
                         className="object-contain"
