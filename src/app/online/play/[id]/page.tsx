@@ -18,6 +18,7 @@ import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
+import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
@@ -25,6 +26,7 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
+import SealedDeckBuilder from "@/components/game/SealedDeckBuilder";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -35,6 +37,7 @@ export default function OnlineMatchPage() {
   }, [params]);
 
   const {
+    transport,
     connected,
     match,
     joinMatch,
@@ -61,7 +64,7 @@ export default function OnlineMatchPage() {
   const resyncSentForRef = useRef<string | null>(null);
   const rejoinChatSentForRef = useRef<string | null>(null);
   const prevMatchIdRef = useRef<string | null>(null);
-  const prevMatchStatusRef = useRef<"waiting" | "in_progress" | "ended" | null>(
+  const prevMatchStatusRef = useRef<"waiting" | "deck_construction" | "in_progress" | "ended" | null>(
     null
   );
   const joinAttemptedForRef = useRef<string | null>(null);
@@ -178,8 +181,8 @@ export default function OnlineMatchPage() {
     if (match.status === "in_progress") {
       // Ongoing match: ensure overlay is closed; do NOT override phase here
       if (setupOpen) setSetupOpen(false);
-    } else if (match.status === "waiting") {
-      // During setup (including mulligan), keep overlay open until server flips to in_progress
+    } else if (match.status === "waiting" || match.status === "deck_construction") {
+      // During setup (including deck construction and mulligan), keep overlay open
       if (!setupOpen) setSetupOpen(true);
     } else {
       // Ended or unknown: keep overlay closed
@@ -426,12 +429,31 @@ export default function OnlineMatchPage() {
       {/* Setup Overlay - only show when in match and setup is open */}
       {inThisMatch && setupOpen && myPlayerKey && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
-          {!prepared ? (
-            <OnlineDeckSelector
+          {match?.status === "deck_construction" ? (
+            <SealedDeckBuilder
+              match={match}
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
-              onPrepareComplete={() => setPrepared(true)}
+              onDeckSubmitted={() => {
+                // Deck submitted, wait for other players
+                console.log("Deck submitted, waiting for other players...");
+              }}
             />
+          ) : !prepared ? (
+            match?.matchType === "sealed" ? (
+              <OnlineSealedDeckLoader
+                match={match}
+                myPlayerKey={myPlayerKey}
+                playerNames={playerNames}
+                onPrepareComplete={() => setPrepared(true)}
+              />
+            ) : (
+              <OnlineDeckSelector
+                myPlayerKey={myPlayerKey}
+                playerNames={playerNames}
+                onPrepareComplete={() => setPrepared(true)}
+              />
+            )
           ) : !d20RollingComplete ? (
             <OnlineD20Screen
               myPlayerKey={myPlayerKey}

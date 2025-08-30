@@ -20,7 +20,7 @@ interface CardPicksPanelProps {
   picksByType: PicksByType;
   picksOpen: boolean;
   onToggleOpen: () => void;
-  picks: Record<string, any>; // The picks object for finding matching cards
+  picks: Record<string, unknown>; // The picks object for finding matching cards
   onMoveCard: (cardId: number, direction: "toDeck" | "toSideboard") => void;
   feedbackMessage: string | null;
 }
@@ -115,8 +115,11 @@ export default function CardPicksPanel({
                     .filter((c) => c.count > 0)
                     .map((card) => {
                       const matchingPick = Object.values(picks).find(
-                        (p: any) => p.cardId === card.cardId
-                      ) as any;
+                        (p: unknown) => {
+                          const pick = p as Record<string, unknown>;
+                          return (pick.cardId as number) === card.cardId;
+                        }
+                      ) as Record<string, unknown> | undefined;
 
                       return (
                         <div
@@ -125,9 +128,9 @@ export default function CardPicksPanel({
                         >
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div className="w-8 h-6 bg-black/40 rounded flex-shrink-0 overflow-hidden">
-                              {matchingPick?.slug && (
+                              {matchingPick?.slug && typeof matchingPick.slug === 'string' && (
                                 <Image
-                                  src={`/api/images/${matchingPick.slug}`}
+                                  src={`/api/images/${matchingPick.slug as string}`}
                                   alt={card.name}
                                   width={32}
                                   height={24}

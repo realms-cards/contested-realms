@@ -49,3 +49,4 @@ next-env.d.ts
 /data-ktx2
 /.playwright-mcp
 dev.db
+/reference

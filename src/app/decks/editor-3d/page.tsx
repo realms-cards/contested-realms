@@ -22,7 +22,6 @@ import {
 import {
   TournamentControls,
   DeckValidation,
-  type StandardSiteName,
 } from "@/components/deck-editor";
 
 // Stable constant for standard site names (tournament legal)
@@ -424,6 +423,26 @@ export default function DeckEditor3DPage() {
   const [picksOpen, setPicksOpen] = useState(true);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
+  
+  // Sealed mode flag (similar to isDraftMode but for sealed deck construction)
+  const [isSealed, setIsSealed] = useState(false);
+  
+  // Sealed mode state
+  const [sealedConfig, setSealedConfig] = useState<{
+    timeLimit: number; // minutes
+    constructionStartTime: number; // timestamp
+    packCount: number;
+    setMix: string[];
+  } | null>(null);
+  
+  const [packs, setPacks] = useState<Array<{
+    id: string;
+    set: string;
+    cards: unknown[];
+    opened: boolean;
+  }>>([]);
+  
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
@@ -795,6 +814,129 @@ export default function DeckEditor3DPage() {
     [stdSites, addCardAuto, setName]
   );
 
+  // Sealed mode pack functions
+  const generateSealedPacks = useCallback((config: typeof sealedConfig) => {
+    if (!config) return;
+    
+    const { packCount, setMix } = config;
+    const generatedPacks = [];
+
+    for (let i = 0; i < packCount; i++) {
+      const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
+      generatedPacks.push({
+        id: `pack_${i}`,
+        set: randomSet,
+        cards: [], // Will be populated when pack is opened
+        opened: false,
+      });
+    }
+
+    setPacks(generatedPacks);
+  }, []);
+
+  const openPack = useCallback(async (packId: string) => {
+    const pack = packs.find(p => p.id === packId);
+    if (!pack || pack.opened) return;
+
+    try {
+      // Generate a real booster pack from the API
+      const res = await fetch(`/api/boosters/generate?set=${encodeURIComponent(pack.set)}`);
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data?.error || "Failed to generate pack");
+      
+      // Add all cards from the pack to picks
+      for (const card of data.cards as SearchResult[]) {
+        addCardAuto(card);
+      }
+
+      // Mark pack as opened
+      setPacks(prev => prev.map(p => 
+        p.id === packId ? { ...p, opened: true, cards: data.cards } : p
+      ));
+      
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [packs, addCardAuto]);
+
+  // Auto-save sealed deck when cards are added/modified
+  const autoSaveSealedDeck = useCallback(async () => {
+    if (!isSealed || !sealedConfig) return;
+    
+    try {
+      // Build cards payload from current 3D picks
+      const agg = new Map<string, { cardId: number; zone: Zone; count: number; variantId?: number }>();
+      for (const p of pick3D) {
+        const inDeck = p.z < 0;
+        const t = (p.card.type || "").toLowerCase();
+        const zone: Zone = inDeck ? (t.includes("site") ? "Atlas" : "Spellbook") : "Sideboard";
+        const variantId = p.card.variantId || undefined;
+        const key = `${p.card.cardId}:${zone}:${variantId ?? "x"}`;
+        const prev = agg.get(key);
+        if (prev) prev.count += 1;
+        else agg.set(key, { cardId: p.card.cardId, zone, count: 1, variantId });
+      }
+      const cards = Array.from(agg.values());
+      
+      const sealedDeckName = `Sealed Deck ${new Date().toLocaleString()}`;
+      
+      // Auto-save the sealed deck
+      const res = await fetch("/api/decks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: sealedDeckName,
+          format: "Sealed",
+          set: setName,
+          cards,
+        }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setDeckId(data.id);
+        setDeckName(data.name);
+        
+        // Refresh deck list
+        try {
+          const res2 = await fetch("/api/decks");
+          const list = await res2.json();
+          if (res2.ok) setDecks(list as DeckListItem[]);
+        } catch {}
+      }
+    } catch (e) {
+      console.error("Auto-save sealed deck failed:", e);
+    }
+  }, [isSealed, sealedConfig, pick3D, setName]);
+  
+  // Auto-save sealed deck when picks change (debounced)
+  useEffect(() => {
+    if (!isSealed || pick3D.length === 0) return;
+    
+    const timeoutId = setTimeout(() => {
+      autoSaveSealedDeck();
+    }, 2000); // 2 second debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [isSealed, pick3D, autoSaveSealedDeck]);
+
+  // Initialize sealed mode (exported for future use)
+  // const initSealedMode = useCallback((config: {
+  //   timeLimit: number;
+  //   packCount: number;
+  //   setMix: string[];
+  // }) => {
+  //   const sealedConfig = {
+  //     ...config,
+  //     constructionStartTime: Date.now(),
+  //   };
+  //   
+  //   setSealedConfig(sealedConfig);
+  //   setIsSealed(true);
+  //   generateSealedPacks(sealedConfig);
+  // }, [generateSealedPacks]);
+
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
   const getTopRenderOrder = useCallback(() => {
@@ -901,23 +1043,23 @@ export default function DeckEditor3DPage() {
         console.log("Raw API response:", data);
         console.log("First card structure:", JSON.stringify(data[0], null, 2));
 
-        const metaMap = data.reduce((acc: any, cardData: any) => {
+        const metaMap = data.reduce((acc: Record<number, CardMeta>, cardData: Record<string, unknown>) => {
           console.log(`Processing card ID ${cardData.cardId}:`, cardData);
 
           // API returns metadata directly in the response
           if (cardData.cardId) {
             const processedMeta = {
-              cardId: cardData.cardId,
-              cost: cardData.cost ?? null,
-              attack: cardData.attack ?? null,
-              defence: cardData.defence ?? null,
-              thresholds: cardData.thresholds ?? null,
+              cardId: cardData.cardId as number,
+              cost: (cardData.cost as number) ?? null,
+              attack: (cardData.attack as number) ?? null,
+              defence: (cardData.defence as number) ?? null,
+              thresholds: (cardData.thresholds as Record<string, number>) ?? null,
             };
             console.log(
               `Extracted metadata for card ${cardData.cardId}:`,
               processedMeta
             );
-            acc[cardData.cardId] = processedMeta;
+            acc[cardData.cardId as number] = processedMeta;
           } else {
             console.warn(`No cardId found in response:`, cardData);
           }
@@ -931,6 +1073,30 @@ export default function DeckEditor3DPage() {
         console.error("Metadata fetch failed:", error);
       });
   }, [yourCounts, pick3D, setName]);
+
+  // Sealed mode timer effect
+  useEffect(() => {
+    if (!isSealed || !sealedConfig?.constructionStartTime || !sealedConfig?.timeLimit) return;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const elapsed = now - sealedConfig.constructionStartTime;
+      const totalTime = sealedConfig.timeLimit * 60 * 1000; // Convert minutes to ms
+      const remaining = Math.max(0, totalTime - elapsed);
+      setTimeRemaining(remaining);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isSealed, sealedConfig]);
+
+  // Format time display
+  const formatTime = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   async function doSearch() {
     try {
@@ -1833,11 +1999,40 @@ export default function DeckEditor3DPage() {
           <div className="max-w-7xl mx-auto">
             <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4">
               <div className="flex flex-wrap items-center gap-4">
-                {/* Collapsible Search / Tournament Controls */}
+                {/* Collapsible Search / Tournament Controls / Sealed Packs */}
                 {!searchExpanded ? (
                   <div className="flex items-center gap-2">
-                    {/* In draft mode (locked), show only tournament button */}
-                    {isDraftMode ? (
+                    {/* In sealed mode, show pack opening controls */}
+                    {isSealed ? (
+                      <div className="flex items-center gap-2">
+                        {/* Time remaining display */}
+                        <div className={`h-10 px-4 rounded-lg flex items-center gap-2 font-medium ${
+                          timeRemaining <= 60000 ? 'bg-red-600 text-white' : 
+                          timeRemaining <= 300000 ? 'bg-yellow-600 text-white' : 
+                          'bg-blue-600 text-white'
+                        }`}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {formatTime(timeRemaining)}
+                        </div>
+                        
+                        {/* Pack opening buttons */}
+                        {packs.filter(p => !p.opened).map(pack => (
+                          <button
+                            key={pack.id}
+                            onClick={() => openPack(pack.id)}
+                            className="h-10 px-4 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-500 hover:to-emerald-500 transition-all duration-200 shadow-lg"
+                          >
+                            Open {pack.set} Pack
+                          </button>
+                        ))}
+                        
+                        {packs.length > 0 && packs.every(p => p.opened) && (
+                          <div className="text-green-400 text-sm font-medium">All packs opened!</div>
+                        )}
+                      </div>
+                    ) : isDraftMode ? (
                       pick3D.length > 0 && (
                         <button
                           onClick={() =>
