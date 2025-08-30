@@ -21,24 +21,18 @@ import type { Group } from "three";
 import { MOUSE } from "three";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import {
+  BoosterCard,
+  Pick3D,
+  Rarity,
+  Finish,
+  categorizeCard,
+  getThresholdElements,
+  computeStackPositions,
+} from "@/lib/game/cardSorting";
 
 // --- Draft data types (mirrors /draft 2D) ---
-
-type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
-type Finish = "Standard" | "Foil";
-
-type BoosterCard = {
-  variantId: number;
-  slug: string;
-  finish: Finish;
-  product: string;
-  rarity: Rarity;
-  type: string | null;
-  cardId: number;
-  cardName: string;
-  // Local enrichment: which set this card came from (for multi-set drafts)
-  setName?: string;
-};
+// Types moved to src/lib/game/cardSorting.ts
 
 function weightForRarity(r: Rarity) {
   switch (r) {
@@ -288,7 +282,7 @@ export default function Draft3DPage() {
   }, []);
 
   // 3D state for your arranged picks on the board
-  type Pick3D = { id: number; card: BoosterCard; x: number; z: number };
+  // Using shared Pick3D type from src/lib/game/cardSorting.ts
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
 
@@ -662,61 +656,9 @@ export default function Draft3DPage() {
     });
   }, [yourPicks, setNames]);
 
-  // Card categorization functions
-  const categorizeCard = (
-    card: BoosterCard,
-    meta?: {
-      cost: number | null;
-      thresholds: Record<string, number> | null;
-      attack: number | null;
-      defence: number | null;
-    }
-  ) => {
-    const type = (card.type || "").toLowerCase();
+  // Card categorization helpers moved to shared module
 
-    if (type.includes("site")) return "sites";
-    if (type.includes("avatar")) return "avatars";
-
-    // Creatures have attack/defence values
-    const isCreature = meta && (meta.attack !== null || meta.defence !== null);
-    if (isCreature) return "creatures";
-
-    return "spells";
-  };
-
-  const getThresholdElements = (
-    card: BoosterCard,
-    meta?: { thresholds: Record<string, number> | null }
-  ) => {
-    const thresholds = meta?.thresholds || {};
-    return Object.keys(thresholds).filter((element) => thresholds[element] > 0);
-  };
-
-  // Sort picks by category and mana cost
-  const sortedPicks = useMemo(() => {
-    if (!isSortingEnabled) return pick3D;
-
-    const categorized = pick3D.reduce((acc, pick) => {
-      const meta = metaByCardId[pick.card.cardId];
-      const category = categorizeCard(pick.card, meta);
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(pick);
-      return acc;
-    }, {} as Record<string, Pick3D[]>);
-
-    // Sort within each category by mana cost
-    for (const category in categorized) {
-      categorized[category].sort((a, b) => {
-        const metaA = metaByCardId[a.card.cardId];
-        const metaB = metaByCardId[b.card.cardId];
-        const costA = metaA?.cost || 0;
-        const costB = metaB?.cost || 0;
-        return costA - costB;
-      });
-    }
-
-    return categorized;
-  }, [pick3D, isSortingEnabled, metaByCardId]);
+  // Sorting is handled by computeStackPositions when enabled
 
   // Calculate threshold summary
   const thresholdSummary = useMemo(() => {
@@ -756,90 +698,8 @@ export default function Draft3DPage() {
 
   // Create sorted stack positions
   const stackPositions = useMemo(() => {
-    if (!isSortingEnabled) return null;
-
-    const positions = new Map<
-      number,
-      { x: number; z: number; stackIndex: number; isVisible: boolean }
-    >();
-    const stackStartZ = 0.5; // Start stacks in the center area
-    const stackSpacing = 1.0; // Closer spacing between different stacks
-    const cardFanSpacing = 0.12; // Vertical fan spacing so tops are visible
-
-    let currentStackX = -2.5; // Start position for stacks
-
-    // Only proceed if sortedPicks is a categorized object (not the original Pick3D array)
-    const categorizedPicks = Array.isArray(sortedPicks) ? {} : sortedPicks;
-
-    // Group all creatures and spells by their threshold elements
-    const allCards = [
-      ...(categorizedPicks.creatures || []),
-      ...(categorizedPicks.spells || []),
-    ];
-
-    const elementGroups = allCards.reduce((acc, pick) => {
-      const meta = metaByCardId[pick.card.cardId];
-      const elements = getThresholdElements(pick.card, meta);
-      const key = elements.length > 0 ? elements.sort().join("-") : "colorless";
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(pick);
-      return acc;
-    }, {} as Record<string, Pick3D[]>);
-
-    // Create vertical fans for each element group
-    Object.keys(elementGroups)
-      .sort()
-      .forEach((elementKey) => {
-        const cards = elementGroups[elementKey];
-        if (cards.length === 0) return;
-
-        cards.forEach((pick, idx) => {
-          positions.set(pick.id, {
-            x: currentStackX,
-            z: stackStartZ + idx * cardFanSpacing,
-            stackIndex: idx,
-            isVisible: true, // All cards visible in vertical fan
-          });
-        });
-        currentStackX += stackSpacing;
-      });
-
-    // Sites stack - vertical fan with bottoms visible (reverse z order)
-    const sites = categorizedPicks.sites || [];
-    if (sites.length > 0) {
-      sites.forEach((pick, idx) => {
-        positions.set(pick.id, {
-          x: currentStackX,
-          // Reverse the z ordering for sites so bottom cards are in front
-          z: stackStartZ + (sites.length - 1 - idx) * cardFanSpacing,
-          stackIndex: idx,
-          isVisible: true, // All sites visible
-        });
-      });
-      currentStackX += stackSpacing;
-    }
-
-    // Artifacts stack (if any cards have artifact in type)
-    const artifacts = Object.values(categorizedPicks)
-      .flat()
-      .filter((pick) => {
-        const type = (pick.card.type || "").toLowerCase();
-        return type.includes("artifact");
-      });
-
-    if (artifacts.length > 0) {
-      artifacts.forEach((pick, idx) => {
-        positions.set(pick.id, {
-          x: currentStackX,
-          z: stackStartZ + idx * cardFanSpacing,
-          stackIndex: idx,
-          isVisible: true,
-        });
-      });
-    }
-
-    return positions;
-  }, [sortedPicks, isSortingEnabled, metaByCardId]);
+    return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
+  }, [pick3D, isSortingEnabled, metaByCardId]);
 
   async function saveDeck() {
     try {
