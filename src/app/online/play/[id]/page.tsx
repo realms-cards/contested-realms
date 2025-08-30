@@ -26,7 +26,6 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
-import SealedDeckBuilder from "@/components/game/SealedDeckBuilder";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -430,15 +429,69 @@ export default function OnlineMatchPage() {
       {inThisMatch && setupOpen && myPlayerKey && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {match?.status === "deck_construction" ? (
-            <SealedDeckBuilder
-              match={match}
-              myPlayerKey={myPlayerKey}
-              playerNames={playerNames}
-              onDeckSubmitted={() => {
-                // Deck submitted, wait for other players
-                console.log("Deck submitted, waiting for other players...");
-              }}
-            />
+            // Redirect to 3D editor for sealed deck construction
+            <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">Sealed Deck Construction</h2>
+                <div className="space-y-4">
+                  <div className="text-slate-300">
+                    <div className="mb-2">Starting 3D deck construction...</div>
+                    <div className="text-white font-medium">
+                      {playerNames.p1} vs {playerNames.p2}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <button
+                      onClick={() => {
+                        // Navigate to 3D editor with sealed mode
+                        const params = new URLSearchParams({
+                          sealed: 'true',
+                          matchId: match.id,
+                          timeLimit: match.sealedConfig?.timeLimit?.toString() || '40',
+                          packCount: match.sealedConfig?.packCount?.toString() || '6',
+                          setMix: match.sealedConfig?.setMix?.join(',') || 'Beta',
+                          constructionStartTime: match.sealedConfig?.constructionStartTime?.toString() || Date.now().toString()
+                        });
+                        
+                        // Open in new window so we can receive postMessage
+                        const editorWindow = window.open(`/decks/editor-3d?${params.toString()}`, '_blank');
+                        
+                        // Listen for sealed deck submission
+                        const handleMessage = (event: MessageEvent) => {
+                          if (event.origin !== window.location.origin) return;
+                          if (event.data.type === 'sealedDeckSubmission') {
+                            // Submit deck using transport
+                            if (transport) {
+                              transport.submitDeck(event.data.deck);
+                              console.log("Sealed deck submitted:", event.data.deck);
+                            }
+                            // Close editor window
+                            if (editorWindow) {
+                              editorWindow.close();
+                            }
+                            // Clean up listener
+                            window.removeEventListener('message', handleMessage);
+                          }
+                        };
+                        
+                        window.addEventListener('message', handleMessage);
+                        
+                        // Clean up if editor window is closed manually
+                        const checkClosed = setInterval(() => {
+                          if (editorWindow?.closed) {
+                            window.removeEventListener('message', handleMessage);
+                            clearInterval(checkClosed);
+                          }
+                        }, 1000);
+                      }}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
+                    >
+                      Open 3D Deck Constructor
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : !prepared ? (
             match?.matchType === "sealed" ? (
               <OnlineSealedDeckLoader
