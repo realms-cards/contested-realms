@@ -45,8 +45,7 @@ export default function LobbyPage() {
   // Match type and sealed configuration
   const [matchType, setMatchType] = useState<"constructed" | "sealed">("constructed");
   const [sealedConfig, setSealedConfig] = useState({
-    packCount: 6,
-    setMix: ["Alpha/Beta"],
+    packCounts: { "Beta": 6, "Arthurian Legends": 0 } as Record<string, number>,
     timeLimit: 40 // minutes
   });
   const chatRef = useRef<HTMLDivElement | null>(null);
@@ -135,20 +134,31 @@ export default function LobbyPage() {
 
   const startSealedMatch = () => {
     // Validate sealed configuration
-    if (sealedConfig.setMix.length === 0) {
-      alert("Please select at least one set for sealed play.");
+    const totalPacks = Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0);
+    const activeSets = Object.entries(sealedConfig.packCounts).filter(([, count]) => count > 0);
+    
+    if (activeSets.length === 0) {
+      alert("Please configure at least one set with packs for sealed play.");
       return;
     }
-    if (sealedConfig.packCount < 3 || sealedConfig.packCount > 8) {
-      alert("Pack count must be between 3 and 8.");
+    if (totalPacks < 3 || totalPacks > 8) {
+      alert("Total pack count must be between 3 and 8.");
       return;
     }
+    
+    // Convert to legacy format for server compatibility
+    const legacySealedConfig = {
+      packCount: totalPacks,
+      setMix: activeSets.map(([set]) => set),
+      timeLimit: sealedConfig.timeLimit,
+      packCounts: sealedConfig.packCounts // Include detailed counts for future use
+    };
     
     // Send startMatch with sealed configuration
     if (transport) {
       transport.startMatch({
         matchType: "sealed",
-        sealedConfig
+        sealedConfig: legacySealedConfig
       });
     }
   };
@@ -268,39 +278,46 @@ export default function LobbyPage() {
             {matchType === "sealed" && (
               <>
                 <div>
-                  <label className="block text-xs font-medium mb-2">
-                    Packs per Player (3-8)
+                  <label className="block text-xs font-medium mb-3">
+                    Pack Configuration
+                    <span className="text-xs opacity-70 ml-2">
+                      (Total: {Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0)} packs, 3-8 required)
+                    </span>
                   </label>
-                  <input
-                    type="number"
-                    min="3"
-                    max="8"
-                    value={sealedConfig.packCount}
-                    onChange={(e) => setSealedConfig(prev => ({ ...prev, packCount: parseInt(e.target.value) || 6 }))}
-                    className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium mb-2">Set Mix</label>
-                  <div className="space-y-2">
-                    {["Alpha/Beta", "Arthurian Legends"].map(set => (
-                      <label key={set} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={sealedConfig.setMix.includes(set)}
-                          onChange={(e) => {
-                            setSealedConfig(prev => ({
-                              ...prev,
-                              setMix: e.target.checked
-                                ? [...prev.setMix, set]
-                                : prev.setMix.filter(s => s !== set)
-                            }));
-                          }}
-                          className="rounded"
-                        />
+                  <div className="space-y-3">
+                    {Object.entries(sealedConfig.packCounts).map(([set, count]) => (
+                      <div key={set} className="flex items-center justify-between">
                         <span className="text-sm">{set}</span>
-                      </label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                            onClick={() => setSealedConfig(prev => ({
+                              ...prev,
+                              packCounts: {
+                                ...prev.packCounts,
+                                [set]: Math.max(0, count - 1)
+                              }
+                            }))}
+                            disabled={count <= 0}
+                          >
+                            −
+                          </button>
+                          <span className="w-8 text-center text-sm font-medium">{count}</span>
+                          <button
+                            className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                            onClick={() => setSealedConfig(prev => ({
+                              ...prev,
+                              packCounts: {
+                                ...prev.packCounts,
+                                [set]: Math.min(8, count + 1)
+                              }
+                            }))}
+                            disabled={Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0) >= 8}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

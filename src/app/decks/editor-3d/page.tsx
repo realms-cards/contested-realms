@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
@@ -300,6 +301,8 @@ function DraggableCard3D({
 }
 
 export default function DeckEditor3DPage() {
+  const searchParams = useSearchParams();
+  
   // Deck editor state (same as 2D version)
   const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(false);
@@ -444,6 +447,32 @@ export default function DeckEditor3DPage() {
   
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
+  // Initialize sealed mode from URL parameters
+  useEffect(() => {
+    const sealed = searchParams.get('sealed');
+    const matchId = searchParams.get('matchId');
+    const timeLimit = searchParams.get('timeLimit');
+    const packCount = searchParams.get('packCount');
+    const setMix = searchParams.get('setMix');
+    const constructionStartTime = searchParams.get('constructionStartTime');
+    
+    if (sealed === 'true' && matchId) {
+      const config = {
+        timeLimit: parseInt(timeLimit || '40'),
+        constructionStartTime: parseInt(constructionStartTime || Date.now().toString()),
+        packCount: parseInt(packCount || '6'),
+        setMix: setMix ? setMix.split(',') : ['Beta'],
+      };
+      
+      setSealedConfig(config);
+      setIsSealed(true);
+      setDeckName(`Sealed Match ${matchId.slice(-8)}`);
+      
+      // Generate packs for sealed construction
+      generateSealedPacks(config);
+    }
+  }, [searchParams]); // generateSealedPacks will be called when available
+
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
 
@@ -471,6 +500,7 @@ export default function DeckEditor3DPage() {
   // Convert picks to Pick3D format (exact same structure as draft-3d)
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [, setNextPickId] = useState(1);
+
 
   // Open duplicate-move context menu for a given card at screen coords
   const openContextMenuForCard = useCallback(
@@ -583,6 +613,9 @@ export default function DeckEditor3DPage() {
       const isSite = (r.type || "").toLowerCase().includes("site");
       const zone: Zone = isSite ? "Atlas" : "Spellbook";
       const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+      
+      console.log(`Adding card: ${r.name} (${r.cardId}), key: ${key}, variantId: ${r.variantId}`);
+      
       setPicks((prev) => {
         const exists = prev[key];
         const next: PickItem = exists
@@ -590,12 +623,16 @@ export default function DeckEditor3DPage() {
           : {
               cardId: r.cardId,
               variantId: r.variantId ?? null,
-              name: r.cardName,
+              name: r.cardName || r.name,
               type: r.type,
               slug: r.slug,
               zone,
               count: 1,
             };
+            
+        console.log(`Card ${r.name}: ${exists ? 'incremented to' : 'added with'} count ${next.count}`);
+        console.log(`Total picks after adding:`, Object.keys({...prev, [key]: next}).length);
+        
         return { ...prev, [key]: next };
       });
     },
@@ -707,6 +744,71 @@ export default function DeckEditor3DPage() {
       setTimeout(() => setSaveMsg(null), 1500);
     }
   }, [pick3D, deckId, deckName, isDraftMode, setName]);
+
+  // Submit sealed deck to match server
+  const submitSealedDeck = useCallback(async () => {
+    if (!isSealed || !searchParams.get('matchId')) return;
+    
+    try {
+      setSaving(true);
+      setError(null);
+      setSaveMsg(null);
+
+      // Validate minimum deck requirements (more lenient for sealed)
+      let atlas = 0;
+      let nonAtlas = 0;
+      for (const p of pick3D) {
+        if (p.z >= 0) continue; // only deck zone
+        const t = (p.card.type || "").toLowerCase();
+        if (t.includes("site")) atlas += 1;
+        else nonAtlas += 1;
+      }
+      if (atlas < 12 || nonAtlas < 24) {
+        throw new Error("Deck invalid. Require: Atlas >= 12, Non-sites >= 24");
+      }
+
+      // Convert 3D picks to simple card array for sealed submission
+      const deckCards = pick3D
+        .filter(p => p.z < 0) // only deck zone
+        .map(p => ({
+          id: p.card.cardId.toString(),
+          cardId: p.card.cardId,
+          name: p.card.cardName || p.card.name || `Card ${p.card.cardId}`,
+          type: p.card.type,
+          slug: p.card.slug,
+          set: p.card.set || 'Beta',
+          cost: p.card.cost || 0,
+          rarity: p.card.rarity || 'Common'
+        }));
+
+      // Auto-save the deck first
+      await saveDeck();
+
+      // Submit to match server using postMessage to parent window (online match page)
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'sealedDeckSubmission',
+          deck: deckCards,
+          matchId: searchParams.get('matchId')
+        }, window.location.origin);
+      } else {
+        // Fallback: save to localStorage for the match page to pick up
+        localStorage.setItem(`sealedDeck_${searchParams.get('matchId')}`, JSON.stringify(deckCards));
+      }
+
+      setSaveMsg("Sealed deck submitted successfully!");
+      
+      // Redirect back to match after short delay
+      setTimeout(() => {
+        window.location.href = `/online/play/${searchParams.get('matchId')}`;
+      }, 2000);
+
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }, [isSealed, pick3D, searchParams, saveDeck]);
 
   const loadDeck = useCallback(async (id: string) => {
     setDeckId(id);
@@ -839,23 +941,50 @@ export default function DeckEditor3DPage() {
     if (!pack || pack.opened) return;
 
     try {
-      // Generate a real booster pack from the API
-      const res = await fetch(`/api/boosters/generate?set=${encodeURIComponent(pack.set)}`);
+      console.log(`Opening pack: ${packId}, set: ${pack.set}`);
+      
+      // Generate a real booster pack from the API (same as draft-3d)
+      const res = await fetch(`/api/booster?set=${encodeURIComponent(pack.set)}&count=1`);
       const data = await res.json();
       
-      if (!res.ok) throw new Error(data?.error || "Failed to generate pack");
+      console.log('Booster API response:', { status: res.status, data });
       
-      // Add all cards from the pack to picks
-      for (const card of data.cards as SearchResult[]) {
-        addCardAuto(card);
+      if (!res.ok) {
+        throw new Error(data?.error || `Failed to generate ${pack.set} pack (status: ${res.status})`);
+      }
+      
+      const boosterCards = data.packs?.[0] || [];
+      if (!Array.isArray(boosterCards)) {
+        throw new Error("Invalid pack data received from server");
+      }
+      
+      // Convert booster cards to SearchResult format and add to sideboard (sealed mode)
+      for (const boosterCard of boosterCards) {
+        const searchCard: SearchResult = {
+          cardId: boosterCard.cardId,
+          name: boosterCard.cardName || `Card ${boosterCard.cardId}`,
+          cardName: boosterCard.cardName || `Card ${boosterCard.cardId}`, // Ensure both name and cardName are set
+          type: boosterCard.type || "Unknown",
+          slug: boosterCard.slug || "",
+          set: pack.set, // This is the set the pack came from
+          cost: boosterCard.cost || 0,
+          rarity: boosterCard.rarity || "Common",
+          variantId: boosterCard.variantId
+        };
+        console.log(`Adding card from ${pack.set} pack:`, searchCard.name, `(${searchCard.cardId})`);
+        // In sealed mode, all pack cards go to sideboard first
+        addToSideboardFromSearch(searchCard);
       }
 
       // Mark pack as opened
       setPacks(prev => prev.map(p => 
-        p.id === packId ? { ...p, opened: true, cards: data.cards } : p
+        p.id === packId ? { ...p, opened: true, cards: boosterCards } : p
       ));
       
+      console.log(`Successfully opened pack with ${boosterCards.length} cards`);
+      
     } catch (e) {
+      console.error('Pack opening error:', e);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [packs, addCardAuto]);
@@ -1013,7 +1142,7 @@ export default function DeckEditor3DPage() {
     setNextPickId(id);
   }, [picks]);
 
-  // Load deck data and meta
+  // Load deck data and meta (enhanced for multi-set sealed like draft-3d)
   useEffect(() => {
     // Get unique card IDs from pick3D array if yourCounts is empty
     const cardIds =
@@ -1032,47 +1161,82 @@ export default function DeckEditor3DPage() {
       "unique card IDs:",
       cardIds
     );
-    const params = new URLSearchParams();
-    params.set("ids", cardIds.join(","));
-    if (setName) params.set("set", setName);
 
-    fetch(`/api/cards/meta?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data) => {
-        console.log("=== API Response Debug ===");
-        console.log("Raw API response:", data);
-        console.log("First card structure:", JSON.stringify(data[0], null, 2));
+    // Group cards by set for proper metadata fetching (like draft-3d)
+    const groups = new Map<string, Set<number>>();
+    
+    // For sealed mode, we need to get the correct set for each card
+    if (isSealed) {
+      // Group by set from pick3D cards which have set information
+      for (const pick of pick3D) {
+        const cardSet = pick.card.setName || setName; // fallback to default set
+        if (!groups.has(cardSet)) groups.set(cardSet, new Set());
+        groups.get(cardSet)!.add(pick.card.cardId);
+      }
+      // Also include cards from yourCounts if they don't exist in pick3D
+      const pick3DCardIds = new Set(pick3D.map(p => p.card.cardId));
+      for (const card of yourCounts) {
+        if (!pick3DCardIds.has(card.cardId)) {
+          // For cards not in pick3D, use the default set
+          if (!groups.has(setName)) groups.set(setName, new Set());
+          groups.get(setName)!.add(card.cardId);
+        }
+      }
+    } else {
+      // For non-sealed mode, use single set
+      groups.set(setName, new Set(cardIds));
+    }
 
-        const metaMap = data.reduce((acc: Record<number, CardMeta>, cardData: Record<string, unknown>) => {
-          console.log(`Processing card ID ${cardData.cardId}:`, cardData);
+    console.log("Metadata groups by set:", Array.from(groups.entries()).map(([set, ids]) => `${set}: ${ids.size} cards`));
 
-          // API returns metadata directly in the response
-          if (cardData.cardId) {
-            const processedMeta = {
-              cardId: cardData.cardId as number,
-              cost: (cardData.cost as number) ?? null,
-              attack: (cardData.attack as number) ?? null,
-              defence: (cardData.defence as number) ?? null,
-              thresholds: (cardData.thresholds as Record<string, number>) ?? null,
-            };
-            console.log(
-              `Extracted metadata for card ${cardData.cardId}:`,
-              processedMeta
-            );
-            acc[cardData.cardId as number] = processedMeta;
-          } else {
-            console.warn(`No cardId found in response:`, cardData);
+    // Make requests grouped by set (same pattern as draft-3d)
+    const requests = Array.from(groups.entries()).map(([s, ids]) => {
+      const params = new URLSearchParams();
+      params.set("set", s);
+      params.set("ids", Array.from(ids).join(","));
+      console.log(`Fetching metadata for set ${s}:`, Array.from(ids));
+      return fetch(`/api/cards/meta?${params.toString()}`)
+        .then((r) => r.json())
+        .then(
+          (rows: {
+            cardId: number;
+            cost: number | null;
+            thresholds: Record<string, number> | null;
+            attack: number | null;
+            defence: number | null;
+          }[]) => {
+            console.log(`Metadata response for set ${s}:`, rows);
+            return rows;
           }
+        );
+    });
 
-          return acc;
-        }, {});
-        console.log("Final MetaByCardId:", metaMap);
-        setMetaByCardId(metaMap);
+    Promise.all(requests)
+      .then((chunks) => {
+        console.log("=== Multi-set API Response Debug ===");
+        console.log("Chunks received:", chunks.length);
+        chunks.forEach((chunk, i) => {
+          console.log(`Chunk ${i} size:`, chunk.length);
+          if (chunk[0]) console.log(`Chunk ${i} first card:`, JSON.stringify(chunk[0], null, 2));
+        });
+
+        const next: Record<number, CardMeta> = {};
+        for (const rows of chunks) {
+          for (const m of rows)
+            next[m.cardId] = {
+              cost: m.cost,
+              thresholds: m.thresholds,
+              attack: m.attack,
+              defence: m.defence,
+            };
+        }
+        console.log("Final multi-set MetaByCardId:", next);
+        setMetaByCardId(next);
       })
       .catch((error) => {
         console.error("Metadata fetch failed:", error);
       });
-  }, [yourCounts, pick3D, setName]);
+  }, [yourCounts, pick3D, setName, isSealed]);
 
   // Sealed mode timer effect
   useEffect(() => {
@@ -1457,22 +1621,23 @@ export default function DeckEditor3DPage() {
             )}
           </div>
 
-          {/* Deck selector */}
-          <div className="flex items-center gap-3">
-            <select
-              value={deckId || ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) loadDeck(v);
-                else clearEditor();
-              }}
-              disabled={loadingDecks}
-              className="border rounded px-3 py-2 bg-black/70 text-white border-white/30 min-w-48 disabled:opacity-60"
-            >
-              <option value="">— New Deck —</option>
-              {decks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} • {d.format}
+          {/* Deck selector - hidden in sealed mode */}
+          {!isSealed && (
+            <div className="flex items-center gap-3">
+              <select
+                value={deckId || ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v) loadDeck(v);
+                  else clearEditor();
+                }}
+                disabled={loadingDecks}
+                className="border rounded px-3 py-2 bg-black/70 text-white border-white/30 min-w-48 disabled:opacity-60"
+              >
+                <option value="">— New Deck —</option>
+                {decks.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} • {d.format}
                 </option>
               ))}
             </select>
@@ -1484,6 +1649,7 @@ export default function DeckEditor3DPage() {
               placeholder="Deck name"
             />
           </div>
+          )}
 
           {/* Enhanced sorting controls */}
           {pick3D.length > 0 && (
@@ -2017,16 +2183,32 @@ export default function DeckEditor3DPage() {
                           {formatTime(timeRemaining)}
                         </div>
                         
-                        {/* Pack opening buttons */}
-                        {packs.filter(p => !p.opened).map(pack => (
-                          <button
-                            key={pack.id}
-                            onClick={() => openPack(pack.id)}
-                            className="h-10 px-4 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-500 hover:to-emerald-500 transition-all duration-200 shadow-lg"
-                          >
-                            Open {pack.set} Pack
-                          </button>
-                        ))}
+                        {/* Pack opening buttons grouped by set */}
+                        <div className="flex flex-wrap gap-3">
+                          {Object.entries(
+                            packs.filter(p => !p.opened).reduce((groups, pack) => {
+                              if (!groups[pack.set]) groups[pack.set] = [];
+                              groups[pack.set].push(pack);
+                              return groups;
+                            }, {} as Record<string, typeof packs>)
+                          ).map(([setName, setPacks]) => (
+                            <div key={setName} className="flex flex-col items-center gap-2">
+                              <div className="text-white text-sm font-medium">{setName}</div>
+                              <div className="flex gap-1">
+                                {setPacks.map(pack => (
+                                  <button
+                                    key={pack.id}
+                                    onClick={() => openPack(pack.id)}
+                                    className="w-12 h-10 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-500 hover:to-emerald-500 transition-all duration-200 shadow-lg text-xs font-bold flex items-center justify-center"
+                                    title={`Open ${setName} pack`}
+                                  >
+                                    {setPacks.indexOf(pack) + 1}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                         
                         {packs.length > 0 && packs.every(p => p.opened) && (
                           <div className="text-green-400 text-sm font-medium">All packs opened!</div>
@@ -2266,7 +2448,7 @@ export default function DeckEditor3DPage() {
                     </button>
                   )}
                   <button
-                    onClick={saveDeck}
+                    onClick={isSealed ? submitSealedDeck : saveDeck}
                     disabled={
                       saving ||
                       (isDraftMode &&
@@ -2274,18 +2456,24 @@ export default function DeckEditor3DPage() {
                           !validation.atlas ||
                           !validation.spellbook))
                     }
-                    className="h-10 px-4 rounded bg-green-600 text-white disabled:opacity-50"
+                    className={`h-10 px-4 rounded text-white disabled:opacity-50 ${
+                      isSealed ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'
+                    }`}
                     title={
                       isDraftMode &&
                       (!validation.avatar ||
                         !validation.atlas ||
                         !validation.spellbook)
                         ? "Cannot save invalid deck in draft mode"
+                        : isSealed
+                        ? "Submit sealed deck to match"
                         : undefined
                     }
                   >
                     {saving
-                      ? "Saving..."
+                      ? "Submitting..."
+                      : isSealed
+                      ? "Submit Sealed Deck"
                       : deckId
                       ? "Update Deck"
                       : "Save Deck"}
