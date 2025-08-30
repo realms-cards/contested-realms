@@ -20,6 +20,9 @@ import {
   computeStackPositions,
 } from "@/lib/game/cardSorting";
 
+// Stable constant for standard site names (tournament legal)
+const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
+
 // --- Deck Editor data types (same as 2D editor) ---
 
 type Zone = "Spellbook" | "Atlas" | "Sideboard";
@@ -48,6 +51,8 @@ type ApiCardRef = {
 };
 
 type DeckListItem = { id: string; name: string; format: string };
+
+type StandardSiteName = (typeof STANDARD_SITE_NAMES)[number];
 
 type PickKey = string; // `${cardId}:${zone}:${variantId??x}`
 
@@ -310,6 +315,19 @@ export default function DeckEditor3DPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // Prefetched standard sites for tournament legal quick-add buttons
+  const [stdSites, setStdSites] = useState<
+    Record<StandardSiteName, SearchResult | null>
+  >({
+    Spire: null,
+    Stream: null,
+    Valley: null,
+    Wasteland: null,
+  });
+
+  // Prefetch Spellslinger avatar
+  const [spellslingerCard, setSpellslingerCard] = useState<SearchResult | null>(null);
+
   // Load list of decks on mount
   useEffect(() => {
     let mounted = true;
@@ -331,6 +349,67 @@ export default function DeckEditor3DPage() {
     };
   }, []);
 
+  // Prefetch standard sites for the current set
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Fetch standard sites and Spellslinger in parallel
+        const [siteEntries, spellslingerRes] = await Promise.all([
+          Promise.all(
+            STANDARD_SITE_NAMES.map(async (name) => {
+              const res = await fetch(
+                `/api/cards/search?q=${encodeURIComponent(
+                  name
+                )}&set=${encodeURIComponent(setName)}&type=site`
+              );
+              const data = (await res.json()) as SearchResult[];
+              return [name, res.ok && data[0] ? data[0] : null] as const;
+            })
+          ),
+          fetch(
+            `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
+              setName
+            )}&type=avatar`
+          )
+        ]);
+        
+        if (!cancelled) {
+          // Set standard sites
+          const next: Record<StandardSiteName, SearchResult | null> = {
+            Spire: null,
+            Stream: null,
+            Valley: null,
+            Wasteland: null,
+          };
+          for (const [k, v] of siteEntries) next[k] = v;
+          setStdSites(next);
+          
+          // Set Spellslinger
+          if (spellslingerRes.ok) {
+            const spellslingerData = (await spellslingerRes.json()) as SearchResult[];
+            setSpellslingerCard(spellslingerData[0] || null);
+          } else {
+            setSpellslingerCard(null);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setStdSites({
+            Spire: null,
+            Stream: null,
+            Valley: null,
+            Wasteland: null,
+          });
+          setSpellslingerCard(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setName]);
+
   // Exact same 3D state as draft-3d
   const [orbitLocked, setOrbitLocked] = useState(false);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
@@ -344,6 +423,9 @@ export default function DeckEditor3DPage() {
 
   // Feedback message system
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Tournament legal controls visibility
+  const [tournamentControlsVisible, setTournamentControlsVisible] = useState(false);
 
   // Context menu for duplicate card selection
   const [contextMenu, setContextMenu] = useState<{
@@ -588,6 +670,37 @@ export default function DeckEditor3DPage() {
     setResults([]);
   }, []);
 
+  // Add Spellslinger as tournament avatar (just add the prefetched card normally)
+  const addSpellslinger = useCallback(() => {
+    if (spellslingerCard) {
+      addCardAuto(spellslingerCard);
+    } else {
+      setError("Spellslinger not found in this set");
+    }
+  }, [spellslingerCard, addCardAuto]);
+
+  // Quick-add a specific standard site by name
+  const addStandardSiteByName = useCallback(async (name: StandardSiteName) => {
+    const hit = stdSites[name];
+    if (hit) {
+      addCardAuto(hit);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/cards/search?q=${encodeURIComponent(
+          name
+        )}&set=${encodeURIComponent(setName)}&type=site`
+      );
+      const data = (await res.json()) as SearchResult[];
+      const r = res.ok && data[0] ? data[0] : null;
+      if (r) addCardAuto(r);
+      else setError(`Site ${name} not found in set ${setName}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [stdSites, addCardAuto, setName]);
+
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
   const getTopRenderOrder = useCallback(() => {
@@ -634,7 +747,7 @@ export default function DeckEditor3DPage() {
       .reduce((sum, item) => sum + item.count, 0);
 
     const isDeckValid =
-      avatarCount === 1 && atlasCount >= 12 && spellbookCount >= 24;
+      avatarCount >= 1 && atlasCount >= 12 && spellbookCount >= 24;
 
     for (const item of Object.values(picks)) {
       for (let i = 0; i < item.count; i++) {
@@ -789,6 +902,13 @@ export default function DeckEditor3DPage() {
     }
   }, [contextMenu]);
 
+  // Helper to check if a card is a standard site (tournament legal)
+  const isStandardSite = useCallback((cardName: string) => {
+    return STANDARD_SITE_NAMES.some(siteName => 
+      cardName.toLowerCase().includes(siteName.toLowerCase())
+    );
+  }, []);
+
   // Convenience helpers to move any one copy by cardId between zones
   const moveOneToSideboard = useCallback((cardId: number) => {
     setPick3D((prev) => {
@@ -797,12 +917,22 @@ export default function DeckEditor3DPage() {
         (p) => p.card.cardId === cardId && p.z < 0
       );
       if (idx === -1) return prev;
+      
+      const card = updated[idx];
+      // Special behavior for standard sites: remove them instead of moving to sideboard
+      if (isStandardSite(card.card.cardName)) {
+        // Remove the card entirely
+        updated.splice(idx, 1);
+        return updated;
+      }
+      
+      // Normal behavior: move to sideboard
       const newZ = 1.5 + Math.random() * 0.5;
       const newX = 0.5 + Math.random() * 3;
       updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
       return updated;
     });
-  }, []);
+  }, [isStandardSite]);
 
   const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
     setPick3D((prev) => {
@@ -825,7 +955,16 @@ export default function DeckEditor3DPage() {
       const cardIndex = updated.findIndex((p) => p.id === pickId);
 
       if (cardIndex === -1) return prev;
+      
+      const card = updated[cardIndex];
+      // Special behavior for standard sites: remove them instead of moving to sideboard
+      if (isStandardSite(card.card.cardName)) {
+        // Remove the card entirely
+        updated.splice(cardIndex, 1);
+        return updated;
+      }
 
+      // Normal behavior: move to sideboard
       const newZ = 1.5 + Math.random() * 0.5;
       const newX = 0.5 + Math.random() * 3;
 
@@ -838,7 +977,7 @@ export default function DeckEditor3DPage() {
 
       return updated;
     });
-  }, []);
+  }, [isStandardSite]);
 
   const moveSpecificCardToDeck = useCallback((pickId: number) => {
     setPick3D((prev) => {
@@ -1591,27 +1730,75 @@ export default function DeckEditor3DPage() {
           <div className="max-w-7xl mx-auto">
             <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4">
               <div className="flex flex-wrap items-center gap-4">
-                {/* Collapsible Search */}
+                {/* Collapsible Search / Tournament Controls */}
                 {!searchExpanded ? (
-                  <button
-                    onClick={() => setSearchExpanded(true)}
-                    className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 transition-all duration-200 shadow-lg"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                    Search Cards
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* In draft mode (locked), show only tournament button */}
+                    {isDraftMode ? (
+                      pick3D.length > 0 && (
+                        <button
+                          onClick={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+                          className={`flex items-center gap-2 h-10 px-4 rounded-lg transition-all duration-200 shadow-lg ${
+                            tournamentControlsVisible
+                              ? "bg-yellow-600 text-white hover:bg-yellow-500"
+                              : "bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500"
+                          }`}
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 4v16m8-8H4"
+                            />
+                          </svg>
+                          Add Standard Cards
+                        </button>
+                      )
+                    ) : (
+                      /* In normal mode, show search button */
+                      <>
+                        <button
+                          onClick={() => setSearchExpanded(true)}
+                          className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 transition-all duration-200 shadow-lg"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                          Search Cards
+                        </button>
+                        {/* Tournament Legal Controls Button next to search */}
+                        {pick3D.length > 0 && (
+                          <button
+                            onClick={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+                            className={`h-10 px-4 rounded font-medium transition-colors ${
+                              tournamentControlsVisible
+                                ? "bg-yellow-600 text-white hover:bg-yellow-500"
+                                : "bg-white/10 text-white hover:bg-white/20"
+                            }`}
+                            title="Show tournament legal cards"
+                          >
+                            Add Standard Cards
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-gray-800/50 to-gray-700/50 rounded-lg backdrop-blur-sm border border-white/10 shadow-xl">
                     {!isDraftMode ? (
@@ -1763,6 +1950,7 @@ export default function DeckEditor3DPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 ml-auto">
+                  
                   {isDraftMode && (
                     <button
                       onClick={() => setIsDraftMode(false)}
@@ -1817,6 +2005,85 @@ export default function DeckEditor3DPage() {
           </div>
         </div>
       </div>
+
+      {/* Tournament Legal Controls - Floating panel on left side */}
+      {tournamentControlsVisible && (
+        <div className="absolute top-20 left-4 z-30 pointer-events-auto">
+          <div className="bg-black/90 backdrop-blur-sm rounded-lg p-4 ring-1 ring-white/30 shadow-xl max-w-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-white text-sm font-medium">
+                Tournament Legal Cards
+              </div>
+              <button
+                onClick={() => setTournamentControlsVisible(false)}
+                className="text-white/60 hover:text-white text-xl leading-none"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            
+            {/* Spellslinger Avatar - Display as card */}
+            <div className="mb-4">
+              <div className="text-xs uppercase opacity-70 text-white mb-2">
+                Default Avatar
+              </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={addSpellslinger}
+                  className="group relative hover:bg-white/10 rounded p-1 transition-colors"
+                  title="Add Spellslinger avatar to your deck"
+                >
+                <div className="relative aspect-[3/4] rounded overflow-hidden bg-black/40">
+                  <Image
+                    src={spellslingerCard?.slug ? `/api/images/${spellslingerCard.slug}` : '/api/assets/card-back.png'}
+                    alt="Spellslinger"
+                    fill
+                    className="object-contain"
+                    sizes="120px"
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-center opacity-80 text-white">
+                  Spellslinger
+                </div>
+              </button>
+              </div>
+            </div>
+
+            {/* Standard Sites */}
+            <div className="text-xs uppercase opacity-70 text-white mb-2">
+              Standard Sites
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {STANDARD_SITE_NAMES.map((name: StandardSiteName) => {
+                const hit = stdSites[name];
+                const isSite = true;
+                return (
+                  <button
+                    key={name}
+                    onClick={() => addStandardSiteByName(name)}
+                    className="group relative hover:bg-white/10 rounded p-1 transition-colors"
+                    title={`Add ${name} to your Atlas`}
+                  >
+                    <div className="relative aspect-[4/3] rounded overflow-hidden bg-black/40 transform rotate-90">
+                      <Image
+                        src={hit?.slug ? `/api/images/${hit.slug}` : '/api/assets/card-back.png'}
+                        alt={name}
+                        fill
+                        className="object-contain"
+                        sizes="80px"
+                      />
+                    </div>
+                    <div className="mt-1 text-[10px] text-center opacity-80 text-white">
+                      {name}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
