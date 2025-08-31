@@ -424,7 +424,7 @@ export default function OnlineMatchPage() {
     matH = baseGridH;
     matW = baseGridH * MAT_RATIO;
   }
-  const minDist = Math.max(4, Math.min(matW, matH) * 0.5);
+  const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
   const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
@@ -809,7 +809,7 @@ export default function OnlineMatchPage() {
                 minDistance={minDist}
                 maxDistance={maxDist}
                 minPolarAngle={0}
-                maxPolarAngle={Math.PI / 2.2}
+                maxPolarAngle={Math.PI / 2.4}
                 // Adjust rotation constraints based on player position
                 minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
                 maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}

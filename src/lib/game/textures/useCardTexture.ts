@@ -43,6 +43,48 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
   return loader;
 }
 
+// Ensure a canonical orientation each time we hand a texture to a consumer.
+// This prevents stray mirroring/flips caused by shared cached Texture instances
+// being mutated elsewhere (e.g. repeat/offset/rotation changed by a material).
+function normalizeTexture(
+  t: Texture,
+  kind: "ktx2" | "raster",
+  gl?: WebGLRenderer
+) {
+  // Color space consistency
+  t.colorSpace = SRGBColorSpace;
+
+  // Reset any transforms that might have been mutated by previous users.
+  t.rotation = 0;
+  // Some code sets center to (0.5, 0.5) for rotations; reset to default
+  t.center.set(0, 0);
+  // Horizontal orientation must never be mirrored for cards
+  t.repeat.x = 1;
+  t.offset.x = 0;
+
+  if (kind === "ktx2") {
+    // For compressed textures, avoid flipY and use UV transform for vertical flip
+    t.flipY = false;
+    t.repeat.y = -1;
+    t.offset.y = 1;
+  } else {
+    // Raster images use flipY
+    t.flipY = true;
+    t.repeat.y = 1;
+    t.offset.y = 0;
+  }
+
+  // Improve readability of card text/details
+  if (gl) {
+    try {
+      const maxAniso = gl.capabilities.getMaxAnisotropy();
+      if (maxAniso && maxAniso > 1) t.anisotropy = Math.min(8, maxAniso);
+    } catch {}
+  }
+
+  t.needsUpdate = true;
+}
+
 async function acquire(
   url: string,
   load: () => Promise<Texture>
@@ -141,25 +183,30 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
           const loader = getKTX2Loader(gl);
           const t = await acquire(ktx2Url, async () => {
             const tex = await loader.loadAsync(ktx2Url);
-            // Align orientation and color across KTX2 and raster
-            tex.colorSpace = SRGBColorSpace;
-            // For compressed textures, prefer UV transform over flipY to avoid double-flip inconsistencies
-            tex.flipY = false;
-            // Robust vertical flip for compressed textures: use UV transform
-            // This avoids relying on flipY semantics for CompressedTexture.
-            tex.repeat.set(1, -1);
-            tex.offset.set(0, 1);
-            // Flip Y for KTX2 to match raster textures on plain planes
-            // This addresses upside-down visuals on card planes.
-            // CompressedTexture supports flipY at sampling time in Three.js.
-            // If you later switch pipelines, revisit this.
-            // Improve readability of card text/details
-            try {
-              const maxAniso = gl.capabilities.getMaxAnisotropy();
-              if (maxAniso && maxAniso > 1)
-                tex.anisotropy = Math.min(8, maxAniso);
-            } catch {}
-            tex.needsUpdate = true;
+            // Dev-only sanity check: ETC1S/UASTC textures should be multiples of 4
+            if (process.env.NODE_ENV !== "production") {
+              try {
+                type TexWithDims = {
+                  image?: { width?: number; height?: number };
+                  source?: { data?: { width?: number; height?: number } };
+                };
+                const twd = tex as unknown as TexWithDims;
+                const iw = twd.image?.width ?? twd.source?.data?.width;
+                const ih = twd.image?.height ?? twd.source?.data?.height;
+                if (
+                  typeof iw === "number" &&
+                  typeof ih === "number" &&
+                  ((iw % 4) !== 0 || (ih % 4) !== 0)
+                ) {
+                  console.warn("[KTX2] Non-multiple-of-4 texture loaded", {
+                    url: ktx2Url,
+                    width: iw,
+                    height: ih,
+                  });
+                }
+              } catch {}
+            }
+            normalizeTexture(tex as Texture, "ktx2", gl);
             return tex as Texture;
           });
           if (cancelled) {
@@ -171,12 +218,8 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
             release(heldKeyRef.current);
           }
           heldKeyRef.current = ktx2Url;
-          // Ensure we rely on UV-based vertical flip only for KTX2
-          t.flipY = false;
-          // Ensure UV-based vertical flip is applied even when sourced from cache
-          t.repeat.set(1, -1);
-          t.offset.set(0, 1);
-          t.needsUpdate = true;
+          // Normalize again in case the cached instance carried mutated state
+          normalizeTexture(t, "ktx2", gl);
           setTex(t);
           return;
         } catch {
@@ -192,17 +235,8 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
         try {
           const t = await acquire(baseUrl, async () => {
             const tex = await new TextureLoader().loadAsync(baseUrl);
-            tex.colorSpace = SRGBColorSpace;
-            // TextureLoader textures default to flipY=true; set explicitly for consistency.
-            tex.flipY = true;
-            // Improve readability of card text/details
-            try {
-              const maxAniso = gl?.capabilities?.getMaxAnisotropy?.();
-              if (maxAniso && maxAniso > 1)
-                tex.anisotropy = Math.min(8, maxAniso);
-            } catch {}
-            tex.needsUpdate = true;
-            return tex;
+            normalizeTexture(tex as Texture, "raster", gl);
+            return tex as Texture;
           });
           if (cancelled) {
             release(baseUrl);
@@ -212,9 +246,8 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
             release(heldKeyRef.current);
           }
           heldKeyRef.current = baseUrl;
-          // Ensure flipY is applied even if texture came from cache
-          t.flipY = true;
-          t.needsUpdate = true;
+          // Normalize again in case the cached instance carried mutated state
+          normalizeTexture(t, "raster", gl);
           setTex(t);
         } catch {
           if (!cancelled) {

@@ -12,6 +12,7 @@ import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import Image from "next/image";
+import CardPreview from "@/components/game/CardPreview";
 import DeckSelector from "@/components/game/DeckSelector";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import StatusBar from "@/components/game/StatusBar";
@@ -266,7 +267,7 @@ export default function PlayPage() {
     matH = baseGridH;
     matW = baseGridH * MAT_RATIO;
   }
-  const minDist = Math.max(4, Math.min(matW, matH) * 0.5);
+  const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
   const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
@@ -386,41 +387,7 @@ export default function PlayPage() {
 
       {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
       {previewCard?.slug && !contextMenu && !selectedHandCard && (
-        <div className="absolute right-3 top-20 z-30 pointer-events-none">
-          {(() => {
-            const isSite = (previewCard?.type || "")
-              .toLowerCase()
-              .includes("site");
-            return (
-              <div className="relative">
-                <div
-                  className={`relative ${
-                    isSite
-                      ? "aspect-[4/3] h-[300px] md:h-[380px]"
-                      : "aspect-[3/4] w-[300px] md:w-[380px]"
-                  } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
-                >
-                  <Image
-                    src={`/api/images/${previewCard.slug}`}
-                    alt={previewCard.name}
-                    fill
-                    sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
-                    className={`${
-                      isSite ? "object-contain rotate-90" : "object-contain"
-                    }`}
-                  />
-                </div>
-                <button
-                  className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
-                  onClick={() => setPreviewCard(null)}
-                  title="Close preview"
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })()}
-        </div>
+        <CardPreview card={previewCard} anchor="top-right" onClose={() => setPreviewCard(null)} />
       )}
 
       {contextMenu && (
@@ -572,7 +539,7 @@ export default function PlayPage() {
           minDistance={minDist}
           maxDistance={maxDist}
           minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.2}
+          maxPolarAngle={Math.PI / 2.4}
         />
       </Canvas>
     </div>

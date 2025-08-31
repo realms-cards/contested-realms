@@ -27,8 +27,9 @@
     - `ktx create` accepts PNG/EXR/RAW inputs. For JPG/WEBP, the script will
       transparently prefer `toktx` if available, otherwise those files are
       skipped with a warning.
-    - Orientation metadata: `toktx` invocations include `--lower_left_maps_to_s0t0`.
-      The `ktx create` path does not currently inject explicit orientation flags.
+    - Orientation: we do NOT write orientation metadata. Our app's loader
+      handles vertical orientation for KTX2 via UV flipping. Keeping the
+      container orientation default avoids double-flip issues.
     - Multiples-of-4: when `--enforceM4` (default true), PNGs are resized down to the
       nearest multiple-of-4 dimensions to satisfy block compression/transcoding requirements.
 */
@@ -205,8 +206,7 @@ function buildToktxArgs(inFile, outFile, resizeGeom) {
   // Color space
   args.push('--assign_oetf', 'srgb', '--assign_primaries', 'bt709');
 
-  // Orientation: map lower-left to s0t0 to match GL convention (avoids vertical mirroring)
-  args.push('--lower_left_maps_to_s0t0');
+  // Orientation: do not write orientation metadata; app handles UV flip for KTX2
 
   // Ensure multiple-of-four dimensions for block-compressed formats if requested
   if (resizeGeom) {
