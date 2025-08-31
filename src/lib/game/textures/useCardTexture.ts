@@ -143,11 +143,16 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
             const tex = await loader.loadAsync(ktx2Url);
             // Align orientation and color across KTX2 and raster
             tex.colorSpace = SRGBColorSpace;
+            // For compressed textures, prefer UV transform over flipY to avoid double-flip inconsistencies
+            tex.flipY = false;
+            // Robust vertical flip for compressed textures: use UV transform
+            // This avoids relying on flipY semantics for CompressedTexture.
+            tex.repeat.set(1, -1);
+            tex.offset.set(0, 1);
             // Flip Y for KTX2 to match raster textures on plain planes
             // This addresses upside-down visuals on card planes.
             // CompressedTexture supports flipY at sampling time in Three.js.
             // If you later switch pipelines, revisit this.
-            tex.flipY = false;
             // Improve readability of card text/details
             try {
               const maxAniso = gl.capabilities.getMaxAnisotropy();
@@ -166,6 +171,12 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
             release(heldKeyRef.current);
           }
           heldKeyRef.current = ktx2Url;
+          // Ensure we rely on UV-based vertical flip only for KTX2
+          t.flipY = false;
+          // Ensure UV-based vertical flip is applied even when sourced from cache
+          t.repeat.set(1, -1);
+          t.offset.set(0, 1);
+          t.needsUpdate = true;
           setTex(t);
           return;
         } catch {
@@ -201,6 +212,9 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
             release(heldKeyRef.current);
           }
           heldKeyRef.current = baseUrl;
+          // Ensure flipY is applied even if texture came from cache
+          t.flipY = true;
+          t.needsUpdate = true;
           setTex(t);
         } catch {
           if (!cancelled) {

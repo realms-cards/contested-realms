@@ -49,7 +49,7 @@ function CardFallback({
   onPointerOver,
   onPointerOut,
   onClick,
-}: Omit<CardPlaneProps, 'slug' | 'textureUrl'>) {
+}: Omit<CardPlaneProps, "slug" | "textureUrl">) {
   return (
     <mesh
       rotation-x={upright ? 0 : -Math.PI / 2}
@@ -65,11 +65,11 @@ function CardFallback({
       castShadow
     >
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial 
-        color="#1f2937" 
-        toneMapped={false} 
-        depthWrite={depthWrite} 
-        depthTest={depthTest} 
+      <meshBasicMaterial
+        color="#1f2937"
+        toneMapped={false}
+        depthWrite={depthWrite}
+        depthTest={depthTest}
       />
     </mesh>
   );
@@ -101,7 +101,7 @@ function CardWithTexture(props: CardPlaneProps) {
   if (!tex) {
     return <CardFallback {...props} />;
   }
-  
+
   return (
     <mesh
       rotation-x={upright ? 0 : -Math.PI / 2}
@@ -117,7 +117,13 @@ function CardWithTexture(props: CardPlaneProps) {
       castShadow
     >
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={tex} toneMapped={false} depthWrite={depthWrite} depthTest={depthTest} transparent={true} />
+      <meshBasicMaterial
+        map={tex}
+        toneMapped={false}
+        depthWrite={depthWrite}
+        depthTest={depthTest}
+        transparent={true}
+      />
     </mesh>
   );
 }

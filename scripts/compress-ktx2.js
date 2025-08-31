@@ -3,7 +3,8 @@
   Compress textures to KTX2 using KTX-Software tools.
 
   Supports both legacy `toktx` and the v4.4+ unified `ktx create` CLI.
-  Automatically prefers `ktx` when available and falls back to `toktx` when needed.
+  Automatically prefers `toktx` when available (broader input support), and
+  falls back to `ktx create` when needed (PNG/EXR/RAW inputs only).
 
   Requirements:
     - macOS: brew install ktx-software
@@ -15,6 +16,7 @@
     node scripts/compress-ktx2.js --format etc1s --mips false --minKB 0 --force
     node scripts/compress-ktx2.js --tool ktx   # force using the new ktx CLI
     node scripts/compress-ktx2.js --tool toktx # force using legacy toktx
+    node scripts/compress-ktx2.js --enforceM4=false  # disable multiple-of-4 resize
 
   Notes:
     - Default format is UASTC (+Zstd) for high-quality card art and text.
@@ -23,8 +25,12 @@
     - Preserves directory structure relative to --input when using --outDir.
     - When no --outDir is given, outputs next to the source as <name>.ktx2.
     - `ktx create` accepts PNG/EXR/RAW inputs. For JPG/WEBP, the script will
-      transparently fall back to `toktx` if available, otherwise those files
-      are skipped with a warning.
+      transparently prefer `toktx` if available, otherwise those files are
+      skipped with a warning.
+    - Orientation metadata: `toktx` invocations include `--lower_left_maps_to_s0t0`.
+      The `ktx create` path does not currently inject explicit orientation flags.
+    - Multiples-of-4: when `--enforceM4` (default true), PNGs are resized down to the
+      nearest multiple-of-4 dimensions to satisfy block compression/transcoding requirements.
 */
 
 const fs = require('node:fs');
@@ -47,6 +53,50 @@ function getFlag(name, def) {
   return next;
 }
 
+// Read PNG dimensions from IHDR (no external deps)
+async function getPngDimensions(inFile) {
+  try {
+    const fh = await fsp.open(inFile, 'r');
+    try {
+      const buf = Buffer.alloc(24 + 17); // sig(8) + len(4) + 'IHDR'(4) + data(13) + CRC(4)
+      await fh.read(buf, 0, buf.length, 0);
+      // Validate PNG signature
+      if (!(buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47)) return null;
+      // IHDR chunk data starts at offset 16
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      return { width: w, height: h };
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function getImageDimensions(inFile) {
+  const ext = path.extname(inFile).toLowerCase();
+  if (ext === '.png') return getPngDimensions(inFile);
+  // For other formats we currently skip probing to avoid extra deps.
+  return null;
+}
+
+function toMultipleOf4(v) {
+  if (v % 4 === 0) return v;
+  return v - (v % 4);
+}
+
+async function computeResizeGeometry(inFile) {
+  if (!ENFORCE_M4) return null;
+  const dim = await getImageDimensions(inFile);
+  if (!dim) return null;
+  const w = toMultipleOf4(dim.width);
+  const h = toMultipleOf4(dim.height);
+  if (w === dim.width && h === dim.height) return null;
+  // Downscale to nearest multiple of 4 to satisfy ETC1S/UASTC block requirements
+  return `${w}x${h}`;
+}
+
 const INPUT_DIR = path.resolve(getFlag('input', 'data'));
 const OUT_DIR = getFlag('outDir', '') ? path.resolve(String(getFlag('outDir'))) : '';
 const FORMAT = String(getFlag('format', 'uastc')).toLowerCase(); // 'uastc' | 'etc1s'
@@ -56,6 +106,7 @@ const DRY = Boolean(getFlag('dryRun', false));
 const MIN_KB = Number(getFlag('minKB', 50));
 const CONCURRENCY = Number(getFlag('jobs', Math.max(1, Math.min(os.cpus().length - 1, 4))));
 const TOOL_PREF = String(getFlag('tool', 'auto')).toLowerCase(); // 'auto' | 'ktx' | 'toktx'
+const ENFORCE_M4 = String(getFlag('enforceM4', 'true')).toLowerCase() !== 'false';
 
 if (!['uastc', 'etc1s'].includes(FORMAT)) {
   console.error(`--format must be 'uastc' or 'etc1s'`);
@@ -91,7 +142,7 @@ const KTX = findKtx();
 let PRIMARY_TOOL = null; // 'ktx' | 'toktx'
 if (TOOL_PREF === 'ktx') PRIMARY_TOOL = KTX ? 'ktx' : null;
 else if (TOOL_PREF === 'toktx') PRIMARY_TOOL = TOKTX ? 'toktx' : null;
-else PRIMARY_TOOL = KTX ? 'ktx' : (TOKTX ? 'toktx' : null);
+else PRIMARY_TOOL = TOKTX ? 'toktx' : (KTX ? 'ktx' : null);
 
 if (!PRIMARY_TOOL) {
   console.error('ERROR: No KTX tools found. Install KTX-Software\n  macOS: brew install ktx-software\n  Releases: https://github.com/KhronosGroup/KTX-Software/releases');
@@ -131,10 +182,12 @@ function makeOutputPath(inFile) {
   return inFile.replace(/\.[^.]+$/, '.ktx2');
 }
 
-function buildToktxArgs(inFile, outFile) {
+function buildToktxArgs(inFile, outFile, resizeGeom) {
+  // toktx expects: options ... outfile infile
   const args = [];
-  // Output file first (toktx syntax)
-  args.push(outFile);
+
+  // Enforce KTX2 container regardless of filename
+  args.push('--t2');
 
   // Compression settings
   if (FORMAT === 'uastc') {
@@ -152,8 +205,16 @@ function buildToktxArgs(inFile, outFile) {
   // Color space
   args.push('--assign_oetf', 'srgb', '--assign_primaries', 'bt709');
 
-  // Input file last
-  args.push(inFile);
+  // Orientation: map lower-left to s0t0 to match GL convention (avoids vertical mirroring)
+  args.push('--lower_left_maps_to_s0t0');
+
+  // Ensure multiple-of-four dimensions for block-compressed formats if requested
+  if (resizeGeom) {
+    args.push('--resize', resizeGeom);
+  }
+
+  // Now positional: outfile then infile
+  args.push(outFile, inFile);
   return args;
 }
 
@@ -258,9 +319,9 @@ async function compressOne(inFile) {
 
   if (PRIMARY_TOOL === 'ktx') {
     if (canUseKtx()) { toolUsed = 'ktx'; cmd = KTX; }
-    else if (canUseToktx()) { toolUsed = 'toktx'; cmd = TOKTX; argv = buildToktxArgs(inFile, outFile); }
+    else if (canUseToktx()) { toolUsed = 'toktx'; cmd = TOKTX; }
   } else {
-    if (canUseToktx()) { toolUsed = 'toktx'; cmd = TOKTX; argv = buildToktxArgs(inFile, outFile); }
+    if (canUseToktx()) { toolUsed = 'toktx'; cmd = TOKTX; }
     else if (canUseKtx()) { toolUsed = 'ktx'; cmd = KTX; }
   }
 
@@ -275,6 +336,9 @@ async function compressOne(inFile) {
   if (toolUsed === 'ktx') {
     const vkFormat = await determineKtxFormat(inFile);
     argv = buildKtxArgs(inFile, outFile, vkFormat);
+  } else if (toolUsed === 'toktx') {
+    const resizeGeom = await computeResizeGeometry(inFile);
+    argv = buildToktxArgs(inFile, outFile, resizeGeom);
   }
 
   return new Promise((resolve) => {
