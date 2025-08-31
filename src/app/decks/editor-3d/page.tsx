@@ -69,6 +69,7 @@ type PickItem = {
   slug: string | null;
   zone: Zone;
   count: number;
+  set?: string; // Preserve set information for metadata fetching
 };
 
 // Using shared card types from '@/lib/game/cardSorting' (Pick3D, CardMeta)
@@ -310,6 +311,16 @@ export default function DeckEditor3DPage() {
   const [deckName, setDeckName] = useState<string>("New Deck");
   const setName = "Beta"; // Use Beta set for metadata (required by API)
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
+  
+  // Debug: Track picks changes
+  useEffect(() => {
+    const pickCount = Object.keys(picks).length;
+    const totalCards = Object.values(picks).reduce((sum, item) => sum + item.count, 0);
+    console.log(`Picks changed: ${pickCount} unique cards, ${totalCards} total cards`);
+    if (pickCount === 0 && totalCards === 0) {
+      console.trace('Picks were cleared - stack trace:');
+    }
+  }, [picks]);
 
   // Search state
   const [q, setQ] = useState("");
@@ -447,7 +458,7 @@ export default function DeckEditor3DPage() {
   
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
-  // Initialize sealed mode from URL parameters
+  // Initialize sealed mode from URL parameters (only once)
   useEffect(() => {
     const sealed = searchParams.get('sealed');
     const matchId = searchParams.get('matchId');
@@ -456,7 +467,8 @@ export default function DeckEditor3DPage() {
     const setMix = searchParams.get('setMix');
     const constructionStartTime = searchParams.get('constructionStartTime');
     
-    if (sealed === 'true' && matchId) {
+    if (sealed === 'true' && matchId && !isSealed) {
+      console.log('Initializing sealed mode...');
       const config = {
         timeLimit: parseInt(timeLimit || '40'),
         constructionStartTime: parseInt(constructionStartTime || Date.now().toString()),
@@ -466,12 +478,12 @@ export default function DeckEditor3DPage() {
       
       setSealedConfig(config);
       setIsSealed(true);
-      setDeckName(`Sealed Match ${matchId.slice(-8)}`);
+      setDeckName("Sealed Deck");
       
       // Generate packs for sealed construction
       generateSealedPacks(config);
     }
-  }, [searchParams]); // generateSealedPacks will be called when available
+  }, [searchParams, isSealed]); // Only initialize if not already sealed
 
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
@@ -628,6 +640,7 @@ export default function DeckEditor3DPage() {
               slug: r.slug,
               zone,
               count: 1,
+              set: r.set, // Preserve set information for metadata fetching
             };
             
         console.log(`Card ${r.name}: ${exists ? 'incremented to' : 'added with'} count ${next.count}`);
@@ -650,11 +663,12 @@ export default function DeckEditor3DPage() {
           : {
               cardId: r.cardId,
               variantId: r.variantId ?? null,
-              name: r.cardName,
+              name: r.cardName || r.name,
               type: r.type,
               slug: r.slug,
               zone,
               count: 1,
+              set: r.set, // Preserve set information for metadata fetching
             };
         return { ...prev, [key]: next };
       });
@@ -715,12 +729,17 @@ export default function DeckEditor3DPage() {
         if (!res.ok) throw new Error(data?.error || "Failed to update deck");
         setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
       } else {
+        // Generate clean filename for sealed mode
+        const finalDeckName = isSealed 
+          ? `Sealed Deck ${new Date().toLocaleDateString()}`
+          : (deckName || "New Deck");
+          
         const res = await fetch("/api/decks", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            name: deckName || "New Deck",
-            format: isDraftMode ? "Sealed" : "Constructed",
+            name: finalDeckName,
+            format: isDraftMode || isSealed ? "Sealed" : "Constructed",
             set: setName,
             cards,
           }),
@@ -728,6 +747,7 @@ export default function DeckEditor3DPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to save deck");
         setDeckId(data.id);
+        setDeckName(data.name); // Use the name returned by the server
         setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
         // Refresh deck list
         try {
@@ -989,66 +1009,18 @@ export default function DeckEditor3DPage() {
     }
   }, [packs, addCardAuto]);
 
-  // Auto-save sealed deck when cards are added/modified
-  const autoSaveSealedDeck = useCallback(async () => {
-    if (!isSealed || !sealedConfig) return;
-    
-    try {
-      // Build cards payload from current 3D picks
-      const agg = new Map<string, { cardId: number; zone: Zone; count: number; variantId?: number }>();
-      for (const p of pick3D) {
-        const inDeck = p.z < 0;
-        const t = (p.card.type || "").toLowerCase();
-        const zone: Zone = inDeck ? (t.includes("site") ? "Atlas" : "Spellbook") : "Sideboard";
-        const variantId = p.card.variantId || undefined;
-        const key = `${p.card.cardId}:${zone}:${variantId ?? "x"}`;
-        const prev = agg.get(key);
-        if (prev) prev.count += 1;
-        else agg.set(key, { cardId: p.card.cardId, zone, count: 1, variantId });
-      }
-      const cards = Array.from(agg.values());
-      
-      const sealedDeckName = `Sealed Deck ${new Date().toLocaleString()}`;
-      
-      // Auto-save the sealed deck
-      const res = await fetch("/api/decks", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: sealedDeckName,
-          format: "Sealed",
-          set: setName,
-          cards,
-        }),
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setDeckId(data.id);
-        setDeckName(data.name);
-        
-        // Refresh deck list
-        try {
-          const res2 = await fetch("/api/decks");
-          const list = await res2.json();
-          if (res2.ok) setDecks(list as DeckListItem[]);
-        } catch {}
-      }
-    } catch (e) {
-      console.error("Auto-save sealed deck failed:", e);
-    }
-  }, [isSealed, sealedConfig, pick3D, setName]);
+  // Removed auto-save sealed deck function - use manual save only
   
-  // Auto-save sealed deck when picks change (debounced)
-  useEffect(() => {
-    if (!isSealed || pick3D.length === 0) return;
-    
-    const timeoutId = setTimeout(() => {
-      autoSaveSealedDeck();
-    }, 2000); // 2 second debounce
-    
-    return () => clearTimeout(timeoutId);
-  }, [isSealed, pick3D, autoSaveSealedDeck]);
+  // Auto-save disabled for sealed mode - use manual save only
+  // useEffect(() => {
+  //   if (!isSealed || pick3D.length === 0) return;
+  //   
+  //   const timeoutId = setTimeout(() => {
+  //     autoSaveSealedDeck();
+  //   }, 2000); // 2 second debounce
+  //   
+  //   return () => clearTimeout(timeoutId);
+  // }, [isSealed, pick3D, autoSaveSealedDeck]);
 
   // Initialize sealed mode (exported for future use)
   // const initSealedMode = useCallback((config: {
@@ -1095,7 +1067,9 @@ export default function DeckEditor3DPage() {
     setPick3D((prev) => [...prev]);
   }, []);
 
-  // Convert deck picks to Pick3D format - all start in sideboard (upper third)
+  // Convert deck picks to Pick3D format - preserve existing positions when possible
+  const positionsRef = useRef<Map<number, { z: number; x: number }>>(new Map());
+  
   useEffect(() => {
     const newPick3D: Pick3D[] = [];
     let id = 1;
@@ -1116,6 +1090,17 @@ export default function DeckEditor3DPage() {
 
     for (const item of Object.values(picks)) {
       for (let i = 0; i < item.count; i++) {
+        // Use existing position if available in sealed mode
+        const existingPos = positionsRef.current.get(item.cardId);
+        const shouldPreservePosition = existingPos && isSealed;
+        
+        const x = shouldPreservePosition ? existingPos.x : -3 + Math.random() * 6;
+        const z = shouldPreservePosition 
+          ? existingPos.z
+          : (isDeckValid && item.zone !== "Sideboard"
+              ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
+              : 0.5 + Math.random() * 3); // Sideboard zone: z from 0.5 to 3.5
+        
         newPick3D.push({
           id: id++,
           card: {
@@ -1127,20 +1112,29 @@ export default function DeckEditor3DPage() {
             type: item.type,
             cardId: item.cardId,
             cardName: item.name,
+            setName: item.set, // Preserve set information for metadata fetching
           },
-          // Position cards in their correct zones based on zone classification
-          x: -3 + Math.random() * 6,
-          z:
-            isDeckValid && item.zone !== "Sideboard"
-              ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
-              : 0.5 + Math.random() * 3, // Sideboard zone: z from 0.5 to 3.5
+          x,
+          z,
         });
       }
     }
 
     setPick3D(newPick3D);
     setNextPickId(id);
-  }, [picks]);
+  }, [picks, isSealed]);
+
+  // Update position cache whenever pick3D changes
+  useEffect(() => {
+    const newPositions = new Map<number, { z: number; x: number }>();
+    for (const pick of pick3D) {
+      const cardId = pick.card.cardId;
+      if (!newPositions.has(cardId)) {
+        newPositions.set(cardId, { z: pick.z, x: pick.x });
+      }
+    }
+    positionsRef.current = newPositions;
+  }, [pick3D]);
 
   // Load deck data and meta (enhanced for multi-set sealed like draft-3d)
   useEffect(() => {
@@ -1167,21 +1161,30 @@ export default function DeckEditor3DPage() {
     
     // For sealed mode, we need to get the correct set for each card
     if (isSealed) {
+      console.log("=== Sealed Mode Metadata Grouping Debug ===");
+      console.log("pick3D cards:", pick3D.length);
+      console.log("yourCounts cards:", yourCounts.length);
+      
       // Group by set from pick3D cards which have set information
       for (const pick of pick3D) {
         const cardSet = pick.card.setName || setName; // fallback to default set
+        console.log(`Card ${pick.card.cardName} (${pick.card.cardId}) → set: ${cardSet}`);
         if (!groups.has(cardSet)) groups.set(cardSet, new Set());
         groups.get(cardSet)!.add(pick.card.cardId);
       }
+      
       // Also include cards from yourCounts if they don't exist in pick3D
       const pick3DCardIds = new Set(pick3D.map(p => p.card.cardId));
       for (const card of yourCounts) {
         if (!pick3DCardIds.has(card.cardId)) {
+          console.log(`Missing card ${card.name} (${card.cardId}) → using default set: ${setName}`);
           // For cards not in pick3D, use the default set
           if (!groups.has(setName)) groups.set(setName, new Set());
           groups.get(setName)!.add(card.cardId);
         }
       }
+      
+      console.log("Final groups:", Array.from(groups.entries()).map(([set, ids]) => `${set}: [${Array.from(ids).join(', ')}]`));
     } else {
       // For non-sealed mode, use single set
       groups.set(setName, new Set(cardIds));

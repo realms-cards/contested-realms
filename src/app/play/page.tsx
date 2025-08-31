@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -11,7 +11,7 @@ import Piles3D from "@/lib/game/components/Piles3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
-import Image from "next/image";
+import CardPlane from "@/lib/game/components/CardPlane";
 import DeckSelector from "@/components/game/DeckSelector";
 import MulliganScreen from "@/components/game/MulliganScreen";
 import StatusBar from "@/components/game/StatusBar";
@@ -19,6 +19,7 @@ import LifeCounters from "@/components/game/LifeCounters";
 import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -61,6 +62,79 @@ export default function PlayPage() {
       setMagnifierDelay(false);
     }
   }, [selectedHandCard]);
+
+  // LocalTransport wiring for offline play
+  const transportRef = useRef<LocalTransport | null>(null);
+  const transport = useMemo(() => {
+    if (!transportRef.current) transportRef.current = new LocalTransport();
+    return transportRef.current;
+  }, []);
+
+  // Batch incoming server patches to a single RAF to avoid rapid re-entrancy
+  const patchQueueRef = useRef<Array<{ patch: unknown; t?: number }>>([]);
+  const patchFlushScheduledRef = useRef<boolean>(false);
+  const queueServerPatch = (patch: unknown, t?: number) => {
+    patchQueueRef.current.push({ patch, t });
+    if (patchFlushScheduledRef.current) return;
+    patchFlushScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      patchFlushScheduledRef.current = false;
+      const items = patchQueueRef.current;
+      patchQueueRef.current = [];
+      for (const it of items) {
+        try {
+          useGameStore.getState().applyServerPatch(it.patch, it.t);
+        } catch (e) {
+          try { console.warn("applyServerPatch failed", e); } catch {}
+        }
+      }
+    });
+  };
+
+  // Inject transport into store once; remove on unmount
+  useEffect(() => {
+    useGameStore.getState().setTransport(transport);
+    return () => {
+      try {
+        useGameStore.getState().setTransport(null);
+      } catch {}
+    };
+  }, [transport]);
+
+  // Connect LocalTransport and subscribe to events
+  useEffect(() => {
+    const unsubscribers: Array<() => void> = [];
+
+    (async () => {
+      try {
+        let displayName = "Offline Player";
+        try { displayName = localStorage.getItem("sorcery:playerName") || displayName; } catch {}
+        await transport.connect({ displayName });
+      } catch (e) {
+        try { console.warn("LocalTransport connect failed", e); } catch {}
+      }
+    })();
+
+    unsubscribers.push(
+      transport.on("statePatch", (p) => {
+        queueServerPatch(p.patch, p.t);
+      }),
+      transport.on("resync", (p) => {
+        const snap = p.snapshot as { game?: unknown; t?: number };
+        if (snap?.game) {
+          queueServerPatch(snap.game, typeof snap.t === "number" ? snap.t : undefined);
+        }
+      }),
+      transport.on("error", (p) => {
+        try { console.warn("local transport error", p); } catch {}
+      })
+    );
+
+    return () => {
+      unsubscribers.forEach((u) => u());
+      transport.disconnect();
+    };
+  }, [transport]);
 
   // Setup state
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
@@ -258,15 +332,21 @@ export default function PlayPage() {
                       : "aspect-[3/4] w-[300px] md:w-[380px]"
                   } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                 >
-                  <Image
-                    src={`/api/images/${previewCard.slug}`}
-                    alt={previewCard.name}
-                    fill
-                    sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
-                    className={`${
-                      isSite ? "object-contain rotate-90" : "object-contain"
-                    }`}
-                  />
+                  <Canvas
+                    camera={{ position: [0, 0, 5], fov: 50 }}
+                    gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
+                  >
+                    <CardPlane
+                      slug={previewCard.slug}
+                      width={isSite ? 4 : 3}
+                      height={isSite ? 3 : 4}
+                      upright
+                      interactive={false}
+                      depthTest={false}
+                      depthWrite={false}
+                      rotationZ={isSite ? Math.PI / 2 : 0}
+                    />
+                  </Canvas>
                 </div>
                 <button
                   className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
@@ -332,15 +412,21 @@ export default function PlayPage() {
                   isSite ? "aspect-[4/3]" : "aspect-[3/4]"
                 } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
               >
-                <Image
-                  src={`/api/images/${c.slug}`}
-                  alt={c.name}
-                  fill
-                  sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
-                  className={`${
-                    isSite ? "object-contain rotate-90" : "object-contain"
-                  }`}
-                />
+                <Canvas
+                  camera={{ position: [0, 0, 5], fov: 50 }}
+                  gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
+                >
+                  <CardPlane
+                    slug={c.slug}
+                    width={isSite ? 4 : 3}
+                    height={isSite ? 3 : 4}
+                    upright
+                    interactive={false}
+                    depthTest={false}
+                    depthWrite={false}
+                    rotationZ={isSite ? Math.PI / 2 : 0}
+                  />
+                </Canvas>
               </div>
               <button
                 className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"

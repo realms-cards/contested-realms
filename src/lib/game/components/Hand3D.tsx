@@ -37,16 +37,15 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
 
-
   const hand = zones[owner].hand || [];
   // Sort hand with sites first, then spells
   const sortedHand = useMemo(() => {
     return [...hand].sort((a, b) => {
       const aIsSite = (a.type || "").toLowerCase().includes("site");
       const bIsSite = (b.type || "").toLowerCase().includes("site");
-      
+
       if (aIsSite && !bIsSite) return -1; // a (site) comes before b (spell)
-      if (!aIsSite && bIsSite) return 1;  // b (site) comes before a (spell)
+      if (!aIsSite && bIsSite) return 1; // b (site) comes before a (spell)
       return 0; // maintain relative order within same type
     });
   }, [hand]);
@@ -54,12 +53,12 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   const { camera } = useThree();
   // Get mouse zone state from store
   const mouseInZone = useGameStore((s) => s.mouseInHandZone);
-  // Get hover count state from store  
+  // Get hover count state from store
   const hoveredCardCount = useGameStore((s) => s.handHoverCount);
   // Simple hover tracking for card pop-up
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
-  
+
   // Smooth transition refs for animations
   const handSpreadLerp = useRef(0); // 0 = compact, 1 = spread
   const handDragStart = useRef<{
@@ -81,18 +80,18 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     function onMove(e: MouseEvent) {
       const h = window.innerHeight || 1;
       const inZone = e.clientY >= h * 0.75;
-      
+
       // Update last known mouse position
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
-      
+
       setMouseInHandZone(inZone);
-      
+
       // Clear any pending cleanup when mouse re-enters zone
       if (inZone && hoverCleanupTimeoutRef.current) {
         window.clearTimeout(hoverCleanupTimeoutRef.current);
         hoverCleanupTimeoutRef.current = null;
       }
-      
+
       // Schedule hover count reset when mouse leaves hand zone
       // Small delay to prevent flicker when moving between cards
       if (!inZone && hoveredCardCount > 0) {
@@ -177,24 +176,35 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
       }[];
 
     // Much gentler fan angle for wider spread
-    const maxAngleWhenShown = Math.min(HAND_MAX_TOTAL_ANGLE * 0.4, n * HAND_STEP_MAX * 0.3);
-    const maxAngleWhenHidden = Math.min(HAND_MAX_TOTAL_ANGLE * 0.2, n * HAND_STEP_MAX * 0.15);
-    const maxAngle = maxAngleWhenHidden + (maxAngleWhenShown - maxAngleWhenHidden) * handSpreadLerp.current;
-    
+    const maxAngleWhenShown = Math.min(
+      HAND_MAX_TOTAL_ANGLE * 0.4,
+      n * HAND_STEP_MAX * 0.3
+    );
+    const maxAngleWhenHidden = Math.min(
+      HAND_MAX_TOTAL_ANGLE * 0.2,
+      n * HAND_STEP_MAX * 0.15
+    );
+    const maxAngle =
+      maxAngleWhenHidden +
+      (maxAngleWhenShown - maxAngleWhenHidden) * handSpreadLerp.current;
+
     // Much wider spacing for proper fan
     const baseSpacingWhenShown = CARD_SHORT * 0.8;
     const baseSpacingWhenHidden = CARD_SHORT * 0.6;
-    const baseSpacing = baseSpacingWhenHidden + (baseSpacingWhenShown - baseSpacingWhenHidden) * handSpreadLerp.current;
+    const baseSpacing =
+      baseSpacingWhenHidden +
+      (baseSpacingWhenShown - baseSpacingWhenHidden) * handSpreadLerp.current;
 
     const stepAngle = n > 1 ? maxAngle / (n - 1) : 0;
     const startAngle = -maxAngle / 2;
-    
+
     return new Array(n).fill(0).map((_, i) => {
       // Map sorted index back to original hand index
       const sortedCard = sortedHand[i];
-      const originalIndex = hand.findIndex(card => card === sortedCard);
+      const originalIndex = hand.findIndex((card) => card === sortedCard);
       const isHovered = originalIndex === hoveredCard;
-      const isSelected = selected && selected.who === owner && selected.index === originalIndex;
+      const isSelected =
+        selected && selected.who === owner && selected.index === originalIndex;
 
       // Fan angle
       const angle = startAngle + i * stepAngle;
@@ -202,19 +212,27 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
 
       // X position with dynamic spacing away from hovered card
       const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
-      
 
       // Y position: smooth interpolated arc + hover pop-up
       const arcMultiplierWhenShown = 1.5;
       const arcMultiplierWhenHidden = 1.0;
-      const arcMultiplier = arcMultiplierWhenHidden + (arcMultiplierWhenShown - arcMultiplierWhenHidden) * handSpreadLerp.current;
+      const arcMultiplier =
+        arcMultiplierWhenHidden +
+        (arcMultiplierWhenShown - arcMultiplierWhenHidden) *
+          handSpreadLerp.current;
       const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * arcMultiplier;
       const y = isHovered ? arcY + CARD_LONG * 0.08 : arcY;
 
       // Scale: hovered card slightly bigger with smoother scaling
       const scale = isHovered ? 1.08 : 1.0;
 
-      return { x, y, rot: isSelected || isHovered ? 0 : rot, scale, originalIndex };
+      return {
+        x,
+        y,
+        rot: isSelected || isHovered ? 0 : rot,
+        scale,
+        originalIndex,
+      };
     });
   }, [sortedHand, hand, hoveredCard, selected, owner]);
 
@@ -275,14 +293,28 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   // Emergency cleanup on any significant game state change
   useEffect(() => {
     // Force cleanup when drags start, selections change, or other major state shifts occur
-    if (dragFromHand || dragFromPile || selected || selectedPermanent || selectedAvatar) {
+    if (
+      dragFromHand ||
+      dragFromPile ||
+      selected ||
+      selectedPermanent ||
+      selectedAvatar
+    ) {
       if (hoveredCardCount > 0) {
-        console.debug('[Hand] Emergency cleanup due to game state change');
+        console.debug("[Hand] Emergency cleanup due to game state change");
         setHandHoverCount(0);
         setHoveredCard(null);
       }
     }
-  }, [dragFromHand, dragFromPile, selected, selectedPermanent, selectedAvatar, hoveredCardCount, setHandHoverCount]);
+  }, [
+    dragFromHand,
+    dragFromPile,
+    selected,
+    selectedPermanent,
+    selectedAvatar,
+    hoveredCardCount,
+    setHandHoverCount,
+  ]);
 
   // Additional failsafe for stuck drag states - no dependencies to prevent re-registration
   useEffect(() => {
@@ -307,9 +339,13 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         const h = window.innerHeight || 1;
         const lastY = lastMousePosRef.current.y;
         const isActuallyInZone = lastY >= h * 0.75;
-        
+
         if (!isActuallyInZone || lastY === 0) {
-          console.debug('[Hand] Force cleaning stuck hover state', { lastY, threshold: h * 0.75, hoveredCardCount });
+          console.debug("[Hand] Force cleaning stuck hover state", {
+            lastY,
+            threshold: h * 0.75,
+            hoveredCardCount,
+          });
           setHandHoverCount(0);
           setHoveredCard(null);
           if (hoverCleanupTimeoutRef.current) {
@@ -331,8 +367,8 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
   // Emergency keyboard shortcut to force hand hiding
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && (hoveredCardCount > 0 || mouseInZone)) {
-        console.debug('[Hand] Emergency cleanup via Escape key');
+      if (e.key === "Escape" && (hoveredCardCount > 0 || mouseInZone)) {
+        console.debug("[Hand] Emergency cleanup via Escape key");
         setHandHoverCount(0);
         setHoveredCard(null);
         setMouseInHandZone(false);
@@ -342,43 +378,45 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         }
       }
     };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [hoveredCardCount, mouseInZone, setHandHoverCount, setMouseInHandZone]);
 
   // Cleanup on window focus/blur events to handle edge cases
   useEffect(() => {
     const handleBlur = () => {
       if (hoveredCardCount > 0) {
-        console.debug('[Hand] Cleanup on window blur');
+        console.debug("[Hand] Cleanup on window blur");
         setHandHoverCount(0);
         setHoveredCard(null);
       }
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && hoveredCardCount > 0) {
-        console.debug('[Hand] Cleanup on visibility hidden');
+      if (document.visibilityState === "hidden" && hoveredCardCount > 0) {
+        console.debug("[Hand] Cleanup on visibility hidden");
         setHandHoverCount(0);
         setHoveredCard(null);
       }
     };
 
-    window.addEventListener('blur', handleBlur);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+    window.addEventListener("blur", handleBlur);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
-      window.removeEventListener('blur', handleBlur);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [hoveredCardCount, setHandHoverCount]);
 
   useEffect(
     () => () => {
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
-      if (hoverCleanupTimeoutRef.current) window.clearTimeout(hoverCleanupTimeoutRef.current);
-      if (forceCleanupIntervalRef.current) window.clearInterval(forceCleanupIntervalRef.current);
+      if (hoverCleanupTimeoutRef.current)
+        window.clearTimeout(hoverCleanupTimeoutRef.current);
+      if (forceCleanupIntervalRef.current)
+        window.clearInterval(forceCleanupIntervalRef.current);
     },
     []
   );
@@ -398,7 +436,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = (c.type || "").toLowerCase().includes("site");
         const isCardHovered = originalIndex === hoveredCard;
-        
+
         const baseScale = HAND_CARD_SCALE;
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
@@ -512,7 +550,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                 >
                   <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
                   <meshBasicMaterial
-                    color={"#1f2937"}
+                    color={"#fff00"}
                     depthTest={false}
                     depthWrite={false}
                   />
