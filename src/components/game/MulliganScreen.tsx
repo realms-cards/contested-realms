@@ -14,6 +14,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
   const mulliganDrawn = useGameStore((s) => s.mulliganDrawn);
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
   const finalizeMulligan = useGameStore((s) => s.finalizeMulligan);
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   
   const [selP1, setSelP1] = useState<number[]>([]);
   const [doneP1, setDoneP1] = useState<boolean>(false);
@@ -44,18 +45,16 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
             Click cards to select for mulligan.
           </div>
           
-          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16">
+          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
             {(zones.p1.hand || []).map((c, i) => {
               const isSite = (c.type || "").toLowerCase().includes("site");
               const picked = selP1.includes(i);
               return (
                 <button
                   key={`${c.cardId}-${i}`}
-                  className={`relative shrink-0 p-1 rounded border transition-transform duration-150 origin-center hover:scale-[2] hover:z-50 ${
-                    picked
-                      ? "border-amber-400 bg-amber-500/20"
-                      : "border-white/15 bg-white/10 hover:bg-white/20"
-                  }`}
+                  className={`relative flex-shrink-0 transition-all duration-200 ${
+                    !doneP1 ? "hover:scale-105 hover:-translate-y-4" : ""
+                  } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""}`}
                   title={c.name}
                   onClick={() =>
                     setSelP1((arr) =>
@@ -65,21 +64,23 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     )
                   }
                   disabled={mulligans.p1 <= 0 || doneP1}
+                  onMouseEnter={() => setPreviewCard(c)}
+                  onMouseLeave={() => setPreviewCard(null)}
                 >
                   {c.slug ? (
                     <div
                       className={`relative ${
-                        isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] h-28"
-                      } rounded overflow-visible`}
+                        isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
+                      } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
+                        picked ? "opacity-70" : ""
+                      }`}
                     >
                       <Image
                         src={`/api/images/${c.slug}`}
                         alt={c.name}
                         fill
-                        sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                        className={`${
-                          isSite ? "object-contain rotate-90" : "object-cover"
-                        }`}
+                        sizes="120px"
+                        className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
                       />
                     </div>
                   ) : (
@@ -130,22 +131,22 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                   return (
                     <div
                       key={`${c.cardId}-d-${i}`}
-                      className="relative shrink-0 p-1 rounded border border-emerald-400 bg-emerald-500/10 transition-transform duration-150 origin-center hover:scale-[2] hover:z-50"
+                      className="relative flex-shrink-0 transition-all duration-200 hover:scale-105 hover:-translate-y-2"
+                      onMouseEnter={() => setPreviewCard(c)}
+                      onMouseLeave={() => setPreviewCard(null)}
                     >
                       {c.slug ? (
                         <div
                           className={`relative ${
-                            isSite ? "aspect-[4/3] w-24" : "aspect-[3/4] h-24"
-                          } rounded overflow-visible`}
+                            isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] w-20"
+                          } rounded-lg overflow-hidden ring-1 ring-emerald-400/40 shadow`}
                         >
                           <Image
                             src={`/api/images/${c.slug}`}
                             alt={c.name}
                             fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${
-                              isSite ? "object-contain rotate-90" : "object-cover"
-                            }`}
+                            sizes="100px"
+                            className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
                           />
                         </div>
                       ) : (
@@ -173,18 +174,16 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
             Click cards to select for mulligan.
           </div>
           
-          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16">
+          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
             {(zones.p2.hand || []).map((c, i) => {
               const isSite = (c.type || "").toLowerCase().includes("site");
               const picked = selP2.includes(i);
               return (
                 <button
                   key={`${c.cardId}-${i}`}
-                  className={`relative shrink-0 p-1 rounded border transition-transform duration-150 origin-center hover:scale-[2] hover:z-50 ${
-                    picked
-                      ? "border-amber-400 bg-amber-500/20"
-                      : "border-white/15 bg-white/10 hover:bg-white/20"
-                  }`}
+                  className={`relative flex-shrink-0 transition-all duration-200 ${
+                    !doneP2 ? "hover:scale-105 hover:-translate-y-4" : ""
+                  } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""}`}
                   title={c.name}
                   onClick={() =>
                     setSelP2((arr) =>
@@ -194,21 +193,23 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     )
                   }
                   disabled={mulligans.p2 <= 0 || doneP2}
+                  onMouseEnter={() => setPreviewCard(c)}
+                  onMouseLeave={() => setPreviewCard(null)}
                 >
                   {c.slug ? (
                     <div
                       className={`relative ${
-                        isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] h-28"
-                      } rounded overflow-visible`}
+                        isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
+                      } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
+                        picked ? "opacity-70" : ""
+                      }`}
                     >
                       <Image
                         src={`/api/images/${c.slug}`}
                         alt={c.name}
                         fill
-                        sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                        className={`${
-                          isSite ? "object-contain rotate-90" : "object-cover"
-                        }`}
+                        sizes="120px"
+                        className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
                       />
                     </div>
                   ) : (
@@ -259,22 +260,22 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                   return (
                     <div
                       key={`${c.cardId}-d-${i}`}
-                      className="relative shrink-0 p-1 rounded border border-emerald-400 bg-emerald-500/10 transition-transform duration-150 origin-center hover:scale-[2] hover:z-50"
+                      className="relative flex-shrink-0 transition-all duration-200 hover:scale-105 hover:-translate-y-2"
+                      onMouseEnter={() => setPreviewCard(c)}
+                      onMouseLeave={() => setPreviewCard(null)}
                     >
                       {c.slug ? (
                         <div
                           className={`relative ${
-                            isSite ? "aspect-[4/3] w-24" : "aspect-[3/4] h-24"
-                          } rounded overflow-visible`}
+                            isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] w-20"
+                          } rounded-lg overflow-hidden ring-1 ring-emerald-400/40 shadow`}
                         >
                           <Image
                             src={`/api/images/${c.slug}`}
                             alt={c.name}
                             fill
-                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
-                            className={`${
-                              isSite ? "object-contain rotate-90" : "object-cover"
-                            }`}
+                            sizes="100px"
+                            className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
                           />
                         </div>
                       ) : (

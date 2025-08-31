@@ -9,17 +9,20 @@ interface OnlineMulliganScreenProps {
   myPlayerKey: PlayerKey;
   playerNames: { p1: string; p2: string };
   onStartGame: () => void;
+  finalizeLabel?: string;
 }
 
 export default function OnlineMulliganScreen({ 
   myPlayerKey, 
   playerNames, 
-  onStartGame 
+  onStartGame, 
+  finalizeLabel = "Start Game",
 }: OnlineMulliganScreenProps) {
   const zones = useGameStore((s) => s.zones);
   const mulligans = useGameStore((s) => s.mulligans);
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
   const finalizeMulligan = useGameStore((s) => s.finalizeMulligan);
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
@@ -99,6 +102,8 @@ export default function OnlineMulliganScreen({
                   }`}
                   onClick={() => handleCardClick(i)}
                   disabled={done}
+                  onMouseEnter={() => setPreviewCard(card)}
+                  onMouseLeave={() => setPreviewCard(null)}
                 >
                   <div
                     className={`relative ${
@@ -156,7 +161,7 @@ export default function OnlineMulliganScreen({
                 disabled={submitted}
                 title={submitted ? "Waiting for other players to finish mulligans" : undefined}
               >
-                {submitted ? "Ready — Waiting for others…" : "Start Game"}
+                {submitted ? "Ready — Waiting for others…" : finalizeLabel}
               </button>
             )}
           </div>

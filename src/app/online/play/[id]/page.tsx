@@ -554,7 +554,7 @@ export default function OnlineMatchPage() {
 
           {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
           {previewCard?.slug && !contextMenu && !selectedHandCard && (
-            <div className="absolute right-3 top-20 z-20 pointer-events-none">
+            <div className="absolute right-3 top-20 z-30 pointer-events-none">
               {(() => {
                 const isSite = (previewCard?.type || "")
                   .toLowerCase()
@@ -634,7 +634,7 @@ export default function OnlineMatchPage() {
               return null;
             const isSite = (c.type || "").toLowerCase().includes("site");
             return (
-              <div className="absolute right-3 top-20 z-20 pointer-events-none">
+              <div className="absolute right-3 top-20 z-30 pointer-events-none">
                 <div className="relative">
                   <div
                     className={`relative ${
