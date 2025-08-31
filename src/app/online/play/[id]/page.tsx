@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useOnline } from "../../layout";
 import { useGameStore } from "@/lib/game/store";
@@ -12,7 +12,7 @@ import Hand3D from "@/lib/game/components/Hand3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
+import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import Image from "next/image";
 import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
@@ -270,6 +270,7 @@ export default function OnlineMatchPage() {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const matchEnded = useGameStore((s) => s.matchEnded);
   const winner = useGameStore((s) => s.winner);
+  const boardSize = useGameStore((s) => s.board.size);
   // Extract store-derived dependencies for effects to satisfy ESLint
   const playersState = useGameStore((s) => s.players);
   const currentPlayerState = useGameStore((s) => s.currentPlayer);
@@ -413,6 +414,32 @@ export default function OnlineMatchPage() {
     playersState,
     currentPlayerState,
   ]);
+
+  // Compute playmat extents and zoom limits for camera clamping
+  const baseGridW = boardSize.w * BASE_TILE_SIZE;
+  const baseGridH = boardSize.h * BASE_TILE_SIZE;
+  let matW = baseGridW;
+  let matH = baseGridW / MAT_RATIO;
+  if (matH < baseGridH) {
+    matH = baseGridH;
+    matW = baseGridH * MAT_RATIO;
+  }
+  const minDist = Math.max(4, Math.min(matW, matH) * 0.5);
+  const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+  const clampControls = useCallback(() => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const halfW = matW / 2;
+    const halfH = matH / 2;
+    const t = c.target;
+    let changed = false;
+    if (t.x < -halfW) { t.x = -halfW; changed = true; }
+    else if (t.x > halfW) { t.x = halfW; changed = true; }
+    if (t.z < -halfH) { t.z = -halfH; changed = true; }
+    else if (t.z > halfH) { t.z = halfH; changed = true; }
+    if (t.y !== 0) { t.y = 0; changed = true; }
+    if (changed) c.update();
+  }, [matW, matH]);
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
@@ -778,8 +805,11 @@ export default function OnlineMatchPage() {
                 }
                 enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                 enableDamping={false}
+                onChange={clampControls}
+                minDistance={minDist}
+                maxDistance={maxDist}
                 minPolarAngle={0}
-                maxPolarAngle={Math.PI / 2.05}
+                maxPolarAngle={Math.PI / 2.2}
                 // Adjust rotation constraints based on player position
                 minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
                 maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
