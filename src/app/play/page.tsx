@@ -10,7 +10,7 @@ import Hand3D from "@/lib/game/components/Hand3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
+import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import Image from "next/image";
 import DeckSelector from "@/components/game/DeckSelector";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
@@ -43,6 +43,7 @@ export default function PlayPage() {
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const players = useGameStore((s) => s.players);
+  const boardSize = useGameStore((s) => s.board.size);
   // Selected hand card (for magnifier) - show for current player
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const [magnifierDelay, setMagnifierDelay] = useState(false);
@@ -255,6 +256,45 @@ export default function PlayPage() {
 
     document.title = title;
   }, [setupOpen, players.p1?.life, players.p2?.life, currentPlayer]);
+
+  // Compute playmat world extents from board size for camera clamping
+  const baseGridW = boardSize.w * BASE_TILE_SIZE;
+  const baseGridH = boardSize.h * BASE_TILE_SIZE;
+  let matW = baseGridW;
+  let matH = baseGridW / MAT_RATIO;
+  if (matH < baseGridH) {
+    matH = baseGridH;
+    matW = baseGridH * MAT_RATIO;
+  }
+  const minDist = Math.max(4, Math.min(matW, matH) * 0.5);
+  const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+  const clampControls = useCallback(() => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const halfW = matW / 2;
+    const halfH = matH / 2;
+    const t = c.target;
+    let changed = false;
+    if (t.x < -halfW) {
+      t.x = -halfW;
+      changed = true;
+    } else if (t.x > halfW) {
+      t.x = halfW;
+      changed = true;
+    }
+    if (t.z < -halfH) {
+      t.z = -halfH;
+      changed = true;
+    } else if (t.z > halfH) {
+      t.z = halfH;
+      changed = true;
+    }
+    if (t.y !== 0) {
+      t.y = 0;
+      changed = true;
+    }
+    if (changed) c.update();
+  }, [matW, matH]);
 
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full">
@@ -528,8 +568,11 @@ export default function PlayPage() {
           }
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
+          onChange={clampControls}
+          minDistance={minDist}
+          maxDistance={maxDist}
           minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.05}
+          maxPolarAngle={Math.PI / 2.2}
         />
       </Canvas>
     </div>
