@@ -13,7 +13,7 @@ import Piles3D from "@/lib/game/components/Piles3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
-import CardPlane from "@/lib/game/components/CardPlane";
+import Image from "next/image";
 import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
@@ -568,21 +568,15 @@ export default function OnlineMatchPage() {
                           : "aspect-[3/4] w-[300px] md:w-[380px]"
                       } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                     >
-                      <Canvas
-                        camera={{ position: [0, 0, 5], fov: 50 }}
-                        gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                      >
-                        <CardPlane
-                          slug={previewCard.slug}
-                          width={isSite ? 4 : 3}
-                          height={isSite ? 3 : 4}
-                          upright
-                          interactive={false}
-                          depthTest={false}
-                          depthWrite={false}
-                          rotationZ={isSite ? Math.PI / 2 : 0}
-                        />
-                      </Canvas>
+                      <Image
+                        src={`/api/images/${previewCard.slug}`}
+                        alt={previewCard.name}
+                        fill
+                        sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
+                        className={`${
+                          isSite ? "object-contain rotate-90" : "object-contain"
+                        }`}
+                      />
                     </div>
                     <button
                       className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
@@ -647,21 +641,15 @@ export default function OnlineMatchPage() {
                       isSite ? "aspect-[4/3]" : "aspect-[3/4]"
                     } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                   >
-                    <Canvas
-                      camera={{ position: [0, 0, 5], fov: 50 }}
-                      gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                    >
-                      <CardPlane
-                        slug={c.slug}
-                        width={isSite ? 4 : 3}
-                        height={isSite ? 3 : 4}
-                        upright
-                        interactive={false}
-                        depthTest={false}
-                        depthWrite={false}
-                        rotationZ={isSite ? Math.PI / 2 : 0}
-                      />
-                    </Canvas>
+                    <Image
+                      src={`/api/images/${c.slug}`}
+                      alt={c.name}
+                      fill
+                      sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
+                      className={`${
+                        isSite ? "object-contain rotate-90" : "object-contain"
+                      }`}
+                    />
                   </div>
                   <button
                     className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"

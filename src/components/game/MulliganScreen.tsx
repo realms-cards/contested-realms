@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Canvas } from "@react-three/fiber";
-import CardPlane from "@/lib/game/components/CardPlane";
+import Image from "next/image";
 import { useGameStore } from "@/lib/game/store";
 
 interface MulliganScreenProps {
@@ -73,22 +72,15 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                         isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] h-28"
                       } rounded overflow-visible`}
                     >
-                      <Canvas
-                        className="pointer-events-none"
-                        camera={{ position: [0, 0, 5], fov: 50 }}
-                        gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                      >
-                        <CardPlane
-                          slug={c.slug}
-                          width={isSite ? 4 : 3}
-                          height={isSite ? 3 : 4}
-                          upright
-                          interactive={false}
-                          depthTest={false}
-                          depthWrite={false}
-                          rotationZ={isSite ? Math.PI / 2 : 0}
-                        />
-                      </Canvas>
+                      <Image
+                        src={`/api/images/${c.slug}`}
+                        alt={c.name}
+                        fill
+                        sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                        className={`${
+                          isSite ? "object-contain rotate-90" : "object-cover"
+                        }`}
+                      />
                     </div>
                   ) : (
                     <div className="w-24 h-32 grid place-items-center rounded bg-white/10 text-xs opacity-80">
@@ -146,22 +138,15 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                             isSite ? "aspect-[4/3] w-24" : "aspect-[3/4] h-24"
                           } rounded overflow-visible`}
                         >
-                          <Canvas
-                            className="pointer-events-none"
-                            camera={{ position: [0, 0, 5], fov: 50 }}
-                            gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                          >
-                            <CardPlane
-                              slug={c.slug}
-                              width={isSite ? 4 : 3}
-                              height={isSite ? 3 : 4}
-                              upright
-                              interactive={false}
-                              depthTest={false}
-                              depthWrite={false}
-                              rotationZ={isSite ? Math.PI / 2 : 0}
-                            />
-                          </Canvas>
+                          <Image
+                            src={`/api/images/${c.slug}`}
+                            alt={c.name}
+                            fill
+                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                            className={`${
+                              isSite ? "object-contain rotate-90" : "object-cover"
+                            }`}
+                          />
                         </div>
                       ) : (
                         <div className="w-20 h-28 grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
@@ -216,22 +201,15 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                         isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] h-28"
                       } rounded overflow-visible`}
                     >
-                      <Canvas
-                        className="pointer-events-none"
-                        camera={{ position: [0, 0, 5], fov: 50 }}
-                        gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                      >
-                        <CardPlane
-                          slug={c.slug}
-                          width={isSite ? 4 : 3}
-                          height={isSite ? 3 : 4}
-                          upright
-                          interactive={false}
-                          depthTest={false}
-                          depthWrite={false}
-                          rotationZ={isSite ? Math.PI / 2 : 0}
-                        />
-                      </Canvas>
+                      <Image
+                        src={`/api/images/${c.slug}`}
+                        alt={c.name}
+                        fill
+                        sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                        className={`${
+                          isSite ? "object-contain rotate-90" : "object-cover"
+                        }`}
+                      />
                     </div>
                   ) : (
                     <div className="w-24 h-32 grid place-items-center rounded bg-white/10 text-xs opacity-80">
@@ -289,22 +267,15 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                             isSite ? "aspect-[4/3] w-24" : "aspect-[3/4] h-24"
                           } rounded overflow-visible`}
                         >
-                          <Canvas
-                            className="pointer-events-none"
-                            camera={{ position: [0, 0, 5], fov: 50 }}
-                            gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                          >
-                            <CardPlane
-                              slug={c.slug}
-                              width={isSite ? 4 : 3}
-                              height={isSite ? 3 : 4}
-                              upright
-                              interactive={false}
-                              depthTest={false}
-                              depthWrite={false}
-                              rotationZ={isSite ? Math.PI / 2 : 0}
-                            />
-                          </Canvas>
+                          <Image
+                            src={`/api/images/${c.slug}`}
+                            alt={c.name}
+                            fill
+                            sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
+                            className={`${
+                              isSite ? "object-contain rotate-90" : "object-cover"
+                            }`}
+                          />
                         </div>
                       ) : (
                         <div className="w-20 h-28 grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
