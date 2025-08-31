@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Canvas } from "@react-three/fiber";
-import CardPlane from "@/lib/game/components/CardPlane";
+import Image from "next/image";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 
@@ -108,28 +107,15 @@ export default function OnlineMulliganScreen({
                       isSelected ? "opacity-70" : ""
                     }`}
                   >
-                    {card.slug ? (
-                      <Canvas
-                        className="pointer-events-none"
-                        camera={{ position: [0, 0, 5], fov: 50 }}
-                        gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-                      >
-                        <CardPlane
-                          slug={card.slug}
-                          width={isSite ? 4 : 3}
-                          height={isSite ? 3 : 4}
-                          upright
-                          interactive={false}
-                          depthTest={false}
-                          depthWrite={false}
-                          rotationZ={isSite ? Math.PI / 2 : 0}
-                        />
-                      </Canvas>
-                    ) : (
-                      <div className="absolute inset-0 grid place-items-center text-[10px] text-white/70 bg-white/10">
-                        {card.name}
-                      </div>
-                    )}
+                    <Image
+                      src={`/api/images/${card.slug}`}
+                      alt={card.name}
+                      fill
+                      sizes="120px"
+                      className={`object-contain ${
+                        isSite ? "rotate-90" : ""
+                      }`}
+                    />
                     {isSelected && (
                       <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
                         <div className="text-white text-xs font-bold bg-red-600 rounded px-2 py-1">

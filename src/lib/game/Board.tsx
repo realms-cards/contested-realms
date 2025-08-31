@@ -524,7 +524,7 @@ export default function Board() {
                   {(() => {
                     const rotZ =
                       -Math.PI / 2 +
-                      (site.owner === 1 ? Math.PI : 0) +
+                      (site.owner === 1 ? 0 : Math.PI) +
                       (site.tapped ? Math.PI / 2 : 0);
                     const isSel =
                       !!contextMenu &&
@@ -614,7 +614,7 @@ export default function Board() {
                     selectedPermanent.at === key &&
                     selectedPermanent.index === idx;
                   const rotZ =
-                    (owner === 1 ? Math.PI : 0) +
+                    (owner === 1 ? 0 : Math.PI) +
                     (p.tapped ? Math.PI / 2 : 0) +
                     (p.tilt || 0); // orient bottom to owner + tap + slight random tilt
                   const offX = p.offset?.[0] ?? 0;
@@ -911,7 +911,7 @@ export default function Board() {
           <group key={`avatar-${who}`}>
             {(() => {
               const rotZ =
-                (who === "p1" ? Math.PI : 0) + (a.tapped ? Math.PI / 2 : 0);
+                (who === "p1" ? 0 : Math.PI) + (a.tapped ? Math.PI / 2 : 0);
               const isSel =
                 selectedAvatar === who ||
                 (!!contextMenu &&
@@ -1129,7 +1129,7 @@ export default function Board() {
                 const isSite = (selected.card.type || "")
                   .toLowerCase()
                   .includes("site");
-                const ownerRot = currentPlayer === 1 ? Math.PI : 0;
+                const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
                 const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!selected.card.slug) return null;
                 return (
@@ -1144,7 +1144,7 @@ export default function Board() {
               if (dragFromPile?.card) {
                 const c = dragFromPile.card;
                 const isSite = (c.type || "").toLowerCase().includes("site");
-                const ownerRot = currentPlayer === 1 ? Math.PI : 0;
+                const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
                 const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!c.slug) return null;
                 return (
