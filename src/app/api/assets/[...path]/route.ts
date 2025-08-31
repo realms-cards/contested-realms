@@ -3,8 +3,9 @@ import fs from "fs";
 import path from "path";
 
 export const dynamic = "force-dynamic";
-
-const ROOT = path.join(process.cwd(), "data");
+ 
+const ROOT_DATA = path.join(process.cwd(), "data");
+const ROOT_KTX2 = path.join(process.cwd(), "data-ktx2");
 const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "ktx2"]);
 
 function contentTypeFor(ext: string): string {
@@ -34,19 +35,57 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
       return new Response("Bad path", { status: 400 });
     }
 
-    const filePath = path.join(ROOT, ...segments);
-    const ext = path.extname(filePath).slice(1).toLowerCase();
-    if (!ALLOWED_EXTS.has(ext)) {
+    // Determine requested extension from the last segment
+    const last = segments[segments.length - 1];
+    const requestedExt = path.extname(last).slice(1).toLowerCase();
+    if (!ALLOWED_EXTS.has(requestedExt)) {
       return new Response("Unsupported type", { status: 415 });
     }
 
-    await fs.promises.access(filePath, fs.constants.R_OK);
-    const buf = await fs.promises.readFile(filePath);
+    // Optional flag to prefer ktx2 variants (mirrors /api/images behavior)
+    const wantKtx2 = (() => {
+      try {
+        const u = new URL(_req.url);
+        const v = u.searchParams.get("ktx2");
+        return v === "1" || v === "true" || requestedExt === "ktx2";
+      } catch {
+        return requestedExt === "ktx2";
+      }
+    })();
+
+    const roots = wantKtx2 ? [ROOT_KTX2, ROOT_DATA] : [ROOT_DATA];
+
+    // Build candidate paths. If ?ktx2 was requested for a raster path, also try swapping extension to .ktx2
+    const candidates: string[] = [];
+    for (const root of roots) {
+      if (wantKtx2 && requestedExt !== "ktx2") {
+        const ktx2Name = last.replace(/\.[^.]+$/, ".ktx2");
+        const ktx2Path = path.join(root, ...segments.slice(0, -1), ktx2Name);
+        candidates.push(ktx2Path);
+      }
+      candidates.push(path.join(root, ...segments));
+    }
+
+    let found: string | null = null;
+    for (const p of candidates) {
+      try {
+        await fs.promises.access(p, fs.constants.R_OK);
+        found = p;
+        break;
+      } catch {}
+    }
+
+    if (!found) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const buf = await fs.promises.readFile(found);
     const body = new Uint8Array(buf);
+    const outExt = path.extname(found).slice(1).toLowerCase();
 
     return new Response(body, {
       headers: {
-        "Content-Type": contentTypeFor(ext),
+        "Content-Type": contentTypeFor(outExt),
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });

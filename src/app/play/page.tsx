@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -13,7 +13,7 @@ import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H } from "@/lib/game/constants";
 import Image from "next/image";
 import DeckSelector from "@/components/game/DeckSelector";
-import MulliganScreen from "@/components/game/MulliganScreen";
+import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import StatusBar from "@/components/game/StatusBar";
 import LifeCounters from "@/components/game/LifeCounters";
 import ContextMenu from "@/components/game/ContextMenu";
@@ -140,6 +140,9 @@ export default function PlayPage() {
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
   const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
+  // Hotseat: Player 1 performs mulligans for both players; start after both are ready
+  const [p1Ready, setP1Ready] = useState<boolean>(false);
+  const [p2Ready, setP2Ready] = useState<boolean>(false);
 
   // Event console: autoscroll and text formatting
   const eventsRef = useRef<HTMLDivElement | null>(null);
@@ -209,10 +212,17 @@ export default function PlayPage() {
     };
   }, [setDragFromHand, setDragFromPile]);
 
-  function startGame() {
+  const startGame = useCallback(() => {
     setSetupOpen(false);
     setPhase("Main");
-  }
+  }, [setPhase]);
+
+  // Start once both players are confirmed in hotseat mulligan
+  useEffect(() => {
+    if (prepared && p1Ready && p2Ready) {
+      startGame();
+    }
+  }, [prepared, p1Ready, p2Ready, startGame]);
 
   function resetCamera() {
     if (controlsRef.current) {
@@ -254,7 +264,25 @@ export default function PlayPage() {
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
           ) : (
-            <MulliganScreen onStartGame={startGame} />
+            <div className="w-full max-w-6xl mx-auto space-y-4">
+              <OnlineMulliganScreen
+                myPlayerKey="p1"
+                playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                finalizeLabel="Ready"
+                onStartGame={() => setP1Ready(true)}
+              />
+              <OnlineMulliganScreen
+                myPlayerKey="p2"
+                playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                finalizeLabel="Ready"
+                onStartGame={() => setP2Ready(true)}
+              />
+              {!(p1Ready && p2Ready) && (
+                <div className="text-center text-xs opacity-80 text-white">
+                  Hotseat: Player 1 confirms mulligans for both players. Click Ready on each to begin.
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -318,7 +346,7 @@ export default function PlayPage() {
 
       {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
       {previewCard?.slug && !contextMenu && !selectedHandCard && (
-        <div className="absolute right-3 top-20 z-20 pointer-events-none">
+        <div className="absolute right-3 top-20 z-30 pointer-events-none">
           {(() => {
             const isSite = (previewCard?.type || "")
               .toLowerCase()
@@ -399,7 +427,7 @@ export default function PlayPage() {
           return null;
         const isSite = (c.type || "").toLowerCase().includes("site");
         return (
-          <div className="absolute right-3 top-20 z-20 pointer-events-none">
+          <div className="absolute right-3 top-20 z-30 pointer-events-none">
             <div className="relative">
               <div
                 className={`relative ${
