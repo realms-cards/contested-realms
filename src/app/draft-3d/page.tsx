@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import CardPreview from "@/components/game/CardPreview";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -756,7 +757,9 @@ export default function Draft3DPage() {
       }
       setSaveMsg(`Saved deck ${data.name} (id: ${data.id})${botMsg}`);
       // Navigate to 3D deck editor with new deck loaded in draft completion mode
-      router.push(`/decks/editor-3d?id=${encodeURIComponent(data.id)}&from=draft`);
+      router.push(
+        `/decks/editor-3d?id=${encodeURIComponent(data.id)}&from=draft`
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -922,9 +925,7 @@ export default function Draft3DPage() {
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
         {/* Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
-          <div className="text-3xl font-fantaisie text-white">
-            Draft
-          </div>
+          <div className="text-3xl font-fantaisie text-white">Draft</div>
 
           {/* Sorting controls */}
           {pick3D.length > 0 && (
@@ -1228,33 +1229,7 @@ export default function Draft3DPage() {
 
         {/* Hover Preview Overlay (hidden while dragging) */}
         {hoverPreview && !orbitLocked && (
-          <div className="absolute right-3 bottom-3 z-20 pointer-events-none">
-            {(() => {
-              const isSite = (hoverPreview.type || "")
-                .toLowerCase()
-                .includes("site");
-              // Clamp size and preserve aspect; use padding-bottom to enforce aspect box
-              const base = isSite
-                ? "w-[30vw] max-w-[600px] min-w-[200px] aspect-[4/3]" // matches rotated site (4:3)
-                : "w-[22vw] max-w-[360px] min-w-[180px] aspect-[3/4]"; // portrait cards
-              return (
-                <div
-                  className={`relative ${base} rounded-xl overflow-hidden shadow-2xl ${
-                    isSite ? "rotate-90" : ""
-                  }`}
-                >
-                  <Image
-                    src={`/api/images/${hoverPreview.slug}`}
-                    alt={hoverPreview.name}
-                    fill
-                    sizes="(max-width:640px) 50vw, (max-width:1024px) 30vw, 25vw"
-                    className={`${isSite ? "object-contain" : "object-cover"}`}
-                    priority
-                  />
-                </div>
-              );
-            })()}
-          </div>
+          <CardPreview card={hoverPreview} anchor="top-right" />
         )}
 
         {/* Pack selection overlay at start of each round */}
