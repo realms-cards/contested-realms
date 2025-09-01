@@ -155,7 +155,7 @@ export default function OnlineConsole({
                   const isSearch = low.startsWith("search:");
                   return (
                     <div
-                      key={`${ev.id}-${index}-${ev.timestamp || Date.now()}`}
+                      key={`${ev.id}-${index}`}
                       className={`opacity-85 ${
                         isWarn 
                           ? "text-red-400" 
