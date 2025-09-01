@@ -260,6 +260,7 @@ export default function Draft3DPage() {
     "Alpha",
   ]);
   const [players, setPlayers] = useState(8);
+  const [replaceAvatars, setReplaceAvatars] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -310,10 +311,11 @@ export default function Draft3DPage() {
 
       // Generate packs per selected set (one column per round)
       const [setA, setB, setC] = setNames;
+      const avatarParam = replaceAvatars ? '&replaceAvatars=true' : '';
       const [respA, respB, respC] = await Promise.all([
-        fetch(`/api/booster?set=${encodeURIComponent(setA)}&count=${players}`),
-        fetch(`/api/booster?set=${encodeURIComponent(setB)}&count=${players}`),
-        fetch(`/api/booster?set=${encodeURIComponent(setC)}&count=${players}`),
+        fetch(`/api/booster?set=${encodeURIComponent(setA)}&count=${players}${avatarParam}`),
+        fetch(`/api/booster?set=${encodeURIComponent(setB)}&count=${players}${avatarParam}`),
+        fetch(`/api/booster?set=${encodeURIComponent(setC)}&count=${players}${avatarParam}`),
       ]);
       const [dataA, dataB, dataC] = await Promise.all([
         respA.json(),
@@ -989,6 +991,16 @@ export default function Draft3DPage() {
                   }
                   className="rounded px-3 py-2 bg-black/70 text-white w-28 ring-1 ring-white/20 backdrop-blur"
                 />
+              </label>
+
+              <label className="flex items-center gap-2 text-white">
+                <input
+                  type="checkbox"
+                  checked={replaceAvatars}
+                  onChange={(e) => setReplaceAvatars(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm">Replace Sorcerer with Beta avatars</span>
               </label>
 
               <button

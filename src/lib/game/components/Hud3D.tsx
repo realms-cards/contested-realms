@@ -1,16 +1,12 @@
 "use client";
 
-import { Text } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import { useMemo } from "react";
 import Threshold3D from "@/lib/game/components/Threshold3D";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
-import type { Intersection, Object3D, Raycaster } from "three";
+import { ManaCounterHUD } from "@/components/game/manacost";
 
-function noopRaycast(this: Object3D, _r: Raycaster, _i: Intersection[]) {
-  void _r;
-  void _i;
-}
 
 export interface Hud3DProps {
   owner: PlayerKey; // p1 top, p2 bottom
@@ -18,8 +14,10 @@ export interface Hud3DProps {
 
 export default function Hud3D({ owner }: Hud3DProps) {
   const boardSize = useGameStore((s) => s.board.size);
-  const manaAvail = useGameStore((s) => s.getAvailableMana(owner));
-  const manaPool = useGameStore((s) => s.players[owner].mana);
+  // Track available mana directly on player.mana
+  const avail = useGameStore((s) => s.players[owner].mana);
+  const siteMana = useGameStore((s) => s.getAvailableMana(owner));
+  const addMana = useGameStore((s) => s.addMana);
 
   // Seat mapping for HUD: p1 bottom, p2 top
   const isBottom = owner === "p1";
@@ -52,23 +50,27 @@ export default function Hud3D({ owner }: Hud3DProps) {
         />
       </group>
 
-      {/* Mana text near threshold column */}
+      {/* Available mana counter near threshold column */}
       <group position={[manaX, 0.001, 0]}>
-        <Text
+        {/* DOM-based controls to avoid interfering with 3D raycasting */}
+        <Html
           position={[0, 0.003, 0]}
+          zIndexRange={[10, 0]}
+          transform
           rotation-x={-Math.PI / 2}
-          rotation-z={ownerRot + Math.PI * 1.5}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-          fontSize={0.28}
-          outlineWidth={0.02}
-          outlineColor="#000000"
-          renderOrder={2100}
-          raycast={noopRaycast}
+          rotation-z={ownerRot}
         >
-          {`Mana ${manaPool} (avail ${manaAvail})`}
-        </Text>
+          <div className="pointer-events-auto select-none">
+            <ManaCounterHUD
+              value={avail}
+              onIncrement={() => (avail < siteMana + 99 ? addMana(owner, +1) : undefined)}
+              onDecrement={() => (avail > 0 ? addMana(owner, -1) : undefined)}
+              disableInc={avail >= siteMana + 99}
+              disableDec={avail <= 0}
+              size={18}
+            />
+          </div>
+        </Html>
       </group>
     </group>
   );
