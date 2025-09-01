@@ -22,9 +22,11 @@ export interface Hand3DProps {
   matW: number;
   matH: number;
   owner?: PlayerKey; // default: p1 (bottom)
+  showCardBacks?: boolean; // if true, render card backs instead of card faces
+  viewerPlayerNumber?: number | null; // 1 or 2, for positioning opponent hands
 }
 
-export default function Hand3D({ owner = "p1" }: Hand3DProps) {
+export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlayerNumber = null }: Hand3DProps) {
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
@@ -130,12 +132,17 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     const fov = (cam.fov * Math.PI) / 180;
     const worldH = 2 * Math.tan(fov / 2) * dist;
     const margin = HAND_BOTTOM_MARGIN;
-    const bottomY = -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE;
+    
+    // Position hands based on owner and card back mode
+    const bottomY = showCardBacks 
+      ? worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE  // Top of screen for opponent
+      : -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE; // Bottom of screen for player
 
     // Smart visibility logic - distinguish between hand drags and pile drags
     const isHandDrag = dragFromHand && selected && selected.who === owner; // Hand card being dragged
-    const targetShown =
-      !isHandDrag && (mouseInZone || hoveredCardCount > 0) ? 1 : 0;
+    const targetShown = showCardBacks 
+      ? 1 // Opponent card backs always shown
+      : !isHandDrag && (mouseInZone || hoveredCardCount > 0) ? 1 : 0;
 
     if (isHandDrag) {
       revealLerp.current = 0; // Collapse for hand drags
@@ -147,7 +154,9 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     }
 
     // Smooth hand spread animation
-    const handShouldBeSpread = mouseInZone || hoveredCardCount > 0;
+    const handShouldBeSpread = showCardBacks 
+      ? true // Opponent hands always spread for visibility
+      : mouseInZone || hoveredCardCount > 0;
     const spreadTarget = handShouldBeSpread ? 1 : 0;
     const spreadK = 0.25; // Smooth easing for hand spread
     handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
@@ -157,10 +166,21 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
     const hiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
-    rootRef.current.position.copy(cam.position);
-    rootRef.current.quaternion.copy(cam.quaternion);
-    rootRef.current.translateZ(-dist);
-    rootRef.current.translateY(bottomY + yOffset);
+    if (showCardBacks) {
+      // Opponent hand: position relative to board (world coordinates)
+      // Position based on viewer's perspective:
+      // P1 (south camera) sees P2's hand at north edge (negative Z)
+      // P2 (north camera) sees P1's hand at south edge (positive Z)
+      const z = viewerPlayerNumber === 1 ? -4.5 : 4.5;
+      rootRef.current.position.set(0, 0.2, z);
+      rootRef.current.rotation.set(0, 0, 0); // No camera-relative rotation
+    } else {
+      // Player hand: position relative to camera (screen-relative)
+      rootRef.current.position.copy(cam.position);
+      rootRef.current.quaternion.copy(cam.quaternion);
+      rootRef.current.translateZ(-dist);
+      rootRef.current.translateY(bottomY + yOffset);
+    }
   });
 
   // Unified hand fan layout: all cards in arc
@@ -435,7 +455,7 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
         const isPileDrag = dragFromHand && dragFromPile && !selected;
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = (c.type || "").toLowerCase().includes("site");
-        const isCardHovered = originalIndex === hoveredCard;
+        const isCardHovered = !showCardBacks && originalIndex === hoveredCard;
 
         const baseScale = HAND_CARD_SCALE;
         const scale = baseScale * layoutScale;
@@ -449,83 +469,85 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
             scale={[scale, scale, scale]}
           >
             {/* Invisible larger interaction box to ensure cards are always clickable */}
-            <mesh
-              position={[0, 0, 0.01]}
-              onPointerOver={(e) => {
-                if (isDragging) return; // allow bubbling while dragging
-                e.stopPropagation();
+            {!showCardBacks && (
+              <mesh
+                position={[0, 0, 0.01]}
+                onPointerOver={(e) => {
+                  if (isDragging) return; // allow bubbling while dragging
+                  e.stopPropagation();
 
-                // Clear any existing hover timeout
-                if (hoverTimeoutRef.current) {
-                  window.clearTimeout(hoverTimeoutRef.current);
-                }
+                  // Clear any existing hover timeout
+                  if (hoverTimeoutRef.current) {
+                    window.clearTimeout(hoverTimeoutRef.current);
+                  }
 
-                setHandHoverCount(hoveredCardCount + 1);
-                setHoveredCard(originalIndex); // Set the hovered card immediately for responsive feel
-                beginHoverPreview(c);
-              }}
-              onPointerOut={(e) => {
-                if (isDragging) return; // allow bubbling while dragging
-                e.stopPropagation();
+                  setHandHoverCount(hoveredCardCount + 1);
+                  setHoveredCard(originalIndex); // Set the hovered card immediately for responsive feel
+                  beginHoverPreview(c);
+                }}
+                onPointerOut={(e) => {
+                  if (isDragging) return; // allow bubbling while dragging
+                  e.stopPropagation();
 
-                setHandHoverCount(Math.max(0, hoveredCardCount - 1));
+                  setHandHoverCount(Math.max(0, hoveredCardCount - 1));
 
-                // Add small delay before clearing hover to prevent flicker between cards
-                if (hoverTimeoutRef.current) {
-                  window.clearTimeout(hoverTimeoutRef.current);
-                }
-                hoverTimeoutRef.current = window.setTimeout(() => {
-                  setHoveredCard((prev) =>
-                    prev === originalIndex ? null : prev
-                  );
-                }, 30); // Reduced to 30ms delay for more responsive transitions
+                  // Add small delay before clearing hover to prevent flicker between cards
+                  if (hoverTimeoutRef.current) {
+                    window.clearTimeout(hoverTimeoutRef.current);
+                  }
+                  hoverTimeoutRef.current = window.setTimeout(() => {
+                    setHoveredCard((prev) =>
+                      prev === originalIndex ? null : prev
+                    );
+                  }, 30); // Reduced to 30ms delay for more responsive transitions
 
-                clearHoverPreview();
-              }}
-              onPointerDown={(e) => {
-                if (isDragging) return; // don't start another drag
-                if (e.button !== 0) return;
-                e.stopPropagation();
-
-                // Clear preview when starting potential drag
-                clearHoverPreview();
-
-                // Record potential drag start (no selection needed)
-                handDragStart.current = {
-                  x: e.clientX,
-                  y: e.clientY,
-                  time: Date.now(),
-                  index: originalIndex,
-                };
-              }}
-              onPointerMove={(e) => {
-                // Start drag only after a tiny hold and some pointer travel
-                if (isHandDrag || isPileDrag) return;
-                const s = handDragStart.current;
-                if (!s || s.index !== originalIndex) return;
-                const held = Date.now() - s.time;
-                const dx = e.clientX - s.x;
-                const dy = e.clientY - s.y;
-                const dist = Math.hypot(dx, dy);
-                const PIX_THRESH = 6; // pixels - reduced for more responsive drag initiation
-                if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
-                  // Select the card only when drag actually starts
-                  selectHandCard(owner, originalIndex);
-                  setDragFromHand(true);
-                  // Clear preview when drag starts
                   clearHoverPreview();
-                }
-              }}
-            >
-              <boxGeometry
-                args={[
-                  CARD_SHORT * 1.1, // Modest interaction area - reduce collision
-                  CARD_LONG * 1.1,
-                  0.01,
-                ]}
-              />
-              <meshBasicMaterial transparent opacity={0} /> {/* Invisible */}
-            </mesh>
+                }}
+                onPointerDown={(e) => {
+                  if (isDragging) return; // don't start another drag
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+
+                  // Clear preview when starting potential drag
+                  clearHoverPreview();
+
+                  // Record potential drag start (no selection needed)
+                  handDragStart.current = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    time: Date.now(),
+                    index: originalIndex,
+                  };
+                }}
+                onPointerMove={(e) => {
+                  // Start drag only after a tiny hold and some pointer travel
+                  if (isHandDrag || isPileDrag) return;
+                  const s = handDragStart.current;
+                  if (!s || s.index !== originalIndex) return;
+                  const held = Date.now() - s.time;
+                  const dx = e.clientX - s.x;
+                  const dy = e.clientY - s.y;
+                  const dist = Math.hypot(dx, dy);
+                  const PIX_THRESH = 6; // pixels - reduced for more responsive drag initiation
+                  if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
+                    // Select the card only when drag actually starts
+                    selectHandCard(owner, originalIndex);
+                    setDragFromHand(true);
+                    // Clear preview when drag starts
+                    clearHoverPreview();
+                  }
+                }}
+              >
+                <boxGeometry
+                  args={[
+                    CARD_SHORT * 1.1, // Modest interaction area - reduce collision
+                    CARD_LONG * 1.1,
+                    0.01,
+                  ]}
+                />
+                <meshBasicMaterial transparent opacity={0} /> {/* Invisible */}
+              </mesh>
+            )}
 
             <group>
               {c.slug ? (
@@ -533,13 +555,18 @@ export default function Hand3D({ owner = "p1" }: Hand3DProps) {
                   slug={c.slug}
                   width={CARD_SHORT}
                   height={CARD_LONG}
-                  rotationZ={isSite ? -rot - Math.PI / 2 : -rot} // Sites need -90° rotation for correct art orientation
+                  rotationZ={
+                    showCardBacks 
+                      ? (isSite ? -rot + Math.PI / 2 : -rot + Math.PI) // Atlas: +90°, Spells: +180°
+                      : (isSite ? -rot - Math.PI / 2 : -rot) // Sites need -90° rotation for correct art orientation
+                  }
                   upright
                   depthWrite={false}
                   depthTest={false}
                   renderOrder={renderOrder}
-                  interactive={!isDragging}
+                  interactive={!isDragging && !showCardBacks}
                   elevation={isCardHovered ? 0.02 : 0.002}
+                  textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
                 />
               ) : (
                 <mesh
