@@ -7,6 +7,15 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const set = searchParams.get('set') || 'Alpha';
+    // Enforce draft exclusion for Dragonlord mini-set at the API level.
+    // Draft UIs already omit Dragonlord, but this prevents manual/API misuse.
+    const sl = set.trim().toLowerCase();
+    if (sl === 'dragonlord' || sl === 'drl' || sl.includes('dragonlord')) {
+      return new Response(JSON.stringify({ error: 'Dragonlord is not available for draft.' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     const count = Math.max(1, Math.min(36, Number(searchParams.get('count') || '1')));
     const replaceAvatars = searchParams.get('replaceAvatars') === 'true';
 

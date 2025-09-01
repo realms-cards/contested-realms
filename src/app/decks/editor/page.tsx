@@ -51,8 +51,8 @@ export default function DeckEditorPage() {
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckName, setDeckName] = useState<string>("New Deck");
   const [deckFormat, setDeckFormat] = useState<string>("Constructed");
-  // Always use Beta set for deck editor
-  const setName = "Beta";
+  // Selectable set for deck editor
+  const [setName, setSetName] = useState<string>("Beta");
 
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
@@ -664,6 +664,19 @@ export default function DeckEditorPage() {
           />
         </label>
 
+        <label className="flex flex-col gap-1">
+          <span className="text-xs uppercase opacity-70">Set</span>
+          <select
+            value={setName}
+            onChange={(e) => setSetName(e.target.value)}
+            className="border rounded px-3 py-2 bg-transparent"
+          >
+            <option value="Alpha">Alpha</option>
+            <option value="Beta">Beta</option>
+            <option value="Arthurian Legends">Arthurian Legends</option>
+            <option value="Dragonlord">Dragonlord</option>
+          </select>
+        </label>
 
         <div className="ml-auto flex items-center gap-3 text-sm">
           <div

@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
         const rarity = meta?.rarity || null;
         return {
           variantId: v.id,
-          slug: v.slug,
+          slug: v.slug.startsWith("dra_") ? ("drl_" + v.slug.slice(4)) : v.slug,
           finish: String(v.finish),
           product: v.product,
           cardId: v.cardId,
