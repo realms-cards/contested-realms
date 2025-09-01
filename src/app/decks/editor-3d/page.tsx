@@ -1742,16 +1742,7 @@ export default function DeckEditor3DPage() {
                 ))}
               </select>
 
-              <select
-                value={setName}
-                onChange={(e) => setSetName(e.target.value)}
-                className="border rounded px-3 py-2 bg-black/70 text-white border-white/30"
-              >
-                <option value="Alpha">Alpha</option>
-                <option value="Beta">Beta</option>
-                <option value="Arthurian Legends">Arthurian Legends</option>
-                <option value="Dragonlord">Dragonlord</option>
-              </select>
+              {/* Removed global set selector to avoid coupling search and deck set */}
 
               <input
                 value={deckName}
@@ -2334,10 +2325,24 @@ export default function DeckEditor3DPage() {
         )}
 
         {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-auto">
+        <div
+          className={`absolute bottom-0 left-0 right-0 ${
+            searchExpanded ? "p-4" : "p-2"
+          } pointer-events-none`}
+        >
           <div className="max-w-7xl mx-auto">
-            <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4">
-              <div className="flex flex-wrap items-center gap-4">
+            <div
+              className={`${
+                searchExpanded
+                  ? "bg-black/80 backdrop-blur-sm p-4"
+                  : "bg-transparent backdrop-blur-0 p-0"
+              } rounded-lg`}
+            >
+              <div
+                className={`flex flex-wrap items-center ${
+                  searchExpanded ? "gap-4" : "gap-2"
+                } pointer-events-auto`}
+              >
                 {/* Collapsible Search / Tournament Controls / Sealed Packs */}
                 {!searchExpanded || isSealed ? (
                   <div className="flex items-center gap-2 flex-1">
@@ -2652,7 +2657,7 @@ export default function DeckEditor3DPage() {
                                 fill
                                 className={
                                   isSite
-                                    ? "object-contain object-center"
+                                    ? "object-contain object-center rotate-90"
                                     : "object-cover"
                                 }
                                 sizes="120px"
