@@ -795,15 +795,27 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
 
   addMana: (who, delta) =>
-    set((s) => ({
-      players: {
-        ...s.players,
-        [who]: {
-          ...s.players[who],
-          mana: Math.max(0, s.players[who].mana + delta),
+    set((s) => {
+      const currentMana = s.players[who].mana;
+      const newMana = Math.max(0, currentMana + delta);
+      if (newMana === currentMana) return s as GameState;
+
+      const newState = {
+        players: {
+          ...s.players,
+          [who]: {
+            ...s.players[who],
+            mana: newMana,
+          },
         },
-      },
-    })),
+      } as Partial<GameState> as GameState;
+
+      // Send patch to other players in multiplayer
+      const patch: ServerPatchT = { players: newState.players };
+      get().trySendPatch(patch);
+
+      return newState;
+    }),
 
   addThreshold: (who, element, delta) =>
     set((s) => {
@@ -1203,6 +1215,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const curP = s.players[who];
         const nextP: PlayerState = {
           ...curP,
+          // Auto-increase available mana by 1 when a site is played
+          mana: (curP.mana || 0) + 1,
           thresholds: {
             ...curP.thresholds,
             air: (curP.thresholds.air || 0) + (add.air || 0),
@@ -1354,6 +1368,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const curP = s.players[who];
         const nextP: PlayerState = {
           ...curP,
+          // Auto-increase available mana by 1 when a site is played
+          mana: (curP.mana || 0) + 1,
           thresholds: {
             ...curP.thresholds,
             air: (curP.thresholds.air || 0) + (add.air || 0),
@@ -1703,6 +1719,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       const site = s.board.sites[key];
       if (!site || !site.card) return s;
       const owner: PlayerKey = site.owner === 1 ? "p1" : "p2";
+      // Compute thresholds to subtract based on the site's provided thresholds
+      const req = (site.card.thresholds || {}) as Partial<
+        Record<keyof Thresholds, number>
+      >;
+      const sub: Partial<Thresholds> = {};
+      for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
+        if (s.players[owner].thresholds[kk] != null) {
+          sub[kk] = Number(req[kk] ?? 0);
+        }
+      }
+      const curP = s.players[owner];
+      const nextP: PlayerState = {
+        ...curP,
+        mana: Math.max(0, (curP.mana || 0) - 1),
+        thresholds: {
+          ...curP.thresholds,
+          air: Math.max(0, (curP.thresholds.air || 0) - (sub.air || 0)),
+          water: Math.max(0, (curP.thresholds.water || 0) - (sub.water || 0)),
+          earth: Math.max(0, (curP.thresholds.earth || 0) - (sub.earth || 0)),
+          fire: Math.max(0, (curP.thresholds.fire || 0) - (sub.fire || 0)),
+        },
+      };
       // Remove the site from the board
       const sites = { ...s.board.sites };
       delete sites[key];
@@ -1730,17 +1768,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `Moved site '${
           site.card.name
-        }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
+        }' from #${cellNo} to ${owner.toUpperCase()} ${label}${
+          Object.keys(sub).length ? " (thresholds updated)" : ""
+        }`
       );
       {
         const boardNext = { ...s.board, sites } as GameState["board"];
+        const playersNext = { ...s.players, [owner]: nextP } as GameState["players"];
         const patch: ServerPatchT = {
+          players: playersNext,
           board: boardNext,
           zones: zones as GameState["zones"],
         };
         get().trySendPatch(patch);
       }
       return {
+        players: { ...s.players, [owner]: nextP },
         board: { ...s.board, sites },
         zones,
       } as Partial<GameState> as GameState;

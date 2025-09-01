@@ -8,8 +8,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const set = searchParams.get('set') || 'Alpha';
     const count = Math.max(1, Math.min(36, Number(searchParams.get('count') || '1')));
+    const replaceAvatars = searchParams.get('replaceAvatars') === 'true';
 
-    const packs = await generateBoosters(set, count);
+    const packs = await generateBoosters(set, count, undefined, replaceAvatars);
 
     return new Response(JSON.stringify({ set, count, packs }), {
       status: 200,

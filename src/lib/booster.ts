@@ -47,7 +47,7 @@ function pickUniqueFrom(pool: VariantSel[], used: Set<number>): VariantSel | nul
   return choice(candidates);
 }
 
-export async function generateBooster(setName: string, client: PrismaClient = defaultPrisma): Promise<BoosterCard[]> {
+export async function generateBooster(setName: string, client: PrismaClient = defaultPrisma, replaceAvatars = false): Promise<BoosterCard[]> {
   const set = await client.set.findUnique({ where: { name: setName }, include: { packConfig: true } });
   if (!set || !set.packConfig) throw new Error(`Set or PackConfig not found for set=${setName}`);
   const cfg = set.packConfig;
@@ -221,13 +221,78 @@ export async function generateBooster(setName: string, client: PrismaClient = de
   for (const c of cards) nameById.set(c.id, c.name);
   for (const p of picks) p.cardName = nameById.get(p.cardId) || '';
 
+  // Avatar replacement logic for Beta/Alpha packs (after names are filled)
+  if (replaceAvatars && (setName === 'Alpha' || setName === 'Beta')) {
+    try {
+      // Find Sorcerer avatars in picks
+      const sorcererIndices: number[] = [];
+      for (let i = 0; i < picks.length; i++) {
+        const pick = picks[i];
+        const meta = metaByCardId.get(pick.cardId);
+        if (meta?.type?.toLowerCase().includes('avatar') && pick.cardName.toLowerCase().includes('sorcerer')) {
+          sorcererIndices.push(i);
+        }
+      }
+
+      if (sorcererIndices.length > 0) {
+        // Get Beta common avatars (Geomancer, Flamecaller, Sparkmage, Waveshaper)
+        const betaAvatarNames = ['Geomancer', 'Flamecaller', 'Sparkmage', 'Waveshaper'];
+        const betaAvatars = await client.card.findMany({
+          where: { 
+            name: { in: betaAvatarNames }
+          },
+          select: { id: true, name: true },
+        });
+
+        if (betaAvatars.length > 0) {
+          // Find Beta set for variants
+          const betaSet = await client.set.findUnique({ where: { name: 'Beta' } });
+          if (betaSet) {
+            const betaVariants = await client.variant.findMany({
+              where: { 
+                cardId: { in: betaAvatars.map(c => c.id) },
+                setId: betaSet.id,
+                product: 'Booster',
+                finish: 'Standard'
+              },
+              select: { id: true, cardId: true, slug: true, finish: true, product: true },
+            });
+
+            // Replace each Sorcerer with a random Beta avatar
+            for (const sorcererIdx of sorcererIndices) {
+              const randomAvatar = choice(betaVariants);
+              if (randomAvatar) {
+                const avatarCard = betaAvatars.find(c => c.id === randomAvatar.cardId);
+                if (avatarCard) {
+                  picks[sorcererIdx] = {
+                    variantId: randomAvatar.id,
+                    slug: randomAvatar.slug,
+                    finish: randomAvatar.finish as Finish,
+                    product: randomAvatar.product,
+                    rarity: 'Ordinary', // Beta avatars are ordinary
+                    type: 'Avatar',
+                    cardId: randomAvatar.cardId,
+                    cardName: avatarCard.name,
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (avatarError) {
+      // Log avatar replacement error but don't fail the entire booster generation
+      console.error('Avatar replacement failed:', avatarError);
+    }
+  }
+
   return picks;
 }
 
-export async function generateBoosters(setName: string, count: number, client: PrismaClient = defaultPrisma) {
+export async function generateBoosters(setName: string, count: number, client: PrismaClient = defaultPrisma, replaceAvatars = false) {
   const packs: BoosterCard[][] = [];
   for (let i = 0; i < count; i++) {
-    packs.push(await generateBooster(setName, client));
+    packs.push(await generateBooster(setName, client, replaceAvatars));
   }
   return packs;
 }

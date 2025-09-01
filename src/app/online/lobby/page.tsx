@@ -46,7 +46,8 @@ export default function LobbyPage() {
   const [matchType, setMatchType] = useState<"constructed" | "sealed">("constructed");
   const [sealedConfig, setSealedConfig] = useState({
     packCounts: { "Beta": 6, "Arthurian Legends": 0 } as Record<string, number>,
-    timeLimit: 40 // minutes
+    timeLimit: 40, // minutes
+    replaceAvatars: false
   });
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
@@ -151,7 +152,8 @@ export default function LobbyPage() {
       packCount: totalPacks,
       setMix: activeSets.map(([set]) => set),
       timeLimit: sealedConfig.timeLimit,
-      packCounts: sealedConfig.packCounts // Include detailed counts for future use
+      packCounts: sealedConfig.packCounts, // Include detailed counts for future use
+      replaceAvatars: sealedConfig.replaceAvatars
     };
     
     // Send startMatch with sealed configuration
@@ -336,6 +338,16 @@ export default function LobbyPage() {
                     className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
                   />
                 </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={sealedConfig.replaceAvatars}
+                    onChange={(e) => setSealedConfig(prev => ({ ...prev, replaceAvatars: e.target.checked }))}
+                    className="rounded"
+                  />
+                  <span>Replace Sorcerer with Beta avatars</span>
+                </label>
               </>
             )}
           </div>
