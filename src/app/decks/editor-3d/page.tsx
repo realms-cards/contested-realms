@@ -2029,11 +2029,11 @@ export default function DeckEditor3DPage() {
                                     (meta.cost >= 1 && meta.cost <= 9 ? (
                                       <NumberBadge
                                         value={meta.cost as Digit}
-                                        size={24}
+                                        size={16}
                                         strokeWidth={8}
                                       />
                                     ) : (
-                                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white text-black text-xs font-bold">
+                                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
                                         {meta.cost}
                                       </span>
                                     ))}

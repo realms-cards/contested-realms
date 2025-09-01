@@ -194,15 +194,14 @@ export function ManaCounterHUD({
               e.stopPropagation();
               if (!disableInc) onIncrement?.();
             }}
-            className={`flex-1 transition-opacity rounded-t-md ${
+            className={`flex-1 transition-opacity rounded-t-xl ${
               disableInc ? "cursor-not-allowed" : "cursor-pointer"
             } ${
               disableInc ? "opacity-40" : "opacity-0 group-hover:opacity-100"
-            } bg-transparent group-hover:bg-green-500/20 hover:bg-green-500/30`}
+            } bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30`}
           >
             <span className="sr-only">+</span>
           </button>
-          <div className="h-px bg-white/20 pointer-events-none" />
           <button
             type="button"
             aria-label="Decrease available mana"
@@ -212,11 +211,11 @@ export function ManaCounterHUD({
               e.stopPropagation();
               if (!disableDec) onDecrement?.();
             }}
-            className={`flex-1 transition-opacity rounded-b-md ${
+            className={`flex-1 transition-opacity rounded-b-xl ${
               disableDec ? "cursor-not-allowed" : "cursor-pointer"
             } ${
               disableDec ? "opacity-40" : "opacity-0 group-hover:opacity-100"
-            } bg-transparent group-hover:bg-red-500/20 hover:bg-red-500/30`}
+            } bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30`}
           >
             <span className="sr-only">−</span>
           </button>
