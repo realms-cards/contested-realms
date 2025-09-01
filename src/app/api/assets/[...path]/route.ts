@@ -53,12 +53,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
       }
     })();
 
-    const roots = wantKtx2 ? [ROOT_KTX2, ROOT_DATA] : [ROOT_DATA];
+    // Force specific assets to only use data directory (not ktx2)
+    const dataOnlyAssets = new Set([
+      "fire.png", "air.png", "water.png", "earth.png",
+      "cardback_atlas.png", "cardback_spellbook.png"
+    ]);
+    
+    const shouldForceDataOnly = segments.some(segment => 
+      dataOnlyAssets.has(segment) || dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
+    );
+    
+    const roots = (wantKtx2 && !shouldForceDataOnly) ? [ROOT_KTX2, ROOT_DATA] : [ROOT_DATA];
 
     // Build candidate paths. If ?ktx2 was requested for a raster path, also try swapping extension to .ktx2
     const candidates: string[] = [];
     for (const root of roots) {
-      if (wantKtx2 && requestedExt !== "ktx2") {
+      if (wantKtx2 && requestedExt !== "ktx2" && !shouldForceDataOnly) {
         const ktx2Name = last.replace(/\.[^.]+$/, ".ktx2");
         const ktx2Path = path.join(root, ...segments.slice(0, -1), ktx2Name);
         candidates.push(ktx2Path);

@@ -12,6 +12,9 @@ function setDirFromSlug(slug: string): string | null {
       return "beta";
     case "art":
       return "arthurian_legends";
+    case "dra":
+      // Some data sources use 'dra' for Dragonlord; accept both 'dra' and 'drl'.
+      return "Dragonlord";
     case "drl":
       return "Dragonlord";
     default:

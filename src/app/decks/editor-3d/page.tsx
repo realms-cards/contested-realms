@@ -306,7 +306,7 @@ export default function DeckEditor3DPage() {
   const [loadingDecks, setLoadingDecks] = useState(false);
   const [deckId, setDeckId] = useState<string | null>(null);
   const [deckName, setDeckName] = useState<string>("New Deck");
-  const setName = "Beta"; // Use Beta set for metadata (required by API)
+  const [setName, setSetName] = useState<string>("Beta");
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
   // Debug: Track picks changes
@@ -449,6 +449,7 @@ export default function DeckEditor3DPage() {
     constructionStartTime: number; // timestamp
     packCount: number;
     setMix: string[];
+    replaceAvatars: boolean;
   } | null>(null);
 
   const [packs, setPacks] = useState<
@@ -634,7 +635,7 @@ export default function DeckEditor3DPage() {
       const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
 
       console.log(
-        `Adding card: ${r.name} (${r.cardId}), key: ${key}, variantId: ${r.variantId}`
+        `Adding card: ${r.cardName} (${r.cardId}), key: ${key}, variantId: ${r.variantId}`
       );
 
       setPicks((prev) => {
@@ -644,7 +645,7 @@ export default function DeckEditor3DPage() {
           : {
               cardId: r.cardId,
               variantId: r.variantId ?? null,
-              name: r.cardName || r.name,
+              name: r.cardName,
               type: r.type,
               slug: r.slug,
               zone,
@@ -653,9 +654,9 @@ export default function DeckEditor3DPage() {
             };
 
         console.log(
-          `Card ${r.name}: ${exists ? "incremented to" : "added with"} count ${
-            next.count
-          }`
+          `Card ${r.cardName}: ${
+            exists ? "incremented to" : "added with"
+          } count ${next.count}`
         );
         console.log(
           `Total picks after adding:`,
@@ -679,7 +680,7 @@ export default function DeckEditor3DPage() {
           : {
               cardId: r.cardId,
               variantId: r.variantId ?? null,
-              name: r.cardName || r.name,
+              name: r.cardName,
               type: r.type,
               slug: r.slug,
               zone,
@@ -816,11 +817,11 @@ export default function DeckEditor3DPage() {
         .map((p) => ({
           id: p.card.cardId.toString(),
           cardId: p.card.cardId,
-          name: p.card.cardName || p.card.name || `Card ${p.card.cardId}`,
+          name: p.card.cardName || `Card ${p.card.cardId}`,
           type: p.card.type,
           slug: p.card.slug,
-          set: p.card.set || "Beta",
-          cost: p.card.cost || 0,
+          set: p.card.setName || setName,
+          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
           rarity: p.card.rarity || "Common",
         }));
 
@@ -856,70 +857,106 @@ export default function DeckEditor3DPage() {
     } finally {
       setSaving(false);
     }
-  }, [isSealed, pick3D, searchParams, saveDeck]);
+  }, [isSealed, pick3D, searchParams, saveDeck, setName, metaByCardId]);
 
-  const loadDeck = useCallback(async (id: string) => {
-    setDeckId(id);
-    try {
-      const res = await fetch(`/api/decks/${id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load deck");
+  const loadDeck = useCallback(
+    async (id: string) => {
+      setDeckId(id);
+      try {
+        const res = await fetch(`/api/decks/${id}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to load deck");
 
-      // Populate deck name
-      if (typeof data?.name === "string") setDeckName(data.name);
+        // Populate deck name
+        if (typeof data?.name === "string") setDeckName(data.name);
 
-      // Build picks from zones
-      const next: Record<PickKey, PickItem> = {};
-      const addZone = (zone: Zone, arr: ApiCardRef[] | undefined) => {
-        if (!arr || !Array.isArray(arr)) return;
-        for (const c of arr) {
-          const key: PickKey = `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
-          const exists = next[key];
-          next[key] = exists
-            ? { ...exists, count: exists.count + 1 }
-            : {
-                cardId: c.cardId,
-                variantId: c.variantId ?? null,
-                name: c.name,
-                type: c.type ?? null,
-                slug: c.slug ?? null,
-                zone,
-                count: 1,
-              };
+        // Build picks from zones
+        const next: Record<PickKey, PickItem> = {};
+        const addZone = (zone: Zone, arr: ApiCardRef[] | undefined) => {
+          if (!arr || !Array.isArray(arr)) return;
+          for (const c of arr) {
+            const key: PickKey = `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
+            const exists = next[key];
+            next[key] = exists
+              ? { ...exists, count: exists.count + 1 }
+              : {
+                  cardId: c.cardId,
+                  variantId: c.variantId ?? null,
+                  name: c.name,
+                  type: c.type ?? null,
+                  slug: c.slug ?? null,
+                  zone,
+                  count: 1,
+                };
+          }
+        };
+        addZone("Atlas", data?.atlas as ApiCardRef[]);
+        addZone("Spellbook", data?.spellbook as ApiCardRef[]);
+        addZone("Sideboard", data?.sideboard as ApiCardRef[]);
+        setPicks(next);
+
+        // Optional: prime metaByCardId with thresholds for sorting/grouping
+        const meta: Record<number, CardMeta> = {};
+        const all: ApiCardRef[] = [
+          ...(Array.isArray(data?.atlas) ? (data.atlas as ApiCardRef[]) : []),
+          ...(Array.isArray(data?.spellbook)
+            ? (data.spellbook as ApiCardRef[])
+            : []),
+          ...(Array.isArray(data?.sideboard)
+            ? (data.sideboard as ApiCardRef[])
+            : []),
+        ];
+        for (const c of all) {
+          if (c.thresholds && meta[c.cardId] == null) {
+            meta[c.cardId] = {
+              cardId: c.cardId,
+              cost: null,
+              attack: null,
+              defence: null,
+              thresholds: c.thresholds,
+            };
+          }
         }
-      };
-      addZone("Atlas", data?.atlas as ApiCardRef[]);
-      addZone("Spellbook", data?.spellbook as ApiCardRef[]);
-      addZone("Sideboard", data?.sideboard as ApiCardRef[]);
-      setPicks(next);
+        setMetaByCardId(meta);
 
-      // Optional: prime metaByCardId with thresholds for sorting/grouping
-      const meta: Record<number, CardMeta> = {};
-      const all: ApiCardRef[] = [
-        ...(Array.isArray(data?.atlas) ? (data.atlas as ApiCardRef[]) : []),
-        ...(Array.isArray(data?.spellbook)
-          ? (data.spellbook as ApiCardRef[])
-          : []),
-        ...(Array.isArray(data?.sideboard)
-          ? (data.sideboard as ApiCardRef[])
-          : []),
-      ];
-      for (const c of all) {
-        if (c.thresholds && meta[c.cardId] == null) {
-          meta[c.cardId] = {
-            cardId: c.cardId,
-            cost: null,
-            attack: null,
-            defence: null,
-            thresholds: c.thresholds,
+        // Infer deck set from card slug prefixes (alp/bet/art/dra/drl) and update set state
+        // Only apply in constructed mode; sealed remains multi-set via pack sets
+        if (!isSealed) {
+          const counts = new Map<string, number>();
+          const codeToSet = (code: string): string | null => {
+            if (code === "alp") return "Alpha";
+            if (code === "bet") return "Beta";
+            if (code === "art") return "Arthurian Legends";
+            if (code === "dra") return "Dragonlord";
+            if (code === "drl") return "Dragonlord";
+            return null;
           };
+          for (const c of all) {
+            const slug = (c.slug || "").toLowerCase();
+            if (/^[a-z]{3}_/.test(slug)) {
+              const code = slug.slice(0, 3);
+              const name = codeToSet(code);
+              if (name) counts.set(name, (counts.get(name) || 0) + 1);
+            }
+          }
+          if (counts.size) {
+            let best = setName;
+            let bestN = -1;
+            for (const [name, n] of counts.entries()) {
+              if (n > bestN) {
+                best = name;
+                bestN = n;
+              }
+            }
+            setSetName(best);
+          }
         }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
       }
-      setMetaByCardId(meta);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+    },
+    [isSealed, setName]
+  );
 
   const clearEditor = useCallback(() => {
     setDeckId(null);
@@ -993,9 +1030,13 @@ export default function DeckEditor3DPage() {
         console.log(`Opening pack: ${packId}, set: ${pack.set}`);
 
         // Generate a real booster pack from the API (same as draft-3d)
-        const avatarParam = sealedConfig?.replaceAvatars ? '&replaceAvatars=true' : '';
+        const avatarParam = sealedConfig?.replaceAvatars
+          ? "&replaceAvatars=true"
+          : "";
         const res = await fetch(
-          `/api/booster?set=${encodeURIComponent(pack.set)}&count=1${avatarParam}`
+          `/api/booster?set=${encodeURIComponent(
+            pack.set
+          )}&count=1${avatarParam}`
         );
         const data = await res.json();
 
@@ -1016,19 +1057,19 @@ export default function DeckEditor3DPage() {
         // Convert booster cards to SearchResult format and add to sideboard (sealed mode)
         for (const boosterCard of boosterCards) {
           const searchCard: SearchResult = {
-            cardId: boosterCard.cardId,
-            name: boosterCard.cardName || `Card ${boosterCard.cardId}`,
-            cardName: boosterCard.cardName || `Card ${boosterCard.cardId}`, // Ensure both name and cardName are set
-            type: boosterCard.type || "Unknown",
-            slug: boosterCard.slug || "",
-            set: pack.set, // This is the set the pack came from
-            cost: boosterCard.cost || 0,
-            rarity: boosterCard.rarity || "Common",
             variantId: boosterCard.variantId,
+            slug: boosterCard.slug || "",
+            finish: boosterCard.finish || "Standard",
+            product: boosterCard.product || "",
+            cardId: boosterCard.cardId,
+            cardName: boosterCard.cardName || `Card ${boosterCard.cardId}`,
+            set: pack.set, // This is the set the pack came from
+            type: boosterCard.type || "Unknown",
+            rarity: boosterCard.rarity || null,
           };
           console.log(
             `Adding card from ${pack.set} pack:`,
-            searchCard.name,
+            searchCard.cardName,
             `(${searchCard.cardId})`
           );
           // In sealed mode, all pack cards go to sideboard first
@@ -1347,7 +1388,18 @@ export default function DeckEditor3DPage() {
       const res = await fetch(`/api/cards/search?${sp.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Search failed");
-      setResults(data as SearchResult[]);
+      // Deduplicate results by cardId, prefer Standard finish over Foil
+      const list = (data as SearchResult[]) || [];
+      const byCard = new Map<number, SearchResult>();
+      for (const r of list) {
+        const prev = byCard.get(r.cardId);
+        if (!prev) {
+          byCard.set(r.cardId, r);
+        } else if (prev.finish !== "Standard" && r.finish === "Standard") {
+          byCard.set(r.cardId, r);
+        }
+      }
+      setResults(Array.from(byCard.values()));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setResults([]);
@@ -1716,12 +1768,56 @@ export default function DeckEditor3DPage() {
                 ))}
               </select>
 
+              <select
+                value={setName}
+                onChange={(e) => setSetName(e.target.value)}
+                className="border rounded px-3 py-2 bg-black/70 text-white border-white/30"
+              >
+                <option value="Alpha">Alpha</option>
+                <option value="Beta">Beta</option>
+                <option value="Arthurian Legends">Arthurian Legends</option>
+                <option value="Dragonlord">Dragonlord</option>
+              </select>
+
               <input
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}
                 className="border rounded px-3 py-2 bg-black/70 text-white border-white/30"
                 placeholder="Deck name"
               />
+              <button
+                onClick={isSealed ? submitSealedDeck : saveDeck}
+                disabled={
+                  saving ||
+                  (isDraftMode &&
+                    (!validation.avatar ||
+                      !validation.atlas ||
+                      !validation.spellbook))
+                }
+                className={`h-10 px-4 rounded text-white disabled:opacity-50 ${
+                  isSealed
+                    ? "bg-blue-600 hover:bg-blue-700"
+                    : "bg-green-600 hover:bg-green-700"
+                }`}
+                title={
+                  isDraftMode &&
+                  (!validation.avatar ||
+                    !validation.atlas ||
+                    !validation.spellbook)
+                    ? "Cannot save invalid deck in draft mode"
+                    : isSealed
+                    ? "Submit sealed deck to match"
+                    : undefined
+                }
+              >
+                {saving
+                  ? "Submitting..."
+                  : isSealed
+                  ? "Submit Sealed Deck"
+                  : deckId
+                  ? "Update Deck"
+                  : "Save Deck"}
+              </button>
             </div>
           )}
 
@@ -1764,7 +1860,7 @@ export default function DeckEditor3DPage() {
           )}
 
           {/* Validation status */}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
             <DeckValidation
               avatarCount={avatarCount}
               atlasCount={atlasCount}
@@ -1772,9 +1868,37 @@ export default function DeckEditor3DPage() {
               validation={validation}
               isDraftMode={isDraftMode}
             />
+            {isSealed && (
+              <button
+                onClick={submitSealedDeck}
+                disabled={
+                  saving ||
+                  (isDraftMode &&
+                    (!validation.avatar ||
+                      !validation.atlas ||
+                      !validation.spellbook))
+                }
+                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+                title={
+                  isDraftMode &&
+                  (!validation.avatar ||
+                    !validation.atlas ||
+                    !validation.spellbook)
+                    ? "Cannot save invalid deck in draft mode"
+                    : "Submit sealed deck to match"
+                }
+              >
+                {saving ? "Submitting..." : "Submit Sealed Deck"}
+              </button>
+            )}
           </div>
         </div>
-
+        {/* Usage instructions */}
+        <div className="text-white text-sm opacity-30">
+          {isDraftMode
+            ? "📝 Draft Complete! You can only add spells & sites  Drag cards to organize your deck"
+            : "💡 Drag cards between zones • Click card to toggle Deck ⟷ Sideboard"}
+        </div>
         {/* EXACT same "Your Picks" panel as draft-3d */}
         <div className="absolute right-6 max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
           <div className="grid grid-cols-12 gap-6">
@@ -2362,7 +2486,7 @@ export default function DeckEditor3DPage() {
                               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                             />
                           </svg>
-                          Search Cards
+                          Add Cards
                         </button>
                         {/* Tournament Legal Controls Button next to search */}
                         {pick3D.length > 0 && (
@@ -2386,93 +2510,95 @@ export default function DeckEditor3DPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-gray-800/50 to-gray-700/50 rounded-lg backdrop-blur-sm border border-white/10 shadow-xl">
-                    {!isDraftMode ? (
-                      <>
-                        <input
-                          value={q}
-                          onChange={(e) => setQ(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && doSearch()}
-                          className="flex-1 border rounded-lg px-4 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 transition-all min-w-64"
-                          placeholder="Search all cards..."
-                          autoFocus
-                        />
-                        <select
-                          value={typeFilter}
-                          onChange={(e) =>
-                            setTypeFilter(e.target.value as SearchType)
-                          }
-                          className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
-                        >
-                          <option value="all">All Types</option>
-                          <option value="avatar">Avatars</option>
-                          <option value="site">Sites</option>
-                          <option value="spell">Spells</option>
-                        </select>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          value={q}
-                          onChange={(e) => setQ(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && doSearch()}
-                          className="flex-1 border rounded-lg px-4 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 transition-all min-w-64"
-                          placeholder="Search spells and sites..."
-                          autoFocus
-                        />
-                        <select
-                          value={
-                            typeFilter === "all" || typeFilter === "avatar"
-                              ? "spell"
-                              : typeFilter
-                          }
-                          onChange={(e) =>
-                            setTypeFilter(e.target.value as SearchType)
-                          }
-                          className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
-                        >
-                          <option value="spell">Spells</option>
-                          <option value="site">Sites</option>
-                        </select>
-                      </>
-                    )}
-                    <button
-                      onClick={doSearch}
-                      disabled={searching}
-                      className="h-10 px-6 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg"
-                    >
-                      {searching ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                          Searching...
-                        </div>
+                  <div className="w-full flex justify-center">
+                    <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-gray-800/50 to-gray-700/50 rounded-lg backdrop-blur-sm border border-white/10 shadow-xl max-w-3xl w-full">
+                      {!isDraftMode ? (
+                        <>
+                          <input
+                            value={q}
+                            onChange={(e) => setQ(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && doSearch()}
+                            className="flex-1 border rounded-lg px-4 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 transition-all min-w-64"
+                            placeholder="Search all cards..."
+                            autoFocus
+                          />
+                          <select
+                            value={typeFilter}
+                            onChange={(e) =>
+                              setTypeFilter(e.target.value as SearchType)
+                            }
+                            className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
+                          >
+                            <option value="all">All Types</option>
+                            <option value="avatar">Avatars</option>
+                            <option value="site">Sites</option>
+                            <option value="spell">Spells</option>
+                          </select>
+                        </>
                       ) : (
-                        "Search"
+                        <>
+                          <input
+                            value={q}
+                            onChange={(e) => setQ(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && doSearch()}
+                            className="flex-1 border rounded-lg px-4 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 transition-all min-w-64"
+                            placeholder="Search spells and sites..."
+                            autoFocus
+                          />
+                          <select
+                            value={
+                              typeFilter === "all" || typeFilter === "avatar"
+                                ? "spell"
+                                : typeFilter
+                            }
+                            onChange={(e) =>
+                              setTypeFilter(e.target.value as SearchType)
+                            }
+                            className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
+                          >
+                            <option value="spell">Spells</option>
+                            <option value="site">Sites</option>
+                          </select>
+                        </>
                       )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSearchExpanded(false);
-                        setResults([]);
-                        setQ("");
-                      }}
-                      className="h-10 w-10 rounded-lg bg-gray-600/50 text-white hover:bg-gray-500/50 transition-all flex items-center justify-center"
-                      title="Close search"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                      <button
+                        onClick={doSearch}
+                        disabled={searching}
+                        className="h-10 px-6 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
+                        {searching ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            Searching...
+                          </div>
+                        ) : (
+                          "Search"
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSearchExpanded(false);
+                          setResults([]);
+                          setQ("");
+                        }}
+                        className="h-10 w-10 rounded-lg bg-gray-600/50 text-white hover:bg-gray-500/50 transition-all flex items-center justify-center"
+                        title="Close search"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -2545,39 +2671,6 @@ export default function DeckEditor3DPage() {
                       Exit Draft Mode
                     </button>
                   )}
-                  <button
-                    onClick={isSealed ? submitSealedDeck : saveDeck}
-                    disabled={
-                      saving ||
-                      (isDraftMode &&
-                        (!validation.avatar ||
-                          !validation.atlas ||
-                          !validation.spellbook))
-                    }
-                    className={`h-10 px-4 rounded text-white disabled:opacity-50 ${
-                      isSealed
-                        ? "bg-blue-600 hover:bg-blue-700"
-                        : "bg-green-600 hover:bg-green-700"
-                    }`}
-                    title={
-                      isDraftMode &&
-                      (!validation.avatar ||
-                        !validation.atlas ||
-                        !validation.spellbook)
-                        ? "Cannot save invalid deck in draft mode"
-                        : isSealed
-                        ? "Submit sealed deck to match"
-                        : undefined
-                    }
-                  >
-                    {saving
-                      ? "Submitting..."
-                      : isSealed
-                      ? "Submit Sealed Deck"
-                      : deckId
-                      ? "Update Deck"
-                      : "Save Deck"}
-                  </button>
                 </div>
               </div>
 
@@ -2588,12 +2681,6 @@ export default function DeckEditor3DPage() {
               {saveMsg && (
                 <div className="mt-2 text-green-400 text-sm">{saveMsg}</div>
               )}
-            </div>
-            {/* Usage instructions */}
-            <div className="text-white text-sm opacity-30">
-              {isDraftMode
-                ? "📝 Draft Complete! You can only add spells & sites • Drag cards to organize your deck"
-                : "💡 Drag cards between zones • Click card to toggle Deck ⟷ Sideboard"}
             </div>
           </div>
         </div>
