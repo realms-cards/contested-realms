@@ -15,6 +15,7 @@ import type { Group } from "three";
 import { MOUSE } from "three";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import {
   Pick3D,
   CardMeta,
@@ -28,19 +29,7 @@ const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
 // --- Deck Editor data types (same as 2D editor) ---
 
 type Zone = "Spellbook" | "Atlas" | "Sideboard";
-type SearchType = "all" | "site" | "spell" | "avatar";
-
-type SearchResult = {
-  variantId: number;
-  slug: string;
-  finish: "Standard" | "Foil";
-  product: string;
-  cardId: number;
-  cardName: string;
-  set: string;
-  type: string | null;
-  rarity: string | null;
-};
+// SearchType and SearchResult moved to '@/lib/deckEditor/search'
 
 // Matches server shape from GET /api/decks/[id]
 type ApiCardRef = {
@@ -333,6 +322,8 @@ export default function DeckEditor3DPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  // Local set selector for search overlay (empty string means "All Sets")
+  const [searchSetName, setSearchSetName] = useState<string>("");
 
   // Prefetched standard sites for tournament legal quick-add buttons
   const [stdSites, setStdSites] = useState<
@@ -1381,25 +1372,8 @@ export default function DeckEditor3DPage() {
     try {
       setSearching(true);
       setError(null);
-      const sp = new URLSearchParams();
-      if (q.trim()) sp.set("q", q.trim());
-      if (setName) sp.set("set", setName);
-      if (typeFilter !== "all") sp.set("type", typeFilter);
-      const res = await fetch(`/api/cards/search?${sp.toString()}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Search failed");
-      // Deduplicate results by cardId, prefer Standard finish over Foil
-      const list = (data as SearchResult[]) || [];
-      const byCard = new Map<number, SearchResult>();
-      for (const r of list) {
-        const prev = byCard.get(r.cardId);
-        if (!prev) {
-          byCard.set(r.cardId, r);
-        } else if (prev.finish !== "Standard" && r.finish === "Standard") {
-          byCard.set(r.cardId, r);
-        }
-      }
-      setResults(Array.from(byCard.values()));
+      const list = await searchCards({ q, setName: searchSetName, type: typeFilter });
+      setResults(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setResults([]);
@@ -2365,8 +2339,8 @@ export default function DeckEditor3DPage() {
             <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4">
               <div className="flex flex-wrap items-center gap-4">
                 {/* Collapsible Search / Tournament Controls / Sealed Packs */}
-                {!searchExpanded ? (
-                  <div className="flex items-center gap-2">
+                {!searchExpanded || isSealed ? (
+                  <div className="flex items-center gap-2 flex-1">
                     {/* In sealed mode, show pack opening controls */}
                     {isSealed ? (
                       <div className="flex items-center gap-2">
@@ -2435,6 +2409,23 @@ export default function DeckEditor3DPage() {
                             All packs opened!
                           </div>
                         )}
+
+                        {/* Standard picker toggle in sealed mode */}
+                        <button
+                          onClick={() =>
+                            setTournamentControlsVisible(
+                              !tournamentControlsVisible
+                            )
+                          }
+                          className={`h-10 px-4 rounded font-medium transition-colors ${
+                            tournamentControlsVisible
+                              ? "bg-yellow-600 text-white hover:bg-yellow-500"
+                              : "bg-white/10 text-white hover:bg-white/20"
+                          }`}
+                          title="Show tournament legal cards (Spellslinger + Standard Sites)"
+                        >
+                          Add Standard Cards
+                        </button>
                       </div>
                     ) : isDraftMode ? (
                       pick3D.length > 0 && (
@@ -2468,7 +2459,7 @@ export default function DeckEditor3DPage() {
                       )
                     ) : (
                       /* In normal mode, show search button */
-                      <>
+                      <div className="flex-1 flex justify-center items-center gap-2">
                         <button
                           onClick={() => setSearchExpanded(true)}
                           className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 transition-all duration-200 shadow-lg"
@@ -2506,7 +2497,7 @@ export default function DeckEditor3DPage() {
                             Add Standard Cards
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -2534,6 +2525,18 @@ export default function DeckEditor3DPage() {
                             <option value="site">Sites</option>
                             <option value="spell">Spells</option>
                           </select>
+                          <select
+                            value={searchSetName}
+                            onChange={(e) => setSearchSetName(e.target.value)}
+                            className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
+                            title="Select set to search"
+                          >
+                            <option value="">All Sets</option>
+                            <option value="Alpha">Alpha</option>
+                            <option value="Beta">Beta</option>
+                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Dragonlord">Dragonlord</option>
+                          </select>
                         </>
                       ) : (
                         <>
@@ -2558,6 +2561,18 @@ export default function DeckEditor3DPage() {
                           >
                             <option value="spell">Spells</option>
                             <option value="site">Sites</option>
+                          </select>
+                          <select
+                            value={searchSetName}
+                            onChange={(e) => setSearchSetName(e.target.value)}
+                            className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
+                            title="Select set to search"
+                          >
+                            <option value="">All Sets</option>
+                            <option value="Alpha">Alpha</option>
+                            <option value="Beta">Beta</option>
+                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Dragonlord">Dragonlord</option>
                           </select>
                         </>
                       )}
@@ -2610,7 +2625,7 @@ export default function DeckEditor3DPage() {
                         Search Results ({results.length} cards)
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-96 overflow-y-auto">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 max-h-96 overflow-y-auto">
                       {results.map((r) => {
                         const isSite = (r.type || "")
                           .toLowerCase()
@@ -2618,20 +2633,50 @@ export default function DeckEditor3DPage() {
                         return (
                           <div
                             key={r.variantId}
-                            className="border border-white/30 rounded p-2 bg-black/70 text-white text-xs"
+                            className={
+                              "border border-white/30 rounded p-2 bg-black/70 text-white text-xs" +
+                              (isSite ? " col-span-2" : "")
+                            }
                           >
-                            <div className="relative aspect-[3/4] mb-2 rounded overflow-hidden bg-black/40">
+                            <div
+                              className={
+                                (isSite
+                                  ? "relative aspect-[3/2] mb-1"
+                                  : "relative aspect-[3/4] mb-2") +
+                                " rounded overflow-hidden bg-black/40 group"
+                              }
+                            >
                               <Image
                                 src={`/api/images/${r.slug}`}
                                 alt={r.cardName}
                                 fill
                                 className={
                                   isSite
-                                    ? "object-contain rotate-90"
+                                    ? "object-contain object-center"
                                     : "object-cover"
                                 }
                                 sizes="120px"
                               />
+                              <div className="hidden sm:flex absolute inset-0">
+                                <button
+                                  onClick={() => addToSideboardFromSearch(r)}
+                                  className="w-1/2 h-full opacity-0 group-hover:opacity-100 transition bg-gradient-to-r from-black/0 to-black/40 text-white text-xs flex items-end justify-start p-2"
+                                  title="Add to sideboard"
+                                >
+                                  <span className="bg-black/60 px-2 py-1 rounded border border-white/20">
+                                    + Side
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => addCardAuto(r)}
+                                  className="w-1/2 h-full opacity-0 group-hover:opacity-100 transition bg-gradient-to-l from-black/0 to-black/40 text-white text-xs flex items-end justify-end p-2"
+                                  title="Add to deck"
+                                >
+                                  <span className="bg-black/60 px-2 py-1 rounded border border-white/20">
+                                    + Deck
+                                  </span>
+                                </button>
+                              </div>
                             </div>
                             <div className="font-semibold line-clamp-1 mb-1">
                               {r.cardName}
@@ -2639,7 +2684,7 @@ export default function DeckEditor3DPage() {
                             <div className="opacity-80 line-clamp-1 mb-2">
                               {r.type || ""}
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 sm:hidden">
                               <button
                                 className="px-2 py-1 border border-white/30 rounded hover:bg-white/10"
                                 onClick={() => addCardAuto(r)}

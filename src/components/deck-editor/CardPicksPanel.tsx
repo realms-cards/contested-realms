@@ -13,6 +13,12 @@ interface PicksByType {
   sideboard: number;
 }
 
+// Minimal shape we rely on for rendering a thumbnail
+interface SimplePick {
+  cardId: number;
+  slug?: string | null;
+}
+
 interface CardPicksPanelProps {
   cardsTab: "deck" | "all";
   onTabChange: (tab: "deck" | "all") => void;
@@ -116,10 +122,10 @@ export default function CardPicksPanel({
                     .map((card) => {
                       const matchingPick = Object.values(picks).find(
                         (p: unknown) => {
-                          const pick = p as Record<string, unknown>;
+                          const pick = p as Partial<SimplePick>;
                           return (pick.cardId as number) === card.cardId;
                         }
-                      ) as Record<string, unknown> | undefined;
+                      ) as SimplePick | undefined;
 
                       return (
                         <div
@@ -128,7 +134,7 @@ export default function CardPicksPanel({
                         >
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div className="w-8 h-6 bg-black/40 rounded flex-shrink-0 overflow-hidden">
-                              {matchingPick?.slug && typeof matchingPick.slug === 'string' && (
+                              {typeof matchingPick?.slug === "string" ? (
                                 <Image
                                   src={`/api/images/${matchingPick.slug as string}`}
                                   alt={card.name}
@@ -137,7 +143,7 @@ export default function CardPicksPanel({
                                   className="w-full h-full object-cover"
                                   sizes="32px"
                                 />
-                              )}
+                              ) : null}
                             </div>
                             <span className="text-white truncate font-medium">
                               {card.name}

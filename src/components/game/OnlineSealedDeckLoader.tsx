@@ -6,7 +6,7 @@ import type { MatchInfo } from "@/lib/net/protocol";
 
 interface OnlineSealedDeckLoaderProps {
   match: MatchInfo;
-  myPlayerKey: string;
+  myPlayerKey: "p1" | "p2";
   playerNames: { p1: string; p2: string };
   onPrepareComplete: () => void;
 }
@@ -20,13 +20,6 @@ export default function OnlineSealedDeckLoader({
   const { me } = useOnline();
   const [deckError, setDeckError] = useState<string>("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!match || !me) return;
-    
-    // Auto-load sealed decks when component mounts
-    loadSealedDecks();
-  }, [match, me, loadSealedDecks]);
 
   const loadSealedDecks = useCallback(async () => {
     if (!match?.playerDecks || !me) return;
@@ -71,6 +64,12 @@ export default function OnlineSealedDeckLoader({
       setLoading(false);
     }
   }, [match, me, myPlayerKey, onPrepareComplete]);
+
+  useEffect(() => {
+    if (!match || !me) return;
+    // Auto-load sealed decks when component mounts
+    loadSealedDecks();
+  }, [match, me, loadSealedDecks]);
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
