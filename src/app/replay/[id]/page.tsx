@@ -70,9 +70,11 @@ export default function ReplayViewerPage() {
 
     return () => {
       try {
-        socketTransport.off("connect", handleConnect);
-        socketTransport.off("disconnect", handleDisconnect);
-        socketTransport.disconnect();
+        if (socketTransport) {
+          socketTransport.offGeneric("connect", handleConnect);
+          socketTransport.offGeneric("disconnect", handleDisconnect);
+          socketTransport.disconnect();
+        }
       } catch {
         // Ignore cleanup errors
       }
@@ -99,7 +101,9 @@ export default function ReplayViewerPage() {
     transport.emit("getMatchRecording", { matchId });
 
     return () => {
-      transport.off("matchRecordingResponse", handleRecording);
+      if (transport) {
+        transport.offGeneric("matchRecordingResponse", handleRecording);
+      }
     };
   }, [connected, transport, matchId]);
 
