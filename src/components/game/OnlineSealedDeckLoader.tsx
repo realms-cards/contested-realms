@@ -44,16 +44,15 @@ export default function OnlineSealedDeckLoader({
       const myDeckData = match.playerDecks[me.id];
       const opponentId = match.players.find(p => p.id !== me.id)?.id;
       const opponentDeckData = opponentId ? match.playerDecks[opponentId] : null;
-      
-      if (!myDeckData) {
-        // Not an error; our submission may still be registering with the server
-        setWaitingForMe(true);
-        return;
-      }
-      
-      if (!opponentDeckData) {
-        // Not an error; opponent may not have submitted yet
-        setWaitingForOpponent(true);
+      // Determine submission states as reported by server
+      const meSubmitted = !!match.deckSubmissions?.includes(me.id);
+      const opponentSubmitted = opponentId ? !!match.deckSubmissions?.includes(opponentId) : false;
+
+      // Reflect accurate waiting state: only say "waiting for me" if I haven't submitted yet
+      // If submission is recorded but deck data not yet present, we avoid mislabeling and wait silently or for opponent
+      if (!myDeckData || !opponentDeckData) {
+        setWaitingForMe(!myDeckData && !meSubmitted);
+        setWaitingForOpponent(!opponentDeckData && !opponentSubmitted);
         return;
       }
       

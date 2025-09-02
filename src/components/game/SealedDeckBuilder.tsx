@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOnline } from "@/app/online/layout";
 import type { MatchInfo } from "@/lib/net/protocol";
 
@@ -9,8 +9,8 @@ interface Card {
   name: string;
   set: string;
   slug: string;
-  type: string;
-  cost: number;
+  type?: string | null;
+  cost?: number | null;
   rarity: string;
 }
 
@@ -38,6 +38,7 @@ export default function SealedDeckBuilder({
   const [deck, setDeck] = useState<Card[]>([]);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [deckSubmitted, setDeckSubmitted] = useState(false);
+  const openedByIdRef = useRef<Map<string, boolean>>(new Map());
 
   // Calculate time remaining
   useEffect(() => {
@@ -56,25 +57,72 @@ export default function SealedDeckBuilder({
     return () => clearInterval(interval);
   }, [match?.sealedConfig]);
 
-  // Generate packs on mount
+  // Keep a ref of which packs are opened to preserve UI state on server updates
   useEffect(() => {
-    if (!match?.sealedConfig) return;
-    
-    const { packCount, setMix } = match.sealedConfig;
+    openedByIdRef.current = new Map(packs.map((p) => [p.id, p.opened]));
+  }, [packs]);
+
+  // Load server-provided packs if available; otherwise fallback to local generation
+  useEffect(() => {
+    const sealedConfig = match?.sealedConfig;
+    if (!sealedConfig) return;
+
+    const myId = me?.id;
+    const sealedPacks = match?.sealedPacks;
+
+    if (myId && sealedPacks && sealedPacks[myId] && sealedPacks[myId].length) {
+      // Preserve opened state if we already have some packs shown
+      const openedById = openedByIdRef.current;
+      const serverPacks = sealedPacks[myId].map((p) => ({
+        id: p.id,
+        set: p.set,
+        cards: p.cards as Card[],
+        opened: openedById.get(p.id) ?? false,
+      }));
+      setPacks(serverPacks);
+      // Light debug
+      if (typeof window !== 'undefined') {
+        console.debug(`[SealedBuilder] Using server-provided packs for ${myId}:`, serverPacks.map(p => ({ id: p.id, set: p.set, count: p.cards.length })));
+      }
+      return; // Don't fall back if server packs exist
+    }
+
+    // Fallback: local mock generation (legacy)
+    const { packCount, setMix, packCounts } = sealedConfig as typeof sealedConfig & { packCounts?: Record<string, number> };
     const generatedPacks: PackType[] = [];
 
-    for (let i = 0; i < packCount; i++) {
-      const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
-      generatedPacks.push({
-        id: `pack_${i}`,
-        set: randomSet,
-        cards: generateBoosterPack(randomSet),
-        opened: false,
+    if (packCounts && Object.keys(packCounts).length > 0) {
+      const sets: string[] = [];
+      for (const [setName, count] of Object.entries(packCounts)) {
+        const c = Math.max(0, Number(count) || 0);
+        for (let i = 0; i < c; i++) sets.push(setName);
+      }
+      for (let i = sets.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [sets[i], sets[j]] = [sets[j], sets[i]];
+      }
+      sets.forEach((setName, i) => {
+        generatedPacks.push({
+          id: `pack_${i}`,
+          set: setName,
+          cards: generateBoosterPack(setName),
+          opened: false,
+        });
       });
+    } else {
+      for (let i = 0; i < packCount; i++) {
+        const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
+        generatedPacks.push({
+          id: `pack_${i}`,
+          set: randomSet,
+          cards: generateBoosterPack(randomSet),
+          opened: false,
+        });
+      }
     }
 
     setPacks(generatedPacks);
-  }, [match?.sealedConfig]);
+  }, [match, match?.sealedPacks, me?.id]);
 
   // Format time display
   const formatTime = (ms: number) => {

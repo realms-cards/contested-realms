@@ -2,12 +2,13 @@
 
 import { io, Socket } from "socket.io-client";
 import { Protocol } from "@/lib/net/protocol";
-import type { LobbyVisibility, ChatScope } from "@/lib/net/protocol";
+import type { LobbyVisibility, ChatScope, DraftConfig } from "@/lib/net/protocol";
 import type {
   GameTransport,
   TransportEvent,
   TransportEventMap,
   TransportHandler,
+  StartMatchConfig,
 } from "@/lib/net/transport";
 
 export class SocketTransport implements GameTransport {
@@ -97,6 +98,10 @@ export class SocketTransport implements GameTransport {
       socket.on("statePatch", (payload) =>
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
       );
+      // Draft updates (server-emitted, custom payload)
+      socket.on("draftUpdate", (payload) =>
+        this.dispatch("draftUpdate", payload as unknown as TransportEventMap["draftUpdate"])
+      );
       socket.on("chat", (payload) =>
         this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
       );
@@ -181,7 +186,7 @@ export class SocketTransport implements GameTransport {
     this.requireSocket().emit("ready", Protocol.ReadyPayload.parse({ ready }));
   }
 
-  startMatch(matchConfig?: { matchType?: string; sealedConfig?: { packCount: number; setMix: string[]; timeLimit: number } }): void {
+  startMatch(matchConfig?: StartMatchConfig): void {
     this.requireSocket().emit(
       "startMatch", 
       matchConfig ? matchConfig : Protocol.StartMatchPayload.parse({})
@@ -246,6 +251,20 @@ export class SocketTransport implements GameTransport {
     this.requireSocket().emit("submitDeck", { deck });
   }
 
+  // Draft-specific methods
+  async startDraft(config: { matchId: string; draftConfig: DraftConfig }): Promise<void> {
+    // Server currently derives match by socket's player; payload is optional
+    this.requireSocket().emit("startDraft", config);
+  }
+
+  makeDraftPick(config: { matchId: string; cardId: string; packIndex: number; pickNumber: number }): void {
+    this.requireSocket().emit("makeDraftPick", config);
+  }
+
+  chooseDraftPack(config: { matchId: string; setChoice: string; packIndex: number }): void {
+    this.requireSocket().emit("chooseDraftPack", config);
+  }
+
   on<E extends TransportEvent>(
     event: E,
     handler: TransportHandler<E>
@@ -270,5 +289,20 @@ export class SocketTransport implements GameTransport {
   private requireSocket(): Socket {
     if (!this.socket) throw new Error("Socket not connected");
     return this.socket;
+  }
+
+  // Generic methods for replay and other custom events
+  emit(event: string, payload?: unknown): void {
+    this.requireSocket().emit(event, payload);
+  }
+
+  // Generic on/off methods for arbitrary events (used by replay functionality)  
+  // Note: This overloads the typed 'on' method for specific events
+  onGeneric(event: string, handler: (payload: unknown) => void): void {
+    this.requireSocket().on(event, handler);
+  }
+
+  offGeneric(event: string, handler: (payload: unknown) => void): void {
+    this.requireSocket().off(event, handler);
   }
 }

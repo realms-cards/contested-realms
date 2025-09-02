@@ -20,6 +20,8 @@ export const LobbyInfoSchema = z.object({
   status: LobbyStatusSchema,
   maxPlayers: z.number().int().min(2).max(8),
   visibility: LobbyVisibilitySchema,
+  // New: readiness information per lobby
+  readyPlayerIds: z.array(z.string()).default([]),
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
@@ -31,8 +33,37 @@ export const SealedConfigSchema = z.object({
   setMix: z.array(z.string()),
   timeLimit: z.number().int().min(15).max(90),
   constructionStartTime: z.number().optional(),
+  // Optional extended fields used by lobby UI and clients
+  packCounts: z.record(z.string(), z.number().int().min(0)).optional(),
+  replaceAvatars: z.boolean().optional(),
 });
 export type SealedConfig = z.infer<typeof SealedConfigSchema>;
+
+export const DraftConfigSchema = z.object({
+  setMix: z.array(z.string()),
+  packCount: z.number().int().min(3).max(4),
+  packSize: z.number().int().min(12).max(18),
+});
+export type DraftConfig = z.infer<typeof DraftConfigSchema>;
+
+// Server-provided sealed packs per player (deterministic)
+export const PackCardSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  set: z.string(),
+  slug: z.string(),
+  type: z.string().optional().nullable(),
+  cost: z.number().int().min(0).optional().nullable(),
+  rarity: z.string(),
+});
+export type PackCard = z.infer<typeof PackCardSchema>;
+
+export const SealedPackSchema = z.object({
+  id: z.string(),
+  set: z.string(),
+  cards: z.array(PackCardSchema),
+});
+export type SealedPack = z.infer<typeof SealedPackSchema>;
 
 export const MatchInfoSchema = z.object({
   id: z.string(),
@@ -42,10 +73,12 @@ export const MatchInfoSchema = z.object({
   seed: z.string(),
   turn: z.string().optional(),
   winnerId: z.string().nullable().optional(),
-  matchType: z.enum(["constructed", "sealed"]).optional(),
+  matchType: z.enum(["constructed", "sealed", "draft"]).optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),
+  draftConfig: DraftConfigSchema.nullable().optional(),
   deckSubmissions: z.array(z.string()).optional(),
   playerDecks: z.record(z.string(), z.unknown()).optional(),
+  sealedPacks: z.record(z.string(), z.array(SealedPackSchema)).optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 

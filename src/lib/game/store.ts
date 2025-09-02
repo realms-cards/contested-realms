@@ -87,6 +87,7 @@ export type GameState = {
   choosePlayerOrder: (winner: PlayerKey, wantsToGoFirst: boolean) => void;
   // Server patch integration
   applyServerPatch: (patch: unknown, t?: number) => void;
+  applyPatch: (patch: unknown) => void;
   lastServerTs: number;
   // Multiplayer transport (null => offline)
   transport: GameTransport | null;
@@ -624,6 +625,68 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       if (typeof t === "number") next.lastServerTs = Math.max(s.lastServerTs ?? 0, t);
+      return next as Partial<GameState> as GameState;
+    }),
+
+  // Apply a replay patch (simplified version without server communication or timestamps)
+  applyPatch: (patch) =>
+    set((s) => {
+      if (!patch || typeof patch !== "object") return s as GameState;
+
+      const p = patch as ServerPatchT;
+      const next: Partial<GameState> = {};
+
+      if (p.players !== undefined) {
+        next.players = deepMergeReplaceArrays(s.players, p.players);
+      }
+      if (p.currentPlayer !== undefined) {
+        next.currentPlayer = p.currentPlayer;
+      }
+      if (p.phase !== undefined) {
+        next.phase = p.phase;
+      }
+      if (p.d20Rolls !== undefined) {
+        next.d20Rolls = p.d20Rolls;
+      }
+      if (p.setupWinner !== undefined) {
+        next.setupWinner = p.setupWinner;
+      }
+      if (p.matchEnded !== undefined) {
+        next.matchEnded = p.matchEnded;
+      }
+      if (p.winner !== undefined) {
+        next.winner = p.winner;
+      }
+      if (p.board !== undefined) {
+        next.board = deepMergeReplaceArrays(s.board, p.board);
+      }
+      if (p.zones !== undefined) {
+        next.zones = deepMergeReplaceArrays(s.zones, p.zones);
+      }
+      if (p.avatars !== undefined) {
+        next.avatars = deepMergeReplaceArrays(s.avatars, p.avatars);
+      }
+      if (p.permanents !== undefined) {
+        next.permanents = deepMergeReplaceArrays(s.permanents, p.permanents);
+      }
+      if (p.mulligans !== undefined) {
+        next.mulligans = deepMergeReplaceArrays(s.mulligans, p.mulligans);
+      }
+      if (p.mulliganDrawn !== undefined) {
+        next.mulliganDrawn = deepMergeReplaceArrays(s.mulliganDrawn, p.mulliganDrawn);
+      }
+      if (p.events !== undefined) {
+        const merged = mergeEvents(s.events, (p.events as GameEvent[]) || []);
+        next.events = merged;
+        const mergedMaxId = merged.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0);
+        const candidateSeq = Math.max(s.eventSeq, mergedMaxId);
+        next.eventSeq = p.eventSeq !== undefined
+          ? Math.max(candidateSeq, Number(p.eventSeq) || 0)
+          : candidateSeq;
+      } else if (p.eventSeq !== undefined) {
+        next.eventSeq = Math.max(s.eventSeq, Number(p.eventSeq) || 0);
+      }
+
       return next as Partial<GameState> as GameState;
     }),
 
