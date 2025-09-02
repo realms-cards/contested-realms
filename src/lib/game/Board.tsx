@@ -11,7 +11,7 @@ import {
 } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PermanentItem } from "@/lib/game/store";
-import { RigidBody, CuboidCollider } from "@react-three/rapier";
+import { RigidBody, CuboidCollider, useAfterPhysicsStep } from "@react-three/rapier";
 import CardPlane from "@/lib/game/components/CardPlane";
 import CardGlow from "@/lib/game/components/CardGlow";
 import {
@@ -176,41 +176,81 @@ export default function Board() {
   // Map of cellKey:index -> RigidBody to drive during drag
   const bodyMap = useRef<Map<string, BodyApi>>(new Map());
   const draggedBody = useRef<BodyApi | null>(null);
+  // Target world position for the currently dragged body (applied after physics step)
+  const dragTarget = useRef<{ x: number; z: number; lift: boolean } | null>(null);
+  // Pending snap operations queued to run safely after the physics step
+  const pendingSnaps = useRef<
+    Map<string, { x: number; z: number; attempts: number }>
+  >(new Map());
 
   function moveDraggedBody(x: number, z: number, lift = true) {
-    const api = draggedBody.current;
-    if (!api) return;
-    try {
-      api.wakeUp();
-      api.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      api.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.25, z }, true);
-    } catch (error) {
-      console.warn(`[physics] Failed to move dragged body:`, error);
-    }
+    // Defer actual physics API calls to useAfterPhysicsStep
+    dragTarget.current = { x, z, lift };
   }
 
-  // Snap a body (by id) to an exact world position on the next frame.
+  // Queue a snap of a body (by id) to an exact world position, applied after the physics step.
   function snapBodyTo(id: string, x: number, z: number) {
-    const trySnap = (left: number) => {
-      requestAnimationFrame(() => {
-        const api = bodyMap.current.get(id);
-        if (!api) {
-          if (left > 0) trySnap(left - 1);
-          return;
-        }
-        try {
-          api.wakeUp();
-          api.setLinvel({ x: 0, y: 0, z: 0 }, true);
-          api.setAngvel({ x: 0, y: 0, z: 0 }, true);
-          api.setTranslation({ x, y: 0.25, z }, false);
-        } catch (error) {
-          console.warn(`[physics] Failed to snap body ${id}:`, error);
-        }
-      });
-    };
-    trySnap(3);
+    // Allow a few frames of retries to handle remount timing
+    pendingSnaps.current.set(id, { x, z, attempts: 8 });
   }
+
+  // Apply queued drag moves and snap operations after each physics step to avoid recursive aliasing
+  useAfterPhysicsStep(() => {
+    // Apply drag target for the currently dragged body
+    const target = dragTarget.current;
+    const api = draggedBody.current;
+    if (api && target) {
+      try {
+        api.wakeUp();
+        api.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        api.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        api.setTranslation(
+          { x: target.x, y: target.lift ? DRAG_LIFT : 0.25, z: target.z },
+          true
+        );
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(`[physics] Failed to move dragged body (afterStep):`, error);
+        }
+      } finally {
+        // Consume this target so we only apply the latest request
+        dragTarget.current = null;
+      }
+    }
+
+    // Process pending snap requests
+    if (pendingSnaps.current.size > 0) {
+      const entries = Array.from(pendingSnaps.current.entries());
+      for (const [id, job] of entries) {
+        const snapApi = bodyMap.current.get(id);
+        if (snapApi) {
+          try {
+            snapApi.wakeUp();
+            snapApi.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            snapApi.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            snapApi.setTranslation({ x: job.x, y: 0.25, z: job.z }, false);
+          } catch (error) {
+            if (process.env.NODE_ENV !== "production") {
+              console.warn(`[physics] Failed to snap body ${id} (afterStep):`, error);
+            }
+          } finally {
+            pendingSnaps.current.delete(id);
+          }
+        } else {
+          // Retry on the next frame until attempts exhausted
+          if (job.attempts > 0) {
+            pendingSnaps.current.set(id, {
+              x: job.x,
+              z: job.z,
+              attempts: job.attempts - 1,
+            });
+          } else {
+            pendingSnaps.current.delete(id);
+          }
+        }
+      }
+    }
+  });
 
   // Ensure local/global drag state is cleared even if input ends outside the canvas
   useEffect(() => {
