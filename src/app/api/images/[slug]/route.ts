@@ -71,11 +71,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     const exts = wantKtx2 ? ["ktx2"] : ["png", "jpg", "jpeg", "webp"];
     const candidates: string[] = [];
 
+    // 1) Try within the resolved set directory first (strict match)
     for (const root of roots) {
       if (suffix) {
         for (const ext of exts) candidates.push(path.join(root, suffix, `${base}.${ext}`));
       }
-      // Also try directly under set dir
       for (const ext of exts) candidates.push(path.join(root, `${base}.${ext}`));
     }
 
@@ -86,6 +86,42 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         found = p;
         break;
       } catch {}
+    }
+
+    // 2) Cross-set fallback: if not found in the primary set, look in other set directories
+    if (!found) {
+      const allSetsPreferredOrder = [
+        // Prefer Beta assets when available, then Alpha, then Arthurian/Dragonlord
+        "beta",
+        "alpha",
+        "arthurian_legends",
+        "Dragonlord",
+      ];
+      // Ensure we don't duplicate the already-checked setDir, and keep order preference
+      const searchSets = allSetsPreferredOrder.filter((s) => s !== setDir);
+      const crossSetCandidates: string[] = [];
+      for (const setName of searchSets) {
+        const altRoots = wantKtx2
+          ? [
+              path.join(process.cwd(), "data-ktx2", setName),
+              path.join(process.cwd(), "data", setName),
+            ]
+          : [path.join(process.cwd(), "data", setName)];
+        for (const root of altRoots) {
+          if (suffix) {
+            for (const ext of exts)
+              crossSetCandidates.push(path.join(root, suffix, `${base}.${ext}`));
+          }
+          for (const ext of exts) crossSetCandidates.push(path.join(root, `${base}.${ext}`));
+        }
+      }
+      for (const p of crossSetCandidates) {
+        try {
+          await fs.promises.access(p, fs.constants.R_OK);
+          found = p;
+          break;
+        } catch {}
+      }
     }
 
     if (!found) {
