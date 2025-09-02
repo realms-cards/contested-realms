@@ -22,6 +22,7 @@ export default function ReplayListPage() {
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  
 
   useEffect(() => {
     // Get current player ID from localStorage if available
@@ -57,9 +58,11 @@ export default function ReplayListPage() {
 
     return () => {
       try {
-        socketTransport.off("connect", handleConnect);
-        socketTransport.off("disconnect", handleDisconnect);
-        socketTransport.disconnect();
+        if (socketTransport) {
+          socketTransport.offGeneric("connect", handleConnect);
+          socketTransport.offGeneric("disconnect", handleDisconnect);
+          socketTransport.disconnect();
+        }
       } catch {
         // Ignore cleanup errors
       }
@@ -79,7 +82,9 @@ export default function ReplayListPage() {
     transport.emit("getMatchRecordings");
 
     return () => {
-      transport.off("matchRecordingsResponse", handleRecordings);
+      if (transport) {
+        transport.offGeneric("matchRecordingsResponse", handleRecordings);
+      }
     };
   }, [connected, transport]);
 
@@ -112,6 +117,7 @@ export default function ReplayListPage() {
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6">
