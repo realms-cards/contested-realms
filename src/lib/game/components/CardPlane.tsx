@@ -26,6 +26,7 @@ interface CardPlaneProps {
   upright?: boolean; // if true, face camera (no -PI/2 tilt)
   renderOrder?: number;
   textureUrl?: string; // optional explicit texture (e.g., pile backs)
+  textureRotation?: number; // rotation to apply to the texture itself
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -89,6 +90,7 @@ function CardWithTexture(props: CardPlaneProps) {
     upright = false,
     renderOrder = 0,
     textureUrl,
+    textureRotation,
     onContextMenu,
     onPointerDown,
     onPointerOver,
@@ -100,6 +102,13 @@ function CardWithTexture(props: CardPlaneProps) {
 
   if (!tex) {
     return <CardFallback {...props} />;
+  }
+
+  // Apply texture rotation if specified
+  if (textureRotation !== undefined && tex.rotation !== textureRotation) {
+    tex.rotation = textureRotation;
+    tex.center.set(0.5, 0.5); // Rotate around center
+    tex.needsUpdate = true;
   }
 
   return (
