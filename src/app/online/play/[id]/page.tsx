@@ -67,6 +67,7 @@ export default function OnlineMatchPage() {
     null
   );
   const joinAttemptedForRef = useRef<string | null>(null);
+  const sealedSubmissionSentForRef = useRef<string | null>(null);
 
   // Get player nicknames
   const playerNames = useMemo(() => {
@@ -171,19 +172,31 @@ export default function OnlineMatchPage() {
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
 
+  // Track sealed submission flag for this match (used to decide when to load decks)
+  const hasSubmittedSealedDeck = useMemo(() => {
+    if (!matchId) return false;
+    // Prefer server-confirmed deck presence
+    const myId = me?.id;
+    if (myId && match?.playerDecks && (match.playerDecks as Record<string, unknown>)[myId]) {
+      return true;
+    }
+    // Fallback to localStorage flag set by editor
+    try {
+      return localStorage.getItem(`sealed_submitted_${matchId}`) === "true";
+    } catch {
+      return false;
+    }
+  }, [matchId, match?.playerDecks, me?.id]);
+
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
   useEffect(() => {
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
-    // Check if we've already submitted a deck for this match
-    const submittedKey = `sealed_submitted_${matchId}`;
-    const hasSubmitted = localStorage.getItem(submittedKey) === 'true';
-
     // Auto-redirect to sealed editor when joining sealed match during deck construction
-    // But only if we haven't submitted a deck yet
-    if (match.status === "deck_construction" && match.matchType === "sealed" && !hasSubmitted) {
+    // But only if we haven't submitted a deck yet (prefer server-confirmed check)
+    if (match.status === "deck_construction" && match.matchType === "sealed" && !hasSubmittedSealedDeck) {
       // Clear game state before opening sealed editor
       useGameStore.getState().resetGameState();
       
@@ -201,7 +214,55 @@ export default function OnlineMatchPage() {
       window.location.href = `/decks/editor-3d?${params.toString()}`;
       return; // Don't execute the rest of the setup logic
     }
-  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig]);
+  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig, hasSubmittedSealedDeck]);
+
+  // Listen for sealed deck submissions via postMessage (when editor opened in a new window)
+  useEffect(() => {
+    if (!matchId || !transport) return;
+
+    const onMessage = (e: MessageEvent) => {
+      try {
+        if (e.origin !== window.location.origin) return;
+      } catch {}
+      const dataUnknown = (e as MessageEvent<unknown>).data;
+      if (!dataUnknown || typeof dataUnknown !== "object") return;
+      const data = dataUnknown as { type?: string; deck?: unknown; matchId?: string };
+      if (data.type !== "sealedDeckSubmission") return;
+      if (data.matchId && data.matchId !== matchId) return;
+      if (sealedSubmissionSentForRef.current === matchId) return;
+
+      // Forward to server
+      transport.submitDeck(data.deck);
+      sealedSubmissionSentForRef.current = matchId;
+      try {
+        localStorage.setItem(`sealed_submitted_${matchId}`, "true");
+        localStorage.removeItem(`sealedDeck_${matchId}`);
+      } catch {}
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [matchId, transport]);
+
+  // Fallback: read sealed deck from localStorage after returning from editor and submit to server
+  useEffect(() => {
+    if (!matchId || match?.id !== matchId) return;
+    if (!transport) return;
+    if (sealedSubmissionSentForRef.current === matchId) return;
+    if (match?.matchType !== "sealed" || match?.status !== "deck_construction") return;
+
+    try {
+      const raw = localStorage.getItem(`sealedDeck_${matchId}`);
+      if (!raw) return;
+      const deck = JSON.parse(raw);
+      if (!Array.isArray(deck) || deck.length === 0) return;
+
+      transport.submitDeck(deck);
+      sealedSubmissionSentForRef.current = matchId;
+      localStorage.setItem(`sealed_submitted_${matchId}`, "true");
+      localStorage.removeItem(`sealedDeck_${matchId}`);
+    } catch {}
+  }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 
   // Control setup overlay based on match status
   useEffect(() => {
@@ -209,25 +270,15 @@ export default function OnlineMatchPage() {
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
-    // Check if we've submitted a deck for sealed matches
-    const submittedKey = `sealed_submitted_${matchId}`;
-    const hasSubmittedSealedDeck = localStorage.getItem(submittedKey) === 'true';
-
-    if (match.status === "in_progress") {
-      // Ongoing match: ensure overlay is closed; do NOT override phase here
-      if (setupOpen) setSetupOpen(false);
-    } else if (match.status === "waiting" || 
-               (match.status === "deck_construction" && 
-                (match.matchType !== "sealed" || !hasSubmittedSealedDeck))) {
-      // During setup (including deck construction and mulligan), keep overlay open
-      // BUT for sealed matches, only if we haven't submitted our deck yet
+    if (match.status === "waiting" || match.status === "deck_construction") {
+      // Keep overlay open during waiting and deck construction
       if (!setupOpen) setSetupOpen(true);
-    } else {
-      // Ended or unknown: keep overlay closed
-      // Also close if sealed match and we've submitted our deck
+    } else if (match.status === "ended") {
+      // Close on end
       if (setupOpen) setSetupOpen(false);
     }
-  }, [matchId, match, match?.id, match?.status, match?.matchType, setupOpen]);
+    // Do not auto-close on "in_progress"; we'll close when serverPhase reaches Main
+  }, [matchId, match, match?.id, match?.status, setupOpen]);
 
   // Reset setup wizard when entering a different match (fresh waiting match)
   useEffect(() => {
@@ -245,12 +296,10 @@ export default function OnlineMatchPage() {
     }
   }, [match?.id, matchId]);
 
-  // Clear submission flag when match transitions away from deck_construction
+  // Clear submission flag when match ends (avoid lingering state for next sessions)
   useEffect(() => {
     if (!matchId || !match) return;
-    
-    // If match is no longer in deck construction, clear the submission flag
-    if (match.status !== 'deck_construction') {
+    if (match.status === 'ended') {
       const submittedKey = `sealed_submitted_${matchId}`;
       localStorage.removeItem(submittedKey);
     }
@@ -525,12 +574,22 @@ export default function OnlineMatchPage() {
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             match?.matchType === "sealed" ? (
-              <OnlineSealedDeckLoader
-                match={match}
-                myPlayerKey={myPlayerKey}
-                playerNames={playerNames}
-                onPrepareComplete={() => setPrepared(true)}
-              />
+              hasSubmittedSealedDeck ? (
+                <OnlineSealedDeckLoader
+                  match={match}
+                  myPlayerKey={myPlayerKey}
+                  playerNames={playerNames}
+                  onPrepareComplete={() => setPrepared(true)}
+                  autoStart
+                />
+              ) : (
+                <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold text-white mb-4">Sealed Deck Construction</h2>
+                    <div className="text-slate-300">Redirecting you to the deck editor to build and submit your sealed deck...</div>
+                  </div>
+                </div>
+              )
             ) : (
               <OnlineDeckSelector
                 myPlayerKey={myPlayerKey}
