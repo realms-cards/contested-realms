@@ -771,6 +771,7 @@ export default function Board() {
                             // Compute nearest tile from world position and preserve exact world drop
                             const wx = e.point.x;
                             const wz = e.point.z;
+                            const draggedId = p.card.cardId;
                             let tx = Math.round((wx - offsetX) / TILE_SIZE);
                             let ty = Math.round((wz - offsetY) / TILE_SIZE);
                             tx = Math.max(0, Math.min(board.size.w - 1, tx));
@@ -799,7 +800,9 @@ export default function Board() {
                               if (draggedBody.current)
                                 moveDraggedBody(wx, wz, false);
                               setPermanentOffset(dropKey, idx, [offX, offZ]);
-                              snapBodyTo(`${dropKey}:${idx}`, wx, wz);
+                              if (draggedId != null) {
+                                snapBodyTo(`perm:${draggedId}`, wx, wz);
+                              }
                             } else {
                               // Moving to another tile: baseline uses new count and new index at end
                               const toItems = permanents[dropKey] || [];
@@ -818,7 +821,9 @@ export default function Board() {
                                 offX,
                                 offZ,
                               ]);
-                              snapBodyTo(`${dropKey}:${newIndex}`, wx, wz);
+                              if (draggedId != null) {
+                                snapBodyTo(`perm:${draggedId}`, wx, wz);
+                              }
                             }
                             setDragging(null);
                             setDragFromHand(false);
