@@ -171,30 +171,90 @@ export default function OnlineMatchPage() {
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
 
+  // Auto-redirect to sealed editor for sealed matches in deck construction
+  // But only if we haven't already submitted a deck (avoid redirect loop)
+  useEffect(() => {
+    if (!matchId || match?.id !== matchId) return;
+    if (!match) return;
+
+    // Check if we've already submitted a deck for this match
+    const submittedKey = `sealed_submitted_${matchId}`;
+    const hasSubmitted = localStorage.getItem(submittedKey) === 'true';
+
+    // Auto-redirect to sealed editor when joining sealed match during deck construction
+    // But only if we haven't submitted a deck yet
+    if (match.status === "deck_construction" && match.matchType === "sealed" && !hasSubmitted) {
+      // Clear game state before opening sealed editor
+      useGameStore.getState().resetGameState();
+      
+      // Navigate to 3D editor with sealed mode
+      const params = new URLSearchParams({
+        sealed: 'true',
+        matchId: match.id,
+        timeLimit: match.sealedConfig?.timeLimit?.toString() || '40',
+        packCount: match.sealedConfig?.packCount?.toString() || '6',
+        setMix: match.sealedConfig?.setMix?.join(',') || 'Beta',
+        constructionStartTime: match.sealedConfig?.constructionStartTime?.toString() || Date.now().toString()
+      });
+      
+      // Redirect to editor
+      window.location.href = `/decks/editor-3d?${params.toString()}`;
+      return; // Don't execute the rest of the setup logic
+    }
+  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig]);
+
   // Control setup overlay based on match status
   useEffect(() => {
     // Only react once we know we're in this specific match
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
+    // Check if we've submitted a deck for sealed matches
+    const submittedKey = `sealed_submitted_${matchId}`;
+    const hasSubmittedSealedDeck = localStorage.getItem(submittedKey) === 'true';
+
     if (match.status === "in_progress") {
       // Ongoing match: ensure overlay is closed; do NOT override phase here
       if (setupOpen) setSetupOpen(false);
-    } else if (match.status === "waiting" || match.status === "deck_construction") {
+    } else if (match.status === "waiting" || 
+               (match.status === "deck_construction" && 
+                (match.matchType !== "sealed" || !hasSubmittedSealedDeck))) {
       // During setup (including deck construction and mulligan), keep overlay open
+      // BUT for sealed matches, only if we haven't submitted our deck yet
       if (!setupOpen) setSetupOpen(true);
     } else {
       // Ended or unknown: keep overlay closed
+      // Also close if sealed match and we've submitted our deck
       if (setupOpen) setSetupOpen(false);
     }
-  }, [matchId, match, match?.id, match?.status, setupOpen]);
+  }, [matchId, match, match?.id, match?.status, match?.matchType, setupOpen]);
 
   // Reset setup wizard when entering a different match (fresh waiting match)
   useEffect(() => {
     // When match id changes, restart the setup steps so we don't skip phases
     setPrepared(false);
     setD20RollingComplete(false);
-  }, [match?.id]);
+    
+    // Clear submission flag when entering a different match
+    if (matchId) {
+      const submittedKey = `sealed_submitted_${matchId}`;
+      // Only clear if this is actually a new match (not a status change on same match)
+      if (match?.id && match.id !== matchId) {
+        localStorage.removeItem(submittedKey);
+      }
+    }
+  }, [match?.id, matchId]);
+
+  // Clear submission flag when match transitions away from deck_construction
+  useEffect(() => {
+    if (!matchId || !match) return;
+    
+    // If match is no longer in deck construction, clear the submission flag
+    if (match.status !== 'deck_construction') {
+      const submittedKey = `sealed_submitted_${matchId}`;
+      localStorage.removeItem(submittedKey);
+    }
+  }, [matchId, match?.status]);
 
   // Reset game state only when match transitions to "in_progress" (once per match)
   useEffect(() => {
@@ -463,71 +523,7 @@ export default function OnlineMatchPage() {
       {/* Setup Overlay - only show when in match and setup is open */}
       {inThisMatch && setupOpen && myPlayerKey && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
-          {match?.status === "deck_construction" ? (
-            // Redirect to 3D editor for sealed deck construction
-            <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold text-white mb-4">Sealed Deck Construction</h2>
-                <div className="space-y-4">
-                  <div className="text-slate-300">
-                    <div className="mb-2">Starting 3D deck construction...</div>
-                    <div className="text-white font-medium">
-                      {playerNames.p1} vs {playerNames.p2}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-center">
-                    <button
-                      onClick={() => {
-                        // Navigate to 3D editor with sealed mode
-                        const params = new URLSearchParams({
-                          sealed: 'true',
-                          matchId: match.id,
-                          timeLimit: match.sealedConfig?.timeLimit?.toString() || '40',
-                          packCount: match.sealedConfig?.packCount?.toString() || '6',
-                          setMix: match.sealedConfig?.setMix?.join(',') || 'Beta',
-                          constructionStartTime: match.sealedConfig?.constructionStartTime?.toString() || Date.now().toString()
-                        });
-                        
-                        // Open in new window so we can receive postMessage
-                        const editorWindow = window.open(`/decks/editor-3d?${params.toString()}`, '_blank');
-                        
-                        // Listen for sealed deck submission
-                        const handleMessage = (event: MessageEvent) => {
-                          if (event.origin !== window.location.origin) return;
-                          if (event.data.type === 'sealedDeckSubmission') {
-                            // Submit deck using transport
-                            if (transport) {
-                              transport.submitDeck(event.data.deck);
-                              console.log("Sealed deck submitted:", event.data.deck);
-                            }
-                            // Close editor window
-                            if (editorWindow) {
-                              editorWindow.close();
-                            }
-                            // Clean up listener
-                            window.removeEventListener('message', handleMessage);
-                          }
-                        };
-                        
-                        window.addEventListener('message', handleMessage);
-                        
-                        // Clean up if editor window is closed manually
-                        const checkClosed = setInterval(() => {
-                          if (editorWindow?.closed) {
-                            window.removeEventListener('message', handleMessage);
-                            clearInterval(checkClosed);
-                          }
-                        }, 1000);
-                      }}
-                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
-                    >
-                      Open 3D Deck Constructor
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : !prepared ? (
+          {!prepared ? (
             match?.matchType === "sealed" ? (
               <OnlineSealedDeckLoader
                 match={match}

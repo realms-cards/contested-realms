@@ -604,7 +604,8 @@ function DeckEditor3DPageInner() {
       const meta = metaByCardId[p.card.cardId];
       const c = meta?.cost;
       if (typeof c === "number") {
-        const k = Math.max(0, Math.min(9, Math.floor(c)));
+        // Bucket costs into 0..7, where 7 represents 7+
+        const k = Math.max(0, Math.min(7, Math.floor(c)));
         curve[k] = (curve[k] || 0) + 1;
       }
     }
@@ -812,9 +813,19 @@ function DeckEditor3DPageInner() {
         else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
       }
+      
+      // Debug: log the actual counts
+      console.log("[Sealed Validation]", { 
+        avatar, 
+        atlas, 
+        spellbookNonAvatar, 
+        totalDeckCards: avatar + atlas + spellbookNonAvatar,
+        deckZoneCards: pick3D.filter(p => p.z < 0).length
+      });
+
       if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
         throw new Error(
-          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+          `Deck invalid. Current: ${avatar} Avatar, ${atlas} Atlas, ${spellbookNonAvatar} Spellbook. Required: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar & Sites)`
         );
       }
 
@@ -832,8 +843,17 @@ function DeckEditor3DPageInner() {
           rarity: p.card.rarity || "Common",
         }));
 
-      // Auto-save the deck first
+      // Auto-save the deck with sealed naming format
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const sealedDeckName = `sealed_opponent_${today}`;
+      setDeckName(sealedDeckName);
       await saveDeck();
+
+      // Mark deck as submitted to prevent redirect loop
+      const matchId = searchParams.get("matchId");
+      if (matchId) {
+        localStorage.setItem(`sealed_submitted_${matchId}`, 'true');
+      }
 
       // Submit to match server using postMessage to parent window (online match page)
       if (window.opener) {
@@ -841,14 +861,14 @@ function DeckEditor3DPageInner() {
           {
             type: "sealedDeckSubmission",
             deck: deckCards,
-            matchId: searchParams.get("matchId"),
+            matchId: matchId,
           },
           window.location.origin
         );
       } else {
         // Fallback: save to localStorage for the match page to pick up
         localStorage.setItem(
-          `sealedDeck_${searchParams.get("matchId")}`,
+          `sealedDeck_${matchId}`,
           JSON.stringify(deckCards)
         );
       }
@@ -857,7 +877,7 @@ function DeckEditor3DPageInner() {
 
       // Redirect back to match after short delay
       setTimeout(() => {
-        window.location.href = `/online/play/${searchParams.get("matchId")}`;
+        window.location.href = `/online/play/${matchId}`;
       }, 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1422,10 +1442,10 @@ function DeckEditor3DPageInner() {
   const spellbookNonAvatar = useMemo(() => {
     let n = 0;
     for (const pick of pick3D) {
-      // Only count non-avatar cards in deck zone (z < 0)
+      // Only count non-avatar, non-site cards in deck zone (z < 0)
       if (pick.z >= 0) continue;
       const t = (pick.card.type || "").toLowerCase();
-      if (!t.includes("avatar")) n += 1;
+      if (!t.includes("avatar") && !t.includes("site")) n += 1;
     }
     return n;
   }, [pick3D]);
@@ -2186,22 +2206,23 @@ function DeckEditor3DPageInner() {
                     Mana Curve (Deck Only):
                   </div>
                   <div className="flex items-end gap-1 h-16 bg-black/40 rounded p-2">
-                    {Array.from({ length: 10 }, (_, cost) => {
+                    {Array.from({ length: 8 }, (_, cost) => {
                       const count = manaCurve[cost] || 0;
                       const maxCount = Math.max(...Object.values(manaCurve), 1);
                       const height = (count / maxCount) * 100;
+                      const label = cost === 7 ? "7+" : String(cost);
 
                       return (
                         <div
                           key={cost}
-                          className="flex flex-col items-center gap-1 flex-1"
+                          className="flex flex-col items-center justify-end gap-1 flex-1 h-full"
                         >
                           <div
                             className="bg-blue-400 rounded-t min-h-[2px] w-full relative group"
                             style={{
                               height: `${Math.max(height, count > 0 ? 8 : 0)}%`,
                             }}
-                            title={`${cost} mana: ${count} cards`}
+                            title={`${label} mana: ${count} cards`}
                           >
                             {count > 0 && (
                               <span className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-white opacity-75">
@@ -2209,7 +2230,7 @@ function DeckEditor3DPageInner() {
                               </span>
                             )}
                           </div>
-                          <span className="text-xs opacity-75">{cost}+</span>
+                          <span className="text-xs opacity-75">{label}</span>
                         </div>
                       );
                     })}
@@ -2420,16 +2441,44 @@ function DeckEditor3DPageInner() {
                                 {setName}
                               </div>
                               <div className="flex gap-1">
-                                {setPacks.map((pack) => (
-                                  <button
-                                    key={pack.id}
-                                    onClick={() => openPack(pack.id)}
-                                    className="w-12 h-10 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-500 hover:to-emerald-500 transition-all duration-200 shadow-lg text-xs font-bold flex items-center justify-center"
-                                    title={`Open ${setName} pack`}
-                                  >
-                                    {setPacks.indexOf(pack) + 1}
-                                  </button>
-                                ))}
+                                {setPacks.map((pack) => {
+                                  // Get booster image name based on set
+                                  const assetName = (() => {
+                                    const s = (pack.set || "").toLowerCase();
+                                    if (s.includes("arthur")) return "arthurian-booster.png";
+                                    if (s.includes("alpha")) return "alphabeta-booster.png";
+                                    if (s.includes("beta")) return "alphabeta-booster.png";
+                                    return null;
+                                  })();
+
+                                  return (
+                                    <button
+                                      key={pack.id}
+                                      onClick={() => openPack(pack.id)}
+                                      className="w-16 h-24 rounded-lg overflow-hidden ring-1 ring-white/20 hover:ring-white/40 transition-all duration-200 shadow-lg relative group"
+                                      title={`Open ${pack.set} pack`}
+                                    >
+                                      {assetName ? (
+                                        <Image
+                                          src={`/api/assets/${assetName}`}
+                                          alt={`${pack.set} booster pack`}
+                                          width={64}
+                                          height={96}
+                                          className="object-cover w-full h-full group-hover:scale-105 transition-transform"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full bg-gradient-to-r from-green-600 to-emerald-600 flex items-center justify-center text-white font-bold">
+                                          {setPacks.indexOf(pack) + 1}
+                                        </div>
+                                      )}
+                                      {pack.opened && (
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                          <span className="text-white text-xs font-bold">OPENED</span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           ))}
