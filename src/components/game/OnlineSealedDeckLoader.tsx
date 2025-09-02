@@ -9,6 +9,8 @@ interface OnlineSealedDeckLoaderProps {
   myPlayerKey: "p1" | "p2";
   playerNames: { p1: string; p2: string };
   onPrepareComplete: () => void;
+  /** If true, begin loading immediately once mounted and prerequisites are met */
+  autoStart?: boolean;
 }
 
 export default function OnlineSealedDeckLoader({
@@ -16,16 +18,24 @@ export default function OnlineSealedDeckLoader({
   myPlayerKey,
   playerNames,
   onPrepareComplete,
+  autoStart,
 }: OnlineSealedDeckLoaderProps) {
   const { me } = useOnline();
   const [deckError, setDeckError] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [initiated, setInitiated] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
+  const [waitingForMe, setWaitingForMe] = useState(false);
 
   const loadSealedDecks = useCallback(async () => {
     if (!match?.playerDecks || !me) return;
     
     setLoading(true);
     setDeckError("");
+    setWaitingForOpponent(false);
+    setWaitingForMe(false);
+    setCompleted(false);
     
     try {
       const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
@@ -36,12 +46,14 @@ export default function OnlineSealedDeckLoader({
       const opponentDeckData = opponentId ? match.playerDecks[opponentId] : null;
       
       if (!myDeckData) {
-        setDeckError("Your sealed deck not found");
+        // Not an error; our submission may still be registering with the server
+        setWaitingForMe(true);
         return;
       }
       
       if (!opponentDeckData) {
-        setDeckError("Opponent's sealed deck not found");
+        // Not an error; opponent may not have submitted yet
+        setWaitingForOpponent(true);
         return;
       }
       
@@ -55,6 +67,7 @@ export default function OnlineSealedDeckLoader({
       if (!opponentSuccess) return;
       
       // Both decks loaded successfully
+      setCompleted(true);
       onPrepareComplete();
       
     } catch (error) {
@@ -66,10 +79,28 @@ export default function OnlineSealedDeckLoader({
   }, [match, me, myPlayerKey, onPrepareComplete]);
 
   useEffect(() => {
+    // Only auto-start if explicitly requested by parent and not already initiated
+    if (!autoStart) return;
     if (!match || !me) return;
-    // Auto-load sealed decks when component mounts
-    loadSealedDecks();
-  }, [match, me, loadSealedDecks]);
+    if (initiated) return;
+    setInitiated(true);
+    void loadSealedDecks();
+  }, [autoStart, match, me, initiated, loadSealedDecks]);
+
+  // If we are auto-starting and were waiting for opponent, try again
+  useEffect(() => {
+    if (!autoStart) return;
+    if (!initiated) return;
+    if (completed) return;
+    if (loading) return;
+    if (!match || !me || !match.playerDecks) return;
+    const myDeckData = match.playerDecks[me.id];
+    const opponentId = match.players.find(p => p.id !== me.id)?.id;
+    const opponentDeckData = opponentId ? match.playerDecks[opponentId] : null;
+    if (myDeckData && opponentDeckData) {
+      void loadSealedDecks();
+    }
+  }, [autoStart, initiated, completed, loading, match?.playerDecks, match, me, loadSealedDecks]);
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
@@ -103,8 +134,22 @@ export default function OnlineSealedDeckLoader({
               </button>
             </div>
           )}
-          
-          {!loading && !deckError && (
+
+          {!loading && !deckError && waitingForMe && (
+            <div className="flex items-center justify-center gap-2 text-slate-300">
+              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin"></div>
+              Waiting for your sealed deck submission to be registered...
+            </div>
+          )}
+
+          {!loading && !deckError && waitingForOpponent && (
+            <div className="flex items-center justify-center gap-2 text-slate-300">
+              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin"></div>
+              Waiting for opponent to submit their sealed deck...
+            </div>
+          )}
+
+          {!loading && !deckError && completed && (
             <div className="text-green-400 font-medium">
               ✓ Sealed decks loaded successfully!
             </div>
