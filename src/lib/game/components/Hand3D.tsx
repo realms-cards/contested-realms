@@ -40,6 +40,17 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
 
   const hand = zones[owner].hand || [];
+  
+  // Debug logging for opponent hands
+  useEffect(() => {
+    if (showCardBacks) {
+      console.debug(`[Hand3D] Opponent hand (${owner}):`, {
+        handSize: hand.length,
+        cards: hand.map(c => c.name),
+        viewerPlayerNumber
+      });
+    }
+  }, [hand.length, showCardBacks, owner, viewerPlayerNumber]);
   // Sort hand with sites first, then spells
   const sortedHand = useMemo(() => {
     return [...hand].sort((a, b) => {
@@ -167,13 +178,13 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
     if (showCardBacks) {
-      // Opponent hand: position relative to board (world coordinates)
-      // Position based on viewer's perspective:
-      // P1 (south camera) sees P2's hand at north edge (negative Z)
-      // P2 (north camera) sees P1's hand at south edge (positive Z)
-      const z = viewerPlayerNumber === 1 ? -4.5 : 4.5;
-      rootRef.current.position.set(0, 0.2, z);
-      rootRef.current.rotation.set(0, 0, 0); // No camera-relative rotation
+      // Opponent hand: position beyond the board edge like before
+      const z = viewerPlayerNumber === 1 ? -4.5 : 4.5; // Beyond board edge
+      const mirroredY = 0.2; // At board level like before
+      rootRef.current.position.set(0, mirroredY, z);
+      // Face the viewing player properly
+      const rotation = viewerPlayerNumber === 1 ? 0 : Math.PI;
+      rootRef.current.rotation.set(0, rotation, 0);
     } else {
       // Player hand: position relative to camera (screen-relative)
       rootRef.current.position.copy(cam.position);
@@ -557,7 +568,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                   height={CARD_LONG}
                   rotationZ={
                     showCardBacks 
-                      ? (isSite ? -rot + Math.PI / 2 : -rot + Math.PI) // Atlas: +90°, Spells: +180°
+                      ? 0 // Card backs don't use fan rotation
                       : (isSite ? -rot - Math.PI / 2 : -rot) // Sites need -90° rotation for correct art orientation
                   }
                   upright
@@ -567,6 +578,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                   interactive={!isDragging && !showCardBacks}
                   elevation={isCardHovered ? 0.02 : 0.002}
                   textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
+                  textureRotation={showCardBacks ? (isSite ? Math.PI * 3/2 : Math.PI) : undefined} // Atlas: 270° (90° + 180°), Spells: 180°
                 />
               ) : (
                 <mesh
