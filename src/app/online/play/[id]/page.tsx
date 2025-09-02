@@ -26,10 +26,12 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
+import OnlineDraftScreen from "@/components/game/OnlineDraftScreen";
 
 export default function OnlineMatchPage() {
   const params = useParams();
   const router = useRouter();
+  
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
     return Array.isArray(idParam) ? idParam[0] : idParam;
@@ -188,6 +190,12 @@ export default function OnlineMatchPage() {
     }
   }, [matchId, match?.playerDecks, me?.id]);
 
+  // Track draft state and completion
+  const [draftCompleted, setDraftCompleted] = useState(false);
+  const isDraftMatch = match?.matchType === "draft";
+  const isDraftActive = isDraftMatch && match?.status === "waiting" && !draftCompleted;
+  const isDraftDeckConstruction = isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
+
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
   useEffect(() => {
@@ -214,7 +222,24 @@ export default function OnlineMatchPage() {
       window.location.href = `/decks/editor-3d?${params.toString()}`;
       return; // Don't execute the rest of the setup logic
     }
-  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig, hasSubmittedSealedDeck]);
+    
+    // Auto-redirect to deck editor when draft is completed and in deck construction
+    if (isDraftDeckConstruction && !hasSubmittedSealedDeck) {
+      // Clear game state before opening deck editor
+      useGameStore.getState().resetGameState();
+      
+      // Navigate to 3D editor with draft mode
+      const params = new URLSearchParams({
+        draft: 'true',
+        matchId: match.id,
+        timeLimit: '30', // Default draft deck construction time
+      });
+      
+      // Redirect to editor
+      window.location.href = `/decks/editor-3d?${params.toString()}`;
+      return;
+    }
+  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig, hasSubmittedSealedDeck, isDraftDeckConstruction]);
 
   // Listen for sealed deck submissions via postMessage (when editor opened in a new window)
   useEffect(() => {
@@ -232,7 +257,7 @@ export default function OnlineMatchPage() {
       if (sealedSubmissionSentForRef.current === matchId) return;
 
       // Forward to server
-      transport.submitDeck(data.deck);
+      transport.submitDeck?.(data.deck);
       sealedSubmissionSentForRef.current = matchId;
       try {
         localStorage.setItem(`sealed_submitted_${matchId}`, "true");
@@ -257,7 +282,7 @@ export default function OnlineMatchPage() {
       const deck = JSON.parse(raw);
       if (!Array.isArray(deck) || deck.length === 0) return;
 
-      transport.submitDeck(deck);
+      transport.submitDeck?.(deck);
       sealedSubmissionSentForRef.current = matchId;
       localStorage.setItem(`sealed_submitted_${matchId}`, "true");
       localStorage.removeItem(`sealedDeck_${matchId}`);
@@ -270,6 +295,12 @@ export default function OnlineMatchPage() {
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
+    // For draft matches, don't show setup overlay during active draft
+    if (isDraftActive) {
+      if (setupOpen) setSetupOpen(false);
+      return;
+    }
+
     if (match.status === "waiting" || match.status === "deck_construction") {
       // Keep overlay open during waiting and deck construction
       if (!setupOpen) setSetupOpen(true);
@@ -278,7 +309,7 @@ export default function OnlineMatchPage() {
       if (setupOpen) setSetupOpen(false);
     }
     // Do not auto-close on "in_progress"; we'll close when serverPhase reaches Main
-  }, [matchId, match, match?.id, match?.status, setupOpen]);
+  }, [matchId, match, match?.id, match?.status, setupOpen, isDraftActive]);
 
   // Reset setup wizard when entering a different match (fresh waiting match)
   useEffect(() => {
@@ -557,6 +588,30 @@ export default function OnlineMatchPage() {
     if (t.y !== 0) { t.y = 0; changed = true; }
     if (changed) c.update();
   }, [matW, matH]);
+
+  // Handle draft completion
+  const handleDraftComplete = useCallback((draftedCards: unknown[]) => {
+    console.log('[Draft] Draft completed with', draftedCards.length, 'cards');
+    setDraftCompleted(true);
+    
+    // Store drafted cards in localStorage for deck editor
+    try {
+      localStorage.setItem(`draftedCards_${matchId}`, JSON.stringify(draftedCards));
+    } catch (error) {
+      console.error('[Draft] Failed to store drafted cards:', error);
+    }
+  }, [matchId]);
+
+  // Show draft screen for active draft matches
+  if (inThisMatch && isDraftActive && myPlayerKey) {
+    return (
+      <OnlineDraftScreen
+        myPlayerKey={myPlayerKey}
+        playerNames={playerNames}
+        onDraftComplete={handleDraftComplete}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
@@ -845,7 +900,7 @@ export default function OnlineMatchPage() {
                   myHandSize,
                   opponentKey,
                   opponentHandSize,
-                  allZones: Object.keys(zones).map(k => `${k}: ${zones[k as PlayerKey]?.hand?.length || 0} cards`)
+                  allZones: Object.keys(zones).map(k => `${k}: ${zones[k as keyof typeof zones]?.hand?.length || 0} cards`)
                 });
                 return (
                   <Hand3D

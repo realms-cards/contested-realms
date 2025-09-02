@@ -75,11 +75,8 @@ export default function Board() {
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
   const playSelectedTo = useGameStore((s) => s.playSelectedTo);
-  const moveSelectedPermanentToWithOffset = useGameStore(
-    (s) => s.moveSelectedPermanentToWithOffset
-  );
+  const moveSelectedPermanentToWithOffset = useGameStore((s) => s.moveSelectedPermanentToWithOffset);
   const setPermanentOffset = useGameStore((s) => s.setPermanentOffset);
-  // tap toggles are handled via context menu in PlayPage
   const moveAvatarToWithOffset = useGameStore((s) => s.moveAvatarToWithOffset);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const contextMenu = useGameStore((s) => s.contextMenu);
@@ -183,22 +180,36 @@ export default function Board() {
   function moveDraggedBody(x: number, z: number, lift = true) {
     const api = draggedBody.current;
     if (!api) return;
-    api.wakeUp();
-    api.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    api.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.25, z }, true);
+    try {
+      api.wakeUp();
+      api.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      api.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      api.setTranslation({ x, y: lift ? DRAG_LIFT : 0.25, z }, true);
+    } catch (error) {
+      console.warn(`[physics] Failed to move dragged body:`, error);
+    }
   }
 
   // Snap a body (by id) to an exact world position on the next frame.
   function snapBodyTo(id: string, x: number, z: number) {
-    requestAnimationFrame(() => {
-      const api = bodyMap.current.get(id);
-      if (!api) return;
-      api.wakeUp();
-      api.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      api.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      api.setTranslation({ x, y: 0.25, z }, false);
-    });
+    const trySnap = (left: number) => {
+      requestAnimationFrame(() => {
+        const api = bodyMap.current.get(id);
+        if (!api) {
+          if (left > 0) trySnap(left - 1);
+          return;
+        }
+        try {
+          api.wakeUp();
+          api.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          api.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          api.setTranslation({ x, y: 0.25, z }, false);
+        } catch (error) {
+          console.warn(`[physics] Failed to snap body ${id}:`, error);
+        }
+      });
+    };
+    trySnap(3);
   }
 
   // Ensure local/global drag state is cleared even if input ends outside the canvas
@@ -397,6 +408,8 @@ export default function Board() {
                   if (dragging) {
                     const dropKey = `${x},${y}`;
                     const world = e.point;
+                    const dragged = permanents[dragging.from]?.[dragging.index];
+                    const draggedId = dragged?.card.cardId;
                     // Compute offsets relative to the rendered slot baseline (row position + zBase)
                     const spacing = TILE_SIZE * 0.28;
                     const marginZ = TILE_SIZE * 0.1;
@@ -422,11 +435,9 @@ export default function Board() {
                         moveDraggedBody(world.x, world.z, false);
                       setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
                       // Ensure body is exactly at the world drop point after render
-                      snapBodyTo(
-                        `${dropKey}:${dragging.index}`,
-                        world.x,
-                        world.z
-                      );
+                      if (draggedId != null) {
+                        snapBodyTo(`perm:${draggedId}`, world.x, world.z);
+                      }
                     } else {
                       const toItems = permanents[dropKey] || [];
                       const newIndex = toItems.length; // push to end
@@ -447,8 +458,10 @@ export default function Board() {
                       if (draggedBody.current)
                         moveDraggedBody(world.x, world.z, false);
                       moveSelectedPermanentToWithOffset(x, y, [offX, offZ]);
-                      // Snap to the new body's id at its new index
-                      snapBodyTo(`${dropKey}:${newIndex}`, world.x, world.z);
+                      // Snap to the moved body's stable id
+                      if (draggedId != null) {
+                        snapBodyTo(`perm:${draggedId}`, world.x, world.z);
+                      }
                     }
                     setDragging(null);
                     setDragFromHand(false);
@@ -632,12 +645,18 @@ export default function Board() {
                   const offZ = p.offset?.[1] ?? 0;
                   return (
                     <RigidBody
-                      key={`perm-${idx}`}
+                      key={`perm-${p.card.cardId}`}
                       ref={(api) => {
-                        const id = `${key}:${idx}`;
-                        if (api)
-                          bodyMap.current.set(id, api as unknown as BodyApi);
-                        else bodyMap.current.delete(id);
+                        const id = `perm:${p.card.cardId}`;
+                        try {
+                          if (api) {
+                            bodyMap.current.set(id, api as unknown as BodyApi);
+                          } else {
+                            bodyMap.current.delete(id);
+                          }
+                        } catch (error) {
+                          console.warn(`[physics] Failed to update body map for ${id}:`, error);
+                        }
                       }}
                       type="dynamic"
                       ccd
@@ -714,7 +733,7 @@ export default function Board() {
                               setGhost(null);
                               // No ghost for board permanent drags; just move the body
                               draggedBody.current =
-                                bodyMap.current.get(`${key}:${idx}`) || null;
+                                bodyMap.current.get(`perm:${p.card.cardId}`) || null;
                               if (draggedBody.current) {
                                 moveDraggedBody(e.point.x, e.point.z, true);
                               }
@@ -932,12 +951,18 @@ export default function Board() {
               return (
                 <>
                   <RigidBody
-                    key={`avatar-${who}-${ax}-${ay}-${offX}-${offZ}`}
+                    key={`avatar-${who}`}
                     ref={(api) => {
                       const id = `avatar:${who}`;
-                      if (api)
-                        bodyMap.current.set(id, api as unknown as BodyApi);
-                      else bodyMap.current.delete(id);
+                      try {
+                        if (api) {
+                          bodyMap.current.set(id, api as unknown as BodyApi);
+                        } else {
+                          bodyMap.current.delete(id);
+                        }
+                      } catch (error) {
+                        console.warn(`[physics] Failed to update body map for ${id}:`, error);
+                      }
                     }}
                     type="dynamic"
                     ccd

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useOnline } from "../layout";
 import { useGameStore } from "@/lib/game/store";
@@ -11,7 +11,6 @@ import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 export default function LobbyPage() {
   const router = useRouter();
   const {
-    transport,
     connected,
     lobby,
     match,
@@ -19,8 +18,9 @@ export default function LobbyPage() {
     ready,
     toggleReady,
     joinLobby,
+    createLobby,
     leaveLobby,
-    startMatch: startMatchOriginal,
+    startMatch,
     joinMatch,
     leaveMatch,
     sendChat,
@@ -43,16 +43,70 @@ export default function LobbyPage() {
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
   const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
   
-  // Match type and sealed configuration
-  const [matchType, setMatchType] = useState<"constructed" | "sealed">("constructed");
+  // Lobby list filters/sorting
+  const [lobbyQuery, setLobbyQuery] = useState("");
+  const [hideFull, setHideFull] = useState(false);
+  const [hideStarted, setHideStarted] = useState(true);
+  const [invitedOnly, setInvitedOnly] = useState(false);
+  type SortKey = "invited" | "playersAsc" | "playersDesc" | "status";
+  const [sortKey, setSortKey] = useState<SortKey>("invited");
+  const [topTab, setTopTab] = useState<"invites" | "friends">("invites");
+  
+  // Match type and sealed/draft configuration
+  const [matchType, setMatchType] = useState<"constructed" | "sealed" | "draft">("constructed");
   const [sealedConfig, setSealedConfig] = useState({
     packCounts: { "Beta": 6, "Arthurian Legends": 0 } as Record<string, number>,
     timeLimit: 40, // minutes
     replaceAvatars: false
   });
+  const [draftConfig, setDraftConfig] = useState({
+    setMix: ["Beta"] as string[],
+    packCount: 3,
+    packSize: 15
+  });
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
   const [declinedRejoin, setDeclinedRejoin] = useState(false);
+  // Overlay for configuring and confirming match start (host)
+  const [configOpen, setConfigOpen] = useState(false);
+
+  const inviteLobbyIds = useMemo(() => invites.map((i) => i.lobbyId), [invites]);
+  const inviteSet = useMemo(() => new Set(inviteLobbyIds), [inviteLobbyIds]);
+
+  const filteredLobbies = useMemo(() => {
+    const q = lobbyQuery.trim().toLowerCase();
+    const list = lobbies.filter((l) => {
+      if (hideFull && l.players.length >= l.maxPlayers) return false;
+      if (hideStarted && l.status !== "open") return false;
+      if (invitedOnly && !inviteSet.has(l.id)) return false;
+      if (!q) return true;
+      const hostName = l.players.find((p) => p.id === l.hostId)?.displayName?.toLowerCase() || "";
+      const playerNames = l.players.map((p) => p.displayName.toLowerCase()).join(" ");
+      return (
+        l.id.toLowerCase().includes(q) ||
+        hostName.includes(q) ||
+        playerNames.includes(q)
+      );
+    });
+    const statusWeight = (s: string) => (s === "open" ? 0 : s === "started" ? 1 : 2);
+    list.sort((a, b) => {
+      switch (sortKey) {
+        case "invited":
+          if (inviteSet.has(a.id) !== inviteSet.has(b.id)) return inviteSet.has(a.id) ? -1 : 1;
+          if (statusWeight(a.status) !== statusWeight(b.status)) return statusWeight(a.status) - statusWeight(b.status);
+          return a.players.length - b.players.length;
+        case "playersAsc":
+          return a.players.length - b.players.length;
+        case "playersDesc":
+          return b.players.length - a.players.length;
+        case "status":
+          return statusWeight(a.status) - statusWeight(b.status);
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [lobbies, lobbyQuery, hideFull, hideStarted, invitedOnly, sortKey, inviteSet]);
 
   const lobbyMessages = chatLog.filter((m) => m.scope === "lobby");
   const globalMessages = chatLog.filter((m) => m.scope === "global");
@@ -134,40 +188,79 @@ export default function LobbyPage() {
       ? "Rejoin"
       : "Join Match";
 
-  const startSealedMatch = () => {
-    // Validate sealed configuration
+  // Derived lobby state for control visibility
+  const joinedLobby = !!lobby;
+  const isHost = joinedLobby && me?.id === lobby.hostId;
+  const allReady = useMemo(() => {
+    if (!lobby) return false;
+    const readyIds = new Set(lobby.readyPlayerIds || []);
+    return lobby.players.length > 1 && lobby.players.every((p) => readyIds.has(p.id));
+  }, [lobby]);
+
+  // Planned match summary (client-side, only reliable for host)
+  const plannedSummary = useMemo(() => {
+    if (!isHost) return null;
+    if (matchType === "constructed") return "Planned: Constructed";
+    if (matchType === "draft") {
+      return `Planned: Draft • Sets: ${draftConfig.setMix.join(", ")} • Packs: ${draftConfig.packCount} • Pack size: ${draftConfig.packSize}`;
+    }
     const totalPacks = Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0);
-    const activeSets = Object.entries(sealedConfig.packCounts).filter(([, count]) => count > 0);
-    
-    if (activeSets.length === 0) {
-      alert("Please configure at least one set with packs for sealed play.");
-      return;
+    const activeSets = Object.entries(sealedConfig.packCounts)
+      .filter(([, count]) => count > 0)
+      .map(([set]) => set);
+    return `Planned: Sealed • Packs: ${totalPacks} • Sets: ${activeSets.join(", ")} • Time: ${sealedConfig.timeLimit}m`;
+  }, [isHost, matchType, sealedConfig, draftConfig]);
+  const plannedSummaries = useMemo(() => {
+    if (lobby && isHost && plannedSummary) {
+      return { [lobby.id]: plannedSummary } as Record<string, string>;
     }
-    if (totalPacks < 3 || totalPacks > 8) {
-      alert("Total pack count must be between 3 and 8.");
-      return;
-    }
-    
-    // Convert to legacy format for server compatibility
-    const legacySealedConfig = {
-      packCount: totalPacks,
-      setMix: activeSets.map(([set]) => set),
-      timeLimit: sealedConfig.timeLimit,
-      packCounts: sealedConfig.packCounts, // Include detailed counts for future use
-      replaceAvatars: sealedConfig.replaceAvatars
-    };
-    
-    // Send startMatch with sealed configuration
-    if (transport) {
-      transport.startMatch({
-        matchType: "sealed",
-        sealedConfig: legacySealedConfig
-      });
-    }
-  };
+    return {} as Record<string, string>;
+  }, [lobby, isHost, plannedSummary]);
+
+  // removed startSealedMatch helper; start is confirmed via modal action
 
   return (
     <div className="space-y-6">
+      {/* Top action bar: Ready / Start controls */}
+      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm font-semibold opacity-90">Lobby Actions</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {joinedLobby && (
+            <button
+              className={`rounded-lg px-4 py-2 text-base font-semibold shadow ${
+                ready
+                  ? "bg-emerald-600/90 hover:bg-emerald-600"
+                  : "bg-slate-700 hover:bg-slate-600"
+              }`}
+              onClick={toggleReady}
+              title="Toggle your ready state"
+            >
+              {ready ? "Ready ✓" : "Ready"}
+            </button>
+          )}
+          {isHost && (
+            <>
+              <button
+                className="rounded-lg px-3 py-2 text-sm bg-slate-700/80 hover:bg-slate-600 shadow"
+                onClick={() => setConfigOpen(true)}
+                title="Configure match settings"
+              >
+                Configure
+              </button>
+              {allReady && (
+                <button
+                  className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-5 py-2.5 text-base font-semibold shadow"
+                  onClick={() => setConfigOpen(true)}
+                  title={`Start ${matchType} match (confirm settings)`}
+                >
+                  Start Match
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Top summary of active lobbies and invites */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
@@ -183,18 +276,80 @@ export default function LobbyPage() {
               Refresh
             </button>
           </div>
-          <LobbyList lobbies={lobbies} onJoin={(id) => joinLobby(id)} />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+              placeholder="Search by lobby ID, host, or player"
+              value={lobbyQuery}
+              onChange={(e) => setLobbyQuery(e.target.value)}
+            />
+            <select
+              className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              title="Sort lobbies"
+            >
+              <option value="invited">Invited first</option>
+              <option value="playersAsc">Players ↑</option>
+              <option value="playersDesc">Players ↓</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <label className="text-xs flex items-center gap-1 opacity-80">
+              <input type="checkbox" checked={hideFull} onChange={(e) => setHideFull(e.target.checked)} />
+              Hide full
+            </label>
+            <label className="text-xs flex items-center gap-1 opacity-80">
+              <input type="checkbox" checked={hideStarted} onChange={(e) => setHideStarted(e.target.checked)} />
+              Hide started/closed
+            </label>
+            <label className="text-xs flex items-center gap-1 opacity-80">
+              <input type="checkbox" checked={invitedOnly} onChange={(e) => setInvitedOnly(e.target.checked)} />
+              Invited only
+            </label>
+          </div>
+          <LobbyList
+            lobbies={filteredLobbies}
+            onJoin={(id) => joinLobby(id)}
+            meId={me?.id ?? null}
+            inviteLobbyIds={inviteLobbyIds}
+            plannedSummaries={plannedSummaries}
+          />
         </div>
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
-          <div className="text-sm font-semibold opacity-90">Invites</div>
-          <InvitesPanel
-            invites={invites}
-            onAccept={async (inv) => {
-              await joinLobby(inv.lobbyId);
-              dismissInvite(inv.lobbyId, inv.from.id);
-            }}
-            onDecline={(inv) => dismissInvite(inv.lobbyId, inv.from.id)}
-          />
+          <div className="flex items-center gap-1">
+            <button
+              className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "invites" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
+              onClick={() => setTopTab("invites")}
+            >
+              Invites
+            </button>
+            <button
+              className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "friends" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
+              onClick={() => { setTopTab("friends"); requestPlayers(); }}
+            >
+              Friends
+            </button>
+          </div>
+          {topTab === "invites" ? (
+            <InvitesPanel
+              invites={invites}
+              onAccept={async (inv) => {
+                await joinLobby(inv.lobbyId);
+                dismissInvite(inv.lobbyId, inv.from.id);
+              }}
+              onDecline={(inv) => dismissInvite(inv.lobbyId, inv.from.id)}
+            />
+          ) : (
+            <PlayersInvitePanel
+              players={players}
+              me={me}
+              lobby={lobby}
+              onInvite={(pid, lid) => inviteToLobby(pid, lid)}
+              onRefresh={() => requestPlayers()}
+            />
+          )}
         </div>
       </div>
 
@@ -247,114 +402,249 @@ export default function LobbyPage() {
           </div>
         )}
 
-      {/* Match Type Selection */}
-      {lobby && lobby.hostId === me?.id && (
-        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-          <div className="text-sm font-semibold opacity-90 mb-3">Match Configuration (Host Only)</div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium mb-2">Match Type</label>
+      {/* Match Configuration Overlay (Host) */}
+      {isHost && configOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setConfigOpen(false)} />
+          <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-xl p-5">
+            <div className="flex items-center justify-between">
+              <div className="text-base font-semibold">Match Configuration</div>
+              <button
+                className="text-slate-300 hover:text-white text-sm"
+                onClick={() => setConfigOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-3 space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-2">Match Type</label>
+                <div className="flex gap-2">
+                  <button
+                    className={`px-3 py-2 text-sm rounded transition-colors ${
+                      matchType === "constructed"
+                        ? "bg-indigo-600/80 text-white"
+                        : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                    }`}
+                    onClick={() => setMatchType("constructed")}
+                  >
+                    Constructed
+                  </button>
+                  <button
+                    className={`px-3 py-2 text-sm rounded transition-colors ${
+                      matchType === "sealed"
+                        ? "bg-indigo-600/80 text-white"
+                        : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                    }`}
+                    onClick={() => setMatchType("sealed")}
+                  >
+                    Sealed
+                  </button>
+                  <button
+                    className={`px-3 py-2 text-sm rounded transition-colors ${
+                      matchType === "draft"
+                        ? "bg-indigo-600/80 text-white"
+                        : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                    }`}
+                    onClick={() => setMatchType("draft")}
+                  >
+                    Draft
+                  </button>
+                </div>
+              </div>
+              {matchType === "draft" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium mb-3">
+                      Draft Configuration
+                    </label>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-2">Sets to Draft From</label>
+                        <div className="space-y-2">
+                          {["Beta", "Arthurian Legends"].map((set) => (
+                            <label key={set} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={draftConfig.setMix.includes(set)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setDraftConfig(prev => ({
+                                      ...prev,
+                                      setMix: [...prev.setMix, set]
+                                    }));
+                                  } else {
+                                    setDraftConfig(prev => ({
+                                      ...prev,
+                                      setMix: prev.setMix.filter(s => s !== set)
+                                    }));
+                                  }
+                                }}
+                                className="rounded"
+                              />
+                              <span>{set}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-2">Number of Packs</label>
+                          <select
+                            value={draftConfig.packCount}
+                            onChange={(e) => setDraftConfig(prev => ({ ...prev, packCount: parseInt(e.target.value) }))}
+                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                          >
+                            <option value={3}>3 Packs</option>
+                            <option value={4}>4 Packs</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-2">Pack Size</label>
+                          <input
+                            type="number"
+                            min="12"
+                            max="18"
+                            value={draftConfig.packSize}
+                            onChange={(e) => setDraftConfig(prev => ({ ...prev, packSize: parseInt(e.target.value) || 15 }))}
+                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              {matchType === "sealed" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium mb-3">
+                      Pack Configuration
+                      <span className="text-xs opacity-70 ml-2">
+                        (Total: {Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0)} packs, 3-8 required)
+                      </span>
+                    </label>
+                    <div className="space-y-3">
+                      {Object.entries(sealedConfig.packCounts).map(([set, count]) => (
+                        <div key={set} className="flex items-center justify-between">
+                          <span className="text-sm">{set}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                              onClick={() => setSealedConfig(prev => ({
+                                ...prev,
+                                packCounts: {
+                                  ...prev.packCounts,
+                                  [set]: Math.max(0, count - 1)
+                                }
+                              }))}
+                              disabled={count <= 0}
+                            >
+                              −
+                            </button>
+                            <span className="w-8 text-center text-sm font-medium">{count}</span>
+                            <button
+                              className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                              onClick={() => setSealedConfig(prev => ({
+                                ...prev,
+                                packCounts: {
+                                  ...prev.packCounts,
+                                  [set]: Math.min(8, count + 1)
+                                }
+                              }))}
+                              disabled={Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0) >= 8}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-2">
+                      Deck Construction Time Limit (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min="15"
+                      max="90"
+                      step="5"
+                      value={sealedConfig.timeLimit}
+                      onChange={(e) => setSealedConfig(prev => ({ ...prev, timeLimit: parseInt(e.target.value) || 40 }))}
+                      className="w-24 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={sealedConfig.replaceAvatars}
+                      onChange={(e) => setSealedConfig(prev => ({ ...prev, replaceAvatars: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span>Replace Sorcerer with Beta avatars</span>
+                  </label>
+                </>
+              )}
+            </div>
+            <div className="mt-5 flex items-center justify-between">
+              <div className="text-xs opacity-70 truncate">{plannedSummary}</div>
               <div className="flex gap-2">
                 <button
-                  className={`px-3 py-2 text-sm rounded transition-colors ${
-                    matchType === "constructed"
-                      ? "bg-indigo-600/80 text-white"
-                      : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                  }`}
-                  onClick={() => setMatchType("constructed")}
+                  className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm"
+                  onClick={() => setConfigOpen(false)}
                 >
-                  Constructed
+                  Cancel
                 </button>
                 <button
-                  className={`px-3 py-2 text-sm rounded transition-colors ${
-                    matchType === "sealed"
-                      ? "bg-indigo-600/80 text-white"
-                      : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                  }`}
-                  onClick={() => setMatchType("sealed")}
+                  className="rounded bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-40"
+                  onClick={() => {
+                    if (matchType === "constructed") {
+                      startMatch({ matchType: "constructed" });
+                      setConfigOpen(false);
+                      return;
+                    }
+                    if (matchType === "draft") {
+                      if (draftConfig.setMix.length === 0) {
+                        alert("Please select at least one set for drafting.");
+                        return;
+                      }
+                      startMatch({ matchType: "draft", draftConfig });
+                      setConfigOpen(false);
+                      return;
+                    }
+                    const totalPacks = Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0);
+                    const activeSets = Object.entries(sealedConfig.packCounts).filter(([, count]) => count > 0);
+                    if (activeSets.length === 0) {
+                      alert("Please configure at least one set with packs for sealed play.");
+                      return;
+                    }
+                    if (totalPacks < 3 || totalPacks > 8) {
+                      alert("Total pack count must be between 3 and 8.");
+                      return;
+                    }
+                    const setMix = activeSets.map(([set]) => set);
+                    const legacySealedConfig = {
+                      packCount: totalPacks,
+                      setMix,
+                      timeLimit: sealedConfig.timeLimit,
+                      packCounts: sealedConfig.packCounts,
+                      replaceAvatars: sealedConfig.replaceAvatars,
+                    };
+                    startMatch({ matchType: "sealed", sealedConfig: legacySealedConfig });
+                    setConfigOpen(false);
+                  }}
+                  disabled={!allReady}
+                  title={!allReady ? "All players must be ready to start" : `Start ${matchType} match`}
                 >
-                  Sealed
+                  Confirm Start
                 </button>
               </div>
             </div>
-            
-            {matchType === "sealed" && (
-              <>
-                <div>
-                  <label className="block text-xs font-medium mb-3">
-                    Pack Configuration
-                    <span className="text-xs opacity-70 ml-2">
-                      (Total: {Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0)} packs, 3-8 required)
-                    </span>
-                  </label>
-                  <div className="space-y-3">
-                    {Object.entries(sealedConfig.packCounts).map(([set, count]) => (
-                      <div key={set} className="flex items-center justify-between">
-                        <span className="text-sm">{set}</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
-                            onClick={() => setSealedConfig(prev => ({
-                              ...prev,
-                              packCounts: {
-                                ...prev.packCounts,
-                                [set]: Math.max(0, count - 1)
-                              }
-                            }))}
-                            disabled={count <= 0}
-                          >
-                            −
-                          </button>
-                          <span className="w-8 text-center text-sm font-medium">{count}</span>
-                          <button
-                            className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
-                            onClick={() => setSealedConfig(prev => ({
-                              ...prev,
-                              packCounts: {
-                                ...prev.packCounts,
-                                [set]: Math.min(8, count + 1)
-                              }
-                            }))}
-                            disabled={Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0) >= 8}
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium mb-2">
-                    Deck Construction Time Limit (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    min="15"
-                    max="90"
-                    step="5"
-                    value={sealedConfig.timeLimit}
-                    onChange={(e) => setSealedConfig(prev => ({ ...prev, timeLimit: parseInt(e.target.value) || 40 }))}
-                    className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                  />
-                </div>
-
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={sealedConfig.replaceAvatars}
-                    onChange={(e) => setSealedConfig(prev => ({ ...prev, replaceAvatars: e.target.checked }))}
-                    className="rounded"
-                  />
-                  <span>Replace Sorcerer with Beta avatars</span>
-                </label>
-              </>
-            )}
           </div>
         </div>
       )}
-
+      
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
           <div className="text-sm font-semibold opacity-90">Lobby Controls</div>
@@ -363,8 +653,17 @@ export default function LobbyPage() {
               className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1 text-sm disabled:opacity-40"
               onClick={() => joinLobby()}
               disabled={!connected}
+              title="Join an existing lobby or create one if none available"
             >
-              Quick Join / Create
+              Quick Join
+            </button>
+            <button
+              className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-sm disabled:opacity-40"
+              onClick={() => createLobby()}
+              disabled={!connected}
+              title="Always create a new lobby"
+            >
+              Create New
             </button>
             <div className="flex-1 flex gap-2">
               <input
@@ -390,33 +689,6 @@ export default function LobbyPage() {
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              className={`rounded px-3 py-1 text-sm ${
-                ready ? "bg-emerald-600/70" : "bg-slate-700 hover:bg-slate-600"
-              }`}
-              onClick={toggleReady}
-              disabled={!lobby}
-            >
-              {ready ? "Ready ✓" : "Ready"}
-            </button>
-            <button
-              className="rounded bg-violet-600/80 hover:bg-violet-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={() => {
-                if (matchType === "constructed") {
-                  startMatchOriginal();
-                } else {
-                  startSealedMatch();
-                }
-              }}
-              disabled={!lobby || lobby.hostId !== me?.id}
-              title={
-                lobby && lobby.hostId !== me?.id
-                  ? "Only the host can start"
-                  : `Start ${matchType} match`
-              }
-            >
-              Start {matchType === "constructed" ? "Match" : "Sealed"} (host)
-            </button>
             {lobby && (
               <button
                 className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm"
@@ -534,15 +806,53 @@ export default function LobbyPage() {
                 <span className="opacity-70">Max Players:</span>{" "}
                 {lobby.maxPlayers}
               </div>
+              {/* Planned match configuration (host view) */}
+              {isHost && (
+                <div className="text-xs opacity-80">
+                  <span className="opacity-70">Planned Match:</span>{" "}
+                  {matchType === "constructed"
+                    ? "Constructed"
+                    : (() => {
+                        const totalPacks = Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0);
+                        const activeSets = Object.entries(sealedConfig.packCounts)
+                          .filter(([, count]) => count > 0)
+                          .map(([set]) => set);
+                        return `Sealed • Packs: ${totalPacks} • Sets: ${activeSets.join(", ")} • Time: ${sealedConfig.timeLimit}m`;
+                      })()}
+                </div>
+              )}
               <div className="mt-2">
-                <div className="font-medium">Players</div>
-                <ul className="list-disc ml-5 space-y-0.5">
-                  {lobby.players.map((p) => (
-                    <li key={p.id}>
-                      {p.displayName} {p.id === lobby.hostId ? "(Host)" : ""}
-                    </li>
-                  ))}
-                </ul>
+                <div className="font-medium flex items-center gap-2">
+                  <span>Players</span>
+                  <span className="text-xs opacity-70">
+                    Ready: {(lobby.readyPlayerIds || []).length}/{lobby.players.length}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {lobby.players.map((p) => {
+                    const isReady = (lobby.readyPlayerIds || []).includes(p.id);
+                    const isHost = p.id === lobby.hostId;
+                    const isYou = !!me?.id && p.id === me.id;
+                    return (
+                      <span
+                        key={p.id}
+                        className={`text-[11px] px-1.5 py-0.5 rounded ring-1 ${
+                          isReady
+                            ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
+                            : "bg-slate-800/60 text-slate-300 ring-slate-700/60"
+                        }`}
+                        title={`${p.displayName}${isYou ? " • You" : ""}${isHost ? " • Host" : ""}${
+                          isReady ? " • Ready" : " • Not ready"
+                        }`}
+                      >
+                        {p.displayName}
+                        {isYou && <span className="opacity-70"> • You</span>}
+                        {isHost && <span className="opacity-70"> • Host</span>}
+                        <span className="opacity-80"> {isReady ? " • ✓" : " • …"}</span>
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ) : (
@@ -561,6 +871,16 @@ export default function LobbyPage() {
               <div>
                 <span className="opacity-70">Status:</span> {match.status}
               </div>
+              {match.matchType && (
+                <div>
+                  <span className="opacity-70">Mode:</span> {match.matchType}
+                </div>
+              )}
+              {match.sealedConfig && (
+                <div className="text-xs opacity-80">
+                  Sealed • Packs: {match.sealedConfig.packCount} • Sets: {match.sealedConfig.setMix.join(", ")} • Time: {match.sealedConfig.timeLimit}m
+                </div>
+              )}
               <div>
                 <span className="opacity-70">Seed:</span>{" "}
                 <span className="font-mono">{match.seed}</span>
@@ -583,7 +903,7 @@ export default function LobbyPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-semibold opacity-90">Chat</div>
@@ -670,16 +990,6 @@ export default function LobbyPage() {
               Send
             </button>
           </div>
-        </div>
-        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-          <div className="text-sm font-semibold opacity-90 mb-2">Players</div>
-          <PlayersInvitePanel
-            players={players}
-            me={me}
-            lobby={lobby}
-            onInvite={(pid, lid) => inviteToLobby(pid, lid)}
-            onRefresh={() => requestPlayers()}
-          />
         </div>
       </div>
     </div>

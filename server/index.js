@@ -3,6 +3,7 @@
 
 const http = require("http");
 const { Server } = require("socket.io");
+const { createRngFromString, generateBoosterDeterministic } = require('./booster');
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
@@ -33,8 +34,10 @@ const players = new Map();
 const playerIdBySocket = new Map();
 /** @type {Map<string, { id: string, hostId: string, playerIds: Set<string>, status: 'open'|'started'|'closed', maxPlayers: number, ready: Set<string>, visibility: 'open'|'private' }>} */
 const lobbies = new Map();
-/** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'deck_construction'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null, matchType?: 'constructed'|'sealed', sealedConfig?: { packCount: number, setMix: string[], timeLimit: number, constructionStartTime?: number }, playerDecks?: Map<string, any> }>} */
+/** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'deck_construction'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null, matchType?: 'constructed'|'sealed', sealedConfig?: { packCount: number, setMix: string[], timeLimit: number, constructionStartTime?: number, packCounts?: Record<string, number>, replaceAvatars?: boolean }, playerDecks?: Map<string, any>, sealedPacks?: Record<string, Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>> }>} */
 const matches = new Map();
+/** @type {Map<string, { matchId: string, playerNames: string[], startTime: number, endTime?: number, initialState?: any, actions: Array<{ patch: any, timestamp: number, playerId: string }> }>} */
+const matchRecordings = new Map();
 /** @type {Map<string, Set<string>>} lobbyId -> set of invited playerIds */
 const lobbyInvites = new Map();
 
@@ -68,6 +71,8 @@ function getLobbyInfo(lobby) {
     status: lobby.status,
     maxPlayers: lobby.maxPlayers,
     visibility: lobby.visibility,
+    // Include readiness state for clients
+    readyPlayerIds: Array.from(lobby.ready),
   };
 }
 
@@ -82,8 +87,11 @@ function getMatchInfo(match) {
     winnerId: match.winnerId ?? null,
     matchType: match.matchType || 'constructed',
     sealedConfig: match.sealedConfig,
+    draftConfig: match.draftConfig,
     deckSubmissions: match.playerDecks ? Array.from(match.playerDecks.keys()) : [],
     playerDecks: match.playerDecks ? Object.fromEntries(match.playerDecks) : undefined,
+    sealedPacks: match.sealedPacks || undefined,
+    draftState: match.draftState || undefined,
   };
 }
 
@@ -227,6 +235,8 @@ function leaveLobby(socket, player) {
   } else if (lobby.hostId === player.id) {
     // Reassign host to first remaining
     lobby.hostId = Array.from(lobby.playerIds)[0];
+    // Reset all ready states when host changes
+    lobby.ready.clear();
   }
 
   if (lobbies.has(lobbyId)) {
@@ -235,7 +245,8 @@ function leaveLobby(socket, player) {
   broadcastLobbies();
 }
 
-function startMatchFromLobby(requestingPlayer, matchType = 'constructed', sealedConfig = null) {
+async function startMatchFromLobby(requestingPlayer, matchType = 'constructed', sealedConfig = null, draftConfig = null) {
+  console.log(`[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`);
   const lobbyId = requestingPlayer.lobbyId;
   if (!lobbyId) return { ok: false, error: "Not in a lobby" };
   const lobby = lobbies.get(lobbyId);
@@ -251,7 +262,7 @@ function startMatchFromLobby(requestingPlayer, matchType = 'constructed', sealed
     id: rid("match"),
     lobbyId: lobby.id,
     playerIds: Array.from(lobby.playerIds),
-    status: matchType === 'sealed' ? 'deck_construction' : 'waiting',
+    status: matchType === 'sealed' ? 'deck_construction' : matchType === 'draft' ? 'waiting' : 'waiting',
     seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
     turn: Array.from(lobby.playerIds)[0],
     winnerId: null,
@@ -260,12 +271,31 @@ function startMatchFromLobby(requestingPlayer, matchType = 'constructed', sealed
       ...sealedConfig,
       constructionStartTime: Date.now()
     } : null,
-    playerDecks: matchType === 'sealed' ? new Map() : null,
+    draftConfig: matchType === 'draft' ? draftConfig : null,
+    playerDecks: (matchType === 'sealed' || matchType === 'draft') ? new Map() : null,
+    draftState: null, // Will be initialized after match creation
     // Server-side aggregated game snapshot and timestamp
     game: {},
     lastTs: 0,
   };
+  // Initialize draft state for draft matches
+  if (matchType === 'draft') {
+    match.draftState = {
+      phase: 'waiting',
+      packIndex: 0,
+      pickNumber: 1,
+      currentPacks: null,
+      picks: match.playerIds.map(() => []),
+      packDirection: 'left',
+      packChoice: match.playerIds.map(() => null),
+      waitingFor: []
+    };
+  }
+
   matches.set(match.id, match);
+
+  // Start recording immediately when match is created
+  startMatchRecording(match);
 
   // Join all sockets to match room
   for (const pid of match.playerIds) {
@@ -274,19 +304,76 @@ function startMatchFromLobby(requestingPlayer, matchType = 'constructed', sealed
     const s = io.sockets.sockets.get(p.socketId);
     if (s) s.join(`match:${match.id}`);
     p.matchId = match.id;
-    // For sealed matches, keep lobby association during deck construction
+    // For sealed/draft matches, keep lobby association during deck construction/draft
     // For constructed matches, clear lobby association immediately
     if (matchType === 'constructed') {
       p.lobbyId = null;
     }
   }
 
-  // For sealed matches, keep lobby active during deck construction
+  // For sealed/draft matches, keep lobby active during deck construction/draft
   // For constructed matches, close lobby immediately
   if (matchType === 'constructed') {
     lobby.status = "closed";
     lobbies.delete(lobby.id);
     broadcastLobbies();
+  }
+  
+  // Deterministic sealed pack generation per player
+  if (matchType === 'sealed' && match.sealedConfig) {
+    try {
+      const sealedPacks = {};
+      for (const pid of match.playerIds) {
+        const rng = createRngFromString(`${match.seed}|${pid}|sealed`);
+        const sc = match.sealedConfig || {};
+        const packCount = Math.max(1, Number(sc.packCount) || 6);
+        const setMix = Array.isArray(sc.setMix) && sc.setMix.length > 0 ? sc.setMix : ['Alpha'];
+        const packCounts = sc.packCounts && typeof sc.packCounts === 'object' ? sc.packCounts : null;
+        const replaceAvatars = !!sc.replaceAvatars;
+
+        /** @type {string[]} */
+        let sets = [];
+        if (packCounts) {
+          for (const [setName, cnt] of Object.entries(packCounts)) {
+            const c = Math.max(0, Number(cnt) || 0);
+            for (let i = 0; i < c; i++) sets.push(setName);
+          }
+          // Deterministic shuffle of sets using rng for variety
+          for (let i = sets.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [sets[i], sets[j]] = [sets[j], sets[i]];
+          }
+        } else {
+          for (let i = 0; i < packCount; i++) {
+            const setName = setMix[Math.floor(rng() * setMix.length)];
+            sets.push(setName);
+          }
+        }
+
+        console.log(`[Sealed] Generating ${sets.length} packs for player ${pid} in match ${match.id}. Sets: ${sets.join(', ')}`);
+        /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>} */
+        const packs = [];
+        for (let i = 0; i < sets.length; i++) {
+          const setName = sets[i];
+          const picks = await generateBoosterDeterministic(setName, rng, replaceAvatars);
+          const cards = picks.map((p, idx) => ({
+            id: `${String(p.variantId)}_${i}_${idx}_${pid.slice(-4)}`,
+            name: p.cardName || '',
+            set: setName,
+            slug: String(p.slug || ''),
+            type: p.type ?? null,
+            cost: p.cost ?? null,
+            rarity: String(p.rarity || 'Ordinary'),
+          }));
+          packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
+        }
+        sealedPacks[pid] = packs;
+      }
+      match.sealedPacks = sealedPacks;
+      console.log(`[Sealed] Completed pack generation for match ${match.id}`);
+    } catch (err) {
+      console.error(`[Sealed] Error generating sealed packs for match ${match.id}:`, err);
+    }
   }
   
   const matchInfo = getMatchInfo(match);
@@ -305,7 +392,12 @@ function lobbiesArray() {
 
 function playersArray() {
   const arr = [];
-  for (const p of players.values()) arr.push(getPlayerInfo(p.id));
+  for (const p of players.values()) {
+    // Filter out replay viewers from the player list
+    if (!p.displayName.startsWith("Replay_")) {
+      arr.push(getPlayerInfo(p.id));
+    }
+  }
   return arr;
 }
 
@@ -315,6 +407,53 @@ function broadcastLobbies() {
 
 function broadcastPlayers() {
   io.emit("playerList", { players: playersArray() });
+}
+
+function startMatchRecording(match) {
+  const playerNames = match.playerIds.map(pid => {
+    const p = players.get(pid);
+    return p ? p.displayName : `Player ${pid}`;
+  });
+  
+  const recording = {
+    matchId: match.id,
+    playerNames,
+    startTime: Date.now(),
+    endTime: null,
+    initialState: {
+      playerIds: match.playerIds,
+      seed: match.seed,
+      matchType: match.matchType,
+      playerDecks: match.playerDecks ? Object.fromEntries(match.playerDecks) : null
+    },
+    actions: []
+  };
+  
+  matchRecordings.set(match.id, recording);
+  console.log(`[Recording] Started recording match ${match.id} with players: ${playerNames.join(", ")}`);
+}
+
+function recordMatchAction(matchId, patch, playerId) {
+  const recording = matchRecordings.get(matchId);
+  if (!recording) {
+    console.log(`[Recording] No recording found for match ${matchId}`);
+    return;
+  }
+  
+  recording.actions.push({
+    patch,
+    timestamp: Date.now(),
+    playerId
+  });
+  console.log(`[Recording] Recorded action ${recording.actions.length} for match ${matchId} by player ${playerId}`);
+}
+
+function finishMatchRecording(matchId) {
+  const recording = matchRecordings.get(matchId);
+  if (!recording) return;
+  
+  recording.endTime = Date.now();
+  console.log(`[Recording] Finished recording match ${matchId}, total actions: ${recording.actions.length}`);
 }
 
 io.on("connection", (socket) => {
@@ -474,7 +613,7 @@ io.on("connection", (socket) => {
     io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
   });
 
-  socket.on("startMatch", (payload = {}) => {
+  socket.on("startMatch", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     const matchType = payload.matchType || 'constructed';
@@ -487,7 +626,8 @@ io.on("connection", (socket) => {
       console.log(`[DEBUG] lobby found: ${!!lobby}, lobby status: ${lobby?.status}, players in lobby: ${lobby?.playerIds?.size}`);
     }
     
-    const res = startMatchFromLobby(player, matchType, sealedConfig);
+    const draftConfig = payload.draftConfig || null;
+    const res = await startMatchFromLobby(player, matchType, sealedConfig, draftConfig);
     if (!res.ok) {
       console.log(`[DEBUG] startMatchFromLobby failed: ${res.error}`);
       socket.emit("error", { message: res.error || "Unable to start match" });
@@ -545,6 +685,7 @@ io.on("connection", (socket) => {
         patch && typeof patch === 'object' && patch.phase === 'Main'
       ) {
         match.status = 'in_progress';
+        // Recording was already started when match was created, so just update status
         io.to(matchRoom).emit("matchStarted", { match: getMatchInfo(match) });
       }
       // Update server-side aggregated snapshot
@@ -560,6 +701,8 @@ io.on("connection", (socket) => {
         }
         match.game = deepMergeReplaceArrays(match.game || {}, patchToApply);
         match.lastTs = now;
+        // Record the action for replay
+        recordMatchAction(player.matchId, patchToApply, player.id);
         // Relay the merged action to all clients
         io.to(matchRoom).emit("statePatch", { patch: patchToApply, t: now });
       } else {
@@ -678,6 +821,221 @@ io.on("connection", (socket) => {
   socket.on("ping", (payload) => {
     const t = payload && typeof payload.t === "number" ? payload.t : Date.now();
     socket.emit("pong", { t });
+  });
+
+  // Match recording endpoints
+  socket.on("getMatchRecordings", () => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    console.log(`[Recording] Request for recordings from ${player?.displayName || 'unknown'}, found ${matchRecordings.size} recordings`);
+    const recordings = Array.from(matchRecordings.values()).map(r => ({
+      matchId: r.matchId,
+      playerNames: r.playerNames,
+      startTime: r.startTime,
+      endTime: r.endTime,
+      duration: r.endTime ? r.endTime - r.startTime : null,
+      actionCount: r.actions.length,
+      matchType: r.initialState?.matchType || 'constructed',
+      playerIds: r.initialState?.playerIds || []
+    }));
+    socket.emit("matchRecordingsResponse", { recordings });
+  });
+
+  socket.on("getMatchRecording", (payload) => {
+    if (!authed) return;
+    const matchId = payload?.matchId;
+    if (!matchId) return;
+    const recording = matchRecordings.get(matchId);
+    if (!recording) {
+      socket.emit("matchRecordingResponse", { error: "Recording not found" });
+      return;
+    }
+    socket.emit("matchRecordingResponse", { recording });
+  });
+
+  // Draft-specific handlers
+  socket.on("startDraft", async (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    
+    const match = matches.get(player.matchId);
+    if (!match || match.matchType !== 'draft' || !match.draftState) return;
+    
+    // Only allow if draft is in waiting phase
+    if (match.draftState.phase !== 'waiting') return;
+    
+    try {
+      // Generate draft packs for all players
+      const draftConfig = match.draftConfig || { setMix: ['Beta'], packCount: 3, packSize: 15 };
+      const { setMix, packCount, packSize } = draftConfig;
+      
+      const currentPacks = [];
+      for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
+        const playerPacks = [];
+        for (let packIdx = 0; packIdx < packCount; packIdx++) {
+          const setName = setMix[Math.floor(Math.random() * setMix.length)];
+          const rng = createRngFromString(`${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`);
+          const picks = await generateBoosterDeterministic(setName, rng, false);
+          const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
+            id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[playerIdx].slice(-4)}`,
+            name: p.cardName || '',
+            slug: String(p.slug || ''),
+            type: p.type || null,
+            cost: String(p.cost || ''),
+            rarity: p.rarity || 'common',
+            element: p.element || []
+          }));
+          playerPacks.push(cards);
+        }
+        currentPacks.push(playerPacks);
+      }
+      
+      // Update draft state
+      match.draftState.phase = 'picking';
+      match.draftState.currentPacks = currentPacks.map(packs => packs[0]); // Start with first pack
+      match.draftState.waitingFor = [...match.playerIds];
+      
+      // Broadcast draft state update
+      io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
+      
+    } catch (error) {
+      console.error(`[Draft] Error starting draft: ${error.message}`);
+      socket.emit("error", { message: "Failed to start draft" });
+    }
+  });
+
+  socket.on("makeDraftPick", (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    
+    const match = matches.get(player.matchId);
+    if (!match || match.matchType !== 'draft' || !match.draftState) return;
+    
+    const { cardId, packIndex, pickNumber } = payload;
+    const draftState = match.draftState;
+    
+    // Validate pick
+    if (draftState.phase !== 'picking') return;
+    if (draftState.packIndex !== packIndex || draftState.pickNumber !== pickNumber) return;
+    if (!draftState.waitingFor.includes(player.id)) return;
+    
+    const playerIndex = match.playerIds.indexOf(player.id);
+    if (playerIndex === -1) return;
+    
+    const currentPack = draftState.currentPacks[playerIndex];
+    if (!currentPack) return;
+    
+    const cardIndex = currentPack.findIndex(card => card.id === cardId);
+    if (cardIndex === -1) return;
+    
+    // Make the pick
+    const pickedCard = currentPack.splice(cardIndex, 1)[0];
+    draftState.picks[playerIndex].push(pickedCard);
+    draftState.waitingFor = draftState.waitingFor.filter(id => id !== player.id);
+    
+    // Check if all players have picked
+    if (draftState.waitingFor.length === 0) {
+      // Advance pick number or pack
+      if (draftState.pickNumber >= 15 || currentPack.length === 0) {
+        // Move to next pack
+        draftState.packIndex++;
+        draftState.pickNumber = 1;
+        
+        if (draftState.packIndex >= 3) {
+          // Draft complete
+          draftState.phase = 'complete';
+          match.status = 'deck_construction';
+        } else {
+          // Start next pack
+          draftState.pickNumber = 1;
+          draftState.packDirection = draftState.packDirection === 'left' ? 'right' : 'left';
+          draftState.waitingFor = [...match.playerIds];
+        }
+      } else {
+        // Pass packs and continue picking
+        draftState.pickNumber++;
+        draftState.phase = 'passing';
+        
+        // Pass packs (rotate current packs)
+        const temp = [...draftState.currentPacks];
+        if (draftState.packDirection === 'left') {
+          for (let i = 0; i < temp.length; i++) {
+            draftState.currentPacks[(i + 1) % temp.length] = temp[i];
+          }
+        } else {
+          for (let i = 0; i < temp.length; i++) {
+            draftState.currentPacks[i] = temp[(i + 1) % temp.length];
+          }
+        }
+        
+        draftState.phase = 'picking';
+        draftState.waitingFor = [...match.playerIds];
+      }
+    }
+    
+    // Broadcast updated draft state
+    io.to(`match:${match.id}`).emit("draftUpdate", draftState);
+  });
+
+  socket.on("chooseDraftPack", (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    
+    const match = matches.get(player.matchId);
+    if (!match || match.matchType !== 'draft' || !match.draftState) return;
+    
+    const { setChoice, packIndex } = payload;
+    const playerIndex = match.playerIds.indexOf(player.id);
+    if (playerIndex === -1) return;
+    
+    // Store pack choice
+    match.draftState.packChoice[playerIndex] = setChoice;
+    
+    // Broadcast updated draft state
+    io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
+  });
+
+  socket.on("submitDeck", (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    
+    const match = matches.get(player.matchId);
+    if (!match || !match.playerDecks) return;
+    
+    // Store the submitted deck
+    match.playerDecks.set(player.id, payload.deck || payload);
+    
+    console.log(`[Match] Deck submitted by ${player.displayName} for match ${match.id}`);
+    
+    // Check if all players have submitted decks
+    const allSubmitted = match.playerIds.every(pid => match.playerDecks.has(pid));
+    if (allSubmitted && match.status === 'deck_construction') {
+      console.log(`[Match] All decks submitted for match ${match.id}, transitioning to in_progress`);
+      match.status = 'in_progress';
+      
+      // Clear lobby associations since match is starting
+      for (const pid of match.playerIds) {
+        const p = players.get(pid);
+        if (p) p.lobbyId = null;
+      }
+      
+      // Close associated lobby
+      if (match.lobbyId) {
+        const lobby = lobbies.get(match.lobbyId);
+        if (lobby) {
+          lobby.status = "closed";
+          lobbies.delete(match.lobbyId);
+          broadcastLobbies();
+        }
+      }
+    }
+    
+    // Broadcast updated match info
+    io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
   });
 
   socket.on("disconnect", () => {

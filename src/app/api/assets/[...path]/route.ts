@@ -56,7 +56,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
     // Force specific assets to only use data directory (not ktx2)
     const dataOnlyAssets = new Set([
       "fire.png", "air.png", "water.png", "earth.png",
-      "cardback_atlas.png", "cardback_spellbook.png"
+      "cardback_atlas.png", "cardback_spellbook.png", "card-back.png",
+      // Booster pack images
+      "beta-booster.png", "alpha-booster.png", "arthurian-legends-booster.png", "dragonlord-booster.png"
     ]);
     
     const shouldForceDataOnly = segments.some(segment => 

@@ -813,14 +813,14 @@ function DeckEditor3DPageInner() {
         else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
       }
-      
+
       // Debug: log the actual counts
-      console.log("[Sealed Validation]", { 
-        avatar, 
-        atlas, 
-        spellbookNonAvatar, 
+      console.log("[Sealed Validation]", {
+        avatar,
+        atlas,
+        spellbookNonAvatar,
         totalDeckCards: avatar + atlas + spellbookNonAvatar,
-        deckZoneCards: pick3D.filter(p => p.z < 0).length
+        deckZoneCards: pick3D.filter((p) => p.z < 0).length,
       });
 
       if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
@@ -844,7 +844,7 @@ function DeckEditor3DPageInner() {
         }));
 
       // Auto-save the deck with sealed naming format
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
       const sealedDeckName = `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
       await saveDeck();
@@ -852,7 +852,7 @@ function DeckEditor3DPageInner() {
       // Mark deck as submitted to prevent redirect loop
       const matchId = searchParams.get("matchId");
       if (matchId) {
-        localStorage.setItem(`sealed_submitted_${matchId}`, 'true');
+        localStorage.setItem(`sealed_submitted_${matchId}`, "true");
       }
 
       // Submit to match server using postMessage to parent window (online match page)
@@ -1848,9 +1848,6 @@ function DeckEditor3DPageInner() {
 
               {isSortingEnabled && (
                 <>
-                  <div className="text-sm text-white/80 px-3 py-2">
-                    📋 Deck: Mana + Sites by Element • Sideboard: Elements
-                  </div>
                   <button
                     onClick={forceSorting}
                     className="h-10 px-4 rounded bg-blue-600 text-white hover:bg-blue-500 font-medium"
@@ -1905,10 +1902,15 @@ function DeckEditor3DPageInner() {
           </div>
         </div>
         {/* Usage instructions */}
-        <div className="text-white text-sm opacity-30">
-          {isDraftMode
-            ? "📝 Draft Complete! You can only add spells & sites  Drag cards to organize your deck"
-            : "💡 Drag cards between zones • Click card to toggle Deck ⟷ Sideboard"}
+        <div className="grid grid-cols-2">
+          <div className="text-white text-sm opacity-30">
+            {isDraftMode
+              ? "📝 Draft Complete! You can only add spells & sites  Drag cards to organize your deck"
+              : "💡 Drag cards between zones • Click card to toggle Deck ⟷ Sideboard"}
+          </div>
+          <div className="text-sm text-white/80 px-3 py-2">
+            📋 Deck: Mana + Sites by Element • Sideboard: Elements
+          </div>
         </div>
         {/* EXACT same "Your Picks" panel as draft-3d */}
         <div className="absolute right-6 max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
@@ -2205,7 +2207,7 @@ function DeckEditor3DPageInner() {
                   <div className="font-medium mb-1">
                     Mana Curve (Deck Only):
                   </div>
-                  <div className="flex items-end gap-1 h-16 bg-black/40 rounded p-2">
+                  <div className="flex items-end gap-1 h-24 bg-black/40 rounded p-2">
                     {Array.from({ length: 8 }, (_, cost) => {
                       const count = manaCurve[cost] || 0;
                       const maxCount = Math.max(...Object.values(manaCurve), 1);
@@ -2445,9 +2447,12 @@ function DeckEditor3DPageInner() {
                                   // Get booster image name based on set
                                   const assetName = (() => {
                                     const s = (pack.set || "").toLowerCase();
-                                    if (s.includes("arthur")) return "arthurian-booster.png";
-                                    if (s.includes("alpha")) return "alphabeta-booster.png";
-                                    if (s.includes("beta")) return "alphabeta-booster.png";
+                                    if (s.includes("arthur"))
+                                      return "arthurian-booster.png";
+                                    if (s.includes("alpha"))
+                                      return "alphabeta-booster.png";
+                                    if (s.includes("beta"))
+                                      return "alphabeta-booster.png";
                                     return null;
                                   })();
 
@@ -2473,7 +2478,9 @@ function DeckEditor3DPageInner() {
                                       )}
                                       {pack.opened && (
                                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                          <span className="text-white text-xs font-bold">OPENED</span>
+                                          <span className="text-white text-xs font-bold">
+                                            OPENED
+                                          </span>
                                         </div>
                                       )}
                                     </button>
@@ -2829,7 +2836,5 @@ function DeckEditor3DPageInner() {
 }
 
 export default function DeckEditor3DPage() {
-  return (
-    <DeckEditor3DPageInner />
-  );
+  return <DeckEditor3DPageInner />;
 }

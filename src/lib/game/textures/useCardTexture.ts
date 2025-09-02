@@ -150,6 +150,23 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
           ? window.location.origin
           : "http://localhost"
       );
+      
+      // Force specific assets to only use regular images (not ktx2)
+      const dataOnlyAssets = new Set([
+        "fire.png", "air.png", "water.png", "earth.png",
+        "cardback_atlas.png", "cardback_spellbook.png", "card-back.png",
+        // Booster pack images
+        "beta-booster.png", "alpha-booster.png", "arthurian-legends-booster.png", "dragonlord-booster.png"
+      ]);
+      
+      const shouldForceDataOnly = u.pathname.split("/").some(segment => 
+        dataOnlyAssets.has(segment) || dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
+      );
+      
+      if (shouldForceDataOnly) {
+        return ""; // Skip KTX2 for these assets
+      }
+      
       // Try API images with explicit ktx2 flag
       if (u.pathname.startsWith("/api/images/")) {
         u.searchParams.set("ktx2", "1");

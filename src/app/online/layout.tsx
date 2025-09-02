@@ -1,6 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SocketTransport } from "@/lib/net/socketTransport";
@@ -13,6 +20,7 @@ import type {
   LobbyVisibility,
   ChatScope,
 } from "@/lib/net/protocol";
+import type { StartMatchConfig } from "@/lib/net/transport";
 import { useGameStore } from "@/lib/game/store";
 
 const PLAYER_NAME_KEY = "sorcery:playerName";
@@ -29,8 +37,9 @@ type OnlineContextValue = {
   ready: boolean;
   toggleReady: () => void;
   joinLobby: (id?: string) => Promise<void>;
+  createLobby: (options?: { visibility?: LobbyVisibility; maxPlayers?: number }) => Promise<void>;
   leaveLobby: () => void;
-  startMatch: () => void;
+  startMatch: (matchConfig?: StartMatchConfig) => void;
   joinMatch: (id: string) => Promise<void>;
   leaveMatch: () => void;
   sendChat: (msg: string, scope?: ChatScope) => void;
@@ -57,10 +66,16 @@ export function useOnline(): OnlineContextValue {
   return ctx;
 }
 
-export default function OnlineLayout({ children }: { children: React.ReactNode }) {
+export default function OnlineLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
-  const isMatchPage = pathname?.includes('/online/play/') && pathname !== '/online/play';
-  
+  const isMatchPage =
+    pathname?.includes("/online/play/") && pathname !== "/online/play";
+  const isLobbyPage = pathname?.startsWith("/online/lobby");
+
   const [displayName, setDisplayName] = useState<string>(() => {
     try {
       return localStorage.getItem(PLAYER_NAME_KEY) || "";
@@ -92,6 +107,8 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
   const [resyncing, setResyncing] = useState<boolean>(false);
+  // Track latest "me" across event handlers without re-subscribing
+  const meRef = useRef<PlayerInfo | null>(null);
 
   const gamePhase = useGameStore((s) => s.phase);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
@@ -140,6 +157,11 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
     };
   }, [transport]);
 
+  // Keep a ref to current player info for event handlers
+  useEffect(() => {
+    meRef.current = me;
+  }, [me]);
+
   useEffect(() => {
     // Only connect if name has been submitted
     if (!nameSubmitted || !displayName.trim()) {
@@ -155,7 +177,9 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
           try {
             let pid = localStorage.getItem(PLAYER_ID_KEY);
             if (!pid) {
-              pid = `p_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
+              pid = `p_${Math.random().toString(36).slice(2, 8)}${Date.now()
+                .toString(36)
+                .slice(-4)}`;
               localStorage.setItem(PLAYER_ID_KEY, pid);
             }
             return pid;
@@ -164,7 +188,10 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
           }
         };
 
-        await transport.connect({ displayName, playerId: getOrCreatePlayerId() });
+        await transport.connect({
+          displayName,
+          playerId: getOrCreatePlayerId(),
+        });
         setConnected(true);
       } catch (e) {
         console.error("connect failed", e);
@@ -183,6 +210,10 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       }),
       transport.on("lobbyUpdated", (p) => {
         setLobby(p.lobby);
+        const you = meRef.current;
+        setReady(
+          you ? p.lobby.readyPlayerIds?.includes(you.id) ?? false : false
+        );
       }),
       transport.on("lobbiesUpdated", (p) => {
         setLobbies(p.lobbies);
@@ -203,9 +234,12 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         // If we've previously declined to rejoin this match locally, ensure we leave and suppress UI
         try {
           const key = `sorcery:declinedRejoin:${p.match.id}`;
-          const declined = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+          const declined =
+            typeof window !== "undefined" ? localStorage.getItem(key) : null;
           if (declined) {
-            try { transport.leaveMatch(); } catch {}
+            try {
+              transport.leaveMatch();
+            } catch {}
             setMatch(null);
             return;
           }
@@ -213,30 +247,47 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
 
         setMatch(p.match);
         // Log match start
-        if (p.match.status === 'waiting') {
-          useGameStore.getState().log(`Match started with ${p.match.players.map(pl => pl.displayName).join(' and ')}`);
+        if (p.match.status === "waiting") {
+          useGameStore
+            .getState()
+            .log(
+              `Match started with ${p.match.players
+                .map((pl) => pl.displayName)
+                .join(" and ")}`
+            );
         }
       }),
       // Apply incremental game state patches into the Zustand store
       transport.on("statePatch", (p) => {
         queueServerPatch(p.patch, p.t);
       }),
-      transport.on("chat", (p) => setChatLog((prev) => {
-        // Don't add duplicate messages
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage && lastMessage.content === p.content && lastMessage.from?.displayName === p.from?.displayName) {
-          return prev;
-        }
-        return [...prev, p];
-      })),
+      transport.on("chat", (p) =>
+        setChatLog((prev) => {
+          // Don't add duplicate messages
+          const lastMessage = prev[prev.length - 1];
+          if (
+            lastMessage &&
+            lastMessage.content === p.content &&
+            lastMessage.from?.displayName === p.from?.displayName
+          ) {
+            return prev;
+          }
+          return [...prev, p];
+        })
+      ),
       transport.on("resync", (p) => {
         // Enter resync mode to pause physics world on clients
         const gen = ++resyncGenRef.current;
         setResyncing(true);
-        const snap = p.snapshot as { lobby?: LobbyInfo; match?: MatchInfo; game?: unknown; t?: number };
+        const snap = p.snapshot as {
+          lobby?: LobbyInfo;
+          match?: MatchInfo;
+          game?: unknown;
+          t?: number;
+        };
         // Debug: server-initiated resync snapshot received
         try {
-          console.debug('[online] resync start (server snapshot) ->', {
+          console.debug("[online] resync start (server snapshot) ->", {
             matchInSnap: snap?.match?.id,
             hasLobby: !!snap?.lobby,
             hasGame: !!snap?.game,
@@ -244,7 +295,13 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
             gen,
           });
         } catch {}
-        if (snap?.lobby) setLobby(snap.lobby);
+        if (snap?.lobby) {
+          setLobby(snap.lobby);
+          const you = meRef.current;
+          setReady(
+            you ? snap.lobby.readyPlayerIds?.includes(you.id) ?? false : false
+          );
+        }
 
         // Track whether we should apply the game snapshot
         let allowApplyGame = true;
@@ -253,10 +310,13 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
           // Respect locally-declined rejoin state and immediately leave/suppress if present
           try {
             const key = `sorcery:declinedRejoin:${snap.match.id}`;
-            const declined = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+            const declined =
+              typeof window !== "undefined" ? localStorage.getItem(key) : null;
             if (declined) {
               allowApplyGame = false;
-              try { transport.leaveMatch(); } catch {}
+              try {
+                transport.leaveMatch();
+              } catch {}
               setMatch(null);
             } else {
               setMatch(snap.match);
@@ -272,37 +332,61 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         if (!snap?.lobby && !snap?.match) {
           setLobby(null);
           setMatch(null);
+          setReady(false);
           allowApplyGame = false;
         }
 
         // Apply full game snapshot if provided and allowed
         if (allowApplyGame && snap?.game) {
           try {
-            queueServerPatch(snap.game, typeof snap.t === 'number' ? snap.t : undefined);
+            queueServerPatch(
+              snap.game,
+              typeof snap.t === "number" ? snap.t : undefined
+            );
           } catch (e) {
-            console.warn('Failed to apply resync game snapshot', e);
+            console.warn("Failed to apply resync game snapshot", e);
           }
         }
         // Debug: report whether we applied the snapshot
         try {
-          console.debug('[online] resync apply ->', { allowApplyGame, hasGame: !!snap?.game, gen });
+          console.debug("[online] resync apply ->", {
+            allowApplyGame,
+            hasGame: !!snap?.game,
+            gen,
+          });
         } catch {}
         // Clear resyncing on the next frame after queueing applies
         try {
           requestAnimationFrame(() => {
             if (resyncGenRef.current !== gen) {
-              try { console.debug('[online] resync stop ignored (newer resync started)', { gen, current: resyncGenRef.current }); } catch {}
+              try {
+                console.debug(
+                  "[online] resync stop ignored (newer resync started)",
+                  { gen, current: resyncGenRef.current }
+                );
+              } catch {}
               return;
             }
-            try { console.debug('[online] resync stop (server)', { gen }); } catch {}
+            try {
+              console.debug("[online] resync stop (server)", { gen });
+            } catch {}
             setResyncing(false);
           });
         } catch {
           if (resyncGenRef.current === gen) {
-            try { console.debug('[online] resync stop (server, immediate)', { gen }); } catch {}
+            try {
+              console.debug("[online] resync stop (server, immediate)", {
+                gen,
+              });
+            } catch {}
             setResyncing(false);
           } else {
-            try { console.debug('[online] resync stop immediate ignored (superseded)', { gen, current: resyncGenRef.current }); } catch {}
+            try {
+              console.debug(
+                "[online] resync stop immediate ignored (superseded)",
+                { gen, current: resyncGenRef.current }
+              );
+            } catch {}
           }
         }
       }),
@@ -359,6 +443,13 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
     },
     joinLobby: async (id?: string) => {
       await transport.joinLobby(id);
+      // Reset local ready state on lobby join; server updates will resync this shortly
+      setReady(false);
+    },
+    createLobby: async (options?: { visibility?: LobbyVisibility; maxPlayers?: number }) => {
+      await transport.createLobby(options);
+      // Reset local ready state on lobby creation; server updates will resync this shortly
+      setReady(false);
     },
     leaveLobby: () => {
       try {
@@ -369,13 +460,15 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
         setMatch(null);
       }
     },
-    startMatch: () => {
-      transport.startMatch();
+    startMatch: (matchConfig?: StartMatchConfig) => {
+      transport.startMatch(matchConfig);
     },
     joinMatch: async (id: string) => {
       try {
         // Clear any previously declined rejoin flag for this match
-        try { localStorage.removeItem(`sorcery:declinedRejoin:${id}`); } catch {}
+        try {
+          localStorage.removeItem(`sorcery:declinedRejoin:${id}`);
+        } catch {}
       } catch {}
       await transport.joinMatch(id);
     },
@@ -383,23 +476,27 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       try {
         const myName = me?.displayName || "A player";
         const matchId = match?.id;
-        
+
         // Send a chat message to notify other players
         if (me) {
           transport.sendChat(`${myName} has left the match.`, "match");
         }
-        
+
         // Tell the server we've left the match so it doesn't prompt rejoin on reconnect
-        try { transport.leaveMatch(); } catch {}
+        try {
+          transport.leaveMatch();
+        } catch {}
 
         // Persist declined rejoin decision locally for this match
         if (matchId) {
-          try { localStorage.setItem(`sorcery:declinedRejoin:${matchId}`, "1"); } catch {}
+          try {
+            localStorage.setItem(`sorcery:declinedRejoin:${matchId}`, "1");
+          } catch {}
         }
 
         // Clear match state
         setMatch(null);
-        
+
         // Log the leave event locally
         useGameStore.getState().log(`You left the match.`);
       } catch {}
@@ -412,16 +509,33 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
       const gen = ++resyncGenRef.current;
       setResyncing(true);
       // Debug: client-initiated resync start
-      try { console.debug('[online] resync start (client request) ->', { matchId: match?.id, gen }); } catch {}
-      try { transport.resync(); } catch {}
+      try {
+        console.debug("[online] resync start (client request) ->", {
+          matchId: match?.id,
+          gen,
+        });
+      } catch {}
+      try {
+        transport.resync();
+      } catch {}
       // Fallback safety: clear resyncing if server doesn't respond, but only if no newer resync started
       try {
         setTimeout(() => {
           if (resyncGenRef.current !== gen) {
-            try { console.debug('[online] resync fallback ignored (superseded)', { gen, current: resyncGenRef.current }); } catch {}
+            try {
+              console.debug("[online] resync fallback ignored (superseded)", {
+                gen,
+                current: resyncGenRef.current,
+              });
+            } catch {}
             return;
           }
-          try { console.debug('[online] resync fallback clear (no server response)', { gen }); } catch {}
+          try {
+            console.debug(
+              "[online] resync fallback clear (no server response)",
+              { gen }
+            );
+          } catch {}
           setResyncing(false);
         }, 2500);
       } catch {}
@@ -432,19 +546,29 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
     players,
     invites,
     requestLobbies: () => {
-      try { transport.requestLobbies(); } catch {}
+      try {
+        transport.requestLobbies();
+      } catch {}
     },
     requestPlayers: () => {
-      try { transport.requestPlayers(); } catch {}
+      try {
+        transport.requestPlayers();
+      } catch {}
     },
     setLobbyVisibility: (visibility: LobbyVisibility) => {
-      try { transport.setLobbyVisibility(visibility); } catch {}
+      try {
+        transport.setLobbyVisibility(visibility);
+      } catch {}
     },
     inviteToLobby: (targetPlayerId: string, lobbyId?: string) => {
-      try { transport.inviteToLobby(targetPlayerId, lobbyId); } catch {}
+      try {
+        transport.inviteToLobby(targetPlayerId, lobbyId);
+      } catch {}
     },
     dismissInvite: (lobbyId: string, fromId: string) => {
-      setInvites((prev) => prev.filter((i) => !(i.lobbyId === lobbyId && i.from.id === fromId)));
+      setInvites((prev) =>
+        prev.filter((i) => !(i.lobbyId === lobbyId && i.from.id === fromId))
+      );
     },
   };
 
@@ -459,9 +583,15 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
           <div className="max-w-5xl mx-auto p-6 space-y-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold">Online</h1>
+                <h1 className="text-xl font-semibold font-fantaisie">
+                  Online Play
+                </h1>
                 <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${connected ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30" : "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"}`}
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    connected
+                      ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
+                      : "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"
+                  }`}
                 >
                   {connected ? "Connected" : "Disconnected"}
                 </span>
@@ -479,10 +609,18 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
                 >
                   Lobby
                 </Link>
+                <Link
+                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
+                  href="/replay"
+                >
+                  Replays
+                </Link>
               </div>
               {!nameSubmitted ? (
                 <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-                  <div className="text-sm font-semibold opacity-90 mb-3">Enter Display Name</div>
+                  <div className="text-sm font-semibold opacity-90 mb-3">
+                    Enter Display Name
+                  </div>
                   <div className="space-y-3">
                     <div>
                       <input
@@ -490,13 +628,18 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
                         placeholder="Enter your name (min 2 characters)"
                         value={tempDisplayName}
                         onChange={(e) => setTempDisplayName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && submitDisplayName()}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && submitDisplayName()
+                        }
                       />
                     </div>
                     <button
                       className="w-full rounded bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       onClick={submitDisplayName}
-                      disabled={!tempDisplayName.trim() || tempDisplayName.trim().length < 2}
+                      disabled={
+                        !tempDisplayName.trim() ||
+                        tempDisplayName.trim().length < 2
+                      }
                     >
                       Set Name & Connect
                     </button>
@@ -506,7 +649,9 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <label className="text-xs opacity-70">Display Name</label>
-                    <span className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm">{displayName}</span>
+                    <span className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm">
+                      {displayName}
+                    </span>
                   </div>
                   <button
                     className="text-xs underline text-slate-300/80 hover:text-slate-200"
@@ -516,33 +661,40 @@ export default function OnlineLayout({ children }: { children: React.ReactNode }
                   </button>
                 </div>
               )}
-              <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-                <div className="text-sm font-semibold opacity-90">Game State (live)</div>
-                <div className="mt-3 text-sm space-y-2">
-                  <div>
-                    <span className="opacity-70">Phase:</span> {gamePhase}
+              {!isLobbyPage && (
+                <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
+                  <div className="text-sm font-semibold opacity-90">
+                    Game State (live)
                   </div>
-                  <div>
-                    <span className="opacity-70">Current Player:</span> P{currentPlayer}
-                  </div>
-                  <div>
-                    <span className="opacity-70">Events:</span> {eventSeq}
-                  </div>
-                  <div>
-                    <span className="opacity-70">Last Server t:</span> {lastServerTs || 0}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="opacity-70">Pending patches:</span> {pendingCount}
-                    <button
-                      className="px-2 py-0.5 text-xs rounded bg-white/10 hover:bg-white/20 disabled:opacity-40"
-                      onClick={() => flushPending()}
-                      disabled={!connected || pendingCount === 0}
-                    >
-                      Flush
-                    </button>
+                  <div className="mt-3 text-sm space-y-2">
+                    <div>
+                      <span className="opacity-70">Phase:</span> {gamePhase}
+                    </div>
+                    <div>
+                      <span className="opacity-70">Current Player:</span> P
+                      {currentPlayer}
+                    </div>
+                    <div>
+                      <span className="opacity-70">Events:</span> {eventSeq}
+                    </div>
+                    <div>
+                      <span className="opacity-70">Last Server t:</span>{" "}
+                      {lastServerTs || 0}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="opacity-70">Pending patches:</span>{" "}
+                      {pendingCount}
+                      <button
+                        className="px-2 py-0.5 text-xs rounded bg-white/10 hover:bg-white/20 disabled:opacity-40"
+                        onClick={() => flushPending()}
+                        disabled={!connected || pendingCount === 0}
+                      >
+                        Flush
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
             {children}
           </div>

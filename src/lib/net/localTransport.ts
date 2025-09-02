@@ -7,6 +7,7 @@ import type {
   TransportEvent,
   TransportEventMap,
   TransportHandler,
+  StartMatchConfig,
 } from "@/lib/net/transport";
 
 // Local, in-memory transport that simulates a server by immediately
@@ -17,6 +18,7 @@ export class LocalTransport implements GameTransport {
   private lobbyId: string | null = null;
   private matchId: string | null = null;
   private you: { id: string; displayName: string } | null = null;
+  private pendingStartConfig?: StartMatchConfig;
 
   async connect(opts: { displayName: string; playerId?: string }): Promise<void> {
     this.connected = true;
@@ -65,12 +67,28 @@ export class LocalTransport implements GameTransport {
 
   async joinMatch(matchId: string): Promise<void> {
     this.matchId = matchId || `local-match-${Date.now()}`;
+    const cfg = this.pendingStartConfig;
+    this.pendingStartConfig = undefined;
+    const isSealed = cfg?.matchType === "sealed" && !!cfg.sealedConfig;
+    const sealedConfig = isSealed
+      ? {
+          packCount: cfg!.sealedConfig!.packCount,
+          setMix: cfg!.sealedConfig!.setMix,
+          timeLimit: cfg!.sealedConfig!.timeLimit,
+          // Preserve extended optional fields
+          packCounts: cfg!.sealedConfig!.packCounts,
+          replaceAvatars: cfg!.sealedConfig!.replaceAvatars,
+          // constructionStartTime optional; omit unless needed
+        }
+      : undefined;
     const match = {
       id: this.matchId,
       lobbyId: this.lobbyId ?? undefined,
       players: this.you ? [this.you] : [],
-      status: "waiting" as const,
+      status: isSealed ? "deck_construction" : "waiting",
       seed: Math.random().toString(36).slice(2, 10),
+      matchType: cfg?.matchType,
+      sealedConfig,
     };
     this.dispatch("matchStarted", Protocol.MatchStartedPayload.parse({ match }));
   }
@@ -88,7 +106,8 @@ export class LocalTransport implements GameTransport {
     void _ready;
   }
 
-  startMatch(): void {
+  startMatch(matchConfig?: StartMatchConfig): void {
+    this.pendingStartConfig = matchConfig;
     if (!this.matchId) {
       // Fire-and-forget; joinMatch will dispatch matchStarted
       void this.joinMatch(`local-match-${Date.now()}`);
