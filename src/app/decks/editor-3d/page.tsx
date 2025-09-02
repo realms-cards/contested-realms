@@ -287,7 +287,7 @@ function DraggableCard3D({
   );
 }
 
-export default function DeckEditor3DPage() {
+function DeckEditor3DPageInner() {
   const searchParams = useSearchParams();
 
   // Deck editor state (same as 2D version)
@@ -459,8 +459,6 @@ export default function DeckEditor3DPage() {
     const sealed = searchParams.get("sealed");
     const matchId = searchParams.get("matchId");
     const timeLimit = searchParams.get("timeLimit");
-    const packCount = searchParams.get("packCount");
-    const setMix = searchParams.get("setMix");
     const constructionStartTime = searchParams.get("constructionStartTime");
     const replaceAvatars = searchParams.get("replaceAvatars") === "true";
 
@@ -471,17 +469,30 @@ export default function DeckEditor3DPage() {
         constructionStartTime: parseInt(
           constructionStartTime || Date.now().toString()
         ),
-        packCount: parseInt(packCount || "6"),
-        setMix: setMix ? setMix.split(",") : ["Beta"],
+        packCount: parseInt(searchParams.get("packCount") || "6"),
+        setMix: searchParams.get("setMix")
+          ? (searchParams.get("setMix") || "").split(",")
+          : ["Beta"],
         replaceAvatars,
       };
 
       setSealedConfig(config);
       setIsSealed(true);
-      setDeckName("Sealed Deck");
+      setDeckName("Deck Editor");
 
-      // Generate packs for sealed construction
-      generateSealedPacks(config);
+      // Generate packs for sealed construction (inline to avoid TDZ on generateSealedPacks)
+      const { packCount, setMix } = config;
+      const generatedPacks = [] as typeof packs;
+      for (let i = 0; i < packCount; i++) {
+        const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
+        generatedPacks.push({
+          id: `pack_${i}`,
+          set: randomSet,
+          cards: [],
+          opened: false,
+        });
+      }
+      setPacks(generatedPacks);
     }
   }, [searchParams, isSealed]); // Only initialize if not already sealed
 
@@ -778,7 +789,7 @@ export default function DeckEditor3DPage() {
       // auto-clear success message after a short delay
       setTimeout(() => setSaveMsg(null), 1500);
     }
-  }, [pick3D, deckId, deckName, isDraftMode, setName]);
+  }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed]);
 
   // Submit sealed deck to match server
   const submitSealedDeck = useCallback(async () => {
@@ -789,17 +800,22 @@ export default function DeckEditor3DPage() {
       setError(null);
       setSaveMsg(null);
 
-      // Validate minimum deck requirements (more lenient for sealed)
+      // Validate minimum deck requirements for sealed
+      // Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excluding Avatar)
+      let avatar = 0;
       let atlas = 0;
-      let nonAtlas = 0;
+      let spellbookNonAvatar = 0;
       for (const p of pick3D) {
         if (p.z >= 0) continue; // only deck zone
         const t = (p.card.type || "").toLowerCase();
-        if (t.includes("site")) atlas += 1;
-        else nonAtlas += 1;
+        if (t.includes("avatar")) avatar += 1;
+        else if (t.includes("site")) atlas += 1;
+        else spellbookNonAvatar += 1;
       }
-      if (atlas < 12 || nonAtlas < 24) {
-        throw new Error("Deck invalid. Require: Atlas >= 12, Non-sites >= 24");
+      if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
+        throw new Error(
+          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+        );
       }
 
       // Convert 3D picks to simple card array for sealed submission
@@ -993,24 +1009,6 @@ export default function DeckEditor3DPage() {
   );
 
   // Sealed mode pack functions
-  const generateSealedPacks = useCallback((config: typeof sealedConfig) => {
-    if (!config) return;
-
-    const { packCount, setMix } = config;
-    const generatedPacks = [];
-
-    for (let i = 0; i < packCount; i++) {
-      const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
-      generatedPacks.push({
-        id: `pack_${i}`,
-        set: randomSet,
-        cards: [], // Will be populated when pack is opened
-        opened: false,
-      });
-    }
-
-    setPacks(generatedPacks);
-  }, []);
 
   const openPack = useCallback(
     async (packId: string) => {
@@ -1082,7 +1080,7 @@ export default function DeckEditor3DPage() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [packs, addCardAuto]
+    [packs, addToSideboardFromSearch, sealedConfig?.replaceAvatars]
   );
 
   // Removed auto-save sealed deck function - use manual save only
@@ -1144,38 +1142,57 @@ export default function DeckEditor3DPage() {
   }, []);
 
   // Convert deck picks to Pick3D format - preserve existing positions when possible
-  const positionsRef = useRef<Map<number, { z: number; x: number }>>(new Map());
+  const positionsRef = useRef<Map<string, { z: number; x: number }>>(new Map());
+  const zoneCountsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     const newPick3D: Pick3D[] = [];
     let id = 1;
 
-    // Check if deck is already valid/edited
-    const avatarCount = Object.values(picks)
-      .filter((item) => (item.type || "").toLowerCase().includes("avatar"))
-      .reduce((sum, item) => sum + item.count, 0);
-    const atlasCount = Object.values(picks)
-      .filter((item) => item.zone === "Atlas")
-      .reduce((sum, item) => sum + item.count, 0);
-    const spellbookCount = Object.values(picks)
-      .filter((item) => item.zone === "Spellbook")
-      .reduce((sum, item) => sum + item.count, 0);
+    // 1) Compute total counts per card and initial deck-target based on picks
+    const totalByCard = new Map<number, number>();
+    const initialDeckByCard = new Map<number, number>();
+    for (const item of Object.values(picks)) {
+      const current = totalByCard.get(item.cardId) || 0;
+      totalByCard.set(item.cardId, current + item.count);
+      if (item.zone !== "Sideboard") {
+        const curDeck = initialDeckByCard.get(item.cardId) || 0;
+        initialDeckByCard.set(item.cardId, curDeck + item.count);
+      }
+    }
 
-    const isDeckValid =
-      avatarCount >= 1 && atlasCount >= 12 && spellbookCount >= 24;
+    // 2) Determine target deck counts per card using prior distribution if available
+    const remainingDeckByCard = new Map<number, number>();
+    for (const [cardId, total] of totalByCard.entries()) {
+      const prevDeck = zoneCountsRef.current.get(`${cardId}:Deck`) || 0;
+      const prevSide = zoneCountsRef.current.get(`${cardId}:Sideboard`) || 0;
+      const hadPrev = prevDeck + prevSide > 0;
+      const initialDeck = initialDeckByCard.get(cardId) || 0;
+      const deckTarget = hadPrev
+        ? Math.min(prevDeck, total)
+        : Math.min(initialDeck, total);
+      remainingDeckByCard.set(cardId, deckTarget);
+    }
 
+    // 3) Emit copies in the computed zones, preserving per-zone positions
     for (const item of Object.values(picks)) {
       for (let i = 0; i < item.count; i++) {
-        // Use existing position if available in sealed mode
-        const existingPos = positionsRef.current.get(item.cardId);
-        const shouldPreservePosition = existingPos && isSealed;
+        const rem = remainingDeckByCard.get(item.cardId) || 0;
+        const zoneKey = rem > 0 ? "Deck" : "Sideboard";
+        if (rem > 0) remainingDeckByCard.set(item.cardId, rem - 1);
+
+        // Use existing position if available (sealed only) and per-zone cached positions
+        const existingPos = positionsRef.current.get(
+          `${item.cardId}:${zoneKey}`
+        );
+        const shouldPreservePosition = !!existingPos && isSealed;
 
         const x = shouldPreservePosition
           ? existingPos.x
           : -3 + Math.random() * 6;
         const z = shouldPreservePosition
           ? existingPos.z
-          : isDeckValid && item.zone !== "Sideboard"
+          : zoneKey === "Deck"
           ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
           : 0.5 + Math.random() * 3; // Sideboard zone: z from 0.5 to 3.5
 
@@ -1204,14 +1221,19 @@ export default function DeckEditor3DPage() {
 
   // Update position cache whenever pick3D changes
   useEffect(() => {
-    const newPositions = new Map<number, { z: number; x: number }>();
+    const newPositions = new Map<string, { z: number; x: number }>();
+    const newZoneCounts = new Map<string, number>();
     for (const pick of pick3D) {
       const cardId = pick.card.cardId;
-      if (!newPositions.has(cardId)) {
-        newPositions.set(cardId, { z: pick.z, x: pick.x });
+      const zoneKey = pick.z < 0 ? "Deck" : "Sideboard";
+      const key = `${cardId}:${zoneKey}`;
+      if (!newPositions.has(key)) {
+        newPositions.set(key, { z: pick.z, x: pick.x });
       }
+      newZoneCounts.set(key, (newZoneCounts.get(key) || 0) + 1);
     }
     positionsRef.current = newPositions;
+    zoneCountsRef.current = newZoneCounts;
   }, [pick3D]);
 
   // Load deck data and meta (enhanced for multi-set sealed like draft-3d)
@@ -1372,7 +1394,11 @@ export default function DeckEditor3DPage() {
     try {
       setSearching(true);
       setError(null);
-      const list = await searchCards({ q, setName: searchSetName, type: typeFilter });
+      const list = await searchCards({
+        q,
+        setName: searchSetName,
+        type: typeFilter,
+      });
       setResults(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1713,7 +1739,7 @@ export default function DeckEditor3DPage() {
         {/* Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
           <div className="text-3xl font-fantaisie text-white">
-            Save and Exit to Deck Builder
+            Deck Editor
             {isDraftMode && (
               <span className="text-lg text-orange-400 ml-2">
                 (Draft Completion Mode)
@@ -2539,7 +2565,9 @@ export default function DeckEditor3DPage() {
                             <option value="">All Sets</option>
                             <option value="Alpha">Alpha</option>
                             <option value="Beta">Beta</option>
-                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Arthurian Legends">
+                              Arthurian Legends
+                            </option>
                             <option value="Dragonlord">Dragonlord</option>
                           </select>
                         </>
@@ -2576,7 +2604,9 @@ export default function DeckEditor3DPage() {
                             <option value="">All Sets</option>
                             <option value="Alpha">Alpha</option>
                             <option value="Beta">Beta</option>
-                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Arthurian Legends">
+                              Arthurian Legends
+                            </option>
                             <option value="Dragonlord">Dragonlord</option>
                           </select>
                         </>
@@ -2746,5 +2776,11 @@ export default function DeckEditor3DPage() {
         onAddStandardSite={addStandardSiteByName}
       />
     </div>
+  );
+}
+
+export default function DeckEditor3DPage() {
+  return (
+    <DeckEditor3DPageInner />
   );
 }

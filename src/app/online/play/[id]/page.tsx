@@ -196,6 +196,14 @@ export default function OnlineMatchPage() {
     setD20RollingComplete(false);
   }, [match?.id]);
 
+  // Reset game state only when match transitions to "in_progress" (once per match)
+  useEffect(() => {
+    if (match?.status === "in_progress" && prevMatchStatusRef.current !== "in_progress") {
+      console.log("[game] Match started - resetting game state");
+      useGameStore.getState().resetGameState();
+    }
+  }, [match?.status]);
+
   // Also close setup if server advances phase to Main (in case match.status races)
   useEffect(() => {
     if (setupOpen && serverPhase === "Main") {
@@ -763,7 +771,7 @@ export default function OnlineMatchPage() {
               <Hud3D owner="p1" />
               <Hud3D owner="p2" />
 
-              {/* 3D Hands - only show my hand in online play */}
+              {/* 3D Hands - show both player and opponent hands */}
               {myPlayerKey && (
                 <Hand3D
                   owner={myPlayerKey}
@@ -771,6 +779,29 @@ export default function OnlineMatchPage() {
                   matH={MAT_PIXEL_H}
                 />
               )}
+              {/* Opponent hand with card backs */}
+              {myPlayerKey && (() => {
+                const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
+                const myHandSize = zones[myPlayerKey]?.hand?.length || 0;
+                const opponentHandSize = zones[opponentKey]?.hand?.length || 0;
+                console.debug("[hand] Hand sizes", { 
+                  myPlayerKey, 
+                  myPlayerNumber, 
+                  myHandSize,
+                  opponentKey,
+                  opponentHandSize,
+                  allZones: Object.keys(zones).map(k => `${k}: ${zones[k as PlayerKey]?.hand?.length || 0} cards`)
+                });
+                return (
+                  <Hand3D
+                    owner={opponentKey}
+                    matW={MAT_PIXEL_W}
+                    matH={MAT_PIXEL_H}
+                    showCardBacks={true}
+                    viewerPlayerNumber={myPlayerNumber}
+                  />
+                );
+              })()}
 
               {/* Invisible texture cache for smooth loading */}
               <TextureCache />

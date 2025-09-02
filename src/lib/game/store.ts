@@ -201,6 +201,8 @@ export type GameState = {
   mulliganWithSelection: (who: PlayerKey, indices: number[]) => void;
   mulliganDrawn: Record<PlayerKey, CardRef[]>;
   finalizeMulligan: () => void;
+  // Reset all game state to initial values (for new matches)
+  resetGameState: () => void;
   // Events / console
   events: GameEvent[];
   eventSeq: number;
@@ -2114,4 +2116,87 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       return { mulliganDrawn: next } as Partial<GameState> as GameState;
     }),
+
+  // Reset all game state to initial values (for new matches)
+  resetGameState: () =>
+    set(() => {
+      console.log("[game] Resetting game state for new match");
+      return {
+        // Reset player state
+        players: {
+          p1: {
+            life: 20,
+            lifeState: 'alive' as LifeState,
+            mana: 0,
+            thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
+          },
+          p2: {
+            life: 20,
+            lifeState: 'alive' as LifeState,
+            mana: 0,
+            thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
+          },
+        },
+        currentPlayer: 1,
+        phase: "Setup" as Phase,
+        // Reset D20 setup
+        d20Rolls: { p1: null, p2: null },
+        setupWinner: null,
+        // Reset match end state
+        matchEnded: false,
+        winner: null,
+        // Reset board
+        board: { size: { w: 5, h: 4 }, sites: {} },
+        // Reset zones
+        zones: {
+          p1: {
+            spellbook: [],
+            atlas: [],
+            hand: [],
+            graveyard: [],
+            battlefield: [],
+            banished: [],
+          },
+          p2: {
+            spellbook: [],
+            atlas: [],
+            hand: [],
+            graveyard: [],
+            battlefield: [],
+            banished: [],
+          },
+        },
+        // Reset selections
+        selectedCard: null,
+        selectedPermanent: null,
+        selectedAvatar: null,
+        // Reset hand state
+        mouseInHandZone: false,
+        handHoverCount: 0,
+        // Reset avatars
+        avatars: {
+          p1: { card: null, pos: null, tapped: false },
+          p2: { card: null, pos: null, tapped: false },
+        },
+        // Reset permanents
+        permanents: {},
+        // Reset UI state
+        dragFromHand: false,
+        dragFromPile: null,
+        hoverCell: null,
+        previewCard: null,
+        contextMenu: null,
+        // Reset history
+        history: [],
+        // Reset mulligans
+        mulligans: { p1: 1, p2: 1 },
+        mulliganDrawn: { p1: [], p2: [] },
+        // Reset events/log
+        events: [],
+        eventSeq: 0,
+        // Keep transport, lastServerTs, and pendingPatches intact
+        // to maintain network connectivity
+      } as Partial<GameState> as GameState;
+    }),
+
 }));

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useOnline } from "../layout";
+import { useGameStore } from "@/lib/game/store";
 import LobbyList from "@/components/online/LobbyList";
 import InvitesPanel from "@/components/online/InvitesPanel";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
@@ -452,7 +453,11 @@ export default function LobbyPage() {
               className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-40"
               onClick={() => {
                 const id = matchIdInput.trim();
-                if (id) joinMatch(id);
+                if (id) {
+                  console.log("[game] Joining match - resetting game state");
+                  useGameStore.getState().resetGameState();
+                  joinMatch(id);
+                }
               }}
               disabled={!connected || !matchIdInput.trim()}
             >

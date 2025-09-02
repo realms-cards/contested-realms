@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { Text, useTexture } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import {
@@ -52,6 +52,24 @@ function noopRaycast(
   void _intersects;
 }
 
+// Isolated playmat that loads its texture and renders the background plane.
+// Wrapped in Suspense by the parent so Board itself doesn't suspend.
+function Playmat({ matW, matH }: { matW: number; matH: number }) {
+  const tex = useTexture("/api/assets/playmat.jpg");
+  tex.colorSpace = SRGBColorSpace;
+  return (
+    <mesh
+      rotation-x={-Math.PI / 2}
+      position={[0, 0, 0]}
+      receiveShadow
+      raycast={noopRaycast}
+    >
+      <planeGeometry args={[matW, matH]} />
+      <meshBasicMaterial map={tex} toneMapped={false} />
+    </mesh>
+  );
+}
+
 export default function Board() {
   const board = useGameStore((s) => s.board);
   const showGrid = useGameStore((s) => s.showGridOverlay);
@@ -81,8 +99,7 @@ export default function Board() {
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
-  const tex = useTexture("/api/assets/playmat.jpg");
-  tex.colorSpace = SRGBColorSpace;
+  // Playmat texture is loaded inside the Playmat subcomponent via Suspense.
 
   // Helper function to update offsets for existing cards when a new card is added
   const updateExistingCardOffsets = (
@@ -249,15 +266,9 @@ export default function Board() {
     <group>
       {/* Playmat background */}
       {showPlaymat && (
-        <mesh
-          rotation-x={-Math.PI / 2}
-          position={[0, 0, 0]}
-          receiveShadow
-          raycast={noopRaycast}
-        >
-          <planeGeometry args={[matW, matH]} />
-          <meshBasicMaterial map={tex} toneMapped={false} />
-        </mesh>
+        <Suspense fallback={null}>
+          <Playmat matW={matW} matH={matH} />
+        </Suspense>
       )}
 
       {/* Physics ground collider matching the playmat extents */}
