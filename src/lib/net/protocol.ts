@@ -88,7 +88,10 @@ export type ChatScope = z.infer<typeof ChatScopeSchema>;
 
 // Client -> Server payloads
 export const HelloPayload = z.object({ 
-  displayName: z.string(),
+  displayName: z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(z.string().min(1).max(40)),
   playerId: z.string().optional() // Persistent player ID for reconnection
 });
 export const CreateLobbyPayload = z.object({

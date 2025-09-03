@@ -14,7 +14,7 @@ import type { Group } from "three";
 import { MOUSE } from "three";
 import Image from "next/image";
 
-import { useOnline } from "@/app/online/layout";
+import { useOnline } from "@/app/online/online-context";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 
 // Card shape used by OnlineDraftScreen; keep compatible

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useOnline } from "../layout";
+import { useOnline } from "@/app/online/online-context";
 import { useGameStore } from "@/lib/game/store";
 import LobbyList from "@/components/online/LobbyList";
 import InvitesPanel from "@/components/online/InvitesPanel";

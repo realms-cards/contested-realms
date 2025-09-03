@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useOnline } from "../../layout";
+import { useOnline } from "@/app/online/online-context";
 import { useGameStore } from "@/lib/game/store";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
