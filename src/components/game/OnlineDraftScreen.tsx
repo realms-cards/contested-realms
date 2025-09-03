@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
 import { Physics, RigidBody } from "@react-three/rapier";
@@ -46,6 +47,7 @@ export default function OnlineDraftScreen({
   console.log(`[DraftClient 2D] Component mounted - myPlayerKey:${myPlayerKey}`);
   const { transport, match, me } = useOnline();
   const matchId = match?.id ?? null;
+  const router = useRouter();
   
   // Draft UI state
   const [error, setError] = useState<string | null>(null);
@@ -185,12 +187,8 @@ export default function OnlineDraftScreen({
         
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
-          if (typeof window !== 'undefined') {
-            if (matchId) {
-              window.location.href = `/decks/editor-3d?draft=true&matchId=${matchId}`;
-            }
-          }
-        }, 1000); // Small delay to show completion message
+          if (matchId) router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
+        }, 600);
         
         onDraftComplete(myFinalPicks);
       }
@@ -200,7 +198,7 @@ export default function OnlineDraftScreen({
     const unsubscribe = transport.on("draftUpdate" as keyof TransportEventMap, handleDraftUpdate);
 
     return unsubscribe;
-  }, [transport, myPlayerIndex, onDraftComplete, matchId, match, staged, ready, me, packChoiceOverlay, usedPacks, shownPackOverlayForRound, cardToBoosterCard, nextPickId]);
+  }, [transport, myPlayerIndex, onDraftComplete, matchId, match, staged, ready, me, packChoiceOverlay, usedPacks, shownPackOverlayForRound, cardToBoosterCard, nextPickId, router]);
 
   // Start draft when both players are ready
   const handleStartDraft = useCallback(async () => {

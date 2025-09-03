@@ -42,9 +42,9 @@ function makeClient() {
     { id: 205, cardId: 5, slug: 't_uni1_f', finish: 'Foil' as Finish, product: 'Booster' },
   ];
 
-  const client: any = {
+  const client = {
     set: {
-      async findUnique({ where: { name } }: any) {
+      async findUnique({ where: { name } }: { where: { name: string } }) {
         if (name !== 'TestSet') return null;
         return {
           id: setId,
@@ -66,28 +66,28 @@ function makeClient() {
       },
     },
     cardSetMetadata: {
-      async findMany({ where: { setId: sid } }: any) {
+      async findMany({ where: { setId: sid } }: { where: { setId: number } }) {
         if (sid !== setId) return [];
         return metas;
       },
     },
     variant: {
-      async findMany({ where, select }: any) {
+      async findMany({ where, select }: { where: { finish: Finish }, select: { id: true; cardId: true; slug: true; finish: true; product: true } }) {
         if (where.finish === 'Standard') return variantsStd;
         if (where.finish === 'Foil') return variantsFoil;
         return [];
       },
     },
     card: {
-      async findMany({ where: { id: { in: ids } } }: any) {
+      async findMany({ where: { id: { in: ids } } }: { where: { id: { in: number[] } } }) {
         return cards.filter(c => ids.includes(c.id));
       },
-      async findUnique({ where: { name } }: any) {
+      async findUnique({ where: { name } }: { where: { name: string } }) {
         return cards.find(c => c.name === name) || null;
       },
     },
-  };
-  return client;
+  } as const;
+  return client as unknown as Parameters<typeof generateBooster>[1];
 }
 
 afterEach(() => {
@@ -123,4 +123,3 @@ describe('generateBooster', () => {
     expect(pack.length).toBe(5);
   });
 });
-
