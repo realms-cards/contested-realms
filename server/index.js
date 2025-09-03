@@ -521,13 +521,9 @@ io.on("connection", (socket) => {
   let authed = false;
 
   socket.on("hello", (payload) => {
-    const displayName =
-      (payload && payload.displayName
-        ? String(payload.displayName)
-        : "Player"
-      ).slice(0, 40) || "Player";
-    const providedId =
-      payload && payload.playerId ? String(payload.playerId) : null;
+    const rawName = payload && typeof payload.displayName === "string" ? payload.displayName : "";
+    const displayName = (rawName.trim() || "Player").slice(0, 40);
+    const providedId = payload && payload.playerId ? String(payload.playerId) : null;
     const playerId = providedId || rid("p");
 
     let player = players.get(playerId);
@@ -546,6 +542,10 @@ io.on("connection", (socket) => {
     }
     playerIdBySocket.set(socket.id, playerId);
     authed = true;
+
+    console.log(
+      `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} socket=${socket.id}`
+    );
 
     socket.emit("welcome", {
       you: { id: player.id, displayName: player.displayName },

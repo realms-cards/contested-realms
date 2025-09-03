@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useOnline } from "@/app/online/layout";
+import { useOnline } from "@/app/online/online-context";
 import type { MatchInfo } from "@/lib/net/protocol";
 
 interface Card {

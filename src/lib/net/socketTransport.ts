@@ -35,7 +35,10 @@ export class SocketTransport implements GameTransport {
         ? "http://localhost:3010"
         : "http://localhost:3001";
     const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
-    console.log(`[Transport] Connecting to ${url} as ${opts.displayName}${opts.playerId ? ` (${opts.playerId})` : ''}`);
+    // Sanitize and fallback the display name to avoid validation issues
+    const trimmed = (opts.displayName ?? "").trim();
+    const finalName = (trimmed || "Player").slice(0, 40);
+    console.log(`[Transport] Connecting to ${url} as ${finalName}${opts.playerId ? ` (${opts.playerId})` : ''}`);
     const socket = io(url, {
       transports: ["websocket"],
       autoConnect: true,
@@ -49,7 +52,7 @@ export class SocketTransport implements GameTransport {
         socket.emit(
           "hello",
           Protocol.HelloPayload.parse({
-            displayName: opts.displayName,
+            displayName: finalName,
             playerId: opts.playerId,
           })
         );

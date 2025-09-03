@@ -1,13 +1,6 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -25,46 +18,9 @@ import type {
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useGameStore } from "@/lib/game/store";
 
+import { OnlineContext } from "@/app/online/online-context";
+import type { OnlineContextValue } from "@/app/online/online-context";
 
-type OnlineContextValue = {
-  transport: SocketTransport | null;
-  connected: boolean;
-  displayName: string;
-  setDisplayName: () => void;
-  me: PlayerInfo | null;
-  lobby: LobbyInfo | null;
-  match: MatchInfo | null;
-  ready: boolean;
-  toggleReady: () => void;
-  joinLobby: (id?: string) => Promise<void>;
-  createLobby: (options?: { visibility?: LobbyVisibility; maxPlayers?: number }) => Promise<void>;
-  leaveLobby: () => void;
-  startMatch: (matchConfig?: StartMatchConfig) => void;
-  joinMatch: (id: string) => Promise<void>;
-  leaveMatch: () => void;
-  sendChat: (msg: string, scope?: ChatScope) => void;
-  resync: () => void;
-  resyncing: boolean;
-  chatLog: ServerChatPayloadT[];
-  // Extended state
-  lobbies: LobbyInfo[];
-  players: PlayerInfo[];
-  invites: LobbyInvitePayloadT[];
-  // Extended actions
-  requestLobbies: () => void;
-  requestPlayers: () => void;
-  setLobbyVisibility: (visibility: LobbyVisibility) => void;
-  inviteToLobby: (targetPlayerId: string, lobbyId?: string) => void;
-  dismissInvite: (lobbyId: string, fromId: string) => void;
-};
-
-const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);
-
-export function useOnline(): OnlineContextValue {
-  const ctx = useContext(OnlineContext);
-  if (!ctx) throw new Error("useOnline must be used within <OnlineLayout>");
-  return ctx;
-}
 
 export default function OnlineLayout({
   children,

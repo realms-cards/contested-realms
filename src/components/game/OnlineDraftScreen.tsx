@@ -5,7 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
 import { Physics, RigidBody } from "@react-three/rapier";
 import CardPlane from "@/lib/game/components/CardPlane";
-import { useOnline } from "@/app/online/layout";
+import { useOnline } from "@/app/online/online-context";
 import { DraftState, TransportEventMap } from "@/lib/net/transport";
 import Image from "next/image";
 

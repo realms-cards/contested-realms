@@ -9,6 +9,7 @@ import {
   Suspense,
 } from "react";
 import AuthenticationWrapper from "@/components/auth/AuthenticationWrapper";
+import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
@@ -296,6 +297,7 @@ function DraggableCard3D({
 }
 
 function AuthenticatedDeckEditor() {
+  const { status } = useSession();
   const searchParams = useSearchParams();
 
   // Deck editor state (same as 2D version)
@@ -330,6 +332,11 @@ function AuthenticatedDeckEditor() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // Clear transient errors when auth status changes to authenticated
+  useEffect(() => {
+    if (status === "authenticated") setError(null);
+  }, [status]);
   // Local set selector for search overlay (empty string means "All Sets")
   const [searchSetName, setSearchSetName] = useState<string>("");
 
@@ -348,13 +355,14 @@ function AuthenticatedDeckEditor() {
     null
   );
 
-  // Load list of decks on mount
+  // Load list of decks after authentication
   useEffect(() => {
+    if (status !== "authenticated") return;
     let mounted = true;
     (async () => {
       try {
         setLoadingDecks(true);
-        const res = await fetch("/api/decks");
+        const res = await fetch("/api/decks", { credentials: "include", cache: "no-store" });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to load decks");
         if (mounted) setDecks(data as DeckListItem[]);
@@ -367,7 +375,7 @@ function AuthenticatedDeckEditor() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [status]);
 
   // Prefetch standard sites for the current set
   useEffect(() => {
@@ -844,6 +852,10 @@ function AuthenticatedDeckEditor() {
 
   // Minimal deck actions
   const saveDeck = useCallback(async () => {
+    if (status !== "authenticated") {
+      setError("You must be signed in to save decks.");
+      return;
+    }
     try {
       setSaving(true);
       setError(null);
@@ -892,6 +904,8 @@ function AuthenticatedDeckEditor() {
         const res = await fetch(`/api/decks/${deckId}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
+          credentials: "include",
+          cache: "no-store",
           body: JSON.stringify({
             name: deckName || "Deck",
             set: setName,
@@ -910,6 +924,8 @@ function AuthenticatedDeckEditor() {
         const res = await fetch("/api/decks", {
           method: "POST",
           headers: { "content-type": "application/json" },
+          credentials: "include",
+          cache: "no-store",
           body: JSON.stringify({
             name: finalDeckName,
             format: isDraftMode || isSealed ? "Sealed" : "Constructed",
@@ -924,7 +940,7 @@ function AuthenticatedDeckEditor() {
         setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
         // Refresh deck list
         try {
-          const res2 = await fetch("/api/decks");
+          const res2 = await fetch("/api/decks", { credentials: "include", cache: "no-store" });
           const list = await res2.json();
           if (res2.ok) setDecks(list as DeckListItem[]);
         } catch {}
@@ -936,7 +952,7 @@ function AuthenticatedDeckEditor() {
       // auto-clear success message after a short delay
       setTimeout(() => setSaveMsg(null), 1500);
     }
-  }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed]);
+  }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed, status]);
 
   // Submit sealed deck to match server
   const submitSealedDeck = useCallback(async () => {
@@ -1034,9 +1050,10 @@ function AuthenticatedDeckEditor() {
 
   const loadDeck = useCallback(
     async (id: string) => {
+      if (status !== "authenticated") return;
       setDeckId(id);
       try {
-        const res = await fetch(`/api/decks/${id}`);
+        const res = await fetch(`/api/decks/${id}`, { credentials: "include", cache: "no-store" });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to load deck");
 
@@ -1128,7 +1145,7 @@ function AuthenticatedDeckEditor() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [isSealed, setName]
+    [isSealed, setName, status]
   );
 
   const clearEditor = useCallback(() => {

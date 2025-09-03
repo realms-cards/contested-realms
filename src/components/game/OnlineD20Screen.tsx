@@ -110,7 +110,11 @@ export default function OnlineD20Screen({
         </div>
         <div className="text-sm opacity-80">
           Playing as:{" "}
-          <span className="font-medium text-blue-400">
+          <span
+            className={`font-medium font-fantaisie ${
+              myPlayerKey === "p1" ? "bg-blue-500" : "bg-red-500"
+            }`}
+          >
             {playerNames[myPlayerKey]}
           </span>
         </div>
@@ -170,7 +174,7 @@ export default function OnlineD20Screen({
               }`}
             />
             <span>{playerNames.p1}</span>
-            <span className="font-mono">{d20Rolls.p1 ?? "—"}</span>
+            <span className="font-fantaisie">{d20Rolls.p1 ?? "—"}</span>
           </div>
           <div className="flex items-center gap-2">
             <div
@@ -179,7 +183,7 @@ export default function OnlineD20Screen({
               }`}
             />
             <span>{playerNames.p2}</span>
-            <span className="font-mono">{d20Rolls.p2 ?? "—"}</span>
+            <span className="font-fantaisie">{d20Rolls.p2 ?? "—"}</span>
           </div>
         </div>
 
