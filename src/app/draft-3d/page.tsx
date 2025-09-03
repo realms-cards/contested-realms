@@ -26,9 +26,7 @@ import {
   BoosterCard,
   Pick3D,
   Rarity,
-  Finish,
   categorizeCard,
-  getThresholdElements,
   computeStackPositions,
 } from "@/lib/game/cardSorting";
 

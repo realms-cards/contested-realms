@@ -10,6 +10,8 @@ import React, {
 } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
+import AuthButton from "@/components/auth/AuthButton";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type {
   LobbyInfo,
@@ -23,8 +25,6 @@ import type {
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useGameStore } from "@/lib/game/store";
 
-const PLAYER_NAME_KEY = "sorcery:playerName";
-const PLAYER_ID_KEY = "sorcery:playerId";
 
 type OnlineContextValue = {
   transport: SocketTransport | null;
@@ -76,10 +76,7 @@ export default function OnlineLayout({
     pathname?.includes("/online/play/") && pathname !== "/online/play";
   const isLobbyPage = pathname?.startsWith("/online/lobby");
 
-  // Important: do not read localStorage during render to avoid SSR/client mismatch
-  const [displayName, setDisplayName] = useState<string>("");
-  const [tempDisplayName, setTempDisplayName] = useState<string>("");
-  const [nameSubmitted, setNameSubmitted] = useState<boolean>(false);
+  const { data: session, status: sessionStatus } = useSession();
   const [connected, setConnected] = useState<boolean>(false);
   const [lobby, setLobby] = useState<LobbyInfo | null>(null);
   const [match, setMatch] = useState<MatchInfo | null>(null);
@@ -93,17 +90,6 @@ export default function OnlineLayout({
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
 
-  // After mount, load persisted display name from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PLAYER_NAME_KEY) || "";
-      if (stored) {
-        setDisplayName(stored);
-        setTempDisplayName(stored);
-        setNameSubmitted(true);
-      }
-    } catch {}
-  }, []);
 
   const gamePhase = useGameStore((s) => s.phase);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
@@ -158,8 +144,8 @@ export default function OnlineLayout({
   }, [me]);
 
   useEffect(() => {
-    // Only connect if name has been submitted
-    if (!nameSubmitted || !displayName.trim()) {
+    // Only connect if the user is authenticated
+    if (sessionStatus !== "authenticated" || !session?.user?.name) {
       return;
     }
 
@@ -167,25 +153,9 @@ export default function OnlineLayout({
 
     (async () => {
       try {
-        // Ensure we have a stable player id for reconnects
-        const getOrCreatePlayerId = (): string | undefined => {
-          try {
-            let pid = localStorage.getItem(PLAYER_ID_KEY);
-            if (!pid) {
-              pid = `p_${Math.random().toString(36).slice(2, 8)}${Date.now()
-                .toString(36)
-                .slice(-4)}`;
-              localStorage.setItem(PLAYER_ID_KEY, pid);
-            }
-            return pid;
-          } catch {
-            return undefined;
-          }
-        };
-
         await transport.connect({
-          displayName,
-          playerId: getOrCreatePlayerId(),
+          displayName: session.user.name!,
+          playerId: session.user.id,
         });
         setConnected(true);
       } catch (e) {
@@ -396,35 +366,14 @@ export default function OnlineLayout({
       setPlayers([]);
       setInvites([]);
     };
-  }, [transport, displayName, nameSubmitted]);
+  }, [transport, session, sessionStatus]);
 
-  // Function to submit and validate display name
-  const submitDisplayName = () => {
-    const trimmedName = tempDisplayName.trim();
-    if (trimmedName && trimmedName.length >= 2) {
-      setDisplayName(trimmedName);
-      setNameSubmitted(true);
-      try {
-        localStorage.setItem(PLAYER_NAME_KEY, trimmedName);
-      } catch {}
-    }
-  };
-
-  // Function to change/edit display name (disconnects first)
-  const changeDisplayName = () => {
-    setNameSubmitted(false);
-    setConnected(false);
-    setTempDisplayName(displayName);
-    try {
-      localStorage.removeItem(PLAYER_NAME_KEY);
-    } catch {}
-  };
 
   const ctxValue: OnlineContextValue = {
     transport,
     connected,
-    displayName,
-    setDisplayName: changeDisplayName, // Triggers name change mode
+    displayName: session?.user?.name || "",
+    setDisplayName: () => {}, // No-op, handled by AuthButton
     me,
     lobby,
     match,
@@ -611,51 +560,7 @@ export default function OnlineLayout({
                   Replays
                 </Link>
               </div>
-              {!nameSubmitted ? (
-                <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-                  <div className="text-sm font-semibold opacity-90 mb-3">
-                    Enter Display Name
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <input
-                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm placeholder-slate-400"
-                        placeholder="Enter your name (min 2 characters)"
-                        value={tempDisplayName}
-                        onChange={(e) => setTempDisplayName(e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && submitDisplayName()
-                        }
-                      />
-                    </div>
-                    <button
-                      className="w-full rounded bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={submitDisplayName}
-                      disabled={
-                        !tempDisplayName.trim() ||
-                        tempDisplayName.trim().length < 2
-                      }
-                    >
-                      Set Name & Connect
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs opacity-70">Display Name</label>
-                    <span className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm">
-                      {displayName}
-                    </span>
-                  </div>
-                  <button
-                    className="text-xs underline text-slate-300/80 hover:text-slate-200"
-                    onClick={changeDisplayName}
-                  >
-                    Change
-                  </button>
-                </div>
-              )}
+              <AuthButton />
               {!isLobbyPage && (
                 <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
                   <div className="text-sm font-semibold opacity-90">
