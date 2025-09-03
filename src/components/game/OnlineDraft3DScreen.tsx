@@ -210,7 +210,7 @@ export default function OnlineDraft3DScreen({
   playerNames,
   onDraftComplete,
 }: OnlineDraft3DScreenProps) {
-  const { transport, match } = useOnline();
+  const { transport, match, me } = useOnline();
 
   // Server-driven draft state
   const [draftState, setDraftState] = useState<DraftState>({
@@ -226,6 +226,7 @@ export default function OnlineDraft3DScreen({
 
   const myPlayerIndex = myPlayerKey === "p1" ? 0 : 1;
   const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
+  const myPlayerId = useMemo(() => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null, [me?.id, match?.players, myPlayerIndex]);
 
   // Local UI state
   const [error, setError] = useState<string | null>(null);
@@ -269,6 +270,11 @@ export default function OnlineDraft3DScreen({
   const PICK_CENTER = { x: 0, z: 0 };
   const PICK_RADIUS = CARD_LONG * 0.6;
 
+  // Whether it's my turn to pick according to the server
+  const amPicker = useMemo(() => {
+    return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
+  }, [draftState.phase, draftState.waitingFor, myPlayerId]);
+
   const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
   const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
   const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
@@ -284,12 +290,7 @@ export default function OnlineDraft3DScreen({
         const myPackSize = (s.currentPacks?.[myPlayerIndex] || []).length;
         console.log(`[DraftClient 3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber} myPack=${myPackSize} waitingFor=${s.waitingFor?.length ?? 0}`);
       }
-      // Reset staged/ready when picking resumes or pack changes
-      if (s.phase === "picking") {
-        console.log(`[DraftClient 3D] resetStaging <- phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`);
-        setStaged(null);
-        setReady(false);
-      }
+      // UI reset will occur when it's our turn again (see effect below)
       if (s.phase === "complete") {
         const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
         onDraftComplete(mine);
@@ -299,6 +300,13 @@ export default function OnlineDraft3DScreen({
     const off = transport.on("draftUpdate" as keyof TransportEventMap, handleDraftUpdate);
     return off;
   }, [transport, myPlayerIndex, onDraftComplete]);
+
+  // When a new pick for me becomes available, unlock UI and clear any previous staged state
+  useEffect(() => {
+    if (draftState.phase === "picking" && amPicker) {
+      setReady(false);
+    }
+  }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker]);
 
   // Start draft
   const handleStartDraft = useCallback(async () => {
@@ -342,10 +350,12 @@ export default function OnlineDraft3DScreen({
         pickNumber: draftState.pickNumber,
       });
     } catch {}
+    // Clear staged immediately after confirming
+    setStaged(null);
   }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber]);
 
   const needsPackChoice =
-    draftState.phase === "picking" && draftState.pickNumber === 1 && (match?.draftConfig?.setMix?.length || 0) > 1;
+    draftState.phase === "picking" && amPicker && draftState.pickNumber === 1 && (match?.draftConfig?.setMix?.length || 0) > 1;
 
   // UI: Lobby (phase waiting)
   if (draftState.phase === "waiting") {
@@ -459,7 +469,7 @@ export default function OnlineDraft3DScreen({
                     isSite={isSite}
                     x={pos.x}
                     z={pos.z}
-                    disabled={ready || draftState.phase !== "picking"}
+                    disabled={ready || !amPicker}
                     onDragChange={setOrbitLocked}
                     rotationZ={pos.rot}
                     getTopRenderOrder={getTopRenderOrder}
@@ -547,16 +557,20 @@ export default function OnlineDraft3DScreen({
                 )}
                 <button
                   onClick={handleConfirmPick}
-                  disabled={ready}
+                  disabled={ready || !amPicker}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white font-semibold rounded transition-colors"
                 >
-                  {ready ? "Waiting..." : "Confirm Pick"}
+                  {amPicker ? (ready ? "Waiting..." : "Confirm Pick") : "Waiting..."}
                 </button>
               </div>
             </div>
           ) : draftState.phase === "passing" ? (
             <div className="bg-yellow-900/50 border border-yellow-500 rounded-lg p-3 text-yellow-200">
               Waiting for packs to be passed...
+            </div>
+          ) : draftState.phase === "picking" && !amPicker ? (
+            <div className="bg-slate-800/70 border border-slate-600 rounded-lg p-3 text-slate-200 text-center">
+              Waiting for other players to pick...
             </div>
           ) : (
             <div className="text-slate-400 text-center">Drag a card beyond the center ring to stage your pick</div>
