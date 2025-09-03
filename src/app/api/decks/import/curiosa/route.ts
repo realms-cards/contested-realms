@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { getServerAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,10 @@ interface JSONObject { [key: string]: JSONValue }
 // - Fetches Curiosa TTS JSON, extracts card names+counts, maps to variants, creates a Constructed deck
 // - Validates avatar/site/spellbook counts similar to game loader expectations
 export async function POST(req: NextRequest) {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+  }
   try {
     // Feature toggle: disable Curiosa import globally unless explicitly enabled
     if (process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT !== "true") {
@@ -188,7 +193,7 @@ export async function POST(req: NextRequest) {
 
     // 8) Create the deck
     const deckName = overrideName || `Curiosa Import ${extractDeckId(rawUrl) || "Deck"}`;
-    const deck = await prisma.deck.create({ data: { name: deckName, format: "Constructed" } });
+    const deck = await prisma.deck.create({ data: { name: deckName, format: "Constructed", user: { connect: { id: session.user.id } } } });
 
     // createMany doesn't allow relation inference per row, so compute setId per variant
     const createRows = Array.from(agg.values()).map((v) => ({

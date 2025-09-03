@@ -149,13 +149,20 @@ export default function OnlineLayout({
       return;
     }
 
+    const user = session.user as { id?: string | null; name?: string | null; email?: string | null; image?: string | null; };
+
+    if (!user.id) {
+      console.error("User ID is missing from session, cannot connect to online services.");
+      return;
+    }
+
     const unsubscribers: Array<() => void> = [];
 
     (async () => {
       try {
         await transport.connect({
-          displayName: session.user.name!,
-          playerId: session.user.id,
+          displayName: user.name!,
+          playerId: user.id!,
         });
         setConnected(true);
       } catch (e) {

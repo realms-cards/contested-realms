@@ -316,6 +316,8 @@ async function startMatchFromLobby(
       pickNumber: 1,
       currentPacks: null,
       picks: match.playerIds.map(() => []),
+      // Track readiness per player key (p1/p2) for the waiting lobby phase
+      playerReady: { p1: false, p2: false },
       packDirection: "left",
       packChoice: match.playerIds.map(() => null),
       waitingFor: [],
@@ -870,6 +872,49 @@ io.on("connection", (socket) => {
     else socket.emit("chat", { from: null, content, scope });
   });
 
+  // Generic lightweight message channel
+  socket.on("message", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const match = matches.get(player.matchId);
+    if (!match || match.matchType !== "draft") return;
+
+    const room = `match:${match.id}`;
+    const type = payload && typeof payload.type === "string" ? payload.type : null;
+
+    if (type === "playerReady") {
+      const ready = !!(payload && payload.ready);
+      // Determine sender's player key by roster index; ignore spoofed playerKey in payload
+      const idx = match.playerIds.indexOf(player.id);
+      if (idx === -1) return;
+      const playerKey = idx === 1 ? "p2" : "p1";
+
+      // Persist readiness in draftState for resync/debug visibility
+      if (match.draftState) {
+        if (!match.draftState.playerReady || typeof match.draftState.playerReady !== "object") {
+          match.draftState.playerReady = { p1: false, p2: false };
+        }
+        match.draftState.playerReady[playerKey] = ready;
+        const pr = match.draftState.playerReady;
+        // If both players are ready and we're still in lobby/waiting phase, auto-start the draft
+        if (
+          match.draftState.phase === "waiting" &&
+          pr && pr.p1 === true && pr.p2 === true
+        ) {
+          console.log(`[Draft] Both players ready in match ${match.id}. Auto-starting draft.`);
+          // Fire and forget; handler above will emit draftUpdate or error
+          startDraftForMatch(match).catch((err) =>
+            console.error(`[Draft] Auto-start error: ${err && err.message ? err.message : String(err)}`)
+          );
+        }
+      }
+
+      // Broadcast canonical message to all clients in the match room
+      io.to(room).emit("message", { type: "playerReady", playerKey, ready });
+    }
+  });
+
   socket.on("resyncRequest", () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
@@ -977,38 +1022,28 @@ io.on("connection", (socket) => {
     socket.emit("matchRecordingResponse", { recording });
   });
 
-  // Draft-specific handlers
-  socket.on("startDraft", async (payload) => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
-
-    const match = matches.get(player.matchId);
+  // Helper: start a draft for a match if in waiting phase
+  async function startDraftForMatch(match, requestingPlayer = null) {
     if (!match || match.matchType !== "draft" || !match.draftState) return;
-
-    console.log(
-      `[Draft] startDraft requested by ${player.displayName} (${
-        player.id
-      }) in match ${match.id}. phase=${
-        match.draftState?.phase
-      }, config=${JSON.stringify(match.draftConfig || {})}`
-    );
-    // Only allow if draft is in waiting phase
     if (match.draftState.phase !== "waiting") return;
-
+    if (match.draftState.__startingDraft) {
+      console.warn(`[Draft] startDraft already in progress for match ${match.id}.`);
+      return;
+    }
+    match.draftState.__startingDraft = true;
+    const room = `match:${match.id}`;
+    const dc = match.draftConfig || { setMix: ["Beta"], packCount: 3, packSize: 15 };
+    const { setMix, packCount, packSize } = dc;
+    console.log(
+      `[Draft] startDraft ${
+        requestingPlayer
+          ? `requested by ${requestingPlayer.displayName} (${requestingPlayer.id})`
+          : "(auto)"
+      } in match ${match.id}. phase=${match.draftState?.phase}, config=${JSON.stringify(dc)}`
+    );
     try {
-      // Generate draft packs for all players
-      const draftConfig = match.draftConfig || {
-        setMix: ["Beta"],
-        packCount: 3,
-        packSize: 15,
-      };
-      const { setMix, packCount, packSize } = draftConfig;
-
       console.log(
-        `[Draft] Generating packs: players=${
-          match.playerIds.length
-        }, packCount=${packCount}, packSize=${packSize}, setMix=${
+        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setMix=${
           Array.isArray(setMix) ? setMix.join(",") : String(setMix)
         }`
       );
@@ -1055,11 +1090,27 @@ io.on("connection", (socket) => {
         )}`
       );
       // Broadcast draft state update
-      io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
+      io.to(room).emit("draftUpdate", match.draftState);
     } catch (error) {
       console.error(`[Draft] Error starting draft: ${error.message}`);
-      socket.emit("error", { message: "Failed to start draft" });
+      const s = requestingPlayer
+        ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
+        : null;
+      if (s) s.emit("error", { message: "Failed to start draft" });
+    } finally {
+      match.draftState.__startingDraft = false;
     }
+  }
+
+  // Draft-specific handlers
+  socket.on("startDraft", async (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+
+    const match = matches.get(player.matchId);
+    if (!match || match.matchType !== "draft" || !match.draftState) return;
+    await startDraftForMatch(match, player);
   });
 
   socket.on("makeDraftPick", (payload) => {

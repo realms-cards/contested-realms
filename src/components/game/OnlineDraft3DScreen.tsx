@@ -15,10 +15,10 @@ import { MOUSE } from "three";
 import Image from "next/image";
 
 import { useOnline } from "@/app/online/layout";
-import type { DraftState, TransportEventMap } from "@/lib/net/transport";
+import type { DraftState, CustomMessage } from "@/lib/net/transport";
 
 // Card shape used by OnlineDraftScreen; keep compatible
-export type DraftCard = {
+type DraftCard = {
   id: string; // server pick token/id
   name: string;
   cardName?: string;
@@ -28,6 +28,13 @@ export type DraftCard = {
   rarity?: string;
   // additional possible fields from server are tolerated
   [k: string]: unknown;
+};
+
+// Player ready message type
+type PlayerReadyMessage = CustomMessage & {
+  type: 'playerReady';
+  playerKey: 'p1' | 'p2';
+  ready: boolean;
 };
 
 interface OnlineDraft3DScreenProps {
@@ -235,6 +242,7 @@ export default function OnlineDraft3DScreen({
   const [hoverPreview, setHoverPreview] = useState<{ slug: string; name: string; type: string | null } | null>(null);
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [ready, setReady] = useState(false);
+  const [playerReadyStates, setPlayerReadyStates] = useState<{p1: boolean, p2: boolean}>({p1: false, p2: false});
 
   // Render order counter for stacking
   const roCounterRef = useRef(1500);
@@ -297,8 +305,24 @@ export default function OnlineDraft3DScreen({
       }
     };
 
-    const off = transport.on("draftUpdate" as keyof TransportEventMap, handleDraftUpdate);
-    return off;
+    const handlePlayerReady = (message: CustomMessage) => {
+      if (message.type === 'playerReady') {
+        const readyMessage = message as PlayerReadyMessage;
+        setPlayerReadyStates(prev => ({ ...prev, [readyMessage.playerKey]: readyMessage.ready }));
+      }
+    };
+
+    const offDraft = transport.on("draftUpdate", handleDraftUpdate);
+    const offMessage = transport.on("message", handlePlayerReady);
+    
+    return () => {
+      try {
+        offDraft();
+        offMessage?.();
+      } catch (err) {
+        console.warn('Error cleaning up transport listeners:', err);
+      }
+    };
   }, [transport, myPlayerIndex, onDraftComplete]);
 
   // When a new pick for me becomes available, unlock UI and clear any previous staged state
@@ -308,9 +332,31 @@ export default function OnlineDraft3DScreen({
     }
   }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker]);
 
+  // Toggle ready state
+  const handleToggleReady = useCallback(async () => {
+    if (!transport || !match) return;
+    
+    const newReadyState = !playerReadyStates[myPlayerKey];
+    setPlayerReadyStates(prev => ({ ...prev, [myPlayerKey]: newReadyState }));
+    
+    // Notify other player of ready state change
+    try {
+      const message: PlayerReadyMessage = {
+        type: 'playerReady',
+        playerKey: myPlayerKey,
+        ready: newReadyState
+      };
+      await transport.sendMessage?.(message);
+    } catch (err) {
+      console.error('Failed to send ready state:', err);
+    }
+  }, [transport, match, myPlayerKey, playerReadyStates]);
+
   // Start draft
   const handleStartDraft = useCallback(async () => {
     if (!transport || !match) return;
+    if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
+    
     setError(null);
     setLoading(true);
     try {
@@ -322,7 +368,7 @@ export default function OnlineDraft3DScreen({
     } finally {
       setLoading(false);
     }
-  }, [transport, match]);
+  }, [transport, match, playerReadyStates]);
 
   // Choose which set to open for this packIndex
   const handlePackChoice = useCallback(
@@ -367,14 +413,46 @@ export default function OnlineDraft3DScreen({
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="bg-slate-800 rounded-lg p-6">
               <h3 className="text-xl font-semibold text-white mb-4">Players</h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-300">{playerNames.p1}</span>
-                  <span className="text-green-400">Ready</span>
+                  <div className="flex items-center gap-2">
+                    <span className={playerReadyStates.p1 ? "text-green-400" : "text-slate-400"}>
+                      {playerReadyStates.p1 ? "Ready" : "Not Ready"}
+                    </span>
+                    {myPlayerKey === "p1" && (
+                      <button
+                        onClick={handleToggleReady}
+                        className={`px-3 py-1 rounded text-sm font-medium ${
+                          playerReadyStates.p1 
+                            ? "bg-red-600 hover:bg-red-700 text-white" 
+                            : "bg-green-600 hover:bg-green-700 text-white"
+                        }`}
+                      >
+                        {playerReadyStates.p1 ? "Not Ready" : "Ready"}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-300">{playerNames.p2}</span>
-                  <span className="text-green-400">Ready</span>
+                  <div className="flex items-center gap-2">
+                    <span className={playerReadyStates.p2 ? "text-green-400" : "text-slate-400"}>
+                      {playerReadyStates.p2 ? "Ready" : "Not Ready"}
+                    </span>
+                    {myPlayerKey === "p2" && (
+                      <button
+                        onClick={handleToggleReady}
+                        className={`px-3 py-1 rounded text-sm font-medium ${
+                          playerReadyStates.p2 
+                            ? "bg-red-600 hover:bg-red-700 text-white" 
+                            : "bg-green-600 hover:bg-green-700 text-white"
+                        }`}
+                      >
+                        {playerReadyStates.p2 ? "Not Ready" : "Ready"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -396,10 +474,15 @@ export default function OnlineDraft3DScreen({
 
           <button
             onClick={handleStartDraft}
-            disabled={loading}
+            disabled={loading || !playerReadyStates.p1 || !playerReadyStates.p2}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
-            {loading ? "Starting Draft..." : "Start Draft"}
+            {loading 
+              ? "Starting Draft..." 
+              : (!playerReadyStates.p1 || !playerReadyStates.p2)
+                ? "Waiting for both players to be ready..."
+                : "Start Draft"
+            }
           </button>
         </div>
       </div>
@@ -469,7 +552,7 @@ export default function OnlineDraft3DScreen({
                     isSite={isSite}
                     x={pos.x}
                     z={pos.z}
-                    disabled={ready || !amPicker}
+                    disabled={!amPicker}
                     onDragChange={setOrbitLocked}
                     rotationZ={pos.rot}
                     getTopRenderOrder={getTopRenderOrder}

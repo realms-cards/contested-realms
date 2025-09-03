@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,10 @@ type ApiCardRef = {
 };
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
   try {
     const { id } = await params;
     if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
@@ -33,7 +38,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
-    if (!deck) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    if (!deck || deck.userId !== session.user.id) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 
     // Gather metas for thresholds/type per (cardId, setId)
     type DeckCardRow = {
@@ -97,12 +102,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // DELETE /api/decks/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
   try {
     const { id } = await params;
     if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
 
-    const res = await prisma.deck.deleteMany({ where: { id } });
-    if (res.count === 0) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    // First, verify the deck exists and belongs to the user.
+    const deck = await prisma.deck.findFirst({ where: { id, userId: session.user.id } });
+    if (!deck) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+
+    // Now, delete it.
+    await prisma.deck.delete({ where: { id } });
     return new Response(null, { status: 204 });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
@@ -113,6 +126,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 // PUT /api/decks/[id]
 // Body: { name?: string, format?: string, set?: string, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
   try {
     const { id } = await params;
     if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
@@ -128,7 +145,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const deck = await prisma.deck.findUnique({ where: { id } });
-    if (!deck) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    if (!deck || deck.userId !== session.user.id) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 
     let setId: number | undefined = undefined;
     if (setName) {

@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, useCallback, useEffect, Suspense } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  Suspense,
+} from "react";
+import AuthenticationWrapper from "@/components/auth/AuthenticationWrapper";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
@@ -287,7 +295,7 @@ function DraggableCard3D({
   );
 }
 
-function DeckEditor3DPageInner() {
+function AuthenticatedDeckEditor() {
   const searchParams = useSearchParams();
 
   // Deck editor state (same as 2D version)
@@ -556,13 +564,21 @@ function DeckEditor3DPageInner() {
           let hit: SearchResult | null = null;
           if (slug) {
             try {
-              const list = await searchCards({ q: slug, setName: "", type: "all" });
+              const list = await searchCards({
+                q: slug,
+                setName: "",
+                type: "all",
+              });
               hit = list[0] || null;
             } catch {}
           }
           if (!hit && name) {
             try {
-              const list = await searchCards({ q: name, setName: "", type: "all" });
+              const list = await searchCards({
+                q: name,
+                setName: "",
+                type: "all",
+              });
               hit = list[0] || null;
             } catch {}
           }
@@ -601,7 +617,8 @@ function DeckEditor3DPageInner() {
 
         // Infer deck set from majority of resolved hits for better metadata/search defaults
         const counts = new Map<string, number>();
-        for (const r of resolved) counts.set(r.set, (counts.get(r.set) || 0) + 1);
+        for (const r of resolved)
+          counts.set(r.set, (counts.get(r.set) || 0) + 1);
         if (counts.size) {
           let best = setName;
           let bestN = -1;
@@ -2961,6 +2978,14 @@ function DeckEditor3DPageInner() {
         onAddStandardSite={addStandardSiteByName}
       />
     </div>
+  );
+}
+
+function DeckEditor3DPageInner() {
+  return (
+    <AuthenticationWrapper signInMessage="You need to be signed in to access the deck editor.">
+      <AuthenticatedDeckEditor />
+    </AuthenticationWrapper>
   );
 }
 
