@@ -72,9 +72,16 @@ export default function OnlineDraftScreen({
     const handleDraftUpdate = (state: unknown) => {
       const draftState = state as DraftState;
       setDraftState(draftState);
+      {
+        const myPackSize = (draftState.currentPacks?.[myPlayerIndex] || []).length;
+        console.log(`[DraftClient 2D] draftUpdate: phase=${draftState.phase} pack=${draftState.packIndex} pick=${draftState.pickNumber} myPack=${myPackSize} waitingFor=${draftState.waitingFor?.length ?? 0}`);
+      }
       
       // Clear staged pick when new pack arrives
       if (draftState.phase === "picking") {
+        console.log(
+          `[DraftClient 2D] resetStaging <- phase=${draftState.phase} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+        );
         setStaged(null);
         setReady(false);
       }
@@ -101,6 +108,7 @@ export default function OnlineDraftScreen({
     
     try {
       const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
+      console.log(`[DraftClient 2D] startDraft -> match=${match.id} cfg=${JSON.stringify(draftConfig)}`);
       await transport.startDraft?.({ matchId: match.id, draftConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start draft");
@@ -112,10 +120,12 @@ export default function OnlineDraftScreen({
   // Handle card staging
   const handleStageCard = useCallback((card: Card) => {
     if (draftState.phase !== "picking" || ready) return;
-    
+    console.log(
+      `[DraftClient 2D] stagePick -> cardId=${card.id} name=${card.name} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+    );
     setStaged(card);
     setReady(false);
-  }, [draftState.phase, ready]);
+  }, [draftState.phase, ready, draftState.packIndex, draftState.pickNumber]);
 
   // Handle pick confirmation
   const handleConfirmPick = useCallback(() => {
@@ -124,6 +134,7 @@ export default function OnlineDraftScreen({
     setReady(true);
     
     try {
+      console.log(`[DraftClient 2D] makeDraftPick -> cardId=${staged.id} pack=${draftState.packIndex} pick=${draftState.pickNumber} match=${match.id}`);
       transport.makeDraftPick?.({
         matchId: match.id,
         cardId: staged.id,
@@ -135,7 +146,8 @@ export default function OnlineDraftScreen({
     // Add to local pick3D for animation
     setPick3D(prev => [...prev, staged]);
     
-    // Clear staged
+    // Clear staged (after confirm)
+    console.log(`[DraftClient 2D] unstagePick -> cardId=${staged.id} (after confirm)`);
     setStaged(null);
   }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber]);
 
@@ -144,6 +156,7 @@ export default function OnlineDraftScreen({
     if (!match || !transport) return;
     
     try {
+      console.log(`[DraftClient 2D] chooseDraftPack -> pack=${draftState.packIndex} choice=${setName}`);
       transport.chooseDraftPack?.({
         matchId: match.id,
         setChoice: setName,

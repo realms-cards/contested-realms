@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { Text, useTexture } from "@react-three/drei";
-import type { ThreeEvent } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   SRGBColorSpace,
+  Raycaster,
   type Object3D,
-  type Raycaster,
   type Intersection,
+  type Group,
 } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PermanentItem } from "@/lib/game/store";
@@ -127,6 +128,45 @@ export default function Board() {
     });
   };
 
+  // Continuously update the drag ghost position based on cursor ray -> ground plane (y=0)
+  useFrame(() => {
+    // Only drive ghost while dragging a card from hand/pile (not board/avatars)
+    if (
+      dragFromHand &&
+      !dragAvatar &&
+      !dragging &&
+      (selected || dragFromPile?.card) &&
+      ghostGroupRef.current &&
+      camera
+    ) {
+      try {
+        const rc = raycasterRef.current;
+        // Use normalized device coords maintained by R3F
+        rc.setFromCamera(pointer, camera);
+        const { origin, direction } = rc.ray;
+        const dy = direction.y;
+        if (Math.abs(dy) > 1e-6) {
+          const t = -origin.y / dy; // intersection with y=0 plane
+          const px = origin.x + direction.x * t;
+          const pz = origin.z + direction.z * t;
+          // Smoothly approach target for a less jittery ghost
+          const k = 0.3;
+          lastGhostPosRef.current.x += (px - lastGhostPosRef.current.x) * k;
+          lastGhostPosRef.current.z += (pz - lastGhostPosRef.current.z) * k;
+          ghostGroupRef.current.position.set(
+            lastGhostPosRef.current.x,
+            0.1,
+            lastGhostPosRef.current.z
+          );
+        }
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[ghost] Failed to update drag ghost:", err);
+        }
+      }
+    }
+  });
+
   // Compute mat world size using BASE tile size (keeps mat size unchanged even if TILE_SIZE changes)
   const baseGridW = board.size.w * BASE_TILE_SIZE;
   const baseGridH = board.size.h * BASE_TILE_SIZE;
@@ -155,8 +195,8 @@ export default function Board() {
     from: string;
     index: number;
   } | null>(null);
-  // Track a world-space ghost position while dragging (from board or hand)
-  const [ghost, setGhost] = useState<{ x: number; z: number } | null>(null);
+  // Track a world-space ghost position while dragging (legacy state - setter used to clear on drop)
+  const [, setGhost] = useState<{ x: number; z: number } | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const [dragAvatar, setDragAvatar] = useState<"p1" | "p2" | null>(null);
   const avatarDragStartRef = useRef<{
@@ -182,6 +222,12 @@ export default function Board() {
   const pendingSnaps = useRef<
     Map<string, { x: number; z: number; attempts: number }>
   >(new Map());
+
+  // Ghost that follows the cursor while dragging from hand/pile, even over the hand area
+  const ghostGroupRef = useRef<Group | null>(null);
+  const lastGhostPosRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
+  const raycasterRef = useRef(new Raycaster());
+  const { camera, pointer } = useThree();
 
   function moveDraggedBody(x: number, z: number, lift = true) {
     // Defer actual physics API calls to useAfterPhysicsStep
@@ -1199,12 +1245,14 @@ export default function Board() {
       })}
 
       {/* Drag ghost while dragging from hand or pile only (never during avatar or board drags) */}
-      {ghost &&
-        dragFromHand &&
+      {dragFromHand &&
         !dragAvatar &&
         !dragging &&
         (selected || dragFromPile?.card) && (
-          <group position={[ghost.x, 0.1, ghost.z]}>
+          <group
+            ref={ghostGroupRef}
+            position={[lastGhostPosRef.current.x, 0.1, lastGhostPosRef.current.z]}
+          >
             {(() => {
               if (selected) {
                 const isSite = (selected.card.type || "")
@@ -1219,6 +1267,7 @@ export default function Board() {
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
+                    interactive={false}
                   />
                 );
               }
@@ -1234,6 +1283,7 @@ export default function Board() {
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
+                    interactive={false}
                   />
                 );
               }

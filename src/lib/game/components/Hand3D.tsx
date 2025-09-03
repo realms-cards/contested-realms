@@ -39,7 +39,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
 
-  const hand = zones[owner].hand || [];
+  const hand = useMemo(() => zones[owner].hand ?? [], [zones, owner]);
   
   // Debug logging for opponent hands
   useEffect(() => {
@@ -50,7 +50,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         viewerPlayerNumber
       });
     }
-  }, [hand.length, showCardBacks, owner, viewerPlayerNumber]);
+  }, [hand, showCardBacks, owner, viewerPlayerNumber]);
   // Sort hand with sites first, then spells
   const sortedHand = useMemo(() => {
     return [...hand].sort((a, b) => {
@@ -72,6 +72,11 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
 
+  // Hand cycling: focus index target and smoothed value
+  const focusTargetRef = useRef(0);
+  const focusLerpRef = useRef(0);
+  const [focusLerp, setFocusLerp] = useState(0);
+
   // Smooth transition refs for animations
   const handSpreadLerp = useRef(0); // 0 = compact, 1 = spread
   const handDragStart = useRef<{
@@ -89,10 +94,14 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   // Track last mouse position for stuck state detection
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
+  // Lower = taller zone. Previously 0.75; make it taller for easier selection/visibility.
+  const HAND_ZONE_TOP_FRAC = 0.68;
+
   useEffect(() => {
     function onMove(e: MouseEvent) {
       const h = window.innerHeight || 1;
-      const inZone = e.clientY >= h * 0.75;
+      const inZone = e.clientY >= h * HAND_ZONE_TOP_FRAC;
 
       // Update last known mouse position
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -192,7 +201,36 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       rootRef.current.translateZ(-dist);
       rootRef.current.translateY(bottomY + yOffset);
     }
+
+    // Smooth focus index animation (for cycling)
+    {
+      const n = sortedHand.length;
+      if (n > 0) {
+        const clamped = Math.max(0, Math.min(n - 1, focusTargetRef.current));
+        focusTargetRef.current = clamped;
+        const kf = 0.25; // focus easing
+        const prev = focusLerpRef.current;
+        focusLerpRef.current += (clamped - focusLerpRef.current) * kf;
+        if (Math.abs(focusLerpRef.current - prev) > 0.001) {
+          setFocusLerp(focusLerpRef.current);
+        }
+      } else {
+        focusTargetRef.current = 0;
+        focusLerpRef.current = 0;
+        if (focusLerp !== 0) setFocusLerp(0);
+      }
+    }
   });
+
+  // Map original hand indices to sorted indices (for selection/hover focus)
+  const origToSortedIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    sortedHand.forEach((card, sortedIdx) => {
+      const origIdx = hand.findIndex((c) => c === card);
+      if (origIdx !== -1) map.set(origIdx, sortedIdx);
+    });
+    return map;
+  }, [sortedHand, hand]);
 
   // Unified hand fan layout: all cards in arc
   const handLayout = useMemo(() => {
@@ -241,7 +279,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
 
-      // X position with dynamic spacing away from hovered card
+      // X position centered for the whole fan (no sliding while cycling)
       const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
 
       // Y position: smooth interpolated arc + hover pop-up
@@ -252,20 +290,92 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         (arcMultiplierWhenShown - arcMultiplierWhenHidden) *
           handSpreadLerp.current;
       const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * arcMultiplier;
-      const y = isHovered ? arcY + CARD_LONG * 0.08 : arcY;
+      // Focus-based lift without sliding the fan
+      const w = Math.max(0, 1 - Math.abs(i - focusLerp)); // 0..1 focus weight
+      const liftFromFocus = CARD_LONG * 0.06 * w;
+      const y = isHovered
+        ? arcY + Math.max(liftFromFocus, CARD_LONG * 0.08)
+        : arcY + liftFromFocus;
 
       // Scale: hovered card slightly bigger with smoother scaling
-      const scale = isHovered ? 1.08 : 1.0;
+      const scale = Math.max(1 + 0.06 * w, isHovered ? 1.08 : 1.0);
 
       return {
         x,
         y,
-        rot: isSelected || isHovered ? 0 : rot,
+        // Reduce rotation toward upright for focused cards
+        rot: isSelected || isHovered ? 0 : rot * (1 - 0.6 * w),
         scale,
         originalIndex,
       };
     });
-  }, [sortedHand, hand, hoveredCard, selected, owner]);
+  }, [sortedHand, hand, hoveredCard, selected, owner, focusLerp]);
+
+  // Clamp focus to hand size changes
+  useEffect(() => {
+    const n = sortedHand.length;
+    if (n === 0) {
+      focusTargetRef.current = 0;
+      focusLerpRef.current = 0;
+      return;
+    }
+    const max = n - 1;
+    focusTargetRef.current = Math.max(0, Math.min(max, focusTargetRef.current));
+    focusLerpRef.current = Math.max(0, Math.min(max, focusLerpRef.current));
+  }, [sortedHand.length]);
+
+  // Snap focus to selected card when selection changes
+  useEffect(() => {
+    if (!sortedHand.length) return;
+    if (selected && selected.who === owner) {
+      const sorted = origToSortedIndex.get(selected.index);
+      if (sorted != null) focusTargetRef.current = sorted;
+    }
+  }, [selected, owner, sortedHand.length, origToSortedIndex]);
+
+  // When hovering (and not dragging), nudge focus to hovered card
+  useEffect(() => {
+    if (showCardBacks) return;
+    if (!sortedHand.length) return;
+    if (!dragFromHand && (!selected || selected.who !== owner)) {
+      if (hoveredCard != null) {
+        const sorted = origToSortedIndex.get(hoveredCard);
+        if (sorted != null) focusTargetRef.current = sorted;
+      }
+    }
+  }, [hoveredCard, selected, owner, dragFromHand, showCardBacks, sortedHand.length, origToSortedIndex]);
+
+  // Input handlers: mouse wheel and arrow keys cycle focus when in hand zone
+  useEffect(() => {
+    if (showCardBacks) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!mouseInZone || dragFromHand || dragFromPile) return;
+      if (sortedHand.length === 0) return;
+      e.preventDefault();
+      const dir = e.deltaY > 0 ? 1 : -1;
+      const max = sortedHand.length - 1;
+      const next = Math.max(0, Math.min(max, focusTargetRef.current + dir));
+      focusTargetRef.current = next;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (dragFromHand || dragFromPile) return;
+      if (!mouseInZone) return;
+      if (sortedHand.length === 0) return;
+      const max = sortedHand.length - 1;
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        focusTargetRef.current = Math.min(max, focusTargetRef.current + 1);
+      } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        focusTargetRef.current = Math.max(0, focusTargetRef.current - 1);
+      }
+    };
+    const onWheelListener = (e: WheelEvent) => onWheel(e);
+    window.addEventListener("wheel", onWheelListener, { passive: false });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("wheel", onWheelListener);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mouseInZone, dragFromHand, dragFromPile, sortedHand.length, showCardBacks, hand.length]);
 
   // Simplified hover handling
   const hoverTimer = useRef<number | null>(null);
@@ -369,12 +479,12 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         // Double-check using last known mouse position
         const h = window.innerHeight || 1;
         const lastY = lastMousePosRef.current.y;
-        const isActuallyInZone = lastY >= h * 0.75;
+        const isActuallyInZone = lastY >= h * HAND_ZONE_TOP_FRAC;
 
         if (!isActuallyInZone || lastY === 0) {
           console.debug("[Hand] Force cleaning stuck hover state", {
             lastY,
-            threshold: h * 0.75,
+            threshold: h * HAND_ZONE_TOP_FRAC,
             hoveredCardCount,
           });
           setHandHoverCount(0);
@@ -452,7 +562,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
     []
   );
 
-  // No keyboard/wheel controls - selection is now purely cursor-based
+  // Keyboard/mouse-wheel cycling is enabled; selection still via click/drag
 
   return (
     <group ref={rootRef}>
