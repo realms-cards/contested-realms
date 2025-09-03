@@ -76,27 +76,10 @@ export default function OnlineLayout({
     pathname?.includes("/online/play/") && pathname !== "/online/play";
   const isLobbyPage = pathname?.startsWith("/online/lobby");
 
-  const [displayName, setDisplayName] = useState<string>(() => {
-    try {
-      return localStorage.getItem(PLAYER_NAME_KEY) || "";
-    } catch {
-      return "";
-    }
-  });
-  const [tempDisplayName, setTempDisplayName] = useState<string>(() => {
-    try {
-      return localStorage.getItem(PLAYER_NAME_KEY) || "";
-    } catch {
-      return "";
-    }
-  });
-  const [nameSubmitted, setNameSubmitted] = useState<boolean>(() => {
-    try {
-      return !!localStorage.getItem(PLAYER_NAME_KEY);
-    } catch {
-      return false;
-    }
-  });
+  // Important: do not read localStorage during render to avoid SSR/client mismatch
+  const [displayName, setDisplayName] = useState<string>("");
+  const [tempDisplayName, setTempDisplayName] = useState<string>("");
+  const [nameSubmitted, setNameSubmitted] = useState<boolean>(false);
   const [connected, setConnected] = useState<boolean>(false);
   const [lobby, setLobby] = useState<LobbyInfo | null>(null);
   const [match, setMatch] = useState<MatchInfo | null>(null);
@@ -109,6 +92,18 @@ export default function OnlineLayout({
   const [resyncing, setResyncing] = useState<boolean>(false);
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
+
+  // After mount, load persisted display name from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PLAYER_NAME_KEY) || "";
+      if (stored) {
+        setDisplayName(stored);
+        setTempDisplayName(stored);
+        setNameSubmitted(true);
+      }
+    } catch {}
+  }, []);
 
   const gamePhase = useGameStore((s) => s.phase);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
