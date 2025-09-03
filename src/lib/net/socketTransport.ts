@@ -10,11 +10,20 @@ import type {
   TransportHandler,
   StartMatchConfig,
   DraftState,
+  CustomMessage,
 } from "@/lib/net/transport";
 
 export class SocketTransport implements GameTransport {
   private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
   private socket?: Socket;
+
+  private static getMessageType(m: unknown): string {
+    if (m && typeof m === "object" && "type" in (m as Record<string, unknown>)) {
+      const t = (m as Record<string, unknown>).type;
+      return typeof t === "string" ? t : "unknown";
+    }
+    return "unknown";
+  }
 
   async connect(opts: { playerId?: string; displayName: string }): Promise<void> {
     if (this.socket && this.socket.connected) return;
@@ -110,6 +119,13 @@ export class SocketTransport implements GameTransport {
       socket.on("chat", (payload) =>
         this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
       );
+      // Generic lightweight messages (e.g., draft ready toggles)
+      socket.on("message", (payload) => {
+        const m = payload as TransportEventMap["message"];
+        const t = SocketTransport.getMessageType(m);
+        console.log(`[Transport] message <= type=${t}`);
+        this.dispatch("message", m);
+      });
       socket.on("resyncResponse", (payload) =>
         this.dispatch("resync", Protocol.ResyncResponsePayload.parse(payload))
       );
@@ -215,6 +231,13 @@ export class SocketTransport implements GameTransport {
 
   sendChat(content: string, scope?: ChatScope): void {
     this.requireSocket().emit("chat", Protocol.ChatPayload.parse({ content, scope }));
+  }
+
+  // Generic lightweight message channel for transient signals (e.g., draft ready)
+  sendMessage(msg: CustomMessage): void {
+    const t = SocketTransport.getMessageType(msg);
+    console.log(`[Transport] message -> type=${t}`);
+    this.requireSocket().emit("message", msg);
   }
 
   resync(): void {

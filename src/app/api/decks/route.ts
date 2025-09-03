@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -6,8 +7,13 @@ export const dynamic = 'force-dynamic';
 // GET /api/decks
 // Returns: [{ id, name, format }]
 export async function GET() {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
   try {
-    const decks = await prisma.deck.findMany({
+        const decks = await prisma.deck.findMany({
+      where: { userId: session.user.id },
       orderBy: { updatedAt: 'desc' },
       select: { id: true, name: true, format: true },
     });
@@ -24,6 +30,10 @@ export async function GET() {
 // - For backward compatibility, a top-level 'set' may be provided; if present, it will be used as the default set for cards that do not specify a variantId.
 // - If a card has a variantId, its set will be inferred from that variant, overriding the top-level 'set' for that card.
 export async function POST(req: NextRequest) {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
   try {
     const body = await req.json();
     const name = String(body?.name || '').trim();
@@ -78,7 +88,9 @@ export async function POST(req: NextRequest) {
     const setByVariant = new Map<number, number>();
     for (const v of variants) setByVariant.set(v.id, v.setId);
 
-    const deck = await prisma.deck.create({ data: { name, format } });
+        const deck = await prisma.deck.create({
+      data: { name, format, userId: session.user.id },
+    });
 
     for (const { cardId, zone, count, variantId } of agg.values()) {
       await prisma.deckCard.create({

@@ -27,6 +27,12 @@ export type DraftState = {
   waitingFor: string[]; // Player IDs who haven't made their pick yet
 };
 
+// Generic custom message payload for ad-hoc features (e.g., draft ready)
+export type CustomMessage = {
+  type: string;
+  [k: string]: unknown;
+};
+
 export type TransportEventMap = {
   welcome: WelcomePayloadT;
   statePatch: StatePatchPayloadT;
@@ -39,6 +45,7 @@ export type TransportEventMap = {
   playerList: PlayerListPayloadT;
   lobbyInvite: LobbyInvitePayloadT;
   draftUpdate: DraftState;
+  message: CustomMessage; // generic channel for lightweight messages
 };
 
 export type TransportEvent = keyof TransportEventMap;
@@ -84,6 +91,9 @@ export interface GameTransport {
   makeDraftPick?(config: { matchId: string; cardId: string; packIndex: number; pickNumber: number }): void;
   chooseDraftPack?(config: { matchId: string; setChoice: string; packIndex: number }): void;
   submitDeck?(deck: unknown): void;
+
+  // Generic lightweight message channel for transient signals (e.g., draft ready)
+  sendMessage?(msg: CustomMessage): Promise<void> | void;
 
   on<E extends TransportEvent>(event: E, handler: TransportHandler<E>): () => void;
   off?<E extends TransportEvent>(event: E, handler: TransportHandler<E>): void;
