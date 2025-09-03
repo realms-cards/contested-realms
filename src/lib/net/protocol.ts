@@ -43,6 +43,8 @@ export const DraftConfigSchema = z.object({
   setMix: z.array(z.string()),
   packCount: z.number().int().min(3).max(4),
   packSize: z.number().int().min(12).max(18),
+  // Optional exact per-set pack counts (must sum to packCount if provided)
+  packCounts: z.record(z.string(), z.number().int().min(0)).optional(),
 });
 export type DraftConfig = z.infer<typeof DraftConfigSchema>;
 

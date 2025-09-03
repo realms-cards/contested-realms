@@ -11,6 +11,7 @@ import Image from "next/image";
 import { 
   type Pick3D, 
   type BoosterCard,
+  type CardMeta,
   computeStackPositions
 } from "@/lib/game/cardSorting";
 
@@ -26,6 +27,7 @@ type Card = {
   life?: number;
   text?: string;
   flavor?: string;
+  setName?: string;
 };
 
 // DraftState is now imported from transport
@@ -43,6 +45,7 @@ export default function OnlineDraftScreen({
 }: OnlineDraftScreenProps) {
   console.log(`[DraftClient 2D] Component mounted - myPlayerKey:${myPlayerKey}`);
   const { transport, match, me } = useOnline();
+  const matchId = match?.id ?? null;
   
   // Draft UI state
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +69,7 @@ export default function OnlineDraftScreen({
     type: card.type || null,
     cardId: parseInt(card.id) || 0,
     cardName: card.name,
+    setName: card.setName || "Beta", // Include set information from server
   }), []);
   
   // Draft game state (synchronized from server)
@@ -83,6 +87,11 @@ export default function OnlineDraftScreen({
   const myPlayerIndex = myPlayerKey === "p1" ? 0 : 1;
   const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as Card[];
   const myPicks = (draftState.picks[myPlayerIndex] || []) as Card[];
+  // Determine if it's my turn to pick
+  const myPlayerId = useMemo(() => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null, [me?.id, match?.players, myPlayerIndex]);
+  const amPicker = useMemo(() => {
+    return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
+  }, [draftState.phase, draftState.waitingFor, myPlayerId]);
 
   // Camera controls
   const controlsRef = useRef(null);
@@ -166,8 +175,10 @@ export default function OnlineDraftScreen({
         
         // Save draft picks to local storage for deck building
         try {
-          localStorage.setItem(`draftedCards_${match.id}`, JSON.stringify(myFinalPicks));
-          console.log(`[DraftClient 2D] Draft data saved to localStorage for matchId: ${match.id}`);
+          if (matchId) {
+            localStorage.setItem(`draftedCards_${matchId}`, JSON.stringify(myFinalPicks));
+            console.log(`[DraftClient 2D] Draft data saved to localStorage for matchId: ${matchId}`);
+          }
         } catch (err) {
           console.error(`[DraftClient 2D] Failed to save draft data:`, err);
         }
@@ -175,7 +186,9 @@ export default function OnlineDraftScreen({
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
           if (typeof window !== 'undefined') {
-            window.location.href = `/decks/editor-3d?draft=true&matchId=${match.id}`;
+            if (matchId) {
+              window.location.href = `/decks/editor-3d?draft=true&matchId=${matchId}`;
+            }
           }
         }, 1000); // Small delay to show completion message
         
@@ -187,7 +200,7 @@ export default function OnlineDraftScreen({
     const unsubscribe = transport.on("draftUpdate" as keyof TransportEventMap, handleDraftUpdate);
 
     return unsubscribe;
-  }, [transport, myPlayerIndex, onDraftComplete, match, staged, ready, me, packChoiceOverlay, usedPacks, shownPackOverlayForRound, cardToBoosterCard, nextPickId]);
+  }, [transport, myPlayerIndex, onDraftComplete, matchId, match, staged, ready, me, packChoiceOverlay, usedPacks, shownPackOverlayForRound, cardToBoosterCard, nextPickId]);
 
   // Start draft when both players are ready
   const handleStartDraft = useCallback(async () => {
@@ -281,11 +294,11 @@ export default function OnlineDraftScreen({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [staged, ready, handlePickAndPass]);
+  }, [staged, ready, handlePickAndPass, amPicker]);
 
   // Create sorted stack positions for picked cards
   const stackedPositions = useMemo(() => {
-    return computeStackPositions(pick3D, {}, isSortingEnabled);
+    return computeStackPositions(pick3D, {} as Record<number, CardMeta>, isSortingEnabled);
   }, [pick3D, isSortingEnabled]);
 
   // Handle pack selection and notify server
