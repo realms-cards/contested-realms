@@ -15,6 +15,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
+import EditorCanvas from "@/app/decks/editor-3d/EditorCanvas";
 import TextureCache from "@/lib/game/components/TextureCache";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
@@ -354,27 +355,7 @@ function AuthenticatedDeckEditor() {
     null
   );
 
-  // Load list of decks after authentication
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    let mounted = true;
-    (async () => {
-      try {
-        setLoadingDecks(true);
-        const res = await fetch("/api/decks", { credentials: "include", cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Failed to load decks");
-        if (mounted) setDecks(data as DeckListItem[]);
-      } catch (e) {
-        if (mounted) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (mounted) setLoadingDecks(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [status]);
+  // (moved below after isDraftMode / isSealed declarations)
 
   // Prefetch standard sites for the current set
   useEffect(() => {
@@ -470,6 +451,29 @@ function AuthenticatedDeckEditor() {
   >([]);
 
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
+
+  // Load list of decks after authentication (skip in draft/ sealed modes)
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (isDraftMode || isSealed) return;
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingDecks(true);
+        const res = await fetch("/api/decks", { credentials: "include", cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Failed to load decks");
+        if (mounted) setDecks(data as DeckListItem[]);
+      } catch (e) {
+        if (mounted) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (mounted) setLoadingDecks(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [status, isDraftMode, isSealed]);
 
   // Initialize sealed mode from URL parameters (only once)
   useEffect(() => {
@@ -1827,42 +1831,9 @@ function AuthenticatedDeckEditor() {
     <div className="fixed inset-0 w-screen h-screen">
       {/* 3D Game View as the stage - EXACT same as draft-3d */}
       <div className="absolute inset-0 w-full h-full">
-        <Canvas
-          camera={{ position: [0, 10, 0], fov: 50 }}
-          shadows
-          gl={{ 
-            preserveDrawingBuffer: true, 
-            antialias: true, 
-            alpha: false,
-            powerPreference: "high-performance"
-          }}
-          onCreated={(state) => {
-            // Add WebGL context restoration handlers
-            const canvas = state.gl.domElement;
-            canvas.addEventListener('webglcontextlost', (event) => {
-              console.warn('WebGL context lost, preventing default');
-              event.preventDefault();
-            });
-            canvas.addEventListener('webglcontextrestored', () => {
-              console.log('WebGL context restored');
-              // Force a re-render by invalidating the state
-              state.invalidate();
-            });
-          }}
-        >
-          <color attach="background" args={["#0b0b0c"]} />
-          <ambientLight intensity={0.8} />
-          <directionalLight
-            position={[10, 12, 8]}
-            intensity={1.35}
-            castShadow
-          />
-
-          <Physics gravity={[0, -9.81, 0]}>
-            <Board />
-
-            {/* 3D Cards with proper stacking order */}
-            <group>
+        <EditorCanvas>
+          {/* 3D Cards with proper stacking order */}
+          <group>
               {pick3D
                 .sort((a, b) => {
                   // Sort by Y position so cards with lower Y render first (appear behind)
@@ -1980,34 +1951,9 @@ function AuthenticatedDeckEditor() {
                     />
                   );
                 })}
-            </group>
-
-            <TextureCache />
-          </Physics>
-
-          <OrbitControls
-            makeDefault
-            target={[0, 0, 0]}
-            enabled={!orbitLocked}
-            enablePan
-            enableRotate={false}
-            enableZoom
-            enableDamping
-            dampingFactor={0.08}
-            screenSpacePanning
-            panSpeed={1.2}
-            zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
-            mouseButtons={{
-              LEFT: MOUSE.PAN,
-              MIDDLE: MOUSE.DOLLY,
-              RIGHT: MOUSE.ROTATE,
-            }}
-          />
-        </Canvas>
+          </group>
+          <TextureCache />
+        </EditorCanvas>
       </div>
 
       {/* HUD Overlay - EXACT same structure as draft-3d */}
@@ -2023,8 +1969,8 @@ function AuthenticatedDeckEditor() {
             )}
           </div>
 
-          {/* Deck selector - hidden in sealed mode */}
-          {!isSealed && (
+          {/* Deck selector - hidden in sealed/draft modes */}
+          {!isSealed && !isDraftMode && (
             <div className="flex items-center gap-3">
               <select
                 value={deckId || ""}
