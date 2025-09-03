@@ -62,6 +62,7 @@ function DraggableCard3D({
   getTopRenderOrder,
   onHoverChange,
   lockUpright,
+  onClick,
 }: {
   slug: string;
   isSite: boolean;
@@ -76,6 +77,7 @@ function DraggableCard3D({
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
   lockUpright?: boolean;
+  onClick?: () => void;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -186,6 +188,11 @@ function DraggableCard3D({
           }
           if (onDrop && wasDragging) onDrop(wx, wz);
           onRelease?.(wx, wz, wasDragging);
+          
+          // Handle click (when not dragging)
+          if (!wasDragging && onClick) {
+            onClick();
+          }
         }}
         onPointerOver={() => {
           if (disabled) return;
@@ -288,6 +295,11 @@ export default function OnlineDraft3DScreen({
   const [nextPickId, setNextPickId] = useState(1);
   const [isSortingEnabled, setIsSortingEnabled] = useState(false);
   
+  // Card metadata for proper sorting (same as editor-3d)
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, { cost?: number; thresholds?: Record<string, number>; attack?: number; defence?: number }>>(
+    {}
+  );
+  
   // Convert DraftCard to BoosterCard format for Pick3D
   const draftCardToBoosterCard = useCallback((card: DraftCard): BoosterCard => ({
     variantId: 0, // Not available in draft context
@@ -330,15 +342,9 @@ export default function OnlineDraft3DScreen({
         console.log(`[DraftClient 3D] Draft complete! Picked ${mine.length} cards`);
         
         // Save draft picks to local storage for deck building
-        const draftData = {
-          picks: mine,
-          format: "Draft" as const,
-          timestamp: Date.now()
-        };
-        
         try {
-          localStorage.setItem('draftResult', JSON.stringify(draftData));
-          console.log(`[DraftClient 3D] Draft data saved to localStorage`);
+          localStorage.setItem(`draftedCards_${match.id}`, JSON.stringify(mine));
+          console.log(`[DraftClient 3D] Draft data saved to localStorage for matchId: ${match.id}`);
         } catch (err) {
           console.error(`[DraftClient 3D] Failed to save draft data:`, err);
         }
@@ -346,7 +352,7 @@ export default function OnlineDraft3DScreen({
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
           if (typeof window !== 'undefined') {
-            window.location.href = '/decks/editor-3d?mode=draft';
+            window.location.href = `/decks/editor-3d?draft=true&matchId=${match.id}`;
           }
         }, 1000); // Small delay to show completion message
         
@@ -372,7 +378,51 @@ export default function OnlineDraft3DScreen({
         console.warn('Error cleaning up transport listeners:', err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete]);
+  }, [transport, myPlayerIndex, onDraftComplete, match.id]);
+
+  // Fetch metadata for picked cards (for proper sorting)
+  useEffect(() => {
+    if (pick3D.length === 0) {
+      setMetaByCardId({});
+      return;
+    }
+
+    // Group by set (similar to editor-3d)
+    const groups = new Map<string, Set<number>>();
+    for (const p of pick3D) {
+      const setName = p.card.setName || "Beta";
+      if (!groups.has(setName)) groups.set(setName, new Set());
+      groups.get(setName)!.add(p.card.cardId);
+    }
+
+    // Fetch metadata for each set
+    const requests = Array.from(groups.entries()).map(([s, ids]) => {
+      const params = new URLSearchParams();
+      params.set("set", s);
+      params.set("ids", Array.from(ids).join(","));
+      return fetch(`/api/cards/meta?${params.toString()}`)
+        .then((r) => r.json())
+        .then((rows: { cardId: number; cost: number | null; thresholds: Record<string, number> | null; attack: number | null; defence: number | null }[]) => rows);
+    });
+
+    Promise.all(requests)
+      .then((chunks) => {
+        const combined = chunks.flat();
+        const meta: Record<number, { cost?: number; thresholds?: Record<string, number>; attack?: number; defence?: number }> = {};
+        for (const row of combined) {
+          meta[row.cardId] = {
+            cost: row.cost ?? undefined,
+            thresholds: row.thresholds ?? undefined,
+            attack: row.attack ?? undefined,
+            defence: row.defence ?? undefined,
+          };
+        }
+        setMetaByCardId(meta);
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch card metadata:", err);
+      });
+  }, [pick3D]);
 
   // When a new pick for me becomes available, unlock UI and clear any previous staged state
   useEffect(() => {
@@ -543,10 +593,27 @@ export default function OnlineDraft3DScreen({
     setStaged(null);
   }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber, draftCardToBoosterCard, nextPickId]);
 
+  // Keyboard event handling for spacebar pick and pass
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle spacebar when a card is staged and it's the player's turn
+      if (event.code === 'Space' && staged && amPicker && !ready) {
+        event.preventDefault();
+        console.log(`[DraftClient 3D] Spacebar pressed - triggering pick and pass`);
+        handlePickAndPass();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [staged, amPicker, ready, handlePickAndPass]);
+
   // Create sorted stack positions for picked cards
   const stackedPositions = useMemo(() => {
-    return computeStackPositions(pick3D, {}, isSortingEnabled);
-  }, [pick3D, isSortingEnabled]);
+    return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
+  }, [pick3D, metaByCardId, isSortingEnabled]);
 
   // Need pack choice at the start of each pack (like offline draft) - but only before any picks are made
   const needsPackChoice =
@@ -758,6 +825,16 @@ export default function OnlineDraft3DScreen({
                         setHoverPreview({ slug: c.slug, name: c.cardName ?? c.name, type: c.type ?? null });
                       else setHoverPreview(null);
                     }}
+                    onClick={() => {
+                      if (!amPicker) return;
+                      console.log(
+                        `[DraftClient 3D] clickStage -> cardId=${c.id} name=${c.cardName ?? c.name} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+                      );
+                      // Stage the card at a position slightly away from center
+                      const stageX = pos.x + 0.5;
+                      const stageZ = pos.z + 0.5;
+                      setStaged({ card: c, x: stageX, z: stageZ });
+                    }}
                     onDragMove={(wx, wz) => {
                       const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
                       if (d > PICK_RADIUS) setReadyIdx(idx);
@@ -912,6 +989,46 @@ export default function OnlineDraft3DScreen({
               >
                 ×
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Your Picks sidebar (left side) */}
+        {myPicks.length > 0 && (
+          <div className="absolute left-4 top-32 z-30 max-w-xs pointer-events-auto">
+            <div className="bg-black/80 ring-1 ring-white/30 shadow-lg rounded-lg">
+              <div className="p-3 border-b border-white/10">
+                <div className="font-medium text-white flex items-center justify-between">
+                  <span>Your Picks ({myPicks.length})</span>
+                </div>
+              </div>
+              <div className="p-2 max-h-80 overflow-auto">
+                <div className="grid gap-1 text-xs">
+                  {myPicks.map((card, idx) => (
+                    <div
+                      key={`pick-${idx}-${card.id}`}
+                      className="p-2 bg-black/50 ring-1 ring-white/20 rounded text-white hover:bg-black/70 transition-colors cursor-pointer"
+                      onMouseEnter={() => {
+                        setHoverPreview({
+                          slug: card.slug,
+                          name: card.name || card.cardName || `Card ${card.id}`,
+                          type: card.type
+                        });
+                      }}
+                      onMouseLeave={() => setHoverPreview(null)}
+                    >
+                      <div className="font-medium truncate">
+                        {card.name || card.cardName || `Card ${card.id}`}
+                      </div>
+                      {card.type && (
+                        <div className="text-xs text-white/70 truncate">
+                          {card.type}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

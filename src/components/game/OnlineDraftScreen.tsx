@@ -165,15 +165,9 @@ export default function OnlineDraftScreen({
         console.log(`[DraftClient 2D] Draft complete! Picked ${myFinalPicks.length} cards`);
         
         // Save draft picks to local storage for deck building
-        const draftData = {
-          picks: myFinalPicks,
-          format: "Draft" as const,
-          timestamp: Date.now()
-        };
-        
         try {
-          localStorage.setItem('draftResult', JSON.stringify(draftData));
-          console.log(`[DraftClient 2D] Draft data saved to localStorage`);
+          localStorage.setItem(`draftedCards_${match.id}`, JSON.stringify(myFinalPicks));
+          console.log(`[DraftClient 2D] Draft data saved to localStorage for matchId: ${match.id}`);
         } catch (err) {
           console.error(`[DraftClient 2D] Failed to save draft data:`, err);
         }
@@ -181,7 +175,7 @@ export default function OnlineDraftScreen({
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
           if (typeof window !== 'undefined') {
-            window.location.href = '/decks/editor-3d?mode=draft';
+            window.location.href = `/decks/editor-3d?draft=true&matchId=${match.id}`;
           }
         }, 1000); // Small delay to show completion message
         
@@ -271,6 +265,23 @@ export default function OnlineDraftScreen({
     console.log(`[DraftClient 2D] pickAndPass -> cardId=${staged.id}`);
     setStaged(null);
   }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber, cardToBoosterCard, nextPickId]);
+
+  // Keyboard event handling for spacebar pick and pass
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle spacebar when a card is staged and it's the player's turn
+      if (event.code === 'Space' && staged && amPicker && !ready) {
+        event.preventDefault();
+        console.log(`[DraftClient 2D] Spacebar pressed - triggering pick and pass`);
+        handlePickAndPass();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [staged, ready, handlePickAndPass]);
 
   // Create sorted stack positions for picked cards
   const stackedPositions = useMemo(() => {
