@@ -8,7 +8,6 @@ import {
   useEffect,
   Suspense,
 } from "react";
-import AuthenticationWrapper from "@/components/auth/AuthenticationWrapper";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -1048,6 +1047,74 @@ function AuthenticatedDeckEditor() {
     }
   }, [isSealed, pick3D, searchParams, saveDeck, setName, metaByCardId]);
 
+  const submitDraftDeck = useCallback(async () => {
+    if (!isDraftMode) return;
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Build deck from picked cards on the board
+      const deckCards: any[] = pick3D.map((p) => ({
+        cardId: p.card.cardId,
+        variantId: p.card.variantId ?? null,
+        name: p.card.cardName || `Card ${p.card.cardId}`,
+        type: p.card.type,
+        slug: p.card.slug,
+        set: p.card.setName || setName,
+        cost: metaByCardId[p.card.cardId]?.cost ?? 0,
+        rarity: p.card.rarity || "Common",
+      }));
+
+      // Auto-save the deck with draft naming format
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+      const draftDeckName = `draft_${today}`;
+      setDeckName(draftDeckName);
+      await saveDeck();
+
+      // Mark deck as submitted to prevent redirect loop
+      const matchId = searchParams.get("matchId");
+      if (matchId) {
+        localStorage.setItem(`draft_submitted_${matchId}`, "true");
+      }
+
+      // Submit to match server using transport layer
+      if (matchId && typeof window !== "undefined" && window.transport) {
+        try {
+          window.transport.submitDeck?.(deckCards);
+          console.log(`[DraftEditor] Draft deck submitted via transport for matchId: ${matchId}`);
+        } catch (e) {
+          console.warn(`[DraftEditor] Transport submission failed, using fallback:`, e);
+          // Fallback: save to localStorage for the match page to pick up
+          localStorage.setItem(
+            `draftDeck_${matchId}`,
+            JSON.stringify(deckCards)
+          );
+        }
+      } else {
+        // Fallback: save to localStorage for the match page to pick up
+        if (matchId) {
+          localStorage.setItem(
+            `draftDeck_${matchId}`,
+            JSON.stringify(deckCards)
+          );
+        }
+      }
+
+      setSaveMsg("Draft deck submitted successfully!");
+
+      // Redirect back to match after short delay
+      setTimeout(() => {
+        if (matchId) {
+          window.location.href = `/online/play/${matchId}`;
+        }
+      }, 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }, [isDraftMode, pick3D, searchParams, saveDeck, setName, metaByCardId]);
+
   const loadDeck = useCallback(
     async (id: string) => {
       if (status !== "authenticated") return;
@@ -1958,7 +2025,7 @@ function AuthenticatedDeckEditor() {
                   if (v) loadDeck(v);
                   else clearEditor();
                 }}
-                disabled={loadingDecks}
+                disabled={loadingDecks || status !== "authenticated"}
                 className="border rounded px-3 py-2 bg-black/70 text-white border-white/30 min-w-48 disabled:opacity-60"
               >
                 <option value="">— New Deck —</option>
@@ -1978,9 +2045,9 @@ function AuthenticatedDeckEditor() {
                 placeholder="Deck name"
               />
               <button
-                onClick={isSealed ? submitSealedDeck : saveDeck}
+                onClick={isSealed ? submitSealedDeck : isDraftMode ? submitDraftDeck : saveDeck}
                 disabled={
-                  saving ||
+                  saving || status !== "authenticated" ||
                   (isDraftMode &&
                     (!validation.avatar ||
                       !validation.atlas ||
@@ -1992,6 +2059,9 @@ function AuthenticatedDeckEditor() {
                     : "bg-green-600 hover:bg-green-700"
                 }`}
                 title={
+                  status !== "authenticated"
+                    ? "Sign in to save or submit decks"
+                    :
                   isDraftMode &&
                   (!validation.avatar ||
                     !validation.atlas ||
@@ -2010,6 +2080,19 @@ function AuthenticatedDeckEditor() {
                   ? "Update Deck"
                   : "Save Deck"}
               </button>
+            </div>
+          )}
+
+          {/* Auth callout: gate save/load, keep Canvas alive */}
+          {status !== "authenticated" && (
+            <div className="ml-auto flex items-center gap-3 px-3 py-2 rounded bg-yellow-500/15 text-yellow-200 border border-yellow-500/30">
+              <span className="text-sm">Sign in to save or load decks</span>
+              <a
+                href="/auth/signin?callbackUrl=%2Fdecks%2Feditor-3d"
+                className="h-8 px-3 rounded bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-100 text-sm inline-flex items-center"
+              >
+                Sign In
+              </a>
             </div>
           )}
 
@@ -2061,7 +2144,7 @@ function AuthenticatedDeckEditor() {
               <button
                 onClick={submitSealedDeck}
                 disabled={
-                  saving ||
+                  saving || status !== "authenticated" ||
                   (isDraftMode &&
                     (!validation.avatar ||
                       !validation.atlas ||
@@ -2078,6 +2161,27 @@ function AuthenticatedDeckEditor() {
                 }
               >
                 {saving ? "Submitting..." : "Submit Sealed Deck"}
+              </button>
+            )}
+            {isDraftMode && (
+              <button
+                onClick={submitDraftDeck}
+                disabled={
+                  saving || status !== "authenticated" ||
+                  !validation.avatar ||
+                  !validation.atlas ||
+                  !validation.spellbook
+                }
+                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
+                title={
+                  !validation.avatar ||
+                  !validation.atlas ||
+                  !validation.spellbook
+                    ? "Cannot submit invalid deck in draft mode"
+                    : "Submit draft deck to match"
+                }
+              >
+                {saving ? "Submitting..." : "Submit Draft Deck"}
               </button>
             )}
           </div>
@@ -3016,18 +3120,6 @@ function AuthenticatedDeckEditor() {
   );
 }
 
-function DeckEditor3DPageInner() {
-  return (
-    <AuthenticationWrapper signInMessage="You need to be signed in to access the deck editor.">
-      <AuthenticatedDeckEditor />
-    </AuthenticationWrapper>
-  );
-}
-
 export default function DeckEditor3DPage() {
-  return (
-    <Suspense fallback={null}>
-      <DeckEditor3DPageInner />
-    </Suspense>
-  );
+  return <AuthenticatedDeckEditor />;
 }
