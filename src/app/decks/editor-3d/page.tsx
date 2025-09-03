@@ -8,20 +8,11 @@ import {
   useEffect,
   Suspense,
 } from "react";
+import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import { Physics } from "@react-three/rapier";
-import Board from "@/lib/game/Board";
-import EditorCanvas from "@/app/decks/editor-3d/EditorCanvas";
 import TextureCache from "@/lib/game/components/TextureCache";
-import CardPlane from "@/lib/game/components/CardPlane";
-import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
-import type { ThreeEvent } from "@react-three/fiber";
-import type { Group } from "three";
-import { MOUSE } from "three";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
@@ -31,6 +22,15 @@ import {
   computeStackPositions,
 } from "@/lib/game/cardSorting";
 import { TournamentControls, DeckValidation } from "@/components/deck-editor";
+import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
+import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+
+// Lazy load the Canvas/three stack to trim initial JS and avoid SSR
+const EditorCanvas = dynamic(() => import("@/app/decks/editor-3d/EditorCanvas"), {
+  ssr: false,
+  // Keep simple to avoid heavy loaders on first paint
+  loading: () => null,
+});
 
 // Stable constant for standard site names (tournament legal)
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
@@ -69,232 +69,7 @@ type PickItem = {
 
 // Using shared card types from '@/lib/game/cardSorting' (Pick3D, CardMeta)
 
-// Enhanced DraggableCard3D with double-click support
-function DraggableCard3D({
-  slug,
-  isSite,
-  x,
-  z,
-  y = 0.002,
-  onDrop,
-  disabled,
-  onDragChange,
-  rotationZ: extraRotZ = 0,
-  onDragMove,
-  onRelease,
-  getTopRenderOrder,
-  onHoverChange,
-  lockUpright,
-  onDoubleClick,
-  onContextMenu,
-  baseRenderOrder = 1500,
-}: {
-  slug: string;
-  isSite: boolean;
-  x: number;
-  z: number;
-  y?: number;
-  onDrop?: (wx: number, wz: number) => void;
-  disabled?: boolean;
-  onDragChange?: (dragging: boolean) => void;
-  rotationZ?: number;
-  onDragMove?: (wx: number, wz: number) => void;
-  onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
-  getTopRenderOrder?: () => number;
-  onHoverChange?: (hovering: boolean) => void;
-  lockUpright?: boolean;
-  onDoubleClick?: () => void;
-  onContextMenu?: (clientX: number, clientY: number) => void;
-  baseRenderOrder?: number;
-}) {
-  const ref = useRef<Group | null>(null);
-  const dragStart = useRef<{
-    x: number;
-    z: number;
-    time: number;
-    screenX: number;
-    screenY: number;
-  } | null>(null);
-  const dragging = useRef(false);
-  const upCleanupRef = useRef<(() => void) | null>(null);
-  const roRef = useRef<number>(baseRenderOrder);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uprightLocked, setUprightLocked] = useState(false);
-  const lastClickTime = useRef<number>(0);
-
-  // Reset render order to base when not dragging
-  useEffect(() => {
-    if (!isDragging) {
-      roRef.current = baseRenderOrder;
-    }
-  }, [baseRenderOrder, isDragging]);
-
-  const setPos = useCallback((wx: number, wz: number, lift = false) => {
-    if (!ref.current) return;
-    ref.current.position.set(wx, lift ? 0.25 : 0.002, wz);
-  }, []);
-
-  // Note: move helpers are defined in parent and used there.
-
-  const rotZ =
-    (isSite ? -Math.PI / 2 : 0) +
-    (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
-
-  return (
-    <group ref={ref} position={[x, y, z]}>
-      {/* Larger invisible hitbox for easier interaction */}
-      <mesh
-        position={[0, 0.01, 0]}
-        onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          if (e.nativeEvent.button !== 0) return;
-          e.stopPropagation();
-          onHoverChange?.(false);
-          // Record potential drag start in both world and screen space
-          dragStart.current = {
-            x: e.point.x,
-            z: e.point.z,
-            time: Date.now(),
-            screenX: e.clientX,
-            screenY: e.clientY,
-          };
-          // bring to front
-          if (getTopRenderOrder) {
-            const next = getTopRenderOrder();
-            roRef.current = next;
-          }
-          // Don't lock orbit immediately - wait for actual drag to start
-          // Ensure we always unlock if pointerup happens off the mesh before drag begins
-          if (!upCleanupRef.current) {
-            const earlyUp = () => {
-              onDragChange?.(false);
-              dragStart.current = null;
-              dragging.current = false;
-              setIsDragging(false);
-              if (upCleanupRef.current) {
-                upCleanupRef.current();
-                upCleanupRef.current = null;
-              }
-            };
-            window.addEventListener("pointerup", earlyUp, { once: true });
-            upCleanupRef.current = () =>
-              window.removeEventListener("pointerup", earlyUp);
-          }
-        }}
-        onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          const s = dragStart.current;
-          if (!s) return;
-          // Check threshold to start dragging
-          const held = Date.now() - s.time;
-          const dx = e.clientX - s.screenX;
-          const dy = e.clientY - s.screenY;
-          const dist = Math.hypot(dx, dy);
-          const PIX_THRESH = 6;
-          if (!dragging.current && held >= 50 && dist > PIX_THRESH) {
-            dragging.current = true;
-            setIsDragging(true);
-            setUprightLocked(true);
-            // Lock orbit controls when dragging actually starts
-            onDragChange?.(true);
-            // Bind a global pointerup fallback
-            const handleUp = () => {
-              // Ensure cleanup even if pointer up occurs off the mesh
-              onDragChange?.(false);
-              dragStart.current = null;
-              dragging.current = false;
-              setIsDragging(false);
-              if (upCleanupRef.current) {
-                upCleanupRef.current();
-                upCleanupRef.current = null;
-              }
-            };
-            window.addEventListener("pointerup", handleUp, { once: true });
-            upCleanupRef.current = () =>
-              window.removeEventListener("pointerup", handleUp);
-          }
-          if (dragging.current) {
-            e.stopPropagation();
-            const wx = e.point.x;
-            const wz = e.point.z;
-            setPos(wx, wz, true);
-            onDragMove?.(wx, wz);
-          }
-        }}
-        onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          if (e.nativeEvent.button !== 0) return;
-          e.stopPropagation();
-          const wasDragging = dragging.current;
-          const wx = e.point.x;
-          const wz = e.point.z;
-
-          // Detect double-click
-          const now = Date.now();
-          const timeSinceLastClick = now - lastClickTime.current;
-          const isDoubleClick = !wasDragging && timeSinceLastClick < 300;
-          lastClickTime.current = now;
-
-          // Always settle to ground height
-          setPos(wx, wz, false);
-          dragStart.current = null;
-          dragging.current = false;
-          setIsDragging(false);
-          onDragChange?.(false);
-          if (upCleanupRef.current) {
-            upCleanupRef.current();
-            upCleanupRef.current = null;
-          }
-
-          if (isDoubleClick) {
-            onDoubleClick?.();
-          } else if (onDrop && wasDragging) {
-            onDrop(wx, wz);
-          }
-
-          onRelease?.(wx, wz, wasDragging);
-        }}
-        onPointerOver={() => {
-          if (disabled) return;
-          onHoverChange?.(true);
-        }}
-        onPointerOut={() => {
-          onHoverChange?.(false);
-        }}
-        onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          e.stopPropagation();
-          e.nativeEvent.preventDefault();
-          onContextMenu?.(e.clientX, e.clientY);
-        }}
-      >
-        <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
-        <meshBasicMaterial
-          transparent
-          opacity={0}
-          depthWrite={false}
-          depthTest={false}
-        />
-      </mesh>
-
-      {/* Visual card */}
-      <group>
-        <CardPlane
-          slug={slug}
-          width={CARD_SHORT}
-          height={CARD_LONG}
-          rotationZ={rotZ}
-          upright={false}
-          depthWrite={false}
-          depthTest={false}
-          renderOrder={roRef.current}
-          interactive={false}
-          elevation={0.002}
-        />
-      </group>
-    </group>
-  );
-}
+// DraggableCard3D moved to its own module for clarity and bundle-splitting
 
 function AuthenticatedDeckEditor() {
   const { status } = useSession();
@@ -1958,188 +1733,30 @@ function AuthenticatedDeckEditor() {
 
       {/* HUD Overlay - EXACT same structure as draft-3d */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
-        {/* Top controls */}
-        <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
-          <div className="text-3xl font-fantaisie text-white">
-            Deck Editor
-            {isDraftMode && (
-              <span className="text-lg text-orange-400 ml-2">
-                (Draft Completion Mode)
-              </span>
-            )}
-          </div>
-
-          {/* Deck selector - hidden in sealed/draft modes */}
-          {!isSealed && !isDraftMode && (
-            <div className="flex items-center gap-3">
-              <select
-                value={deckId || ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v) loadDeck(v);
-                  else clearEditor();
-                }}
-                disabled={loadingDecks || status !== "authenticated"}
-                className="border rounded px-3 py-2 bg-black/70 text-white border-white/30 min-w-48 disabled:opacity-60"
-              >
-                <option value="">— New Deck —</option>
-                {decks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} • {d.format}
-                  </option>
-                ))}
-              </select>
-
-              {/* Removed global set selector to avoid coupling search and deck set */}
-
-              <input
-                value={deckName}
-                onChange={(e) => setDeckName(e.target.value)}
-                className="border rounded px-3 py-2 bg-black/70 text-white border-white/30"
-                placeholder="Deck name"
-              />
-              <button
-                onClick={isSealed ? submitSealedDeck : isDraftMode ? submitDraftDeck : saveDeck}
-                disabled={
-                  saving || status !== "authenticated" ||
-                  (isDraftMode &&
-                    (!validation.avatar ||
-                      !validation.atlas ||
-                      !validation.spellbook))
-                }
-                className={`h-10 px-4 rounded text-white disabled:opacity-50 ${
-                  isSealed
-                    ? "bg-blue-600 hover:bg-blue-700"
-                    : "bg-green-600 hover:bg-green-700"
-                }`}
-                title={
-                  status !== "authenticated"
-                    ? "Sign in to save or submit decks"
-                    :
-                  isDraftMode &&
-                  (!validation.avatar ||
-                    !validation.atlas ||
-                    !validation.spellbook)
-                    ? "Cannot save invalid deck in draft mode"
-                    : isSealed
-                    ? "Submit sealed deck to match"
-                    : undefined
-                }
-              >
-                {saving
-                  ? "Submitting..."
-                  : isSealed
-                  ? "Submit Sealed Deck"
-                  : deckId
-                  ? "Update Deck"
-                  : "Save Deck"}
-              </button>
-            </div>
-          )}
-
-          {/* Auth callout: gate save/load, keep Canvas alive */}
-          {status !== "authenticated" && (
-            <div className="ml-auto flex items-center gap-3 px-3 py-2 rounded bg-yellow-500/15 text-yellow-200 border border-yellow-500/30">
-              <span className="text-sm">Sign in to save or load decks</span>
-              <a
-                href="/auth/signin?callbackUrl=%2Fdecks%2Feditor-3d"
-                className="h-8 px-3 rounded bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-100 text-sm inline-flex items-center"
-              >
-                Sign In
-              </a>
-            </div>
-          )}
-
-          {/* Enhanced sorting controls */}
-          {pick3D.length > 0 && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setIsSortingEnabled(!isSortingEnabled)}
-                className={`h-10 px-4 rounded font-medium transition-colors ${
-                  isSortingEnabled
-                    ? "bg-emerald-500 text-black hover:bg-emerald-400"
-                    : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                {isSortingEnabled ? "Unsort Cards" : "Sort Cards"}
-              </button>
-
-              {isSortingEnabled && (
-                <>
-                  <button
-                    onClick={forceSorting}
-                    className="h-10 px-4 rounded bg-blue-600 text-white hover:bg-blue-500 font-medium"
-                    title="Re-apply sorting to all cards"
-                  >
-                    Re-sort
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={() => setInfoBoxVisible(!infoBoxVisible)}
-                className="h-10 px-4 rounded bg-white/10 text-white hover:bg-white/20 font-medium"
-              >
-                {infoBoxVisible ? "Hide Info" : "Show Info"}
-              </button>
-            </div>
-          )}
-
-          {/* Validation status */}
-          <div className="ml-auto flex items-center gap-3">
-            <DeckValidation
-              avatarCount={avatarCount}
-              atlasCount={atlasCount}
-              spellbookCount={spellbookNonAvatar}
-              validation={validation}
-              isDraftMode={isDraftMode}
-            />
-            {isSealed && (
-              <button
-                onClick={submitSealedDeck}
-                disabled={
-                  saving || status !== "authenticated" ||
-                  (isDraftMode &&
-                    (!validation.avatar ||
-                      !validation.atlas ||
-                      !validation.spellbook))
-                }
-                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
-                title={
-                  isDraftMode &&
-                  (!validation.avatar ||
-                    !validation.atlas ||
-                    !validation.spellbook)
-                    ? "Cannot save invalid deck in draft mode"
-                    : "Submit sealed deck to match"
-                }
-              >
-                {saving ? "Submitting..." : "Submit Sealed Deck"}
-              </button>
-            )}
-            {isDraftMode && (
-              <button
-                onClick={submitDraftDeck}
-                disabled={
-                  saving || status !== "authenticated" ||
-                  !validation.avatar ||
-                  !validation.atlas ||
-                  !validation.spellbook
-                }
-                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
-                title={
-                  !validation.avatar ||
-                  !validation.atlas ||
-                  !validation.spellbook
-                    ? "Cannot submit invalid deck in draft mode"
-                    : "Submit draft deck to match"
-                }
-              >
-                {saving ? "Submitting..." : "Submit Draft Deck"}
-              </button>
-            )}
-          </div>
-        </div>
+        <DeckPanels
+          isDraftMode={isDraftMode}
+          isSealed={isSealed}
+          status={status}
+          decks={decks}
+          deckId={deckId}
+          deckName={deckName}
+          loadingDecks={loadingDecks}
+          pick3DLength={pick3D.length}
+          isSortingEnabled={isSortingEnabled}
+          onToggleSort={() => setIsSortingEnabled(!isSortingEnabled)}
+          onForceSort={forceSorting}
+          avatarCount={avatarCount}
+          atlasCount={atlasCount}
+          spellbookNonAvatar={spellbookNonAvatar}
+          validation={validation}
+          saving={saving}
+          onLoadDeck={loadDeck}
+          onClearEditor={clearEditor}
+          onSetDeckName={setDeckName}
+          onSaveDeck={saveDeck}
+          onSubmitSealed={submitSealedDeck}
+          onSubmitDraft={submitDraftDeck}
+        />
         {/* Usage instructions */}
         <div className="grid grid-cols-2">
           <div className="text-white text-sm opacity-30">
