@@ -9,6 +9,7 @@ import type {
   TransportEventMap,
   TransportHandler,
   StartMatchConfig,
+  DraftState,
 } from "@/lib/net/transport";
 
 export class SocketTransport implements GameTransport {
@@ -25,6 +26,7 @@ export class SocketTransport implements GameTransport {
         ? "http://localhost:3010"
         : "http://localhost:3001";
     const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
+    console.log(`[Transport] Connecting to ${url} as ${opts.displayName}${opts.playerId ? ` (${opts.playerId})` : ''}`);
     const socket = io(url, {
       transports: ["websocket"],
       autoConnect: true,
@@ -99,9 +101,12 @@ export class SocketTransport implements GameTransport {
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
       );
       // Draft updates (server-emitted, custom payload)
-      socket.on("draftUpdate", (payload) =>
-        this.dispatch("draftUpdate", payload as unknown as TransportEventMap["draftUpdate"])
-      );
+      socket.on("draftUpdate", (payload) => {
+        const s = payload as DraftState;
+        const myPackSize = s.currentPacks && Array.isArray(s.currentPacks[0]) ? (s.currentPacks[0] as unknown[]).length : 0;
+        console.log(`[Transport] draftUpdate <= phase=${s?.phase} pack=${s?.packIndex} pick=${s?.pickNumber} waitingFor=${(s?.waitingFor || []).length} (p1 pack ~${myPackSize})`);
+        this.dispatch("draftUpdate", payload as unknown as TransportEventMap["draftUpdate"]);
+      });
       socket.on("chat", (payload) =>
         this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
       );
@@ -254,14 +259,17 @@ export class SocketTransport implements GameTransport {
   // Draft-specific methods
   async startDraft(config: { matchId: string; draftConfig: DraftConfig }): Promise<void> {
     // Server currently derives match by socket's player; payload is optional
+    console.log(`[Transport] startDraft -> match=${config.matchId} cfg=${JSON.stringify(config.draftConfig)}`);
     this.requireSocket().emit("startDraft", config);
   }
 
   makeDraftPick(config: { matchId: string; cardId: string; packIndex: number; pickNumber: number }): void {
+    console.log(`[Transport] makeDraftPick -> cardId=${config.cardId} pack=${config.packIndex} pick=${config.pickNumber} match=${config.matchId}`);
     this.requireSocket().emit("makeDraftPick", config);
   }
 
   chooseDraftPack(config: { matchId: string; setChoice: string; packIndex: number }): void {
+    console.log(`[Transport] chooseDraftPack -> pack=${config.packIndex} choice=${config.setChoice} match=${config.matchId}`);
     this.requireSocket().emit("chooseDraftPack", config);
   }
 

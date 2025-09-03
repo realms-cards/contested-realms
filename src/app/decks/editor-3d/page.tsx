@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
@@ -430,6 +430,8 @@ function DeckEditor3DPageInner() {
   const [picksOpen, setPicksOpen] = useState(true);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
+  // Ensure we only initialize draft mode once per load
+  const [draftInitDone, setDraftInitDone] = useState(false);
 
   // Sealed mode flag (similar to isDraftMode but for sealed deck construction)
   const [isSealed, setIsSealed] = useState(false);
@@ -495,6 +497,133 @@ function DeckEditor3DPageInner() {
       setPacks(generatedPacks);
     }
   }, [searchParams, isSealed]); // Only initialize if not already sealed
+
+  // Initialize draft completion mode from URL and localStorage
+  useEffect(() => {
+    const draft = searchParams.get("draft");
+    const matchId = searchParams.get("matchId");
+    if (draft !== "true" || !matchId) return;
+    if (draftInitDone) return;
+
+    setIsDraftMode(true);
+
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(`draftedCards_${matchId}`);
+    } catch (e) {
+      console.warn("Failed to read drafted cards from localStorage:", e);
+    }
+
+    if (!raw) {
+      setError("No drafted cards found for this match.");
+      setDraftInitDone(true);
+      return;
+    }
+
+    type DraftCardLike = {
+      id?: string | number;
+      name?: string;
+      cardName?: string;
+      slug?: string;
+      type?: string | null;
+      [k: string]: unknown;
+    };
+
+    let drafted: DraftCardLike[] = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) drafted = parsed as DraftCardLike[];
+    } catch (e) {
+      console.error("Failed to parse drafted cards: ", e);
+      setError("Failed to parse drafted cards.");
+      setDraftInitDone(true);
+      return;
+    }
+
+    if (!Array.isArray(drafted) || drafted.length === 0) {
+      setDraftInitDone(true);
+      return;
+    }
+
+    (async () => {
+      try {
+        // Resolve each drafted card to a concrete SearchResult via slug first, fallback to name
+        const resolved: SearchResult[] = [];
+        for (const c of drafted) {
+          const slug = (c.slug || "").toString().trim();
+          const name = (c.name || c.cardName || "").toString().trim();
+
+          let hit: SearchResult | null = null;
+          if (slug) {
+            try {
+              const list = await searchCards({ q: slug, setName: "", type: "all" });
+              hit = list[0] || null;
+            } catch {}
+          }
+          if (!hit && name) {
+            try {
+              const list = await searchCards({ q: name, setName: "", type: "all" });
+              hit = list[0] || null;
+            } catch {}
+          }
+          if (hit) resolved.push(hit);
+        }
+
+        if (resolved.length === 0) {
+          setError("Could not resolve drafted cards to known card data.");
+          setDraftInitDone(true);
+          return;
+        }
+
+        // Batch update picks to include all drafted cards with correct zones
+        setPicks((prev) => {
+          const next = { ...prev } as Record<PickKey, PickItem>;
+          for (const r of resolved) {
+            const isSite = (r.type || "").toLowerCase().includes("site");
+            const zone: Zone = isSite ? "Atlas" : "Spellbook";
+            const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+            const exists = next[key];
+            next[key] = exists
+              ? { ...exists, count: exists.count + 1 }
+              : {
+                  cardId: r.cardId,
+                  variantId: r.variantId ?? null,
+                  name: r.cardName,
+                  type: r.type,
+                  slug: r.slug,
+                  zone,
+                  count: 1,
+                  set: r.set,
+                };
+          }
+          return next;
+        });
+
+        // Infer deck set from majority of resolved hits for better metadata/search defaults
+        const counts = new Map<string, number>();
+        for (const r of resolved) counts.set(r.set, (counts.get(r.set) || 0) + 1);
+        if (counts.size) {
+          let best = setName;
+          let bestN = -1;
+          for (const [name, n] of counts.entries()) {
+            if (n > bestN) {
+              best = name;
+              bestN = n;
+            }
+          }
+          setSetName(best);
+        }
+
+        // Name the deck for clarity in draft completion flow
+        if (!deckName || deckName === "New Deck") setDeckName("Draft Deck");
+      } catch (e) {
+        console.error("Draft initialization failed:", e);
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setDraftInitDone(true);
+      }
+    })();
+  }, [searchParams, draftInitDone, setPicks, setSetName, deckName, setName]);
 
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
@@ -2836,5 +2965,9 @@ function DeckEditor3DPageInner() {
 }
 
 export default function DeckEditor3DPage() {
-  return <DeckEditor3DPageInner />;
+  return (
+    <Suspense fallback={null}>
+      <DeckEditor3DPageInner />
+    </Suspense>
+  );
 }

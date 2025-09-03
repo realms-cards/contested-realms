@@ -26,7 +26,7 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
-import OnlineDraftScreen from "@/components/game/OnlineDraftScreen";
+import OnlineDraft3DScreen from "@/components/game/OnlineDraft3DScreen";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -605,7 +605,7 @@ export default function OnlineMatchPage() {
   // Show draft screen for active draft matches
   if (inThisMatch && isDraftActive && myPlayerKey) {
     return (
-      <OnlineDraftScreen
+      <OnlineDraft3DScreen
         myPlayerKey={myPlayerKey}
         playerNames={playerNames}
         onDraftComplete={handleDraftComplete}
