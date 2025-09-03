@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -234,6 +235,7 @@ export default function OnlineDraft3DScreen({
 }: OnlineDraft3DScreenProps) {
   const { transport, match, me } = useOnline();
   const matchId = match?.id ?? null;
+  const router = useRouter();
 
   // Server-driven draft state
   const [draftState, setDraftState] = useState<DraftState>({
@@ -356,12 +358,10 @@ export default function OnlineDraft3DScreen({
         
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
-          if (typeof window !== 'undefined') {
-            if (matchId) {
-              window.location.href = `/decks/editor-3d?draft=true&matchId=${matchId}`;
-            }
+          if (matchId) {
+            router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
           }
-        }, 1000); // Small delay to show completion message
+        }, 600);
         
         onDraftComplete(mine);
       }
@@ -385,7 +385,7 @@ export default function OnlineDraft3DScreen({
         console.warn('Error cleaning up transport listeners:', err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete, matchId]);
+  }, [transport, myPlayerIndex, onDraftComplete, matchId, router]);
 
   // Fetch metadata for picked cards (for proper sorting)
   useEffect(() => {
