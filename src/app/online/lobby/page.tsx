@@ -38,6 +38,7 @@ export default function LobbyPage() {
   } = useOnline();
 
   const [lobbyIdInput, setLobbyIdInput] = useState("");
+  const [mainTab, setMainTab] = useState<"overview" | "browse" | "social" | "chat">("overview");
   const [matchIdInput, setMatchIdInput] = useState("");
   const [chatInput, setChatInput] = useState("");
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
@@ -60,10 +61,29 @@ export default function LobbyPage() {
     replaceAvatars: false
   });
   const [draftConfig, setDraftConfig] = useState({
+    // Available sets restricted for now
     setMix: ["Beta"] as string[],
     packCount: 3,
-    packSize: 15
+    packSize: 15,
+    packCounts: { "Beta": 3, "Arthurian Legends": 0 } as Record<string, number>,
   });
+  
+  // UI validation helpers
+  const sealedTotalPacks = useMemo(
+    () => Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0),
+    [sealedConfig.packCounts]
+  );
+  const sealedActiveSets = useMemo(
+    () => Object.entries(sealedConfig.packCounts).filter(([, c]) => c > 0).length,
+    [sealedConfig.packCounts]
+  );
+  const sealedValid = sealedActiveSets > 0 && sealedTotalPacks >= 3 && sealedTotalPacks <= 8;
+
+  const draftAssigned = useMemo(
+    () => Object.values(draftConfig.packCounts).reduce((sum, c) => sum + c, 0),
+    [draftConfig.packCounts]
+  );
+  const draftValid = draftAssigned === draftConfig.packCount;
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
   const [declinedRejoin, setDeclinedRejoin] = useState(false);
@@ -202,7 +222,9 @@ export default function LobbyPage() {
     if (!isHost) return null;
     if (matchType === "constructed") return "Planned: Constructed";
     if (matchType === "draft") {
-      return `Planned: Draft • Sets: ${draftConfig.setMix.join(", ")} • Packs: ${draftConfig.packCount} • Pack size: ${draftConfig.packSize}`;
+      const entries = Object.entries(draftConfig.packCounts || {}).filter(([, c]) => c > 0);
+      const mix = entries.length ? entries.map(([s, c]) => `${s}×${c}`).join(", ") : draftConfig.setMix.join(", ");
+      return `Planned: Draft • Mix: ${mix} • Packs: ${draftConfig.packCount} • Pack size: ${draftConfig.packSize}`;
     }
     const totalPacks = Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0);
     const activeSets = Object.entries(sealedConfig.packCounts)
@@ -221,7 +243,37 @@ export default function LobbyPage() {
 
   return (
     <div className="space-y-6">
+      {/* Page title + tabs */}
+      <div className="flex items-end justify-between">
+        <h2 className="text-3xl sm:text-4xl font-fantaisie text-white">Lobby</h2>
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`px-2 py-0.5 rounded-full ring-1 ${connected ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30" : "bg-rose-500/15 text-rose-300 ring-rose-500/30"}`}>{connected ? "Connected" : "Disconnected"}</span>
+          {lobby?.id && <span className="opacity-70">Lobby {lobby.id.slice(-6)}</span>}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([
+          ["overview", "Overview"],
+          ["browse", "Browse"],
+          ["social", "Social"],
+          ["chat", "Chat"],
+        ] as Array<[typeof mainTab, string]>).map(([key, label]) => (
+          <button
+            key={key}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ring-1 ${
+              mainTab === key
+                ? "bg-white/10 ring-white/20 text-white"
+                : "bg-white/5 ring-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
+            }`}
+            onClick={() => setMainTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {/* Top action bar: Ready / Start controls */}
+      {mainTab === "overview" && (
       <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold opacity-90">Lobby Actions</div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -260,10 +312,12 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Top summary of active lobbies and invites */}
+      {(mainTab === "browse" || mainTab === "social") && (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
+        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3 ${mainTab === "browse" ? "" : "hidden md:block"}`}>
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold opacity-90">
               Active Lobbies
@@ -317,7 +371,7 @@ export default function LobbyPage() {
             plannedSummaries={plannedSummaries}
           />
         </div>
-        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
+        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3 ${mainTab === "social" ? "" : "hidden md:block"}`}>
           <div className="flex items-center gap-1">
             <button
               className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "invites" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
@@ -352,9 +406,10 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Match Section - only show for joinable matches and not when user declined rejoin */}
-      {match &&
+      {mainTab === "overview" && match &&
         !declinedRejoin &&
         (match.status === "waiting" || match.status === "in_progress" || match.status === "deck_construction") && (
           <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
@@ -459,40 +514,33 @@ export default function LobbyPage() {
                       Draft Configuration
                     </label>
                     <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium mb-2">Sets to Draft From</label>
-                        <div className="space-y-2">
-                          {["Beta", "Arthurian Legends"].map((set) => (
-                            <label key={set} className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={draftConfig.setMix.includes(set)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setDraftConfig(prev => ({
-                                      ...prev,
-                                      setMix: [...prev.setMix, set]
-                                    }));
-                                  } else {
-                                    setDraftConfig(prev => ({
-                                      ...prev,
-                                      setMix: prev.setMix.filter(s => s !== set)
-                                    }));
-                                  }
-                                }}
-                                className="rounded"
-                              />
-                              <span>{set}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-3 items-end">
                         <div>
                           <label className="block text-xs font-medium mb-2">Number of Packs</label>
                           <select
                             value={draftConfig.packCount}
-                            onChange={(e) => setDraftConfig(prev => ({ ...prev, packCount: parseInt(e.target.value) }))}
+                            onChange={(e) => {
+                              const nextCount = parseInt(e.target.value) || 3;
+                              setDraftConfig(prev => {
+                                const total = Object.values(prev.packCounts).reduce((s, c) => s + c, 0);
+                                const packs = { ...prev.packCounts };
+                                // Clamp or pad counts to match nextCount
+                                if (total > nextCount) {
+                                  // Reduce from the last non-zero set first
+                                  const order = ["Arthurian Legends", "Beta"]; // prefer reducing AL first if needed
+                                  let excess = total - nextCount;
+                                  for (const name of order) {
+                                    const take = Math.min(excess, packs[name] || 0);
+                                    if (take > 0) { packs[name] = (packs[name] || 0) - take; excess -= take; }
+                                    if (excess <= 0) break;
+                                  }
+                                } else if (total < nextCount) {
+                                  // Add remainder to Beta by default
+                                  packs["Beta"] = (packs["Beta"] || 0) + (nextCount - total);
+                                }
+                                return { ...prev, packCount: nextCount, packCounts: packs };
+                              });
+                            }}
                             className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
                           >
                             <option value={3}>3 Packs</option>
@@ -511,6 +559,62 @@ export default function LobbyPage() {
                           />
                         </div>
                       </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-2">
+                          Exact Pack Mix (sum must equal {draftConfig.packCount})
+                          <span
+                            className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
+                              draftValid
+                                ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+                            }`}
+                          >
+                            {draftValid
+                              ? "OK"
+                              : draftAssigned < draftConfig.packCount
+                              ? `Need ${draftConfig.packCount - draftAssigned}`
+                              : `Remove ${draftAssigned - draftConfig.packCount}`}
+                          </span>
+                        </label>
+                        <div className="space-y-2">
+                          {["Beta", "Arthurian Legends"].map((set) => {
+                            const count = draftConfig.packCounts[set] || 0;
+                            const total = Object.values(draftConfig.packCounts).reduce((s, c) => s + c, 0);
+                            const canInc = total < draftConfig.packCount;
+                            const canDec = count > 0;
+                            return (
+                              <div key={set} className="flex items-center justify-between">
+                                <span className="text-sm">{set}</span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                    onClick={() => setDraftConfig(prev => ({
+                                      ...prev,
+                                      setMix: Array.from(new Set([...(prev.setMix || []), set])),
+                                      packCounts: { ...prev.packCounts, [set]: Math.max(0, (prev.packCounts[set] || 0) - 1) }
+                                    }))}
+                                    disabled={!canDec}
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-8 text-center text-sm font-medium">{count}</span>
+                                  <button
+                                    className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                    onClick={() => setDraftConfig(prev => ({
+                                      ...prev,
+                                      setMix: Array.from(new Set([...(prev.setMix || []), set])),
+                                      packCounts: { ...prev.packCounts, [set]: Math.min(prev.packCount, (prev.packCounts[set] || 0) + 1) }
+                                    }))}
+                                    disabled={!canInc}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -521,7 +625,16 @@ export default function LobbyPage() {
                     <label className="block text-xs font-medium mb-3">
                       Pack Configuration
                       <span className="text-xs opacity-70 ml-2">
-                        (Total: {Object.values(sealedConfig.packCounts).reduce((sum, count) => sum + count, 0)} packs, 3-8 required)
+                        (Total: {sealedTotalPacks} packs, 3-8 required)
+                      </span>
+                      <span
+                        className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
+                          sealedValid
+                            ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                            : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
+                        }`}
+                      >
+                        {sealedValid ? "OK" : sealedActiveSets === 0 ? "No packs set" : sealedTotalPacks < 3 ? `Need ${3 - sealedTotalPacks} more` : `Remove ${sealedTotalPacks - 8}`}
                       </span>
                     </label>
                     <div className="space-y-3">
@@ -605,11 +718,17 @@ export default function LobbyPage() {
                       return;
                     }
                     if (matchType === "draft") {
-                      if (draftConfig.setMix.length === 0) {
-                        alert("Please select at least one set for drafting.");
+                      const total = Object.values(draftConfig.packCounts).reduce((s, c) => s + c, 0);
+                      if (total !== draftConfig.packCount) {
+                        alert(`Draft pack mix must sum to ${draftConfig.packCount}.`);
                         return;
                       }
-                      startMatch({ matchType: "draft", draftConfig });
+                      const activeSets = Object.entries(draftConfig.packCounts).filter(([, c]) => c > 0).map(([s]) => s);
+                      const payload = {
+                        ...draftConfig,
+                        setMix: activeSets.length ? activeSets : draftConfig.setMix,
+                      };
+                      startMatch({ matchType: "draft", draftConfig: payload });
                       setConfigOpen(false);
                       return;
                     }
@@ -634,7 +753,7 @@ export default function LobbyPage() {
                     startMatch({ matchType: "sealed", sealedConfig: legacySealedConfig });
                     setConfigOpen(false);
                   }}
-                  disabled={!allReady}
+                  disabled={!allReady || (matchType === "sealed" && !sealedValid) || (matchType === "draft" && !draftValid)}
                   title={!allReady ? "All players must be ready to start" : `Start ${matchType} match`}
                 >
                   Confirm Start
@@ -645,6 +764,7 @@ export default function LobbyPage() {
         </div>
       )}
       
+      {mainTab === "overview" && (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
           <div className="text-sm font-semibold opacity-90">Lobby Controls</div>
@@ -751,10 +871,12 @@ export default function LobbyPage() {
           </div>
         </div>
       </div>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {mainTab === "chat" && (
+      <div className="grid grid-cols-1 gap-4">
         <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-          <div className="text-sm font-semibold opacity-90">Lobby</div>
+          <div className="text-sm font-semibold opacity-90">Chat</div>
           {lobby ? (
             <div className="mt-3 text-sm space-y-2">
               <div>
@@ -902,11 +1024,13 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
+      )}
 
+      {mainTab === "chat" && (
       <div className="grid grid-cols-1 gap-4">
         <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-semibold opacity-90">Chat</div>
+          {/* tabs for Lobby/Global chat scopes */}
             <div className="flex items-center gap-1">
               <button
                 className={`rounded px-2 py-0.5 text-xs transition-colors ${
@@ -992,6 +1116,7 @@ export default function LobbyPage() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

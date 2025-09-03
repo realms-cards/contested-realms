@@ -541,6 +541,7 @@ function AuthenticatedDeckEditor() {
       cardName?: string;
       slug?: string;
       type?: string | null;
+      setName?: string;
       [k: string]: unknown;
     };
 
@@ -567,13 +568,14 @@ function AuthenticatedDeckEditor() {
         for (const c of drafted) {
           const slug = (c.slug || "").toString().trim();
           const name = (c.name || c.cardName || "").toString().trim();
+          const cardSetName = (c.setName || "").toString().trim() || setName; // Use card's set or fallback to current setName
 
           let hit: SearchResult | null = null;
           if (slug) {
             try {
               const list = await searchCards({
                 q: slug,
-                setName: "",
+                setName: cardSetName,
                 type: "all",
               });
               hit = list[0] || null;
@@ -583,7 +585,7 @@ function AuthenticatedDeckEditor() {
             try {
               const list = await searchCards({
                 q: name,
-                setName: "",
+                setName: cardSetName,
                 type: "all",
               });
               hit = list[0] || null;
@@ -598,12 +600,12 @@ function AuthenticatedDeckEditor() {
           return;
         }
 
-        // Batch update picks to include all drafted cards with correct zones
+        // Batch update picks to include all drafted cards in sideboard (not deck)
         setPicks((prev) => {
           const next = { ...prev } as Record<PickKey, PickItem>;
           for (const r of resolved) {
-            const isSite = (r.type || "").toLowerCase().includes("site");
-            const zone: Zone = isSite ? "Atlas" : "Spellbook";
+            // All draft picks should start in sideboard, not directly in deck zones
+            const zone: Zone = "Sideboard";
             const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
             const exists = next[key];
             next[key] = exists
@@ -1053,17 +1055,28 @@ function AuthenticatedDeckEditor() {
     setError(null);
 
     try {
-      // Build deck from picked cards on the board
-      const deckCards: any[] = pick3D.map((p) => ({
-        cardId: p.card.cardId,
-        variantId: p.card.variantId ?? null,
-        name: p.card.cardName || `Card ${p.card.cardId}`,
-        type: p.card.type,
-        slug: p.card.slug,
-        set: p.card.setName || setName,
-        cost: metaByCardId[p.card.cardId]?.cost ?? 0,
-        rarity: p.card.rarity || "Common",
-      }));
+      // Build deck from picked cards on the board (only deck zone, same as sealed)
+      const deckCards: Array<{
+        id: string;
+        cardId: number;
+        name: string;
+        type: string | null;
+        slug: string;
+        set: string;
+        cost: number;
+        rarity: string;
+      }> = pick3D
+        .filter((p) => p.z < 0) // only deck zone
+        .map((p) => ({
+          id: p.card.cardId.toString(),
+          cardId: p.card.cardId,
+          name: p.card.cardName || `Card ${p.card.cardId}`,
+          type: p.card.type,
+          slug: p.card.slug,
+          set: p.card.setName || setName,
+          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
+          rarity: p.card.rarity || "Common",
+        }));
 
       // Auto-save the deck with draft naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
@@ -1077,27 +1090,22 @@ function AuthenticatedDeckEditor() {
         localStorage.setItem(`draft_submitted_${matchId}`, "true");
       }
 
-      // Submit to match server using transport layer
-      if (matchId && typeof window !== "undefined" && window.transport) {
-        try {
-          window.transport.submitDeck?.(deckCards);
-          console.log(`[DraftEditor] Draft deck submitted via transport for matchId: ${matchId}`);
-        } catch (e) {
-          console.warn(`[DraftEditor] Transport submission failed, using fallback:`, e);
-          // Fallback: save to localStorage for the match page to pick up
-          localStorage.setItem(
-            `draftDeck_${matchId}`,
-            JSON.stringify(deckCards)
-          );
-        }
+      // Submit to match server using postMessage to parent window (same as sealed)
+      if (window.opener) {
+        window.opener.postMessage(
+          {
+            type: "draftDeckSubmission",
+            deck: deckCards,
+            matchId: matchId,
+          },
+          window.location.origin
+        );
       } else {
         // Fallback: save to localStorage for the match page to pick up
-        if (matchId) {
-          localStorage.setItem(
-            `draftDeck_${matchId}`,
-            JSON.stringify(deckCards)
-          );
-        }
+        localStorage.setItem(
+          `draftDeck_${matchId}`,
+          JSON.stringify(deckCards)
+        );
       }
 
       setSaveMsg("Draft deck submitted successfully!");
@@ -3121,5 +3129,15 @@ function AuthenticatedDeckEditor() {
 }
 
 export default function DeckEditor3DPage() {
-  return <AuthenticatedDeckEditor />;
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+          Loading editor…
+        </div>
+      }
+    >
+      <AuthenticatedDeckEditor />
+    </Suspense>
+  );
 }

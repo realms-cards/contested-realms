@@ -70,6 +70,7 @@ export default function OnlineMatchPage() {
   );
   const joinAttemptedForRef = useRef<string | null>(null);
   const sealedSubmissionSentForRef = useRef<string | null>(null);
+  const draftSubmissionSentForRef = useRef<string | null>(null);
 
   // Get player nicknames
   const playerNames = useMemo(() => {
@@ -252,17 +253,28 @@ export default function OnlineMatchPage() {
       const dataUnknown = (e as MessageEvent<unknown>).data;
       if (!dataUnknown || typeof dataUnknown !== "object") return;
       const data = dataUnknown as { type?: string; deck?: unknown; matchId?: string };
-      if (data.type !== "sealedDeckSubmission") return;
+      if (data.type !== "sealedDeckSubmission" && data.type !== "draftDeckSubmission") return;
       if (data.matchId && data.matchId !== matchId) return;
-      if (sealedSubmissionSentForRef.current === matchId) return;
+
+      // Check if we've already sent this type of submission for this match
+      if (data.type === "sealedDeckSubmission") {
+        if (sealedSubmissionSentForRef.current === matchId) return;
+        sealedSubmissionSentForRef.current = matchId;
+        try {
+          localStorage.setItem(`sealed_submitted_${matchId}`, "true");
+          localStorage.removeItem(`sealedDeck_${matchId}`);
+        } catch {}
+      } else if (data.type === "draftDeckSubmission") {
+        if (draftSubmissionSentForRef.current === matchId) return;
+        draftSubmissionSentForRef.current = matchId;
+        try {
+          localStorage.setItem(`draft_submitted_${matchId}`, "true");
+          localStorage.removeItem(`draftDeck_${matchId}`);
+        } catch {}
+      }
 
       // Forward to server
       transport.submitDeck?.(data.deck);
-      sealedSubmissionSentForRef.current = matchId;
-      try {
-        localStorage.setItem(`sealed_submitted_${matchId}`, "true");
-        localStorage.removeItem(`sealedDeck_${matchId}`);
-      } catch {}
     };
 
     window.addEventListener("message", onMessage);
@@ -286,6 +298,26 @@ export default function OnlineMatchPage() {
       sealedSubmissionSentForRef.current = matchId;
       localStorage.setItem(`sealed_submitted_${matchId}`, "true");
       localStorage.removeItem(`sealedDeck_${matchId}`);
+    } catch {}
+  }, [matchId, match?.id, match?.status, match?.matchType, transport]);
+
+  // Fallback: read draft deck from localStorage after returning from editor and submit to server
+  useEffect(() => {
+    if (!matchId || match?.id !== matchId) return;
+    if (!transport) return;
+    if (draftSubmissionSentForRef.current === matchId) return;
+    if (match?.matchType !== "draft" || match?.status !== "deck_construction") return;
+
+    try {
+      const raw = localStorage.getItem(`draftDeck_${matchId}`);
+      if (!raw) return;
+      const deck = JSON.parse(raw);
+      if (!Array.isArray(deck) || deck.length === 0) return;
+
+      transport.submitDeck?.(deck);
+      draftSubmissionSentForRef.current = matchId;
+      localStorage.setItem(`draft_submitted_${matchId}`, "true");
+      localStorage.removeItem(`draftDeck_${matchId}`);
     } catch {}
   }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 

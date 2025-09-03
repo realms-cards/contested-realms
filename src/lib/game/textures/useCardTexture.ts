@@ -62,17 +62,12 @@ function normalizeTexture(
   t.repeat.x = 1;
   t.offset.x = 0;
 
-  if (kind === "ktx2") {
-    // For compressed textures, avoid flipY and use UV transform for vertical flip
-    t.flipY = false;
-    t.repeat.y = -1;
-    t.offset.y = 1;
-  } else {
-    // Raster images use flipY
-    t.flipY = true;
-    t.repeat.y = 1;
-    t.offset.y = 0;
-  }
+  // Use UV-based vertical flip for ALL textures to avoid browser-specific flipY quirks
+  // (notably Safari). This ensures a consistent orientation regardless of the loader path.
+  // Keep flipY disabled and apply the vertical flip via repeat/offset.
+  t.flipY = false;
+  t.repeat.y = -1;
+  t.offset.y = 1;
 
   // Improve readability of card text/details
   if (gl) {

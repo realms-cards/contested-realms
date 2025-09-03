@@ -19,8 +19,10 @@ import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { 
   type Pick3D, 
   type BoosterCard,
+  type CardMeta,
   computeStackPositions
 } from "@/lib/game/cardSorting";
+import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 
 // Card shape used by OnlineDraftScreen; keep compatible
 type DraftCard = {
@@ -31,6 +33,7 @@ type DraftCard = {
   type?: string;
   cost?: string;
   rarity?: string;
+  setName?: string; // Set information from server
   // additional possible fields from server are tolerated
   [k: string]: unknown;
 };
@@ -230,6 +233,7 @@ export default function OnlineDraft3DScreen({
   onDraftComplete,
 }: OnlineDraft3DScreenProps) {
   const { transport, match, me } = useOnline();
+  const matchId = match?.id ?? null;
 
   // Server-driven draft state
   const [draftState, setDraftState] = useState<DraftState>({
@@ -296,9 +300,7 @@ export default function OnlineDraft3DScreen({
   const [isSortingEnabled, setIsSortingEnabled] = useState(false);
   
   // Card metadata for proper sorting (same as editor-3d)
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, { cost?: number; thresholds?: Record<string, number>; attack?: number; defence?: number }>>(
-    {}
-  );
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
   
   // Convert DraftCard to BoosterCard format for Pick3D
   const draftCardToBoosterCard = useCallback((card: DraftCard): BoosterCard => ({
@@ -310,6 +312,7 @@ export default function OnlineDraft3DScreen({
     type: card.type || null,
     cardId: parseInt(card.id) || 0,
     cardName: card.cardName || card.name,
+    setName: card.setName || "Beta", // Include set information from server
   }), []);
   const PICK_CENTER = { x: 0, z: 0 };
   const PICK_RADIUS = CARD_LONG * 0.6;
@@ -343,8 +346,10 @@ export default function OnlineDraft3DScreen({
         
         // Save draft picks to local storage for deck building
         try {
-          localStorage.setItem(`draftedCards_${match.id}`, JSON.stringify(mine));
-          console.log(`[DraftClient 3D] Draft data saved to localStorage for matchId: ${match.id}`);
+          if (matchId) {
+            localStorage.setItem(`draftedCards_${matchId}`, JSON.stringify(mine));
+            console.log(`[DraftClient 3D] Draft data saved to localStorage for matchId: ${matchId}`);
+          }
         } catch (err) {
           console.error(`[DraftClient 3D] Failed to save draft data:`, err);
         }
@@ -352,7 +357,9 @@ export default function OnlineDraft3DScreen({
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
           if (typeof window !== 'undefined') {
-            window.location.href = `/decks/editor-3d?draft=true&matchId=${match.id}`;
+            if (matchId) {
+              window.location.href = `/decks/editor-3d?draft=true&matchId=${matchId}`;
+            }
           }
         }, 1000); // Small delay to show completion message
         
@@ -378,7 +385,7 @@ export default function OnlineDraft3DScreen({
         console.warn('Error cleaning up transport listeners:', err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete, match.id]);
+  }, [transport, myPlayerIndex, onDraftComplete, matchId]);
 
   // Fetch metadata for picked cards (for proper sorting)
   useEffect(() => {
@@ -407,17 +414,8 @@ export default function OnlineDraft3DScreen({
 
     Promise.all(requests)
       .then((chunks) => {
-        const combined = chunks.flat();
-        const meta: Record<number, { cost?: number; thresholds?: Record<string, number>; attack?: number; defence?: number }> = {};
-        for (const row of combined) {
-          meta[row.cardId] = {
-            cost: row.cost ?? undefined,
-            thresholds: row.thresholds ?? undefined,
-            attack: row.attack ?? undefined,
-            defence: row.defence ?? undefined,
-          };
-        }
-        setMetaByCardId(meta);
+        const combined = chunks.flat() as ApiCardMetaRow[];
+        setMetaByCardId(toCardMetaMap(combined));
       })
       .catch((err) => {
         console.warn("Failed to fetch card metadata:", err);
@@ -1012,7 +1010,7 @@ export default function OnlineDraft3DScreen({
                         setHoverPreview({
                           slug: card.slug,
                           name: card.name || card.cardName || `Card ${card.id}`,
-                          type: card.type
+                          type: card.type ?? null
                         });
                       }}
                       onMouseLeave={() => setHoverPreview(null)}

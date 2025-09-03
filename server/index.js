@@ -1042,16 +1042,32 @@ io.on("connection", (socket) => {
       } in match ${match.id}. phase=${match.draftState?.phase}, config=${JSON.stringify(dc)}`
     );
     try {
+      // Build set sequence per pack index: prefer exact counts when provided
+      /** @type {string[]} */
+      let setSequence = [];
+      if (dc.packCounts && typeof dc.packCounts === 'object') {
+        for (const [name, cnt] of Object.entries(dc.packCounts)) {
+          const c = Math.max(0, Number(cnt) || 0);
+          for (let i = 0; i < c; i++) setSequence.push(name);
+        }
+      }
+      if (setSequence.length !== packCount) {
+        // Fallback to sampling from setMix if counts invalid or mismatched
+        setSequence = [];
+        for (let i = 0; i < packCount; i++) {
+          const name = Array.isArray(setMix) && setMix.length > 0 ? setMix[Math.floor(Math.random() * setMix.length)] : 'Beta';
+          setSequence.push(name);
+        }
+      }
+
       console.log(
-        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setMix=${
-          Array.isArray(setMix) ? setMix.join(",") : String(setMix)
-        }`
+        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setSeq=${setSequence.join(',')}`
       );
       const currentPacks = [];
       for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
         const playerPacks = [];
         for (let packIdx = 0; packIdx < packCount; packIdx++) {
-          const setName = setMix[Math.floor(Math.random() * setMix.length)];
+          const setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
           const rng = createRngFromString(
             `${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`
           );
@@ -1066,6 +1082,7 @@ io.on("connection", (socket) => {
             cost: String(p.cost || ""),
             rarity: p.rarity || "common",
             element: p.element || [],
+            setName: setName, // Include set information for proper card resolution
           }));
           playerPacks.push(cards);
         }
