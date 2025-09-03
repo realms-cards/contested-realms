@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 
 export const dynamic = "force-dynamic";
- 
+
 const ROOT_DATA = path.join(process.cwd(), "data");
 const ROOT_KTX2 = path.join(process.cwd(), "data-ktx2");
 const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "ktx2"]);
@@ -24,14 +24,21 @@ function contentTypeFor(ext: string): string {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
   try {
     const { path: pathSegments } = await params;
     const segments = (pathSegments ?? []).filter(Boolean);
     if (!segments.length) return new Response("Missing path", { status: 400 });
 
     // Prevent traversal
-    if (segments.some((s) => s.includes("..") || s.includes(":") || s.startsWith("."))) {
+    if (
+      segments.some(
+        (s) => s.includes("..") || s.includes(":") || s.startsWith(".")
+      )
+    ) {
       return new Response("Bad path", { status: 400 });
     }
 
@@ -55,17 +62,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
 
     // Force specific assets to only use data directory (not ktx2)
     const dataOnlyAssets = new Set([
-      "fire.png", "air.png", "water.png", "earth.png",
-      "cardback_atlas.png", "cardback_spellbook.png", "card-back.png",
+      "fire.png",
+      "air.png",
+      "water.png",
+      "earth.png",
+      "cardback_atlas.png",
+      "cardback_spellbook.png",
       // Booster pack images
-      "beta-booster.png", "alpha-booster.png", "arthurian-legends-booster.png", "dragonlord-booster.png"
+      "beta-booster.png",
+      "alpha-booster.png",
+      "arthurian-legends-booster.png",
     ]);
-    
-    const shouldForceDataOnly = segments.some(segment => 
-      dataOnlyAssets.has(segment) || dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
+
+    const shouldForceDataOnly = segments.some(
+      (segment) =>
+        dataOnlyAssets.has(segment) ||
+        dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
     );
-    
-    const roots = (wantKtx2 && !shouldForceDataOnly) ? [ROOT_KTX2, ROOT_DATA] : [ROOT_DATA];
+
+    const roots =
+      wantKtx2 && !shouldForceDataOnly ? [ROOT_KTX2, ROOT_DATA] : [ROOT_DATA];
 
     // Build candidate paths. If ?ktx2 was requested for a raster path, also try swapping extension to .ktx2
     const candidates: string[] = [];
