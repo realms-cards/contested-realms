@@ -1755,7 +1755,25 @@ function AuthenticatedDeckEditor() {
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
-          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+          gl={{ 
+            preserveDrawingBuffer: true, 
+            antialias: true, 
+            alpha: false,
+            powerPreference: "high-performance"
+          }}
+          onCreated={(state) => {
+            // Add WebGL context restoration handlers
+            const canvas = state.gl.domElement;
+            canvas.addEventListener('webglcontextlost', (event) => {
+              console.warn('WebGL context lost, preventing default');
+              event.preventDefault();
+            });
+            canvas.addEventListener('webglcontextrestored', () => {
+              console.log('WebGL context restored');
+              // Force a re-render by invalidating the state
+              state.invalidate();
+            });
+          }}
         >
           <color attach="background" args={["#0b0b0c"]} />
           <ambientLight intensity={0.8} />

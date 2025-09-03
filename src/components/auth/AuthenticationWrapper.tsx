@@ -34,6 +34,14 @@ export default function AuthenticationWrapper({
     if (status === "authenticated" && session?.user?.id) {
       hasAuthedRef.current = true;
     }
+    // Debug logging for development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('AuthWrapper state:', { 
+        status, 
+        hasUserId: !!session?.user?.id, 
+        hasAuthed: hasAuthedRef.current 
+      });
+    }
   }, [status, session]);
 
   const handleSignIn = async (): Promise<void> => {
@@ -48,8 +56,19 @@ export default function AuthenticationWrapper({
     }
   };
 
-  // If never authenticated yet and currently unauthenticated, block and prompt sign-in (don't mount children yet)
-  if (!hasAuthedRef.current && (status === "unauthenticated" || !session?.user?.id)) {
+  // Show loading while session is being determined
+  if (status === "loading") {
+    return (
+      <div className={loadingClassName}>
+        <div className="text-center">
+          <div className="text-white">{loadingMessage}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // If never authenticated and currently unauthenticated, block and prompt sign-in
+  if (!hasAuthedRef.current && status === "unauthenticated") {
     return (
       <div className={signInClassName}>
         <div className="text-center">
@@ -67,8 +86,8 @@ export default function AuthenticationWrapper({
     );
   }
 
-  // Keep children mounted once authenticated; overlay status if session is loading or has briefly become unauthenticated
-  const showOverlay = status !== "authenticated" || !session?.user?.id;
+  // Keep children mounted once authenticated; overlay status if session has briefly become unauthenticated
+  const showOverlay = status !== "authenticated" && hasAuthedRef.current;
   const overlay = (
     <div className={showOverlay ? loadingClassName : "hidden"}>
       <div className="text-center">
