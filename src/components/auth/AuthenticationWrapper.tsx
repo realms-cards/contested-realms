@@ -91,21 +91,15 @@ export default function AuthenticationWrapper({
   const overlay = (
     <div className={showOverlay ? loadingClassName : "hidden"}>
       <div className="text-center">
-        {status === "loading" ? (
-          <div className="text-white">{loadingMessage}</div>
-        ) : (
-          <>
-            <h2 className="text-2xl text-white mb-4">Session expired</h2>
-            <p className="text-gray-300 mb-6">Please sign in again to continue.</p>
-            <button
-              onClick={handleSignIn}
-              disabled={isSigningIn}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded transition-colors"
-            >
-              {isSigningIn ? 'Loading...' : 'Sign In'}
-            </button>
-          </>
-        )}
+        <h2 className="text-2xl text-white mb-4">Session expired</h2>
+        <p className="text-gray-300 mb-6">Please sign in again to continue.</p>
+        <button
+          onClick={handleSignIn}
+          disabled={isSigningIn}
+          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded transition-colors"
+        >
+          {isSigningIn ? 'Loading...' : 'Sign In'}
+        </button>
       </div>
     </div>
   );
