@@ -279,8 +279,10 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
 
-      // X position centered for the whole fan (no sliding while cycling)
-      const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
+      // X position centered on the focused card: slide smoothly with focusLerp
+      // This turns the static fan into a sliding fan when moving focus using
+      // mouse wheel or arrow keys, without changing existing lift/scale logic.
+      const x = (i - focusLerp) * baseSpacing;
 
       // Y position: smooth interpolated arc + hover pop-up
       const arcMultiplierWhenShown = 1.5;
