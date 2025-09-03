@@ -1074,6 +1074,7 @@ io.on("connection", (socket) => {
 
       // Update draft state
       match.draftState.phase = "picking";
+      match.draftState.allGeneratedPacks = currentPacks; // Store all generated packs
       match.draftState.currentPacks = currentPacks.map((packs) => packs[0]); // Start with first pack
       match.draftState.waitingFor = [...match.playerIds];
 
@@ -1211,13 +1212,28 @@ io.on("connection", (socket) => {
           draftState.packDirection =
             draftState.packDirection === "left" ? "right" : "left";
           draftState.waitingFor = [...match.playerIds];
-          console.log(
-            `[Draft] Moving to next pack. packIndex=${
-              draftState.packIndex
-            }, direction=${
-              draftState.packDirection
-            }. waitingFor reset for players: ${draftState.waitingFor.join("|")}`
-          );
+          
+          // Load new packs from stored generated packs
+          if (draftState.allGeneratedPacks && draftState.packIndex < 3) {
+            draftState.currentPacks = draftState.allGeneratedPacks.map((packs) => 
+              packs[draftState.packIndex] || []
+            );
+            console.log(
+              `[Draft] Moving to next pack. packIndex=${
+                draftState.packIndex
+              }, direction=${
+                draftState.packDirection
+              }. Loaded new packs with sizes: ${draftState.currentPacks.map(p => p.length).join(",")}. waitingFor reset for players: ${draftState.waitingFor.join("|")}`
+            );
+          } else {
+            console.log(
+              `[Draft] Moving to next pack. packIndex=${
+                draftState.packIndex
+              }, direction=${
+                draftState.packDirection
+              }. waitingFor reset for players: ${draftState.waitingFor.join("|")}`
+            );
+          }
         }
       } else {
         // Pass packs and continue picking
