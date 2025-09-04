@@ -131,8 +131,13 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
   const heldKeyRef = useRef<string | null>(null);
 
   const baseUrl = useMemo(() => {
-    if (textureUrl) return textureUrl;
-    if (slug) return `/api/images/${slug}`;
+    // ALWAYS prioritize textureUrl when provided, even if empty string
+    if (textureUrl !== undefined) {
+      return textureUrl;
+    }
+    if (slug) {
+      return `/api/images/${slug}`;
+    }
     return "";
   }, [textureUrl, slug]);
 
@@ -271,7 +276,7 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
           // Normalize again in case the cached instance carried mutated state
           normalizeTexture(t, "raster", gl);
           setTex(t);
-        } catch {
+        } catch (error) {
           if (!cancelled) {
             setTex(null);
           }

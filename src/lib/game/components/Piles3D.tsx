@@ -153,6 +153,11 @@ export default function Piles3D({
         // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
         const ownerRot = owner === "p1" ? Math.PI : 0;
         const rotZ = ownerRot + Math.PI + (isCemetery ? Math.PI : 0);
+        const cardbackUrl = isCemetery 
+          ? undefined 
+          : key === "atlas" 
+          ? "/api/assets/cardback_atlas.png" 
+          : "/api/assets/cardback_spellbook.png";
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         return (
@@ -163,17 +168,13 @@ export default function Piles3D({
                 {/* Bottom cards for stack depth (non-interactive) */}
                 {cards
                   .slice(1, Math.min(cards.length, 4))
+                  .filter((card) => card.slug) // Only render cards with valid slugs
                   .map((card, stackIndex) => (
                     <CardPlane
                       key={`stack-${card.slug}-${stackIndex}`}
-                      slug={isCemetery ? card.slug! : ""}
-                      textureUrl={
-                        isCemetery
-                          ? undefined
-                          : key === "atlas"
-                          ? "/api/assets/cardback_atlas.png"
-                          : "/api/assets/cardback_spellbook.png"
-                      }
+                      slug={card.slug!}
+                      textureUrl={cardbackUrl}
+                      forceTextureUrl={!isCemetery}
                       width={w}
                       height={h}
                       rotationZ={rotZ}
@@ -308,14 +309,9 @@ export default function Piles3D({
 
                   {/* Visual card */}
                   <CardPlane
-                    slug={isCemetery ? cards[0].slug! : ""}
-                    textureUrl={
-                      isCemetery
-                        ? undefined
-                        : key === "atlas"
-                        ? "/api/assets/cardback_atlas.png"
-                        : "/api/assets/cardback_spellbook.png"
-                    }
+                    slug={cards[0].slug || ""}
+                    textureUrl={cardbackUrl}
+                    forceTextureUrl={!isCemetery}
                     width={w}
                     height={h}
                     rotationZ={rotZ}

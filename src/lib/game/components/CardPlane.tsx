@@ -27,6 +27,7 @@ interface CardPlaneProps {
   renderOrder?: number;
   textureUrl?: string; // optional explicit texture (e.g., pile backs)
   textureRotation?: number; // rotation to apply to the texture itself
+  forceTextureUrl?: boolean; // if true, ignore slug completely and only use textureUrl
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -67,8 +68,7 @@ function CardFallback({
     >
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial
-        transparent={true}
-        opacity={0}
+        color="#4a5568"
         toneMapped={false}
         depthWrite={depthWrite}
         depthTest={depthTest}
@@ -92,6 +92,7 @@ function CardWithTexture(props: CardPlaneProps) {
     renderOrder = 0,
     textureUrl,
     textureRotation,
+    forceTextureUrl = false,
     onContextMenu,
     onPointerDown,
     onPointerOver,
@@ -99,7 +100,10 @@ function CardWithTexture(props: CardPlaneProps) {
     onClick,
   } = props;
 
-  const tex = useCardTexture({ slug, textureUrl });
+  const tex = useCardTexture({ 
+    slug: forceTextureUrl ? "" : slug, 
+    textureUrl 
+  });
 
   if (!tex) {
     return <CardFallback {...props} />;

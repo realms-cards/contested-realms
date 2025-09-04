@@ -749,7 +749,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
             <group>
               {c.slug ? (
                 <CardPlane
-                  slug={showCardBacks ? "" : c.slug}
+                  slug={c.slug}
                   width={CARD_SHORT}
                   height={CARD_LONG}
                   rotationZ={
@@ -765,6 +765,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                   elevation={0.002 + 0.018 * (hoverWeight || 0)}
                   textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
                   textureRotation={showCardBacks ? (isSite ? Math.PI * 3/2 : Math.PI) : undefined} // Atlas: 270° (90° + 180°), Spells: 180°
+                  forceTextureUrl={showCardBacks}
                 />
               ) : (
                 <mesh

@@ -114,45 +114,48 @@ export default function DeckPanels(props: DeckPanelsProps) {
               </button>
             </div>
           )}
-          <button
-            onClick={() => setControlsOpen((v) => !v)}
-            className={`h-9 w-9 grid place-items-center rounded-full ${
-              controlsOpen ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
-            } text-white/80 hover:text-white`}
-            title={controlsOpen ? "Hide deck controls" : "Show deck controls"}
-            aria-label={controlsOpen ? "Hide deck controls" : "Show deck controls"}
-          >
-            {/* Sliders icon */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-              <path d="M4 6h8v2H4V6zm12 0h4v2h-4V6zM9 11h11v2H9v-2zM4 11h3v2H4v-2zm0 5h8v2H4v-2zm12 0h4v2h-4v-2z"/>
-            </svg>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setControlsOpen((v) => !v)}
+              className={`h-9 w-9 grid place-items-center rounded-full ${
+                controlsOpen ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
+              } text-white/80 hover:text-white`}
+              title={controlsOpen ? "Hide deck controls" : "Show deck controls"}
+              aria-label={controlsOpen ? "Hide deck controls" : "Show deck controls"}
+            >
+              {/* Sliders icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <path d="M4 6h8v2H4V6zm12 0h4v2h-4V6zM9 11h11v2H9v-2zM4 11h3v2H4v-2zm0 5h8v2H4v-2zm12 0h4v2h-4v-2z"/>
+              </svg>
+            </button>
+            {controlsOpen && (
+              <div className="absolute top-full left-0 mt-2 z-[60] pointer-events-auto">
+                <div className="rounded-lg bg-black/85 ring-1 ring-white/20 p-3 shadow-xl">
+                  <DeckTopBarActions
+                    isSealed={isSealed}
+                    isDraftMode={isDraftMode}
+                    status={status}
+                    decks={decks}
+                    deckId={deckId}
+                    deckName={deckName}
+                    loadingDecks={loadingDecks}
+                    saving={saving}
+                    validation={validation}
+                    onLoadDeck={onLoadDeck}
+                    onClearEditor={onClearEditor}
+                    onSetDeckName={onSetDeckName}
+                    onSaveDeck={onSaveDeck}
+                    onSubmitSealed={onSubmitSealed}
+                    onSubmitDraft={onSubmitDraft}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Deck selector - hidden in sealed/draft modes */}
-        {controlsOpen && (
-          <div className="absolute top-16 left-4 z-[55] pointer-events-auto">
-            <div className="rounded-lg bg-black/85 ring-1 ring-white/20 p-3 shadow-xl">
-              <DeckTopBarActions
-                isSealed={isSealed}
-                isDraftMode={isDraftMode}
-                status={status}
-                decks={decks}
-                deckId={deckId}
-                deckName={deckName}
-                loadingDecks={loadingDecks}
-                saving={saving}
-                validation={validation}
-                onLoadDeck={onLoadDeck}
-                onClearEditor={onClearEditor}
-                onSetDeckName={onSetDeckName}
-                onSaveDeck={onSaveDeck}
-                onSubmitSealed={onSubmitSealed}
-                onSubmitDraft={onSubmitDraft}
-              />
-            </div>
-          </div>
-        )}
+        {/* DeckTopBarActions dropdown is rendered inline under the toggle button above */}
 
         {/* Sorting controls moved next to the title/help to keep them in the top row */}
 
