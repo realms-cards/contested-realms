@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useGameStore } from "@/lib/game/store";
 import { LogOut, MessageCircle, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,7 @@ interface OnlineConsoleProps {
   onSendChat: (message: string, scope?: ChatScope) => void;
   onLeaveMatch: () => void;
   connected: boolean;
+  myPlayerId?: string | null;
 }
 
 type TabType = 'events' | 'chat';
@@ -25,7 +26,8 @@ export default function OnlineConsole({
   setChatInput,
   onSendChat,
   onLeaveMatch,
-  connected
+  connected,
+  myPlayerId
 }: OnlineConsoleProps) {
   const router = useRouter();
   const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
@@ -37,6 +39,57 @@ export default function OnlineConsole({
   const events = useGameStore((s) => s.events);
   const eventsRef = useRef<HTMLDivElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
+  
+  // Auto-expand on incoming chat (not from self) and auto-collapse after 10s
+  const prevMatchChatLenRef = useRef<number>(matchChat.length);
+  const autoCloseTimerRef = useRef<number | null>(null);
+  const lastOpenReasonRef = useRef<'auto' | 'manual' | null>(null);
+  const clearAutoCloseTimer = useCallback(() => {
+    if (autoCloseTimerRef.current !== null) {
+      window.clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+  }, []);
+  const startAutoCloseTimer = useCallback(() => {
+    clearAutoCloseTimer();
+    autoCloseTimerRef.current = window.setTimeout(() => {
+      // Only close if the console is still open due to auto-open
+      if (lastOpenReasonRef.current === 'auto') {
+        setConsoleOpen(false);
+        lastOpenReasonRef.current = null;
+      }
+    }, 10000);
+  }, [clearAutoCloseTimer]);
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      clearAutoCloseTimer();
+    };
+  }, [clearAutoCloseTimer]);
+  // Detect new incoming messages and toggle console accordingly
+  useEffect(() => {
+    const prevLen = prevMatchChatLenRef.current ?? 0;
+    const newCount = matchChat.length - prevLen;
+    if (newCount > 0) {
+      const newMessages = matchChat.slice(-newCount);
+      const hasIncoming = newMessages.some((m) => {
+        const fromId = m.from?.id;
+        // Only trigger on messages sent by another player (ignore system and self)
+        return !!fromId && !!myPlayerId && fromId !== myPlayerId;
+      });
+      if (hasIncoming) {
+        if (!consoleOpen) {
+          setConsoleOpen(true);
+          lastOpenReasonRef.current = 'auto';
+          startAutoCloseTimer();
+        } else if (lastOpenReasonRef.current === 'auto') {
+          // While auto-open, reset the collapse timer on further incoming messages
+          startAutoCloseTimer();
+        }
+      }
+    }
+    prevMatchChatLenRef.current = matchChat.length;
+  }, [matchChat, myPlayerId, consoleOpen, startAutoCloseTimer]);
 
   // Format event text (same logic as offline console)
   function formatEventText(text: string): string {
@@ -129,7 +182,15 @@ export default function OnlineConsole({
             </button>
             <button
               className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
-              onClick={() => setConsoleOpen((o) => !o)}
+              onClick={() => {
+                setConsoleOpen((o) => {
+                  const next = !o;
+                  // Any explicit user toggle takes precedence over auto behavior
+                  lastOpenReasonRef.current = 'manual';
+                  clearAutoCloseTimer();
+                  return next;
+                });
+              }}
             >
               {consoleOpen ? "Collapse" : "Expand"}
             </button>
