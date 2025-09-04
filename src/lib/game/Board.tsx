@@ -15,6 +15,7 @@ import type { CardRef, PermanentItem } from "@/lib/game/store";
 import { RigidBody, CuboidCollider, useAfterPhysicsStep } from "@react-three/rapier";
 import CardPlane from "@/lib/game/components/CardPlane";
 import CardGlow from "@/lib/game/components/CardGlow";
+import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 import {
   BASE_TILE_SIZE,
   TILE_SIZE,
@@ -718,15 +719,23 @@ export default function Board() {
                     owner === 1
                       ? -TILE_SIZE * 0.5 + marginZ
                       : TILE_SIZE * 0.5 - marginZ;
-                  const xPos = startX + idx * spacing;
+                  let effectiveIndex = idx;
+                  if (p.attachedTo && p.attachedTo.at === key) {
+                    effectiveIndex = p.attachedTo.index;
+                  }
+                  const xPos = startX + effectiveIndex * spacing;
                   const isSel =
                     selectedPermanent &&
                     selectedPermanent.at === key &&
                     selectedPermanent.index === idx;
+                  const isToken = (p.card.type || "").toLowerCase().includes("token");
+                  const tokenDef = isToken ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()] : undefined;
+                  const tokenSiteReplace = !!tokenDef?.siteReplacement;
                   const rotZ =
                     (owner === 1 ? 0 : Math.PI) +
+                    (tokenSiteReplace ? -Math.PI / 2 : 0) +
                     (p.tapped ? Math.PI / 2 : 0) +
-                    (p.tilt || 0); // orient bottom to owner + tap + slight random tilt
+                    (p.tilt || 0); // orient bottom to owner + site-like tokens + tap + slight random tilt
                   const offX = p.offset?.[0] ?? 0;
                   const offZ = p.offset?.[1] ?? 0;
                   return (
@@ -923,8 +932,8 @@ export default function Board() {
                         {/* Selection glow */}
                         {isSel && !isHandVisible && (
                           <CardGlow
-                            width={CARD_SHORT + 0.3}
-                            height={CARD_LONG + 0.4}
+                            width={(tokenDef && tokenDef.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT) + 0.3}
+                            height={(tokenDef && tokenDef.size === "small" ? CARD_LONG * 0.5 : CARD_LONG) + 0.4}
                             rotationZ={rotZ}
                             elevation={0}
                             color={owner === 1 ? "#93c5fd" : "#fca5a5"}
@@ -958,7 +967,25 @@ export default function Board() {
                               );
                           }}
                         >
-                          {p.card.slug ? (
+                          {isToken ? (
+                            (() => {
+                              const w = tokenDef && tokenDef.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
+                              const h = tokenDef && tokenDef.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
+                              const texUrl = tokenDef ? tokenTextureUrl(tokenDef) : undefined;
+                              return (
+                                <CardPlane
+                                  slug={""}
+                                  textureUrl={texUrl}
+                                  forceTextureUrl
+                                  width={w}
+                                  height={h}
+                                  rotationZ={rotZ}
+                                  elevation={0.02}
+                                  renderOrder={700}
+                                />
+                              );
+                            })()
+                          ) : p.card.slug ? (
                             <>
                               {((selectedPermanent?.at === key &&
                                 selectedPermanent?.index === idx) ||

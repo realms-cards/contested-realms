@@ -51,12 +51,7 @@ export default function TextureCache() {
         }
       }
       
-      // ALL token cards
-      for (const card of playerZones.token) {
-        if (card?.slug) {
-          slugs.add(card.slug);
-        }
-      }
+      // Tokens are ad-hoc; no dedicated pile in zones
     }
     
     return Array.from(slugs);

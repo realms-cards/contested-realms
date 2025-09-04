@@ -30,6 +30,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const shuffleAtlas = useGameStore((s) => s.shuffleAtlas);
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
+  const addTokenToHand = useGameStore((s) => s.addTokenToHand);
+  const attachTokenToTopPermanent = useGameStore((s) => s.attachTokenToTopPermanent);
+  const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +84,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doShufflePile: (() => void) | null = null;
   let doAddToAtlas: (() => void) | null = null;
   let doSearchPile: (() => void) | null = null;
+  let doAttachToken: (() => void) | null = null;
+  let doDetachToken: (() => void) | null = null;
 
   if (t.kind === "site") {
     const key = `${t.x},${t.y}`;
@@ -127,7 +132,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
   } else if (t.kind === "permanent") {
-    const item = (permanents[t.at] || [])[t.index];
+    const arr = permanents[t.at] || [];
+    const item = arr[t.index];
     header = item?.card?.name || "Permanent";
     tapped = !!item?.tapped;
     hasToggle = true;
@@ -144,27 +150,49 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
-    doToHand = () => {
-      movePermanentToZone(t.at, t.index, "hand");
-      onClose();
-    };
-    doToGY = () => {
-      movePermanentToZone(t.at, t.index, "graveyard");
-      onClose();
-    };
-    if (item?.card?.name) {
-      doToSpellbook = () => {
-        const cardName = item.card!.name;
-        openPlacementDialog(cardName, "Spellbook", (position) => {
-          movePermanentToZone(t.at, t.index, "spellbook", position);
-        });
+    const isToken = (item?.card?.type || "").toLowerCase().includes("token");
+    if (isToken) {
+      const nonTokenIndices = arr
+        .map((it, i) => ({ it, i }))
+        .filter(({ it }) => !((it.card.type || "").toLowerCase().includes("token")));
+      if (item?.attachedTo) {
+        doDetachToken = () => {
+          detachToken(t.at, t.index);
+          onClose();
+        };
+      } else if (nonTokenIndices.length > 0) {
+        doAttachToken = () => {
+          attachTokenToTopPermanent(t.at, t.index);
+          onClose();
+        };
+      }
+      doBanish = () => {
+        movePermanentToZone(t.at, t.index, "banished");
+        onClose();
+      };
+    } else {
+      doToHand = () => {
+        movePermanentToZone(t.at, t.index, "hand");
+        onClose();
+      };
+      doToGY = () => {
+        movePermanentToZone(t.at, t.index, "graveyard");
+        onClose();
+      };
+      if (item?.card?.name) {
+        doToSpellbook = () => {
+          const cardName = item.card!.name;
+          openPlacementDialog(cardName, "Spellbook", (position) => {
+            movePermanentToZone(t.at, t.index, "spellbook", position);
+          });
+          onClose();
+        };
+      }
+      doBanish = () => {
+        movePermanentToZone(t.at, t.index, "banished");
         onClose();
       };
     }
-    doBanish = () => {
-      movePermanentToZone(t.at, t.index, "banished");
-      onClose();
-    };
   } else if (t.kind === "avatar") {
     const a = avatars[t.who];
     header = a?.card?.name || `${t.who.toUpperCase()} Avatar`;
@@ -221,6 +249,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
+  } else if (t.kind === "tokenpile") {
+    header = "Tokens";
+    const who = t.who;
+    doSearchPile = () => {
+      const { TOKEN_DEFS, tokenSlug } = require("@/lib/game/tokens");
+      const tokenCards = (TOKEN_DEFS || []).map((def: any) => ({
+        cardId: -1,
+        variantId: null,
+        name: def.name,
+        type: "Token",
+        slug: tokenSlug(def),
+        thresholds: null,
+      })) as CardRef[];
+      openSearchDialog("Tokens", tokenCards, (selected) => {
+        addTokenToHand(who, selected.name);
+      });
+      onClose();
+    };
   }
 
   const label = tapped ? "Untap" : "Tap";
@@ -264,6 +310,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               >
                 {`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
               </button>
+            )}
+
+            {(doAttachToken || doDetachToken) && (
+              <div className="space-y-2">
+                {doAttachToken && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doAttachToken}
+                  >
+                    Attach to permanent
+                  </button>
+                )}
+                {doDetachToken && (
+                  <button
+                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    onClick={doDetachToken}
+                  >
+                    Detach token
+                  </button>
+                )}
+              </div>
             )}
 
             {(doToHand || doToGY || doToSpellbook || doBanish) && (
