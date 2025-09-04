@@ -45,7 +45,7 @@ export default function YourDeckList(props: YourDeckListProps) {
   const order = ["air", "water", "earth", "fire"] as const;
 
   return (
-    <div className="max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto">
+    <div className="max-h-[calc(100vh-9rem)] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto">
       {yourCounts
         .filter((it) => {
           if (cardsTab === "all") return true;

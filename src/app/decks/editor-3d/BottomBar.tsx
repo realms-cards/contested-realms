@@ -221,7 +221,7 @@ export default function BottomBar(props: BottomBarProps) {
 
           {/* Search results grid */}
           {searchExpanded && (
-            <div className="mt-4">
+            <div className="mt-4 pointer-events-auto max-h-[60vh] overflow-y-auto pr-2">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {results.map((r) => {
                   const isSite = (r.type || "").toLowerCase().includes("site");
@@ -261,4 +261,3 @@ export default function BottomBar(props: BottomBarProps) {
     </div>
   );
 }
-
