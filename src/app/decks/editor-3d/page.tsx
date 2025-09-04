@@ -1292,7 +1292,7 @@ function AuthenticatedDeckEditor() {
   );
 
   // Metadata via hook; keep state for any manual priming, then sync on change
-  const fetchedMeta = useCardMeta(yourCounts, pick3D, setName, isSealed);
+  const fetchedMeta = useCardMeta(yourCounts, pick3D);
   useEffect(() => {
     setMetaByCardId(fetchedMeta);
   }, [fetchedMeta]);
