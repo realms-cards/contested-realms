@@ -67,7 +67,8 @@ function CardFallback({
     >
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial
-        color="#1f2937"
+        transparent={true}
+        opacity={0}
         toneMapped={false}
         depthWrite={depthWrite}
         depthTest={depthTest}

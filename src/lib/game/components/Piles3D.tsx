@@ -166,7 +166,7 @@ export default function Piles3D({
                   .map((card, stackIndex) => (
                     <CardPlane
                       key={`stack-${card.slug}-${stackIndex}`}
-                      slug={card.slug!}
+                      slug={isCemetery ? card.slug! : ""}
                       textureUrl={
                         isCemetery
                           ? undefined
@@ -308,7 +308,7 @@ export default function Piles3D({
 
                   {/* Visual card */}
                   <CardPlane
-                    slug={cards[0].slug!}
+                    slug={isCemetery ? cards[0].slug! : ""}
                     textureUrl={
                       isCemetery
                         ? undefined

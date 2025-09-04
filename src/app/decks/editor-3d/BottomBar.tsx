@@ -217,6 +217,18 @@ export default function BottomBar(props: BottomBarProps) {
                 </div>
               </div>
             )}
+            {searchExpanded && (
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setSearchExpanded(false)}
+                  className="h-9 w-9 grid place-items-center rounded bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+                  title="Close search"
+                  aria-label="Close search"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Search results grid */}
