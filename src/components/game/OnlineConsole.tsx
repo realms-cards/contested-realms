@@ -28,7 +28,7 @@ export default function OnlineConsole({
   connected
 }: OnlineConsoleProps) {
   const router = useRouter();
-  const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
+  const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabType>('events');
   // Only show match chat in match console
   const matchChat = chatLog.filter((m) => m.scope === 'match');

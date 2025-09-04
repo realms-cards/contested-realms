@@ -71,11 +71,22 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   // Simple hover tracking for card pop-up
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
+  // Hand card preview disabled per design (cards are large enough)
+  const HAND_PREVIEW_ENABLED = false;
 
   // Hand cycling: focus index target and smoothed value
   const focusTargetRef = useRef(0);
   const focusLerpRef = useRef(0);
   const [focusLerp, setFocusLerp] = useState(0);
+
+  // Sliding hover highlight index
+  const hoverTargetRef = useRef(-1);
+  const hoverLerpRef = useRef(-1);
+  const [hoverLerp, setHoverLerp] = useState(-1);
+
+  // Track whether the pointer is over any card area (aggregated)
+  const [overCardsArea, setOverCardsArea] = useState(false);
+  const handAreaLeaveTimeoutRef = useRef<number | null>(null);
 
   // Smooth transition refs for animations
   const handSpreadLerp = useRef(0); // 0 = compact, 1 = spread
@@ -162,7 +173,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
     const isHandDrag = dragFromHand && selected && selected.who === owner; // Hand card being dragged
     const targetShown = showCardBacks 
       ? 1 // Opponent card backs always shown
-      : !isHandDrag && (mouseInZone || hoveredCardCount > 0) ? 1 : 0;
+      : !isHandDrag && (mouseInZone || overCardsArea) ? 1 : 0; // Reveal when in hand zone or over cards area; hide only when leaving both
 
     if (isHandDrag) {
       revealLerp.current = 0; // Collapse for hand drags
@@ -176,7 +187,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
     // Smooth hand spread animation
     const handShouldBeSpread = showCardBacks 
       ? true // Opponent hands always spread for visibility
-      : mouseInZone || hoveredCardCount > 0;
+      : (mouseInZone || overCardsArea);
     const spreadTarget = handShouldBeSpread ? 1 : 0;
     const spreadK = 0.25; // Smooth easing for hand spread
     handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
@@ -220,6 +231,26 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         if (focusLerp !== 0) setFocusLerp(0);
       }
     }
+
+    // Smooth hover index animation (sliding highlight)
+    {
+      const n = sortedHand.length;
+      const target = hoverTargetRef.current;
+      const prev = hoverLerpRef.current;
+      const kh = 0.3; // hover easing
+      if (n > 0 && target >= 0) {
+        const clamped = Math.max(0, Math.min(n - 1, target));
+        hoverLerpRef.current += (clamped - hoverLerpRef.current) * kh;
+      } else {
+        // Animate toward -1 (no hover)
+        hoverLerpRef.current += (-1 - hoverLerpRef.current) * kh;
+        if (Math.abs(-1 - hoverLerpRef.current) < 0.005)
+          hoverLerpRef.current = -1;
+      }
+      if (Math.abs(hoverLerpRef.current - prev) > 0.001) {
+        setHoverLerp(hoverLerpRef.current);
+      }
+    }
   });
 
   // Map original hand indices to sorted indices (for selection/hover focus)
@@ -242,6 +273,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         rot: number;
         scale: number;
         originalIndex: number;
+        hoverWeight: number;
       }[];
 
     // Much gentler fan angle for wider spread
@@ -271,7 +303,6 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       // Map sorted index back to original hand index
       const sortedCard = sortedHand[i];
       const originalIndex = hand.findIndex((card) => card === sortedCard);
-      const isHovered = originalIndex === hoveredCard;
       const isSelected =
         selected && selected.who === owner && selected.index === originalIndex;
 
@@ -279,10 +310,8 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
 
-      // X position centered on the focused card: slide smoothly with focusLerp
-      // This turns the static fan into a sliding fan when moving focus using
-      // mouse wheel or arrow keys, without changing existing lift/scale logic.
-      const x = (i - focusLerp) * baseSpacing;
+      // X position centered for the whole fan (do not slide the entire fan)
+      const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
 
       // Y position: smooth interpolated arc + hover pop-up
       const arcMultiplierWhenShown = 1.5;
@@ -295,23 +324,24 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       // Focus-based lift without sliding the fan
       const w = Math.max(0, 1 - Math.abs(i - focusLerp)); // 0..1 focus weight
       const liftFromFocus = CARD_LONG * 0.06 * w;
-      const y = isHovered
-        ? arcY + Math.max(liftFromFocus, CARD_LONG * 0.08)
-        : arcY + liftFromFocus;
+      // Sliding hover highlight adds extra lift that moves smoothly across cards
+      const hoverWeight = hoverLerp >= 0 ? Math.max(0, 1 - Math.abs(i - hoverLerp)) : 0;
+      const y = arcY + liftFromFocus + CARD_LONG * 0.08 * hoverWeight;
 
       // Scale: hovered card slightly bigger with smoother scaling
-      const scale = Math.max(1 + 0.06 * w, isHovered ? 1.08 : 1.0);
+      const scale = Math.max(1 + 0.06 * w, 1.0 + 0.08 * hoverWeight);
 
       return {
         x,
         y,
         // Reduce rotation toward upright for focused cards
-        rot: isSelected || isHovered ? 0 : rot * (1 - 0.6 * w),
+        rot: isSelected ? 0 : rot * (1 - 0.6 * Math.max(w, hoverWeight)),
         scale,
         originalIndex,
+        hoverWeight,
       };
     });
-  }, [sortedHand, hand, hoveredCard, selected, owner, focusLerp]);
+  }, [sortedHand, hand, selected, owner, focusLerp, hoverLerp]);
 
   // Clamp focus to hand size changes
   useEffect(() => {
@@ -346,6 +376,20 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       }
     }
   }, [hoveredCard, selected, owner, dragFromHand, showCardBacks, sortedHand.length, origToSortedIndex]);
+
+  // Track hover target for sliding highlight animation
+  useEffect(() => {
+    if (showCardBacks) {
+      hoverTargetRef.current = -1;
+      return;
+    }
+    if (hoveredCard == null) {
+      hoverTargetRef.current = -1;
+      return;
+    }
+    const sorted = origToSortedIndex.get(hoveredCard);
+    hoverTargetRef.current = sorted != null ? sorted : -1;
+  }, [hoveredCard, origToSortedIndex, showCardBacks]);
 
   // Input handlers: mouse wheel and arrow keys cycle focus when in hand zone
   useEffect(() => {
@@ -385,10 +429,11 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   const beginHoverPreview = useCallback(
     (card?: CardRef | null) => {
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+      if (!HAND_PREVIEW_ENABLED) return; // Preview disabled
       if (!card?.slug) return;
       hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400); // Reduced from 600ms for more responsive preview
     },
-    [setPreviewCard]
+    [setPreviewCard, HAND_PREVIEW_ENABLED]
   );
   const clearHoverPreview = useCallback(() => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
@@ -515,6 +560,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         setHandHoverCount(0);
         setHoveredCard(null);
         setMouseInHandZone(false);
+        setOverCardsArea(false);
         if (hoverCleanupTimeoutRef.current) {
           window.clearTimeout(hoverCleanupTimeoutRef.current);
           hoverCleanupTimeoutRef.current = null;
@@ -525,6 +571,17 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [hoveredCardCount, mouseInZone, setHandHoverCount, setMouseInHandZone]);
+
+  // Reset aggregated over-cards-area when drags start to avoid stale 'true'
+  useEffect(() => {
+    if (dragFromHand || dragFromPile) {
+      if (handAreaLeaveTimeoutRef.current) {
+        window.clearTimeout(handAreaLeaveTimeoutRef.current);
+        handAreaLeaveTimeoutRef.current = null;
+      }
+      setOverCardsArea(false);
+    }
+  }, [dragFromHand, dragFromPile]);
 
   // Cleanup on window focus/blur events to handle edge cases
   useEffect(() => {
@@ -560,6 +617,8 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         window.clearTimeout(hoverCleanupTimeoutRef.current);
       if (forceCleanupIntervalRef.current)
         window.clearInterval(forceCleanupIntervalRef.current);
+      if (handAreaLeaveTimeoutRef.current)
+        window.clearTimeout(handAreaLeaveTimeoutRef.current);
     },
     []
   );
@@ -573,18 +632,17 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
         const layoutInfo = handLayout[i];
         if (!layoutInfo) return null;
 
-        const { x, y, rot, scale: layoutScale, originalIndex } = layoutInfo;
+        const { x, y, rot, scale: layoutScale, originalIndex, hoverWeight } = layoutInfo;
         const isHandDrag = dragFromHand && selected && selected.who === owner;
         const isPileDrag = dragFromHand && dragFromPile && !selected;
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = (c.type || "").toLowerCase().includes("site");
-        const isCardHovered = !showCardBacks && originalIndex === hoveredCard;
 
         const baseScale = HAND_CARD_SCALE;
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
         const baseRenderOrder = isSite ? 1000 : 2000;
-        const renderOrder = isCardHovered ? 3000 : baseRenderOrder + i;
+        const renderOrder = !showCardBacks && hoverWeight > 0.5 ? 3000 : baseRenderOrder + i;
         return (
           <group
             key={`${c.cardId}-${i}`}
@@ -603,6 +661,13 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                   if (hoverTimeoutRef.current) {
                     window.clearTimeout(hoverTimeoutRef.current);
                   }
+
+                  // Pointer entered cards area: cancel area leave debounce and mark as over
+                  if (handAreaLeaveTimeoutRef.current) {
+                    window.clearTimeout(handAreaLeaveTimeoutRef.current);
+                    handAreaLeaveTimeoutRef.current = null;
+                  }
+                  if (!overCardsArea) setOverCardsArea(true);
 
                   setHandHoverCount(hoveredCardCount + 1);
                   setHoveredCard(originalIndex); // Set the hovered card immediately for responsive feel
@@ -623,6 +688,15 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                       prev === originalIndex ? null : prev
                     );
                   }, 30); // Reduced to 30ms delay for more responsive transitions
+
+                  // Debounce leaving the overall cards area so moving between cards doesn't hide the hand
+                  if (handAreaLeaveTimeoutRef.current) {
+                    window.clearTimeout(handAreaLeaveTimeoutRef.current);
+                  }
+                  handAreaLeaveTimeoutRef.current = window.setTimeout(() => {
+                    setOverCardsArea(false);
+                    handAreaLeaveTimeoutRef.current = null;
+                  }, 80);
 
                   clearHoverPreview();
                 }}
@@ -688,7 +762,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                   depthTest={false}
                   renderOrder={renderOrder}
                   interactive={!isDragging && !showCardBacks}
-                  elevation={isCardHovered ? 0.02 : 0.002}
+                  elevation={0.002 + 0.018 * (hoverWeight || 0)}
                   textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
                   textureRotation={showCardBacks ? (isSite ? Math.PI * 3/2 : Math.PI) : undefined} // Atlas: 270° (90° + 180°), Spells: 180°
                 />
@@ -696,7 +770,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
                 <mesh
                   rotation-x={0}
                   rotation-z={-rot}
-                  position={[0, isCardHovered ? 0.02 : 0.002, 0]}
+                  position={[0, 0.002 + 0.018 * (hoverWeight || 0), 0]}
                   renderOrder={renderOrder}
                 >
                   <planeGeometry args={[CARD_SHORT, CARD_LONG]} />

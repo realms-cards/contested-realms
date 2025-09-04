@@ -57,7 +57,7 @@ export function NumberBadge({
         fontWeight={800}
         fontSize={fontScale * 100}
         className="font-fantaisie select-none"
-        dy="0.06em"
+dy="0.1em"
         style={{ userSelect: "none" }}
       >
         {value}
