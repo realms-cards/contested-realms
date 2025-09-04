@@ -2,7 +2,7 @@
 
 import type { ThreeEvent } from "@react-three/fiber";
 import { type Object3D, type Raycaster, type Intersection } from "three";
-import { Suspense } from "react";
+import React, { Suspense, useMemo } from "react";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 
 function noopRaycast(
@@ -78,7 +78,7 @@ function CardFallback({
 }
 
 // Simplified component that relies on texture cache
-function CardWithTexture(props: CardPlaneProps) {
+const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProps) {
   const {
     slug,
     width,
@@ -100,10 +100,12 @@ function CardWithTexture(props: CardPlaneProps) {
     onClick,
   } = props;
 
+  // Simple texture loading - just use the hook for everything
   const tex = useCardTexture({ 
     slug: forceTextureUrl ? "" : slug, 
     textureUrl 
   });
+  
 
   if (!tex) {
     return <CardFallback {...props} />;
@@ -140,7 +142,7 @@ function CardWithTexture(props: CardPlaneProps) {
       />
     </mesh>
   );
-}
+});
 
 export default function CardPlane(props: CardPlaneProps) {
   return (

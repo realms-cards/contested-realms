@@ -66,7 +66,12 @@ export default function YourDeckList(props: YourDeckListProps) {
 
   const renderItem = (it: { cardId: number; count: number; name: string }) => {
     const meta = metaByCardId[it.cardId];
-    const thresholds = (meta?.thresholds as Record<string, number> | undefined) || {};
+    const raw = (meta?.thresholds as Record<string, number> | undefined) || {};
+    const thresholds: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const key = k.toLowerCase();
+      if (v && ["air", "water", "earth", "fire"].includes(key)) thresholds[key] = v;
+    }
     const pickInfo = pickInfoById[it.cardId];
     const slug = pickInfo?.slug || undefined;
     const typeText = (pickInfo?.type || "").toLowerCase();
@@ -121,7 +126,7 @@ export default function YourDeckList(props: YourDeckListProps) {
                 src={`/api/images/${slug}`}
                 alt={it.name}
                 fill
-                className={`${isSite ? "object-cover rotate-90" : "object-cover"}`}
+                className={`${isSite ? "object-contain rotate-90" : "object-cover"}`}
                 sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
               />
             </div>
@@ -147,31 +152,29 @@ export default function YourDeckList(props: YourDeckListProps) {
               </div>
               <div className="text-right font-semibold">x{it.count}</div>
             </div>
-            {!isSite && (
-              <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
-                <div className="flex items-center gap-2">
-                  {order.map((k) =>
-                    thresholds[k] ? (
-                      <span key={k} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10">
-                        <Image src={`/api/assets/${k}.png`} alt={k} width={12} height={12} />
-                        {thresholds[k]}
-                      </span>
-                    ) : null
-                  )}
-                </div>
-                {meta?.cost != null && (
-                  <div className="ml-auto flex items-center gap-1">
-                    {meta.cost >= 0 && meta.cost <= 9 ? (
-                      <NumberBadge value={meta.cost as Digit} size={16} strokeWidth={8} />
-                    ) : (
-                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
-                        {meta.cost}
-                      </span>
-                    )}
-                  </div>
+            <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
+              <div className="flex items-center gap-2">
+                {order.map((k) =>
+                  thresholds[k] ? (
+                    <span key={k} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10">
+                      <Image src={`/api/assets/${k}.png`} alt={k} width={12} height={12} />
+                      {thresholds[k]}
+                    </span>
+                  ) : null
                 )}
               </div>
-            )}
+              {meta?.cost != null && !isSite && (
+                <div className="ml-auto flex items-center gap-1">
+                  {meta.cost >= 0 && meta.cost <= 9 ? (
+                    <NumberBadge value={meta.cost as Digit} size={16} strokeWidth={8} />
+                  ) : (
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
+                      {meta.cost}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

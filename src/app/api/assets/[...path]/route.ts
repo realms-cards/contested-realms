@@ -66,8 +66,6 @@ export async function GET(
       "air.png",
       "water.png",
       "earth.png",
-      "cardback_atlas.png",
-      "cardback_spellbook.png",
       // Booster pack images
       "beta-booster.png",
       "alpha-booster.png",
@@ -92,6 +90,18 @@ export async function GET(
         candidates.push(ktx2Path);
       }
       candidates.push(path.join(root, ...segments));
+    }
+    
+    // Debug logging for cardback files
+    if (last.includes("cardback")) {
+      console.log("[API assets] Debug for", last, {
+        wantKtx2,
+        shouldForceDataOnly,
+        roots: roots.map(r => path.basename(r)),
+        candidates,
+        requestedExt,
+        segments
+      });
     }
 
     let found: string | null = null;

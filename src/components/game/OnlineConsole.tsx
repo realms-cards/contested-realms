@@ -15,6 +15,9 @@ interface OnlineConsoleProps {
   onLeaveMatch: () => void;
   connected: boolean;
   myPlayerId?: string | null;
+  hideLeaveButton?: boolean;
+  defaultOpen?: boolean;
+  hideChat?: boolean;
 }
 
 type TabType = 'events' | 'chat';
@@ -27,13 +30,16 @@ export default function OnlineConsole({
   onSendChat,
   onLeaveMatch,
   connected,
-  myPlayerId
+  myPlayerId,
+  hideLeaveButton = false,
+  defaultOpen = false,
+  hideChat = false,
 }: OnlineConsoleProps) {
   const router = useRouter();
-  const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
+  const [consoleOpen, setConsoleOpen] = useState<boolean>(defaultOpen);
   const [activeTab, setActiveTab] = useState<TabType>('events');
-  // Only show match chat in match console
-  const matchChat = chatLog.filter((m) => m.scope === 'match');
+  // Only show match chat in match console (or hide entirely in replay)
+  const matchChat = hideChat ? [] : chatLog.filter((m) => m.scope === 'match');
   
   // Game events
   const events = useGameStore((s) => s.events);
@@ -90,6 +96,11 @@ export default function OnlineConsole({
     }
     prevMatchChatLenRef.current = matchChat.length;
   }, [matchChat, myPlayerId, consoleOpen, startAutoCloseTimer]);
+
+  // Ensure chat tab cannot be active when chat is hidden
+  useEffect(() => {
+    if (hideChat && activeTab === 'chat') setActiveTab('events');
+  }, [hideChat, activeTab]);
 
   // Format event text (same logic as offline console)
   function formatEventText(text: string): string {
@@ -153,33 +164,37 @@ export default function OnlineConsole({
                 </span>
               )}
             </button>
-            <button
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                activeTab === 'chat' 
-                  ? 'bg-white/20 text-white' 
-                  : 'hover:bg-white/10 opacity-70'
-              }`}
-              onClick={() => setActiveTab('chat')}
-            >
-              <MessageCircle className="w-3 h-3" />
-              Chat
-              {matchChat.length > 0 && (
-                <span className="bg-green-500 text-white text-xs px-1 rounded-full">
-                  {matchChat.length}
-                </span>
-              )}
-            </button>
+            {!hideChat && (
+              <button
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                  activeTab === 'chat' 
+                    ? 'bg-white/20 text-white' 
+                    : 'hover:bg-white/10 opacity-70'
+                }`}
+                onClick={() => setActiveTab('chat')}
+              >
+                <MessageCircle className="w-3 h-3" />
+                Chat
+                {matchChat.length > 0 && (
+                  <span className="bg-green-500 text-white text-xs px-1 rounded-full">
+                    {matchChat.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
           
           <div className="flex items-center gap-1">
-            <button
-              className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
-              onClick={handleLeaveMatch}
-              title="Leave match and return to lobby"
-            >
-              <LogOut className="w-3 h-3" />
-              Leave
-            </button>
+            {!hideLeaveButton && (
+              <button
+                className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
+                onClick={handleLeaveMatch}
+                title="Leave match and return to lobby"
+              >
+                <LogOut className="w-3 h-3" />
+                Leave
+              </button>
+            )}
             <button
               className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
               onClick={() => {
@@ -233,7 +248,7 @@ export default function OnlineConsole({
             )}
 
             {/* Chat Tab */}
-            {activeTab === 'chat' && (
+            {activeTab === 'chat' && !hideChat && (
               <>
                 <div
                   ref={chatRef}

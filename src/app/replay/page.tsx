@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SocketTransport } from "@/lib/net/socketTransport";
 
@@ -22,13 +23,15 @@ export default function ReplayListPage() {
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  const { data: session } = useSession();
   
 
   useEffect(() => {
-    // Get current player ID from localStorage if available
+    // Get current player ID from session or localStorage if available
     try {
+      const fromSession = (session?.user && (session.user as { id?: string }).id) as string | undefined;
       const storedPlayerId = localStorage.getItem("sorcery:playerId");
-      setCurrentPlayerId(storedPlayerId);
+      setCurrentPlayerId(fromSession || storedPlayerId);
     } catch {
       // Ignore localStorage errors
     }
@@ -40,10 +43,12 @@ export default function ReplayListPage() {
     const handleDisconnect = () => setConnected(false);
 
     // Connect first, then set up event listeners
+    const displayName = (session?.user?.name && String(session.user.name).trim()) || `Replay_${Date.now()}`;
+    const playerId = (session?.user && (session.user as { id?: string }).id) || `replay_viewer_${Date.now()}`;
     socketTransport
       .connect({
-        displayName: `Replay_${Date.now()}`, // Make it clear it's not a real player
-        playerId: `replay_viewer_${Date.now()}`,
+        displayName,
+        playerId,
       })
       .then(() => {
         // Set up event listeners after connection is established
@@ -67,7 +72,7 @@ export default function ReplayListPage() {
         // Ignore cleanup errors
       }
     };
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     if (!connected || !transport) return;
