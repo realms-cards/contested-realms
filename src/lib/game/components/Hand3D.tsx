@@ -106,8 +106,8 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
-  // Lower = taller zone. Previously 0.75; make it taller for easier selection/visibility.
-  const HAND_ZONE_TOP_FRAC = 0.68;
+  // Higher value = smaller zone (cursor must be closer to bottom)
+  const HAND_ZONE_TOP_FRAC = 0.85;
 
   useEffect(() => {
     function onMove(e: MouseEvent) {

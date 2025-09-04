@@ -136,6 +136,12 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
       return textureUrl;
     }
     if (slug) {
+      // Special-case token slugs: token:<fileBase>
+      if (slug.startsWith("token:")) {
+        const base = slug.slice("token:".length);
+        // Request raster with ?ktx2=1 to allow KTX2 swap server-side
+        return `/api/assets/tokens/${base}.png?ktx2=1`;
+      }
       return `/api/images/${slug}`;
     }
     return "";

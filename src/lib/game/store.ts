@@ -65,6 +65,8 @@ export type AvatarState = EntityBase<CardRef | null> & {
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
+  // Optional attachment to a permanent at the same tile
+  attachedTo?: { at: CellKey; index: number } | null;
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -73,7 +75,8 @@ export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
   | { kind: "permanent"; at: CellKey; index: number }
   | { kind: "avatar"; who: PlayerKey }
-  | { kind: "pile"; who: PlayerKey; from: "spellbook" | "atlas" | "graveyard" };
+  | { kind: "pile"; who: PlayerKey; from: "spellbook" | "atlas" | "graveyard" }
+  | { kind: "tokenpile"; who: PlayerKey };
 
 export type GameState = {
   players: Record<PlayerKey, PlayerState>;
@@ -263,6 +266,10 @@ export type GameState = {
     onSelectCard: (card: CardRef) => void
   ) => void;
   closeSearchDialog: () => void;
+  // Tokens
+  addTokenToHand: (who: PlayerKey, name: string) => void;
+  attachTokenToTopPermanent: (at: CellKey, index: number) => void;
+  detachToken: (at: CellKey, index: number) => void;
   // Derived selectors (pure getters)
   getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
   getUntappedSitesCount: (who: PlayerKey) => number;
@@ -767,6 +774,72 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   closeSearchDialog: () => set({ searchDialog: null }),
 
+  // --- Tokens ---------------------------------------------------------------
+  addTokenToHand: (who, name) =>
+    set((s) => {
+      const { TOKEN_BY_NAME, tokenCardId, tokenSlug } = require("@/lib/game/tokens");
+      const def = TOKEN_BY_NAME[(name || "").toLowerCase()];
+      if (!def) return s as GameState;
+      const hand = [...s.zones[who].hand];
+      const card = {
+        cardId: tokenCardId(def),
+        variantId: null,
+        name: def.name,
+        type: "Token",
+        slug: tokenSlug(def),
+        thresholds: null,
+      } as CardRef;
+      hand.push(card);
+      get().log(`${who.toUpperCase()} adds token '${def.name}' to hand`);
+      const zonesNext = { ...s.zones, [who]: { ...s.zones[who], hand } } as GameState["zones"];
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
+    }),
+
+  attachTokenToTopPermanent: (at, index) =>
+    set((s) => {
+      const arr = s.permanents[at] || [];
+      const token = arr[index];
+      if (!token) return s;
+      const nonTokenIndices = arr
+        .map((it, i) => ({ it, i }))
+        .filter(({ it }) => !((it.card.type || "").toLowerCase().includes("token")));
+      if (nonTokenIndices.length === 0) return s;
+      const targetIdx = nonTokenIndices[nonTokenIndices.length - 1]!.i;
+      const per: Permanents = { ...s.permanents };
+      const list = [...(per[at] || [])];
+      list[index] = { ...token, attachedTo: { at, index: targetIdx } };
+      per[at] = list;
+      get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  detachToken: (at, index) =>
+    set((s) => {
+      const token = (s.permanents[at] || [])[index];
+      if (!token) return s;
+      const per: Permanents = { ...s.permanents };
+      const list = [...(per[at] || [])];
+      list[index] = { ...token, attachedTo: null };
+      per[at] = list;
+      get().log(`Detached token '${token.card.name}'`);
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
   // Derived selectors (no state mutation)
   getPlayerSites: (who) => {
     const s = get();
@@ -929,11 +1002,24 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (sites[key].owner === nextPlayer)
           sites[key] = { ...sites[key], tapped: false };
       }
+      
+      // Untap all permanents owned by the next player
+      const permanents: Permanents = { ...s.permanents };
+      for (const cellKey of Object.keys(permanents)) {
+        const cellPermanents = permanents[cellKey] || [];
+        permanents[cellKey] = cellPermanents.map(permanent => 
+          permanent.owner === nextPlayer 
+            ? { ...permanent, tapped: false }
+            : permanent
+        );
+      }
+      
       {
         const patch: ServerPatchT = {
           phase: nextPhase,
           currentPlayer: nextPlayer,
           board: { ...s.board, sites } as GameState["board"],
+          permanents: permanents as GameState["permanents"],
         };
         get().trySendPatch(patch);
       }
@@ -941,6 +1027,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         phase: nextPhase,
         currentPlayer: nextPlayer,
         board: { ...s.board, sites },
+        permanents,
         selectedCard: null,
       });
       get().log(`Turn passes to P${nextPlayer}`);
@@ -969,11 +1056,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         sites[key] = { ...sites[key], tapped: false };
     }
 
+    // Untap all permanents owned by the next player
+    const permanents: Permanents = { ...s.permanents };
+    for (const cellKey of Object.keys(permanents)) {
+      const cellPermanents = permanents[cellKey] || [];
+      permanents[cellKey] = cellPermanents.map(permanent => 
+        permanent.owner === nextPlayer 
+          ? { ...permanent, tapped: false }
+          : permanent
+      );
+    }
+
     {
       const patch: ServerPatchT = {
         phase: "Main",
         currentPlayer: nextPlayer,
         board: { ...s.board, sites } as GameState["board"],
+        permanents: permanents as GameState["permanents"],
       };
       get().trySendPatch(patch);
     }
@@ -981,6 +1080,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       phase: "Main",
       currentPlayer: nextPlayer,
       board: { ...s.board, sites },
+      permanents,
       selectedCard: null,
       selectedPermanent: null,
     });

@@ -10,6 +10,7 @@ import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
 import Hand3D from "@/lib/game/components/Hand3D";
 import Piles3D from "@/lib/game/components/Piles3D";
+import TokenPile3D from "@/lib/game/components/TokenPile3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
@@ -922,6 +923,9 @@ export default function OnlineMatchPage() {
               {/* 3D Piles (sides of the board) */}
               <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
               <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+              {/* Token piles (face-up) */}
+              <TokenPile3D owner="p1" />
+              <TokenPile3D owner="p2" />
 
               {/* 3D HUD (thresholds, life, mana) */}
               <Hud3D owner="p1" />
