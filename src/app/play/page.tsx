@@ -141,7 +141,7 @@ export default function PlayPage() {
   // Setup state
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
-  const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
+  const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
   // Hotseat: Player 1 performs mulligans for both players; start after both are ready
   const [p1Ready, setP1Ready] = useState<boolean>(false);
   const [p2Ready, setP2Ready] = useState<boolean>(false);

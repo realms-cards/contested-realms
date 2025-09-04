@@ -24,6 +24,15 @@ import {
 import { TournamentControls, DeckValidation } from "@/components/deck-editor";
 import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
+import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
+
+const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
+  ssr: false,
+});
+const BottomBar = dynamic(() => import("@/app/decks/editor-3d/BottomBar"), {
+  ssr: false,
+});
 
 // Lazy load the Canvas/three stack to trim initial JS and avoid SSR
 const EditorCanvas = dynamic(() => import("@/app/decks/editor-3d/EditorCanvas"), {
@@ -130,69 +139,7 @@ function AuthenticatedDeckEditor() {
     null
   );
 
-  // (moved below after isDraftMode / isSealed declarations)
-
-  // Prefetch standard sites for the current set
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        // Fetch standard sites and Spellslinger in parallel
-        const [siteEntries, spellslingerRes] = await Promise.all([
-          Promise.all(
-            STANDARD_SITE_NAMES.map(async (name) => {
-              const res = await fetch(
-                `/api/cards/search?q=${encodeURIComponent(
-                  name
-                )}&set=${encodeURIComponent(setName)}&type=site`
-              );
-              const data = (await res.json()) as SearchResult[];
-              return [name, res.ok && data[0] ? data[0] : null] as const;
-            })
-          ),
-          fetch(
-            `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
-              setName
-            )}&type=avatar`
-          ),
-        ]);
-
-        if (!cancelled) {
-          // Set standard sites
-          const next: Record<StandardSiteName, SearchResult | null> = {
-            Spire: null,
-            Stream: null,
-            Valley: null,
-            Wasteland: null,
-          };
-          for (const [k, v] of siteEntries) next[k] = v;
-          setStdSites(next);
-
-          // Set Spellslinger
-          if (spellslingerRes.ok) {
-            const spellslingerData =
-              (await spellslingerRes.json()) as SearchResult[];
-            setSpellslingerCard(spellslingerData[0] || null);
-          } else {
-            setSpellslingerCard(null);
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setStdSites({
-            Spire: null,
-            Stream: null,
-            Valley: null,
-            Wasteland: null,
-          });
-          setSpellslingerCard(null);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [setName]);
+  // (prefetch moved below after isDraftMode / isSealed declarations)
 
   // Exact same 3D state as draft-3d
   const [orbitLocked, setOrbitLocked] = useState(false);
@@ -225,7 +172,57 @@ function AuthenticatedDeckEditor() {
     }>
   >([]);
 
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  // Prefetch standard sites and Spellslinger for current set or all sets in sealed/draft
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const setParam = isSealed || isDraftMode ? "" : `&set=${encodeURIComponent(setName)}`;
+        const siteEntries = await Promise.all(
+          STANDARD_SITE_NAMES.map(async (name) => {
+            const res = await fetch(
+              `/api/cards/search?q=${encodeURIComponent(name)}${setParam}&type=site`
+            );
+            const data = (await res.json()) as SearchResult[];
+            return [name, res.ok && data[0] ? data[0] : null] as const;
+          })
+        );
+
+        let spells: SearchResult | null = null;
+        try {
+          const res = await fetch(
+            `/api/cards/search?q=spellslinger${setParam}&type=avatar`
+          );
+          const data = (await res.json()) as SearchResult[];
+          spells = res.ok ? data[0] || null : null;
+        } catch {
+          spells = null;
+        }
+
+        if (!cancelled) {
+          const next: Record<StandardSiteName, SearchResult | null> = {
+            Spire: null,
+            Stream: null,
+            Valley: null,
+            Wasteland: null,
+          };
+          for (const [k, v] of siteEntries) next[k as StandardSiteName] = v;
+          setStdSites(next);
+          setSpellslingerCard(spells);
+        }
+      } catch {
+        if (!cancelled) {
+          setStdSites({ Spire: null, Stream: null, Valley: null, Wasteland: null });
+          setSpellslingerCard(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setName, isSealed, isDraftMode]);
+
+  // Sealed timer managed via hook
 
   // Load list of decks after authentication (skip in draft/ sealed modes)
   useEffect(() => {
@@ -450,9 +447,7 @@ function AuthenticatedDeckEditor() {
     sideboardCards: Pick3D[];
   } | null>(null);
 
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
-    {}
-  );
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
 
   // Convert picks to Pick3D format (exact same structure as draft-3d)
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
@@ -1013,11 +1008,22 @@ function AuthenticatedDeckEditor() {
 
   // Add Spellslinger as tournament avatar (just add the prefetched card normally)
   const addSpellslinger = useCallback(() => {
-    if (spellslingerCard) {
-      addCardAuto(spellslingerCard);
-    } else {
-      setError("Spellslinger not found in this set");
-    }
+    (async () => {
+      if (spellslingerCard) {
+        addCardAuto(spellslingerCard);
+        return;
+      }
+      // Fallback: try global search (no set constraint) for sealed/draft
+      try {
+        const res = await fetch(`/api/cards/search?q=spellslinger&type=avatar`);
+        const data = (await res.json()) as SearchResult[];
+        const hit = res.ok ? data[0] || null : null;
+        if (hit) addCardAuto(hit);
+        else setError("Spellslinger not found");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
   }, [spellslingerCard, addCardAuto]);
 
   // Quick-add a specific standard site by name
@@ -1029,20 +1035,23 @@ function AuthenticatedDeckEditor() {
         return;
       }
       try {
+        const setParam = isSealed || isDraftMode ? "" : `&set=${encodeURIComponent(setName)}`;
         const res = await fetch(
-          `/api/cards/search?q=${encodeURIComponent(
-            name
-          )}&set=${encodeURIComponent(setName)}&type=site`
+          `/api/cards/search?q=${encodeURIComponent(name)}${setParam}&type=site`
         );
         const data = (await res.json()) as SearchResult[];
         const r = res.ok && data[0] ? data[0] : null;
         if (r) addCardAuto(r);
-        else setError(`Site ${name} not found in set ${setName}`);
+        else setError(
+          isSealed || isDraftMode
+            ? `Site ${name} not found`
+            : `Site ${name} not found in set ${setName}`
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [stdSites, addCardAuto, setName]
+    [stdSites, addCardAuto, setName, isSealed, isDraftMode]
   );
 
   // Sealed mode pack functions
@@ -1273,159 +1282,33 @@ function AuthenticatedDeckEditor() {
     zoneCountsRef.current = newZoneCounts;
   }, [pick3D]);
 
-  // Load deck data and meta (enhanced for multi-set sealed like draft-3d)
-  useEffect(() => {
-    // Get unique card IDs from pick3D array if yourCounts is empty
-    const cardIds =
-      yourCounts.length > 0
-        ? yourCounts.map((c) => c.cardId)
-        : [...new Set(pick3D.map((p) => p.card.cardId))]; // Remove duplicates
-
-    if (!cardIds.length) {
-      setMetaByCardId({});
-      return;
+  // Quick lookup for card slug/type by cardId (for right panel thumbnails)
+  const pickInfoById = useMemo(() => {
+    const map: Record<number, { slug: string | null; type: string | null; name: string }> = {};
+    for (const it of Object.values(picks)) {
+      map[it.cardId] = { slug: it.slug, type: it.type, name: it.name };
     }
+    return map;
+  }, [picks]);
 
-    console.log(
-      "Fetching metadata for",
-      cardIds.length,
-      "unique card IDs:",
-      cardIds
-    );
-
-    // Group cards by set for proper metadata fetching (like draft-3d)
-    const groups = new Map<string, Set<number>>();
-
-    // For sealed mode, we need to get the correct set for each card
-    if (isSealed) {
-      console.log("=== Sealed Mode Metadata Grouping Debug ===");
-      console.log("pick3D cards:", pick3D.length);
-      console.log("yourCounts cards:", yourCounts.length);
-
-      // Group by set from pick3D cards which have set information
-      for (const pick of pick3D) {
-        const cardSet = pick.card.setName || setName; // fallback to default set
-        console.log(
-          `Card ${pick.card.cardName} (${pick.card.cardId}) → set: ${cardSet}`
-        );
-        if (!groups.has(cardSet)) groups.set(cardSet, new Set());
-        groups.get(cardSet)!.add(pick.card.cardId);
-      }
-
-      // Also include cards from yourCounts if they don't exist in pick3D
-      const pick3DCardIds = new Set(pick3D.map((p) => p.card.cardId));
-      for (const card of yourCounts) {
-        if (!pick3DCardIds.has(card.cardId)) {
-          console.log(
-            `Missing card ${card.name} (${card.cardId}) → using default set: ${setName}`
-          );
-          // For cards not in pick3D, use the default set
-          if (!groups.has(setName)) groups.set(setName, new Set());
-          groups.get(setName)!.add(card.cardId);
-        }
-      }
-
-      console.log(
-        "Final groups:",
-        Array.from(groups.entries()).map(
-          ([set, ids]) => `${set}: [${Array.from(ids).join(", ")}]`
-        )
-      );
-    } else {
-      // For non-sealed mode, use single set
-      groups.set(setName, new Set(cardIds));
+  // Sealed timer via hook
+  const { timeRemaining, formatTime: formatTimeSealed } = useSealedTimer(
+    isSealed,
+    sealedConfig && {
+      timeLimit: sealedConfig.timeLimit,
+      constructionStartTime: sealedConfig.constructionStartTime,
     }
+  );
 
-    console.log(
-      "Metadata groups by set:",
-      Array.from(groups.entries()).map(
-        ([set, ids]) => `${set}: ${ids.size} cards`
-      )
-    );
-
-    // Make requests grouped by set (same pattern as draft-3d)
-    const requests = Array.from(groups.entries()).map(([s, ids]) => {
-      const params = new URLSearchParams();
-      params.set("set", s);
-      params.set("ids", Array.from(ids).join(","));
-      console.log(`Fetching metadata for set ${s}:`, Array.from(ids));
-      return fetch(`/api/cards/meta?${params.toString()}`)
-        .then((r) => r.json())
-        .then(
-          (
-            rows: {
-              cardId: number;
-              cost: number | null;
-              thresholds: Record<string, number> | null;
-              attack: number | null;
-              defence: number | null;
-            }[]
-          ) => {
-            console.log(`Metadata response for set ${s}:`, rows);
-            return rows;
-          }
-        );
-    });
-
-    Promise.all(requests)
-      .then((chunks) => {
-        console.log("=== Multi-set API Response Debug ===");
-        console.log("Chunks received:", chunks.length);
-        chunks.forEach((chunk, i) => {
-          console.log(`Chunk ${i} size:`, chunk.length);
-          if (chunk[0])
-            console.log(
-              `Chunk ${i} first card:`,
-              JSON.stringify(chunk[0], null, 2)
-            );
-        });
-
-        const next: Record<number, CardMeta> = {};
-        for (const rows of chunks) {
-          for (const m of rows)
-            next[m.cardId] = {
-              cost: m.cost,
-              thresholds: m.thresholds,
-              attack: m.attack,
-              defence: m.defence,
-            };
-        }
-        console.log("Final multi-set MetaByCardId:", next);
-        setMetaByCardId(next);
-      })
-      .catch((error) => {
-        console.error("Metadata fetch failed:", error);
-      });
-  }, [yourCounts, pick3D, setName, isSealed]);
-
-  // Sealed mode timer effect
+  // Metadata via hook; keep state for any manual priming, then sync on change
+  const fetchedMeta = useCardMeta(yourCounts, pick3D, setName, isSealed);
   useEffect(() => {
-    if (
-      !isSealed ||
-      !sealedConfig?.constructionStartTime ||
-      !sealedConfig?.timeLimit
-    )
-      return;
+    setMetaByCardId(fetchedMeta);
+  }, [fetchedMeta]);
 
-    const updateTimer = () => {
-      const now = Date.now();
-      const elapsed = now - sealedConfig.constructionStartTime;
-      const totalTime = sealedConfig.timeLimit * 60 * 1000; // Convert minutes to ms
-      const remaining = Math.max(0, totalTime - elapsed);
-      setTimeRemaining(remaining);
-    };
+  // (metadata loading moved to useCardMeta hook)
 
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [isSealed, sealedConfig]);
-
-  // Format time display
-  const formatTime = (ms: number) => {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  };
+  // (sealed timer moved to useSealedTimer hook above)
 
   async function doSearch() {
     try {
@@ -1768,280 +1651,28 @@ function AuthenticatedDeckEditor() {
             📋 Deck: Mana + Sites by Element • Sideboard: Elements
           </div>
         </div>
-        {/* EXACT same "Your Picks" panel as draft-3d */}
-        <div className="absolute right-6 max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-12 lg:col-span-8">
-              {/* Empty space where pack info would be in draft */}
-            </div>
-            <div className="col-span-12 lg:col-span-4">
-              <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
-                <div className="font-medium mb-2 text-white flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    {/* Tabs */}
-                    <div className="flex bg-white/10 rounded pointer-events-auto">
-                      <button
-                        onClick={() => setCardsTab("deck")}
-                        className={`px-3 py-1 text-sm rounded-l transition-colors ${
-                          cardsTab === "deck"
-                            ? "bg-green-600 text-white"
-                            : "text-white/80 hover:bg-white/10"
-                        }`}
-                      >
-                        Your Deck ({picksByType.deck + picksByType.sideboard})
-                      </button>
-                      <button
-                        onClick={() => setCardsTab("all")}
-                        className={`px-3 py-1 text-sm rounded-r transition-colors ${
-                          cardsTab === "all"
-                            ? "bg-blue-600 text-white"
-                            : "text-white/80 hover:bg-white/10"
-                        }`}
-                      >
-                        All Cards (
-                        {yourCounts.reduce((sum, card) => sum + card.count, 0)})
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setPicksOpen((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
-                    >
-                      {picksOpen ? "Hide" : "Show"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Deck/Sideboard Summary */}
-                {cardsTab === "deck" && picksOpen && (
-                  <div className="mb-3 pointer-events-auto">
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-600 rounded"></div>
-                        <span className="text-green-300">
-                          Deck: {picksByType.deck}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-blue-600 rounded"></div>
-                        <span className="text-blue-300">
-                          Sideboard: {picksByType.sideboard}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {picksOpen && (
-                  <div
-                    className={`max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
-                  >
-                    {yourCounts
-                      .filter((it) => {
-                        if (cardsTab === "all") return true;
-                        // For "deck" tab, show cards that are in either deck or sideboard zones
-                        return pick3D.some(
-                          (pick) => pick.card.cardId === it.cardId
-                        );
-                      })
-                      .map((it) => {
-                        const meta = metaByCardId[it.cardId];
-                        const t =
-                          (meta?.thresholds as
-                            | Record<string, number>
-                            | undefined) || {};
-                        const order = [
-                          "air",
-                          "water",
-                          "earth",
-                          "fire",
-                        ] as const;
-
-                        // Find matching pick to get slug and type info
-                        const matchingPick = Object.values(picks).find(
-                          (p) => p.cardId === it.cardId
-                        );
-                        const slug = matchingPick?.slug;
-                        const isSite = (matchingPick?.type || "")
-                          .toLowerCase()
-                          .includes("site");
-
-                        // Get zone information for this card
-                        const cardInDeck = pick3D.filter(
-                          (p) => p.card.cardId === it.cardId && p.z < 0
-                        ).length;
-                        const cardInSideboard = pick3D.filter(
-                          (p) => p.card.cardId === it.cardId && p.z >= 0
-                        ).length;
-
-                        // Enhanced right-click handler with context menu for duplicates
-                        const handleContextMenu = (e: React.MouseEvent) => {
-                          e.preventDefault();
-
-                          const totalCopies = cardInDeck + cardInSideboard;
-
-                          // If only one copy total, or all copies are in the same zone, use simple move
-                          if (
-                            totalCopies === 1 ||
-                            cardInDeck === 0 ||
-                            cardInSideboard === 0
-                          ) {
-                            if (cardInDeck > 0) {
-                              moveOneToSideboard(it.cardId);
-                              const remaining = cardInDeck - 1;
-                              const message =
-                                remaining > 0
-                                  ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-                                  : `Moved "${it.name}" to Sideboard (deck now empty)`;
-                              setFeedbackMessage(message);
-                              setTimeout(() => setFeedbackMessage(null), 2000);
-                            } else if (cardInSideboard > 0) {
-                              moveOneFromSideboardToDeck(it.cardId);
-                              const remaining = cardInSideboard - 1;
-                              const message =
-                                remaining > 0
-                                  ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
-                                  : `Moved "${it.name}" to Deck (sideboard now empty)`;
-                              setFeedbackMessage(message);
-                              setTimeout(() => setFeedbackMessage(null), 2000);
-                            }
-                          } else {
-                            // Multiple copies in different zones - show context menu
-                            const deckCards = pick3D.filter(
-                              (p) => p.card.cardId === it.cardId && p.z < 0
-                            );
-                            const sideboardCards = pick3D.filter(
-                              (p) => p.card.cardId === it.cardId && p.z >= 0
-                            );
-
-                            setContextMenu({
-                              cardId: it.cardId,
-                              cardName: it.name,
-                              x: e.clientX,
-                              y: e.clientY,
-                              deckCards,
-                              sideboardCards,
-                            });
-                          }
-                        };
-
-                        return (
-                          <div
-                            key={it.cardId}
-                            className="rounded p-2 bg-black/70 ring-1 ring-white/25 text-white cursor-pointer hover:bg-black/50"
-                            onMouseEnter={() => {
-                              if (slug) {
-                                setHoverPreview({
-                                  slug,
-                                  name: it.name,
-                                  type: matchingPick?.type || null,
-                                });
-                              }
-                            }}
-                            onMouseLeave={() => setHoverPreview(null)}
-                            onContextMenu={handleContextMenu}
-                            title={`Right-click to move between Deck/Sideboard`}
-                          >
-                            <div className="flex items-start gap-2">
-                              {slug ? (
-                                <div
-                                  className={`relative flex-none ${
-                                    isSite
-                                      ? "aspect-[4/3] w-14"
-                                      : "aspect-[3/4] w-12"
-                                  } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
-                                >
-                                  <Image
-                                    src={`/api/images/${slug}`}
-                                    alt={it.name}
-                                    fill
-                                    className={`${
-                                      isSite
-                                        ? "object-cover rotate-90"
-                                        : "object-cover"
-                                    }`}
-                                    sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
-                                    priority={false}
-                                  />
-                                </div>
-                              ) : null}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between">
-                                  <div className="min-w-0">
-                                    <div
-                                      className="font-semibold truncate"
-                                      title={it.name}
-                                    >
-                                      {it.name}
-                                    </div>
-                                    <div className="text-xs opacity-90 flex items-center gap-2">
-                                      {cardInDeck > 0 && (
-                                        <span className="bg-green-600/20 text-green-300 px-1 py-0.5 rounded text-[10px]">
-                                          Deck: {cardInDeck}
-                                        </span>
-                                      )}
-                                      {cardInSideboard > 0 && (
-                                        <span className="bg-blue-600/20 text-blue-300 px-1 py-0.5 rounded text-[10px]">
-                                          Sideboard: {cardInSideboard}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="text-right font-semibold">
-                                    x{it.count}
-                                  </div>
-                                </div>
-                                <div className="mt-1 flex items-center flex-wrap gap-2 opacity-90">
-                                  <div className="flex items-center gap-2">
-                                    {order.map((k) =>
-                                      t[k] ? (
-                                        <span
-                                          key={k}
-                                          className="inline-flex items-center gap-1"
-                                        >
-                                          {Array.from({ length: t[k] }).map(
-                                            (_, i) => (
-                                              <Image
-                                                key={`${k}-${i}`}
-                                                src={`/api/assets/${k}.png`}
-                                                alt={k}
-                                                width={16}
-                                                height={16}
-                                                className="pointer-events-none select-none"
-                                                priority={false}
-                                              />
-                                            )
-                                          )}
-                                        </span>
-                                      ) : null
-                                    )}
-                                  </div>
-                                  {meta?.cost != null &&
-                                    meta.cost > 0 &&
-                                    (meta.cost >= 1 && meta.cost <= 9 ? (
-                                      <NumberBadge
-                                        value={meta.cost as Digit}
-                                        size={16}
-                                        strokeWidth={8}
-                                      />
-                                    ) : (
-                                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
-                                        {meta.cost}
-                                      </span>
-                                    ))}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={null}>
+          <RightPanel
+            cardsTab={cardsTab}
+            setCardsTab={setCardsTab}
+            picksOpen={picksOpen}
+            setPicksOpen={setPicksOpen}
+            picksByType={picksByType}
+            yourCounts={yourCounts}
+            pick3D={pick3D}
+            metaByCardId={metaByCardId}
+            pickInfoById={pickInfoById}
+            onHoverPreview={(slug, name, type) => setHoverPreview({ slug, name, type })}
+            onHoverClear={() => setHoverPreview(null)}
+            moveOneToSideboard={moveOneToSideboard}
+            moveOneFromSideboardToDeck={moveOneFromSideboardToDeck}
+            openContextMenu={openContextMenuForCard}
+            setFeedback={(msg) => {
+              setFeedbackMessage(msg);
+              setTimeout(() => setFeedbackMessage(null), 2000);
+            }}
+          />
+        </Suspense>
 
         {/* EXACT same Draft Statistics box as draft-3d */}
         {infoBoxVisible && pick3D.length > 0 && (
@@ -2230,6 +1861,33 @@ function AuthenticatedDeckEditor() {
         )}
 
         {/* Bottom controls */}
+        <Suspense fallback={null}>
+          <BottomBar
+            isSealed={isSealed}
+            isDraftMode={isDraftMode}
+            searchExpanded={searchExpanded}
+            setSearchExpanded={setSearchExpanded}
+            q={q}
+            setQ={setQ}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            searchSetName={searchSetName}
+            setSearchSetName={setSearchSetName}
+            doSearch={doSearch}
+            results={results}
+            addCardAuto={addCardAuto}
+            addToSideboardFromSearch={addToSideboardFromSearch}
+            pick3DLength={pick3D.length}
+            tournamentControlsVisible={tournamentControlsVisible}
+            toggleTournamentControls={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+            packs={packs}
+            openPack={openPack}
+            timeRemaining={timeRemaining}
+            formatTime={formatTimeSealed}
+          />
+        </Suspense>
+        {/* Legacy bottom controls (disabled) */}
+        {false && (
         <div
           className={`absolute bottom-0 left-0 right-0 ${
             searchExpanded ? "p-4" : "p-2"
@@ -2277,7 +1935,7 @@ function AuthenticatedDeckEditor() {
                               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                             />
                           </svg>
-                          {formatTime(timeRemaining)}
+                          {formatTimeSealed(timeRemaining)}
                         </div>
 
                         {/* Pack opening buttons grouped by set */}
@@ -2676,17 +2334,20 @@ function AuthenticatedDeckEditor() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Tournament Legal Controls */}
-      <TournamentControls
-        isVisible={tournamentControlsVisible}
-        onClose={() => setTournamentControlsVisible(false)}
-        spellslingerCard={spellslingerCard}
-        standardSites={stdSites}
-        onAddSpellslinger={addSpellslinger}
-        onAddStandardSite={addStandardSiteByName}
-      />
+      <Suspense fallback={null}>
+        <TournamentControls
+          isVisible={tournamentControlsVisible}
+          onClose={() => setTournamentControlsVisible(false)}
+          spellslingerCard={spellslingerCard}
+          standardSites={stdSites}
+          onAddSpellslinger={addSpellslinger}
+          onAddStandardSite={addStandardSiteByName}
+        />
+      </Suspense>
     </div>
   );
 }

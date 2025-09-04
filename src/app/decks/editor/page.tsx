@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { TournamentControls } from "@/components/deck-editor";
 
 // Stable constant for standard site names
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
@@ -74,6 +75,10 @@ export default function DeckEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [tournamentControlsVisible, setTournamentControlsVisible] =
+    useState(false);
+  const [spellslingerCard, setSpellslingerCard] =
+    useState<SearchResult | null>(null);
 
   // DnD hover states for visual feedback
   const [isOverDeck, setIsOverDeck] = useState(false);
@@ -151,6 +156,27 @@ export default function DeckEditorPage() {
             Wasteland: null,
           });
         }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setName]);
+
+  // Prefetch Spellslinger avatar for current set
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
+            setName
+          )}&type=avatar`
+        );
+        const data = (await res.json()) as SearchResult[];
+        if (!cancelled) setSpellslingerCard(res.ok ? data[0] || null : null);
+      } catch {
+        if (!cancelled) setSpellslingerCard(null);
       }
     })();
     return () => {
@@ -695,7 +721,7 @@ export default function DeckEditorPage() {
         </div>
       </div>
 
-      {/* Format indicator and quick actions */}
+      {/* Format indicator and tournament-legal quick actions */}
       <div className="flex flex-wrap items-center gap-3">
         {isRestrictedMode && (
           <div className="px-3 py-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded text-sm text-amber-800 dark:text-amber-200">
@@ -703,35 +729,16 @@ export default function DeckEditorPage() {
           </div>
         )}
         <button
-          className="px-3 py-2 border rounded text-sm"
-          onClick={setAvatarSpellslinger}
+          onClick={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+          className={`px-3 py-2 rounded text-sm transition-colors ${
+            tournamentControlsVisible
+              ? "bg-yellow-600 text-white hover:bg-yellow-500"
+              : "border hover:bg-white/10"
+          }`}
+          title="Show tournament legal cards (Spellslinger + Standard Sites)"
         >
-          Set Avatar: Spellslinger
+          Add Standard Cards
         </button>
-        <div className="text-xs uppercase opacity-70 ml-2">Standard Sites</div>
-        <div className="flex gap-2">
-          {STANDARD_SITE_NAMES.map((n: StandardSiteName) => {
-            const hit = stdSites[n];
-            const isSite = true;
-            return (
-              <button
-                key={n}
-                onClick={() => addStandardSiteByName(n)}
-                className="group relative w-20"
-              >
-                <CardThumb
-                  slug={hit?.slug ?? null}
-                  alt={n}
-                  isSite={isSite}
-                  className="w-20"
-                />
-                <div className="mt-1 text-[10px] text-center opacity-80">
-                  {n}
-                </div>
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* Main two zones */}
@@ -1061,6 +1068,36 @@ export default function DeckEditorPage() {
         {saveMsg && <div className="text-green-600 text-sm">{saveMsg}</div>}
       </div>
 
+      {/* Tournament Legal Controls overlay */}
+      <TournamentControls
+        isVisible={tournamentControlsVisible}
+        onClose={() => setTournamentControlsVisible(false)}
+        spellslingerCard={spellslingerCard}
+        standardSites={stdSites}
+        onAddSpellslinger={() => {
+          const hit = spellslingerCard;
+          if (!hit) {
+            setError("Spellslinger not found in this set");
+            return;
+          }
+          const key = `${hit.cardId}:Spellbook:${hit.variantId ?? "x"}`;
+          setPicks((prev) => ({
+            ...prev,
+            [key]: prev[key]
+              ? { ...prev[key], count: prev[key].count + 1 }
+              : {
+                  cardId: hit.cardId,
+                  variantId: hit.variantId ?? null,
+                  name: hit.cardName,
+                  type: hit.type ?? null,
+                  slug: hit.slug ?? null,
+                  zone: "Spellbook",
+                  count: 1,
+                },
+          }));
+        }}
+        onAddStandardSite={addStandardSiteByName}
+      />
     </div>
   );
 }
