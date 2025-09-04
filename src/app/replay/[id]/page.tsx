@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import { useGameStore } from "@/lib/game/store";
@@ -9,6 +10,7 @@ import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
 import TextureCache from "@/lib/game/components/TextureCache";
+import OnlineConsole from "@/components/game/OnlineConsole";
 
 interface MatchRecording {
   matchId: string;
@@ -35,6 +37,7 @@ export default function ReplayViewerPage() {
   
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);
+  const { data: session } = useSession();
   
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,7 @@ export default function ReplayViewerPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentActionIndex, setCurrentActionIndex] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [chatInput, setChatInput] = useState("");
 
   // Setup socket connection
   useEffect(() => {
@@ -54,9 +58,11 @@ export default function ReplayViewerPage() {
     const handleDisconnect = () => setConnected(false);
 
     // Connect first, then set up event listeners
+    const displayName = (session?.user?.name && String(session.user.name).trim()) || `Replay_${Date.now()}`;
+    const playerId = (session?.user && (session.user as { id?: string }).id) || `replay_viewer_${Date.now()}`;
     socketTransport.connect({
-      displayName: `Replay_${Date.now()}`, // Make it clear it's not a real player
-      playerId: `replay_viewer_${Date.now()}`
+      displayName,
+      playerId,
     }).then(() => {
       // Set up event listeners after connection is established
       socketTransport.onGeneric("connect", handleConnect);
@@ -79,7 +85,7 @@ export default function ReplayViewerPage() {
         // Ignore cleanup errors
       }
     };
-  }, []);
+  }, [session]);
 
   // Load the recording
   useEffect(() => {
@@ -228,8 +234,9 @@ export default function ReplayViewerPage() {
           <OrbitControls
             makeDefault
             target={[0, 0, 0]}
+            // Full orbit controls for replay viewing
             enablePan
-            enableRotate={false}
+            enableRotate
             enableZoom
             enableDamping
             dampingFactor={0.08}
@@ -288,40 +295,54 @@ export default function ReplayViewerPage() {
           </div>
 
           {/* Control Buttons */}
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-3">
             <button
               onClick={() => jumpToAction(0)}
-              className="p-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Jump to Start"
             >
-              ⏮
+              {/* Skip back icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z"/></svg>
             </button>
             <button
               onClick={stepBackward}
-              className="p-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Step Backward"
             >
-              ⏪
+              {/* Step back icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z"/></svg>
             </button>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors font-semibold"
-            >
-              {isPlaying ? "⏸ Pause" : "▶ Play"}
+              className="h-9 px-4 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors font-semibold flex items-center gap-2"
+              >
+              {isPlaying ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z"/></svg>
+                  Pause
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M8 5v14l11-7-11-7z"/></svg>
+                  Play
+                </>
+              )}
             </button>
             <button
               onClick={stepForward}
-              className="p-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Step Forward"
             >
-              ⏩
+              {/* Step forward icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z"/></svg>
             </button>
             <button
               onClick={() => jumpToAction(recording.actions.length - 1)}
-              className="p-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Jump to End"
             >
-              ⏭
+              {/* Skip forward icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z"/></svg>
             </button>
             
             {/* Speed Control */}
@@ -341,6 +362,21 @@ export default function ReplayViewerPage() {
           </div>
         </div>
       </div>
+
+      {/* Event/Chat Console */}
+      <OnlineConsole
+        dragFromHand={false}
+        chatLog={[]}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSendChat={() => {}}
+        onLeaveMatch={() => router.push('/replay')}
+        connected={true}
+        myPlayerId={undefined}
+        hideLeaveButton={true}
+        defaultOpen={true}
+        hideChat={true}
+      />
     </div>
   );
 }

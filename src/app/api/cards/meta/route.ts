@@ -14,13 +14,13 @@ export async function GET(req: NextRequest) {
       return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
     }
 
-    if (!setName) {
-      return new Response(JSON.stringify({ error: "Missing set" }), { status: 400 });
-    }
-
-    const set = await prisma.set.findUnique({ where: { name: setName } });
-    if (!set) {
-      return new Response(JSON.stringify({ error: `Unknown set: ${setName}` }), { status: 400 });
+    let set: { id: number } | null = null;
+    if (setName) {
+      const s = await prisma.set.findUnique({ where: { name: setName } });
+      if (!s) {
+        return new Response(JSON.stringify({ error: `Unknown set: ${setName}` }), { status: 400 });
+      }
+      set = { id: s.id };
     }
 
     const ids = Array.from(
@@ -36,12 +36,28 @@ export async function GET(req: NextRequest) {
       return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
     }
 
-    const metas = await prisma.cardSetMetadata.findMany({
-      where: { setId: set.id, cardId: { in: ids } },
-      select: { cardId: true, cost: true, thresholds: true, attack: true, defence: true },
-    });
+    let rows: Array<{ cardId: number; cost: number | null; thresholds: unknown; attack: number | null; defence: number | null; setId: number }>; 
+    if (set) {
+      rows = await prisma.cardSetMetadata.findMany({
+        where: { setId: set.id, cardId: { in: ids } },
+        select: { cardId: true, cost: true, thresholds: true, attack: true, defence: true, setId: true },
+      });
+    } else {
+      // No set specified: fetch from all sets and pick the most recent per cardId
+      rows = await prisma.cardSetMetadata.findMany({
+        where: { cardId: { in: ids } },
+        select: { cardId: true, cost: true, thresholds: true, attack: true, defence: true, setId: true },
+        orderBy: { setId: "desc" },
+      });
+      // Reduce to one row per cardId (highest setId wins)
+      const bestByCard = new Map<number, typeof rows[number]>();
+      for (const r of rows) {
+        if (!bestByCard.has(r.cardId)) bestByCard.set(r.cardId, r);
+      }
+      rows = Array.from(bestByCard.values());
+    }
 
-    const out = metas.map((m) => ({
+    const out = rows.map((m) => ({
       cardId: m.cardId,
       cost: m.cost ?? null,
       thresholds: (m.thresholds as unknown as Record<string, number> | null) ?? null,
