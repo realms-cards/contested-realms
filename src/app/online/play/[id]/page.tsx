@@ -83,6 +83,17 @@ export default function OnlineMatchPage() {
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
     if (!connected || !matchId) return;
+    // If store still holds a different match, force a one-time hard reload to clear stale state
+    try {
+      if (match?.id && match?.id !== matchId) {
+        const key = `force_reload_match_${matchId}`;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "1");
+          window.location.replace(`/online/play/${matchId}`);
+          return;
+        }
+      }
+    } catch {}
     if (match?.id === matchId) {
       // Arrived or already in: clear join attempt flag
       if (joinAttemptedForRef.current === matchId)
@@ -637,6 +648,16 @@ export default function OnlineMatchPage() {
     }
   }, [matchId]);
 
+  // Stabilize Canvas props to prevent renderer teardown/remount between renders
+  const glOptions = useMemo(
+    () => ({ preserveDrawingBuffer: true, antialias: true, alpha: false }),
+    []
+  );
+  const cameraOptions = useMemo(
+    () => ({ position: myPlayerNumber === 2 ? [0, 10, -5] : [0, 10, 5], fov: 50 as const }),
+    [myPlayerNumber]
+  );
+
   // Show draft screen for active draft matches
   if (inThisMatch && isDraftActive && myPlayerKey) {
     return (
@@ -873,18 +894,9 @@ export default function OnlineMatchPage() {
           {/* 3D Board Canvas - fills entire viewport */}
           <div className="absolute inset-0 w-full h-full">
             <Canvas
-              camera={{
-                // Position camera based on player seat
-                // P1 looks from south to north, P2 looks from north to south
-                position: myPlayerNumber === 1 ? [0, 10, 5] : [0, 10, -5],
-                fov: 50,
-              }}
+              camera={cameraOptions}
               shadows
-              gl={{
-                preserveDrawingBuffer: true,
-                antialias: true,
-                alpha: false,
-              }}
+              gl={glOptions}
               onPointerMissed={() => {
                 if (!dragFromHand && !dragFromPile) {
                   clearSelection();
@@ -902,12 +914,10 @@ export default function OnlineMatchPage() {
               />
 
               {/* Interactive board (physics-enabled) */}
-              {!resyncing && (
-                <Physics key={match?.id || "no-match"} gravity={[0, -9.81, 0]}>
-                  <PhysicsProbe mid={match?.id} />
-                  <Board />
-                </Physics>
-              )}
+              <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
+                <PhysicsProbe mid={match?.id} />
+                <Board />
+              </Physics>
 
               {/* 3D Piles (sides of the board) */}
               <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
@@ -988,6 +998,7 @@ export default function OnlineMatchPage() {
                 minPolarAngle={0}
                 maxPolarAngle={Math.PI / 2.4}
                 // Adjust rotation constraints based on player position
+                // Default to P1 constraints if player number not determined yet
                 minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
                 maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
               />

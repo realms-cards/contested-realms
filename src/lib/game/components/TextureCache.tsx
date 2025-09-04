@@ -4,51 +4,55 @@ import { useGameStore } from "@/lib/game/store";
 import { useMemo } from "react";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 
-function PreloadTexture({ slug }: { slug: string }) {
-  const tex = useCardTexture({ slug });
+function PreloadTexture({ slug, textureUrl }: { slug?: string; textureUrl?: string }) {
+  const tex = useCardTexture({ slug, textureUrl });
   // Keep textures in memory by referencing them
   void tex;
   return null;
 }
 
-// Invisible component that preloads textures for upcoming cards
+// Invisible component that preloads textures for ALL cards in the match
 export default function TextureCache() {
   const zones = useGameStore((s) => s.zones);
   
-  // Get all cards that might be drawn soon
+  // Get ALL cards in the match to keep textures loaded
   const preloadSlugs = useMemo(() => {
     const slugs = new Set<string>();
     
-    // Preload next 5 cards from both players' spellbooks and atlases
+    // Load ALL cards from both players' zones
     for (const player of ["p1", "p2"] as const) {
       const playerZones = zones[player];
       
-      // Next cards from spellbook
-      for (let i = 0; i < Math.min(5, playerZones.spellbook.length); i++) {
-        const card = playerZones.spellbook[i];
+      // ALL cards from spellbook
+      for (const card of playerZones.spellbook) {
         if (card?.slug) {
           slugs.add(card.slug);
         }
       }
       
-      // Next cards from atlas  
-      for (let i = 0; i < Math.min(5, playerZones.atlas.length); i++) {
-        const card = playerZones.atlas[i];
+      // ALL cards from atlas  
+      for (const card of playerZones.atlas) {
         if (card?.slug) {
           slugs.add(card.slug);
         }
       }
       
-      // Cards currently in hand (in case they get reordered)
+      // ALL cards currently in hand
       for (const card of playerZones.hand) {
         if (card?.slug) {
           slugs.add(card.slug);
         }
       }
       
-      // Top few cards from graveyard (in case they get moved)
-      for (let i = 0; i < Math.min(3, playerZones.graveyard.length); i++) {
-        const card = playerZones.graveyard[i];
+      // ALL cards from graveyard
+      for (const card of playerZones.graveyard) {
+        if (card?.slug) {
+          slugs.add(card.slug);
+        }
+      }
+      
+      // ALL token cards
+      for (const card of playerZones.token) {
         if (card?.slug) {
           slugs.add(card.slug);
         }
@@ -60,9 +64,11 @@ export default function TextureCache() {
   
   return (
     <>
+      {/* Preload all card textures */}
       {preloadSlugs.map((slug) => (
         <PreloadTexture key={slug} slug={slug} />
       ))}
+      {/* Cardback textures are now handled by CardbackTextureProvider */}
     </>
   );
 }

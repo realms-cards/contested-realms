@@ -20,7 +20,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ nam
     if (!/^[a-zA-Z0-9_.-]+$/.test(name)) {
       return new Response('Bad Request', { status: 400 });
     }
-    const filePath = path.join(process.cwd(), 'data', name);
+    
+    // Check both data-ktx2 and data directories
+    const candidates = [];
+    if (name.endsWith('.ktx2')) {
+      candidates.push(path.join(process.cwd(), 'data-ktx2', name));
+    }
+    candidates.push(path.join(process.cwd(), 'data', name));
+    
+    let filePath: string | null = null;
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate);
+        filePath = candidate;
+        break;
+      } catch {}
+    }
+    
+    if (!filePath) {
+      return new Response('Not found', { status: 404 });
+    }
+    
     const buf = await fs.readFile(filePath);
     const body = new Uint8Array(buf);
     return new Response(body, {

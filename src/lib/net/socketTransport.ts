@@ -333,10 +333,12 @@ export class SocketTransport implements GameTransport {
   // Generic on/off methods for arbitrary events (used by replay functionality)  
   // Note: This overloads the typed 'on' method for specific events
   onGeneric(event: string, handler: (payload: unknown) => void): void {
-    this.requireSocket().on(event, handler);
+    if (!this.socket) return; // safely ignore if not connected
+    this.socket.on(event, handler);
   }
 
   offGeneric(event: string, handler: (payload: unknown) => void): void {
-    this.requireSocket().off(event, handler);
+    if (!this.socket) return; // safely ignore if not connected
+    this.socket.off(event, handler);
   }
 }
