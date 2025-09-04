@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
         card: { select: { name: true } },
         set: { select: { name: true } },
       },
-      take: 60,
+      take: 200,
     });
 
     if (!variants.length) {
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
         if (typeFilt === "spell") return !t.includes("site"); // treat non-site as spellbook bucket
         return true;
       })
-      .slice(0, 60);
+      .slice(0, 200);
 
     return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });
   } catch (e: unknown) {

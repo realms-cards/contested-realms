@@ -1,9 +1,13 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import React, { useEffect } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { MOUSE } from "three";
 import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
+import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 export default function EditorCanvas({ children }: { children?: React.ReactNode }) {
   return (
@@ -20,8 +24,60 @@ export default function EditorCanvas({ children }: { children?: React.ReactNode 
           <Board />
           {children}
         </Physics>
-        <OrbitControls makeDefault target={[0, 0, 0]} enablePan enableZoom enableDamping dampingFactor={0.08} screenSpacePanning panSpeed={1.2} zoomSpeed={0.75} minDistance={1} maxDistance={36} minPolarAngle={0} maxPolarAngle={Math.PI / 2.05} />
+        <OrbitControls
+          makeDefault
+          target={[0, 0, 0]}
+          // Drag-to-pan on left mouse; disable rotate on single click
+          enableRotate={false}
+          enablePan
+          enableZoom
+          mouseButtons={{ LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }}
+          enableDamping
+          dampingFactor={0.08}
+          screenSpacePanning
+          panSpeed={1.2}
+          zoomSpeed={0.75}
+          minDistance={1}
+          maxDistance={36}
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI / 2.05}
+        />
+        {/* Clamp panning to board bounds */}
+        <PanBounds minX={-8} maxX={8} minZ={-6} maxZ={8} />
       </Canvas>
     </div>
   );
+}
+
+function PanBounds({ minX, maxX, minZ, maxZ }: { minX: number; maxX: number; minZ: number; maxZ: number }) {
+  const { camera, controls, invalidate } = useThree((s) => ({
+    camera: s.camera as THREE.PerspectiveCamera,
+    controls: s.controls as OrbitControlsImpl | undefined,
+    invalidate: s.invalidate,
+  }));
+  useEffect(() => {
+    if (!controls) return;
+    let offset = camera.position.clone().sub((controls as OrbitControlsImpl).target.clone());
+    const updateOffset = () => {
+      offset = camera.position.clone().sub((controls as OrbitControlsImpl).target.clone());
+    };
+    const clampTarget = () => {
+      const t = (controls as OrbitControlsImpl).target;
+      const clampedX = Math.max(minX, Math.min(maxX, t.x));
+      const clampedZ = Math.max(minZ, Math.min(maxZ, t.z));
+      if (clampedX !== t.x || clampedZ !== t.z) {
+        t.set(clampedX, t.y, clampedZ);
+        camera.position.copy(t.clone().add(offset));
+        (controls as OrbitControlsImpl).update();
+        invalidate();
+      }
+    };
+    (controls as OrbitControlsImpl).addEventListener('start', updateOffset);
+    (controls as OrbitControlsImpl).addEventListener('change', clampTarget);
+    return () => {
+      (controls as OrbitControlsImpl).removeEventListener('start', updateOffset);
+      (controls as OrbitControlsImpl).removeEventListener('change', clampTarget);
+    };
+  }, [controls, camera, minX, maxX, minZ, maxZ, invalidate]);
+  return null;
 }

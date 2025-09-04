@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import DeckTopBarActions from "@/app/decks/editor-3d/DeckTopBarActions";
 import { DeckValidation } from "@/components/deck-editor";
 
 type DeckPanelsProps = {
@@ -36,6 +37,7 @@ type DeckPanelsProps = {
 
 export default function DeckPanels(props: DeckPanelsProps) {
   const [helpOpen, setHelpOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const {
     isDraftMode,
     isSealed,
@@ -112,69 +114,43 @@ export default function DeckPanels(props: DeckPanelsProps) {
               </button>
             </div>
           )}
+          <button
+            onClick={() => setControlsOpen((v) => !v)}
+            className={`h-9 w-9 grid place-items-center rounded-full ${
+              controlsOpen ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
+            } text-white/80 hover:text-white`}
+            title={controlsOpen ? "Hide deck controls" : "Show deck controls"}
+            aria-label={controlsOpen ? "Hide deck controls" : "Show deck controls"}
+          >
+            {/* Sliders icon */}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path d="M4 6h8v2H4V6zm12 0h4v2h-4V6zM9 11h11v2H9v-2zM4 11h3v2H4v-2zm0 5h8v2H4v-2zm12 0h4v2h-4v-2z"/>
+            </svg>
+          </button>
         </div>
 
         {/* Deck selector - hidden in sealed/draft modes */}
-        {!isSealed && !isDraftMode && (
-          <div className="flex items-center gap-3">
-            <select
-              value={deckId || ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) onLoadDeck(v);
-                else onClearEditor();
-              }}
-              disabled={loadingDecks || status !== "authenticated"}
-              className="border rounded px-3 py-2 bg-black/70 text-white border-white/30 min-w-48 disabled:opacity-60"
-            >
-              <option value="">— New Deck —</option>
-              {decks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} • {d.format}
-                </option>
-              ))}
-            </select>
-
-            <input
-              value={deckName}
-              onChange={(e) => onSetDeckName(e.target.value)}
-              className="border rounded px-3 py-2 bg-black/70 text-white border-white/30"
-              placeholder="Deck name"
-            />
-            <button
-              onClick={isSealed ? onSubmitSealed : isDraftMode ? onSubmitDraft : onSaveDeck}
-              disabled={
-                saving || status !== "authenticated" ||
-                (isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook))
-              }
-              className={`h-10 px-4 rounded text-white disabled:opacity-50 ${
-                isSealed ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"
-              }`}
-              title={
-                status !== "authenticated"
-                  ? "Sign in to save or submit decks"
-                  : isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook)
-                  ? "Cannot save invalid deck in draft mode"
-                  : isSealed
-                  ? "Submit sealed deck to match"
-                  : undefined
-              }
-            >
-              {saving ? "Submitting..." : isSealed ? "Submit Sealed Deck" : deckId ? "Update Deck" : "Save Deck"}
-            </button>
-          </div>
-        )}
-
-        {/* Auth callout: gate save/load, keep Canvas alive */}
-        {status !== "authenticated" && (
-          <div className="ml-auto flex items-center gap-3 px-3 py-2 rounded bg-yellow-500/15 text-yellow-200 border border-yellow-500/30">
-            <span className="text-sm">Sign in to save or load decks</span>
-            <a
-              href="/auth/signin?callbackUrl=%2Fdecks%2Feditor-3d"
-              className="h-8 px-3 rounded bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-100 text-sm inline-flex items-center"
-            >
-              Sign In
-            </a>
+        {controlsOpen && (
+          <div className="absolute top-16 left-4 z-[55] pointer-events-auto">
+            <div className="rounded-lg bg-black/85 ring-1 ring-white/20 p-3 shadow-xl">
+              <DeckTopBarActions
+                isSealed={isSealed}
+                isDraftMode={isDraftMode}
+                status={status}
+                decks={decks}
+                deckId={deckId}
+                deckName={deckName}
+                loadingDecks={loadingDecks}
+                saving={saving}
+                validation={validation}
+                onLoadDeck={onLoadDeck}
+                onClearEditor={onClearEditor}
+                onSetDeckName={onSetDeckName}
+                onSaveDeck={onSaveDeck}
+                onSubmitSealed={onSubmitSealed}
+                onSubmitDraft={onSubmitDraft}
+              />
+            </div>
           </div>
         )}
 

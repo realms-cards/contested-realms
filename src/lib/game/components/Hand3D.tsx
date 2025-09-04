@@ -749,7 +749,7 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
             <group>
               {c.slug ? (
                 <CardPlane
-                  slug={c.slug}
+                  slug={showCardBacks ? "" : c.slug}
                   width={CARD_SHORT}
                   height={CARD_LONG}
                   rotationZ={
