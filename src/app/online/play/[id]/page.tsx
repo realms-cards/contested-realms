@@ -218,6 +218,9 @@ export default function OnlineMatchPage() {
         setMix: match.sealedConfig?.setMix?.join(',') || 'Beta',
         constructionStartTime: match.sealedConfig?.constructionStartTime?.toString() || Date.now().toString()
       });
+      if (match.sealedConfig?.replaceAvatars) {
+        params.set('replaceAvatars', 'true');
+      }
       
       // Redirect to editor
       window.location.href = `/decks/editor-3d?${params.toString()}`;
@@ -727,6 +730,7 @@ export default function OnlineMatchPage() {
             onSendChat={sendChat}
             onLeaveMatch={leaveMatch}
             connected={connected}
+            myPlayerId={myPlayerId}
           />
 
           {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
