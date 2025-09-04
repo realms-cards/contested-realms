@@ -14,7 +14,12 @@ interface TournamentControlsProps {
   onAddStandardSite: (name: StandardSiteName) => void;
 }
 
-const STANDARD_SITE_NAMES: StandardSiteName[] = ["Spire", "Stream", "Valley", "Wasteland"];
+const STANDARD_SITE_NAMES: StandardSiteName[] = [
+  "Spire",
+  "Stream",
+  "Valley",
+  "Wasteland",
+];
 
 export default function TournamentControls({
   isVisible,
@@ -27,7 +32,7 @@ export default function TournamentControls({
   if (!isVisible) return null;
 
   return (
-    <div className="absolute top-20 left-6 z-30 pointer-events-auto">
+    <div className="absolute bottom-6 right-6 z-30 pointer-events-auto">
       <div className="bg-black/90 backdrop-blur-sm rounded-lg p-4 ring-1 ring-white/30 shadow-xl max-w-sm">
         <div className="flex items-center justify-between mb-3">
           <div className="text-white text-sm font-medium">
@@ -58,7 +63,7 @@ export default function TournamentControls({
                   src={
                     spellslingerCard?.slug
                       ? `/api/images/${spellslingerCard.slug}`
-                      : "/api/assets/card-back.png"
+                      : "/api/assets/cardback_spellbook.png"
                   }
                   alt="Spellslinger"
                   fill
@@ -92,7 +97,7 @@ export default function TournamentControls({
                     src={
                       hit?.slug
                         ? `/api/images/${hit.slug}`
-                        : "/api/assets/card-back.png"
+                        : "/api/assets/cardback_atlas.png"
                     }
                     alt={name}
                     fill

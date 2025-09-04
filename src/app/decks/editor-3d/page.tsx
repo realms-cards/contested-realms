@@ -143,6 +143,7 @@ function AuthenticatedDeckEditor() {
   const [orbitLocked, setOrbitLocked] = useState(false);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [infoBoxVisible, setInfoBoxVisible] = useState(true);
+  const [statsCollapsed, setStatsCollapsed] = useState(true);
   const [picksOpen, setPicksOpen] = useState(true);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
@@ -175,7 +176,8 @@ function AuthenticatedDeckEditor() {
     let cancelled = false;
     (async () => {
       try {
-        const setParam = isSealed || isDraftMode ? "" : `&set=${encodeURIComponent(setName)}`;
+        // Set-agnostic: always search across all sets for standard sites and Spellslinger
+        const setParam = "";
         const siteEntries = await Promise.all(
           STANDARD_SITE_NAMES.map(async (name) => {
             const res = await fetch(
@@ -189,7 +191,7 @@ function AuthenticatedDeckEditor() {
         let spells: SearchResult | null = null;
         try {
           const res = await fetch(
-            `/api/cards/search?q=spellslinger${setParam}&type=avatar`
+            `/api/cards/search?q=spellslinger&type=avatar`
           );
           const data = (await res.json()) as SearchResult[];
           spells = res.ok ? data[0] || null : null;
@@ -1033,23 +1035,19 @@ function AuthenticatedDeckEditor() {
         return;
       }
       try {
-        const setParam = isSealed || isDraftMode ? "" : `&set=${encodeURIComponent(setName)}`;
+        // Set-agnostic lookup: always query across all sets
         const res = await fetch(
-          `/api/cards/search?q=${encodeURIComponent(name)}${setParam}&type=site`
+          `/api/cards/search?q=${encodeURIComponent(name)}&type=site`
         );
         const data = (await res.json()) as SearchResult[];
         const r = res.ok && data[0] ? data[0] : null;
         if (r) addCardAuto(r);
-        else setError(
-          isSealed || isDraftMode
-            ? `Site ${name} not found`
-            : `Site ${name} not found in set ${setName}`
-        );
+        else setError(`Site ${name} not found`);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [stdSites, addCardAuto, setName, isSealed, isDraftMode]
+    [stdSites, addCardAuto]
   );
 
   // Sealed mode pack functions
@@ -1205,16 +1203,11 @@ function AuthenticatedDeckEditor() {
       }
     }
 
-    // 2) Determine target deck counts per card using prior distribution if available
+    // 2) Determine target deck counts per card from the current pick zones
     const remainingDeckByCard = new Map<number, number>();
     for (const [cardId, total] of totalByCard.entries()) {
-      const prevDeck = zoneCountsRef.current.get(`${cardId}:Deck`) || 0;
-      const prevSide = zoneCountsRef.current.get(`${cardId}:Sideboard`) || 0;
-      const hadPrev = prevDeck + prevSide > 0;
       const initialDeck = initialDeckByCard.get(cardId) || 0;
-      const deckTarget = hadPrev
-        ? Math.min(prevDeck, total)
-        : Math.min(initialDeck, total);
+      const deckTarget = Math.min(initialDeck, total);
       remainingDeckByCard.set(cardId, deckTarget);
     }
 
@@ -1638,17 +1631,7 @@ function AuthenticatedDeckEditor() {
           onSubmitSealed={submitSealedDeck}
           onSubmitDraft={submitDraftDeck}
         />
-        {/* Usage instructions */}
-        <div className="grid grid-cols-2">
-          <div className="text-white text-sm opacity-30">
-            {isDraftMode
-              ? "📝 Draft Complete! You can only add spells & sites  Drag cards to organize your deck"
-              : "💡 Drag cards between zones • Click card to toggle Deck ⟷ Sideboard"}
-          </div>
-          <div className="text-sm text-white/80 px-3 py-2">
-            📋 Deck: Mana + Sites by Element • Sideboard: Elements
-          </div>
-        </div>
+        {/* (Removed background usage text in favor of Help overlay) */}
         <Suspense fallback={null}>
           <RightPanel
             cardsTab={cardsTab}
@@ -1672,92 +1655,122 @@ function AuthenticatedDeckEditor() {
           />
         </Suspense>
 
-        {/* EXACT same Draft Statistics box as draft-3d */}
+        {/* Deck Statistics (collapsible, minimal) */}
         {infoBoxVisible && pick3D.length > 0 && (
-          <div className="bottom-6 left-6 pointer-events-auto select-none absolute">
-            <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg w-72">
-              <div className="font-medium mb-2 text-white">Deck Statistics</div>
-              <div className="text-sm text-white/90 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>Deck: {picksByType.deck}</div>
-                  <div>Sideboard: {picksByType.sideboard}</div>
-                  <div>Creatures: {picksByType.creatures}</div>
-                  <div>Spells: {picksByType.spells}</div>
-                  <div>Sites: {picksByType.sites}</div>
-                  <div>Avatars: {picksByType.avatars}</div>
-                </div>
+          <div className="top-24 left-6 absolute select-none">
+            <div
+              className={
+                `relative rounded bg-black/80 shadow-lg w-72 max-w-[90vw] p-2 pointer-events-none ` +
+                (statsCollapsed ? "" : "ring-1 ring-white/30")
+              }
+            >
+              <button
+                onClick={() => setStatsCollapsed((v) => !v)}
+                className="absolute top-1 right-1 h-7 w-7 grid place-items-center rounded bg-white/10 hover:bg-white/20 text-white/60 hover:text-white opacity-40 hover:opacity-80 pointer-events-auto"
+                title={statsCollapsed ? "Show details" : "Hide details"}
+                aria-label={statsCollapsed ? "Show details" : "Hide details"}
+              >
+                {statsCollapsed ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path d="M12 5C7 5 2.73 8.11 1 12c1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path d="M12 5c-2.5 0-4.78.73-6.68 1.95L3.7 5.34 2.29 6.75l16.97 16.97 1.41-1.41-3.03-3.03C20.04 16.83 22 12 22 12S18.27 5 12 5z"/>
+                  </svg>
+                )}
+              </button>
 
-                {/* Mana Curve Diagram */}
-                <div>
-                  <div className="font-medium mb-1">
-                    Mana Curve (Deck Only):
-                  </div>
-                  <div className="flex items-end gap-1 h-24 bg-black/40 rounded p-2">
+              {statsCollapsed ? (
+                <div className="text-sm text-white/90 space-y-2">
+                  <div className="flex items-end gap-1 h-14 bg-black/40 rounded p-1">
                     {Array.from({ length: 8 }, (_, cost) => {
                       const count = manaCurve[cost] || 0;
                       const maxCount = Math.max(...Object.values(manaCurve), 1);
                       const height = (count / maxCount) * 100;
                       const label = cost === 7 ? "7+" : String(cost);
-
                       return (
-                        <div
-                          key={cost}
-                          className="flex flex-col items-center justify-end gap-1 flex-1 h-full"
-                        >
+                        <div key={cost} className="flex flex-col items-center justify-end gap-0.5 flex-1 h-full">
                           <div
-                            className="bg-blue-400 rounded-t min-h-[2px] w-full relative group"
-                            style={{
-                              height: `${Math.max(height, count > 0 ? 8 : 0)}%`,
-                            }}
+                            className="bg-blue-400 rounded-t min-h-[2px] w-full"
+                            style={{ height: `${Math.max(height, count > 0 ? 8 : 0)}%` }}
                             title={`${label} mana: ${count} cards`}
-                          >
-                            {count > 0 && (
-                              <span className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-xs text-white opacity-75">
-                                {count}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs opacity-75">{label}</span>
+                          />
+                          <span className="text-[10px] opacity-60">{label}</span>
                         </div>
                       );
                     })}
                   </div>
-                </div>
-
-                {thresholdSummary.elements.length > 0 && (
-                  <div>
-                    <div className="font-medium mb-1">Threshold Elements:</div>
-                    <div className="flex flex-wrap gap-2">
+                  {thresholdSummary.elements.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
                       {thresholdSummary.elements.map((element) => (
-                        <div key={element} className="flex items-center gap-1">
-                          <Image
-                            src={`/api/assets/${element}.png`}
-                            alt={element}
-                            width={16}
-                            height={16}
-                            className="pointer-events-none select-none"
-                          />
-                          <span className="capitalize">
-                            {" "}
-                            {
-                              thresholdSummary.summary[
-                                element as keyof typeof thresholdSummary.summary
-                              ]
-                            }
+                        <div key={element} className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded">
+                          <Image src={`/api/assets/${element}.png`} alt={element} width={12} height={12} />
+                          <span className="text-[10px]">
+                            {thresholdSummary.summary[element as keyof typeof thresholdSummary.summary]}
                           </span>
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-white/90 space-y-2">
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>Deck: {picksByType.deck}</div>
+                    <div>Sideboard: {picksByType.sideboard}</div>
+                    <div>Creatures: {picksByType.creatures}</div>
+                    <div>Spells: {picksByType.spells}</div>
+                    <div>Sites: {picksByType.sites}</div>
+                    <div>Avatars: {picksByType.avatars}</div>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <div className="flex items-end gap-1 h-20 bg-black/40 rounded p-1">
+                      {Array.from({ length: 8 }, (_, cost) => {
+                        const count = manaCurve[cost] || 0;
+                        const maxCount = Math.max(...Object.values(manaCurve), 1);
+                        const height = (count / maxCount) * 100;
+                        const label = cost === 7 ? "7+" : String(cost);
+                        return (
+                          <div key={cost} className="flex flex-col items-center justify-end gap-1 flex-1 h-full">
+                            <div
+                              className="bg-blue-400 rounded-t min-h-[2px] w-full relative"
+                              style={{ height: `${Math.max(height, count > 0 ? 8 : 0)}%` }}
+                              title={`${label} mana: ${count} cards`}
+                            >
+                              {count > 0 && (
+                                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-white opacity-75">
+                                  {count}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs opacity-75">{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {thresholdSummary.elements.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {thresholdSummary.elements.map((element) => (
+                        <div key={element} className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded">
+                          <Image src={`/api/assets/${element}.png`} alt={element} width={14} height={14} />
+                          <span className="text-xs">
+                            {thresholdSummary.summary[element as keyof typeof thresholdSummary.summary]}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Card preview - exact copy from draft-3d */}
         {hoverPreview && (
-          <div className="fixed bottom-6 right-6 z-50 pointer-events-none select-none">
+          <div className="fixed bottom-6 left-6 z-50 pointer-events-none select-none">
             {(() => {
               const isSite = (hoverPreview.type || "")
                 .toLowerCase()
