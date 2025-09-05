@@ -804,7 +804,7 @@ export default function Draft3DPage() {
               onDragChange={setOrbitLocked}
               getTopRenderOrder={getTopRenderOrder}
               onHoverInfo={(info) => {
-                if (info && !orbitLocked) {
+                if (info) {
                   setHoverPreview(info);
                 } else {
                   // Keep preview if a card is selected
