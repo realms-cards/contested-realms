@@ -559,6 +559,12 @@ io.on("connection", (socket) => {
       socket.join(`match:${player.matchId}`);
       const m = matches.get(player.matchId);
       socket.emit("matchStarted", { match: getMatchInfo(m) });
+      
+      // If rejoining during an active draft, send current draft state
+      if (m.matchType === "draft" && m.draftState && m.draftState.phase !== "waiting") {
+        console.log(`[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`);
+        socket.emit("draftUpdate", m.draftState);
+      }
     } else if (player.lobbyId && lobbies.has(player.lobbyId)) {
       socket.join(`lobby:${player.lobbyId}`);
       const l = lobbies.get(player.lobbyId);

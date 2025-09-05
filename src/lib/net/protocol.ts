@@ -67,6 +67,18 @@ export const SealedPackSchema = z.object({
 });
 export type SealedPack = z.infer<typeof SealedPackSchema>;
 
+export const DraftStateSchema = z.object({
+  phase: z.enum(["waiting", "picking", "passing", "complete"]),
+  packIndex: z.number(),
+  pickNumber: z.number(),
+  currentPacks: z.array(z.array(z.unknown())).nullable(),
+  picks: z.array(z.array(z.unknown())),
+  packDirection: z.enum(["left", "right"]),
+  packChoice: z.array(z.string().nullable()),
+  waitingFor: z.array(z.string()),
+});
+export type DraftStateType = z.infer<typeof DraftStateSchema>;
+
 export const MatchInfoSchema = z.object({
   id: z.string(),
   lobbyId: z.string().optional(),
@@ -81,6 +93,7 @@ export const MatchInfoSchema = z.object({
   deckSubmissions: z.array(z.string()).optional(),
   playerDecks: z.record(z.string(), z.unknown()).optional(),
   sealedPacks: z.record(z.string(), z.array(SealedPackSchema)).optional(),
+  draftState: DraftStateSchema.optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 

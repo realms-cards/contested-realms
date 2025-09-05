@@ -98,6 +98,14 @@ export default function OnlineDraftScreen({
   // Camera controls
   const controlsRef = useRef(null);
 
+  // Initialize draft state from match on component mount (for rejoining players)
+  useEffect(() => {
+    if (match?.draftState) {
+      console.log(`[DraftClient 2D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`);
+      setDraftState(match.draftState);
+    }
+  }, [match?.draftState]);
+
   // Listen for draft state updates from server
   useEffect(() => {
     if (!transport) return;

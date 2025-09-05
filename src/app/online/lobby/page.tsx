@@ -38,7 +38,7 @@ export default function LobbyPage() {
   } = useOnline();
 
   const [lobbyIdInput, setLobbyIdInput] = useState("");
-  const [mainTab, setMainTab] = useState<"overview" | "browse" | "social" | "chat">("overview");
+  // Tabs removed: we show all sections in the main view
   const [matchIdInput, setMatchIdInput] = useState("");
   const [chatInput, setChatInput] = useState("");
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
@@ -243,7 +243,7 @@ export default function LobbyPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page title + tabs */}
+      {/* Page title and connection badge */}
       <div className="flex items-end justify-between">
         <h2 className="text-3xl sm:text-4xl font-fantaisie text-white">Lobby</h2>
         <div className="flex items-center gap-2 text-xs">
@@ -251,29 +251,7 @@ export default function LobbyPage() {
           {lobby?.id && <span className="opacity-70">Lobby {lobby.id.slice(-6)}</span>}
         </div>
       </div>
-
-      <div className="flex flex-wrap gap-2">
-        {([
-          ["overview", "Overview"],
-          ["browse", "Browse"],
-          ["social", "Social"],
-          ["chat", "Chat"],
-        ] as Array<[typeof mainTab, string]>).map(([key, label]) => (
-          <button
-            key={key}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ring-1 ${
-              mainTab === key
-                ? "bg-white/10 ring-white/20 text-white"
-                : "bg-white/5 ring-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
-            }`}
-            onClick={() => setMainTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       {/* Top action bar: Ready / Start controls */}
-      {mainTab === "overview" && (
       <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold opacity-90">Lobby Actions</div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -312,12 +290,9 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
-      )}
-
-      {/* Top summary of active lobbies and invites */}
-      {(mainTab === "browse" || mainTab === "social") && (
+      {/* Active lobbies and social (invites/friends) side by side */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3 ${mainTab === "browse" ? "" : "hidden md:block"}`}>
+        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold opacity-90">
               Active Lobbies
@@ -371,7 +346,7 @@ export default function LobbyPage() {
             plannedSummaries={plannedSummaries}
           />
         </div>
-        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3 ${mainTab === "social" ? "" : "hidden md:block"}`}>
+        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
           <div className="flex items-center gap-1">
             <button
               className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "invites" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
@@ -406,10 +381,9 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
-      )}
 
       {/* Match Section - only show for joinable matches and not when user declined rejoin */}
-      {mainTab === "overview" && match &&
+      {match &&
         !declinedRejoin &&
         (match.status === "waiting" || match.status === "in_progress" || match.status === "deck_construction") && (
           <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
@@ -762,9 +736,9 @@ export default function LobbyPage() {
             </div>
           </div>
         </div>
-      )}
-      
-      {mainTab === "overview" && (
+        )}
+
+      {/* Controls for lobby and match IDs */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
           <div className="text-sm font-semibold opacity-90">Lobby Controls</div>
@@ -871,12 +845,11 @@ export default function LobbyPage() {
           </div>
         </div>
       </div>
-      )}
 
-      {mainTab === "chat" && (
+      {/* Lobby details */}
       <div className="grid grid-cols-1 gap-4">
         <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-          <div className="text-sm font-semibold opacity-90">Chat</div>
+          <div className="text-sm font-semibold opacity-90">Lobby</div>
           {lobby ? (
             <div className="mt-3 text-sm space-y-2">
               <div>
@@ -1024,13 +997,11 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
-      )}
-
-      {mainTab === "chat" && (
+      {/* Chat */}
       <div className="grid grid-cols-1 gap-4">
         <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
           <div className="flex items-center justify-between mb-2">
-          {/* tabs for Lobby/Global chat scopes */}
+            {/* tabs for Lobby/Global chat scopes */}
             <div className="flex items-center gap-1">
               <button
                 className={`rounded px-2 py-0.5 text-xs transition-colors ${
@@ -1116,7 +1087,6 @@ export default function LobbyPage() {
           </div>
         </div>
       </div>
-      )}
     </div>
   );
 }
