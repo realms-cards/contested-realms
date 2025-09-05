@@ -330,6 +330,14 @@ export default function OnlineDraft3DScreen({
   
   console.log(`[DraftClient 3D] Component state - myPlayerKey:${myPlayerKey} packChoiceOverlay:${packChoiceOverlay} packIndex:${draftState.packIndex} myPackSize:${myPack.length}`);
 
+  // Initialize draft state from match on component mount (for rejoining players)
+  useEffect(() => {
+    if (match?.draftState) {
+      console.log(`[DraftClient 3D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`);
+      setDraftState(match.draftState);
+    }
+  }, [match?.draftState]);
+
   // Listen for server draft updates
   useEffect(() => {
     if (!transport) return;
