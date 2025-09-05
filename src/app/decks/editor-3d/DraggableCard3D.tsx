@@ -79,6 +79,7 @@ export default function DraggableCard3D({
       {/* Larger invisible hitbox for easier interaction */}
       <mesh
         position={[0, 0.01, 0]}
+        rotation-y={rotZ}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -202,7 +203,7 @@ export default function DraggableCard3D({
           onContextMenu?.(e.clientX, e.clientY);
         }}
       >
-        <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
+        <boxGeometry args={[CARD_SHORT * 1.12, 0.02, CARD_LONG * 1.12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
       </mesh>
 

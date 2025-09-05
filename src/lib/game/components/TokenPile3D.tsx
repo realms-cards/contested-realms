@@ -132,6 +132,8 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
+              // For rubble, don't apply texture rotation since the card is already rotated
+              const textureRotation = undefined;
 
               return (
                 <group key={def.key} position={[px, 0, pz]}>
@@ -171,6 +173,7 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                     rotationZ={rotZ + rotated}
                     elevation={0.005}
                     renderOrder={650}
+                    textureRotation={textureRotation}
                     onPointerOver={() => bumpInteractClock()}
                   />
                 </group>
@@ -191,7 +194,7 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
             const centers: Array<[number, number]> =
               big.length === 1
                 ? [[0, baseZ]]
-                : [[-CARD_SHORT * 0.35, baseZ], [CARD_SHORT * 0.35, baseZ]];
+                : [[-CARD_SHORT * 0.6, baseZ], [CARD_SHORT * 0.6, baseZ]];
             return big.map((def, i) => {
               const [px, pz] = centers[i] || [0, baseZ];
               const w = CARD_SHORT;
@@ -199,6 +202,8 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
+              // Don't apply texture rotation - the card rotation handles orientation
+              const textureRotation = undefined;
               return (
                 <group key={`big-${def.key}`} position={[px, 0, pz]}>
                   <mesh
@@ -233,6 +238,7 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                     rotationZ={rotZ + rotated}
                     elevation={0.01}
                     renderOrder={660}
+                    textureRotation={textureRotation}
                     onPointerOver={() => bumpInteractClock()}
                   />
                 </group>

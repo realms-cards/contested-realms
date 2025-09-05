@@ -299,7 +299,7 @@ export default function OnlineDraft3DScreen({
   // 3D state for picked cards on the board
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
-  const [isSortingEnabled, setIsSortingEnabled] = useState(false);
+  const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   
   // Card metadata for proper sorting (same as editor-3d)
   const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
@@ -335,8 +335,29 @@ export default function OnlineDraft3DScreen({
     if (match?.draftState) {
       console.log(`[DraftClient 3D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`);
       setDraftState(match.draftState);
+      
+      // Clear staged pick and reset ready state when rejoining during picking phase
+      if (match.draftState.phase === "picking") {
+        console.log(`[DraftClient 3D] Clearing staged pick and ready state for rejoin during picking phase`);
+        setStaged(null);
+        setReady(false);
+      }
+      
+      // Rebuild pick3D array from existing picks for visual board representation
+      const existingPicks = (match.draftState.picks[myPlayerIndex] || []) as DraftCard[];
+      if (existingPicks.length > 0) {
+        console.log(`[DraftClient 3D] Rebuilding ${existingPicks.length} picked cards for 3D board display`);
+        const rebuiltPick3D: Pick3D[] = existingPicks.map((card, idx) => ({
+          id: idx + 1,
+          card: draftCardToBoosterCard(card),
+          x: 0, // Default position - will be arranged by computeStackPositions
+          z: 0,
+        }));
+        setPick3D(rebuiltPick3D);
+        setNextPickId(existingPicks.length + 1);
+      }
     }
-  }, [match?.draftState]);
+  }, [match?.draftState, myPlayerIndex, draftCardToBoosterCard]);
 
   // Listen for server draft updates
   useEffect(() => {
@@ -349,6 +370,14 @@ export default function OnlineDraft3DScreen({
         const myPackSize = (s.currentPacks?.[myPlayerIndex] || []).length;
         console.log(`[DraftClient 3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber} myPack=${myPackSize} waitingFor=${s.waitingFor?.length ?? 0}`);
       }
+      
+      // Clear staged pick when new pack arrives (similar to 2D version)
+      if (s.phase === "picking") {
+        console.log(`[DraftClient 3D] resetStaging <- phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`);
+        setStaged(null);
+        setReady(false);
+      }
+      
       // Handle draft completion and transition to editor-3d
       if (s.phase === "complete") {
         const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];

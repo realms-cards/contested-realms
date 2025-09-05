@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { GameTransport } from "@/lib/net/transport";
+import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 
 export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
 export type PlayerKey = "p1" | "p2";
@@ -1362,6 +1363,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       const key: CellKey = `${x},${y}`;
       const cellNo = y * s.board.size.w + x + 1;
 
+      // Check if this is a rubble token that should behave like a site
+      const isRubble = type.includes("token") && 
+        TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
+
       if (type.includes("site")) {
         if (s.board.sites[key]) {
           get().log(
@@ -1419,6 +1424,16 @@ export const useGameStore = create<GameState>((set, get) => ({
           selectedCard: null,
           selectedPermanent: null,
         } as Partial<GameState> as GameState;
+      }
+
+      // Rubble token validation: should only be placed on empty tiles (like sites)
+      if (isRubble) {
+        if (s.board.sites[key]) {
+          get().log(
+            `Cannot place token '${card.name}': #${cellNo} already occupied`
+          );
+          return s; // occupied
+        }
       }
 
       // Non-site permanent: place on tile
@@ -1516,6 +1531,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       const key: CellKey = `${x},${y}`;
       const cellNo = y * s.board.size.w + x + 1;
 
+      // Check if this is a rubble token that should behave like a site
+      const isRubble = type.includes("token") && 
+        TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
+
       if (type.includes("site")) {
         if (s.board.sites[key]) {
           get().log(
@@ -1583,6 +1602,19 @@ export const useGameStore = create<GameState>((set, get) => ({
           dragFromPile: null,
           dragFromHand: false,
         } as Partial<GameState> as GameState;
+      }
+
+      // Rubble token validation: should only be placed on empty tiles (like sites)
+      if (isRubble) {
+        if (s.board.sites[key]) {
+          get().log(
+            `Cannot place token '${card.name}': #${cellNo} already occupied`
+          );
+          return {
+            dragFromPile: null,
+            dragFromHand: false,
+          } as Partial<GameState> as GameState;
+        }
       }
 
       // Non-site
