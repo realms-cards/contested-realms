@@ -203,8 +203,9 @@ export function computeStackPositions(
     });
   });
 
-  // Deck positioning - LEFT HALF of board
-  const deckZStart = -2;
+  // Deck positioning - place near TOP of the board
+  // Use two rows near the top: deck on top row, sideboard just below it
+  const deckZStart = -3.0; // farther toward the top edge
   let deckXStart = -4; // Start further left
   const deckSpacing = 0.8;
 
@@ -278,8 +279,8 @@ export function computeStackPositions(
     });
   }
 
-  // Sideboard positioning - RIGHT HALF of board
-  const sideboardZStart = 1;
+  // Sideboard positioning - also near TOP (just beneath deck row)
+  const sideboardZStart = -2.2;
   let sideboardXStart = 0; // Start on right side
   const sideboardSpacing = 0.7;
 

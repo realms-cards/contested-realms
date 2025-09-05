@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 
 export type CardPreviewData = {
   slug?: string | null;
@@ -27,6 +28,17 @@ export default function CardPreview({
 }: Props) {
   if (!card?.slug) return null;
   const isSite = (card.type || "").toLowerCase().includes("site");
+  
+  // Handle token assets properly
+  const isToken = card.slug.startsWith("token:");
+  let imgSrc = `/api/images/${card.slug}`;
+  if (isToken) {
+    const key = card.slug.split(":")[1]?.toLowerCase() || "";
+    const def = TOKEN_BY_KEY[key];
+    if (def) {
+      imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
+    }
+  }
 
   const anchorClasses = (() => {
     switch (anchor) {
@@ -57,7 +69,7 @@ export default function CardPreview({
           }`}
         >
           <Image
-            src={`/api/images/${card.slug}`}
+            src={imgSrc}
             alt={card.name}
             fill
             sizes="(max-width:640px) 50vw, (max-width:1024px) 30vw, 25vw"

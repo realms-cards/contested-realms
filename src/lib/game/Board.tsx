@@ -565,7 +565,12 @@ export default function Board() {
                       const type = (
                         (selected.card?.type || "") as string
                       ).toLowerCase();
-                      if (!type.includes("site")) {
+                      const isToken = type.includes("token");
+                      const tokenDef = isToken
+                        ? TOKEN_BY_NAME[(selected.card?.name || "").toLowerCase()]
+                        : undefined;
+                      const tokenSiteReplace = !!tokenDef?.siteReplacement;
+                      if (!type.includes("site") && !tokenSiteReplace) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
                       }
                     } else if (dragFromPile?.card) {
@@ -576,7 +581,12 @@ export default function Board() {
                       setDragFromPile(null);
                       setDragFromHand(false); // Also clear dragFromHand for pile drops
                       setGhost(null); // Also clear ghost immediately
-                      if (!type.includes("site")) {
+                      const isToken = type.includes("token");
+                      const tokenDef = isToken
+                        ? TOKEN_BY_NAME[(dragFromPile.card.name || "").toLowerCase()]
+                        : undefined;
+                      const tokenSiteReplace = !!tokenDef?.siteReplacement;
+                      if (!type.includes("site") && !tokenSiteReplace) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
                       }
                     }

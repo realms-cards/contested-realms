@@ -56,7 +56,7 @@ export default function OnlineDraftScreen({
   const [ready, setReady] = useState(false);
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
-  const [isSortingEnabled, setIsSortingEnabled] = useState(false);
+  const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [usedPacks, setUsedPacks] = useState<number[]>([]); // Track which pack indices have been used
   const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<number | null>(null); // Track if we've shown overlay for current round
