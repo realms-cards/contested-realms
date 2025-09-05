@@ -243,14 +243,6 @@ export default function LobbyPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page title and connection badge */}
-      <div className="flex items-end justify-between">
-        <h2 className="text-3xl sm:text-4xl font-fantaisie text-white">Lobby</h2>
-        <div className="flex items-center gap-2 text-xs">
-          <span className={`px-2 py-0.5 rounded-full ring-1 ${connected ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30" : "bg-rose-500/15 text-rose-300 ring-rose-500/30"}`}>{connected ? "Connected" : "Disconnected"}</span>
-          {lobby?.id && <span className="opacity-70">Lobby {lobby.id.slice(-6)}</span>}
-        </div>
-      </div>
       {/* Top action bar: Ready / Start controls */}
       <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold opacity-90">Lobby Actions</div>
