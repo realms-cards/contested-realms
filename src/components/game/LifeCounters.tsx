@@ -47,22 +47,34 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
   const canDecrease = lifeState !== 'dead';
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div 
+      className="flex flex-col items-center gap-2 select-none"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {/* Player name above counter (for upper player) */}
       {showNameAbove && (
-        <div className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300">
+        <div 
+          className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           {playerName}
         </div>
       )}
       
       {/* Main counter row */}
-      <div className="flex items-center gap-2">
+      <div 
+        className="flex items-center gap-2"
+        onContextMenu={(e) => e.preventDefault()}
+      >
         {/* Life counter */}
-        <div className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
-          lifeState === 'dd' ? 'ring-orange-400/50 bg-orange-900/20' : 
-          lifeState === 'dead' ? 'ring-red-400/50 bg-red-900/20' : 
-          'ring-white/10'
-        }`}>
+        <div 
+          className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
+            lifeState === 'dd' ? 'ring-orange-400/50 bg-orange-900/20' : 
+            lifeState === 'dead' ? 'ring-red-400/50 bg-red-900/20' : 
+            'ring-white/10'
+          }`}
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <div className="flex flex-col items-center justify-center gap-0.5">
             {getLifeStateIcon(lifeState)}
             <span className={`${lifeState === 'alive' ? 'text-2xl' : 'text-xl'} font-bold ${colorClass}`}>
@@ -72,12 +84,16 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
         </div>
         
         {/* Life modification buttons */}
-        <div className="flex flex-col gap-1">
+        <div 
+          className="flex flex-col gap-1"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <button
             className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             onClick={() => addLife(player, +1)}
             disabled={dragFromHand || !canIncrease}
             title={!canIncrease ? 'Cannot increase life (max 20 or player is dead)' : 'Increase life'}
+            onContextMenu={(e) => e.preventDefault()}
           >
             +
           </button>
@@ -86,6 +102,7 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
             onClick={() => addLife(player, -1)}
             disabled={dragFromHand || !canDecrease}
             title={!canDecrease ? 'Player is dead' : 'Decrease life'}
+            onContextMenu={(e) => e.preventDefault()}
           >
             -
           </button>
@@ -93,7 +110,10 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
         
         {/* Life state description */}
         {lifeState !== 'alive' && (
-          <div className="text-xs opacity-80">
+          <div 
+            className="text-xs opacity-80"
+            onContextMenu={(e) => e.preventDefault()}
+          >
             {lifeState === 'dd' && "Death's Door"}
             {lifeState === 'dead' && "Dead"}
           </div>
@@ -102,7 +122,10 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
       
       {/* Player name below counter (for lower player) */}
       {!showNameAbove && (
-        <div className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300">
+        <div 
+          className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           {playerName}
         </div>
       )}
@@ -115,7 +138,8 @@ export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
     <div
       className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-4 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white`}
+      } text-white select-none`}
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* P1 Life - name above */}
       <LifeCounter

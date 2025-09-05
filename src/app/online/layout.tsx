@@ -267,6 +267,10 @@ export default function OnlineLayout({
         // Apply full game snapshot if provided and allowed
         if (allowApplyGame && snap?.game) {
           try {
+            // Reset game state before applying server snapshot to ensure clean merge
+            console.log("[game] Applying server snapshot - resetting game state first");
+            useGameStore.getState().resetGameState();
+            
             queueServerPatch(
               snap.game,
               typeof snap.t === "number" ? snap.t : undefined

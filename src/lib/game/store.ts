@@ -215,14 +215,14 @@ export type GameState = {
   dragFromHand: boolean;
   dragFromPile: {
     who: PlayerKey;
-    from: "spellbook" | "atlas" | "graveyard";
+    from: "spellbook" | "atlas" | "graveyard" | "tokens";
     card: CardRef | null;
   } | null;
   setDragFromHand: (on: boolean) => void;
   setDragFromPile: (
     info: {
       who: PlayerKey;
-      from: "spellbook" | "atlas" | "graveyard";
+      from: "spellbook" | "atlas" | "graveyard" | "tokens";
       card: CardRef | null;
     } | null
   ) => void;
@@ -777,12 +777,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   // --- Tokens ---------------------------------------------------------------
   addTokenToHand: (who, name) =>
     set((s) => {
-      const { TOKEN_BY_NAME, tokenCardId, tokenSlug } = require("@/lib/game/tokens");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { TOKEN_BY_NAME, newTokenInstanceId, tokenSlug } = require("@/lib/game/tokens");
       const def = TOKEN_BY_NAME[(name || "").toLowerCase()];
       if (!def) return s as GameState;
       const hand = [...s.zones[who].hand];
       const card = {
-        cardId: tokenCardId(def),
+        cardId: newTokenInstanceId(def),
         variantId: null,
         name: def.name,
         type: "Token",
@@ -1315,8 +1316,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         return s;
       }
       const { who, index, card } = sel;
+      const typeEarly = (card.type || "").toLowerCase();
       const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
-      if (!isCurrent) {
+      if (!isCurrent && !typeEarly.includes("token")) {
         get().log(
           `Cannot play '${
             card.name
@@ -1324,7 +1326,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         );
         return s;
       }
-      const type = (card.type || "").toLowerCase();
+      const type = typeEarly;
       // For non-site cards only: warn if thresholds are missing. Sites never cost thresholds.
       if (!type.includes("site")) {
         const req = (card.thresholds || {}) as Partial<
@@ -1345,8 +1347,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           );
       }
 
-      // Only non-sites restricted to Main phase
-      if (!type.includes("site") && s.phase !== "Main") {
+      // Only non-sites restricted to Main phase; tokens are exempt
+      if (!type.includes("site") && !type.includes("token") && s.phase !== "Main") {
         get().log(`Cannot play '${card.name}' during ${s.phase} phase`);
         return s;
       }
@@ -1423,7 +1425,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const per: Permanents = { ...s.permanents };
       const arr = per[key] ? [...per[key]!] : [];
       arr.push({
-        owner: s.currentPlayer as 1 | 2,
+        owner: (who === "p1" ? 1 : 2) as 1 | 2,
         card,
         offset: null,
         tilt: randomTilt(),
@@ -1450,7 +1452,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       } as Partial<GameState> as GameState;
     }),
 
-  // Play a card that is being dragged from a pile (spellbook, atlas, graveyard)
+  // Play a card that is being dragged from a pile (spellbook, atlas, graveyard, or tokens)
   playFromPileTo: (x, y) =>
     set((s) => {
       const info = s.dragFromPile;
@@ -1458,8 +1460,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const who = info.who;
       const from = info.from;
       const card = info.card;
+      const type = (card.type || "").toLowerCase();
       const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
-      if (!isCurrent) {
+      if (!isCurrent && !type.includes("token")) {
         get().log(
           `Cannot play '${
             card.name
@@ -1470,9 +1473,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           dragFromHand: false,
         } as Partial<GameState> as GameState;
       }
-      const type = (card.type || "").toLowerCase();
-      // Sites can be played any phase; other cards only during Main
-      if (!type.includes("site") && s.phase !== "Main") {
+      
+      // Sites can be played any phase; other cards only during Main (tokens are exempt)
+      if (!type.includes("site") && !type.includes("token") && s.phase !== "Main") {
         get().log(
           `Cannot play '${card.name}' from ${from} during ${s.phase} phase`
         );
@@ -1483,28 +1486,31 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       get().pushHistory();
-
-      // Remove the card from the corresponding pile (first matching instance)
+      // Remove from zones for real piles; tokens are virtual and not in zones
       const z = { ...s.zones[who] };
-      const pileName = from as keyof Zones;
-      const pile = [...(z[pileName] as CardRef[])];
-      let removedIndex = pile.findIndex((c) => c === card);
-      if (removedIndex < 0) {
-        removedIndex = pile.findIndex(
-          (c) =>
-            c.cardId === card.cardId &&
-            c.variantId === card.variantId &&
-            c.name === card.name
-        );
-      }
-      if (removedIndex < 0) removedIndex = 0; // fallback to top of pile
-      const removed = pile.splice(removedIndex, 1)[0];
-      if (!removed) {
-        get().log(`Card to play from ${from} was not found`);
-        return {
-          dragFromPile: null,
-          dragFromHand: false,
-        } as Partial<GameState> as GameState;
+      let pileName: keyof Zones | null = null;
+      let pile: CardRef[] = [];
+      if (from !== "tokens") {
+        pileName = from as keyof Zones;
+        pile = [...(z[pileName] as CardRef[])];
+        let removedIndex = pile.findIndex((c) => c === card);
+        if (removedIndex < 0) {
+          removedIndex = pile.findIndex(
+            (c) =>
+              c.cardId === card.cardId &&
+              c.variantId === card.variantId &&
+              c.name === card.name
+          );
+        }
+        if (removedIndex < 0) removedIndex = 0; // fallback to top of pile
+        const removed = pile.splice(removedIndex, 1)[0];
+        if (!removed) {
+          get().log(`Card to play from ${from} was not found`);
+          return {
+            dragFromPile: null,
+            dragFromHand: false,
+          } as Partial<GameState> as GameState;
+        }
       }
 
       const key: CellKey = `${x},${y}`;
@@ -1557,7 +1563,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         {
           const tr = get().transport;
           if (tr) {
-            const zonesNext = { ...s.zones, [who]: { ...z, [pileName]: pile } } as GameState["zones"];
+            const zonesNext = pileName 
+              ? { ...s.zones, [who]: { ...z, [pileName]: pile } } as GameState["zones"]
+              : s.zones;
             const patch: ServerPatchT = {
               players: { ...s.players, [who]: nextP } as GameState["players"],
               zones: zonesNext,
@@ -1568,7 +1576,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         return {
           players: { ...s.players, [who]: nextP },
-          zones: { ...s.zones, [who]: { ...z, [pileName]: pile } },
+          zones: pileName 
+            ? { ...s.zones, [who]: { ...z, [pileName]: pile } }
+            : s.zones,
           board: { ...s.board, sites },
           dragFromPile: null,
           dragFromHand: false,
@@ -1579,7 +1589,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const per: Permanents = { ...s.permanents };
       const arr = per[key] ? [...per[key]!] : [];
       arr.push({
-        owner: s.currentPlayer as 1 | 2,
+        owner: (who === "p1" ? 1 : 2) as 1 | 2,
         card,
         offset: null,
         tilt: randomTilt(),
@@ -1592,17 +1602,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const zonesNext = { ...s.zones, [who]: { ...z, [pileName]: pile } } as GameState["zones"];
+          const zonesNext = from !== "tokens"
+            ? ({ ...s.zones, [who]: { ...z, [pileName as keyof Zones]: pile } } as GameState["zones"]) 
+            : s.zones;
           const patch: ServerPatchT = {
-            zones: zonesNext,
             permanents: per as GameState["permanents"],
+            ...(from !== "tokens" ? { zones: zonesNext } : {}),
           };
           get().trySendPatch(patch);
         }
       }
 
       return {
-        zones: { ...s.zones, [who]: { ...z, [pileName]: pile } },
+        zones: from !== "tokens" ? ({ ...s.zones, [who]: { ...z, [pileName as keyof Zones]: pile } } as GameState["zones"]) : s.zones,
         permanents: per,
         dragFromPile: null,
         dragFromHand: false,

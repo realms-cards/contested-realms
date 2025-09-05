@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import { Physics } from "@react-three/rapier";
 import { useGameStore } from "@/lib/game/store";
 import Board from "@/lib/game/Board";
@@ -13,6 +14,7 @@ import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import Image from "next/image";
+import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 import CardPreview from "@/components/game/CardPreview";
 import DeckSelector from "@/components/game/DeckSelector";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
@@ -46,6 +48,8 @@ export default function PlayPage() {
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const players = useGameStore((s) => s.players);
   const boardSize = useGameStore((s) => s.board.size);
+  const cameraMode = useGameStore((s) => s.cameraMode);
+  const setCameraMode = useGameStore((s) => s.setCameraMode);
   // Selected hand card (for magnifier) - show for current player
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const [magnifierDelay, setMagnifierDelay] = useState(false);
@@ -173,7 +177,7 @@ export default function PlayPage() {
     el.scrollTop = el.scrollHeight;
   }, [events.length, consoleOpen]);
 
-  // Robust: reset drag flags when input ends, is canceled, or tab loses focus
+  // Robust: reset drag flags only on hard-cancel contexts (not every pointerup)
   useEffect(() => {
     const reset = (reason?: string) => {
       if (process.env.NODE_ENV !== "production") {
@@ -186,29 +190,20 @@ export default function PlayPage() {
       }, 0);
     };
 
-    const onPointerUp = () => reset("pointerup");
     const onPointerCancel = () => reset("pointercancel");
-    const onMouseUp = () => reset("mouseup");
-    const onTouchEnd = () => reset("touchend");
     const onBlur = () => reset("blur");
     const onVisibility = () => {
       if (document.visibilityState !== "visible") reset("visibilitychange");
     };
     const onPageHide = () => reset("pagehide");
 
-    window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerCancel);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("touchend", onTouchEnd);
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
 
     return () => {
-      window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
@@ -227,11 +222,22 @@ export default function PlayPage() {
     }
   }, [prepared, p1Ready, p2Ready, startGame]);
 
-  function resetCamera() {
-    if (controlsRef.current) {
-      // Reset camera position and rotation to default
-      controlsRef.current.reset();
+  function gotoBaseline(mode: 'topdown' | 'orbit') {
+    const c = controlsRef.current;
+    if (!c) return;
+    c.target.set(0, 0, 0);
+    const cam = c.object as THREE.Camera;
+    if (mode === 'topdown') {
+      const dist = Math.max(matW, matH) * 1.1;
+      cam.position.set(0, dist, 0);
+    } else {
+      cam.position.set(0, 10, 5);
     }
+    c.update();
+  }
+
+  function resetCamera() {
+    gotoBaseline(cameraMode);
   }
 
   // Dynamic page title for offline play
@@ -300,6 +306,25 @@ export default function PlayPage() {
 
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full">
+      {/* Camera mode toggle */}
+      <div className="absolute top-2 right-2 z-30">
+        <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
+          <button
+            className={`px-2 py-1 text-xs rounded ${cameraMode === 'topdown' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
+            onClick={() => { setCameraMode('topdown'); gotoBaseline('topdown'); }}
+            title="Top-down 2D camera"
+          >
+            2D
+          </button>
+          <button
+            className={`ml-1 px-2 py-1 text-xs rounded ${cameraMode === 'orbit' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
+            onClick={() => { setCameraMode('orbit'); gotoBaseline('orbit'); }}
+            title="3D orbit camera"
+          >
+            3D
+          </button>
+        </div>
+      </div>
       {/* Setup Overlay */}
       {setupOpen && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
@@ -433,22 +458,34 @@ export default function PlayPage() {
         const c = selectedHandCard;
         if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay)
           return null;
+        const slug = c.slug || "";
         const isSite = (c.type || "").toLowerCase().includes("site");
+        const isToken = slug.startsWith("token:");
+        let imgSrc = `/api/images/${slug}`;
+        let siteLike = isSite;
+        if (isToken) {
+          const key = slug.split(":")[1]?.toLowerCase() || "";
+          const def = TOKEN_BY_KEY[key];
+          if (def) {
+            imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
+            siteLike = !!def.siteReplacement;
+          }
+        }
         return (
           <div className="absolute right-3 top-20 z-30 pointer-events-none">
             <div className="relative">
               <div
                 className={`relative ${
-                  isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                  siteLike ? "aspect-[4/3]" : "aspect-[3/4]"
                 } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
               >
                 <Image
-                  src={`/api/images/${c.slug}`}
+                  src={imgSrc}
                   alt={c.name}
                   fill
                   sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
                   className={`${
-                    isSite ? "object-contain rotate-90" : "object-contain"
+                    siteLike ? "object-contain rotate-90" : "object-contain"
                   }`}
                 />
               </div>
@@ -516,6 +553,10 @@ export default function PlayPage() {
           ref={controlsRef}
           makeDefault
           target={[0, 0, 0]}
+          mouseButtons={cameraMode === 'topdown'
+            ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+            : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+          }
           enabled={
             !dragFromHand &&
             !dragFromPile &&
@@ -530,20 +571,14 @@ export default function PlayPage() {
             !selectedPermanent &&
             !selectedAvatar
           }
-          enableRotate={
-            !dragFromHand &&
-            !dragFromPile &&
-            !selected &&
-            !selectedPermanent &&
-            !selectedAvatar
-          }
+          enableRotate={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar && cameraMode !== 'topdown'}
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
           onChange={clampControls}
           minDistance={minDist}
           maxDistance={maxDist}
-          minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.4}
+          minPolarAngle={cameraMode === 'topdown' ? 0 : 0}
+          maxPolarAngle={cameraMode === 'topdown' ? 0 : Math.PI / 2.4}
         />
       </Canvas>
     </div>

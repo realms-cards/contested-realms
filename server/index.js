@@ -382,10 +382,12 @@ async function startMatchFromLobby(
             [sets[i], sets[j]] = [sets[j], sets[i]];
           }
         } else {
-          for (let i = 0; i < packCount; i++) {
-            const setName = setMix[Math.floor(rng() * setMix.length)];
-            sets.push(setName);
-          }
+          // Error: packCounts must be provided for sealed
+          console.error(
+            `[Sealed] packCounts not provided for player ${pid} in match ${match.id}`
+          );
+          // Skip this player's pack generation
+          continue;
         }
 
         console.log(
@@ -1042,7 +1044,7 @@ io.on("connection", (socket) => {
       } in match ${match.id}. phase=${match.draftState?.phase}, config=${JSON.stringify(dc)}`
     );
     try {
-      // Build set sequence per pack index: prefer exact counts when provided
+      // Build set sequence per pack index: ALWAYS use exact counts
       /** @type {string[]} */
       let setSequence = [];
       if (dc.packCounts && typeof dc.packCounts === 'object') {
@@ -1052,12 +1054,13 @@ io.on("connection", (socket) => {
         }
       }
       if (setSequence.length !== packCount) {
-        // Fallback to sampling from setMix if counts invalid or mismatched
-        setSequence = [];
-        for (let i = 0; i < packCount; i++) {
-          const name = Array.isArray(setMix) && setMix.length > 0 ? setMix[Math.floor(Math.random() * setMix.length)] : 'Beta';
-          setSequence.push(name);
-        }
+        // Error: packCounts must match packCount exactly
+        console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
+        const s = requestingPlayer
+          ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
+          : null;
+        if (s) s.emit("error", { message: `Draft configuration error: pack counts must sum to ${packCount}` });
+        return;
       }
 
       console.log(

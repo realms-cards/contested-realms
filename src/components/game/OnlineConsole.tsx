@@ -146,7 +146,10 @@ export default function OnlineConsole({
     >
       <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
         {/* Header with tabs */}
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-white/10">
+        <div 
+          className="flex items-center justify-between px-3 py-2 text-sm border-b border-white/10 select-none"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <div className="flex items-center gap-2">
             <button
               className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
@@ -155,6 +158,7 @@ export default function OnlineConsole({
                   : 'hover:bg-white/10 opacity-70'
               }`}
               onClick={() => setActiveTab('events')}
+              onContextMenu={(e) => e.preventDefault()}
             >
               <ScrollText className="w-3 h-3" />
               Events
@@ -172,6 +176,7 @@ export default function OnlineConsole({
                     : 'hover:bg-white/10 opacity-70'
                 }`}
                 onClick={() => setActiveTab('chat')}
+                onContextMenu={(e) => e.preventDefault()}
               >
                 <MessageCircle className="w-3 h-3" />
                 Chat
@@ -190,6 +195,7 @@ export default function OnlineConsole({
                 className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
                 onClick={handleLeaveMatch}
                 title="Leave match and return to lobby"
+                onContextMenu={(e) => e.preventDefault()}
               >
                 <LogOut className="w-3 h-3" />
                 Leave
@@ -206,6 +212,7 @@ export default function OnlineConsole({
                   return next;
                 });
               }}
+              onContextMenu={(e) => e.preventDefault()}
             >
               {consoleOpen ? "Collapse" : "Expand"}
             </button>
@@ -265,7 +272,10 @@ export default function OnlineConsole({
                 </div>
                 
                 {/* Chat input */}
-                <div className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2">
+                <div 
+                  className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
                   <input
                     className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
                     placeholder="Type a message..."
@@ -277,11 +287,13 @@ export default function OnlineConsole({
                       }
                     }}
                     disabled={!connected}
+                    onContextMenu={(e) => e.preventDefault()}
                   />
                   <button
                     className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs transition-colors"
                     onClick={handleSendChat}
                     disabled={!connected || !chatInput.trim()}
+                    onContextMenu={(e) => e.preventDefault()}
                   >
                     Send
                   </button>
