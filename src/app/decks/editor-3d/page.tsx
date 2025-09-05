@@ -1203,11 +1203,12 @@ function AuthenticatedDeckEditor() {
       }
     }
 
-    // 2) Determine target deck counts per card from the current pick zones
+    // 2) Determine target deck counts per card - preserve existing deck positions
     const remainingDeckByCard = new Map<number, number>();
     for (const [cardId, total] of totalByCard.entries()) {
       const initialDeck = initialDeckByCard.get(cardId) || 0;
-      const deckTarget = Math.min(initialDeck, total);
+      // Use all non-sideboard cards as deck target to preserve existing deck placements
+      const deckTarget = initialDeck;
       remainingDeckByCard.set(cardId, deckTarget);
     }
 

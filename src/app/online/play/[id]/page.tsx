@@ -219,12 +219,6 @@ export default function OnlineMatchPage() {
     }
   }, [matchId, match?.playerDecks, me?.id]);
 
-  // Track draft state and completion
-  const [draftCompleted, setDraftCompleted] = useState(false);
-  const isDraftMatch = match?.matchType === "draft";
-  const isDraftActive = isDraftMatch && match?.status === "waiting" && !draftCompleted;
-  const isDraftDeckConstruction = isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
-
   // Track draft submission flag similar to sealed
   const hasSubmittedDraftDeck = useMemo(() => {
     if (!matchId) return false;
@@ -238,6 +232,15 @@ export default function OnlineMatchPage() {
       return false;
     }
   }, [matchId, match?.playerDecks, me?.id]);
+
+  // Track draft state and completion
+  const [draftCompleted, setDraftCompleted] = useState(false);
+  const isDraftMatch = match?.matchType === "draft";
+  const isDraftActive = isDraftMatch && match?.status === "waiting" && !draftCompleted;
+  const isDraftDeckConstruction = isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
+
+  // Prevent showing draft component again once it's completed or if we already submitted a deck
+  const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
@@ -372,8 +375,8 @@ export default function OnlineMatchPage() {
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
-    // For draft matches, don't show setup overlay during active draft
-    if (isDraftActive) {
+    // For draft matches, don't show setup overlay during active draft or if we've submitted a deck
+    if (shouldShowDraft) {
       if (setupOpen) setSetupOpen(false);
       return;
     }
@@ -386,7 +389,7 @@ export default function OnlineMatchPage() {
       if (setupOpen) setSetupOpen(false);
     }
     // Do not auto-close on "in_progress"; we'll close when serverPhase reaches Main
-  }, [matchId, match, match?.id, match?.status, setupOpen, isDraftActive]);
+  }, [matchId, match, match?.id, match?.status, setupOpen, shouldShowDraft]);
 
   // Reset setup wizard when entering a different match (fresh waiting match)
   useEffect(() => {
@@ -688,6 +691,19 @@ export default function OnlineMatchPage() {
     } catch (error) {
       console.error('[Draft] Failed to store drafted cards:', error);
     }
+
+    // Clear game state and immediately redirect to deck editor
+    useGameStore.getState().resetGameState();
+    
+    // Navigate to 3D editor with draft mode
+    const params = new URLSearchParams({
+      draft: 'true',
+      matchId: matchId || '',
+      timeLimit: '30', // Default draft deck construction time
+    });
+    
+    // Redirect to editor
+    window.location.href = `/decks/editor-3d?${params.toString()}`;
   }, [matchId]);
 
   // Stabilize Canvas props to prevent renderer teardown/remount between renders
@@ -703,8 +719,8 @@ export default function OnlineMatchPage() {
     [myPlayerNumber]
   );
 
-  // Show draft screen for active draft matches
-  if (inThisMatch && isDraftActive && myPlayerKey) {
+  // Show draft screen for active draft matches (but only if we haven't submitted a deck)
+  if (inThisMatch && shouldShowDraft && myPlayerKey) {
     return (
       <OnlineDraft3DScreen
         myPlayerKey={myPlayerKey}
