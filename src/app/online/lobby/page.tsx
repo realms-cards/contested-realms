@@ -7,6 +7,7 @@ import { useGameStore } from "@/lib/game/store";
 import LobbyList from "@/components/online/LobbyList";
 import InvitesPanel from "@/components/online/InvitesPanel";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
+import LobbiesCentral from "@/components/online/LobbiesCentral";
 
 export default function LobbyPage() {
   const router = useRouter();
@@ -282,63 +283,29 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
-      {/* Active lobbies and social (invites/friends) side by side */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold opacity-90">
-              Active Lobbies
-            </div>
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
-              onClick={() => requestLobbies()}
-              disabled={!connected}
-            >
-              Refresh
-            </button>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-              placeholder="Search by lobby ID, host, or player"
-              value={lobbyQuery}
-              onChange={(e) => setLobbyQuery(e.target.value)}
-            />
-            <select
-              className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as SortKey)}
-              title="Sort lobbies"
-            >
-              <option value="invited">Invited first</option>
-              <option value="playersAsc">Players ↑</option>
-              <option value="playersDesc">Players ↓</option>
-              <option value="status">Status</option>
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <label className="text-xs flex items-center gap-1 opacity-80">
-              <input type="checkbox" checked={hideFull} onChange={(e) => setHideFull(e.target.checked)} />
-              Hide full
-            </label>
-            <label className="text-xs flex items-center gap-1 opacity-80">
-              <input type="checkbox" checked={hideStarted} onChange={(e) => setHideStarted(e.target.checked)} />
-              Hide started/closed
-            </label>
-            <label className="text-xs flex items-center gap-1 opacity-80">
-              <input type="checkbox" checked={invitedOnly} onChange={(e) => setInvitedOnly(e.target.checked)} />
-              Invited only
-            </label>
-          </div>
-          <LobbyList
-            lobbies={filteredLobbies}
-            onJoin={(id) => joinLobby(id)}
-            meId={me?.id ?? null}
-            inviteLobbyIds={inviteLobbyIds}
-            plannedSummaries={plannedSummaries}
-          />
-        </div>
-        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
+      {/* Lobbies (central, full width) */}
+      <LobbiesCentral
+        lobbies={lobbies as unknown as any[]}
+        myId={me?.id ?? null}
+        joinedLobbyId={lobby?.id ?? null}
+        onJoin={(id) => joinLobby(id)}
+        onCreate={(cfg) => {
+          // Placeholder wiring: create a lobby, then apply visibility if possible
+          createLobby();
+          // If we immediately become host of a newly created lobby, set visibility
+          setTimeout(() => {
+            try {
+              if (cfg?.visibility === 'private') setLobbyVisibility('private');
+              else if (cfg?.visibility === 'open') setLobbyVisibility('open');
+            } catch {}
+          }, 250);
+          // Note: maxPlayers placeholder — wire when backend supports it
+        }}
+        onRefresh={() => requestLobbies()}
+      />
+
+      {/* Social (invites/friends) */}
+      <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
           <div className="flex items-center gap-1">
             <button
               className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "invites" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
@@ -372,7 +339,6 @@ export default function LobbyPage() {
             />
           )}
         </div>
-      </div>
 
       {/* Match Section - only show for joinable matches and not when user declined rejoin */}
       {match &&

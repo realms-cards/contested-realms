@@ -62,6 +62,9 @@ export default function DraftPackHand3D({
   // (reserved) minimal hover state if needed later
   const focusIndexRef = useRef<number | null>(null);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const hoverIndexRef = useRef<number | null>(null);
+  const hoverAnyRef = useRef<boolean>(false);
+  const hoverClearTimerRef = useRef<number | null>(null);
   const focusTimerRef = useRef<number | null>(null);
   const mouseYRef = useRef<number>(0);
   React.useEffect(() => {
@@ -106,7 +109,7 @@ export default function DraftPackHand3D({
       if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
       focusTimerRef.current = window.setTimeout(() => {
         setFocusIndex(null);
-        if (!orbitLocked) onHoverInfo?.(null);
+        if (!orbitLocked && !hoverAnyRef.current) onHoverInfo?.(null);
       }, 1800);
     };
 
@@ -114,8 +117,8 @@ export default function DraftPackHand3D({
       const vis = visibleIndices;
       const n = vis.length;
       if (n === 0) return;
-      const cur = focusIndexRef.current;
-      const curPos = cur == null ? -1 : vis.indexOf(cur);
+      const start = focusIndexRef.current != null ? focusIndexRef.current : hoverIndexRef.current;
+      const curPos = start == null ? -1 : vis.indexOf(start);
       const nextPos = (curPos + dir + n) % n;
       const nextIdx = vis[nextPos] ?? null;
       setFocusIndex(nextIdx);
@@ -135,7 +138,7 @@ export default function DraftPackHand3D({
         pickNext(-1);
       } else if (e.key === "Enter") {
         // Stage focused card via parent onSelectIndex
-        const idx = focusIndexRef.current;
+        const idx = focusIndexRef.current != null ? focusIndexRef.current : hoverIndexRef.current;
         if (idx != null) {
           e.preventDefault();
           onSelectIndex?.(idx);
@@ -164,10 +167,11 @@ export default function DraftPackHand3D({
 
   // Clear preview when focus is removed (from timer) unless something is selected (handled by parent)
   React.useEffect(() => {
-    if (focusIndex == null && !orbitLocked && selectedIndex == null) {
-      onHoverInfo?.(null);
+    if (focusIndex == null && selectedIndex == null) {
+      // Do not clear if the mouse is currently hovering any card
+      if (!hoverAnyRef.current) onHoverInfo?.(null);
     }
-  }, [focusIndex, orbitLocked, selectedIndex, onHoverInfo]);
+  }, [focusIndex, selectedIndex, onHoverInfo]);
 
   // Basic straight-line layout (no fan) for visible cards only, with dynamic scaling as pack shrinks
   const layout = useMemo(() => {
@@ -229,6 +233,26 @@ export default function DraftPackHand3D({
               getTopRenderOrder={getTopRenderOrder}
               onHoverInfo={(info) => {
                 onHoverInfo?.(info);
+                if (info) {
+                  if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                  hoverClearTimerRef.current = null;
+                }
+              }}
+              onHoverIndexChange={(i) => {
+                hoverIndexRef.current = i;
+                hoverAnyRef.current = i != null;
+                if (i != null) {
+                  if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                  hoverClearTimerRef.current = null;
+                } else {
+                  if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                  hoverClearTimerRef.current = window.setTimeout(() => {
+                    // Only clear if no hover has resumed and no keyboard focus or selection
+                    if (!hoverAnyRef.current && focusIndexRef.current == null && selectedIndex == null) {
+                      onHoverInfo?.(null);
+                    }
+                  }, 260);
+                }
               }}
               orbitLocked={orbitLocked}
               rootRef={rootRef}
@@ -265,6 +289,7 @@ function PackCard3D({
   selected,
   focused,
   onSelectIndex,
+  onHoverIndexChange,
 }: {
   index: number;
   slug: string;
@@ -286,7 +311,10 @@ function PackCard3D({
   selected?: boolean;
   focused?: boolean;
   onSelectIndex?: (index: number | null) => void;
+  onHoverIndexChange?: (index: number | null) => void;
 }) {
+  // Mark orbitLocked as used to avoid lint warning (we no longer gate hover by it)
+  void orbitLocked;
   const ref = useRef<Group | null>(null);
   const roRef = useRef<number>(1500);
   const dragStart = useRef<{ time: number; screenX: number; screenY: number } | null>(null);
@@ -382,11 +410,11 @@ function PackCard3D({
 
   return (
     <group ref={ref} position={[x, 0.002, z]} scale={[scale, scale, scale]}>
-      {/* Upright plane hitbox matching the visible card for accurate hover/click */}
+      {/* Horizontal plane hitbox (aligned with ground) for reliable top-down hover/click */}
       <mesh
         position={[0, 0, 0]}
-        rotation-x={0}
-        rotation-z={isSite ? -Math.PI / 2 : 0}
+        rotation-x={-Math.PI / 2}
+        rotation-z={0}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -554,20 +582,26 @@ function PackCard3D({
         }}
         onPointerOver={() => {
           if (disabled) return;
-          if (orbitLocked) return;
           hoveringRef.current = true;
           if (getTopRenderOrder) {
             const next = getTopRenderOrder();
             roRef.current = next;
           }
           onHoverInfo?.({ slug, name, type: type ?? null });
+          onHoverIndexChange?.(index);
+        }}
+        onPointerMove={() => {
+          if (disabled) return;
+          // Continuously refresh hover while moving to avoid accidental clears
+          onHoverInfo?.({ slug, name, type: type ?? null });
+          onHoverIndexChange?.(index);
         }}
         onPointerOut={() => {
           hoveringRef.current = false;
-          onHoverInfo?.(null);
+          onHoverIndexChange?.(null);
         }}
       >
-        <planeGeometry args={[CARD_SHORT * 1.08, CARD_LONG * 1.08]} />
+        <planeGeometry args={[CARD_SHORT * 1.2, CARD_LONG * 1.2]} />
         <meshBasicMaterial
           transparent
           opacity={0}
