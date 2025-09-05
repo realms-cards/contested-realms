@@ -50,3 +50,15 @@ export function tokenCardId(def: TokenDef): number {
 export function tokenSlug(def: TokenDef): string {
   return `token:${def.fileBase}`;
 }
+
+// Generate a unique cardId for each token instance to avoid collisions
+// with other tokens of the same type (used for React keys and physics IDs).
+let TOKEN_SEQ = 1;
+export function newTokenInstanceId(def: TokenDef): number {
+  const base = tokenCardId(def); // negative and type-specific
+  // Mix in a small sequence and time component to ensure uniqueness per session
+  const salt = ((Date.now() & 0xffff) << 8) | (TOKEN_SEQ++ & 0xff);
+  // Keep result negative to avoid clashing with real ids
+  const out = base * 1000 - (salt & 0x7fffffff);
+  return out | 0;
+}

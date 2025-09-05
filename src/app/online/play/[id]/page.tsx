@@ -6,6 +6,7 @@ import { useOnline } from "@/app/online/online-context";
 import { useGameStore } from "@/lib/game/store";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
 import Hand3D from "@/lib/game/components/Hand3D";
@@ -15,6 +16,7 @@ import Hud3D from "@/lib/game/components/Hud3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import Image from "next/image";
+import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 import ContextMenu from "@/components/game/ContextMenu";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
@@ -84,17 +86,27 @@ export default function OnlineMatchPage() {
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
     if (!connected || !matchId) return;
+    
     // If store still holds a different match, force a one-time hard reload to clear stale state
     try {
       if (match?.id && match?.id !== matchId) {
         const key = `force_reload_match_${matchId}`;
         if (!sessionStorage.getItem(key)) {
+          console.log("[game] Switching to different match - forcing page reload for clean state");
           sessionStorage.setItem(key, "1");
+          // Clear the old match key to prevent stale data
+          const oldKey = `force_reload_match_${match.id}`;
+          sessionStorage.removeItem(oldKey);
           window.location.replace(`/online/play/${matchId}`);
           return;
+        } else {
+          // If we've already forced a reload but still have wrong match, reset game state
+          console.log("[game] After reload still have wrong match - resetting game state");
+          useGameStore.getState().resetGameState();
         }
       }
     } catch {}
+    
     if (match?.id === matchId) {
       // Arrived or already in: clear join attempt flag
       if (joinAttemptedForRef.current === matchId)
@@ -136,6 +148,10 @@ export default function OnlineMatchPage() {
 
     // One-shot resync per connection for this match id
     if (resyncSentForRef.current !== matchId) {
+      // Reset game state before resyncing to ensure clean slate
+      console.log("[game] Joining match - resetting game state before resync");
+      useGameStore.getState().resetGameState();
+      
       // Debug: track resync emission
       try {
         console.debug("[online] resync ->", {
@@ -209,6 +225,20 @@ export default function OnlineMatchPage() {
   const isDraftActive = isDraftMatch && match?.status === "waiting" && !draftCompleted;
   const isDraftDeckConstruction = isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
 
+  // Track draft submission flag similar to sealed
+  const hasSubmittedDraftDeck = useMemo(() => {
+    if (!matchId) return false;
+    const myId = me?.id;
+    if (myId && match?.playerDecks && (match.playerDecks as Record<string, unknown>)[myId]) {
+      return true;
+    }
+    try {
+      return localStorage.getItem(`draft_submitted_${matchId}`) === "true";
+    } catch {
+      return false;
+    }
+  }, [matchId, match?.playerDecks, me?.id]);
+
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
   useEffect(() => {
@@ -240,7 +270,7 @@ export default function OnlineMatchPage() {
     }
     
     // Auto-redirect to deck editor when draft is completed and in deck construction
-    if (isDraftDeckConstruction && !hasSubmittedSealedDeck) {
+    if (isDraftDeckConstruction && !hasSubmittedDraftDeck) {
       // Clear game state before opening deck editor
       useGameStore.getState().resetGameState();
       
@@ -255,7 +285,7 @@ export default function OnlineMatchPage() {
       window.location.href = `/decks/editor-3d?${params.toString()}`;
       return;
     }
-  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig, hasSubmittedSealedDeck, isDraftDeckConstruction]);
+  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig, hasSubmittedSealedDeck, isDraftDeckConstruction, hasSubmittedDraftDeck]);
 
   // Listen for sealed deck submissions via postMessage (when editor opened in a new window)
   useEffect(() => {
@@ -490,10 +520,30 @@ export default function OnlineMatchPage() {
       setMagnifierDelay(false);
     }
   }, [selectedHandCard]);
-  function resetCamera() {
-    if (controlsRef.current) controlsRef.current.reset();
+  const cameraMode = useGameStore((s) => s.cameraMode);
+  const setCameraMode = useGameStore((s) => s.setCameraMode);
+
+  function gotoBaseline(mode: 'topdown' | 'orbit') {
+    const c = controlsRef.current;
+    if (!c) return;
+    // Always reset target to board center
+    c.target.set(0, 0, 0);
+    const cam = c.object as THREE.Camera;
+    if (mode === 'topdown') {
+      // True orthographic-esque top-down: straight above, no rotation
+      const dist = Math.max(matW, matH) * 1.1;
+      cam.position.set(0, dist, 0);
+    } else {
+      // Reasonable default orbit position based on seat (slightly offset)
+      cam.position.set(0, 10, myPlayerNumber === 2 ? -5 : 5);
+    }
+    c.update();
   }
-  // Robust: reset drag flags when input ends, is canceled, or tab loses focus
+
+  function resetCamera() {
+    gotoBaseline(cameraMode);
+  }
+  // Robust: reset drag flags only on hard-cancel contexts (not every pointerup)
   useEffect(() => {
     const reset = () => {
       setTimeout(() => {
@@ -501,27 +551,18 @@ export default function OnlineMatchPage() {
         setDragFromPile(null);
       }, 0);
     };
-    const onPointerUp = () => reset();
     const onPointerCancel = () => reset();
-    const onMouseUp = () => reset();
-    const onTouchEnd = () => reset();
     const onBlur = () => reset();
     const onVisibility = () => {
       if (document.visibilityState !== "visible") reset();
     };
     const onPageHide = () => reset();
-    window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerCancel);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("touchend", onTouchEnd);
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
     return () => {
-      window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
@@ -655,7 +696,10 @@ export default function OnlineMatchPage() {
     []
   );
   const cameraOptions = useMemo(
-    () => ({ position: myPlayerNumber === 2 ? [0, 10, -5] : [0, 10, 5], fov: 50 as const }),
+    () => ({ 
+      position: (myPlayerNumber === 2 ? [0, 10, -5] : [0, 10, 5]) as [number, number, number], 
+      fov: 50 
+    }),
     [myPlayerNumber]
   );
 
@@ -672,6 +716,25 @@ export default function OnlineMatchPage() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
+      {/* Camera mode toggle */}
+      <div className="absolute top-2 right-2 z-30">
+        <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
+          <button
+            className={`px-2 py-1 text-xs rounded ${cameraMode === 'topdown' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
+            onClick={() => { setCameraMode('topdown'); gotoBaseline('topdown'); }}
+            title="Top-down 2D camera"
+          >
+            2D
+          </button>
+          <button
+            className={`ml-1 px-2 py-1 text-xs rounded ${cameraMode === 'orbit' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
+            onClick={() => { setCameraMode('orbit'); gotoBaseline('orbit'); }}
+            title="3D orbit camera"
+          >
+            3D
+          </button>
+        </div>
+      </div>
       {!inThisMatch && (
         <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="text-center">
@@ -759,25 +822,35 @@ export default function OnlineMatchPage() {
           {previewCard?.slug && !contextMenu && !selectedHandCard && (
             <div className="absolute right-3 top-20 z-30 pointer-events-none">
               {(() => {
-                const isSite = (previewCard?.type || "")
-                  .toLowerCase()
-                  .includes("site");
+                const isSite = (previewCard?.type || "").toLowerCase().includes("site");
+                const slug = previewCard.slug || "";
+                const isToken = slug.startsWith("token:");
+                let imgSrc = `/api/images/${slug}`;
+                let siteLike = isSite;
+                if (isToken) {
+                  const key = slug.split(":")[1]?.toLowerCase() || "";
+                  const def = TOKEN_BY_KEY[key];
+                  if (def) {
+                    imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
+                    siteLike = !!def.siteReplacement;
+                  }
+                }
                 return (
                   <div className="relative">
                     <div
                       className={`relative ${
-                        isSite
+                        siteLike
                           ? "aspect-[4/3] h-[300px] md:h-[380px]"
                           : "aspect-[3/4] w-[300px] md:w-[380px]"
                       } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                     >
                       <Image
-                        src={`/api/images/${previewCard.slug}`}
+                        src={imgSrc}
                         alt={previewCard.name}
                         fill
                         sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
                         className={`${
-                          isSite ? "object-contain rotate-90" : "object-contain"
+                          siteLike ? "object-contain rotate-90" : "object-contain"
                         }`}
                       />
                     </div>
@@ -835,22 +908,34 @@ export default function OnlineMatchPage() {
             const c = selectedHandCard;
             if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay)
               return null;
+            const slug = c.slug || "";
             const isSite = (c.type || "").toLowerCase().includes("site");
+            const isToken = slug.startsWith("token:");
+            let imgSrc = `/api/images/${slug}`;
+            let siteLike = isSite;
+            if (isToken) {
+              const key = slug.split(":")[1]?.toLowerCase() || "";
+              const def = TOKEN_BY_KEY[key];
+              if (def) {
+                imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
+                siteLike = !!def.siteReplacement;
+              }
+            }
             return (
               <div className="absolute right-3 top-20 z-30 pointer-events-none">
                 <div className="relative">
                   <div
                     className={`relative ${
-                      isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                      siteLike ? "aspect-[4/3]" : "aspect-[3/4]"
                     } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
                   >
                     <Image
-                      src={`/api/images/${c.slug}`}
+                      src={imgSrc}
                       alt={c.name}
                       fill
                       sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
                       className={`${
-                        isSite ? "object-contain rotate-90" : "object-contain"
+                        siteLike ? "object-contain rotate-90" : "object-contain"
                       }`}
                     />
                   </div>
@@ -970,6 +1055,10 @@ export default function OnlineMatchPage() {
                 ref={controlsRef}
                 makeDefault
                 target={[0, 0, 0]}
+                mouseButtons={cameraMode === 'topdown'
+                  ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+                  : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+                }
                 enabled={
                   !resyncing &&
                   !dragFromHand &&
@@ -992,15 +1081,16 @@ export default function OnlineMatchPage() {
                   !dragFromPile &&
                   !selected &&
                   !selectedPermanent &&
-                  !selectedAvatar
+                  !selectedAvatar &&
+                  cameraMode !== 'topdown'
                 }
                 enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                 enableDamping={false}
                 onChange={clampControls}
                 minDistance={minDist}
                 maxDistance={maxDist}
-                minPolarAngle={0}
-                maxPolarAngle={Math.PI / 2.4}
+                minPolarAngle={cameraMode === 'topdown' ? 0 : 0}
+                maxPolarAngle={cameraMode === 'topdown' ? 0 : Math.PI / 2.4}
                 // Adjust rotation constraints based on player position
                 // Default to P1 constraints if player number not determined yet
                 minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}

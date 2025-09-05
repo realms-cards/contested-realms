@@ -1548,6 +1548,33 @@ function AuthenticatedDeckEditor() {
                           return updated;
                         });
 
+                        // Keep picks in sync with zone changes so future updates don't revert layout
+                        if (zoneChanged) {
+                          const variantId = p.card.variantId || undefined;
+                          setPicks((prev) => {
+                            const next = { ...prev } as Record<PickKey, PickItem>;
+                            const decKey = `${p.card.cardId}:${oldZone === 'Deck' ? (isSite ? 'Atlas' : 'Spellbook') : 'Sideboard'}:${variantId ?? 'x'}` as PickKey;
+                            const incKey = `${p.card.cardId}:${newZone === 'Deck' ? (isSite ? 'Atlas' : 'Spellbook') : 'Sideboard'}:${variantId ?? 'x'}` as PickKey;
+                            const dec = next[decKey];
+                            if (dec) {
+                              if (dec.count > 1) next[decKey] = { ...dec, count: dec.count - 1 };
+                              else delete next[decKey];
+                            }
+                            const inc = next[incKey];
+                            next[incKey] = inc ? { ...inc, count: inc.count + 1 } : {
+                              cardId: p.card.cardId,
+                              variantId: variantId ?? null,
+                              name: p.card.cardName,
+                              type: p.card.type,
+                              slug: p.card.slug || '',
+                              zone: newZone === 'Deck' ? (isSite ? 'Atlas' : 'Spellbook') : 'Sideboard',
+                              count: 1,
+                              set: p.card.setName || '',
+                            } as PickItem;
+                            return next;
+                          });
+                        }
+
                         // Show feedback message for zone changes
                         if (zoneChanged) {
                           setFeedbackMessage(

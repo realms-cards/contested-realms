@@ -522,8 +522,18 @@ export default function OnlineDraft3DScreen({
       // Send pack choice to server
       try {
         // Determine the set choice based on pack index
-        const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
-        const setChoice = draftConfig.setMix[Math.min(packIndex, draftConfig.setMix.length - 1)] || "Beta";
+        const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15, packCounts: {} };
+        // Build actual pack sequence from packCounts
+        const packSequence: string[] = [];
+        if (draftConfig.packCounts && typeof draftConfig.packCounts === 'object') {
+          for (const [setName, count] of Object.entries(draftConfig.packCounts)) {
+            for (let i = 0; i < count; i++) {
+              packSequence.push(setName);
+            }
+          }
+        }
+        // Use the exact set for this pack index, or fallback to setMix
+        const setChoice = packSequence[packIndex] || draftConfig.setMix[Math.min(packIndex, draftConfig.setMix.length - 1)] || "Beta";
         
         console.log(`[DraftClient 3D] chooseDraftPack -> setChoice=${setChoice} packIndex=${draftState.packIndex} match=${match.id}`);
         
@@ -716,7 +726,16 @@ export default function OnlineDraft3DScreen({
       console.log(`[DraftClient 3D] Pack button clicked - packIndex:${packIndex}`);
       handlePackChoice(packIndex);
     };
-    const availableSets = match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"];
+    // Build actual pack sequence from packCounts
+    const packCounts = match?.draftConfig?.packCounts || {};
+    const packSequence: string[] = [];
+    for (const [setName, count] of Object.entries(packCounts)) {
+      for (let i = 0; i < count; i++) {
+        packSequence.push(setName);
+      }
+    }
+    // Fallback to setMix if packCounts is empty
+    const availableSets = packSequence.length > 0 ? packSequence : (match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"]);
     // Always show 3 packs, one for each round
     const packs = [0, 1, 2]; 
     
@@ -729,7 +748,7 @@ export default function OnlineDraft3DScreen({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
               const isUsed = usedPacks.includes(packIdx);
-              const setName = availableSets[packIdx % availableSets.length]; // Cycle through available sets
+              const setName = availableSets[packIdx] || availableSets[packIdx % availableSets.length]; // Cycle through available sets
               const assetName = (() => {
                 const s = (setName || "").toLowerCase();
                 if (s.includes("arthur")) return "arthurian-booster.png";

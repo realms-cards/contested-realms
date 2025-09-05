@@ -34,7 +34,8 @@ export default function OnlineStatusBar({
     <div
       className={`absolute top-3 left-1/2 -translate-x-1/2 z-10 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      }`}
+      } select-none`}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-3 rounded-full bg-black/60 backdrop-blur px-4 py-1.5 text-sm text-white shadow-lg ring-1 ring-white/10">
         {/* Match Info Button */}
@@ -42,6 +43,7 @@ export default function OnlineStatusBar({
           className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 flex items-center gap-1.5"
           onClick={onOpenMatchInfo}
           title="Match Info & Settings"
+          onContextMenu={(e) => e.preventDefault()}
         >
           <Settings className="w-3.5 h-3.5" />
           Info
@@ -58,6 +60,7 @@ export default function OnlineStatusBar({
           <button
             className="rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-1 transition-colors"
             onClick={() => endTurn()}
+            onContextMenu={(e) => e.preventDefault()}
           >
             End Turn
           </button>
@@ -71,6 +74,7 @@ export default function OnlineStatusBar({
           onClick={() => undo()}
           disabled={!history.length || !canControlTurn}
           title={canControlTurn ? "Undo last action" : "Only current player can undo"}
+          onContextMenu={(e) => e.preventDefault()}
         >
           Undo
         </button>
@@ -80,6 +84,7 @@ export default function OnlineStatusBar({
             className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 flex items-center gap-1.5 transition-colors"
             onClick={() => onCameraReset()}
             title="Reset Camera"
+            onContextMenu={(e) => e.preventDefault()}
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset Cam
@@ -93,6 +98,7 @@ export default function OnlineStatusBar({
               : "bg-white/15 hover:bg-white/25"
           }`}
           onClick={() => togglePlaymat()}
+          onContextMenu={(e) => e.preventDefault()}
         >
           {showPlaymat ? "Mat On" : "Mat Off"}
         </button>

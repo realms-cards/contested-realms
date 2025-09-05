@@ -12,7 +12,11 @@ import {
 } from "three";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PermanentItem } from "@/lib/game/store";
-import { RigidBody, CuboidCollider, useAfterPhysicsStep } from "@react-three/rapier";
+import {
+  RigidBody,
+  CuboidCollider,
+  useAfterPhysicsStep,
+} from "@react-three/rapier";
 import CardPlane from "@/lib/game/components/CardPlane";
 import CardGlow from "@/lib/game/components/CardGlow";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
@@ -77,7 +81,9 @@ export default function Board() {
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
   const playSelectedTo = useGameStore((s) => s.playSelectedTo);
-  const moveSelectedPermanentToWithOffset = useGameStore((s) => s.moveSelectedPermanentToWithOffset);
+  const moveSelectedPermanentToWithOffset = useGameStore(
+    (s) => s.moveSelectedPermanentToWithOffset
+  );
   const setPermanentOffset = useGameStore((s) => s.setPermanentOffset);
   const moveAvatarToWithOffset = useGameStore((s) => s.moveAvatarToWithOffset);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
@@ -100,34 +106,7 @@ export default function Board() {
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
   // Playmat texture is loaded inside the Playmat subcomponent via Suspense.
 
-  // Helper function to update offsets for existing cards when a new card is added
-  const updateExistingCardOffsets = (
-    tileKey: string,
-    existingItems: PermanentItem[],
-    newTotalCount: number
-  ) => {
-    const spacing = TILE_SIZE * 0.28;
-
-    // Calculate old baseline (before new card was added)
-    const oldCount = existingItems.length;
-    const oldStartX = -((Math.max(oldCount, 1) - 1) * spacing) / 2;
-
-    // Calculate new baseline (with new card added)
-    const newStartX = -((Math.max(newTotalCount, 1) - 1) * spacing) / 2;
-
-    // Update offsets for each existing card
-    existingItems.forEach((item, idx) => {
-      if (item && item.offset) {
-        const oldBaselineX = oldStartX + idx * spacing;
-        const newBaselineX = newStartX + idx * spacing;
-        const baselineDiff = newBaselineX - oldBaselineX;
-
-        // Adjust the offset to maintain the same world position
-        const newOffsetX = item.offset[0] - baselineDiff;
-        setPermanentOffset(tileKey, idx, [newOffsetX, item.offset[1]]);
-      }
-    });
-  };
+  // Removed baseline-shift helper to ensure only the moved card changes position
 
   // Continuously update the drag ghost position based on cursor ray -> ground plane (y=0)
   useFrame(() => {
@@ -218,7 +197,9 @@ export default function Board() {
   const bodyMap = useRef<Map<string, BodyApi>>(new Map());
   const draggedBody = useRef<BodyApi | null>(null);
   // Target world position for the currently dragged body (applied after physics step)
-  const dragTarget = useRef<{ x: number; z: number; lift: boolean } | null>(null);
+  const dragTarget = useRef<{ x: number; z: number; lift: boolean } | null>(
+    null
+  );
   // Pending snap operations queued to run safely after the physics step
   const pendingSnaps = useRef<
     Map<string, { x: number; z: number; attempts: number }>
@@ -257,7 +238,10 @@ export default function Board() {
         );
       } catch (error) {
         if (process.env.NODE_ENV !== "production") {
-          console.warn(`[physics] Failed to move dragged body (afterStep):`, error);
+          console.warn(
+            `[physics] Failed to move dragged body (afterStep):`,
+            error
+          );
         }
       } finally {
         // Consume this target so we only apply the latest request
@@ -278,7 +262,10 @@ export default function Board() {
             snapApi.setTranslation({ x: job.x, y: 0.25, z: job.z }, false);
           } catch (error) {
             if (process.env.NODE_ENV !== "production") {
-              console.warn(`[physics] Failed to snap body ${id} (afterStep):`, error);
+              console.warn(
+                `[physics] Failed to snap body ${id} (afterStep):`,
+                error
+              );
             }
           } finally {
             pendingSnaps.current.delete(id);
@@ -299,7 +286,7 @@ export default function Board() {
     }
   });
 
-  // Ensure local/global drag state is cleared even if input ends outside the canvas
+  // Ensure local/global drag state is cleared on hard context loss (not every pointerup)
   useEffect(() => {
     const reset = (reason?: string) => {
       if (process.env.NODE_ENV !== "production") {
@@ -318,29 +305,21 @@ export default function Board() {
       }, 0);
     };
 
-    const onPointerUp = () => reset("pointerup");
+    // Only listen to hard-cancel contexts; avoid pointerup/mouseup which fire during normal drags
     const onPointerCancel = () => reset("pointercancel");
-    const onMouseUp = () => reset("mouseup");
-    const onTouchEnd = () => reset("touchend");
     const onBlur = () => reset("blur");
     const onVisibility = () => {
       if (document.visibilityState !== "visible") reset("visibilitychange");
     };
     const onPageHide = () => reset("pagehide");
 
-    window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerCancel);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("touchend", onTouchEnd);
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
 
     return () => {
-      window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
@@ -588,8 +567,6 @@ export default function Board() {
                       ).toLowerCase();
                       if (!type.includes("site")) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
-                        // Update offsets for existing cards to maintain their world positions
-                        updateExistingCardOffsets(dropKey, toItems, newCount);
                       }
                     } else if (dragFromPile?.card) {
                       const type = (
@@ -601,8 +578,6 @@ export default function Board() {
                       setGhost(null); // Also clear ghost immediately
                       if (!type.includes("site")) {
                         setPermanentOffset(dropKey, newIndex, [offX, offZ]);
-                        // Update offsets for existing cards to maintain their world positions
-                        updateExistingCardOffsets(dropKey, toItems, newCount);
                       }
                     }
                     setDragFromHand(false);
@@ -709,9 +684,6 @@ export default function Board() {
               {/* Permanents on this tile */}
               {(() => {
                 const items = permanents[key] || [];
-                const count = items.length;
-                const spacing = TILE_SIZE * 0.28;
-                const startX = -((Math.max(count, 1) - 1) * spacing) / 2;
                 const marginZ = TILE_SIZE * 0.1; // distance from bottom/top edge
                 return items.map((p, idx) => {
                   const owner = p.owner; // 1 or 2
@@ -719,30 +691,30 @@ export default function Board() {
                     owner === 1
                       ? -TILE_SIZE * 0.5 + marginZ
                       : TILE_SIZE * 0.5 - marginZ;
-                  let effectiveIndex = idx;
-                  if (p.attachedTo && p.attachedTo.at === key) {
-                    effectiveIndex = p.attachedTo.index;
-                  }
-                  const xPos = startX + effectiveIndex * spacing;
                   const isSel =
                     selectedPermanent &&
                     selectedPermanent.at === key &&
                     selectedPermanent.index === idx;
-                  const isToken = (p.card.type || "").toLowerCase().includes("token");
-                  const tokenDef = isToken ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()] : undefined;
+                  const isToken = (p.card.type || "")
+                    .toLowerCase()
+                    .includes("token");
+                  const tokenDef = isToken
+                    ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
+                    : undefined;
                   const tokenSiteReplace = !!tokenDef?.siteReplacement;
+                  // Orientation: bottom toward owner; Rubble (site-like token) adds -90° like sites
                   const rotZ =
                     (owner === 1 ? 0 : Math.PI) +
                     (tokenSiteReplace ? -Math.PI / 2 : 0) +
                     (p.tapped ? Math.PI / 2 : 0) +
-                    (p.tilt || 0); // orient bottom to owner + site-like tokens + tap + slight random tilt
+                    (p.tilt || 0);
                   const offX = p.offset?.[0] ?? 0;
                   const offZ = p.offset?.[1] ?? 0;
                   return (
                     <RigidBody
-                      key={`perm-${p.card.cardId}`}
+                      key={`perm-${key}-${idx}`}
                       ref={(api) => {
-                        const id = `perm:${p.card.cardId}`;
+                        const id = `perm:${key}:${idx}`;
                         try {
                           if (api) {
                             bodyMap.current.set(id, api as unknown as BodyApi);
@@ -750,13 +722,16 @@ export default function Board() {
                             bodyMap.current.delete(id);
                           }
                         } catch (error) {
-                          console.warn(`[physics] Failed to update body map for ${id}:`, error);
+                          console.warn(
+                            `[physics] Failed to update body map for ${id}:`,
+                            error
+                          );
                         }
                       }}
-                      type="dynamic"
+                      type={tokenSiteReplace ? "fixed" : "dynamic"}
                       ccd
                       colliders={false}
-                      position={[xPos + offX, 0.25, zBase + offZ]}
+                      position={[0 + offX, 0.25, zBase + offZ]}
                       linearDamping={2}
                       angularDamping={2}
                       canSleep={false}
@@ -772,6 +747,13 @@ export default function Board() {
                         onPointerDown={(e) => {
                           // Only start potential drag on left-click
                           if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
+                          if (tokenSiteReplace) {
+                            // Rubble behaves like a site for movement: no drag start
+                            e.stopPropagation();
+                            useGameStore.getState().selectPermanent(key, idx);
+                            clearHoverPreview();
+                            return;
+                          }
                           if (e.button === 0) {
                             e.stopPropagation();
                             useGameStore.getState().selectPermanent(key, idx);
@@ -805,6 +787,7 @@ export default function Board() {
                         }}
                         onPointerMove={(e) => {
                           if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
+                          if (tokenSiteReplace) return; // no drag for Rubble
                           e.stopPropagation();
                           // Start dragging once hold + threshold exceeded
                           if (
@@ -828,7 +811,8 @@ export default function Board() {
                               setGhost(null);
                               // No ghost for board permanent drags; just move the body
                               draggedBody.current =
-                                bodyMap.current.get(`perm:${p.card.cardId}`) || null;
+                                bodyMap.current.get(`perm:${key}:${idx}`) ||
+                                null;
                               if (draggedBody.current) {
                                 moveDraggedBody(e.point.x, e.point.z, true);
                               }
@@ -857,6 +841,7 @@ export default function Board() {
                         onPointerUp={(e) => {
                           if (e.button !== 0) return; // ignore non-left button releases
                           if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
+                          if (tokenSiteReplace) { e.stopPropagation(); return; }
                           e.stopPropagation();
                           if (
                             dragging &&
@@ -883,30 +868,19 @@ export default function Board() {
                                 : TILE_SIZE * 0.5 - marginZ;
                             if (dragging.from === dropKey) {
                               // Staying on same tile: compute baseline using current count and index
-                              const items = permanents[dropKey] || [];
-                              const count = items.length;
-                              const startX =
-                                -((Math.max(count, 1) - 1) * spacing) / 2;
-                              const xPos = startX + idx * spacing;
-                              const baseX = tileX + xPos;
+                              const baseX = tileX;
                               const baseZ = tileZ + zBase;
                               const offX = wx - baseX;
                               const offZ = wz - baseZ;
                               if (draggedBody.current)
                                 moveDraggedBody(wx, wz, false);
                               setPermanentOffset(dropKey, idx, [offX, offZ]);
-                              if (draggedId != null) {
-                                snapBodyTo(`perm:${draggedId}`, wx, wz);
-                              }
+                              snapBodyTo(`perm:${dropKey}:${idx}`, wx, wz);
                             } else {
                               // Moving to another tile: baseline uses new count and new index at end
                               const toItems = permanents[dropKey] || [];
                               const newIndex = toItems.length;
-                              const newCount = toItems.length + 1;
-                              const startX =
-                                -((Math.max(newCount, 1) - 1) * spacing) / 2;
-                              const xPos = startX + newIndex * spacing;
-                              const baseX = tileX + xPos;
+                              const baseX = tileX;
                               const baseZ = tileZ + zBase;
                               const offX = wx - baseX;
                               const offZ = wz - baseZ;
@@ -916,9 +890,7 @@ export default function Board() {
                                 offX,
                                 offZ,
                               ]);
-                              if (draggedId != null) {
-                                snapBodyTo(`perm:${draggedId}`, wx, wz);
-                              }
+                              snapBodyTo(`perm:${dropKey}:${newIndex}`, wx, wz);
                             }
                             setDragging(null);
                             setDragFromHand(false);
@@ -932,8 +904,16 @@ export default function Board() {
                         {/* Selection glow */}
                         {isSel && !isHandVisible && (
                           <CardGlow
-                            width={(tokenDef && tokenDef.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT) + 0.3}
-                            height={(tokenDef && tokenDef.size === "small" ? CARD_LONG * 0.5 : CARD_LONG) + 0.4}
+                            width={
+                              (tokenDef && tokenDef.size === "small"
+                                ? CARD_SHORT * 0.5
+                                : CARD_SHORT) + 0.3
+                            }
+                            height={
+                              (tokenDef && tokenDef.size === "small"
+                                ? CARD_LONG * 0.5
+                                : CARD_LONG) + 0.4
+                            }
                             rotationZ={rotZ}
                             elevation={0}
                             color={owner === 1 ? "#93c5fd" : "#fca5a5"}
@@ -969,9 +949,17 @@ export default function Board() {
                         >
                           {isToken ? (
                             (() => {
-                              const w = tokenDef && tokenDef.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
-                              const h = tokenDef && tokenDef.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
-                              const texUrl = tokenDef ? tokenTextureUrl(tokenDef) : undefined;
+                              const w =
+                                tokenDef && tokenDef.size === "small"
+                                  ? CARD_SHORT * 0.5
+                                  : CARD_SHORT;
+                              const h =
+                                tokenDef && tokenDef.size === "small"
+                                  ? CARD_LONG * 0.5
+                                  : CARD_LONG;
+                              const texUrl = tokenDef
+                                ? tokenTextureUrl(tokenDef)
+                                : undefined;
                               return (
                                 <CardPlane
                                   slug={""}
@@ -981,7 +969,6 @@ export default function Board() {
                                   height={h}
                                   rotationZ={rotZ}
                                   elevation={0.02}
-                                  renderOrder={700}
                                 />
                               );
                             })()
@@ -990,16 +977,17 @@ export default function Board() {
                               {((selectedPermanent?.at === key &&
                                 selectedPermanent?.index === idx) ||
                                 (dragging?.from === key &&
-                                  dragging?.index === idx)) && !isHandVisible && (
-                                <CardGlow
-                                  width={CARD_SHORT}
-                                  height={CARD_LONG}
-                                  rotationZ={rotZ}
-                                  elevation={0.001}
-                                  color="#60a5fa"
-                                  renderOrder={600}
-                                />
-                              )}
+                                  dragging?.index === idx)) &&
+                                !isHandVisible && (
+                                  <CardGlow
+                                    width={CARD_SHORT}
+                                    height={CARD_LONG}
+                                    rotationZ={rotZ}
+                                    elevation={0.001}
+                                    color="#60a5fa"
+                                    renderOrder={600}
+                                  />
+                                )}
                               <CardPlane
                                 slug={p.card.slug!}
                                 width={CARD_SHORT}
@@ -1079,7 +1067,10 @@ export default function Board() {
                           bodyMap.current.delete(id);
                         }
                       } catch (error) {
-                        console.warn(`[physics] Failed to update body map for ${id}:`, error);
+                        console.warn(
+                          `[physics] Failed to update body map for ${id}:`,
+                          error
+                        );
                       }
                     }}
                     type="dynamic"
@@ -1234,16 +1225,17 @@ export default function Board() {
                       >
                         {a.card?.slug ? (
                           <>
-                            {(selectedAvatar === who || dragAvatar === who) && !isHandVisible && (
-                              <CardGlow
-                                width={CARD_SHORT}
-                                height={CARD_LONG}
-                                rotationZ={rotZ}
-                                elevation={0.001}
-                                color="#60a5fa"
-                                renderOrder={600}
-                              />
-                            )}
+                            {(selectedAvatar === who || dragAvatar === who) &&
+                              !isHandVisible && (
+                                <CardGlow
+                                  width={CARD_SHORT}
+                                  height={CARD_LONG}
+                                  rotationZ={rotZ}
+                                  elevation={0.001}
+                                  color="#60a5fa"
+                                  renderOrder={600}
+                                />
+                              )}
                             <CardPlane
                               slug={a.card.slug!}
                               width={CARD_SHORT}
@@ -1278,7 +1270,11 @@ export default function Board() {
         (selected || dragFromPile?.card) && (
           <group
             ref={ghostGroupRef}
-            position={[lastGhostPosRef.current.x, 0.1, lastGhostPosRef.current.z]}
+            position={[
+              lastGhostPosRef.current.x,
+              0.1,
+              lastGhostPosRef.current.z,
+            ]}
           >
             {(() => {
               if (selected) {
@@ -1304,11 +1300,37 @@ export default function Board() {
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
                 const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!c.slug) return null;
+                // Adjust ghost size for tokens
+                let w = CARD_SHORT;
+                let h = CARD_LONG;
+                if ((c.slug || "").startsWith("token:")) {
+                  try {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { TOKEN_BY_KEY } = require("@/lib/game/tokens");
+                    const key = c.slug.split(":")[1]?.toLowerCase();
+                    const def = key ? TOKEN_BY_KEY[key] : undefined;
+                    if (def && def.size === "small") {
+                      w = CARD_SHORT * 0.5;
+                      h = CARD_LONG * 0.5;
+                    }
+                    const ownerRotToken = dragFromPile?.who === 'p1' ? 0 : Math.PI;
+                    const rotZToken = ownerRotToken + (def && def.siteReplacement ? -Math.PI / 2 : 0);
+                    return (
+                      <CardPlane
+                        slug={c.slug}
+                        width={w}
+                        height={h}
+                        rotationZ={rotZToken}
+                        interactive={false}
+                      />
+                    );
+                  } catch {}
+                }
                 return (
                   <CardPlane
                     slug={c.slug}
-                    width={CARD_SHORT}
-                    height={CARD_LONG}
+                    width={w}
+                    height={h}
                     rotationZ={rotZ}
                     interactive={false}
                   />
@@ -1318,7 +1340,6 @@ export default function Board() {
             })()}
           </group>
         )}
-
     </group>
   );
 }
