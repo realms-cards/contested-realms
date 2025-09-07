@@ -210,6 +210,48 @@ export default function DraftPackHand3D({
       <group ref={worldLayerRef} />
       {/* Camera-anchored hand row */}
       <group ref={rootRef}>
+        {/* Row-level hover plane to bridge gaps between card hitboxes */}
+        {layout.length > 0 && (
+          <mesh
+            position={[0, -0.004, 0]}
+            rotation-x={-Math.PI / 2}
+            onPointerMove={() => {
+              if (disabled) return;
+              // If no card hitbox is currently hovered, clear preview
+              if (!hoverAnyRef.current) {
+                hoverIndexRef.current = null;
+                onHoverInfo?.(null);
+              }
+            }}
+            onPointerOver={() => {
+              if (disabled) return;
+              if (!hoverAnyRef.current) {
+                hoverIndexRef.current = null;
+                onHoverInfo?.(null);
+              }
+            }}
+            onPointerOut={() => {
+              hoverAnyRef.current = false;
+              onHoverInfo?.(null);
+            }}
+          >
+            {(() => {
+              const xs = layout.map((e) => e.x);
+              const minX = Math.min(...xs);
+              const maxX = Math.max(...xs);
+              const scale = layout[0]!.scale;
+              const cardW = CARD_SHORT * scale;
+              const rowW = (maxX - minX) + cardW + 0.4; // add margin
+              const rowD = CARD_LONG * scale * 1.6; // generous depth
+              return (
+                <>
+                  <planeGeometry args={[rowW, rowD]} />
+                  <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
+                </>
+              );
+            })()}
+          </mesh>
+        )}
         {layout.map((entry) => {
           const { originalIndex, x, z, scale } = entry;
           const c = cards[originalIndex]!;
@@ -410,11 +452,11 @@ function PackCard3D({
 
   return (
     <group ref={ref} position={[x, 0.002, z]} scale={[scale, scale, scale]}>
-      {/* Horizontal plane hitbox (aligned with ground) for reliable top-down hover/click */}
+      {/* Upright plane hitbox matching the visible card for accurate hover/click */}
       <mesh
         position={[0, 0, 0]}
-        rotation-x={-Math.PI / 2}
-        rotation-z={0}
+        rotation-x={0}
+        rotation-z={isSite ? -Math.PI / 2 : 0}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -463,6 +505,12 @@ function PackCard3D({
         }}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
+          // If not dragging or holding for drag, refresh hover preview precisely
+          if (!dragging.current && !dragStart.current) {
+            onHoverInfo?.({ slug, name, type: type ?? null });
+            onHoverIndexChange?.(index);
+            return;
+          }
           const s = dragStart.current;
           if (!s) return;
           didInteractRef.current = true;
@@ -590,18 +638,13 @@ function PackCard3D({
           onHoverInfo?.({ slug, name, type: type ?? null });
           onHoverIndexChange?.(index);
         }}
-        onPointerMove={() => {
-          if (disabled) return;
-          // Continuously refresh hover while moving to avoid accidental clears
-          onHoverInfo?.({ slug, name, type: type ?? null });
-          onHoverIndexChange?.(index);
-        }}
         onPointerOut={() => {
           hoveringRef.current = false;
+          onHoverInfo?.(null);
           onHoverIndexChange?.(null);
         }}
       >
-        <planeGeometry args={[CARD_SHORT * 1.2, CARD_LONG * 1.2]} />
+        <planeGeometry args={[CARD_SHORT * 1.08, CARD_LONG * 1.08]} />
         <meshBasicMaterial
           transparent
           opacity={0}

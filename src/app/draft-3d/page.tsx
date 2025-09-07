@@ -74,6 +74,7 @@ function DraggableCard3D({
   getTopRenderOrder,
   onHoverChange,
   lockUpright,
+  baseRenderOrder = 1500,
 }: {
   slug: string;
   isSite: boolean;
@@ -88,6 +89,7 @@ function DraggableCard3D({
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
   lockUpright?: boolean;
+  baseRenderOrder?: number;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -99,9 +101,16 @@ function DraggableCard3D({
   } | null>(null);
   const dragging = useRef(false);
   const upCleanupRef = useRef<(() => void) | null>(null);
-  const roRef = useRef<number>(1500);
+  const roRef = useRef<number>(baseRenderOrder);
   const [isDragging, setIsDragging] = useState(false);
   const [uprightLocked, setUprightLocked] = useState(false);
+
+  // Reset render order back to base when not dragging (prevents sticky top-order after drag)
+  useEffect(() => {
+    if (!isDragging) {
+      roRef.current = baseRenderOrder;
+    }
+  }, [isDragging, baseRenderOrder]);
 
   const setPos = useCallback((wx: number, wz: number, lift = false) => {
     if (!ref.current) return;
@@ -310,11 +319,23 @@ export default function Draft3DPage() {
 
       // Generate packs per selected set (one column per round)
       const [setA, setB, setC] = setNames;
-      const avatarParam = replaceAvatars ? '&replaceAvatars=true' : '';
+      const avatarParam = replaceAvatars ? "&replaceAvatars=true" : "";
       const [respA, respB, respC] = await Promise.all([
-        fetch(`/api/booster?set=${encodeURIComponent(setA)}&count=${players}${avatarParam}`),
-        fetch(`/api/booster?set=${encodeURIComponent(setB)}&count=${players}${avatarParam}`),
-        fetch(`/api/booster?set=${encodeURIComponent(setC)}&count=${players}${avatarParam}`),
+        fetch(
+          `/api/booster?set=${encodeURIComponent(
+            setA
+          )}&count=${players}${avatarParam}`
+        ),
+        fetch(
+          `/api/booster?set=${encodeURIComponent(
+            setB
+          )}&count=${players}${avatarParam}`
+        ),
+        fetch(
+          `/api/booster?set=${encodeURIComponent(
+            setC
+          )}&count=${players}${avatarParam}`
+        ),
       ]);
       const [dataA, dataB, dataC] = await Promise.all([
         respA.json(),
@@ -410,6 +431,8 @@ export default function Draft3DPage() {
   const PICK_RADIUS = CARD_LONG * 0.6;
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const STAGE_CLICK_POS = { x: 0, z: 1.7 };
+  const STAGE_X = STAGE_CLICK_POS.x;
+  const STAGE_Z = STAGE_CLICK_POS.z;
   // Pack selection per round (choose which of your 3 to open for this packIndex)
   const [packChoice, setPackChoice] = useState<(number | null)[]>([
     null,
@@ -544,13 +567,31 @@ export default function Draft3DPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [yourPicks]);
 
+  // Auto-pick the last remaining card in a pack
+  useEffect(() => {
+    if (!inProgress) return;
+    if (needsPackChoice) return;
+    const mine = currentPacks[0] || [];
+    if (mine.length !== 1) return;
+    const guardKey = `${packIndex}-${pickNumber}`;
+    if (autoPickGuardRef.current === guardKey) return;
+    autoPickGuardRef.current = guardKey;
+    // Commit the only remaining card immediately
+    const idx = 0;
+    commitPickAndPass(idx, STAGE_X, STAGE_Z);
+  }, [inProgress, needsPackChoice, currentPacks, packIndex, pickNumber, commitPickAndPass, STAGE_X, STAGE_Z]);
+
   // Spacebar Pick & Pass (only when draft in progress and a card is staged)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!inProgress) return;
       if (e.code !== "Space") return;
       const ae = document.activeElement as HTMLElement | null;
-      const isTyping = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
+      const isTyping =
+        ae &&
+        (ae.tagName === "INPUT" ||
+          ae.tagName === "TEXTAREA" ||
+          ae.isContentEditable);
       if (isTyping) return;
       e.preventDefault();
       if (staged) {
@@ -593,6 +634,8 @@ export default function Draft3DPage() {
 
   // Sorting state
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const autoPickGuardRef = useRef<string | null>(null);
   useEffect(() => {
     if (!yourPicks.length) {
       setMetaByCardId({});
@@ -811,7 +854,12 @@ export default function Draft3DPage() {
                   const sel = selectedRowIndex;
                   if (sel != null) {
                     const c = currentPacks[0]?.[sel];
-                    if (c) setHoverPreview({ slug: c.slug, name: c.cardName, type: c.type ?? null });
+                    if (c)
+                      setHoverPreview({
+                        slug: c.slug,
+                        name: c.cardName,
+                        type: c.type ?? null,
+                      });
                     else setHoverPreview(null);
                   } else setHoverPreview(null);
                 }
@@ -827,7 +875,12 @@ export default function Draft3DPage() {
                   setStaged({ idx, x: wx, z: wz });
                   setSelectedRowIndex(null);
                   const c = currentPacks[0]?.[idx];
-                  if (c) setHoverPreview({ slug: c.slug, name: c.cardName, type: c.type ?? null });
+                  if (c)
+                    setHoverPreview({
+                      slug: c.slug,
+                      name: c.cardName,
+                      type: c.type ?? null,
+                    });
                 } else if (staged && staged.idx === idx) {
                   setStaged(null);
                 }
@@ -837,11 +890,20 @@ export default function Draft3DPage() {
                 setSelectedRowIndex(idx);
                 if (idx != null) {
                   // Stage on click to lower side of the board temporarily
-                  setStaged({ idx, x: STAGE_CLICK_POS.x, z: STAGE_CLICK_POS.z });
+                  setStaged({
+                    idx,
+                    x: STAGE_CLICK_POS.x,
+                    z: STAGE_CLICK_POS.z,
+                  });
                   // Clear explicit selection to avoid preview mismatch
                   setSelectedRowIndex(null);
                   const c = currentPacks[0]?.[idx];
-                  if (c) setHoverPreview({ slug: c.slug, name: c.cardName, type: c.type ?? null });
+                  if (c)
+                    setHoverPreview({
+                      slug: c.slug,
+                      name: c.cardName,
+                      type: c.type ?? null,
+                    });
                 } else {
                   setHoverPreview(null);
                 }
@@ -851,34 +913,47 @@ export default function Draft3DPage() {
           )}
 
           {/* 3D Draft: staged card representation on the board (draggable to reposition or unstage) */}
-          {inProgress && staged && !needsPackChoice && currentPacks[0]?.[staged.idx] && (
-            <DraggableCard3D
-              key={`staged-${packIndex}-${pickNumber}-${staged.idx}`}
-              slug={currentPacks[0]![staged.idx]!.slug}
-              isSite={(currentPacks[0]![staged.idx]!.type || "").toLowerCase().includes("site")}
-              x={staged.x}
-              z={staged.z}
-              onDrop={(wx, wz) => {
-                setStaged((prev) => (prev && prev.idx === staged.idx ? { ...prev, x: wx, z: wz } : prev));
-              }}
-              onDragChange={setOrbitLocked}
-              getTopRenderOrder={getTopRenderOrder}
-              lockUpright
-              onHoverChange={(hover) => {
-                if (hover && !orbitLocked) {
-                  const c = currentPacks[0]![staged.idx]!;
-                  setHoverPreview({ slug: c.slug, name: c.cardName, type: c.type });
-                } else setHoverPreview(null);
-              }}
-              onRelease={(wx, wz) => {
-                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-                if (d <= PICK_RADIUS) {
-                  // Move back into radius -> unstage
-                  setStaged(null);
-                }
-              }}
-            />
-          )}
+          {inProgress &&
+            staged &&
+            !needsPackChoice &&
+            currentPacks[0]?.[staged.idx] && (
+              <DraggableCard3D
+                key={`staged-${packIndex}-${pickNumber}-${staged.idx}`}
+                slug={currentPacks[0]![staged.idx]!.slug}
+                isSite={(currentPacks[0]![staged.idx]!.type || "")
+                  .toLowerCase()
+                  .includes("site")}
+                x={staged.x}
+                z={staged.z}
+                onDrop={(wx, wz) => {
+                  setStaged((prev) =>
+                    prev && prev.idx === staged.idx
+                      ? { ...prev, x: wx, z: wz }
+                      : prev
+                  );
+                }}
+                onDragChange={setOrbitLocked}
+                getTopRenderOrder={getTopRenderOrder}
+                lockUpright
+                onHoverChange={(hover) => {
+                  if (hover && !orbitLocked) {
+                    const c = currentPacks[0]![staged.idx]!;
+                    setHoverPreview({
+                      slug: c.slug,
+                      name: c.cardName,
+                      type: c.type,
+                    });
+                  } else setHoverPreview(null);
+                }}
+                onRelease={(wx, wz) => {
+                  const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                  if (d <= PICK_RADIUS) {
+                    // Move back into radius -> unstage
+                    setStaged(null);
+                  }
+                }}
+              />
+            )}
 
           {/* 3D Draft: your picked cards remain on the mat and stay draggable */}
           {pick3D.length > 0 && (
@@ -893,6 +968,7 @@ export default function Draft3DPage() {
                 const x = stackPos ? stackPos.x : p.x;
                 const z = stackPos ? stackPos.z : p.z;
                 const isVisible = stackPos ? stackPos.isVisible : true;
+                const baseRO = stackPos ? 1600 + stackPos.stackIndex : 1500;
 
                 return (
                   <DraggableCard3D
@@ -901,6 +977,7 @@ export default function Draft3DPage() {
                     isSite={isSite}
                     x={x}
                     z={z}
+                    baseRenderOrder={baseRO}
                     onDrop={(wx, wz) => {
                       if (!isSortingEnabled) {
                         setPick3D((prev) =>
@@ -957,34 +1034,57 @@ export default function Draft3DPage() {
       {/* Overlays */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
         {/* Top controls */}
-        <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
-          <div className="text-3xl font-fantaisie text-white">Draft</div>
+        <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
+          <div className="flex items-center gap-3">
+            <div className="text-3xl font-fantaisie text-white">Draft</div>
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="h-9 w-9 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+              title="How to use Draft mode"
+              aria-label="How to use Draft mode"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15h2v2h-2v-2zm3.07-7.75c-.9-.9-2.24-1.17-3.43-.74-1.19.44-2.02 1.51-2.17 2.77l1.99.23c.09-.68.54-1.25 1.18-1.49.64-.24 1.36-.08 1.84.4.62.62.62 1.63 0 2.25-.37.37-.81.67-1.21.98-.77.6-1.27 1.15-1.27 2.35V13h2c0-.53.2-.74.82-1.21.45-.35.98-.74 1.46-1.22 1.24-1.24 1.24-3.26-.21-4.32z"/>
+              </svg>
+            </button>
+          </div>
 
           {/* Sorting controls */}
           {pick3D.length > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSortingEnabled(!isSortingEnabled)}
-                className={`h-10 px-4 rounded font-medium transition-colors ${
+                title={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
+                aria-label={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
+                className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
                   isSortingEnabled
-                    ? "bg-emerald-500 text-black hover:bg-emerald-400"
-                    : "bg-white/10 text-white hover:bg-white/20"
+                    ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
+                    : "bg-white/15 text-white ring-white/30 hover:bg-white/25"
                 }`}
               >
-                {isSortingEnabled ? "Unsort Cards" : "Sort Cards"}
+                {/* Shuffle/stack icon (same as editor) */}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z"/>
+                </svg>
               </button>
             </div>
           )}
           {inProgress && (
-            <div className="ml-auto flex items-center gap-3">
-              <div className="text-sm opacity-90 hidden sm:block">Press Spacebar to Pick & Pass</div>
+            <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] pointer-events-auto text-center">
               <button
                 onClick={() => staged && commitPickAndPass(staged.idx, staged.x, staged.z)}
                 disabled={!staged}
-                className="h-10 px-4 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-semibold disabled:opacity-50"
+                className="h-10 px-4 rounded border border-emerald-500 text-emerald-400 font-semibold disabled:opacity-50 bg-transparent hover:text-emerald-300 hover:border-emerald-400"
               >
-                {staged ? `Pick & Pass: ${currentPacks[0]?.[staged.idx]?.cardName ?? "Card"}` : "Pick & Pass"}
+                {staged ? (
+                  <>Pick & Pass: <span className="font-fantaisie text-lg md:text-xl">{currentPacks[0]?.[staged.idx]?.cardName ?? "Card"}</span></>
+                ) : (
+                  "Pick & Pass"
+                )}
               </button>
+              <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
+                Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing {dir === 1 ? "Left" : "Right"}
+              </div>
             </div>
           )}
           {!inProgress && (
@@ -1037,7 +1137,9 @@ export default function Draft3DPage() {
                   onChange={(e) => setReplaceAvatars(e.target.checked)}
                   className="rounded"
                 />
-                <span className="text-sm">Replace Sorcerer with Beta avatars</span>
+                <span className="text-sm">
+                  Replace Sorcerer with Beta avatars
+                </span>
               </label>
 
               <button
@@ -1056,22 +1158,11 @@ export default function Draft3DPage() {
         </div>
 
         {/* Pack status + Picks summary (no 2D pack grid; cards are on the mat) */}
-        <div className="max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
+        <div className="w-full pl-4 pr-0 pb-6 pt-2 pointer-events-none select-none">
           {inProgress ? (
-            <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12 lg:col-span-8">
-                <div className="flex items-center justify-between mb-2 text-white text-sm">
-                  <div>
-                    Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing{" "}
-                    {dir === 1 ? "Left" : "Right"}
-                  </div>
-                </div>
-                <div className="text-white text-sm">
-                  Drag a card outward to stage it, then click <b>Pick & Pass</b>
-                  . Drag it back inward to unstage.
-                </div>
-              </div>
-              <div className="col-span-12 lg:col-span-4">
+            <div className="grid grid-cols-12 gap-3 lg:gap-4">
+              <div className="col-span-12 lg:col-span-8" />
+              <div className="col-span-12 lg:col-span-4 justify-self-end pr-0">
                 <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
                   <div className="font-medium mb-2 text-white flex items-center justify-between">
                     <span>Your Picks ({yourPicks.length})</span>
@@ -1105,7 +1196,10 @@ export default function Draft3DPage() {
                         <div className="flex items-center gap-2">
                           <span className="opacity-80">Thresholds:</span>
                           {thresholdSummary.elements.map((element) => (
-                            <span key={element} className="inline-flex items-center gap-1">
+                            <span
+                              key={element}
+                              className="inline-flex items-center gap-1"
+                            >
                               <Image
                                 src={`/api/assets/${element}.png`}
                                 alt={element}
@@ -1386,6 +1480,60 @@ export default function Draft3DPage() {
         )}
 
         {/* Draft Statistics - Slim version integrated near Picks panel (moved from bottom-left) */}
+
+        {/* Help overlay */}
+        {helpOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto">
+            <div className="absolute inset-0 bg-black/70" onClick={() => setHelpOpen(false)} />
+            <div className="relative bg-slate-900 text-white rounded-lg p-6 w-[min(90vw,720px)] ring-1 ring-white/20 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-lg font-semibold">Draft Help</div>
+                <button
+                  onClick={() => setHelpOpen(false)}
+                  className="h-8 w-8 grid place-items-center rounded bg-white/10 hover:bg-white/20"
+                  aria-label="Close help"
+                  title="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="space-y-4 text-sm opacity-90">
+                <div>
+                  <div className="font-medium mb-1">Picking cards</div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Hover a card in your hand to preview it (left side).</li>
+                    <li>Click a card or drag it outward beyond the center ring to stage it (lower board).</li>
+                    <li>Press <b>Spacebar</b> or click <b>Pick &amp; Pass</b> to commit your pick.</li>
+                    <li>Drag a staged card back inside the ring to unstage it.</li>
+                  </ul>
+                </div>
+                <div>
+                  <div className="font-medium mb-1">Keyboard controls</div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><b>Left/Right</b>: browse cards in your hand (focus lifts and previews).</li>
+                    <li><b>Enter</b>: stage the focused/hovered card to the lower board.</li>
+                    <li><b>Space</b>: Pick &amp; Pass if a card is staged.</li>
+                  </ul>
+                </div>
+                <div>
+                  <div className="font-medium mb-1">Sorting</div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Toggle <b>Sort Cards</b> to auto‑stack your picks by mana/type near the top rows.</li>
+                    <li>With sorting off, you can freely reposition picked cards.</li>
+                  </ul>
+                </div>
+                <div>
+                  <div className="font-medium mb-1">Your Picks panel</div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Shows totals by type and your maximum thresholds.</li>
+                    <li>Hover a row to preview the corresponding card.</li>
+                    <li>Use the Compact/Comfort toggle to adjust density; Hide/Show to collapse.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Pick & Pass lives in the header container above; removed absolute overlay */}
 
