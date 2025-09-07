@@ -164,7 +164,7 @@ export function computeStackPositions(
   if (!isSortingEnabled) return null;
 
   const positions = new Map<number, StackPosition>();
-  const cardSpacing = 0.15; // Vertical spacing between cards
+  const cardSpacing = 0.15; // Vertical spacing between cards (increased for easier hover)
 
   // Separate cards by zone first
   const deckCards = picks.filter((pick) => pick.z < 0);
@@ -203,18 +203,19 @@ export function computeStackPositions(
     });
   });
 
-  // Deck positioning - place near TOP of the board
-  // Use two rows near the top: deck on top row, sideboard just below it
-  const deckZStart = -3.0; // farther toward the top edge
-  let deckXStart = -4; // Start further left
+  // Deck positioning - place on left side of board
+  const deckZStart = -2.0; // Left side of board
+  let deckXStart = -3.5; // Start from left
   const deckSpacing = 0.8;
 
   // First, position mana cost stacks (creatures on top, spells below)
-  const manaCosts = Array.from(new Set(
-    Object.keys(deckCategories)
-      .filter((key) => key.startsWith("mana-"))
-      .map((key) => parseInt(key.split("-")[1]))
-  )).sort((a, b) => a - b);
+  const manaCosts = Array.from(
+    new Set(
+      Object.keys(deckCategories)
+        .filter((key) => key.startsWith("mana-"))
+        .map((key) => parseInt(key.split("-")[1]))
+    )
+  ).sort((a, b) => a - b);
 
   manaCosts.forEach((cost) => {
     // Creatures first
@@ -279,9 +280,9 @@ export function computeStackPositions(
     });
   }
 
-  // Sideboard positioning - also near TOP (just beneath deck row)
-  const sideboardZStart = -2.2;
-  let sideboardXStart = 0; // Start on right side
+  // Sideboard positioningd
+  const sideboardZStart = 1.5;
+  let sideboardXStart = 0;
   const sideboardSpacing = 0.7;
 
   const elementOrder = ["air", "water", "earth", "fire", "colorless"];
