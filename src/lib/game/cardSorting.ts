@@ -159,16 +159,19 @@ function categorizeCardByZone(
 export function computeStackPositions(
   picks: Pick3D[],
   metaByCardId: Record<number, CardMeta>,
-  isSortingEnabled: boolean
+  isSortingEnabled: boolean,
+  treatAllAsDeck: boolean = false
 ): Map<number, StackPosition> | null {
   if (!isSortingEnabled) return null;
 
   const positions = new Map<number, StackPosition>();
   const cardSpacing = 0.15; // Vertical spacing between cards (increased for easier hover)
 
-  // Separate cards by zone first
-  const deckCards = picks.filter((pick) => pick.z < 0);
-  const sideboardCards = picks.filter((pick) => pick.z >= 0);
+  // Separate cards by zone first (or treat all as deck for draft-3d)
+  const deckCards = treatAllAsDeck ? picks : picks.filter((pick) => pick.z < 0);
+  const sideboardCards = treatAllAsDeck
+    ? []
+    : picks.filter((pick) => pick.z >= 0);
 
   // Categorize deck cards by mana cost and sites by element
   const deckCategories = deckCards.reduce((acc, pick) => {
@@ -205,7 +208,7 @@ export function computeStackPositions(
 
   // Deck positioning - place on left side of board
   const deckZStart = -2.0; // Left side of board
-  let deckXStart = -3.5; // Start from left
+  let deckXStart = -4; // Start from left
   const deckSpacing = 0.8;
 
   // First, position mana cost stacks (creatures on top, spells below)

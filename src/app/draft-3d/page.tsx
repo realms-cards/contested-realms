@@ -221,11 +221,11 @@ function DraggableCard3D({
           if (onDrop && wasDragging) onDrop(wx, wz);
           onRelease?.(wx, wz, wasDragging);
         }}
-        onPointerOver={() => {
+        onPointerEnter={() => {
           if (disabled) return;
           onHoverChange?.(true);
         }}
-        onPointerOut={() => {
+        onPointerLeave={() => {
           onHoverChange?.(false);
         }}
       >
@@ -295,6 +295,37 @@ export default function Draft3DPage() {
   // Using shared Pick3D type from src/lib/game/cardSorting.ts
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
+  
+  // Hover preview timer to prevent immediate clearing
+  const hoverTimerRef = useRef<number | null>(null);
+  const clearHoverTimerRef = useRef<number | null>(null);
+  const currentHoverCardRef = useRef<string | null>(null);
+
+  // Helper functions for consistent hover management
+  const showCardPreview = useCallback((card: { slug: string; name: string; type: string | null }) => {
+    // Clear any pending hide timer
+    if (clearHoverTimerRef.current) {
+      window.clearTimeout(clearHoverTimerRef.current);
+      clearHoverTimerRef.current = null;
+    }
+    
+    // Show preview immediately and keep it shown
+    currentHoverCardRef.current = card.slug;
+    setHoverPreview(card);
+  }, []);
+
+  const hideCardPreview = useCallback(() => {
+    // Small delay before hiding to handle quick mouse movements between cards
+    if (clearHoverTimerRef.current) {
+      window.clearTimeout(clearHoverTimerRef.current);
+    }
+    
+    clearHoverTimerRef.current = window.setTimeout(() => {
+      currentHoverCardRef.current = null;
+      setHoverPreview(null);
+      clearHoverTimerRef.current = null;
+    }, 150); // Small delay just for transition between cards
+  }, []);
 
   const dir = useMemo(() => (packIndex === 1 ? -1 : 1), [packIndex]); // L-R-L
   const inProgress = useMemo(
@@ -740,9 +771,9 @@ export default function Draft3DPage() {
     return counts;
   }, [yourPicks, metaByCardId]);
 
-  // Create sorted stack positions
+  // Create sorted stack positions (treat all as deck for draft positioning)
   const stackPositions = useMemo(() => {
-    return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
+    return computeStackPositions(pick3D, metaByCardId, isSortingEnabled, true);
   }, [pick3D, isSortingEnabled, metaByCardId]);
 
   async function saveDeck() {
@@ -848,20 +879,20 @@ export default function Draft3DPage() {
               getTopRenderOrder={getTopRenderOrder}
               onHoverInfo={(info) => {
                 if (info) {
-                  setHoverPreview(info);
+                  showCardPreview(info);
                 } else {
                   // Keep preview if a card is selected
                   const sel = selectedRowIndex;
                   if (sel != null) {
                     const c = currentPacks[0]?.[sel];
                     if (c)
-                      setHoverPreview({
+                      showCardPreview({
                         slug: c.slug,
                         name: c.cardName,
                         type: c.type ?? null,
                       });
-                    else setHoverPreview(null);
-                  } else setHoverPreview(null);
+                    else hideCardPreview();
+                  } else hideCardPreview();
                 }
               }}
               onDragMove={(idx, wx, wz) => {
@@ -876,7 +907,7 @@ export default function Draft3DPage() {
                   setSelectedRowIndex(null);
                   const c = currentPacks[0]?.[idx];
                   if (c)
-                    setHoverPreview({
+                    showCardPreview({
                       slug: c.slug,
                       name: c.cardName,
                       type: c.type ?? null,
@@ -899,13 +930,13 @@ export default function Draft3DPage() {
                   setSelectedRowIndex(null);
                   const c = currentPacks[0]?.[idx];
                   if (c)
-                    setHoverPreview({
+                    showCardPreview({
                       slug: c.slug,
                       name: c.cardName,
                       type: c.type ?? null,
                     });
                 } else {
-                  setHoverPreview(null);
+                  hideCardPreview();
                 }
               }}
               orbitLocked={orbitLocked}
@@ -938,12 +969,14 @@ export default function Draft3DPage() {
                 onHoverChange={(hover) => {
                   if (hover && !orbitLocked) {
                     const c = currentPacks[0]![staged.idx]!;
-                    setHoverPreview({
+                    showCardPreview({
                       slug: c.slug,
                       name: c.cardName,
                       type: c.type,
                     });
-                  } else setHoverPreview(null);
+                  } else {
+                    hideCardPreview();
+                  }
                 }}
                 onRelease={(wx, wz) => {
                   const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
@@ -992,13 +1025,15 @@ export default function Draft3DPage() {
                     lockUpright
                     disabled={isSortingEnabled && !isVisible}
                     onHoverChange={(hover) => {
-                      if (hover && !orbitLocked)
-                        setHoverPreview({
+                      if (hover && !orbitLocked) {
+                        showCardPreview({
                           slug: p.card.slug,
                           name: p.card.cardName,
                           type: p.card.type,
                         });
-                      else setHoverPreview(null);
+                      } else {
+                        hideCardPreview();
+                      }
                     }}
                   />
                 );
@@ -1249,14 +1284,16 @@ export default function Draft3DPage() {
                             } bg-black/70 ring-1 ring-white/25 text-white`}
                             onMouseEnter={() => {
                               if (slug) {
-                                setHoverPreview({
+                                showCardPreview({
                                   slug,
                                   name: it.name,
                                   type: info?.type || null,
                                 });
                               }
                             }}
-                            onMouseLeave={() => setHoverPreview(null)}
+                            onMouseLeave={() => {
+                              hideCardPreview();
+                            }}
                           >
                             {compactPicks ? (
                               <div className="flex items-center justify-between gap-2">
