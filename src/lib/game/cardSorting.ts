@@ -49,6 +49,32 @@ export type CategorizedPicks = {
   [key: string]: Pick3D[] | undefined;
 };
 
+// Draft bot utility functions
+export function weightForRarity(r: Rarity): number {
+  switch (r) {
+    case "Unique":
+      return 12;
+    case "Elite":
+      return 8;
+    case "Exceptional":
+      return 4;
+    default:
+      return 1;
+  }
+}
+
+export function choiceWeighted<T>(items: { item: T; weight: number }[]): T | null {
+  const total = items.reduce((s, x) => s + Math.max(0, x.weight), 0);
+  if (total <= 0) return null;
+  let r = Math.random() * total;
+  for (const { item, weight } of items) {
+    const w = Math.max(0, weight);
+    if (r < w) return item;
+    r -= w;
+  }
+  return items.at(-1)?.item ?? null;
+}
+
 export function categorizeCard(
   card: BoosterCard,
   meta?: CardMeta

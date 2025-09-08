@@ -3,45 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import {
+  type BoosterCard,
+  type Rarity,
+  weightForRarity,
+  choiceWeighted,
+} from "@/lib/game/cardSorting";
 
-type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
-type Finish = "Standard" | "Foil";
-
-type BoosterCard = {
-  variantId: number;
-  slug: string;
-  finish: Finish;
-  product: string;
-  rarity: Rarity;
-  type: string | null;
-  cardId: number;
-  cardName: string;
-};
-
-function weightForRarity(r: Rarity) {
-  switch (r) {
-    case "Unique":
-      return 12;
-    case "Elite":
-      return 8;
-    case "Exceptional":
-      return 4;
-    default:
-      return 1;
-  }
-}
-
-function choiceWeighted<T>(items: { item: T; weight: number }[]): T | null {
-  const total = items.reduce((s, x) => s + Math.max(0, x.weight), 0);
-  if (total <= 0) return null;
-  let r = Math.random() * total;
-  for (const { item, weight } of items) {
-    const w = Math.max(0, weight);
-    if (r < w) return item;
-    r -= w;
-  }
-  return items.at(-1)?.item ?? null;
-}
 
 export default function DraftPage() {
   const router = useRouter();

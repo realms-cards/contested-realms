@@ -10,253 +10,30 @@ import { Physics } from "@react-three/rapier";
 import Board from "@/lib/game/Board";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
-import CardPlane from "@/lib/game/components/CardPlane";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import {
   MAT_PIXEL_W,
   MAT_PIXEL_H,
   CARD_LONG,
-  CARD_SHORT,
 } from "@/lib/game/constants";
-import type { ThreeEvent } from "@react-three/fiber";
-import type { Group } from "three";
 import { MOUSE } from "three";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import {
   BoosterCard,
   Pick3D,
   Rarity,
   categorizeCard,
   computeStackPositions,
+  weightForRarity,
+  choiceWeighted,
 } from "@/lib/game/cardSorting";
 
 // --- Draft data types (mirrors /draft 2D) ---
 // Types moved to src/lib/game/cardSorting.ts
 
-function weightForRarity(r: Rarity) {
-  switch (r) {
-    case "Unique":
-      return 12;
-    case "Elite":
-      return 8;
-    case "Exceptional":
-      return 4;
-    default:
-      return 1;
-  }
-}
 
-function choiceWeighted<T>(items: { item: T; weight: number }[]): T | null {
-  const total = items.reduce((s, x) => s + Math.max(0, x.weight), 0);
-  if (total <= 0) return null;
-  let r = Math.random() * total;
-  for (const { item, weight } of items) {
-    const w = Math.max(0, weight);
-    if (r < w) return item;
-    r -= w;
-  }
-  return items.at(-1)?.item ?? null;
-}
-
-// Lightweight draggable card for draft (not tied to game store)
-function DraggableCard3D({
-  slug,
-  isSite,
-  x,
-  z,
-  onDrop,
-  disabled,
-  onDragChange,
-  rotationZ: extraRotZ = 0,
-  onDragMove,
-  onRelease,
-  getTopRenderOrder,
-  onHoverChange,
-  lockUpright,
-  baseRenderOrder = 1500,
-}: {
-  slug: string;
-  isSite: boolean;
-  x: number;
-  z: number;
-  onDrop?: (wx: number, wz: number) => void;
-  disabled?: boolean;
-  onDragChange?: (dragging: boolean) => void;
-  rotationZ?: number;
-  onDragMove?: (wx: number, wz: number) => void;
-  onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
-  getTopRenderOrder?: () => number;
-  onHoverChange?: (hovering: boolean) => void;
-  lockUpright?: boolean;
-  baseRenderOrder?: number;
-}) {
-  const ref = useRef<Group | null>(null);
-  const dragStart = useRef<{
-    x: number;
-    z: number;
-    time: number;
-    screenX: number;
-    screenY: number;
-  } | null>(null);
-  const dragging = useRef(false);
-  const upCleanupRef = useRef<(() => void) | null>(null);
-  const roRef = useRef<number>(baseRenderOrder);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uprightLocked, setUprightLocked] = useState(false);
-
-  // Reset render order back to base when not dragging (prevents sticky top-order after drag)
-  useEffect(() => {
-    if (!isDragging) {
-      roRef.current = baseRenderOrder;
-    }
-  }, [isDragging, baseRenderOrder]);
-
-  const setPos = useCallback((wx: number, wz: number, lift = false) => {
-    if (!ref.current) return;
-    ref.current.position.set(wx, lift ? 0.25 : 0.002, wz);
-  }, []);
-
-  const rotZ =
-    (isSite ? -Math.PI / 2 : 0) +
-    (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
-
-  return (
-    <group ref={ref} position={[x, 0.002, z]}>
-      {/* Larger invisible hitbox for easier interaction */}
-      <mesh
-        position={[0, 0.01, 0]}
-        onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          if (e.nativeEvent.button !== 0) return;
-          e.stopPropagation();
-          onHoverChange?.(false);
-          // Record potential drag start in both world and screen space
-          dragStart.current = {
-            x: e.point.x,
-            z: e.point.z,
-            time: Date.now(),
-            screenX: e.clientX,
-            screenY: e.clientY,
-          };
-          // bring to front
-          if (getTopRenderOrder) {
-            const next = getTopRenderOrder();
-            roRef.current = next;
-          }
-          // Lock orbit immediately while pointer is held on a card to prevent camera orbiting
-          onDragChange?.(true);
-          // Ensure we always unlock if pointerup happens off the mesh before drag begins
-          if (!upCleanupRef.current) {
-            const earlyUp = () => {
-              onDragChange?.(false);
-              dragStart.current = null;
-              dragging.current = false;
-              setIsDragging(false);
-              if (upCleanupRef.current) {
-                upCleanupRef.current();
-                upCleanupRef.current = null;
-              }
-            };
-            window.addEventListener("pointerup", earlyUp, { once: true });
-            upCleanupRef.current = () =>
-              window.removeEventListener("pointerup", earlyUp);
-          }
-        }}
-        onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          const s = dragStart.current;
-          if (!s) return;
-          // Check threshold to start dragging
-          const held = Date.now() - s.time;
-          const dx = e.clientX - s.screenX;
-          const dy = e.clientY - s.screenY;
-          const dist = Math.hypot(dx, dy);
-          const PIX_THRESH = 6;
-          if (!dragging.current && held >= 50 && dist > PIX_THRESH) {
-            dragging.current = true;
-            setIsDragging(true);
-            setUprightLocked(true);
-            // Bind a global pointerup fallback
-            const handleUp = () => {
-              // Ensure cleanup even if pointer up occurs off the mesh
-              onDragChange?.(false);
-              dragStart.current = null;
-              dragging.current = false;
-              setIsDragging(false);
-              if (upCleanupRef.current) {
-                upCleanupRef.current();
-                upCleanupRef.current = null;
-              }
-            };
-            window.addEventListener("pointerup", handleUp, { once: true });
-            upCleanupRef.current = () =>
-              window.removeEventListener("pointerup", handleUp);
-          }
-          if (dragging.current) {
-            e.stopPropagation();
-            const wx = e.point.x;
-            const wz = e.point.z;
-            setPos(wx, wz, true);
-            onDragMove?.(wx, wz);
-          }
-        }}
-        onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-          if (disabled) return;
-          if (e.nativeEvent.button !== 0) return;
-          e.stopPropagation();
-          const wasDragging = dragging.current;
-          const wx = e.point.x;
-          const wz = e.point.z;
-          // Always settle to ground height
-          setPos(wx, wz, false);
-          dragStart.current = null;
-          dragging.current = false;
-          setIsDragging(false);
-          onDragChange?.(false);
-          if (upCleanupRef.current) {
-            upCleanupRef.current();
-            upCleanupRef.current = null;
-          }
-          if (onDrop && wasDragging) onDrop(wx, wz);
-          onRelease?.(wx, wz, wasDragging);
-        }}
-        onPointerEnter={() => {
-          if (disabled) return;
-          onHoverChange?.(true);
-        }}
-        onPointerLeave={() => {
-          onHoverChange?.(false);
-        }}
-      >
-        <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
-        <meshBasicMaterial
-          transparent
-          opacity={0}
-          depthWrite={false}
-          depthTest={false}
-        />
-      </mesh>
-
-      {/* Visual card */}
-      <group>
-        {/* CardGlow removed for draft3d per request */}
-        <CardPlane
-          slug={slug}
-          width={CARD_SHORT}
-          height={CARD_LONG}
-          rotationZ={rotZ}
-          upright={false}
-          depthWrite={false}
-          depthTest={false}
-          renderOrder={roRef.current}
-          interactive={false}
-          elevation={0.002}
-        />
-      </group>
-    </group>
-  );
-}
 
 export default function Draft3DPage() {
   const router = useRouter();
@@ -297,34 +74,17 @@ export default function Draft3DPage() {
   const [nextPickId, setNextPickId] = useState(1);
   
   // Hover preview timer to prevent immediate clearing
-  const hoverTimerRef = useRef<number | null>(null);
   const clearHoverTimerRef = useRef<number | null>(null);
   const currentHoverCardRef = useRef<string | null>(null);
 
-  // Helper functions for consistent hover management
-  const showCardPreview = useCallback((card: { slug: string; name: string; type: string | null }) => {
-    // Clear any pending hide timer
-    if (clearHoverTimerRef.current) {
-      window.clearTimeout(clearHoverTimerRef.current);
-      clearHoverTimerRef.current = null;
-    }
-    
-    // Show preview immediately and keep it shown
-    currentHoverCardRef.current = card.slug;
-    setHoverPreview(card);
-  }, []);
 
-  const hideCardPreview = useCallback(() => {
-    // Small delay before hiding to handle quick mouse movements between cards
-    if (clearHoverTimerRef.current) {
-      window.clearTimeout(clearHoverTimerRef.current);
-    }
-    
-    clearHoverTimerRef.current = window.setTimeout(() => {
-      currentHoverCardRef.current = null;
-      setHoverPreview(null);
-      clearHoverTimerRef.current = null;
-    }, 150); // Small delay just for transition between cards
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (clearHoverTimerRef.current) {
+        window.clearTimeout(clearHoverTimerRef.current);
+      }
+    };
   }, []);
 
   const dir = useMemo(() => (packIndex === 1 ? -1 : 1), [packIndex]); // L-R-L
@@ -651,6 +411,32 @@ export default function Draft3DPage() {
     name: string;
     type: string | null;
   } | null>(null);
+
+  // Helper functions for consistent hover management
+  const showCardPreview = useCallback((card: { slug: string; name: string; type: string | null }) => {
+    // Clear any pending hide timer - we're actively showing a card
+    if (clearHoverTimerRef.current) {
+      window.clearTimeout(clearHoverTimerRef.current);
+      clearHoverTimerRef.current = null;
+    }
+    
+    // Show preview immediately and keep it shown while hovering
+    currentHoverCardRef.current = card.slug;
+    setHoverPreview(card);
+  }, []); // setHoverPreview is stable, no need to include it
+
+  const hideCardPreview = useCallback(() => {
+    // Small delay before hiding to handle quick mouse movements between cards
+    if (clearHoverTimerRef.current) {
+      window.clearTimeout(clearHoverTimerRef.current);
+    }
+    
+    clearHoverTimerRef.current = window.setTimeout(() => {
+      currentHoverCardRef.current = null;
+      setHoverPreview(null);
+      clearHoverTimerRef.current = null;
+    }, 400); // Longer delay to handle 3D card hover sensitivity
+  }, []); // setHoverPreview is stable, no need to include it
   const [metaByCardId, setMetaByCardId] = useState<
     Record<
       number,
@@ -974,9 +760,9 @@ export default function Draft3DPage() {
                       name: c.cardName,
                       type: c.type,
                     });
-                  } else {
-                    hideCardPreview();
                   }
+                  // Don't call hideCardPreview on hover end - let natural timeout handle it
+                  // This prevents premature clearing due to pointer event instability in 3D
                 }}
                 onRelease={(wx, wz) => {
                   const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
@@ -1031,9 +817,9 @@ export default function Draft3DPage() {
                           name: p.card.cardName,
                           type: p.card.type,
                         });
-                      } else {
-                        hideCardPreview();
                       }
+                      // Don't call hideCardPreview on hover end - let natural timeout handle it
+                      // This prevents premature clearing due to pointer event instability in 3D
                     }}
                   />
                 );
