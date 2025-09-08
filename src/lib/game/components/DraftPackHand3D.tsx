@@ -217,22 +217,15 @@ export default function DraftPackHand3D({
             rotation-x={-Math.PI / 2}
             onPointerMove={() => {
               if (disabled) return;
-              // If no card hitbox is currently hovered, clear preview
-              if (!hoverAnyRef.current) {
-                hoverIndexRef.current = null;
-                onHoverInfo?.(null);
-              }
+              // Don't immediately clear - let hover timeout handle it
             }}
             onPointerOver={() => {
               if (disabled) return;
-              if (!hoverAnyRef.current) {
-                hoverIndexRef.current = null;
-                onHoverInfo?.(null);
-              }
+              // Don't immediately clear - let cards show their previews
             }}
             onPointerOut={() => {
               hoverAnyRef.current = false;
-              onHoverInfo?.(null);
+              // Don't immediately clear - let hover timeout handle it
             }}
           >
             {(() => {
@@ -287,13 +280,8 @@ export default function DraftPackHand3D({
                   if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
                   hoverClearTimerRef.current = null;
                 } else {
-                  if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
-                  hoverClearTimerRef.current = window.setTimeout(() => {
-                    // Only clear if no hover has resumed and no keyboard focus or selection
-                    if (!hoverAnyRef.current && focusIndexRef.current == null && selectedIndex == null) {
-                      onHoverInfo?.(null);
-                    }
-                  }, 260);
+                  // Don't clear preview immediately - let the parent handle it with its longer delay
+                  // This prevents flickering when moving between cards
                 }
               }}
               orbitLocked={orbitLocked}
@@ -640,8 +628,8 @@ function PackCard3D({
         }}
         onPointerOut={() => {
           hoveringRef.current = false;
-          onHoverInfo?.(null);
           onHoverIndexChange?.(null);
+          // Don't immediately clear hover info - let timeout mechanism handle it
         }}
       >
         <planeGeometry args={[CARD_SHORT * 1.08, CARD_LONG * 1.08]} />

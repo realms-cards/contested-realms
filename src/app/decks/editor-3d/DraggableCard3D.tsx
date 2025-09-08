@@ -56,7 +56,18 @@ export default function DraggableCard3D({
   const roRef = useRef<number>(baseRenderOrder);
   const [isDragging, setIsDragging] = useState(false);
   const [uprightLocked, setUprightLocked] = useState(false);
+  const hoveringRef = useRef(false);
+  const hoverStableRef = useRef<number | null>(null);
   const lastClickTime = useRef<number>(0);
+
+  // Cleanup hover timer on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverStableRef.current) {
+        window.clearTimeout(hoverStableRef.current);
+      }
+    };
+  }, []);
 
   // Reset render order to base when not dragging
   useEffect(() => {
@@ -191,10 +202,27 @@ export default function DraggableCard3D({
         }}
         onPointerOver={() => {
           if (disabled) return;
+          hoveringRef.current = true;
+          // Clear any pending hover-out debounce
+          if (hoverStableRef.current) {
+            window.clearTimeout(hoverStableRef.current);
+            hoverStableRef.current = null;
+          }
           onHoverChange?.(true);
         }}
         onPointerOut={() => {
-          onHoverChange?.(false);
+          hoveringRef.current = false;
+          // Add a small delay before calling hover false to prevent spurious events
+          if (hoverStableRef.current) {
+            window.clearTimeout(hoverStableRef.current);
+          }
+          hoverStableRef.current = window.setTimeout(() => {
+            // Only call hover false if we're truly not hovering anymore
+            if (!hoveringRef.current) {
+              onHoverChange?.(false);
+            }
+            hoverStableRef.current = null;
+          }, 50); // Small delay to handle pointer event quirks
         }}
         onContextMenu={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
