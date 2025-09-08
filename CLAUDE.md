@@ -1,0 +1,1 @@
+- ok - what else can be the problematic source for card previews - the only big difference between how the editor-3d uses the view is that we have a "hand" in /draft-3d - not sure why, but it might be the source for the vanishing hover/card previews
