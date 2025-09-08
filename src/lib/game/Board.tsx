@@ -697,10 +697,6 @@ export default function Board() {
                 const marginZ = TILE_SIZE * 0.1; // distance from bottom/top edge
                 return items.map((p, idx) => {
                   const owner = p.owner; // 1 or 2
-                  const zBase =
-                    owner === 1
-                      ? -TILE_SIZE * 0.5 + marginZ
-                      : TILE_SIZE * 0.5 - marginZ;
                   const isSel =
                     selectedPermanent &&
                     selectedPermanent.at === key &&
@@ -712,6 +708,12 @@ export default function Board() {
                     ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
                     : undefined;
                   const tokenSiteReplace = !!tokenDef?.siteReplacement;
+                  // Sites sit at tile center; rubble tokens (site replacements) should also snap to center
+                  const zBase = tokenSiteReplace
+                    ? 0
+                    : owner === 1
+                      ? -TILE_SIZE * 0.5 + marginZ
+                      : TILE_SIZE * 0.5 - marginZ;
                   // Orientation: bottom toward owner; Rubble (site-like token) adds -90° like sites
                   const rotZ =
                     (owner === 1 ? 0 : Math.PI) +
