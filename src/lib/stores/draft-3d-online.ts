@@ -17,7 +17,8 @@ import type {
   StackInteractionType, 
   EventPriority,
   OperationData,
-  UIUpdateData
+  UIUpdateData,
+  UIUpdateType
 } from '@/types/draft-3d-events';
 
 interface Draft3DOnlineState {
@@ -66,7 +67,7 @@ interface Draft3DOnlineState {
   updatePlayerStates: () => void;
   
   // UI Sync Actions
-  addUIUpdate: (updateType: string, data: UIUpdateData, priority?: EventPriority) => void;
+  addUIUpdate: (updateType: UIUpdateType, data: UIUpdateData, priority?: EventPriority) => void;
   processPendingUpdates: () => UIUpdateData[] | null;
   
   // Session Management
@@ -129,7 +130,14 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
       );
       
       // Update local state for immediate UI response
-      get().updateActivePreviews();
+      set(state => {
+        const previews = stateManager.previews.getActivePreviews(sessionId);
+        const previewMap = new Map();
+        for (const preview of previews) {
+          previewMap.set(preview.previewId, preview);
+        }
+        return { activePreviews: previewMap };
+      });
       
       return preview;
     } catch (error) {
@@ -139,9 +147,19 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
   },
 
   clearCardPreview: (previewId: string) => {
-    const { stateManager } = get();
+    const { stateManager, sessionId } = get();
     stateManager.previews.clearPreview(previewId);
-    get().updateActivePreviews();
+    
+    if (sessionId) {
+      set(state => {
+        const previews = stateManager.previews.getActivePreviews(sessionId);
+        const previewMap = new Map();
+        for (const preview of previews) {
+          previewMap.set(preview.previewId, preview);
+        }
+        return { activePreviews: previewMap };
+      });
+    }
   },
 
   updateActivePreviews: () => {
@@ -187,17 +205,38 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
 
   // Player State Management
   updatePlayerState: (playerId, updates) => {
-    const { stateManager } = get();
+    const { stateManager, sessionId } = get();
     const updated = stateManager.players.updatePlayerState(playerId, updates);
-    get().updatePlayerStates();
+    
+    if (sessionId) {
+      set(state => {
+        const players = stateManager.players.getSessionPlayers(sessionId);
+        const playerMap = new Map();
+        for (const player of players) {
+          playerMap.set(player.playerId, player);
+        }
+        return { playerStates: playerMap };
+      });
+    }
+    
     return updated;
   },
 
   removePlayer: (playerId: string) => {
-    const { stateManager } = get();
+    const { stateManager, sessionId } = get();
     stateManager.players.removePlayerState(playerId);
     stateManager.previews.clearPlayerPreviews(playerId);
-    get().updatePlayerStates();
+    
+    if (sessionId) {
+      set(state => {
+        const players = stateManager.players.getSessionPlayers(sessionId);
+        const playerMap = new Map();
+        for (const player of players) {
+          playerMap.set(player.playerId, player);
+        }
+        return { playerStates: playerMap };
+      });
+    }
   },
 
   updatePlayerStates: () => {
@@ -215,7 +254,7 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
   },
 
   // UI Sync Management
-  addUIUpdate: (updateType, data, priority = 'low') => {
+  addUIUpdate: (updateType: UIUpdateType, data: UIUpdateData, priority: EventPriority = 'low') => {
     const { stateManager, sessionId, currentPlayerId } = get();
     if (!sessionId || !currentPlayerId) return;
 
@@ -227,14 +266,19 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
     const { stateManager, sessionId } = get();
     if (!sessionId) return null;
 
-    const batchKey = `${sessionId}-low`;
-    const updates = stateManager.uiSync.processBatch(batchKey);
-    
-    if (updates) {
-      set({ pendingUIUpdates: 0 });
+    try {
+      const batchKey = `${sessionId}-low`;
+      const updates = stateManager.uiSync.processBatch(batchKey);
+      
+      if (updates) {
+        set({ pendingUIUpdates: 0 });
+      }
+      
+      return updates;
+    } catch (error) {
+      console.warn('[Draft3D] Failed to process pending updates:', error);
+      return null;
     }
-    
-    return updates;
   },
 
   // Session Management

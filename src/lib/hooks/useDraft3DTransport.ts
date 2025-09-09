@@ -33,21 +33,25 @@ export const useDraft3DTransport = ({
   onError
 }: UseDraft3DTransportOptions) => {
   const store = useDraft3DOnlineStore();
+  // Select stable action references to avoid effect loops when store state changes
+  const initialize = useDraft3DOnlineStore(s => s.initialize);
+  const cleanup = useDraft3DOnlineStore(s => s.cleanup);
+  const setConnectionStatus = useDraft3DOnlineStore(s => s.setConnectionStatus);
   const unsubscribersRef = useRef<(() => void)[]>([]);
 
   // Initialize store when session starts
   useEffect(() => {
     if (sessionId && playerId) {
-      store.initialize(sessionId, playerId);
+      initialize(sessionId, playerId);
     } else {
-      store.cleanup();
+      cleanup();
     }
-  }, [sessionId, playerId]);
+  }, [sessionId, playerId, initialize, cleanup]);
 
   // Connection status tracking
   useEffect(() => {
-    store.setConnectionStatus(!!transport);
-  }, [transport]);
+    setConnectionStatus(!!transport);
+  }, [transport, setConnectionStatus]);
 
   // Set up event listeners when transport is available
   useEffect(() => {
@@ -218,10 +222,16 @@ export const useDraft3DTransport = ({
 
     // Cleanup function
     return () => {
-      unsubscribers.forEach(unsub => unsub());
+      unsubscribers.forEach(unsub => {
+        try {
+          unsub();
+        } catch (error) {
+          console.warn('[Draft3D] Error during event listener cleanup:', error);
+        }
+      });
       unsubscribersRef.current = [];
     };
-  }, [transport, sessionId, playerId, onError]);
+  }, [transport, sessionId, playerId, onError, store]);
 
   // Transport methods wrapped for Draft-3D
   const sendCardPreview = useCallback((
@@ -249,7 +259,7 @@ export const useDraft3DTransport = ({
     
     // Also update local store for immediate UI response
     store.createCardPreview(cardId, previewType, position, priority);
-  }, [transport, sessionId, playerId]);
+  }, [transport, sessionId, playerId, store]);
 
   const clearCardPreview = useCallback((cardId: string, previewType: PreviewType) => {
     if (!transport || !sessionId || !playerId) return;
@@ -271,7 +281,7 @@ export const useDraft3DTransport = ({
       transport.sendCardPreview(event);
     }
     store.clearCardPreview(previewId);
-  }, [transport, sessionId, playerId]);
+  }, [transport, sessionId, playerId, store]);
 
   const sendStackInteraction = useCallback((
     interactionType: StackInteractionType,
@@ -303,7 +313,7 @@ export const useDraft3DTransport = ({
     
     // Process locally for immediate feedback
     store.processStackInteraction(interactionType, cardIds, event.operationData);
-  }, [transport, sessionId, playerId]);
+  }, [transport, sessionId, playerId, store]);
 
   const sendUIUpdate = useCallback((
     updateType: UIUpdateType,
@@ -327,7 +337,7 @@ export const useDraft3DTransport = ({
       transport.sendUIUpdate(event);
     }
     store.addUIUpdate(updateType, data, priority);
-  }, [transport, sessionId, playerId]);
+  }, [transport, sessionId, playerId, store]);
 
   return {
     // Connection state

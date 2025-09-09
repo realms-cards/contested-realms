@@ -25,19 +25,22 @@ import {
 } from "@/lib/game/cardSorting";
 import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 
+// Import new draft sync system
+import { useDraftSync, usePlayerSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
+import { useDeckPersistence, useSubmissionCoordination } from "@/lib/draft/hooks/useDeckPersistence";
+import { WaitingOverlay, useWaitingOverlay } from "@/components/draft/WaitingOverlay";
+
 // Card shape used by OnlineDraftScreen; keep compatible
-type DraftCard = {
+interface DraftCard {
   id: string; // server pick token/id
   name: string;
   cardName?: string;
   slug: string;
   type?: string;
   cost?: string;
-  rarity?: string;
+  rarity?: 'common' | 'uncommon' | 'rare' | 'mythic' | string;
   setName?: string; // Set information from server
-  // additional possible fields from server are tolerated
-  [k: string]: unknown;
-};
+}
 
 // Player ready message type
 type PlayerReadyMessage = CustomMessage & {
@@ -324,6 +327,20 @@ export default function OnlineDraft3DScreen({
     return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
   }, [draftState.phase, draftState.waitingFor, myPlayerId]);
 
+  // New draft sync system integration
+  const draftSync = useDraftSync(myPlayerKey);
+  const playerSync = usePlayerSync();
+  const pickTimer = usePickTimer();
+  
+  // Deck persistence system
+  const deckPersistence = useDeckPersistence(matchId || 'default-session', myPlayerKey);
+  const submissionCoordination = useSubmissionCoordination(matchId || 'default-session', myPlayerKey);
+  
+  // Waiting overlay integration
+  const waitingState = useWaitingOverlay({
+    getWaitingState: () => submissionCoordination.waitingState
+  });
+
   const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
   const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
   const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
@@ -363,24 +380,23 @@ export default function OnlineDraft3DScreen({
   useEffect(() => {
     if (!transport) return;
 
-    const handleDraftUpdate = (state: unknown) => {
-      const s = state as DraftState;
-      setDraftState(s);
+    const handleDraftUpdate = (state: DraftState) => {
+      setDraftState(state);
       {
-        const myPackSize = (s.currentPacks?.[myPlayerIndex] || []).length;
-        console.log(`[DraftClient 3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber} myPack=${myPackSize} waitingFor=${s.waitingFor?.length ?? 0}`);
+        const myPackSize = (state.currentPacks?.[myPlayerIndex] || []).length;
+        console.log(`[DraftClient 3D] draftUpdate: phase=${state.phase} pack=${state.packIndex} pick=${state.pickNumber} myPack=${myPackSize} waitingFor=${state.waitingFor?.length ?? 0}`);
       }
       
       // Clear staged pick when new pack arrives (similar to 2D version)
-      if (s.phase === "picking") {
-        console.log(`[DraftClient 3D] resetStaging <- phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`);
+      if (state.phase === "picking") {
+        console.log(`[DraftClient 3D] resetStaging <- phase=${state.phase} pack=${state.packIndex} pick=${state.pickNumber}`);
         setStaged(null);
         setReady(false);
       }
       
       // Handle draft completion and transition to editor-3d
-      if (s.phase === "complete") {
-        const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
+      if (state.phase === "complete") {
+        const mine = (state.picks[myPlayerIndex] || []) as DraftCard[];
         console.log(`[DraftClient 3D] Draft complete! Picked ${mine.length} cards`);
         
         // Save draft picks to local storage for deck building
@@ -593,8 +609,8 @@ export default function OnlineDraft3DScreen({
     [draftState.packIndex, transport, match]
   );
 
-  // Handle pick and pass when button is clicked
-  const handlePickAndPass = useCallback(() => {
+  // Enhanced pick handling with new sync system
+  const handlePickAndPass = useCallback(async () => {
     console.log(`[DraftClient 3D] handlePickAndPass called - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`);
     
     if (!staged || !transport || !match || ready) {
@@ -606,23 +622,46 @@ export default function OnlineDraft3DScreen({
     
     setReady(true);
     
-    if (!transport.makeDraftPick) {
-      console.error(`[DraftClient 3D] transport.makeDraftPick is not available!`);
-      return;
+    // Use new sync system if connected, fallback to old transport
+    if (draftSync.isConnected) {
+      try {
+        console.log(`[DraftClient 3D] Using new sync system for pick`);
+        const result = await draftSync.makePickAttempt(staged.card.id);
+        
+        if (result.success) {
+          console.log(`[DraftClient 3D] New sync pick successful: ${result.message}`);
+        } else {
+          console.error(`[DraftClient 3D] New sync pick failed: ${result.message}`);
+          setReady(false);
+          return;
+        }
+      } catch (err) {
+        console.error(`[DraftClient 3D] New sync pick error:`, err);
+        setReady(false);
+        return;
+      }
+    } else {
+      // Fallback to old transport system
+      if (!transport.makeDraftPick) {
+        console.error(`[DraftClient 3D] transport.makeDraftPick is not available!`);
+        return;
+      }
+      
+      try {
+        transport.makeDraftPick({
+          matchId: match.id,
+          cardId: staged.card.id,
+          packIndex: draftState.packIndex,
+          pickNumber: draftState.pickNumber,
+        });
+      } catch (err) {
+        console.error(`[DraftClient 3D] makeDraftPick error:`, err);
+        setReady(false);
+        return;
+      }
     }
     
-    try {
-      transport.makeDraftPick({
-        matchId: match.id,
-        cardId: staged.card.id,
-        packIndex: draftState.packIndex,
-        pickNumber: draftState.pickNumber,
-      });
-    } catch (err) {
-      console.error(`[DraftClient 3D] makeDraftPick error:`, err);
-    }
-    
-    // Add picked card to 3D board display
+    // Add picked card to 3D board display and persistence
     const boosterCard = draftCardToBoosterCard(staged.card);
     const newPick: Pick3D = {
       id: nextPickId,
@@ -633,10 +672,18 @@ export default function OnlineDraft3DScreen({
     setPick3D(prev => [...prev, newPick]);
     setNextPickId(prev => prev + 1);
     
+    // Add drafted card to persistence system
+    try {
+      await deckPersistence.addStandardCards([staged.card.id]);
+      console.log(`[DraftClient 3D] Added drafted card to persistence`);
+    } catch (err) {
+      console.warn(`[DraftClient 3D] Failed to add drafted card to persistence:`, err);
+    }
+    
     // Clear staged after pick
     console.log(`[DraftClient 3D] pickAndPass -> cardId=${staged.card.id}`);
     setStaged(null);
-  }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber, draftCardToBoosterCard, nextPickId]);
+  }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber, draftCardToBoosterCard, nextPickId, draftSync, deckPersistence]);
 
   // Keyboard event handling for spacebar pick and pass
   useEffect(() => {
@@ -1111,6 +1158,53 @@ export default function OnlineDraft3DScreen({
         >
           {amPicker ? (ready ? `Waiting for ${draftState.waitingFor.length - 1} other player${draftState.waitingFor.length - 1 === 1 ? '' : 's'}...` : "Pick & Pass") : "Waiting..."}
         </button>
+      )}
+
+      {/* New sync system waiting overlay */}
+      <WaitingOverlay
+        waitingState={waitingState}
+        onCancel={() => {
+          console.log('[OnlineDraft3DScreen] Waiting overlay cancelled');
+          submissionCoordination.updateSubmissionStatus('failed');
+        }}
+        onDismiss={() => {
+          console.log('[OnlineDraft3DScreen] Waiting overlay dismissed');
+        }}
+      />
+
+      {/* Sync status indicator */}
+      {draftSync.isConnected && (
+        <div className="fixed top-4 right-4 z-40 bg-black/80 text-white px-3 py-1 rounded-lg text-sm">
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${
+              draftSync.connectionQuality === 'excellent' ? 'bg-green-500' :
+              draftSync.connectionQuality === 'good' ? 'bg-yellow-500' :
+              draftSync.connectionQuality === 'poor' ? 'bg-orange-500' :
+              'bg-red-500'
+            }`} />
+            <span>Sync: {draftSync.connectionQuality}</span>
+            {draftSync.syncLatency > 0 && (
+              <span className="text-xs text-gray-400">({draftSync.syncLatency}ms)</span>
+            )}
+          </div>
+          {draftSync.waitingForPlayers && (
+            <div className="text-xs text-gray-400 mt-1">
+              Waiting for {draftSync.waitingPlayers.length} player(s)
+            </div>
+          )}
+          {pickTimer.hasTimeRemaining && (
+            <div className="text-xs mt-1">
+              Pick timer: {pickTimer.timeRemaining}s
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Persistence status indicator */}
+      {deckPersistence.isDirty && (
+        <div className="fixed top-16 right-4 z-40 bg-orange-500/80 text-white px-2 py-1 rounded text-xs">
+          Unsaved changes
+        </div>
       )}
     </div>
   );

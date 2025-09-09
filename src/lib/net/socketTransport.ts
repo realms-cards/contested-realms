@@ -21,6 +21,11 @@ import type {
 export class SocketTransport implements GameTransport {
   private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
   private socket?: Socket;
+  private reconnectionAttempts = 0;
+  private maxReconnectionAttempts = 5;
+  private reconnectionDelay = 1000; // Start with 1 second
+  private connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
+  private isIntentionalDisconnect = false;
 
   private static getMessageType(m: unknown): string {
     if (m && typeof m === "object" && "type" in (m as Record<string, unknown>)) {
@@ -32,6 +37,9 @@ export class SocketTransport implements GameTransport {
 
   async connect(opts: { playerId?: string; displayName: string }): Promise<void> {
     if (this.socket && this.socket.connected) return;
+    
+    this.connectionState = 'connecting';
+    this.isIntentionalDisconnect = false;
 
     // Prefer explicit env; otherwise pick a sensible default based on current dev port
     // If Next dev runs on 3002, we default WS to 3010 to avoid conflicts with other local apps
@@ -50,6 +58,7 @@ export class SocketTransport implements GameTransport {
     }) as Socket;
 
     this.socket = socket;
+    this.setupReconnectionHandlers(socket, opts);
 
     await new Promise<void>((resolve, reject) => {
       let resolved = false;
@@ -71,7 +80,12 @@ export class SocketTransport implements GameTransport {
       };
 
       // Send hello on every connect (initial and reconnects)
-      socket.on("connect", sendHello);
+      socket.on("connect", () => {
+        this.connectionState = 'connected';
+        this.reconnectionAttempts = 0;
+        this.reconnectionDelay = 1000;
+        sendHello();
+      });
       socket.once("connect_error", onError);
 
       // Wire server events
@@ -141,6 +155,8 @@ export class SocketTransport implements GameTransport {
         this.dispatch("error", Protocol.ErrorPayload.parse(payload))
       );
       socket.on("connect_error", (err: unknown) => {
+        console.warn(`[Transport] Connection error:`, err);
+        this.connectionState = 'disconnected';
         this.dispatch("error", { message: String(err) });
       });
 
@@ -193,6 +209,8 @@ export class SocketTransport implements GameTransport {
 
   disconnect(): void {
     if (!this.socket) return;
+    this.isIntentionalDisconnect = true;
+    this.connectionState = 'disconnected';
     this.socket.disconnect();
     this.socket = undefined;
   }
@@ -379,9 +397,73 @@ export class SocketTransport implements GameTransport {
     for (const h of Array.from(set)) h(payload as unknown);
   }
 
+  private setupReconnectionHandlers(socket: Socket, opts: { playerId?: string; displayName: string }): void {
+    socket.on('disconnect', (reason: string) => {
+      console.log(`[Transport] Disconnected: ${reason}`);
+      this.connectionState = 'disconnected';
+      
+      if (!this.isIntentionalDisconnect && reason === 'io server disconnect') {
+        // Server initiated disconnect, attempt reconnection
+        this.attemptReconnection(opts);
+      } else if (!this.isIntentionalDisconnect && reason === 'transport close') {
+        // Network issue, attempt reconnection
+        this.attemptReconnection(opts);
+      }
+    });
+
+    socket.on('reconnect', (attemptNumber: number) => {
+      console.log(`[Transport] Reconnected after ${attemptNumber} attempts`);
+      this.connectionState = 'connected';
+      this.reconnectionAttempts = 0;
+    });
+
+    socket.on('reconnect_error', (error: Error) => {
+      console.warn(`[Transport] Reconnection error:`, error);
+      this.connectionState = 'disconnected';
+    });
+
+    socket.on('reconnect_failed', () => {
+      console.error('[Transport] All reconnection attempts failed');
+      this.connectionState = 'disconnected';
+      this.dispatch('error', { message: 'Failed to reconnect to server' });
+    });
+  }
+
+  private attemptReconnection(opts: { playerId?: string; displayName: string }): void {
+    if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
+      console.error('[Transport] Max reconnection attempts reached');
+      return;
+    }
+
+    this.connectionState = 'reconnecting';
+    this.reconnectionAttempts++;
+    
+    console.log(`[Transport] Attempting reconnection ${this.reconnectionAttempts}/${this.maxReconnectionAttempts} in ${this.reconnectionDelay}ms`);
+    
+    setTimeout(() => {
+      if (this.connectionState === 'reconnecting' && !this.isIntentionalDisconnect) {
+        this.connect(opts).catch(error => {
+          console.warn(`[Transport] Reconnection attempt ${this.reconnectionAttempts} failed:`, error);
+          // Exponential backoff
+          this.reconnectionDelay = Math.min(this.reconnectionDelay * 2, 30000);
+        });
+      }
+    }, this.reconnectionDelay);
+  }
+
   private requireSocket(): Socket {
-    if (!this.socket) throw new Error("Socket not connected");
+    if (!this.socket || !this.socket.connected) {
+      throw new Error(`Socket not connected (state: ${this.connectionState})`);
+    }
     return this.socket;
+  }
+
+  getConnectionState(): 'disconnected' | 'connecting' | 'connected' | 'reconnecting' {
+    return this.connectionState;
+  }
+
+  isConnected(): boolean {
+    return this.connectionState === 'connected' && this.socket?.connected === true;
   }
 
   // Generic methods for replay and other custom events

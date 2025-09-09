@@ -20,7 +20,7 @@ export interface OperationData {
   sourceStackId?: string;
   targetStackId?: string;
   destinationPlayerId?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, string | number | boolean>;
 }
 
 // UI Update data structures
@@ -31,7 +31,7 @@ export interface UIUpdateData {
   scale?: number;
   opacity?: number;
   visible?: boolean;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, string | number | boolean>;
 }
 
 // Player state for draft sessions
@@ -58,7 +58,7 @@ export interface SessionState {
 // Batch update data structure
 export interface BatchUpdateData {
   playerId: string;
-  type: string;
+  type: UIUpdateType;
   data: UIUpdateData;
   timestamp: number;
 }
@@ -127,7 +127,7 @@ export interface UIUpdateEvent {
   sessionId: string;
   playerId: string;
   uiUpdates: {
-    type: 'card_position' | 'camera_angle' | 'menu_state';
+    type: UIUpdateType;
     data: UIUpdateData;
     priority: EventPriority;
   }[];
@@ -164,8 +164,8 @@ export interface SessionLeaveEvent {
 export interface Draft3DError {
   errorCode: string;
   errorMessage: string;
-  error: Error | string | unknown;
-  context?: Record<string, unknown>;
+  error: Error | string;
+  context?: Record<string, string | number | boolean>;
   severity: 'warning' | 'error' | 'critical';
 }
 
