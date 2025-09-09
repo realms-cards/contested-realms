@@ -20,6 +20,8 @@ export default function DraggableCard3D({
   onRelease,
   getTopRenderOrder,
   onHoverChange,
+  onHoverStart,
+  onHoverEnd,
   lockUpright,
   onDoubleClick,
   onContextMenu,
@@ -42,6 +44,8 @@ export default function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
+  onHoverStart?: (cardId: number, slug: string, type: string | null) => void;
+  onHoverEnd?: (cardId: number) => void;
   lockUpright?: boolean;
   onDoubleClick?: () => void;
   onContextMenu?: (clientX: number, clientY: number) => void;
@@ -134,7 +138,11 @@ export default function DraggableCard3D({
         position={[hitboxOffsetX, 0.005, hitboxOffsetZ]}
         rotation-x={-Math.PI / 2}
         rotation-z={isSite ? -Math.PI / 2 : 0}
-        raycast={() => []}
+        userData={{
+          cardId: cardId || 0,
+          slug: slug,
+          type: null, // Will be enhanced later with actual card type
+        }}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -253,6 +261,7 @@ export default function DraggableCard3D({
             hoverStableRef.current = null;
           }
           onHoverChange?.(true);
+          onHoverStart?.(cardId || 0, slug, null);
         }}
         onPointerOut={() => {
           hoveringRef.current = false;
@@ -264,6 +273,7 @@ export default function DraggableCard3D({
             // Only call hover false if we're truly not hovering anymore
             if (!hoveringRef.current) {
               onHoverChange?.(false);
+              onHoverEnd?.(cardId || 0);
             }
             hoverStableRef.current = null;
           }, 50); // Small delay to handle pointer event quirks

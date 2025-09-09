@@ -288,7 +288,7 @@ export default function OnlineMatchPage() {
       window.location.href = `/decks/editor-3d?${params.toString()}`;
       return;
     }
-  }, [matchId, match?.id, match?.status, match?.matchType, match?.sealedConfig, hasSubmittedSealedDeck, isDraftDeckConstruction, hasSubmittedDraftDeck]);
+  }, [matchId, match, hasSubmittedSealedDeck, isDraftDeckConstruction, hasSubmittedDraftDeck]);
 
   // Listen for sealed deck submissions via postMessage (when editor opened in a new window)
   useEffect(() => {
@@ -414,7 +414,7 @@ export default function OnlineMatchPage() {
       const submittedKey = `sealed_submitted_${matchId}`;
       localStorage.removeItem(submittedKey);
     }
-  }, [matchId, match?.status]);
+  }, [matchId, match]);
 
   // Reset game state only when match transitions to "in_progress" (once per match)
   useEffect(() => {
