@@ -1,0 +1,344 @@
+/**
+ * useSocket Hook - Socket.io Integration for React Components
+ * Provides socket connection management with automatic reconnection and state tracking
+ */
+
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+interface UseSocketOptions {
+  url?: string;
+  autoConnect?: boolean;
+  reconnection?: boolean;
+  reconnectionDelay?: number;
+  reconnectionAttempts?: number;
+  timeout?: number;
+}
+
+interface SocketState {
+  isConnected: boolean;
+  isConnecting: boolean;
+  error: string | null;
+  reconnectAttempts: number;
+}
+
+const DEFAULT_OPTIONS: UseSocketOptions = {
+  url: process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001',
+  autoConnect: true,
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 5,
+  timeout: 20000
+};
+
+/**
+ * useSocket hook provides Socket.io connection management
+ * Returns the socket instance and connection state
+ */
+export function useSocket(options: UseSocketOptions = {}): Socket | null {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [state, setState] = useState<SocketState>({
+    isConnected: false,
+    isConnecting: false,
+    error: null,
+    reconnectAttempts: 0
+  });
+  
+  const socketRef = useRef<Socket | null>(null);
+  const optionsRef = useRef(opts);
+
+  // Update options ref when they change
+  useEffect(() => {
+    optionsRef.current = opts;
+  }, [opts]);
+
+  // Initialize socket connection
+  useEffect(() => {
+    if (!opts.autoConnect) return;
+
+    console.log(`[useSocket] Initializing socket connection to ${opts.url}`);
+
+    const socketInstance = io(opts.url!, {
+      autoConnect: opts.autoConnect,
+      reconnection: opts.reconnection,
+      reconnectionDelay: opts.reconnectionDelay,
+      reconnectionAttempts: opts.reconnectionAttempts,
+      timeout: opts.timeout
+    });
+
+    socketRef.current = socketInstance;
+    setSocket(socketInstance);
+
+    // Connection event handlers
+    const handleConnect = () => {
+      console.log('[useSocket] Connected to server');
+      setState(prev => ({
+        ...prev,
+        isConnected: true,
+        isConnecting: false,
+        error: null,
+        reconnectAttempts: 0
+      }));
+    };
+
+    const handleDisconnect = (reason: string) => {
+      console.log(`[useSocket] Disconnected: ${reason}`);
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false,
+        error: reason
+      }));
+    };
+
+    const handleConnecting = () => {
+      console.log('[useSocket] Connecting...');
+      setState(prev => ({
+        ...prev,
+        isConnecting: true,
+        error: null
+      }));
+    };
+
+    const handleConnectError = (error: Error) => {
+      console.error('[useSocket] Connection error:', error);
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false,
+        error: error.message
+      }));
+    };
+
+    const handleReconnect = (attemptNumber: number) => {
+      console.log(`[useSocket] Reconnected after ${attemptNumber} attempts`);
+      setState(prev => ({
+        ...prev,
+        isConnected: true,
+        isConnecting: false,
+        error: null,
+        reconnectAttempts: attemptNumber
+      }));
+    };
+
+    const handleReconnectAttempt = (attemptNumber: number) => {
+      console.log(`[useSocket] Reconnection attempt ${attemptNumber}`);
+      setState(prev => ({
+        ...prev,
+        reconnectAttempts: attemptNumber
+      }));
+    };
+
+    const handleReconnectError = (error: Error) => {
+      console.error('[useSocket] Reconnection error:', error);
+      setState(prev => ({
+        ...prev,
+        error: error.message
+      }));
+    };
+
+    const handleReconnectFailed = () => {
+      console.error('[useSocket] Reconnection failed - max attempts reached');
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false,
+        error: 'Reconnection failed'
+      }));
+    };
+
+    // Attach event listeners
+    socketInstance.on('connect', handleConnect);
+    socketInstance.on('disconnect', handleDisconnect);
+    socketInstance.on('connecting', handleConnecting);
+    socketInstance.on('connect_error', handleConnectError);
+    socketInstance.on('reconnect', handleReconnect);
+    socketInstance.on('reconnect_attempt', handleReconnectAttempt);
+    socketInstance.on('reconnect_error', handleReconnectError);
+    socketInstance.on('reconnect_failed', handleReconnectFailed);
+
+    // Cleanup function
+    return () => {
+      console.log('[useSocket] Cleaning up socket connection');
+      
+      socketInstance.off('connect', handleConnect);
+      socketInstance.off('disconnect', handleDisconnect);
+      socketInstance.off('connecting', handleConnecting);
+      socketInstance.off('connect_error', handleConnectError);
+      socketInstance.off('reconnect', handleReconnect);
+      socketInstance.off('reconnect_attempt', handleReconnectAttempt);
+      socketInstance.off('reconnect_error', handleReconnectError);
+      socketInstance.off('reconnect_failed', handleReconnectFailed);
+      
+      socketInstance.disconnect();
+      setSocket(null);
+      socketRef.current = null;
+    };
+  }, [opts.url, opts.autoConnect, opts.reconnection, opts.reconnectionDelay, opts.reconnectionAttempts, opts.timeout]);
+
+  return socket;
+}
+
+/**
+ * useSocketConnection hook provides detailed connection state
+ */
+export function useSocketConnection(options: UseSocketOptions = {}) {
+  const socket = useSocket(options);
+  const [state, setState] = useState<SocketState>({
+    isConnected: false,
+    isConnecting: false,
+    error: null,
+    reconnectAttempts: 0
+  });
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const updateState = (updates: Partial<SocketState>) => {
+      setState(prev => ({ ...prev, ...updates }));
+    };
+
+    const handleConnect = () => updateState({
+      isConnected: true,
+      isConnecting: false,
+      error: null,
+      reconnectAttempts: 0
+    });
+
+    const handleDisconnect = (reason: string) => updateState({
+      isConnected: false,
+      isConnecting: false,
+      error: reason
+    });
+
+    const handleConnecting = () => updateState({
+      isConnecting: true,
+      error: null
+    });
+
+    const handleConnectError = (error: Error) => updateState({
+      isConnected: false,
+      isConnecting: false,
+      error: error.message
+    });
+
+    const handleReconnectAttempt = (attemptNumber: number) => updateState({
+      reconnectAttempts: attemptNumber
+    });
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connecting', handleConnecting);
+    socket.on('connect_error', handleConnectError);
+    socket.on('reconnect_attempt', handleReconnectAttempt);
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connecting', handleConnecting);
+      socket.off('connect_error', handleConnectError);
+      socket.off('reconnect_attempt', handleReconnectAttempt);
+    };
+  }, [socket]);
+
+  // Manual connection controls
+  const connect = useCallback(() => {
+    if (socket && !socket.connected) {
+      console.log('[useSocketConnection] Manual connect');
+      socket.connect();
+    }
+  }, [socket]);
+
+  const disconnect = useCallback(() => {
+    if (socket && socket.connected) {
+      console.log('[useSocketConnection] Manual disconnect');
+      socket.disconnect();
+    }
+  }, [socket]);
+
+  const reconnect = useCallback(() => {
+    if (socket) {
+      console.log('[useSocketConnection] Manual reconnect');
+      socket.disconnect();
+      setTimeout(() => {
+        socket.connect();
+      }, 1000);
+    }
+  }, [socket]);
+
+  return {
+    socket,
+    ...state,
+    connect,
+    disconnect,
+    reconnect
+  };
+}
+
+/**
+ * useSocketEvent hook for listening to specific socket events
+ */
+export function useSocketEvent<T = unknown>(
+  socket: Socket | null,
+  eventName: string,
+  handler: (data: T) => void,
+  deps: React.DependencyList = []
+) {
+  useEffect(() => {
+    if (!socket || !eventName || !handler) return;
+
+    console.log(`[useSocketEvent] Registering handler for event: ${eventName}`);
+    
+    const wrappedHandler = (data: T) => {
+      try {
+        handler(data);
+      } catch (error) {
+        console.error(`[useSocketEvent] Error in handler for ${eventName}:`, error);
+      }
+    };
+
+    socket.on(eventName, wrappedHandler);
+
+    return () => {
+      console.log(`[useSocketEvent] Unregistering handler for event: ${eventName}`);
+      socket.off(eventName, wrappedHandler);
+    };
+  }, [socket, eventName, ...deps]);
+}
+
+/**
+ * useSocketEmit hook for emitting events with acknowledgment
+ */
+export function useSocketEmit(socket: Socket | null) {
+  return useCallback(
+    <T = unknown>(eventName: string, data?: T): Promise<unknown> => {
+      return new Promise((resolve, reject) => {
+        if (!socket) {
+          reject(new Error('Socket not connected'));
+          return;
+        }
+
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timeout waiting for acknowledgment of ${eventName}`));
+        }, 10000); // 10 second timeout
+
+        socket.emit(eventName, data, (response: unknown) => {
+          clearTimeout(timeout);
+          console.log(`[useSocketEmit] Received acknowledgment for ${eventName}:`, response);
+          resolve(response);
+        });
+
+        console.log(`[useSocketEmit] Emitted event: ${eventName}`, data);
+      });
+    },
+    [socket]
+  );
+}
+
+// Export socket.io types for convenience
+export type { Socket } from 'socket.io-client';
+export { io } from 'socket.io-client';
+
+// Default export
+export default useSocket;

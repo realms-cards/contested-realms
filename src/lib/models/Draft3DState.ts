@@ -19,7 +19,8 @@ import type {
   InteractionStatus,
   OperationData,
   UIUpdateData,
-  BatchUpdateData
+  BatchUpdateData,
+  UIUpdateType
 } from '@/types/draft-3d-events';
 
 /**
@@ -277,7 +278,7 @@ export class UIStateSyncManager {
   /**
    * Add UI update to batch for synchronization
    */
-  addUpdate(sessionId: string, playerId: string, updateType: string, data: UIUpdateData, priority: EventPriority = 'low'): void {
+  addUpdate(sessionId: string, playerId: string, updateType: UIUpdateType, data: UIUpdateData, priority: EventPriority = 'low'): void {
     const batchKey = `${sessionId}-${priority}`;
     
     if (!this.updateBatches.has(batchKey)) {

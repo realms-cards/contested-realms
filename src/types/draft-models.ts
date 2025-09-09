@@ -100,7 +100,7 @@ export interface StackOperationData {
   // Common metadata
   userInitiated: boolean;
   hasAnimation: boolean;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, string | number | boolean>;
 }
 
 // Draft session configuration
@@ -148,9 +148,9 @@ export interface DraftCard {
   isPicked: boolean;
   isVisible: boolean; // for face-down cards
   metadata: {
-    rarity?: string;
+    rarity?: 'common' | 'uncommon' | 'rare' | 'mythic' | string;
     manaCost?: string;
-    cardType?: string;
+    cardType?: 'creature' | 'spell' | 'artifact' | 'enchantment' | 'land' | string;
   };
 }
 
@@ -170,7 +170,7 @@ export interface DraftError {
   playerId?: string;
   errorType: 'network' | 'validation' | 'conflict' | 'system';
   message: string;
-  context: Record<string, unknown>;
+  context: Record<string, string | number | boolean>;
   resolved: boolean;
 }
 
