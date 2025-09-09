@@ -1,0 +1,186 @@
+
+> contested-realms@0.1.0 lint
+> eslint
+
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/specs/001-fix-card-preview/contracts/behavior-tests.ts
+  335:7  error  'cardPreviewComponent' is never reassigned. Use 'const' instead  prefer-const
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/specs/001-fix-card-preview/contracts/component-interfaces.ts
+  127:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  127:55  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  137:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  139:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/decks/editor-3d/page.tsx
+    22:30  warning  'DeckValidation' is defined but never used              @typescript-eslint/no-unused-vars
+   113:10  warning  'searching' is assigned a value but never used          @typescript-eslint/no-unused-vars
+   145:10  warning  'orbitLocked' is assigned a value but never used        @typescript-eslint/no-unused-vars
+   147:26  warning  'setInfoBoxVisible' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  1227:25  warning  'total' is assigned a value but never used              @typescript-eslint/no-unused-vars
+  1565:25  warning  'isTopCard' is assigned a value but never used          @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/decks/editor/page.tsx
+  348:18  warning  'setAvatarSpellslinger' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/draft-3d/page.tsx
+    7:18  warning  'useThree' is defined but never used                  @typescript-eslint/no-unused-vars
+   10:13  warning  'THREE' is defined but never used                     @typescript-eslint/no-unused-vars
+   12:8   warning  'Piles3D' is defined but never used                   @typescript-eslint/no-unused-vars
+   16:10  warning  'MAT_PIXEL_W' is defined but never used               @typescript-eslint/no-unused-vars
+   16:23  warning  'MAT_PIXEL_H' is defined but never used               @typescript-eslint/no-unused-vars
+   30:10  warning  'handleStackHover' is defined but never used          @typescript-eslint/no-unused-vars
+  590:17  warning  'cardId' is assigned a value but never used           @typescript-eslint/no-unused-vars
+  596:17  warning  'cardId' is assigned a value but never used           @typescript-eslint/no-unused-vars
+  605:9   warning  'smartStackHover' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  609:17  error    Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/online/lobby/page.tsx
+    7:8   warning  'LobbyList' is defined but never used                  @typescript-eslint/no-unused-vars
+   49:22  warning  'setLobbyQuery' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   50:20  warning  'setHideFull' is assigned a value but never used       @typescript-eslint/no-unused-vars
+   51:23  warning  'setHideStarted' is assigned a value but never used    @typescript-eslint/no-unused-vars
+   52:23  warning  'setInvitedOnly' is assigned a value but never used    @typescript-eslint/no-unused-vars
+   54:19  warning  'setSortKey' is assigned a value but never used        @typescript-eslint/no-unused-vars
+   97:9   warning  'filteredLobbies' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  236:9   warning  'plannedSummaries' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  288:40  error    Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/online/play/[id]/page.tsx
+  291:6  warning  React Hook useEffect has a missing dependency: 'match'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  417:6  warning  React Hook useEffect has a missing dependency: 'match'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/deck-editor/DeckValidation.tsx
+  22:3  warning  'isDraftMode' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/CardPreview.tsx
+  25:3  warning  'onClose' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/HandPanel.tsx
+  14:9  warning  'clearSelection' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/LifeCounters.tsx
+  5:10  warning  'Heart' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/MatchInfoPopup.tsx
+  3:20  warning  'Clock' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/OnlineConsole.tsx
+  42:9  warning  The 'matchChat' conditional could make the dependencies of useEffect Hook (at line 98) change on every render. To fix this, wrap the initialization of 'matchChat' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/OnlineLifeCounters.tsx
+    5:10  warning  'Heart' is defined but never used                   @typescript-eslint/no-unused-vars
+  155:9   warning  'currentPlayer' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/game/StatusBar.tsx
+  22:9  warning  'rollD20' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/components/online/LobbiesCentral.tsx
+  22:3  warning  'myId' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/lib/game/Board.tsx
+    14:24  warning  'PermanentItem' is defined but never used       @typescript-eslint/no-unused-vars
+   867:35  warning  'draggedId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   875:35  warning  'spacing' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  1314:23  warning  'rotZ' is assigned a value but never used       @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/lib/game/components/CardPlane.tsx
+  5:27  warning  'useMemo' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/lib/game/components/TokenPile3D.tsx
+   10:3   warning  'BASE_TILE_SIZE' is defined but never used  @typescript-eslint/no-unused-vars
+   11:3   warning  'MAT_RATIO' is defined but never used       @typescript-eslint/no-unused-vars
+  140:19  warning  'big' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/src/lib/game/textures/useCardTexture.ts
+  285:18  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/booster.test.ts
+  75:31  warning  'select' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/integration/card-preview-display.test.tsx
+   33:26  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+   45:37  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+  106:17  warning  'setCards' is assigned a value but never used                                                                        @typescript-eslint/no-unused-vars
+  216:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  245:54  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  281:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  315:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  339:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  367:50  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  401:13  warning  'mockRaycast' is assigned a value but never used                                                                     @typescript-eslint/no-unused-vars
+  407:34  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  493:34  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  520:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  539:9   error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+  547:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  565:54  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  585:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+  601:45  error    A `require()` style import is forbidden                                                                              @typescript-eslint/no-require-imports
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/integration/hover-timing.test.tsx
+   11:8   warning  'React' is defined but never used                              @typescript-eslint/no-unused-vars
+   14:5   error    'mockTimerCallbacks' is never reassigned. Use 'const' instead  prefer-const
+   14:5   warning  'mockTimerCallbacks' is assigned a value but never used        @typescript-eslint/no-unused-vars
+   15:5   error    'mockTimeouts' is never reassigned. Use 'const' instead        prefer-const
+   34:43  error    Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   35:47  error    Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+  135:24  error    Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+  136:24  error    Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+  555:64  warning  '_' is defined but never used                                  @typescript-eslint/no-unused-vars
+  555:67  warning  'i' is defined but never used                                  @typescript-eslint/no-unused-vars
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/integration/multi-card-hover.test.tsx
+   11:8   warning  'React' is defined but never used                                                                                    @typescript-eslint/no-unused-vars
+  145:26  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+  297:40  warning  'description' is defined but never used                                                                              @typescript-eslint/no-unused-vars
+  344:55  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+  452:11  error    'dynamicCards' is never reassigned. Use 'const' instead                                                              prefer-const
+  491:36  warning  'expected' is defined but never used                                                                                 @typescript-eslint/no-unused-vars
+  545:9   error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+  547:9   error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+  549:9   error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+  555:48  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/unit/card-preview-interfaces.test.ts
+  260:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  270:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/unit/draggable-card-raycast.test.ts
+   10:8   warning  'React' is defined but never used                   @typescript-eslint/no-unused-vars
+   30:37  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  102:13  warning  'mockRaycaster' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  122:34  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  215:35  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  216:32  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/unit/hover-state-management.test.ts
+   14:21  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+   15:21  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+   17:23  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+   98:24  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+   99:24  error    Unexpected any. Specify a different type                                                                             @typescript-eslint/no-explicit-any
+  214:28  warning  'i' is defined but never used                                                                                        @typescript-eslint/no-unused-vars
+  318:11  error    'currentHoverCardRef' is never reassigned. Use 'const' instead                                                       prefer-const
+  319:11  error    'clearHoverTimerRef' is never reassigned. Use 'const' instead                                                        prefer-const
+  351:11  error    'clearHoverTimerRef' is never reassigned. Use 'const' instead                                                        prefer-const
+  353:11  error    'currentHoverCardRef' is never reassigned. Use 'const' instead                                                       prefer-const
+  390:9   error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+  392:9   error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+  396:42  warning  'index' is defined but never used                                                                                    @typescript-eslint/no-unused-vars
+  398:11  error    Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+
+/Users/geleeroyale/CascadeProjects/sorcery-client/tests/unit/mouse-tracker-hover.test.ts
+    9:50  warning  'afterEach' is defined but never used     @typescript-eslint/no-unused-vars
+   45:27  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   46:25  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   47:22  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   49:59  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   94:26  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  139:24  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  271:29  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  272:30  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 122 problems (62 errors, 60 warnings)
+  8 errors and 0 warnings potentially fixable with the `--fix` option.
+

@@ -55,10 +55,3 @@ next-env.d.ts
 /.playwright-mcp
 dev.db
 /reference
-/specs
-/templates
-*.log
-.claude
-CLAUDE.md
-/scripts
-/memory

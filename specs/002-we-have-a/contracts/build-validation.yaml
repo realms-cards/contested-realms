@@ -1,0 +1,163 @@
+openapi: 3.0.3
+info:
+  title: Build Validation API
+  description: Contract for validating TypeScript build process and error resolution
+  version: 1.0.0
+
+paths:
+  /build/validate:
+    post:
+      summary: Validate build process
+      description: Run TypeScript compilation and ESLint to validate code quality
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional list of specific files to validate
+                strict:
+                  type: boolean
+                  default: true
+                  description: Whether to use strict TypeScript checking
+                fix:
+                  type: boolean
+                  default: false
+                  description: Whether to attempt automatic fixes
+      responses:
+        '200':
+          description: Validation completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationError'
+                  warnings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationError'
+                  summary:
+                    $ref: '#/components/schemas/ValidationSummary'
+        '400':
+          description: Invalid request parameters
+        '500':
+          description: Build process failed unexpectedly
+
+  /errors/analyze:
+    post:
+      summary: Analyze current errors
+      description: Categorize and prioritize existing TypeScript and ESLint errors
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                includeWarnings:
+                  type: boolean
+                  default: true
+                groupByFile:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Error analysis completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalErrors:
+                    type: integer
+                  categories:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  byFile:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ValidationError'
+                  recommendations:
+                    type: array
+                    items:
+                      type: string
+
+components:
+  schemas:
+    ValidationError:
+      type: object
+      required:
+        - file
+        - line
+        - message
+        - severity
+      properties:
+        file:
+          type: string
+          description: Path to file containing the error
+        line:
+          type: integer
+          minimum: 1
+          description: Line number where error occurs
+        column:
+          type: integer
+          minimum: 1
+          description: Column position of error
+        code:
+          type: string
+          description: Error code (e.g., TS2345, @typescript-eslint/no-explicit-any)
+        message:
+          type: string
+          description: Human-readable error description
+        severity:
+          type: string
+          enum: [error, warning]
+          description: Impact level on build process
+        category:
+          type: string
+          enum: [explicit-any, unused-variable, hook-dependency, declaration, other]
+          description: Error classification
+        fixable:
+          type: boolean
+          description: Whether error can be automatically fixed
+        suggestion:
+          type: string
+          description: Suggested fix for the error
+
+    ValidationSummary:
+      type: object
+      properties:
+        totalFiles:
+          type: integer
+          description: Number of files processed
+        errorCount:
+          type: integer
+          description: Total number of errors found
+        warningCount:
+          type: integer
+          description: Total number of warnings found
+        fixedCount:
+          type: integer
+          description: Number of errors automatically fixed
+        buildTime:
+          type: number
+          format: float
+          description: Time taken for validation in seconds
+        status:
+          type: string
+          enum: [pass, fail]
+          description: Overall validation result
