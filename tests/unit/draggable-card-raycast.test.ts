@@ -18,7 +18,9 @@ type MockMeshProps = {
     cardId: number;
     slug: string;
     type: string | null;
+    name?: string;
   };
+  cardId?: number;
 };
 
 type MockMesh = {
@@ -33,6 +35,13 @@ type MockMesh = {
 type RaycastIntersection = {
   point: { x: number; z: number };
   object: MockMesh;
+  userData?: {
+    cardId: number;
+    slug: string;
+    type: string | null;
+    name?: string;
+  };
+  distance?: number;
 };
 
 // Mock Three.js and React Three Fiber

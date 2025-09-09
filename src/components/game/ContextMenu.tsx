@@ -108,7 +108,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               const state = useGameStore.getState();
               if (!state.permanentPositions[permanentId]) {
                 state.setPermanentPosition(permanentId, {
-                  permanentId: permanentId,
+                  permanentId,
                   state: 'surface',
                   position: {
                     x: 0, // Default position - will be updated by actual game logic
@@ -153,7 +153,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               const state = useGameStore.getState();
               if (!state.permanentPositions[permanentId]) {
                 state.setPermanentPosition(permanentId, {
-                  permanentId: permanentId,
+                  permanentId,
                   state: 'surface',
                   position: {
                     x: 0, // Default position - will be updated by actual game logic

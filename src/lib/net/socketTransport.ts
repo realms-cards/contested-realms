@@ -12,6 +12,11 @@ import type {
   DraftState,
   CustomMessage,
 } from "@/lib/net/transport";
+import type { 
+  CardPreviewEvent,
+  StackInteractionEvent,
+  UIUpdateEvent 
+} from "@/types/draft-3d-events";
 
 export class SocketTransport implements GameTransport {
   private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
@@ -138,6 +143,44 @@ export class SocketTransport implements GameTransport {
       socket.on("connect_error", (err: unknown) => {
         this.dispatch("error", { message: String(err) });
       });
+
+      // Draft-3D enhanced events for online integration
+      socket.on("draft:card:preview", (payload) =>
+        this.dispatch("draft:card:preview", payload)
+      );
+      socket.on("draft:card:preview_update", (payload) =>
+        this.dispatch("draft:card:preview_update", payload)
+      );
+      socket.on("draft:stack:interact", (payload) =>
+        this.dispatch("draft:stack:interact", payload)
+      );
+      socket.on("draft:stack:interaction_result", (payload) =>
+        this.dispatch("draft:stack:interaction_result", payload)
+      );
+      socket.on("draft:stack:state_sync", (payload) =>
+        this.dispatch("draft:stack:state_sync", payload)
+      );
+      socket.on("draft:ui:update", (payload) =>
+        this.dispatch("draft:ui:update", payload)
+      );
+      socket.on("draft:ui:sync_batch", (payload) =>
+        this.dispatch("draft:ui:sync_batch", payload)
+      );
+      socket.on("draft:session:join", (payload) =>
+        this.dispatch("draft:session:join", payload)
+      );
+      socket.on("draft:session:joined", (payload) =>
+        this.dispatch("draft:session:joined", payload)
+      );
+      socket.on("draft:session:leave", (payload) =>
+        this.dispatch("draft:session:leave", payload)
+      );
+      socket.on("draft:error", (payload) =>
+        this.dispatch("draft:error", payload)
+      );
+      socket.on("draft:system:reconnect", (payload) =>
+        this.dispatch("draft:system:reconnect", payload)
+      );
     });
   }
 
@@ -297,6 +340,22 @@ export class SocketTransport implements GameTransport {
   chooseDraftPack(config: { matchId: string; setChoice: string; packIndex: number }): void {
     console.log(`[Transport] chooseDraftPack -> pack=${config.packIndex} choice=${config.setChoice} match=${config.matchId}`);
     this.requireSocket().emit("chooseDraftPack", config);
+  }
+
+  // Draft-3D enhanced methods for online integration
+  sendCardPreview(event: CardPreviewEvent): void {
+    console.log(`[Transport] sendCardPreview -> cardId=${event.cardId} playerId=${event.playerId} type=${event.previewType}`);
+    this.requireSocket().emit("draft:card:preview", event);
+  }
+
+  sendStackInteraction(event: StackInteractionEvent): void {
+    console.log(`[Transport] sendStackInteraction -> type=${event.interactionType} cardIds=[${event.cardIds.join(',')}] playerId=${event.playerId}`);
+    this.requireSocket().emit("draft:stack:interact", event);
+  }
+
+  sendUIUpdate(event: UIUpdateEvent): void {
+    console.log(`[Transport] sendUIUpdate -> playerId=${event.playerId} updates=${event.uiUpdates.length}`);
+    this.requireSocket().emit("draft:ui:update", event);
   }
 
   on<E extends TransportEvent>(

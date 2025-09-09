@@ -13,7 +13,10 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/react';
 
 // Mock React Testing Library
 vi.mock('@testing-library/react', () => ({
-  render: vi.fn(),
+  render: vi.fn(() => ({
+    unmount: vi.fn(),
+    rerender: vi.fn(),
+  })),
   screen: {
     getByTestId: vi.fn(),
     queryByTestId: vi.fn(),
@@ -225,7 +228,7 @@ describe('Card Preview Display Integration', () => {
       // ❌ WILL FAIL - preview should appear but raycast is disabled
       const preview = screen.queryByTestId('card-preview');
       expect(preview).toBeTruthy();
-      expect(preview.getAttribute('data-card-slug')).toBe('lightning-bolt');
+      expect((preview as HTMLElement)?.getAttribute('data-card-slug')).toBe('lightning-bolt');
       
       const previewName = screen.getByTestId('preview-name');
       expect(previewName.textContent).toBe('Lightning Bolt');
@@ -287,11 +290,11 @@ describe('Card Preview Display Integration', () => {
       const preview = screen.queryByTestId('card-preview');
       // ❌ WILL FAIL initially
       expect(preview).toBeTruthy();
-      expect(preview.getAttribute('data-card-slug')).toBe('mystic-monastery');
+      expect((preview as HTMLElement)?.getAttribute('data-card-slug')).toBe('mystic-monastery');
       
       const previewImage = screen.getByTestId('preview-image');
-      expect(previewImage.src).toBe('/api/images/mystic-monastery');
-      expect(previewImage.alt).toBe('Mystic Monastery');
+      expect((previewImage as HTMLImageElement).src).toBe('/api/images/mystic-monastery');
+      expect((previewImage as HTMLImageElement).alt).toBe('Mystic Monastery');
       
       const previewName = screen.getByTestId('preview-name');
       expect(previewName.textContent).toBe('Mystic Monastery');
@@ -536,7 +539,6 @@ describe('Card Preview Display Integration', () => {
 
     test('MUST handle missing card data gracefully', () => {
       const invalidCards: MockCard[] = [
-        // @ts-expect-error - Testing runtime behavior
         { id: 999, card: { slug: '', cardName: 'Empty Slug', type: 'Creature' }, x: 0, z: 0 },
       ];
 
@@ -570,6 +572,7 @@ describe('Card Preview Display Integration', () => {
       fireEvent.mouseLeave(card);
 
       // Unmount while hide timer is active
+      const { unmount } = render(editor);
       expect(() => {
         unmount();
       }).not.toThrow(); // Should not cause timer leaks
@@ -605,7 +608,7 @@ describe('Card Preview Display Integration', () => {
       fireEvent.mouseEnter(card);
 
       const previewImage = screen.getByTestId('preview-image');
-      expect(previewImage.alt).toBe('Lightning Bolt');
+      expect((previewImage as HTMLImageElement).alt).toBe('Lightning Bolt');
     });
   });
 });

@@ -253,7 +253,7 @@ export default function DraftPackHand3D({
           const { originalIndex, x, z, scale } = entry;
           const c = cards[originalIndex]!;
           const isSite = (c.type || "").toLowerCase().includes("site");
-          const key = c.variantId != null ? `v-${c.variantId}` : `c-${c.cardId}-${originalIndex}`;
+          const key = c.variantId != null ? `v-${c.variantId}-${originalIndex}` : `c-${c.cardId}-${originalIndex}`;
           return (
             <PackCard3D
               key={key}
