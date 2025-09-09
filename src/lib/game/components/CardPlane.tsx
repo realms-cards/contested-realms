@@ -33,6 +33,7 @@ interface CardPlaneProps {
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
   onClick?: (e: ThreeEvent<PointerEvent>) => void;
+  cardId?: number; // for raycasting identification
 }
 
 // Fallback component while texture loads
@@ -98,6 +99,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     onPointerOver,
     onPointerOut,
     onClick,
+    cardId,
   } = props;
 
   // Simple texture loading - just use the hook for everything
@@ -131,6 +133,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
       onPointerOut={onPointerOut}
       onClick={onClick}
       castShadow
+      userData={{ cardId, slug }}
     >
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial

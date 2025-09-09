@@ -22,6 +22,7 @@ import {
 import { TournamentControls, DeckValidation } from "@/components/deck-editor";
 import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import MouseTracker from "@/lib/game/components/MouseTracker";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
 import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
 
@@ -1482,16 +1483,33 @@ function AuthenticatedDeckEditor() {
       {/* 3D Game View as the stage - EXACT same as draft-3d */}
       <div className="absolute inset-0 w-full h-full">
         <EditorCanvas>
+          {/* Mouse tracking for hover detection */}
+          <MouseTracker 
+            cards={pick3D}
+            onHover={(card) => {
+              if (card) {
+                setHoverPreview({
+                  slug: card.slug,
+                  name: card.name,
+                  type: card.type
+                });
+              } else {
+                setHoverPreview(null);
+              }
+            }}
+          />
+          
           {/* 3D Cards with proper stacking order */}
           <group>
-              {pick3D
-                .sort((a, b) => {
+              {(() => {
+                const sortedCards = pick3D.sort((a, b) => {
                   // Sort by Y position so cards with lower Y render first (appear behind)
                   const aY = isSortingEnabled ? a.y || 0.002 : 0.002;
                   const bY = isSortingEnabled ? b.y || 0.002 : 0.002;
                   return aY - bY; // Lower Y values render first (behind higher Y values)
-                })
-                .map((p) => {
+                });
+
+                return sortedCards.map((p, index) => {
                   const isSite = (p.card.type || "")
                     .toLowerCase()
                     .includes("site");
@@ -1500,12 +1518,33 @@ function AuthenticatedDeckEditor() {
                   const stackPos = stackPositions?.get(p.id);
                   const x = stackPos ? stackPos.x : p.x;
                   const z = stackPos ? stackPos.z : p.z;
-                  const y = isSortingEnabled ? p.y || 0.002 : 0.002; // Use Y elevation only when sorting
-
-                  // Calculate base render order from Y position for proper stacking
+                  
+                  // Calculate base render order first
                   const baseRenderOrder = isSortingEnabled
-                    ? 1500 + Math.floor(y * 1000)
+                    ? 1500 + Math.floor((p.y || 0.002) * 1000)
                     : 1500;
+
+                  // Always use proper Y elevation for raycasting to work correctly
+                  // When sorting is enabled, use the actual p.y value
+                  // When sorting is disabled, use array index to create small Y differences for raycasting
+                  const y = isSortingEnabled 
+                    ? (p.y || 0.002)
+                    : 0.002 + (index * 0.00001); // Small incremental Y offset based on rendering order
+
+                  // Determine if this card should be interactive (topmost card in its area)
+                  // Only cards that are actually on top should respond to raycasting
+                  const cardArea = `${Math.round(x * 10)},${Math.round(z * 10)}`; // Round to 0.1 precision
+                  const cardsInSameArea = sortedCards.filter((other) => {
+                    const otherStackPos = stackPositions?.get(other.id);
+                    const otherX = otherStackPos ? otherStackPos.x : other.x;
+                    const otherZ = otherStackPos ? otherStackPos.z : other.z;
+                    const otherArea = `${Math.round(otherX * 10)},${Math.round(otherZ * 10)}`;
+                    return otherArea === cardArea;
+                  });
+                  const highestYInArea = Math.max(...cardsInSameArea.map((_, i) => 
+                    isSortingEnabled ? (cardsInSameArea[i].y || 0.002) : 0.002 + (sortedCards.indexOf(cardsInSameArea[i]) * 0.00001)
+                  ));
+                  const isTopCard = Math.abs(y - highestYInArea) < 0.000001; // Account for floating point precision
 
                   return (
                     <DraggableCard3D
@@ -1516,6 +1555,10 @@ function AuthenticatedDeckEditor() {
                       z={z}
                       y={y}
                       baseRenderOrder={baseRenderOrder}
+                      cardId={p.id}
+                      stackIndex={0}
+                      totalInStack={1}
+                      interactive={true}
                       onContextMenu={(cx, cy) =>
                         openContextMenuForCard(
                           p.card.cardId,
@@ -1594,15 +1637,6 @@ function AuthenticatedDeckEditor() {
                       onDragChange={(dragging) => {
                         setOrbitLocked(dragging);
                       }}
-                      onHoverChange={(hover) => {
-                        if (hover && !orbitLocked)
-                          setHoverPreview({
-                            slug: p.card.slug,
-                            name: p.card.cardName,
-                            type: p.card.type,
-                          });
-                        else setHoverPreview(null);
-                      }}
                       onRelease={(wx, wz, wasDragging) => {
                         // Click to move between deck/sideboard using the same functions as sidebar
                         if (!wasDragging) {
@@ -1627,7 +1661,8 @@ function AuthenticatedDeckEditor() {
                       }}
                     />
                   );
-                })}
+                });
+              })()}
           </group>
           <TextureCache />
         </EditorCanvas>
