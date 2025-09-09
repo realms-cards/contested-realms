@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Type Safety Regression Prevention
+# This pre-commit hook enforces the type safety improvements made in Phase 3.5
+
+echo "🔍 Running type safety checks..."
+
+# Run TypeScript compilation check
+echo "📝 Checking TypeScript compilation..."
+npx tsc --noEmit --skipLibCheck || {
+  echo "❌ TypeScript compilation failed. Please fix type errors before committing."
+  exit 1
+}
+
+# Run ESLint with enhanced rules
+echo "🔧 Running ESLint with enhanced type safety rules..."
+npm run lint || {
+  echo "⚠️  ESLint found issues. Please fix linting errors before committing."
+  echo "💡 Run 'npm run lint -- --fix' to auto-fix some issues."
+  exit 1
+}
+
+echo "✅ All type safety checks passed!"

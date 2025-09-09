@@ -13,6 +13,18 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+    
+    // Enhanced strict settings to prevent type safety regressions
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false, // Keep off for better DX with arrays
+    "exactOptionalPropertyTypes": false, // Keep off for flexibility with undefined
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false, // Keep off for object access patterns
+    "useUnknownInCatchVariables": true,
+    
     "plugins": [
       {
         "name": "next"

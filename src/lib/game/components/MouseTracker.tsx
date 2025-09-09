@@ -5,7 +5,7 @@ import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
 interface MouseTrackerProps {
-  cards: Array<{ id: number; card: { slug: string; cardName: string; type: string | null } }>;
+  cards: Array<{ id: number; card: { slug: string; cardName: string; type: string | null }; y?: number }>;
   onHover: (card: { slug: string; name: string; type: string | null } | null) => void;
 }
 
@@ -50,7 +50,7 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
             }
             return null;
           })
-          .filter(Boolean);
+          .filter((item): item is NonNullable<typeof item> => item !== null);
 
         if (validIntersects.length > 0) {
           // Sort by Y position (highest first) to get the topmost card
@@ -74,6 +74,7 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
       canvas.addEventListener('mousemove', handleMouseMove);
       return () => canvas.removeEventListener('mousemove', handleMouseMove);
     }
+    return undefined;
   }, [camera, scene, raycaster, pointer, cards, onHover]);
   
   return null; // This component doesn't render anything

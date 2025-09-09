@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Users, Clock, Hash } from "lucide-react";
+import { X, Users, Hash } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 
 interface MatchInfoPopupProps {

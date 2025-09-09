@@ -4,7 +4,12 @@ import { useGameStore } from "@/lib/game/store";
 import { useMemo } from "react";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 
-function PreloadTexture({ slug, textureUrl }: { slug?: string; textureUrl?: string }) {
+interface PreloadTextureProps {
+  slug?: string;
+  textureUrl?: string;
+}
+
+function PreloadTexture({ slug, textureUrl }: PreloadTextureProps) {
   const tex = useCardTexture({ slug, textureUrl });
   // Keep textures in memory by referencing them
   void tex;

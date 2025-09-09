@@ -577,7 +577,7 @@ export default function OnlineDraft3DScreen({
         if (transport.chooseDraftPack) {
           transport.chooseDraftPack({
             matchId: match.id,
-            setChoice: setChoice,
+            setChoice,
             packIndex: draftState.packIndex
           });
         } else {

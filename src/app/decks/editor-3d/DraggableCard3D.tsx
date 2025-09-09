@@ -140,7 +140,7 @@ export default function DraggableCard3D({
         rotation-z={isSite ? -Math.PI / 2 : 0}
         userData={{
           cardId: cardId || 0,
-          slug: slug,
+          slug,
           type: null, // Will be enhanced later with actual card type
         }}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {

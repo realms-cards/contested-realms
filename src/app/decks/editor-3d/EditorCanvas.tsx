@@ -9,7 +9,18 @@ import Board from "@/lib/game/Board";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
-export default function EditorCanvas({ children }: { children?: React.ReactNode }) {
+interface EditorCanvasProps {
+  children?: React.ReactNode;
+}
+
+interface PanBoundsProps {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+export default function EditorCanvas({ children }: EditorCanvasProps) {
   return (
     <div className="absolute inset-0 w-full h-full">
       <Canvas
@@ -49,7 +60,7 @@ export default function EditorCanvas({ children }: { children?: React.ReactNode 
   );
 }
 
-function PanBounds({ minX, maxX, minZ, maxZ }: { minX: number; maxX: number; minZ: number; maxZ: number }) {
+function PanBounds({ minX, maxX, minZ, maxZ }: PanBoundsProps) {
   const { camera, controls, invalidate } = useThree((s) => ({
     camera: s.camera as THREE.PerspectiveCamera,
     controls: s.controls as OrbitControlsImpl | undefined,

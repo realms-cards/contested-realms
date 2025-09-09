@@ -68,6 +68,7 @@ export default function PlayPage() {
     } else {
       setMagnifierDelay(false);
     }
+    return undefined;
   }, [selectedHandCard]);
 
   // LocalTransport wiring for offline play

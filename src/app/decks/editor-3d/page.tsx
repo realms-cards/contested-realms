@@ -112,6 +112,7 @@ function AuthenticatedDeckEditor() {
   const [typeFilter, setTypeFilter] = useState<SearchType>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searchExpanded, setSearchExpanded] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -145,6 +146,7 @@ function AuthenticatedDeckEditor() {
   const [statsCollapsed, setStatsCollapsed] = useState(true);
   const [infoBoxVisible, setInfoBoxVisible] = useState(true);
   const [picksOpen, setPicksOpen] = useState(true);
+  const [orbitLocked, setOrbitLocked] = useState(false);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
   // Ensure we only initialize draft mode once per load
@@ -815,7 +817,7 @@ function AuthenticatedDeckEditor() {
           {
             type: "sealedDeckSubmission",
             deck: deckCards,
-            matchId: matchId,
+            matchId,
           },
           window.location.origin
         );
@@ -887,7 +889,7 @@ function AuthenticatedDeckEditor() {
           {
             type: "draftDeckSubmission",
             deck: deckCards,
-            matchId: matchId,
+            matchId,
           },
           window.location.origin
         );
@@ -1388,6 +1390,7 @@ function AuthenticatedDeckEditor() {
       document.addEventListener("click", handleClickOutside);
       return () => document.removeEventListener("click", handleClickOutside);
     }
+    return undefined;
   }, [contextMenu]);
 
   // Helper to check if a card is a standard site (tournament legal)
