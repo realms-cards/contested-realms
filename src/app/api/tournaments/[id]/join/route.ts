@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ).trim();
 
     const tournament = await prisma.tournament.findUnique({
-      where: { id: id },
+      where: { id },
       include: { registrations: true }
     });
 

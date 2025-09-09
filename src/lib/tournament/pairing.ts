@@ -59,11 +59,11 @@ export async function generatePairings(
 
   switch (tournament.format) {
     case 'swiss':
-      return generateSwissPairings(activePlayers, tournament.matches, roundNumber);
+      return generateSwissPairings(activePlayers, tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>, roundNumber);
     case 'elimination':
       return generateEliminationPairings(activePlayers, roundNumber);
     case 'round_robin':
-      return generateRoundRobinPairings(activePlayers, tournament.matches, roundNumber);
+      return generateRoundRobinPairings(activePlayers, tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>, roundNumber);
     default:
       throw new Error(`Unsupported tournament format: ${tournament.format}`);
   }
@@ -74,7 +74,7 @@ export async function generatePairings(
  */
 function generateSwissPairings(
   players: PlayerPairing[],
-  previousMatches: any[],
+  previousMatches: Array<{ players: Array<{ id: string }> }>,
   roundNumber: number
 ): TournamentPairingResult {
   const matches: MatchPairing[] = [];
@@ -88,7 +88,7 @@ function generateSwissPairings(
   }
 
   for (const match of previousMatches) {
-    const playerIds = (match.players as any[]).map(p => p.id);
+    const playerIds = match.players.map(p => p.id);
     if (playerIds.length === 2) {
       previousOpponents.get(playerIds[0])?.add(playerIds[1]);
       previousOpponents.get(playerIds[1])?.add(playerIds[0]);
@@ -159,7 +159,7 @@ function generateEliminationPairings(
  */
 function generateRoundRobinPairings(
   players: PlayerPairing[],
-  previousMatches: any[],
+  previousMatches: Array<{ players: Array<{ id: string }> }>,
   roundNumber: number
 ): TournamentPairingResult {
   const matches: MatchPairing[] = [];
@@ -172,7 +172,7 @@ function generateRoundRobinPairings(
   }
 
   for (const match of previousMatches) {
-    const playerIds = (match.players as any[]).map(p => p.id);
+    const playerIds = match.players.map(p => p.id);
     if (playerIds.length === 2) {
       hasPlayed.get(playerIds[0])?.add(playerIds[1]);
       hasPlayed.get(playerIds[1])?.add(playerIds[0]);

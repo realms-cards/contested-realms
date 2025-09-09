@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const tournament = await prisma.tournament.findUnique({
-      where: { id: id },
+      where: { id },
       include: { registrations: true }
     });
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Start tournament
     const updatedTournament = await prisma.tournament.update({
-      where: { id: id },
+      where: { id },
       data: {
         status: nextStatus,
         currentRound: nextStatus === 'playing' ? 1 : 0

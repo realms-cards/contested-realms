@@ -75,19 +75,22 @@ export default function OnlineMatchPage() {
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
 
-  // Get player nicknames (dynamic for 2-8 players)
+  // Get player nicknames (constrained to 2 players for game engine compatibility)
   const playerNames = useMemo(() => {
-    const names: Record<string, string> = {};
-    if (!match?.players) {
-      // Fallback for 2 players
-      names.p1 = "Player 1";
-      names.p2 = "Player 2";
-      return names;
-    }
+    const names: { p1: string; p2: string } = {
+      p1: "Player 1",
+      p2: "Player 2"
+    };
     
-    match.players.forEach((player, index) => {
-      names[`p${index + 1}`] = player.displayName || `Player ${index + 1}`;
-    });
+    if (match?.players) {
+      // Only use first 2 players for the game engine
+      if (match.players[0]) {
+        names.p1 = match.players[0].displayName || "Player 1";
+      }
+      if (match.players[1]) {
+        names.p2 = match.players[1].displayName || "Player 2";
+      }
+    }
     
     return names;
   }, [match?.players]);

@@ -14,8 +14,8 @@ interface TournamentContextValue {
     format: "swiss" | "elimination" | "round_robin";
     matchType: "constructed" | "sealed" | "draft";
     maxPlayers: number;
-    sealedConfig?: any;
-    draftConfig?: any;
+    sealedConfig?: unknown;
+    draftConfig?: unknown;
   }) => Promise<void>;
   joinTournament: (tournamentId: string) => Promise<void>;
   leaveTournament: (tournamentId: string) => Promise<void>;
@@ -40,8 +40,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     format: "swiss" | "elimination" | "round_robin";
     matchType: "constructed" | "sealed" | "draft";
     maxPlayers: number;
-    sealedConfig?: any;
-    draftConfig?: any;
+    sealedConfig?: unknown;
+    draftConfig?: unknown;
   }) => {
     setLoading(true);
     setError(null);
@@ -61,8 +61,16 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
         totalRounds: config.format === "swiss" ? 3 : Math.ceil(Math.log2(config.maxPlayers)),
         rounds: [],
         matchType: config.matchType,
-        sealedConfig: config.sealedConfig || null,
-        draftConfig: config.draftConfig || null,
+        sealedConfig: config.sealedConfig ? {
+          packCount: 6,
+          setMix: ["sorcery"],
+          timeLimit: 45,
+        } : null,
+        draftConfig: config.draftConfig ? {
+          setMix: ["sorcery"],
+          packCount: 3,
+          packSize: 15,
+        } : null,
         createdAt: Date.now(),
       };
       
