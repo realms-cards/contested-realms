@@ -2,9 +2,35 @@
 
 import { useMemo, useState } from "react";
 
+// Fantasy-themed word lists for generating lobby names
+const ADJECTIVES = [
+  "Ancient", "Mystic", "Golden", "Silver", "Crystal", "Shadow", "Bright", "Dark",
+  "Eternal", "Sacred", "Wild", "Hidden", "Lost", "Frozen", "Burning", "Stormy",
+  "Peaceful", "Mighty", "Noble", "Brave", "Swift", "Wise", "Fierce", "Gentle",
+  "Enchanted", "Forgotten", "Legendary", "Celestial", "Divine", "Ethereal",
+  "Crimson", "Azure", "Emerald", "Royal", "Arcane", "Primal", "Spectral"
+];
+
+const NOUNS = [
+  "Dragon", "Phoenix", "Griffin", "Unicorn", "Wyrm", "Basilisk", "Chimera",
+  "Tower", "Castle", "Keep", "Citadel", "Fortress", "Sanctum", "Temple", 
+  "Mountain", "Valley", "Forest", "Grove", "Meadow", "River", "Lake", "Sea",
+  "Crown", "Throne", "Scepter", "Orb", "Blade", "Shield", "Staff", "Wand",
+  "Storm", "Thunder", "Lightning", "Flame", "Frost", "Wind", "Earth", "Star",
+  "Moon", "Sun", "Dawn", "Dusk", "Night", "Light", "Shadow", "Dream",
+  "Quest", "Journey", "Path", "Gate", "Portal", "Realm", "Domain", "Kingdom"
+];
+
+function generateLobbyName(): string {
+  const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+  return `${adjective} ${noun}`;
+}
+
 type PlayerInfo = { id: string; displayName: string };
 type LobbyInfo = {
   id: string;
+  name?: string;
   hostId: string;
   status: "open" | "started" | string;
   visibility?: "open" | "private" | string;
@@ -13,6 +39,7 @@ type LobbyInfo = {
 };
 
 export type CreateLobbyConfig = {
+  name: string;
   visibility: "open" | "private";
   maxPlayers: number;
 };
@@ -37,8 +64,15 @@ export default function LobbiesCentral({
   const [hideStarted, setHideStarted] = useState(true);
   const [sortKey, setSortKey] = useState<"invited" | "playersAsc" | "playersDesc" | "status">("status");
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [cfgName, setCfgName] = useState<string>("");
   const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">("open");
   const [cfgMaxPlayers, setCfgMaxPlayers] = useState<number>(2);
+
+  // Generate a random name when overlay opens
+  const handleOverlayOpen = () => {
+    setCfgName(generateLobbyName());
+    setOverlayOpen(true);
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -49,7 +83,8 @@ export default function LobbiesCentral({
       if (!q) return true;
       const hostName = l.players.find((p) => p.id === l.hostId)?.displayName?.toLowerCase() || "";
       const players = l.players.map((p) => p.displayName.toLowerCase()).join(" ");
-      return l.id.toLowerCase().includes(q) || hostName.includes(q) || players.includes(q);
+      const lobbyName = l.name?.toLowerCase() || "";
+      return l.id.toLowerCase().includes(q) || hostName.includes(q) || players.includes(q) || lobbyName.includes(q);
     });
 
     list.sort((a, b) => {
@@ -83,7 +118,7 @@ export default function LobbiesCentral({
           </button>
           <button
             className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs"
-            onClick={() => setOverlayOpen(true)}
+            onClick={handleOverlayOpen}
           >
             Create Lobby
           </button>
@@ -93,7 +128,7 @@ export default function LobbiesCentral({
       <div className="flex flex-col sm:flex-row gap-2">
         <input
           className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-          placeholder="Search by lobby ID, host, or player"
+          placeholder="Search by name, lobby ID, host, or player"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -133,6 +168,9 @@ export default function LobbiesCentral({
               }`}
             >
               <div className="flex-1 min-w-0">
+                {l.name && (
+                  <div className="text-sm font-semibold text-white mb-1 truncate">{l.name}</div>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-mono opacity-70 truncate">{l.id}</span>
                   <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
@@ -182,6 +220,28 @@ export default function LobbiesCentral({
             </div>
             <div className="mt-4 space-y-4">
               <div>
+                <label className="block text-xs font-medium mb-2">Lobby Name *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={cfgName}
+                    onChange={(e) => setCfgName(e.target.value)}
+                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                    placeholder="Enter lobby name"
+                    maxLength={50}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCfgName(generateLobbyName())}
+                    className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+                    title="Generate random name"
+                  >
+                    🎲
+                  </button>
+                </div>
+              </div>
+              <div>
                 <label className="block text-xs font-medium mb-2">Visibility</label>
                 <div className="flex gap-2">
                   <button
@@ -212,10 +272,14 @@ export default function LobbiesCentral({
               <div className="flex justify-end gap-2">
                 <button className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm" onClick={() => setOverlayOpen(false)}>Cancel</button>
                 <button
-                  className="rounded bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold"
+                  className="rounded bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!cfgName.trim()}
                   onClick={() => {
-                    onCreate({ visibility: cfgVisibility, maxPlayers: cfgMaxPlayers });
-                    setOverlayOpen(false);
+                    const trimmedName = cfgName.trim();
+                    if (trimmedName) {
+                      onCreate({ name: trimmedName, visibility: cfgVisibility, maxPlayers: cfgMaxPlayers });
+                      setOverlayOpen(false);
+                    }
                   }}
                 >
                   Create
