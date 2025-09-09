@@ -64,6 +64,17 @@ const eslintConfig = [
       "no-global-assign": "error",
     },
   },
+  // Tests: allow pragmatic flexibility while keeping app code strict
+  {
+    files: [
+      "tests/**/*.ts",
+      "tests/**/*.tsx",
+    ],
+    rules: {
+      // Tests may intentionally use 'any' for mocks and helper utilities
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

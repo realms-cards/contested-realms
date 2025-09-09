@@ -15,6 +15,14 @@ import type {
   DraftConfig,
 } from "@/lib/net/protocol";
 
+// Import Draft-3D event types for enhanced online integration
+import type { 
+  Draft3DEventMap,
+  CardPreviewEvent,
+  StackInteractionEvent,
+  UIUpdateEvent 
+} from "@/types/draft-3d-events";
+
 // Draft state type for client-server sync
 export type DraftState = {
   phase: "waiting" | "picking" | "passing" | "complete";
@@ -46,7 +54,7 @@ export type TransportEventMap = {
   lobbyInvite: LobbyInvitePayloadT;
   draftUpdate: DraftState;
   message: CustomMessage; // generic channel for lightweight messages
-};
+} & Draft3DEventMap; // Extend with Draft-3D events for enhanced online integration
 
 export type TransportEvent = keyof TransportEventMap;
 export type TransportHandler<E extends TransportEvent> = (payload: TransportEventMap[E]) => void;
@@ -91,6 +99,11 @@ export interface GameTransport {
   makeDraftPick?(config: { matchId: string; cardId: string; packIndex: number; pickNumber: number }): void;
   chooseDraftPack?(config: { matchId: string; setChoice: string; packIndex: number }): void;
   submitDeck?(deck: unknown): void;
+
+  // Draft-3D enhanced methods for online integration
+  sendCardPreview?(event: CardPreviewEvent): void;
+  sendStackInteraction?(event: StackInteractionEvent): void;
+  sendUIUpdate?(event: UIUpdateEvent): void;
 
   // Generic lightweight message channel for transient signals (e.g., draft ready)
   sendMessage?(msg: CustomMessage): Promise<void> | void;

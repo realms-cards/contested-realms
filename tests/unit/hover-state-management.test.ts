@@ -34,7 +34,7 @@ type CardPreviewData = {
 class MockHoverStateManager {
   private currentCard: CardPreviewData | null = null;
   private previewVisible: boolean = false;
-  private clearTimer: number | null = null;
+  private clearTimer: NodeJS.Timeout | null = null;
   private showPreviewCallback?: (card: CardPreviewData) => void;
   private hidePreviewCallback?: () => void;
 
@@ -350,7 +350,7 @@ describe('Card Hover State Management', () => {
     test('MUST match draft-3d showCardPreview implementation', () => {
       // Test the exact pattern from draft-3d
       const currentHoverCardRef = { current: null as string | null };
-      const clearHoverTimerRef = { current: null as number | null };
+      const clearHoverTimerRef = { current: null as NodeJS.Timeout | null };
       let previewState = null as CardPreviewData | null;
 
       const showCardPreview = (card: CardPreviewData) => {
@@ -382,7 +382,7 @@ describe('Card Hover State Management', () => {
     });
 
     test('MUST match draft-3d hideCardPreview implementation', () => {
-      const clearHoverTimerRef = { current: null as number | null };
+      const clearHoverTimerRef = { current: null as NodeJS.Timeout | null };
       let previewState = { slug: 'test', name: 'Test', type: 'Creature' } as CardPreviewData | null;
       const currentHoverCardRef = { current: 'test' as string | null };
 

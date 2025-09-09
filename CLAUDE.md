@@ -54,22 +54,27 @@ scripts/validate-type-safety.sh  # Validate type safety configuration
 - 001-fix-card-preview: Fixed card preview hover issues by enabling raycasting in DraggableCard3D
 - Phase 3.5: Polish & cleanup with enhanced type safety and regression prevention
 
-## Current Development: Burrow/Submerge Mechanics (Branch: 003-permanents-might-have)
+## Current Development: Draft-3D Online Integration (Branch: 004-i-want-to)
 
-**New Feature**: Permanent cards with burrow/submerge abilities can visually move "under" their current site in 3D space through right-click context menus. Sites are now placed toward tile edges facing the owning player rather than in tile centers.
+**New Feature**: Integrate improved UI, stack mechanics, and card preview system from single-player draft-3d into online multiplayer draft-3d, maintaining real-time synchronization via Socket.io.
 
 **Technical Approach**:
-- Extend existing 3D game components (CardPlane, Board, ContextMenu) 
-- Use Y-axis negative positioning (-0.1 to -0.5) for "underground" visual effect
-- React Three Fiber positioning with smooth animations via react-spring
-- Zustand store extensions for permanent position state management
-- Edge-based site placement using player position calculations
+- Socket.io event batching with 16ms (60fps) updates for 3D synchronization
+- Hybrid state architecture: Zustand for critical state, useFrame for visual mutations
+- Debounced card preview broadcasting (100ms) with priority system
+- Operational transform for stack interaction conflict resolution
+- Server authority with optimistic UI updates
 
-**Key Components**:
-- `src/lib/game/store.ts` - Add permanent position state tracking
-- `src/lib/game/components/CardPlane.tsx` - Support depth-based positioning  
-- `src/components/game/ContextMenu.tsx` - Add burrow/submerge/surface actions
-- `src/lib/game/Board.tsx` - Modify site placement for edge-based positioning
+**Key Technologies**:
+- **Real-time Sync**: Socket.io 4.x with binary encoding and delta compression
+- **3D State Management**: React Three Fiber with instanced rendering for performance
+- **Conflict Resolution**: Timestamp-based operational transform for concurrent actions
+- **Network Optimization**: Event batching, WebSocket compression, Redis pub/sub scaling
+
+**Performance Targets**:
+- 8 concurrent players per session with ~1000 3D cards rendered
+- <100ms UI response time, <200ms network round-trip
+- 60fps maintained during all interactions
 
 **Performance Impact**: Build times remain stable at ~22 seconds with no memory regressions. Enhanced type checking adds <1 second to compilation time while significantly improving code quality.
 

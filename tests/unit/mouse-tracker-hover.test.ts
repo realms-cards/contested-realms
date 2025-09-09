@@ -28,9 +28,11 @@ type RaycastIntersection = {
       cardId: number;
       slug: string;
       type: string | null;
+      name?: string;
     };
   };
   point: { x: number; z: number };
+  distance?: number;
 };
 
 // Mock Three.js Raycaster and related classes

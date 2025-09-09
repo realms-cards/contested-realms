@@ -23,7 +23,7 @@ const mockSetTimeout = vi.fn((callback: () => void, delay: number) => {
   mockTimeouts.set(id, { 
     callback, 
     delay, 
-    created: vi.getMockedSystemTime?.() || Date.now() 
+    created: Number(vi.getMockedSystemTime?.()) || Date.now() 
   });
   return id;
 });
@@ -33,7 +33,7 @@ const mockClearTimeout = vi.fn((id: number) => {
 });
 
 // Override global timers
-globalThis.setTimeout = mockSetTimeout as typeof setTimeout;
+globalThis.setTimeout = mockSetTimeout as unknown as typeof setTimeout;
 globalThis.clearTimeout = mockClearTimeout as typeof clearTimeout;
 
 // Types
@@ -53,7 +53,7 @@ type TimingEvent = {
 // Mock hover timing system based on draft-3d pattern
 class MockHoverTimingSystem {
   private currentCard: CardPreviewData | null = null;
-  private clearTimer: number | null = null;
+  private clearTimer: ReturnType<typeof setTimeout> | null = null;
   private onShowCallback?: (card: CardPreviewData) => void;
   private onHideCallback?: () => void;
   private events: TimingEvent[] = [];
@@ -67,7 +67,7 @@ class MockHoverTimingSystem {
   }
 
   showCardPreview(card: CardPreviewData) {
-    const timestamp = vi.getMockedSystemTime?.() || Date.now();
+    const timestamp = Number(vi.getMockedSystemTime?.()) || Date.now();
     
     // Clear any pending hide timer (draft-3d pattern)
     if (this.clearTimer) {
@@ -86,7 +86,7 @@ class MockHoverTimingSystem {
   }
 
   hideCardPreview() {
-    const timestamp = vi.getMockedSystemTime?.() || Date.now();
+    const timestamp = Number(vi.getMockedSystemTime?.()) || Date.now();
     
     // Clear any existing timer
     if (this.clearTimer) {
@@ -95,7 +95,7 @@ class MockHoverTimingSystem {
     
     // Set 400ms delay timer (draft-3d pattern)
     this.clearTimer = setTimeout(() => {
-      const hideTimestamp = vi.getMockedSystemTime?.() || Date.now();
+      const hideTimestamp = Number(vi.getMockedSystemTime?.()) || Date.now();
       this.currentCard = null;
       this.clearTimer = null;
       this.events.push({ timestamp: hideTimestamp, event: 'hide' });
