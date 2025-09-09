@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useOnline } from "@/app/online/online-context";
-import { useGameStore } from "@/lib/game/store";
+import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -54,15 +54,14 @@ export default function OnlineMatchPage() {
     resyncing,
   } = useOnline();
 
-  // Determine which player this client is
+  // Determine which player this client is (support for 2-8 players)
   const myPlayerId = me?.id;
-  const myPlayerNumber = useMemo(() => {
-    if (!match?.players || !myPlayerId) return null;
-    const index = match.players.findIndex((p) => p.id === myPlayerId);
-    return index === 0 ? 1 : index === 1 ? 2 : null;
+  const myPlayerIndex = useMemo(() => {
+    if (!match?.players || !myPlayerId) return -1;
+    return match.players.findIndex((p) => p.id === myPlayerId);
   }, [match?.players, myPlayerId]);
-  const myPlayerKey =
-    myPlayerNumber === 1 ? "p1" : myPlayerNumber === 2 ? "p2" : null;
+  const myPlayerNumber = myPlayerIndex >= 0 ? myPlayerIndex + 1 : null;
+  const myPlayerKey = myPlayerIndex >= 0 && myPlayerIndex < 2 ? (myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey : null;
 
   // One-shot guards for rejoin flow per connection
   const lastConnectedRef = useRef<boolean>(false);
@@ -76,12 +75,21 @@ export default function OnlineMatchPage() {
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
 
-  // Get player nicknames
+  // Get player nicknames (dynamic for 2-8 players)
   const playerNames = useMemo(() => {
-    if (!match?.players) return { p1: "Player 1", p2: "Player 2" };
-    const p1Name = match.players[0]?.displayName || "Player 1";
-    const p2Name = match.players[1]?.displayName || "Player 2";
-    return { p1: p1Name, p2: p2Name };
+    const names: Record<string, string> = {};
+    if (!match?.players) {
+      // Fallback for 2 players
+      names.p1 = "Player 1";
+      names.p2 = "Player 2";
+      return names;
+    }
+    
+    match.players.forEach((player, index) => {
+      names[`p${index + 1}`] = player.displayName || `Player ${index + 1}`;
+    });
+    
+    return names;
   }, [match?.players]);
 
   // Ensure we are in the correct match when landing on /online/play/[id]

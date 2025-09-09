@@ -6,8 +6,8 @@ import type { MatchInfo } from "@/lib/net/protocol";
 
 interface OnlineDraftDeckLoaderProps {
   match: MatchInfo;
-  myPlayerKey: "p1" | "p2";
-  playerNames: { p1: string; p2: string };
+  myPlayerKey: string;
+  playerNames: Record<string, string>;
   onPrepareComplete: () => void;
   /** If true, begin loading immediately once mounted and prerequisites are met */
   autoStart?: boolean;
@@ -40,20 +40,19 @@ export default function OnlineDraftDeckLoader({
     try {
       const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
       
-      // Find my player's deck data and opponent's deck data
+      // Find my player's deck data and all other players' deck data
       const myDeckData = match.playerDecks[me.id];
-      const opponentId = match.players.find(p => p.id !== me.id)?.id;
-      const opponentDeckData = opponentId ? match.playerDecks[opponentId] : null;
+      const otherPlayers = match.players.filter(p => p.id !== me.id);
+      const allPlayerDecksReady = otherPlayers.every(p => match.playerDecks[p.id]);
       
       // Determine submission states as reported by server
       const meSubmitted = !!match.deckSubmissions?.includes(me.id);
-      const opponentSubmitted = opponentId ? !!match.deckSubmissions?.includes(opponentId) : false;
+      const allOthersSubmitted = otherPlayers.every(p => match.deckSubmissions?.includes(p.id));
 
-      // Reflect accurate waiting state: only say "waiting for me" if I haven't submitted yet
-      // If submission is recorded but deck data not yet present, we avoid mislabeling and wait silently or for opponent
-      if (!myDeckData || !opponentDeckData) {
+      // Reflect accurate waiting state for multi-player scenario
+      if (!myDeckData || !allPlayerDecksReady) {
         setWaitingForMe(!myDeckData && !meSubmitted);
-        setWaitingForOpponent(!opponentDeckData && !opponentSubmitted);
+        setWaitingForOpponent(!allPlayerDecksReady && !allOthersSubmitted);
         return;
       }
       
@@ -61,12 +60,19 @@ export default function OnlineDraftDeckLoader({
       const mySuccess = await loadSealedDeckFor(myPlayerKey, myDeckData, setDeckError);
       if (!mySuccess) return;
       
-      // Load opponent's deck
-      const opponentPlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
-      const opponentSuccess = await loadSealedDeckFor(opponentPlayerKey, opponentDeckData, setDeckError);
-      if (!opponentSuccess) return;
+      // Load all other players' decks
+      const loadPromises = otherPlayers.map(async (player, index) => {
+        const playerKey = Object.keys(playerNames).find(key => 
+          playerNames[key] === player.displayName
+        ) || `p${match.players.findIndex(p => p.id === player.id) + 1}`;
+        const playerDeckData = match.playerDecks[player.id];
+        return loadSealedDeckFor(playerKey, playerDeckData, setDeckError);
+      });
       
-      // Both decks loaded successfully
+      const allResults = await Promise.all(loadPromises);
+      if (!allResults.every(Boolean)) return; // If any deck failed to load
+      
+      // All decks loaded successfully
       setCompleted(true);
       onPrepareComplete();
       
@@ -111,7 +117,7 @@ export default function OnlineDraftDeckLoader({
           <div className="text-slate-300">
             <div className="mb-2">Players:</div>
             <div className="text-white font-medium">
-              {playerNames.p1} vs {playerNames.p2}
+              {Object.values(playerNames).join(", ")}
             </div>
           </div>
           
@@ -145,7 +151,7 @@ export default function OnlineDraftDeckLoader({
           {!loading && !deckError && waitingForOpponent && (
             <div className="flex items-center justify-center gap-2 text-slate-300">
               <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin"></div>
-              Waiting for opponent to submit their draft deck...
+              Waiting for other players to submit their draft decks...
             </div>
           )}
 

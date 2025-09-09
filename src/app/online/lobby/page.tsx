@@ -6,9 +6,10 @@ import { useOnline } from "@/app/online/online-context";
 import { useGameStore } from "@/lib/game/store";
 import InvitesPanel from "@/components/online/InvitesPanel";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
-import LobbiesCentral from "@/components/online/LobbiesCentral";
+import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/LobbiesCentral";
+import { useTournaments, TournamentProvider } from "@/app/tournaments/tournament-context";
 
-export default function LobbyPage() {
+function LobbyPageContent() {
   const router = useRouter();
   const {
     connected,
@@ -36,6 +37,8 @@ export default function LobbyPage() {
     inviteToLobby,
     dismissInvite,
   } = useOnline();
+
+  const { createTournament } = useTournaments();
 
   const [lobbyIdInput, setLobbyIdInput] = useState("");
   // Tabs removed: we show all sections in the main view
@@ -249,18 +252,21 @@ export default function LobbyPage() {
         joinedLobbyId={lobby?.id ?? null}
         onJoin={(id) => joinLobby(id)}
         onCreate={(cfg) => {
-          // Placeholder wiring: create a lobby, then apply visibility if possible
-          // TODO: Pass cfg.name to createLobby when backend supports named lobbies
-          console.log(`Creating lobby: "${cfg.name}"`);
-          createLobby();
-          // If we immediately become host of a newly created lobby, set visibility
-          setTimeout(() => {
-            try {
-              if (cfg?.visibility === 'private') setLobbyVisibility('private');
-              else if (cfg?.visibility === 'open') setLobbyVisibility('open');
-            } catch {}
-          }, 250);
-          // Note: maxPlayers and name placeholders — wire when backend supports them
+          console.log(`Creating lobby: "${cfg.name}" with ${cfg.maxPlayers} max players`);
+          createLobby({ 
+            visibility: cfg.visibility, 
+            maxPlayers: cfg.maxPlayers 
+          });
+          // Note: lobby name will be supported in future backend updates
+        }}
+        onCreateTournament={async (cfg: CreateTournamentConfig) => {
+          console.log(`Creating tournament: "${cfg.name}"`);
+          try {
+            await createTournament(cfg);
+            router.push('/tournaments');
+          } catch (error) {
+            console.error('Failed to create tournament:', error);
+          }
         }}
         onRefresh={() => requestLobbies()}
       />
@@ -1007,5 +1013,13 @@ export default function LobbyPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LobbyPage() {
+  return (
+    <TournamentProvider>
+      <LobbyPageContent />
+    </TournamentProvider>
   );
 }
