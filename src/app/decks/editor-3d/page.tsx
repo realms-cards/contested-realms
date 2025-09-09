@@ -116,6 +116,7 @@ function AuthenticatedDeckEditor() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [waitingForOtherPlayers, setWaitingForOtherPlayers] = useState(false);
 
   // Clear transient errors when auth status changes to authenticated
   useEffect(() => {
@@ -379,8 +380,11 @@ function AuthenticatedDeckEditor() {
         }
 
         // Batch update picks to include all drafted cards in sideboard (not deck)
+        // IMPORTANT: Preserve any existing picks (like Standard Cards) that may have been added
         setPicks((prev) => {
           const next = { ...prev } as Record<PickKey, PickItem>;
+          console.log(`[Draft Init] Preserving ${Object.keys(prev).length} existing picks`);
+          
           for (const r of resolved) {
             // All draft picks should start in sideboard, not directly in deck zones
             const zone: Zone = "Sideboard";
@@ -399,6 +403,7 @@ function AuthenticatedDeckEditor() {
                   set: r.set,
                 };
           }
+          console.log(`[Draft Init] After adding drafted cards: ${Object.keys(next).length} total picks`);
           return next;
         });
 
@@ -427,7 +432,7 @@ function AuthenticatedDeckEditor() {
         setDraftInitDone(true);
       }
     })();
-  }, [searchParams, draftInitDone, setPicks, setSetName, deckName, setName]);
+  }, [searchParams, draftInitDone]);
 
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
@@ -831,10 +836,13 @@ function AuthenticatedDeckEditor() {
 
       setSaveMsg("Sealed deck submitted successfully!");
 
-      // Redirect back to match after short delay
+      // Show waiting overlay for multiplayer coordination
+      setWaitingForOtherPlayers(true);
+
+      // Redirect back to match page where the proper waiting overlay will be shown
       setTimeout(() => {
         window.location.href = `/online/play/${matchId}`;
-      }, 2000);
+      }, 3000); // Allow time for the submission success message to be seen
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -873,7 +881,12 @@ function AuthenticatedDeckEditor() {
 
       // Auto-save the deck with draft naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-      const draftDeckName = `draft_${today}`;
+      // Generate a more interesting name for draft decks
+      const adjectives = ["Mystical", "Ancient", "Swift", "Noble", "Fierce", "Ethereal"];
+      const nouns = ["Phoenix", "Dragon", "Storm", "Blade", "Crown", "Journey"];
+      const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
+      const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+      const draftDeckName = `${randomAdj} ${randomNoun} Draft (${today})`;
       setDeckName(draftDeckName);
       await saveDeck();
 
@@ -903,12 +916,15 @@ function AuthenticatedDeckEditor() {
 
       setSaveMsg("Draft deck submitted successfully!");
 
-      // Redirect back to match after short delay
+      // Show waiting overlay for multiplayer coordination
+      setWaitingForOtherPlayers(true);
+
+      // Redirect back to match page where the proper waiting overlay will be shown
       setTimeout(() => {
         if (matchId) {
           window.location.href = `/online/play/${matchId}`;
         }
-      }, 2000);
+      }, 3000); // Allow time for the submission success message to be seen
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1226,8 +1242,15 @@ function AuthenticatedDeckEditor() {
     const remainingDeckByCard = new Map<number, number>();
     for (const [cardId] of totalByCard.entries()) {
       const initialDeck = initialDeckByCard.get(cardId) || 0;
-      // Use all non-sideboard cards as deck target to preserve existing deck placements
-      const deckTarget = initialDeck;
+      
+      // In draft mode, check actual 3D positions to determine deck target
+      // since draft cards start in Sideboard zone but may have been moved to deck area
+      let deckTarget = initialDeck;
+      if (isDraftMode) {
+        const cardsInDeckArea = pick3D.filter(p => p.card.cardId === cardId && p.z < 0).length;
+        deckTarget = Math.max(initialDeck, cardsInDeckArea);
+      }
+      
       remainingDeckByCard.set(cardId, deckTarget);
     }
 
@@ -1242,7 +1265,7 @@ function AuthenticatedDeckEditor() {
         const existingPos = positionsRef.current.get(
           `${item.cardId}:${zoneKey}`
         );
-        const shouldPreservePosition = !!existingPos && isSealed;
+        const shouldPreservePosition = !!existingPos && (isSealed || isDraftMode);
 
         const x = shouldPreservePosition
           ? existingPos.x
@@ -1274,7 +1297,7 @@ function AuthenticatedDeckEditor() {
 
     setPick3D(newPick3D);
     setNextPickId(id);
-  }, [picks, isSealed]);
+  }, [picks, isSealed, isDraftMode]);
 
   // Update position cache whenever pick3D changes
   useEffect(() => {
@@ -1422,10 +1445,47 @@ function AuthenticatedDeckEditor() {
         const newZ = 1.5 + Math.random() * 0.5;
         const newX = 0.5 + Math.random() * 3;
         updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
+
+        // Sync picks state for draft mode
+        if (isDraftMode) {
+          const isSite = (card.card.type || "").toLowerCase().includes("site");
+          const variantId = card.card.variantId || undefined;
+          setPicks((prevPicks) => {
+            const next = { ...prevPicks } as Record<PickKey, PickItem>;
+            const deckKey = `${cardId}:${isSite ? 'Atlas' : 'Spellbook'}:${variantId ?? 'x'}` as PickKey;
+            const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+            
+            const deckItem = next[deckKey];
+            if (deckItem && deckItem.count > 0) {
+              // Move one from deck zone to sideboard
+              if (deckItem.count > 1) {
+                next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+              } else {
+                delete next[deckKey];
+              }
+              
+              const sideboardItem = next[sideboardKey];
+              next[sideboardKey] = sideboardItem
+                ? { ...sideboardItem, count: sideboardItem.count + 1 }
+                : {
+                    cardId,
+                    variantId: variantId ?? null,
+                    name: card.card.cardName,
+                    type: card.card.type,
+                    slug: card.card.slug || '',
+                    zone: 'Sideboard',
+                    count: 1,
+                    set: card.card.setName || '',
+                  };
+            }
+            return next;
+          });
+        }
+
         return updated;
       });
     },
-    [isStandardSite]
+    [isStandardSite, isDraftMode]
   );
 
   const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
@@ -1435,12 +1495,50 @@ function AuthenticatedDeckEditor() {
         (p) => p.card.cardId === cardId && p.z >= 0
       );
       if (idx === -1) return prev;
+      const card = updated[idx];
       const newZ = -1.5 - Math.random() * 0.5;
       const newX = -2 + Math.random() * 4;
       updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
+
+      // Sync picks state for draft mode
+      if (isDraftMode) {
+        const isSite = (card.card.type || "").toLowerCase().includes("site");
+        const variantId = card.card.variantId || undefined;
+        setPicks((prevPicks) => {
+          const next = { ...prevPicks } as Record<PickKey, PickItem>;
+          const deckKey = `${cardId}:${isSite ? 'Atlas' : 'Spellbook'}:${variantId ?? 'x'}` as PickKey;
+          const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+          
+          const sideboardItem = next[sideboardKey];
+          if (sideboardItem && sideboardItem.count > 0) {
+            // Move one from sideboard to deck zone
+            if (sideboardItem.count > 1) {
+              next[sideboardKey] = { ...sideboardItem, count: sideboardItem.count - 1 };
+            } else {
+              delete next[sideboardKey];
+            }
+            
+            const deckItem = next[deckKey];
+            next[deckKey] = deckItem
+              ? { ...deckItem, count: deckItem.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: card.card.cardName,
+                  type: card.card.type,
+                  slug: card.card.slug || '',
+                  zone: isSite ? 'Atlas' : 'Spellbook',
+                  count: 1,
+                  set: card.card.setName || '',
+                };
+          }
+          return next;
+        });
+      }
+
       return updated;
     });
-  }, []);
+  }, [isDraftMode]);
 
   // Helper function to move specific card by its unique ID
   const moveSpecificCardToSideboard = useCallback(
@@ -1971,6 +2069,26 @@ function AuthenticatedDeckEditor() {
         {saveMsg && (
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-green-700/80 text-white px-3 py-1 rounded text-sm pointer-events-none">
             {saveMsg}
+          </div>
+        )}
+        
+        {/* Waiting overlay for deck submission */}
+        {waitingForOtherPlayers && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  Deck Submitted!
+                </h2>
+                <p className="text-gray-600 mb-4">
+                  Waiting for other players to submit their decks...
+                </p>
+                <div className="text-sm text-gray-500">
+                  You will be redirected to the match page shortly.
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

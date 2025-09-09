@@ -250,6 +250,8 @@ export default function LobbyPage() {
         onJoin={(id) => joinLobby(id)}
         onCreate={(cfg) => {
           // Placeholder wiring: create a lobby, then apply visibility if possible
+          // TODO: Pass cfg.name to createLobby when backend supports named lobbies
+          console.log(`Creating lobby: "${cfg.name}"`);
           createLobby();
           // If we immediately become host of a newly created lobby, set visibility
           setTimeout(() => {
@@ -258,7 +260,7 @@ export default function LobbyPage() {
               else if (cfg?.visibility === 'open') setLobbyVisibility('open');
             } catch {}
           }, 250);
-          // Note: maxPlayers placeholder — wire when backend supports it
+          // Note: maxPlayers and name placeholders — wire when backend supports them
         }}
         onRefresh={() => requestLobbies()}
       />

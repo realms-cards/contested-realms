@@ -22,6 +22,7 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
+import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
@@ -779,6 +780,23 @@ export default function OnlineMatchPage() {
                   <div className="text-center">
                     <h2 className="text-2xl font-bold text-white mb-4">Sealed Deck Construction</h2>
                     <div className="text-slate-300">Redirecting you to the deck editor to build and submit your sealed deck...</div>
+                  </div>
+                </div>
+              )
+            ) : match?.matchType === "draft" ? (
+              hasSubmittedDraftDeck ? (
+                <OnlineDraftDeckLoader
+                  match={match}
+                  myPlayerKey={myPlayerKey}
+                  playerNames={playerNames}
+                  onPrepareComplete={() => setPrepared(true)}
+                  autoStart
+                />
+              ) : (
+                <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold text-white mb-4">Draft Deck Construction</h2>
+                    <div className="text-slate-300">Redirecting you to the deck editor to build and submit your draft deck...</div>
                   </div>
                 </div>
               )
