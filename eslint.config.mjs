@@ -53,6 +53,15 @@ const eslintConfig = [
       
       // Performance and correctness
       "react-hooks/exhaustive-deps": "warn", // Keep dependency warnings visible
+      
+      // Three.js and React Three Fiber best practices
+      // Encourage proper disposal of Three.js resources
+      "no-unused-expressions": ["error", { 
+        "allowShortCircuit": true, 
+        "allowTernary": true 
+      }],
+      // Ensure Three.js objects are properly managed
+      "no-global-assign": "error",
     },
   },
 ];

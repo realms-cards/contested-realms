@@ -1,8 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
+import type { ContextMenuAction } from "@/lib/game/types";
+import { detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 
 interface ContextMenuProps {
   onClose: () => void;
@@ -34,11 +36,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const attachTokenToTopPermanent = useGameStore((s) => s.attachTokenToTopPermanent);
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
+  
+  // Permanent position management (burrow/submerge)
+  const getAvailableActions = useGameStore((s) => s.getAvailableActions);
+  const updatePermanentState = useGameStore((s) => s.updatePermanentState);
+  const setPermanentAbility = useGameStore((s) => s.setPermanentAbility);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
     null
   );
+  const [positionActions, setPositionActions] = useState<ContextMenuAction[]>([]);
 
   useLayoutEffect(() => {
     if (!contextMenu) {
@@ -66,6 +74,45 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [contextMenu]);
+
+  // Handle permanent ability setup and position actions
+  useEffect(() => {
+    if (!contextMenu) {
+      setPositionActions([]);
+      return;
+    }
+
+    const t = contextMenu.target;
+    if (t.kind === "permanent") {
+      const item = permanents[t.at]?.[t.index];
+      if (item?.card) {
+        const permanentId = item?.card?.cardId ?? (parseInt(t.at.split(',')[0]) * 1000 + t.index);
+        
+        // Parse and set up permanent abilities from card rulesText
+        const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
+        const canBurrow = abilities.canBurrow;
+        const canSubmerge = abilities.canSubmerge;
+        
+        if (canBurrow || canSubmerge) {
+          setPermanentAbility(permanentId, {
+            permanentId,
+            canBurrow,
+            canSubmerge,
+            requiresWaterSite: canSubmerge, // Submerge typically requires water sites
+            abilitySource: `${item.card.name} - ${canBurrow && canSubmerge ? 'Burrowing/Submerge' : canBurrow ? 'Burrowing' : 'Submerge'} ability`
+          });
+        }
+        
+        // Get available position actions
+        const actions = getAvailableActions(permanentId);
+        setPositionActions(actions);
+      } else {
+        setPositionActions([]);
+      }
+    } else {
+      setPositionActions([]);
+    }
+  }, [contextMenu, permanents, setPermanentAbility, getAvailableActions]);
 
   if (!contextMenu) return null;
 
@@ -193,6 +240,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
+
   } else if (t.kind === "avatar") {
     const a = avatars[t.who];
     header = a?.card?.name || `${t.who.toUpperCase()} Avatar`;
@@ -331,6 +379,38 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     Detach token
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Burrow/Submerge Actions */}
+            {positionActions.length > 0 && (
+              <div className="space-y-2">
+                {positionActions.map((action) => (
+                  <button
+                    key={action.actionId}
+                    className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
+                      action.isEnabled 
+                        ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200" 
+                        : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                    }`}
+                    disabled={!action.isEnabled}
+                    onClick={() => {
+                      if (action.isEnabled && action.newPositionState) {
+                        updatePermanentState(action.targetPermanentId, action.newPositionState);
+                        log(`${header} ${action.displayText.toLowerCase()}${action.newPositionState === 'surface' ? 'ed' : 'ed'}`);
+                        onClose();
+                      }
+                    }}
+                    title={action.description}
+                  >
+                    <span className="text-xs">
+                      {action.icon === 'arrow-down' && '↓'}
+                      {action.icon === 'arrow-up' && '↑'}
+                      {action.icon === 'waves' && '〜'}
+                    </span>
+                    <span>{action.displayText}</span>
+                  </button>
+                ))}
               </div>
             )}
 

@@ -54,6 +54,23 @@ scripts/validate-type-safety.sh  # Validate type safety configuration
 - 001-fix-card-preview: Fixed card preview hover issues by enabling raycasting in DraggableCard3D
 - Phase 3.5: Polish & cleanup with enhanced type safety and regression prevention
 
+## Current Development: Burrow/Submerge Mechanics (Branch: 003-permanents-might-have)
+
+**New Feature**: Permanent cards with burrow/submerge abilities can visually move "under" their current site in 3D space through right-click context menus. Sites are now placed toward tile edges facing the owning player rather than in tile centers.
+
+**Technical Approach**:
+- Extend existing 3D game components (CardPlane, Board, ContextMenu) 
+- Use Y-axis negative positioning (-0.1 to -0.5) for "underground" visual effect
+- React Three Fiber positioning with smooth animations via react-spring
+- Zustand store extensions for permanent position state management
+- Edge-based site placement using player position calculations
+
+**Key Components**:
+- `src/lib/game/store.ts` - Add permanent position state tracking
+- `src/lib/game/components/CardPlane.tsx` - Support depth-based positioning  
+- `src/components/game/ContextMenu.tsx` - Add burrow/submerge/surface actions
+- `src/lib/game/Board.tsx` - Modify site placement for edge-based positioning
+
 **Performance Impact**: Build times remain stable at ~22 seconds with no memory regressions. Enhanced type checking adds <1 second to compilation time while significantly improving code quality.
 
-**Last updated**: 2025-09-09
+**Last updated**: 2025-01-09
