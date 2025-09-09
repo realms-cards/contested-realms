@@ -183,9 +183,14 @@ model User {
   isPro         Boolean   @default(false)
   stats         String? // Stored as a stringified JSON object
 
-  accounts Account[]
-  sessions Session[]
-  decks    Deck[]
+  accounts              Account[]
+  sessions              Session[]
+  decks                 Deck[]
+  tournamentRegistrations TournamentRegistration[]
+  standings             PlayerStanding[]
+  leaderboardEntries    LeaderboardEntry[]
+  wonMatches            MatchResult[] @relation("MatchWinner")
+  lostMatches           MatchResult[] @relation("MatchLoser")
 }
 
 model VerificationToken {
@@ -194,4 +199,179 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// Tournament system models
+enum TournamentFormat {
+  swiss
+  elimination
+  round_robin
+}
+
+enum TournamentStatus {
+  registering
+  draft_phase
+  sealed_phase
+  playing
+  completed
+}
+
+enum MatchStatus {
+  pending
+  in_progress
+  completed
+}
+
+model Tournament {
+  id                String            @id @default(cuid())
+  name              String
+  format            TournamentFormat
+  status            TournamentStatus  @default(registering)
+  maxPlayers        Int
+  currentRound      Int               @default(0)
+  totalRounds       Int
+  matchType         String            // constructed, sealed, draft
+  sealedConfig      Json?             // Sealed pack configuration
+  draftConfig       Json?             // Draft configuration
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  registrations     TournamentRegistration[]
+  standings         PlayerStanding[]
+  rounds            TournamentRound[]
+  matches           Match[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TournamentRegistration {
+  id           String     @id @default(cuid())
+  tournamentId String
+  playerId     String
+  displayName  String
+  joinedAt     DateTime   @default(now())
+
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+}
+
+model PlayerStanding {
+  id                           String     @id @default(cuid())
+  tournamentId                 String
+  playerId                     String
+  displayName                  String
+  wins                         Int        @default(0)
+  losses                       Int        @default(0)
+  draws                        Int        @default(0)
+  matchPoints                  Int        @default(0)
+  gameWinPercentage            Float      @default(0.0)
+  opponentMatchWinPercentage   Float      @default(0.0)
+  isEliminated                 Boolean    @default(false)
+  currentMatchId               String?
+  updatedAt                    DateTime   @updatedAt
+
+  tournament                   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player                       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+  @@index([matchPoints])
+}
+
+model TournamentRound {
+  id           String      @id @default(cuid())
+  tournamentId String
+  roundNumber  Int
+  status       MatchStatus @default(pending)
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  tournament   Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches      Match[]
+
+  @@unique([tournamentId, roundNumber])
+  @@index([tournamentId])
+}
+
+model Match {
+  id           String      @id @default(cuid())
+  tournamentId String?
+  roundId      String?
+  status       MatchStatus @default(pending)
+  players      Json        // Array of player IDs and info
+  results      Json?       // Match results and game scores
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+
+  tournament   Tournament?      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  round        TournamentRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([roundId])
+  @@index([status])
+}
+
+// Global leaderboard system
+enum GameFormat {
+  constructed
+  sealed
+  draft
+}
+
+enum TimeFrame {
+  all_time
+  monthly
+  weekly
+}
+
+model LeaderboardEntry {
+  id           String     @id @default(cuid())
+  playerId     String
+  displayName  String
+  format       GameFormat
+  timeFrame    TimeFrame
+  wins         Int        @default(0)
+  losses       Int        @default(0)
+  draws        Int        @default(0)
+  winRate      Float      @default(0.0)
+  rating       Int        @default(1200)  // ELO-style rating
+  rank         Int        @default(0)
+  tournamentWins Int      @default(0)
+  lastActive   DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  player       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, format, timeFrame])
+  @@index([format, timeFrame, rating])
+  @@index([format, timeFrame, winRate])
+  @@index([rank])
+}
+
+model MatchResult {
+  id           String     @id @default(cuid())
+  matchId      String
+  lobbyName    String?    // Store lobby name for titles
+  winnerId     String?
+  loserId      String?
+  isDraw       Boolean    @default(false)
+  format       GameFormat
+  tournamentId String?
+  players      Json       // Array of player info
+  duration     Int?       // Match duration in seconds
+  completedAt  DateTime   @default(now())
+
+  winner       User?      @relation("MatchWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  loser        User?      @relation("MatchLoser", fields: [loserId], references: [id], onDelete: SetNull)
+
+  @@index([winnerId])
+  @@index([loserId])
+  @@index([format])
+  @@index([tournamentId])
+  @@index([completedAt])
 }

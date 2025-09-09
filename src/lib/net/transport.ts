@@ -13,6 +13,7 @@ import type {
   ChatScope,
   SealedConfig,
   DraftConfig,
+  TournamentInfo,
 } from "@/lib/net/protocol";
 
 // Import Draft-3D event types for enhanced online integration
@@ -54,6 +55,16 @@ export type TransportEventMap = {
   lobbyInvite: LobbyInvitePayloadT;
   draftUpdate: DraftState;
   message: CustomMessage; // generic channel for lightweight messages
+  // Tournament events
+  tournamentCreated: TournamentInfo;
+  tournamentUpdated: TournamentInfo;
+  tournamentJoined: { tournamentId: string; playerId: string; displayName: string };
+  tournamentLeft: { tournamentId: string; playerId: string };
+  tournamentStarted: { tournamentId: string; status: string };
+  tournamentRoundStarted: { tournamentId: string; roundNumber: number; matches: string[] };
+  tournamentMatchReady: { tournamentId: string; matchId: string; players: string[] };
+  tournamentCompleted: { tournamentId: string; winnerId?: string };
+  tournamentsListUpdated: TournamentInfo[];
 } & Draft3DEventMap; // Extend with Draft-3D events for enhanced online integration
 
 export type TransportEvent = keyof TransportEventMap;
@@ -107,6 +118,20 @@ export interface GameTransport {
 
   // Generic lightweight message channel for transient signals (e.g., draft ready)
   sendMessage?(msg: CustomMessage): Promise<void> | void;
+
+  // Tournament methods
+  createTournament?(config: {
+    name: string;
+    format: "swiss" | "elimination" | "round_robin";
+    matchType: "constructed" | "sealed" | "draft";
+    maxPlayers: number;
+    sealedConfig?: unknown;
+    draftConfig?: unknown;
+  }): Promise<{ tournamentId: string }>;
+  joinTournament?(tournamentId: string, displayName?: string): Promise<void>;
+  leaveTournament?(tournamentId: string): Promise<void>;
+  startTournament?(tournamentId: string): Promise<void>;
+  requestTournaments?(): void;
 
   on<E extends TransportEvent>(event: E, handler: TransportHandler<E>): () => void;
   off?<E extends TransportEvent>(event: E, handler: TransportHandler<E>): void;

@@ -197,6 +197,35 @@ export class SocketTransport implements GameTransport {
       socket.on("draft:system:reconnect", (payload) =>
         this.dispatch("draft:system:reconnect", payload)
       );
+
+      // Tournament events
+      socket.on("tournamentCreated", (payload) =>
+        this.dispatch("tournamentCreated", payload)
+      );
+      socket.on("tournamentUpdated", (payload) =>
+        this.dispatch("tournamentUpdated", payload)
+      );
+      socket.on("tournamentJoined", (payload) =>
+        this.dispatch("tournamentJoined", payload)
+      );
+      socket.on("tournamentLeft", (payload) =>
+        this.dispatch("tournamentLeft", payload)
+      );
+      socket.on("tournamentStarted", (payload) =>
+        this.dispatch("tournamentStarted", payload)
+      );
+      socket.on("tournamentRoundStarted", (payload) =>
+        this.dispatch("tournamentRoundStarted", payload)
+      );
+      socket.on("tournamentMatchReady", (payload) =>
+        this.dispatch("tournamentMatchReady", payload)
+      );
+      socket.on("tournamentCompleted", (payload) =>
+        this.dispatch("tournamentCompleted", payload)
+      );
+      socket.on("tournamentsListUpdated", (payload) =>
+        this.dispatch("tournamentsListUpdated", payload)
+      );
     });
   }
 
@@ -374,6 +403,97 @@ export class SocketTransport implements GameTransport {
   sendUIUpdate(event: UIUpdateEvent): void {
     console.log(`[Transport] sendUIUpdate -> playerId=${event.playerId} updates=${event.uiUpdates.length}`);
     this.requireSocket().emit("draft:ui:update", event);
+  }
+
+  // Tournament methods implementation
+  async createTournament(config: {
+    name: string;
+    format: "swiss" | "elimination" | "round_robin";
+    matchType: "constructed" | "sealed" | "draft";
+    maxPlayers: number;
+    sealedConfig?: unknown;
+    draftConfig?: unknown;
+  }): Promise<{ tournamentId: string }> {
+    const s = this.requireSocket();
+    return new Promise((resolve, reject) => {
+      const onCreated = (payload: unknown) => {
+        const tournament = payload as { id: string };
+        s.off("tournamentCreated", onCreated);
+        resolve({ tournamentId: tournament.id });
+      };
+      const onError = (error: unknown) => {
+        s.off("error", onError);
+        reject(error);
+      };
+      s.on("tournamentCreated", onCreated);
+      s.on("error", onError);
+      s.emit("createTournament", config);
+    });
+  }
+
+  async joinTournament(tournamentId: string, displayName?: string): Promise<void> {
+    const s = this.requireSocket();
+    return new Promise((resolve, reject) => {
+      const onJoined = (payload: unknown) => {
+        const data = payload as { tournamentId: string };
+        if (data.tournamentId === tournamentId) {
+          s.off("tournamentJoined", onJoined);
+          resolve();
+        }
+      };
+      const onError = (error: unknown) => {
+        s.off("error", onError);
+        reject(error);
+      };
+      s.on("tournamentJoined", onJoined);
+      s.on("error", onError);
+      s.emit("joinTournament", { tournamentId, displayName });
+    });
+  }
+
+  async leaveTournament(tournamentId: string): Promise<void> {
+    const s = this.requireSocket();
+    return new Promise((resolve, reject) => {
+      const onLeft = (payload: unknown) => {
+        const data = payload as { tournamentId: string };
+        if (data.tournamentId === tournamentId) {
+          s.off("tournamentLeft", onLeft);
+          resolve();
+        }
+      };
+      const onError = (error: unknown) => {
+        s.off("error", onError);
+        reject(error);
+      };
+      s.on("tournamentLeft", onLeft);
+      s.on("error", onError);
+      s.emit("leaveTournament", { tournamentId });
+    });
+  }
+
+  async startTournament(tournamentId: string): Promise<void> {
+    const s = this.requireSocket();
+    return new Promise((resolve, reject) => {
+      const onStarted = (payload: unknown) => {
+        const data = payload as { tournamentId: string };
+        if (data.tournamentId === tournamentId) {
+          s.off("tournamentStarted", onStarted);
+          resolve();
+        }
+      };
+      const onError = (error: unknown) => {
+        s.off("error", onError);
+        reject(error);
+      };
+      s.on("tournamentStarted", onStarted);
+      s.on("error", onError);
+      s.emit("startTournament", { tournamentId });
+    });
+  }
+
+  requestTournaments(): void {
+    console.log(`[Transport] Requesting tournaments list`);
+    this.requireSocket().emit("requestTournaments", {});
   }
 
   on<E extends TransportEvent>(

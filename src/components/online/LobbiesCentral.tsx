@@ -44,12 +44,20 @@ export type CreateLobbyConfig = {
   maxPlayers: number;
 };
 
+export type CreateTournamentConfig = {
+  name: string;
+  format: "swiss" | "elimination" | "round_robin";
+  matchType: "constructed" | "sealed" | "draft";
+  maxPlayers: number;
+};
+
 export default function LobbiesCentral({
   lobbies,
   myId,
   joinedLobbyId,
   onJoin,
   onCreate,
+  onCreateTournament,
   onRefresh,
 }: {
   lobbies: LobbyInfo[];
@@ -57,6 +65,7 @@ export default function LobbiesCentral({
   joinedLobbyId: string | null;
   onJoin: (lobbyId: string) => void;
   onCreate: (config: CreateLobbyConfig) => void;
+  onCreateTournament?: (config: CreateTournamentConfig) => void;
   onRefresh: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -64,14 +73,26 @@ export default function LobbiesCentral({
   const [hideStarted, setHideStarted] = useState(true);
   const [sortKey, setSortKey] = useState<"invited" | "playersAsc" | "playersDesc" | "status">("status");
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [tournamentOverlayOpen, setTournamentOverlayOpen] = useState(false);
   const [cfgName, setCfgName] = useState<string>("");
   const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">("open");
   const [cfgMaxPlayers, setCfgMaxPlayers] = useState<number>(2);
+  
+  // Tournament creation state
+  const [tournamentName, setTournamentName] = useState<string>("");
+  const [tournamentFormat, setTournamentFormat] = useState<"swiss" | "elimination" | "round_robin">("swiss");
+  const [tournamentMatchType, setTournamentMatchType] = useState<"constructed" | "sealed" | "draft">("sealed");
+  const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(8);
 
   // Generate a random name when overlay opens
   const handleOverlayOpen = () => {
     setCfgName(generateLobbyName());
     setOverlayOpen(true);
+  };
+
+  const handleTournamentOverlayOpen = () => {
+    setTournamentName(generateLobbyName());
+    setTournamentOverlayOpen(true);
   };
 
   const filtered = useMemo(() => {
@@ -122,6 +143,14 @@ export default function LobbiesCentral({
           >
             Create Lobby
           </button>
+          {onCreateTournament && (
+            <button
+              className="rounded bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-3 py-1 text-xs font-semibold"
+              onClick={handleTournamentOverlayOpen}
+            >
+              Create Tournament
+            </button>
+          )}
         </div>
       </div>
 
@@ -168,11 +197,11 @@ export default function LobbiesCentral({
               }`}
             >
               <div className="flex-1 min-w-0">
-                {l.name && (
-                  <div className="text-sm font-semibold text-white mb-1 truncate">{l.name}</div>
-                )}
+                <div className="text-base font-bold text-white mb-1 truncate">
+                  {l.name || "Unnamed Lobby"}
+                </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="font-mono opacity-70 truncate">{l.id}</span>
+                  <span className="font-mono opacity-50 text-xs truncate">{l.id}</span>
                   <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
                     open ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30" : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
                   }`}>
@@ -285,6 +314,122 @@ export default function LobbiesCentral({
                   Create
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tournament Creation Overlay */}
+      {tournamentOverlayOpen && onCreateTournament && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setTournamentOverlayOpen(false)} />
+          <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
+            <div className="flex items-center justify-between">
+              <div className="text-base font-semibold">Create Tournament</div>
+              <button className="text-slate-300 hover:text-white text-sm" onClick={() => setTournamentOverlayOpen(false)}>Close</button>
+            </div>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-2">Tournament Name *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={tournamentName}
+                    onChange={(e) => setTournamentName(e.target.value)}
+                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                    placeholder="Enter tournament name"
+                    maxLength={50}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTournamentName(generateLobbyName())}
+                    className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+                    title="Generate random name"
+                  >
+                    🎲
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium mb-2">Format</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["swiss", "elimination", "round_robin"].map((format) => (
+                    <button
+                      key={format}
+                      className={`px-3 py-2 text-xs rounded transition-colors ${
+                        tournamentFormat === format
+                          ? "bg-blue-600/80 text-white"
+                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                      }`}
+                      onClick={() => setTournamentFormat(format as any)}
+                    >
+                      {format === "swiss" ? "Swiss" : format === "elimination" ? "Elimination" : "Round Robin"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium mb-2">Match Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["constructed", "sealed", "draft"].map((type) => (
+                    <button
+                      key={type}
+                      className={`px-3 py-2 text-xs rounded transition-colors ${
+                        tournamentMatchType === type
+                          ? "bg-purple-600/80 text-white"
+                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+                      }`}
+                      onClick={() => setTournamentMatchType(type as any)}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium mb-2">Max Players</label>
+                <select
+                  value={tournamentMaxPlayers}
+                  onChange={(e) => setTournamentMaxPlayers(parseInt(e.target.value))}
+                  className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+                >
+                  <option value={4}>4 Players</option>
+                  <option value={8}>8 Players</option>
+                  <option value={16}>16 Players</option>
+                  <option value={32}>32 Players</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm"
+                onClick={() => setTournamentOverlayOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
+                disabled={!tournamentName.trim()}
+                onClick={() => {
+                  const trimmedName = tournamentName.trim();
+                  if (trimmedName) {
+                    onCreateTournament({
+                      name: trimmedName,
+                      format: tournamentFormat,
+                      matchType: tournamentMatchType,
+                      maxPlayers: tournamentMaxPlayers
+                    });
+                    setTournamentOverlayOpen(false);
+                  }
+                }}
+              >
+                Create Tournament
+              </button>
             </div>
           </div>
         </div>

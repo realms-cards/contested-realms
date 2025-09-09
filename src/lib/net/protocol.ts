@@ -82,11 +82,15 @@ export type DraftStateType = z.infer<typeof DraftStateSchema>;
 export const MatchInfoSchema = z.object({
   id: z.string(),
   lobbyId: z.string().optional(),
+  lobbyName: z.string().optional(),
+  tournamentId: z.string().optional(),
+  round: z.number().int().min(1).optional(),
   players: z.array(PlayerInfoSchema),
   status: MatchStatusSchema,
   seed: z.string(),
   turn: z.string().optional(),
   winnerId: z.string().nullable().optional(),
+  result: z.enum(["win", "loss", "draw"]).nullable().optional(),
   matchType: z.enum(["constructed", "sealed", "draft"]).optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),
   draftConfig: DraftConfigSchema.nullable().optional(),
@@ -94,8 +98,62 @@ export const MatchInfoSchema = z.object({
   playerDecks: z.record(z.string(), z.unknown()).optional(),
   sealedPacks: z.record(z.string(), z.array(SealedPackSchema)).optional(),
   draftState: DraftStateSchema.optional(),
+  // Multi-player support
+  maxPlayers: z.number().int().min(2).max(8).default(2),
+  isMultiplayer: z.boolean().default(false),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
+
+// Tournament system types
+export const TournamentFormatSchema = z.enum(["swiss", "elimination", "round_robin"]);
+export type TournamentFormat = z.infer<typeof TournamentFormatSchema>;
+
+export const TournamentStatusSchema = z.enum(["registering", "draft_phase", "sealed_phase", "playing", "completed"]);
+export type TournamentStatus = z.infer<typeof TournamentStatusSchema>;
+
+export const TournamentRoundSchema = z.object({
+  roundNumber: z.number().int().min(1),
+  matches: z.array(z.string()), // Match IDs
+  status: z.enum(["pending", "in_progress", "completed"]),
+  startTime: z.number().optional(),
+  endTime: z.number().optional(),
+});
+export type TournamentRound = z.infer<typeof TournamentRoundSchema>;
+
+export const PlayerStandingSchema = z.object({
+  playerId: z.string(),
+  displayName: z.string(),
+  wins: z.number().int().min(0).default(0),
+  losses: z.number().int().min(0).default(0),
+  draws: z.number().int().min(0).default(0),
+  matchPoints: z.number().int().min(0).default(0),
+  gameWinPercentage: z.number().min(0).max(1).default(0),
+  opponentMatchWinPercentage: z.number().min(0).max(1).default(0),
+  currentMatchId: z.string().nullable().optional(),
+  isEliminated: z.boolean().default(false),
+});
+export type PlayerStanding = z.infer<typeof PlayerStandingSchema>;
+
+export const TournamentInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  format: TournamentFormatSchema,
+  status: TournamentStatusSchema,
+  maxPlayers: z.number().int().min(4).max(32),
+  registeredPlayers: z.array(PlayerInfoSchema),
+  standings: z.array(PlayerStandingSchema),
+  currentRound: z.number().int().min(0).default(0),
+  totalRounds: z.number().int().min(1),
+  rounds: z.array(TournamentRoundSchema),
+  matchType: z.enum(["constructed", "sealed", "draft"]),
+  sealedConfig: SealedConfigSchema.nullable().optional(),
+  draftConfig: DraftConfigSchema.nullable().optional(),
+  registrationDeadline: z.number().optional(),
+  createdAt: z.number(),
+  startedAt: z.number().optional(),
+  completedAt: z.number().optional(),
+});
+export type TournamentInfo = z.infer<typeof TournamentInfoSchema>;
 
 // Chat scope shared enum
 export const ChatScopeSchema = z.enum(["lobby", "match", "global"]);
@@ -136,6 +194,20 @@ export const InviteToLobbyPayload = z.object({
 });
 export const RequestLobbiesPayload = z.object({});
 export const RequestPlayersPayload = z.object({});
+
+// Tournament payloads
+export const CreateTournamentPayload = z.object({
+  name: z.string().min(1).max(100),
+  format: TournamentFormatSchema,
+  matchType: z.enum(["constructed", "sealed", "draft"]),
+  maxPlayers: z.number().int().min(4).max(32),
+  sealedConfig: SealedConfigSchema.optional(),
+  draftConfig: DraftConfigSchema.optional(),
+});
+export const JoinTournamentPayload = z.object({ tournamentId: z.string() });
+export const LeaveTournamentPayload = z.object({ tournamentId: z.string() });
+export const StartTournamentPayload = z.object({ tournamentId: z.string() });
+export const RequestTournamentsPayload = z.object({});
 
 export type HelloPayloadT = z.infer<typeof HelloPayload>;
 export type CreateLobbyPayloadT = z.infer<typeof CreateLobbyPayload>;
