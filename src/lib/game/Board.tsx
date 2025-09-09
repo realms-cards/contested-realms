@@ -101,6 +101,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
+  const permanentPositions = useGameStore((s) => s.permanentPositions);
   const avatars = useGameStore((s) => s.avatars);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   // hover tracking disabled for tiles
@@ -201,8 +202,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
       position: { x: boardCenterX, z: boardCenterY - 3 } // 3 tiles north of center
     };
     
-    setPlayerPosition("p1", p1Position);
-    setPlayerPosition("p2", p2Position);
+    // Only set player positions if the function is available (not in draft mode)
+    if (setPlayerPosition) {
+      setPlayerPosition("p1", p1Position);
+      setPlayerPosition("p2", p2Position);
+    }
   }, [board.size.w, board.size.h, setPlayerPosition]);
 
   const offsetX = -((board.size.w - 1) * TILE_SIZE) / 2;
@@ -699,9 +703,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               slug={site.card.slug!}
                               width={CARD_SHORT}
                               height={CARD_LONG}
-                              depthWrite={false}
+                              depthWrite={true}
+                              depthTest={true}
                               rotationZ={rotZ}
                               elevation={0.001}
+                              renderOrder={10}
                               onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                                 e.stopPropagation();
                                 e.nativeEvent.preventDefault();
@@ -771,6 +777,16 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                     (p.tilt || 0);
                   const offX = p.offset?.[0] ?? 0;
                   const offZ = p.offset?.[1] ?? 0;
+                  
+                  // Check if this permanent is burrowed/submerged
+                  const permanentId = p.card.cardId;
+                  const permanentPosition = permanentPositions[permanentId];
+                  const isBurrowed = permanentPosition?.state === 'burrowed' || permanentPosition?.state === 'submerged';
+                  
+                  // Adjust Y position: normal cards at 0.25, burrowed cards at 0.0005 (below sites at 0.001)
+                  // This puts burrowed cards under sites but still visible
+                  const yPos = isBurrowed ? 0.0005 : 0.25;
+                  
                   return (
                     <RigidBody
                       key={`perm-${key}-${idx}`}
@@ -792,7 +808,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       type={tokenSiteReplace ? "fixed" : "dynamic"}
                       ccd
                       colliders={false}
-                      position={[0 + offX, 0.25, zBase + offZ]}
+                      position={[0 + offX, yPos, zBase + offZ]}
                       linearDamping={2}
                       angularDamping={2}
                       canSleep={false}
@@ -1054,6 +1070,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                                 width={CARD_SHORT}
                                 height={CARD_LONG}
                                 rotationZ={rotZ}
+                                renderOrder={isBurrowed ? -10 : 0}
+                                depthWrite={!isBurrowed}
+                                depthTest={true}
                               />
                             </>
                           ) : (
