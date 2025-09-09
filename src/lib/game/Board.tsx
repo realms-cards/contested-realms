@@ -11,7 +11,7 @@ import {
   type Group,
 } from "three";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef, PermanentItem } from "@/lib/game/store";
+import type { CardRef } from "@/lib/game/store";
 import {
   RigidBody,
   CuboidCollider,
@@ -47,6 +47,16 @@ type BodyApi = {
   ) => void;
 };
 
+// Component prop interfaces
+interface PlaymatProps {
+  matW: number;
+  matH: number;
+}
+
+interface BoardProps {
+  noRaycast?: boolean;
+}
+
 // No-op raycast handler to make a mesh ignore pointer events (lets objects above receive them)
 function noopRaycast(
   this: Object3D,
@@ -60,7 +70,7 @@ function noopRaycast(
 
 // Isolated playmat that loads its texture and renders the background plane.
 // Wrapped in Suspense by the parent so Board itself doesn't suspend.
-function Playmat({ matW, matH }: { matW: number; matH: number }) {
+function Playmat({ matW, matH }: PlaymatProps) {
   const tex = useTexture("/api/assets/playmat.jpg");
   tex.colorSpace = SRGBColorSpace;
   return (
@@ -76,7 +86,7 @@ function Playmat({ matW, matH }: { matW: number; matH: number }) {
   );
 }
 
-export default function Board({ noRaycast = false }: { noRaycast?: boolean } = {}) {
+export default function Board({ noRaycast = false }: BoardProps = {}) {
   const board = useGameStore((s) => s.board);
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);

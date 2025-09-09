@@ -2,7 +2,7 @@
 
 import { useGameStore } from "@/lib/game/store";
 import type { LifeState, PlayerKey } from "@/lib/game/store";
-import { Heart, Skull, AlertTriangle } from "lucide-react";
+import { Skull, AlertTriangle } from "lucide-react";
 
 interface OnlineLifeCountersProps {
   dragFromHand: boolean;

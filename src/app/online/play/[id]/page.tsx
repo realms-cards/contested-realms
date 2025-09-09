@@ -522,6 +522,7 @@ export default function OnlineMatchPage() {
     } else {
       setMagnifierDelay(false);
     }
+    return undefined;
   }, [selectedHandCard]);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);

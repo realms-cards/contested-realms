@@ -7,8 +7,6 @@ import {
   TILE_SIZE,
   CARD_SHORT,
   CARD_LONG,
-  BASE_TILE_SIZE,
-  MAT_RATIO,
 } from "@/lib/game/constants";
 import type { ThreeEvent } from "@react-three/fiber";
 // No label text for tokens pile

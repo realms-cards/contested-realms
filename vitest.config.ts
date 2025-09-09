@@ -3,10 +3,10 @@ import path from 'path';
 
 export default defineConfig({
   test: {
-    environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    environment: 'jsdom',
+    include: ['tests/**/*.test.{ts,tsx}'],
     globals: true,
-    setupFiles: [],
+    setupFiles: ['./tests/setup.ts'],
     reporters: ['default'],
     coverage: {
       enabled: false,

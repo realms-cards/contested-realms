@@ -237,9 +237,10 @@ export default function LobbyPage() {
       <LobbiesCentral
         lobbies={lobbies as unknown as Array<{
           id: string;
+          hostId: string;
           name: string;
           status: string;
-          players: Array<{ id: string; name: string }>;
+          players: Array<{ id: string; displayName: string }>;
           maxPlayers: number;
           gameType?: string;
           isPrivate?: boolean;
