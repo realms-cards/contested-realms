@@ -361,8 +361,9 @@ describe('Integration: Submerge Functionality Workflow', () => {
       }, { timeout: 1000 });
 
       // X and Z coordinates should remain the same
-      const position = permanent.getAttribute('data-position')!;
-      const [x, y, z] = position.split(',').map(Number);
+      const positionAttr = permanent.getAttribute('data-position');
+      expect(positionAttr).not.toBeNull();
+      const [x, y, z] = (positionAttr as string).split(',').map(Number);
       expect(x).toBe(5); // X unchanged
       expect(y).toBe(-0.5); // Y moved underwater (deeper than -0.25 burrow)
       expect(z).toBe(3); // Z unchanged
@@ -372,8 +373,9 @@ describe('Integration: Submerge Functionality Workflow', () => {
       render(<MockSubmergeWorkflow siteType="water" />);
       
       const permanent = screen.getByTestId('permanent-456');
-      const initialPosition = permanent.getAttribute('data-position')!;
-      const [initialX, , initialZ] = initialPosition.split(',').map(Number);
+      const initialPositionAttr = permanent.getAttribute('data-position');
+      expect(initialPositionAttr).not.toBeNull();
+      const [initialX, , initialZ] = (initialPositionAttr as string).split(',').map(Number);
 
       // Submerge and surface multiple times
       for (let i = 0; i < 3; i++) {
@@ -383,8 +385,9 @@ describe('Integration: Submerge Functionality Workflow', () => {
         fireEvent.click(screen.getByTestId('action-submerge'));
         
         await waitFor(() => {
-          const pos = permanent.getAttribute('data-position')!;
-          const [x, y, z] = pos.split(',').map(Number);
+          const posAttr = permanent.getAttribute('data-position');
+          expect(posAttr).not.toBeNull();
+          const [x, y, z] = (posAttr as string).split(',').map(Number);
           expect(x).toBe(initialX); // X should not change
           expect(z).toBe(initialZ); // Z should not change
           expect(y).toBeLessThan(0); // Y should be underwater
@@ -397,8 +400,9 @@ describe('Integration: Submerge Functionality Workflow', () => {
         fireEvent.click(screen.getByTestId('action-surface'));
         
         await waitFor(() => {
-          const pos = permanent.getAttribute('data-position')!;
-          const [x, y, z] = pos.split(',').map(Number);
+          const posAttr = permanent.getAttribute('data-position');
+          expect(posAttr).not.toBeNull();
+          const [x, y, z] = (posAttr as string).split(',').map(Number);
           expect(x).toBe(initialX); // X should not change
           expect(z).toBe(initialZ); // Z should not change
           expect(y).toBe(0); // Y should be at surface
@@ -416,7 +420,7 @@ describe('Integration: Submerge Functionality Workflow', () => {
       expect(siteInfo).toHaveAttribute('data-site-type', 'water');
       expect(siteInfo).toHaveAttribute('data-is-water', 'true');
 
-      let waterSite = screen.getByTestId('site-water-5-3');
+      const waterSite = screen.getByTestId('site-water-5-3');
       expect(waterSite).toBeInTheDocument();
       expect(waterSite).toHaveAttribute('data-site-type', 'water');
 
@@ -427,7 +431,7 @@ describe('Integration: Submerge Functionality Workflow', () => {
       expect(siteInfo).toHaveAttribute('data-site-type', 'land');
       expect(siteInfo).toHaveAttribute('data-is-water', 'false');
 
-      let landSite = screen.getByTestId('site-land-5-3');
+      const landSite = screen.getByTestId('site-land-5-3');
       expect(landSite).toBeInTheDocument();
       expect(landSite).toHaveAttribute('data-site-type', 'land');
     });
