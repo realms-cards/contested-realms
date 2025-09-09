@@ -9,8 +9,8 @@
     "start": "next start",
     "server": "node server/index.js",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config vitest.config.mts --configLoader runner",
+    "test:watch": "vitest --config vitest.config.mts --configLoader runner",
     "validate:cards": "node scripts/validate-cards.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
@@ -24,6 +24,7 @@
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
     "@prisma/client": "^6.14.0",
+    "@react-spring/three": "^10.0.2",
     "@react-three/drei": "^10.7.3",
     "@react-three/fiber": "^9.3.0",
     "@react-three/rapier": "^2.1.0",
@@ -58,6 +59,7 @@
     "jsdom": "^26.1.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^2.0.5"
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
   }
 }

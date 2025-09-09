@@ -2,8 +2,11 @@
 
 import type { ThreeEvent } from "@react-three/fiber";
 import { type Object3D, type Raycaster, type Intersection } from "three";
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect, useState } from "react";
+import { useSpring, animated } from "@react-spring/three";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
+import { useGameStore } from "../store";
+import type { PermanentPositionState } from "../types";
 
 function noopRaycast(
   this: Object3D,
@@ -34,6 +37,11 @@ interface CardPlaneProps {
   onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
   onClick?: (e: ThreeEvent<PointerEvent>) => void;
   cardId?: number; // for raycasting identification
+  
+  // Burrow/Submerge support
+  permanentId?: number; // if provided, uses position from game store
+  basePosition?: [number, number, number]; // base X,Y,Z position when not using store
+  enablePositionAnimation?: boolean; // whether to animate position transitions
 }
 
 // Fallback component while texture loads
@@ -78,7 +86,56 @@ function CardFallback({
   );
 }
 
-// Simplified component that relies on texture cache
+// Position calculation hook for permanent cards
+function useCardPosition(props: CardPlaneProps) {
+  const {
+    permanentId,
+    basePosition = [0, 0, 0],
+    elevation = 0.001,
+    enablePositionAnimation = true
+  } = props;
+
+  // Get permanent position from store if permanentId is provided
+  const permanentPosition = useGameStore((state) => 
+    permanentId ? state.permanentPositions[permanentId] : null
+  );
+
+  // Calculate final position
+  const targetPosition: [number, number, number] = React.useMemo(() => {
+    if (permanentPosition) {
+      // Use position from game store
+      return [
+        basePosition[0] + permanentPosition.position.x,
+        permanentPosition.position.y, // Y is controlled by burrow/surface state
+        basePosition[2] + permanentPosition.position.z
+      ];
+    }
+    
+    // Use base position with elevation
+    return [basePosition[0], basePosition[1] + elevation, basePosition[2]];
+  }, [permanentPosition, basePosition, elevation]);
+
+  // Get transition duration from permanent position or default
+  const transitionDuration = permanentPosition?.transitionDuration ?? 200;
+
+  // Animate position changes if enabled
+  const springProps = useSpring({
+    position: targetPosition,
+    config: {
+      duration: enablePositionAnimation ? transitionDuration : 0,
+      tension: 200,
+      friction: 20
+    }
+  });
+
+  return {
+    springProps,
+    currentState: permanentPosition?.state ?? 'surface',
+    isUnderground: permanentPosition?.state === 'burrowed' || permanentPosition?.state === 'submerged'
+  };
+}
+
+// Enhanced component with burrow/submerge positioning
 const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProps) {
   const {
     slug,
@@ -88,7 +145,6 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     depthWrite = true,
     depthTest = true,
     interactive = true,
-    elevation = 0.001,
     upright = false,
     renderOrder = 0,
     textureUrl,
@@ -102,13 +158,15 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     cardId,
   } = props;
 
+  // Get position and animation from the hook
+  const { springProps, currentState, isUnderground } = useCardPosition(props);
+
   // Simple texture loading - just use the hook for everything
   const tex = useCardTexture({ 
     slug: forceTextureUrl ? "" : slug, 
     textureUrl 
   });
   
-
   if (!tex) {
     return <CardFallback {...props} />;
   }
@@ -120,30 +178,40 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     tex.needsUpdate = true;
   }
 
+  // Adjust render properties for underground permanents
+  const adjustedDepthWrite = isUnderground ? false : depthWrite;
+  const adjustedRenderOrder = isUnderground ? renderOrder - 1 : renderOrder;
+
   return (
-    <mesh
+    <animated.mesh
       rotation-x={upright ? 0 : -Math.PI / 2}
       rotation-z={rotationZ}
-      position={[0, elevation, 0]}
+      position={springProps.position}
       raycast={interactive ? undefined : noopRaycast}
-      renderOrder={renderOrder}
+      renderOrder={adjustedRenderOrder}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
       onClick={onClick}
       castShadow
-      userData={{ cardId, slug }}
+      userData={{ 
+        cardId, 
+        slug, 
+        permanentId: props.permanentId,
+        positionState: currentState
+      }}
     >
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial
         map={tex}
         toneMapped={false}
-        depthWrite={depthWrite}
+        depthWrite={adjustedDepthWrite}
         depthTest={depthTest}
         transparent={true}
+        opacity={isUnderground ? 0.7 : 1.0} // Slightly transparent when underground
       />
-    </mesh>
+    </animated.mesh>
   );
 });
 

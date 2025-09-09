@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import type { GameTransport } from "@/lib/net/transport";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import type { 
+  PermanentPosition, 
+  SitePositionData, 
+  BurrowAbility,
+  ContextMenuAction,
+  PermanentPositionState,
+  PlayerPositionReference
+} from "./types";
 
 export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
 export type PlayerKey = "p1" | "p2";
@@ -279,6 +287,25 @@ export type GameState = {
   history: SerializedGame[];
   pushHistory: () => void;
   undo: () => void;
+  
+  // Permanent Position Management (Burrow/Submerge)
+  permanentPositions: Record<number, PermanentPosition>; // permanentId -> position
+  permanentAbilities: Record<number, BurrowAbility>; // permanentId -> ability
+  sitePositions: Record<number, SitePositionData>; // siteId -> position data
+  playerPositions: Record<PlayerKey, PlayerPositionReference>; // player -> position
+  
+  // Position Actions
+  setPermanentPosition: (permanentId: number, position: PermanentPosition) => void;
+  updatePermanentState: (permanentId: number, newState: PermanentPositionState) => void;
+  setPermanentAbility: (permanentId: number, ability: BurrowAbility) => void;
+  setSitePosition: (siteId: number, positionData: SitePositionData) => void;
+  setPlayerPosition: (playerId: PlayerKey, position: PlayerPositionReference) => void;
+  
+  // Validation and Utilities
+  canTransitionState: (permanentId: number, targetState: PermanentPositionState) => boolean;
+  getAvailableActions: (permanentId: number) => ContextMenuAction[];
+  calculateEdgePosition: (tileCoords: { x: number; z: number }, playerPos: { x: number; z: number }) => { x: number; z: number };
+  calculatePlacementAngle: (tilePos: { x: number; z: number }, playerPos: { x: number; z: number }) => number;
 };
 
 const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "Combat", "End"];
@@ -2342,6 +2369,198 @@ export const useGameStore = create<GameState>((set, get) => ({
       return { mulliganDrawn: next } as Partial<GameState> as GameState;
     }),
 
+  // ===== PERMANENT POSITION SLICE (Burrow/Submerge) =====
+  
+  // State storage
+  permanentPositions: {},
+  permanentAbilities: {},
+  sitePositions: {},
+  playerPositions: {
+    p1: { playerId: 1, position: { x: 0, z: 0 } },
+    p2: { playerId: 2, position: { x: 0, z: 0 } }
+  },
+  
+  // Position Actions
+  setPermanentPosition: (permanentId: number, position: PermanentPosition) =>
+    set((state) => ({
+      permanentPositions: {
+        ...state.permanentPositions,
+        [permanentId]: position
+      }
+    })),
+    
+  updatePermanentState: (permanentId: number, newState: PermanentPositionState) =>
+    set((state) => {
+      const currentPos = state.permanentPositions[permanentId];
+      if (!currentPos) return state;
+      
+      // Calculate new Y position based on state
+      let newY = currentPos.position.y;
+      switch (newState) {
+        case 'surface':
+          newY = 0;
+          break;
+        case 'burrowed':
+        case 'submerged':
+          newY = -0.25; // Underground depth
+          break;
+      }
+      
+      const updatedPosition: PermanentPosition = {
+        ...currentPos,
+        state: newState,
+        position: {
+          ...currentPos.position,
+          y: newY
+        }
+      };
+      
+      return {
+        permanentPositions: {
+          ...state.permanentPositions,
+          [permanentId]: updatedPosition
+        }
+      };
+    }),
+    
+  setPermanentAbility: (permanentId: number, ability: BurrowAbility) =>
+    set((state) => ({
+      permanentAbilities: {
+        ...state.permanentAbilities,
+        [permanentId]: ability
+      }
+    })),
+    
+  setSitePosition: (siteId: number, positionData: SitePositionData) =>
+    set((state) => ({
+      sitePositions: {
+        ...state.sitePositions,
+        [siteId]: positionData
+      }
+    })),
+    
+  setPlayerPosition: (playerId: PlayerKey, position: PlayerPositionReference) =>
+    set((state) => ({
+      playerPositions: {
+        ...state.playerPositions,
+        [playerId]: position
+      }
+    })),
+    
+  // Validation and Utilities
+  canTransitionState: (permanentId: number, targetState: PermanentPositionState) => {
+    const state = get();
+    const currentPos = state.permanentPositions[permanentId];
+    const ability = state.permanentAbilities[permanentId];
+    
+    if (!currentPos || !ability) return false;
+    
+    const currentState = currentPos.state;
+    
+    // Same state transitions not allowed
+    if (currentState === targetState) return false;
+    
+    // Check ability requirements
+    if (targetState === 'burrowed' && !ability.canBurrow) return false;
+    if (targetState === 'submerged' && !ability.canSubmerge) return false;
+    
+    // Direct burrowed ↔ submerged transitions forbidden
+    if (currentState === 'burrowed' && targetState === 'submerged') return false;
+    if (currentState === 'submerged' && targetState === 'burrowed') return false;
+    
+    return true;
+  },
+  
+  getAvailableActions: (permanentId: number): ContextMenuAction[] => {
+    const state = get();
+    const currentPos = state.permanentPositions[permanentId];
+    const ability = state.permanentAbilities[permanentId];
+    
+    if (!currentPos || !ability) return [];
+    
+    const actions: ContextMenuAction[] = [];
+    const currentState = currentPos.state;
+    
+    // Add burrow action if possible
+    if (currentState === 'surface' && ability.canBurrow) {
+      actions.push({
+        actionId: 'burrow',
+        displayText: 'Burrow',
+        icon: 'arrow-down',
+        isEnabled: true,
+        targetPermanentId: permanentId,
+        newPositionState: 'burrowed',
+        description: 'Move this permanent under the current site'
+      });
+    }
+    
+    // Add submerge action if possible
+    if (currentState === 'surface' && ability.canSubmerge) {
+      // TODO: Check if at water site when site system is integrated
+      const isAtWaterSite = true; // Placeholder
+      actions.push({
+        actionId: 'submerge',
+        displayText: 'Submerge',
+        icon: 'waves',
+        isEnabled: isAtWaterSite,
+        targetPermanentId: permanentId,
+        newPositionState: 'submerged',
+        description: 'Submerge this permanent underwater (water sites only)'
+      });
+    }
+    
+    // Add surface/emerge actions if underground
+    if (currentState === 'burrowed') {
+      actions.push({
+        actionId: 'surface',
+        displayText: 'Surface',
+        icon: 'arrow-up',
+        isEnabled: true,
+        targetPermanentId: permanentId,
+        newPositionState: 'surface',
+        description: 'Bring this permanent back to the surface'
+      });
+    }
+    
+    if (currentState === 'submerged') {
+      actions.push({
+        actionId: 'emerge',
+        displayText: 'Emerge',
+        icon: 'arrow-up',
+        isEnabled: true,
+        targetPermanentId: permanentId,
+        newPositionState: 'surface',
+        description: 'Emerge this permanent from underwater'
+      });
+    }
+    
+    return actions;
+  },
+  
+  calculateEdgePosition: (tileCoords: { x: number; z: number }, playerPos: { x: number; z: number }) => {
+    // Calculate offset toward player position from tile center
+    const dx = playerPos.x - tileCoords.x;
+    const dz = playerPos.z - tileCoords.z;
+    
+    // Normalize and scale to edge (max ±0.2 offset, closer to center)
+    const magnitude = Math.sqrt(dx * dx + dz * dz);
+    if (magnitude === 0) return { x: 0, z: 0 };
+    
+    const scale = 0.2;
+    return {
+      x: (dx / magnitude) * scale,
+      z: (dz / magnitude) * scale
+    };
+  },
+  
+  calculatePlacementAngle: (tilePos: { x: number; z: number }, playerPos: { x: number; z: number }) => {
+    // Calculate angle from tile to player (0 = east, π/2 = north)
+    const dx = playerPos.x - tilePos.x;
+    const dz = playerPos.z - tilePos.z;
+    
+    return Math.atan2(dz, dx);
+  },
+
   // Reset all game state to initial values (for new matches)
   resetGameState: () =>
     set(() => {
@@ -2405,6 +2624,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         },
         // Reset permanents
         permanents: {},
+        // Reset permanent positions (burrow/submerge)
+        permanentPositions: {},
+        permanentAbilities: {},
+        sitePositions: {},
+        playerPositions: {
+          p1: { playerId: 1, position: { x: 0, z: 0 } },
+          p2: { playerId: 2, position: { x: 0, z: 0 } }
+        },
         // Reset UI state
         dragFromHand: false,
         dragFromPile: null,

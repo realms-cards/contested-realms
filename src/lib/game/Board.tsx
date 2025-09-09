@@ -114,6 +114,12 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
+  
+  // Site edge placement functions
+  const calculateEdgePosition = useGameStore((s) => s.calculateEdgePosition);
+  const playerPositions = useGameStore((s) => s.playerPositions);
+  const setPlayerPosition = useGameStore((s) => s.setPlayerPosition);
+  
   // Playmat texture is loaded inside the Playmat subcomponent via Suspense.
 
   // Removed baseline-shift helper to ensure only the moved card changes position
@@ -176,6 +182,28 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
     }
     return out;
   }, [board.size.w, board.size.h]);
+
+  // Set up player positions based on board layout
+  useEffect(() => {
+    // Set player positions relative to board - P1 at bottom, P2 at top
+    const boardCenterX = (board.size.w - 1) / 2;
+    const boardCenterY = (board.size.h - 1) / 2;
+    
+    // P1 is positioned "south" of the board center (higher Y in game coords)
+    const p1Position = {
+      playerId: 1,
+      position: { x: boardCenterX, z: boardCenterY + 3 } // 3 tiles south of center
+    };
+    
+    // P2 is positioned "north" of the board center (lower Y in game coords)  
+    const p2Position = {
+      playerId: 2,
+      position: { x: boardCenterX, z: boardCenterY - 3 } // 3 tiles north of center
+    };
+    
+    setPlayerPosition("p1", p1Position);
+    setPlayerPosition("p2", p2Position);
+  }, [board.size.w, board.size.h, setPlayerPosition]);
 
   const offsetX = -((board.size.w - 1) * TILE_SIZE) / 2;
   const offsetY = -((board.size.h - 1) * TILE_SIZE) / 2;
@@ -638,20 +666,30 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       contextMenu.target.kind === "site" &&
                       contextMenu.target.x === x &&
                       contextMenu.target.y === y;
+                    
+                    // Calculate edge-based positioning toward owning player
+                    const ownerKey = site.owner === 1 ? "p1" : "p2";
+                    const playerPos = playerPositions[ownerKey];
+                    const tileCoords = { x, z: y };
+                    const edgeOffset = calculateEdgePosition(tileCoords, playerPos.position);
+                    
                     return (
                       <>
                         {isSel && !isHandVisible && (
-                          <CardGlow
-                            width={CARD_SHORT + 0.3}
-                            height={CARD_LONG + 0.4}
-                            rotationZ={rotZ}
-                            elevation={0}
-                            color={site.owner === 1 ? "#93c5fd" : "#fca5a5"}
-                            renderOrder={500}
-                          />
+                          <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+                            <CardGlow
+                              width={CARD_SHORT + 0.3}
+                              height={CARD_LONG + 0.4}
+                              rotationZ={rotZ}
+                              elevation={0}
+                              color={site.owner === 1 ? "#93c5fd" : "#fca5a5"}
+                              renderOrder={500}
+                            />
+                          </group>
                         )}
                         {site.card?.slug ? (
                           <group
+                            position={[edgeOffset.x, 0, edgeOffset.z]}
                             onPointerOver={(e) => {
                               e.stopPropagation();
                               beginHoverPreview(site.card!);
@@ -678,7 +716,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                           <mesh
                             rotation-x={-Math.PI / 2}
                             rotation-z={rotZ}
-                            position={[0, 0.001, 0]}
+                            position={[edgeOffset.x, 0.001, edgeOffset.z]}
                             castShadow
                             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                               e.stopPropagation();
