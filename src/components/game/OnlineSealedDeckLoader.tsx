@@ -41,9 +41,9 @@ export default function OnlineSealedDeckLoader({
       const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
       
       // Find my player's deck data and all other players' deck data
-      const myDeckData = match.playerDecks[me.id];
+      const myDeckData = match.playerDecks?.[me.id];
       const otherPlayers = match.players.filter(p => p.id !== me.id);
-      const allPlayerDecksReady = otherPlayers.every(p => match.playerDecks[p.id]);
+      const allPlayerDecksReady = otherPlayers.every(p => match.playerDecks?.[p.id]);
       
       // Determine submission states as reported by server
       const meSubmitted = !!match.deckSubmissions?.includes(me.id);
@@ -57,7 +57,7 @@ export default function OnlineSealedDeckLoader({
       }
       
       // Load my deck
-      const mySuccess = await loadSealedDeckFor(myPlayerKey, myDeckData, setDeckError);
+      const mySuccess = await loadSealedDeckFor(myPlayerKey as "p1" | "p2", myDeckData, setDeckError);
       if (!mySuccess) return;
       
       // Load all other players' decks
@@ -65,8 +65,8 @@ export default function OnlineSealedDeckLoader({
         const playerKey = Object.keys(playerNames).find(key => 
           playerNames[key] === player.displayName
         ) || `p${match.players.findIndex(p => p.id === player.id) + 1}`;
-        const playerDeckData = match.playerDecks[player.id];
-        return loadSealedDeckFor(playerKey, playerDeckData, setDeckError);
+        const playerDeckData = match.playerDecks?.[player.id];
+        return loadSealedDeckFor(playerKey as "p1" | "p2", playerDeckData, setDeckError);
       });
       
       const allResults = await Promise.all(loadPromises);
@@ -100,9 +100,9 @@ export default function OnlineSealedDeckLoader({
     if (completed) return;
     if (loading) return;
     if (!match || !me || !match.playerDecks) return;
-    const myDeckData = match.playerDecks[me.id];
+    const myDeckData = match.playerDecks?.[me.id];
     const opponentId = match.players.find(p => p.id !== me.id)?.id;
-    const opponentDeckData = opponentId ? match.playerDecks[opponentId] : null;
+    const opponentDeckData = opponentId ? match.playerDecks?.[opponentId] : null;
     if (myDeckData && opponentDeckData) {
       void loadSealedDecks();
     }

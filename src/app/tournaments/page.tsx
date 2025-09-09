@@ -172,7 +172,7 @@ function TournamentPageContent() {
                           ? "bg-blue-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                       }`}
-                      onClick={() => setTournamentFormat(format as any)}
+                      onClick={() => setTournamentFormat(format as "swiss" | "elimination" | "round_robin")}
                     >
                       {formatDisplay(format)}
                     </button>
@@ -191,7 +191,7 @@ function TournamentPageContent() {
                           ? "bg-purple-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                       }`}
-                      onClick={() => setMatchType(type as any)}
+                      onClick={() => setMatchType(type as "constructed" | "sealed" | "draft")}
                     >
                       {type.charAt(0).toUpperCase() + type.slice(1)}
                     </button>

@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
     }
 
     // Verify the players are in this match
-    const playerIds = (match.players as any[]).map(p => p.id);
+    const playerIds = (match.players as Array<{ id: string }>).map(p => p.id);
     if (!playerIds.includes(winnerId) || !playerIds.includes(loserId)) {
       return new Response(JSON.stringify({ error: 'Invalid player IDs for this match' }), { status: 400 });
     }
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
 
     return new Response(JSON.stringify({
       success: true,
-      matchId: matchId,
+      matchId,
       results: matchResults
     }), {
       status: 200,

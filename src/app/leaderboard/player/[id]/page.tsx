@@ -60,18 +60,29 @@ interface PlayerStats {
   }>;
 }
 
-export default function PlayerDetailPage({ params }: { params: { id: string } }) {
+export default function PlayerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const [data, setData] = useState<PlayerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
 
   useEffect(() => {
+    const getParams = async () => {
+      const resolvedParams = await params;
+      setPlayerId(resolvedParams.id);
+    };
+    getParams();
+  }, [params]);
+
+  useEffect(() => {
+    if (!playerId) return;
+
     const fetchPlayerStats = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/leaderboard/player/${params.id}`);
+        const response = await fetch(`/api/leaderboard/player/${playerId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch player stats');
         }
@@ -85,7 +96,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     };
 
     fetchPlayerStats();
-  }, [params.id]);
+  }, [playerId]);
 
   const formatWinRate = (winRate: number) => `${(winRate * 100).toFixed(1)}%`;
 

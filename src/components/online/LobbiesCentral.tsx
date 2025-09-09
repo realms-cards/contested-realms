@@ -363,7 +363,7 @@ export default function LobbiesCentral({
                           ? "bg-blue-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                       }`}
-                      onClick={() => setTournamentFormat(format as any)}
+                      onClick={() => setTournamentFormat(format as "swiss" | "elimination" | "round_robin")}
                     >
                       {format === "swiss" ? "Swiss" : format === "elimination" ? "Elimination" : "Round Robin"}
                     </button>
@@ -382,7 +382,7 @@ export default function LobbiesCentral({
                           ? "bg-purple-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                       }`}
-                      onClick={() => setTournamentMatchType(type as any)}
+                      onClick={() => setTournamentMatchType(type as "constructed" | "sealed" | "draft")}
                     >
                       {type.charAt(0).toUpperCase() + type.slice(1)}
                     </button>
