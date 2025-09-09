@@ -1054,9 +1054,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                                 width={CARD_SHORT}
                                 height={CARD_LONG}
                                 rotationZ={rotZ}
-                                permanentId={p.card.cardId}
-                                basePosition={[offX, 0.25, zBase + offZ]}
-                                enablePositionAnimation={true}
                               />
                             </>
                           ) : (
