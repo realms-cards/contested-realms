@@ -10,14 +10,25 @@ export const dynamic = "force-dynamic";
  */
 async function getCardRulesText(cardName: string): Promise<string | null> {
   try {
-    // Find CardSetMetadata directly with rulesText for the card name
+    console.log('Searching for card:', cardName);
+    
+    // First, find the card
+    const card = await prisma.card.findFirst({
+      where: { name: cardName }
+    });
+    
+    console.log('Found card:', card);
+    
+    if (!card) {
+      return null;
+    }
+    
+    // Then find metadata with rulesText for this card
     const metadata = await prisma.cardSetMetadata.findFirst({
       where: {
+        cardId: card.id,
         rulesText: {
           not: null
-        },
-        card: {
-          name: cardName
         }
       },
       select: {
@@ -28,6 +39,8 @@ async function getCardRulesText(cardName: string): Promise<string | null> {
       }
     });
 
+    console.log('Found metadata:', metadata);
+    
     return metadata?.rulesText || null;
   } catch (error) {
     console.error('Error fetching card rules text:', error);
@@ -74,7 +87,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const abilities = detectBurrowSubmergeAbilities(cardName);
+    const abilities = await detectBurrowSubmergeAbilities(cardName);
     
     return new Response(
       JSON.stringify({

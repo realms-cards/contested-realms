@@ -106,7 +106,7 @@ function useCardPosition(props: CardPlaneProps) {
       // Use position from game store
       return [
         basePosition[0] + permanentPosition.position.x,
-        permanentPosition.position.y, // Y is controlled by burrow/surface state
+        basePosition[1] + permanentPosition.position.y, // Y is base position + burrow/surface offset
         basePosition[2] + permanentPosition.position.z
       ];
     }

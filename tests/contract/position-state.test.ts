@@ -25,8 +25,8 @@ describe('Contract: Permanent Position State Management', () => {
       });
       
       // Invalid states should be rejected
-      expect(PositionStateValidation.isValidState('invalid' as any)).toBe(false);
-      expect(PositionStateValidation.isValidState('underground' as any)).toBe(false);
+      expect(PositionStateValidation.isValidState('invalid')).toBe(false);
+      expect(PositionStateValidation.isValidState('underground')).toBe(false);
     });
   });
 

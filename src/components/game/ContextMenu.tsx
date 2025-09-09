@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import type { ContextMenuAction } from "@/lib/game/types";
-import { detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
+import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 
 interface ContextMenuProps {
   onClose: () => void;
@@ -88,24 +88,89 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       if (item?.card) {
         const permanentId = item?.card?.cardId ?? (parseInt(t.at.split(',')[0]) * 1000 + t.index);
         
-        // Parse and set up permanent abilities from card rulesText
-        const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
-        const canBurrow = abilities.canBurrow;
-        const canSubmerge = abilities.canSubmerge;
-        
-        if (canBurrow || canSubmerge) {
-          setPermanentAbility(permanentId, {
-            permanentId,
-            canBurrow,
-            canSubmerge,
-            requiresWaterSite: canSubmerge, // Submerge typically requires water sites
-            abilitySource: `${item.card.name} - ${canBurrow && canSubmerge ? 'Burrowing/Submerge' : canBurrow ? 'Burrowing' : 'Submerge'} ability`
-          });
-        }
-        
-        // Get available position actions
-        const actions = getAvailableActions(permanentId);
-        setPositionActions(actions);
+        // Fetch abilities asynchronously from API
+        (async () => {
+          try {
+            const abilities = await detectBurrowSubmergeAbilities(item.card.name);
+            const canBurrow = abilities.canBurrow;
+            const canSubmerge = abilities.canSubmerge;
+            
+            if (canBurrow || canSubmerge) {
+              setPermanentAbility(permanentId, {
+                permanentId,
+                canBurrow,
+                canSubmerge,
+                requiresWaterSite: canSubmerge, // Submerge typically requires water sites
+                abilitySource: `${item.card.name} - ${canBurrow && canSubmerge ? 'Burrowing/Submerge' : canBurrow ? 'Burrowing' : 'Submerge'} ability`
+              });
+              
+              // Initialize position data if it doesn't exist - permanent starts on surface
+              const state = useGameStore.getState();
+              if (!state.permanentPositions[permanentId]) {
+                state.setPermanentPosition(permanentId, {
+                  permanentId: permanentId,
+                  state: 'surface',
+                  position: {
+                    x: 0, // Default position - will be updated by actual game logic
+                    y: 0,
+                    z: 0
+                  }
+                });
+              }
+            }
+            
+            // Get available position actions after abilities are set
+            const actions = getAvailableActions(permanentId);
+            console.log('Debug - Permanent ID:', permanentId);
+            console.log('Debug - Available actions:', actions);
+            console.log('Debug - Abilities set:', { canBurrow, canSubmerge });
+            
+            // Debug store state
+            const state = useGameStore.getState();
+            console.log('Debug - Position data:', state.permanentPositions[permanentId]);
+            console.log('Debug - Ability data:', state.permanentAbilities[permanentId]);
+            console.log('Debug - All positions:', Object.keys(state.permanentPositions));
+            console.log('Debug - All abilities:', Object.keys(state.permanentAbilities));
+            
+            setPositionActions(actions);
+          } catch (error) {
+            console.warn('Failed to fetch abilities for', item.card.name, error);
+            // Fallback to sync detection as backup
+            const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
+            const canBurrow = abilities.canBurrow;
+            const canSubmerge = abilities.canSubmerge;
+            
+            if (canBurrow || canSubmerge) {
+              setPermanentAbility(permanentId, {
+                permanentId,
+                canBurrow,
+                canSubmerge,
+                requiresWaterSite: canSubmerge,
+                abilitySource: `${item.card.name} - ${canBurrow && canSubmerge ? 'Burrowing/Submerge' : canBurrow ? 'Burrowing' : 'Submerge'} ability`
+              });
+              
+              // Initialize position data if it doesn't exist - permanent starts on surface
+              const state = useGameStore.getState();
+              if (!state.permanentPositions[permanentId]) {
+                state.setPermanentPosition(permanentId, {
+                  permanentId: permanentId,
+                  state: 'surface',
+                  position: {
+                    x: 0, // Default position - will be updated by actual game logic
+                    y: 0,
+                    z: 0
+                  }
+                });
+              }
+            }
+            
+            const actions = getAvailableActions(permanentId);
+            console.log('Debug - Fallback - Permanent ID:', permanentId);
+            console.log('Debug - Fallback - Available actions:', actions);
+            console.log('Debug - Fallback - Abilities set:', { canBurrow, canSubmerge });
+            setPositionActions(actions);
+          }
+        })();
       } else {
         setPositionActions([]);
       }
