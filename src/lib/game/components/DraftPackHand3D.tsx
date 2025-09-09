@@ -39,6 +39,8 @@ export interface DraftPackHand3DProps {
   // Controlled selection from parent for persistent preview/indicator
   selectedIndex?: number | null;
   onSelectIndex?: (index: number | null) => void;
+  // Disable raycast to prevent interference with card hover
+  noRaycast?: boolean;
 }
 
 // A simple, anchored-to-camera row of cards for draft packs (no fan, fully visible)
@@ -54,6 +56,7 @@ export default function DraftPackHand3D({
   orbitLocked = false,
   selectedIndex = null,
   onSelectIndex,
+  noRaycast = false,
 }: DraftPackHand3DProps) {
   const rootRef = useRef<Group | null>(null);
   const worldLayerRef = useRef<Group | null>(null);
@@ -215,6 +218,7 @@ export default function DraftPackHand3D({
           <mesh
             position={[0, -0.004, 0]}
             rotation-x={-Math.PI / 2}
+            raycast={noRaycast ? () => [] : undefined}
             onPointerMove={() => {
               if (disabled) return;
               // Don't immediately clear - let hover timeout handle it
@@ -290,6 +294,7 @@ export default function DraftPackHand3D({
               selected={selectedIndex === originalIndex}
               focused={focusIndex === originalIndex}
               onSelectIndex={onSelectIndex}
+              noRaycast={noRaycast}
             />
           );
         })}
@@ -320,6 +325,7 @@ function PackCard3D({
   focused,
   onSelectIndex,
   onHoverIndexChange,
+  noRaycast = false,
 }: {
   index: number;
   slug: string;
@@ -342,6 +348,7 @@ function PackCard3D({
   focused?: boolean;
   onSelectIndex?: (index: number | null) => void;
   onHoverIndexChange?: (index: number | null) => void;
+  noRaycast?: boolean;
 }) {
   // Mark orbitLocked as used to avoid lint warning (we no longer gate hover by it)
   void orbitLocked;
@@ -445,6 +452,7 @@ function PackCard3D({
         position={[0, 0, 0]}
         rotation-x={0}
         rotation-z={isSite ? -Math.PI / 2 : 0}
+        raycast={noRaycast ? () => [] : undefined}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -632,7 +640,7 @@ function PackCard3D({
           // Don't immediately clear hover info - let timeout mechanism handle it
         }}
       >
-        <planeGeometry args={[CARD_SHORT * 1.08, CARD_LONG * 1.08]} />
+        <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
         <meshBasicMaterial
           transparent
           opacity={0}
@@ -646,7 +654,7 @@ function PackCard3D({
         {/* Selection indicator: subtle glow rectangle slightly larger than card */}
         {selected && !isDragging && (
           <mesh position={[0, 0.001, 0]} rotation-x={0} raycast={noopRaycast}>
-            <planeGeometry args={[CARD_SHORT * 1.08, CARD_LONG * 1.08]} />
+            <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
             <meshBasicMaterial color="#ffffff" opacity={0.16} transparent depthWrite={false} depthTest={false} />
           </mesh>
         )}

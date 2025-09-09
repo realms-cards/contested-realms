@@ -3,10 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerKey } from "@/lib/game/store";
 import { useGameStore } from "@/lib/game/store";
-import { TILE_SIZE, CARD_SHORT, CARD_LONG, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
+import {
+  TILE_SIZE,
+  CARD_SHORT,
+  CARD_LONG,
+  BASE_TILE_SIZE,
+  MAT_RATIO,
+} from "@/lib/game/constants";
 import type { ThreeEvent } from "@react-three/fiber";
 // No label text for tokens pile
-import { TOKEN_DEFS, tokenTextureUrl, tokenSlug, newTokenInstanceId } from "@/lib/game/tokens";
+import {
+  TOKEN_DEFS,
+  tokenTextureUrl,
+  tokenSlug,
+  newTokenInstanceId,
+} from "@/lib/game/tokens";
 import CardPlane from "@/lib/game/components/CardPlane";
 
 export interface TokenPile3DProps {
@@ -33,7 +44,9 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
     // Piles3D Z anchors
     const topEdgeZ = -gridHalfH;
     const bottomEdgeZ = gridHalfH;
-    const startZ = isBottom ? bottomEdgeZ + TILE_SIZE * 0.8 : topEdgeZ - TILE_SIZE * 0.8;
+    const startZ = isBottom
+      ? bottomEdgeZ + TILE_SIZE * 0.8
+      : topEdgeZ - TILE_SIZE * 0.8;
     const zSpacing = CARD_LONG * 1.1;
     const step = isBottom ? -zSpacing : +zSpacing;
     const posZ = startZ + step * 3.2; // a bit further up toward top edge
@@ -48,7 +61,8 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
 
   function bumpInteractClock() {
     lastInteractRef.current = Date.now();
-    if (autoCloseTimerRef.current) window.clearTimeout(autoCloseTimerRef.current);
+    if (autoCloseTimerRef.current)
+      window.clearTimeout(autoCloseTimerRef.current);
     autoCloseTimerRef.current = window.setTimeout(() => {
       // Only collapse if no interaction since timer start
       if (Date.now() - lastInteractRef.current >= AUTO_CLOSE_MS) {
@@ -59,10 +73,16 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
 
   useEffect(() => {
     return () => {
-      if (autoCloseTimerRef.current) window.clearTimeout(autoCloseTimerRef.current);
+      if (autoCloseTimerRef.current)
+        window.clearTimeout(autoCloseTimerRef.current);
     };
   }, []);
-  const dragStartRef = useRef<{ tokenKey: string; x: number; y: number; t: number } | null>(null);
+  const dragStartRef = useRef<{
+    tokenKey: string;
+    x: number;
+    y: number;
+    t: number;
+  } | null>(null);
 
   return (
     <group position={[x, 0.002, z]}>
@@ -71,7 +91,10 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
         onContextMenu={(e: ThreeEvent<PointerEvent>) => {
           e.nativeEvent.preventDefault();
           e.stopPropagation();
-          openContextMenu({ kind: "tokenpile", who: owner }, { x: e.clientX, y: e.clientY });
+          openContextMenu(
+            { kind: "tokenpile", who: owner },
+            { x: e.clientX, y: e.clientY }
+          );
         }}
         onClick={(e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
@@ -108,7 +131,10 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
 
       {/* Expanded fan */}
       {expanded && (
-        <group position={[0, 0.02, 0]} onPointerMove={() => bumpInteractClock()}>
+        <group
+          position={[0, 0.02, 0]}
+          onPointerMove={() => bumpInteractClock()}
+        >
           {(() => {
             const defsAll = TOKEN_DEFS;
             const big = defsAll.filter((d) => d.size === "normal"); // Bruin, Rubble
@@ -126,14 +152,14 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
               const angle = start + t * spread;
               const radius = 1.35;
               const px = Math.sin(angle) * radius;
-              const pz = Math.cos(angle) * radius * (owner === 'p2' ? 1 : -1);
+              const pz = Math.cos(angle) * radius * (owner === "p2" ? 1 : -1);
               const w = def.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
               const h = def.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
               // For rubble, don't apply texture rotation since the card is already rotated
-              const textureRotation = undefined;
+              const textureRotation = 0;
 
               return (
                 <group key={def.key} position={[px, 0, pz]}>
@@ -144,7 +170,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                     onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                       if (e.button !== 0) return;
                       e.stopPropagation();
-                      dragStartRef.current = { tokenKey: def.key, x: e.clientX, y: e.clientY, t: Date.now() };
+                      dragStartRef.current = {
+                        tokenKey: def.key,
+                        x: e.clientX,
+                        y: e.clientY,
+                        t: Date.now(),
+                      };
                       // Start drag immediately
                       const card = {
                         cardId: newTokenInstanceId(def),
@@ -185,16 +216,22 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
 
       {/* Big tokens (Bruin, Rubble) placed in the center gap of the fan */}
       {expanded && (
-        <group position={[0, 0.03, 0]} onPointerMove={() => bumpInteractClock()}>
+        <group
+          position={[0, 0.03, 0]}
+          onPointerMove={() => bumpInteractClock()}
+        >
           {(() => {
             const big = TOKEN_DEFS.filter((d) => d.size === "normal");
             if (big.length === 0) return null;
             const gapRadius = 0.55;
-            const baseZ = Math.cos(0) * gapRadius * (owner === 'p2' ? 1 : -1);
+            const baseZ = Math.cos(0) * gapRadius * (owner === "p2" ? 1 : -1);
             const centers: Array<[number, number]> =
               big.length === 1
                 ? [[0, baseZ]]
-                : [[-CARD_SHORT * 0.6, baseZ], [CARD_SHORT * 0.6, baseZ]];
+                : [
+                    [-CARD_SHORT * 0.6, baseZ],
+                    [CARD_SHORT * 0.6, baseZ],
+                  ];
             return big.map((def, i) => {
               const [px, pz] = centers[i] || [0, baseZ];
               const w = CARD_SHORT;
@@ -203,7 +240,7 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
               // Don't apply texture rotation - the card rotation handles orientation
-              const textureRotation = undefined;
+              const textureRotation = 0;
               return (
                 <group key={`big-${def.key}`} position={[px, 0, pz]}>
                   <mesh

@@ -24,6 +24,10 @@ export default function DraggableCard3D({
   onDoubleClick,
   onContextMenu,
   baseRenderOrder = 1500,
+  stackIndex = 0,
+  totalInStack = 1,
+  cardId,
+  interactive = true,
 }: {
   slug: string;
   isSite: boolean;
@@ -42,6 +46,10 @@ export default function DraggableCard3D({
   onDoubleClick?: () => void;
   onContextMenu?: (clientX: number, clientY: number) => void;
   baseRenderOrder?: number;
+  stackIndex?: number;
+  totalInStack?: number;
+  cardId?: number;
+  interactive?: boolean;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -78,19 +86,55 @@ export default function DraggableCard3D({
 
   const setPos = useCallback((wx: number, wz: number, lift = false) => {
     if (!ref.current) return;
-    ref.current.position.set(wx, lift ? 0.25 : 0.002, wz);
-  }, []);
+    ref.current.position.set(wx, lift ? 0.25 : y, wz);
+  }, [y]);
 
   const rotZ =
     (isSite ? -Math.PI / 2 : 0) +
     (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
 
+  // Calculate visible area for fanned cards
+  // Each card in the stack covers some of the card below it
+  const isInStack = totalInStack > 1;
+  const isTopCard = stackIndex === totalInStack - 1;
+  
+  // For fanned cards, calculate the actual visible strip
+  // Fan offsets: X = stackIndex * 0.03, Y = stackIndex * 0.05
+  // Each higher card covers part of lower cards
+  let visibleWidth = CARD_SHORT;
+  let visibleHeight = CARD_LONG;
+  let hitboxOffsetX = 0;
+  let hitboxOffsetZ = 0;
+  
+  if (isInStack && !isTopCard) {
+    // Each card in the fan reveals exactly the fan offset strip
+    const fanOffsetX = 0.03;  // X offset per stack level  
+    const fanOffsetZ = 0.05;  // Z offset per stack level
+    
+    // The visible area is exactly the fan offset - no more, no less
+    visibleWidth = fanOffsetX;
+    visibleHeight = fanOffsetZ;
+    
+    // Position hitbox at the trailing edge (opposite to fan direction)
+    // Cards fan toward +X and +Z, so visible strip is at the -X and -Z edge
+    hitboxOffsetX = -(CARD_SHORT / 2) + (visibleWidth / 2);
+    hitboxOffsetZ = -(CARD_LONG / 2) + (visibleHeight / 2);
+  }
+  
+  // For editor-3d, always use full hitbox since there's no complex stacking
+  visibleWidth = CARD_SHORT;
+  visibleHeight = CARD_LONG;
+  hitboxOffsetX = 0;
+  hitboxOffsetZ = 0;
+
   return (
     <group ref={ref} position={[x, y, z]}>
-      {/* Larger invisible hitbox for easier interaction */}
+      {/* Invisible hitbox positioned at card surface level, sized for visible area */}
       <mesh
-        position={[0, 0.01, 0]}
-        rotation-y={rotZ}
+        position={[hitboxOffsetX, 0.005, hitboxOffsetZ]}
+        rotation-x={-Math.PI / 2}
+        rotation-z={isSite ? -Math.PI / 2 : 0}
+        raycast={() => []}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -231,8 +275,9 @@ export default function DraggableCard3D({
           onContextMenu?.(e.clientX, e.clientY);
         }}
       >
-        <boxGeometry args={[CARD_SHORT * 1.12, 0.02, CARD_LONG * 1.12]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
+        <planeGeometry args={[visibleWidth, visibleHeight]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={true} depthTest={true} />
+        {/* Allow raycasting to pass through to cards below by setting raycast layers */}
       </mesh>
 
       {/* Visual card */}
@@ -246,8 +291,9 @@ export default function DraggableCard3D({
           depthWrite={false}
           depthTest={false}
           renderOrder={roRef.current}
-          interactive={false}
+          interactive={interactive}
           elevation={0.002}
+          cardId={cardId}
         />
       </group>
     </group>

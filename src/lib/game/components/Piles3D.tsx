@@ -15,6 +15,7 @@ export interface Piles3DProps {
   matW: number;
   matH: number;
   owner: PlayerKey; // p1 is TOP, p2 is BOTTOM
+  noRaycast?: boolean; // Disable raycast to prevent interference
 }
 
 const labels: Record<"spellbook" | "atlas" | "graveyard", string> = {
@@ -32,6 +33,7 @@ export default function Piles3D({
   matW: _matW,
   matH: _matH,
   owner,
+  noRaycast = false,
 }: Piles3DProps) {
   const zones = useGameStore((s) => s.zones);
   const boardSize = useGameStore((s) => s.board.size);
@@ -195,6 +197,7 @@ export default function Piles3D({
                       Math.min(cards.length - 1, 3) * 0.01 + 0.002,
                       0,
                     ]}
+                    raycast={noRaycast ? () => [] : undefined}
                     onPointerOver={() => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
@@ -327,6 +330,7 @@ export default function Piles3D({
                 rotation-x={-Math.PI / 2}
                 rotation-z={rotZ}
                 position={[0, 0.001, 0]}
+                raycast={noRaycast ? () => [] : undefined}
                 onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                   // Right click: open context menu for empty pile
                   const isDragging = !!dragFromHand || !!dragFromPile;

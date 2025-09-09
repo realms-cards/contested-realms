@@ -4,13 +4,15 @@ import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import CardPreview from "@/components/game/CardPreview";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
+import * as THREE from "three";
 import Board from "@/lib/game/Board";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
+import MouseTracker from "@/lib/game/components/MouseTracker";
 import {
   MAT_PIXEL_W,
   MAT_PIXEL_H,
@@ -29,11 +31,10 @@ import {
   weightForRarity,
   choiceWeighted,
 } from "@/lib/game/cardSorting";
+import { handleStackHover, createStackHoverState } from "@/lib/game/stackHover";
 
 // --- Draft data types (mirrors /draft 2D) ---
 // Types moved to src/lib/game/cardSorting.ts
-
-
 
 export default function Draft3DPage() {
   const router = useRouter();
@@ -76,11 +77,21 @@ export default function Draft3DPage() {
   // Hover preview timer to prevent immediate clearing
   const clearHoverTimerRef = useRef<number | null>(null);
   const currentHoverCardRef = useRef<string | null>(null);
+  
+  // Stack hover tracking for better navigation
+  const stackHoverRef = useRef(createStackHoverState());
 
 
-  // Cleanup timers on unmount
+
+  // Global mouse tracking for stack navigation
   useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      stackHoverRef.current.lastMouseY = e.clientY;
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
       if (clearHoverTimerRef.current) {
         window.clearTimeout(clearHoverTimerRef.current);
       }
@@ -562,6 +573,44 @@ export default function Draft3DPage() {
     return computeStackPositions(pick3D, metaByCardId, isSortingEnabled, true);
   }, [pick3D, isSortingEnabled, metaByCardId]);
 
+  // Calculate stack sizes for hitbox optimization
+  const stackSizes = useMemo(() => {
+    if (!stackPositions) return new Map<string, number>();
+    
+    const sizeMap = new Map<string, number>();
+    const stackGroups = new Map<string, number>();
+    
+    // Group by position to find stack sizes
+    for (const [cardId, pos] of stackPositions) {
+      const key = `${pos.x.toFixed(3)},${pos.z.toFixed(3)}`;
+      stackGroups.set(key, (stackGroups.get(key) || 0) + 1);
+    }
+    
+    // Map each position to its stack size
+    for (const [cardId, pos] of stackPositions) {
+      const key = `${pos.x.toFixed(3)},${pos.z.toFixed(3)}`;
+      sizeMap.set(key, stackGroups.get(key) || 1);
+    }
+    
+    return sizeMap;
+  }, [stackPositions]);
+
+  // Simple hover - just show the card under the cursor
+  const smartStackHover = useCallback((
+    cardId: number,
+    card: BoosterCard,
+    stackPos: any,
+    mouseY: number,
+    showPreview: (c: { slug: string; name: string; type: string | null }) => void
+  ) => {
+    // Simple rule: show the preview for the card that's actually being hovered
+    showPreview({
+      slug: card.slug,
+      name: card.cardName,
+      type: card.type,
+    });
+  }, []);
+
   async function saveDeck() {
     try {
       setSaving(true);
@@ -645,14 +694,28 @@ export default function Draft3DPage() {
           />
 
           <Physics gravity={[0, -9.81, 0]}>
-            <Board />
+            {/* Board re-enabled for proper playmat, with raycast disabled for draft mode */}
+            <Board noRaycast={true} />
           </Physics>
 
-          {/* 3D piles for atmosphere (HUD hidden in draft mode) */}
-          <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
-          <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
-
           <TextureCache />
+          
+          {/* Mouse tracking for precise card hover detection */}
+          <MouseTracker 
+            cards={pick3D} 
+            onHover={(card) => {
+              if (card) {
+                showCardPreview({
+                  slug: card.slug,
+                  name: card.name,
+                  type: card.type,
+                });
+              } else {
+                hideCardPreview();
+              }
+            }} 
+          />
+          
           {/* Threshold ring and per-card glow removed for cleaner draft UI */}
 
           {/* 3D Draft: current pack cards displayed as a straight hand row (no fan) */}
@@ -793,10 +856,19 @@ export default function Draft3DPage() {
 
                 // Use sorted position if sorting is enabled
                 const stackPos = stackPositions?.get(p.id);
-                const x = stackPos ? stackPos.x : p.x;
+                // Add X offset for each card in stack for better targeting
+                const x = stackPos ? stackPos.x + (stackPos.stackIndex * 0.03) : p.x;
                 const z = stackPos ? stackPos.z : p.z;
+                // Calculate Y position with very large spacing to prevent raycast blocking
+                const y = stackPos ? 0.002 + (stackPos.stackIndex * 0.05) : 0.002;
                 const isVisible = stackPos ? stackPos.isVisible : true;
-                const baseRO = stackPos ? 1600 + stackPos.stackIndex : 1500;
+                // Higher stack index = higher render order = rendered on top
+                const baseRO = stackPos ? 1600 + (stackPos.stackIndex * 10) : 1500;
+                
+                // Calculate stack information for hitbox optimization
+                const stackKey = stackPos ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}` : null;
+                const totalInStack = stackKey ? stackSizes.get(stackKey) || 1 : 1;
+                const stackIndex = stackPos ? stackPos.stackIndex : 0;
 
                 return (
                   <DraggableCard3D
@@ -805,7 +877,11 @@ export default function Draft3DPage() {
                     isSite={isSite}
                     x={x}
                     z={z}
+                    y={y}
                     baseRenderOrder={baseRO}
+                    stackIndex={stackIndex}
+                    totalInStack={totalInStack}
+                    cardId={p.id}
                     onDrop={(wx, wz) => {
                       if (!isSortingEnabled) {
                         setPick3D((prev) =>
@@ -819,17 +895,6 @@ export default function Draft3DPage() {
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
                     disabled={isSortingEnabled && !isVisible}
-                    onHoverChange={(hover) => {
-                      if (hover && !orbitLocked) {
-                        showCardPreview({
-                          slug: p.card.slug,
-                          name: p.card.cardName,
-                          type: p.card.type,
-                        });
-                      }
-                      // Don't call hideCardPreview on hover end - let natural timeout handle it
-                      // This prevents premature clearing due to pointer event instability in 3D
-                    }}
                   />
                 );
               })}

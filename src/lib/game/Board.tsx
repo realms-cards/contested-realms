@@ -76,7 +76,7 @@ function Playmat({ matW, matH }: { matW: number; matH: number }) {
   );
 }
 
-export default function Board() {
+export default function Board({ noRaycast = false }: { noRaycast?: boolean } = {}) {
   const board = useGameStore((s) => s.board);
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
@@ -428,6 +428,7 @@ export default function Board() {
               <mesh
                 rotation-x={-Math.PI / 2}
                 // hover tracking disabled to reduce interference
+                raycast={noRaycast ? () => [] : undefined}
                 onPointerMove={(e: ThreeEvent<PointerEvent>) => {
                   // Track ghost only for hand/pile drags; still drive bodies for board/avatar drags
                   const world = e.point;
@@ -1343,7 +1344,7 @@ export default function Board() {
                     slug={c.slug}
                     width={w}
                     height={h}
-                    rotationZ={rotZ}
+                    rotationZ={isSite ? -Math.PI / 2 + ownerRot : ownerRot}
                     interactive={false}
                   />
                 );

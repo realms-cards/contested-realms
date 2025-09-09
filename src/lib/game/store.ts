@@ -1015,6 +1015,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             : permanent
         );
       }
+
+      // Untap the next player's avatar
+      const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
+      const avatarsNext = {
+        ...s.avatars,
+        [nextKey]: { ...s.avatars[nextKey], tapped: false },
+      } as GameState["avatars"];
       
       {
         const patch: ServerPatchT = {
@@ -1022,6 +1029,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           currentPlayer: nextPlayer,
           board: { ...s.board, sites } as GameState["board"],
           permanents: permanents as GameState["permanents"],
+          avatars: avatarsNext as GameState["avatars"],
         };
         get().trySendPatch(patch);
       }
@@ -1030,6 +1038,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentPlayer: nextPlayer,
         board: { ...s.board, sites },
         permanents,
+        avatars: avatarsNext,
         selectedCard: null,
       });
       get().log(`Turn passes to P${nextPlayer}`);
@@ -1069,12 +1078,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
     }
 
+    // Untap the next player's avatar
+    const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
+    const avatarsNext = {
+      ...s.avatars,
+      [nextKey]: { ...s.avatars[nextKey], tapped: false },
+    } as GameState["avatars"];
+
     {
       const patch: ServerPatchT = {
         phase: "Main",
         currentPlayer: nextPlayer,
         board: { ...s.board, sites } as GameState["board"],
         permanents: permanents as GameState["permanents"],
+        avatars: avatarsNext as GameState["avatars"],
       };
       get().trySendPatch(patch);
     }
@@ -1083,6 +1100,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentPlayer: nextPlayer,
       board: { ...s.board, sites },
       permanents,
+      avatars: avatarsNext,
       selectedCard: null,
       selectedPermanent: null,
     });
