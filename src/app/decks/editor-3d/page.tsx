@@ -19,12 +19,13 @@ import {
   CardMeta,
   computeStackPositions,
 } from "@/lib/game/cardSorting";
-import { TournamentControls, DeckValidation } from "@/components/deck-editor";
+import { TournamentControls } from "@/components/deck-editor";
 import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
 import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
+import { useCardHover, CardPreviewData } from "@/lib/game/hooks/useCardHover";
 
 const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
   ssr: false,
@@ -109,7 +110,6 @@ function AuthenticatedDeckEditor() {
   // Search state
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<SearchType>("all");
-  const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,10 +141,9 @@ function AuthenticatedDeckEditor() {
   // (prefetch moved below after isDraftMode / isSealed declarations)
 
   // Exact same 3D state as draft-3d
-  const [orbitLocked, setOrbitLocked] = useState(false);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
-  const [infoBoxVisible, setInfoBoxVisible] = useState(true);
   const [statsCollapsed, setStatsCollapsed] = useState(true);
+  const [infoBoxVisible, setInfoBoxVisible] = useState(true);
   const [picksOpen, setPicksOpen] = useState(true);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
@@ -484,6 +483,23 @@ function AuthenticatedDeckEditor() {
     name: string;
     type: string | null;
   } | null>(null);
+
+  // Hover state management using the draft-3d pattern
+  const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
+    onShow: (card: CardPreviewData) => {
+      setHoverPreview(card);
+    },
+    onHide: () => {
+      setHoverPreview(null);
+    },
+  });
+
+  // Cleanup hover timers on component unmount
+  useEffect(() => {
+    return () => {
+      clearHoverTimers();
+    };
+  }, [clearHoverTimers]);
 
   // (Removed unused deckItems/deckCards/sideboardCards memos)
 
@@ -1206,7 +1222,7 @@ function AuthenticatedDeckEditor() {
 
     // 2) Determine target deck counts per card - preserve existing deck positions
     const remainingDeckByCard = new Map<number, number>();
-    for (const [cardId, total] of totalByCard.entries()) {
+    for (const [cardId] of totalByCard.entries()) {
       const initialDeck = initialDeckByCard.get(cardId) || 0;
       // Use all non-sideboard cards as deck target to preserve existing deck placements
       const deckTarget = initialDeck;
@@ -1483,18 +1499,18 @@ function AuthenticatedDeckEditor() {
       {/* 3D Game View as the stage - EXACT same as draft-3d */}
       <div className="absolute inset-0 w-full h-full">
         <EditorCanvas>
-          {/* Mouse tracking for hover detection */}
+          {/* Mouse tracking for hover detection on arranged cards */}
           <MouseTracker 
             cards={pick3D}
             onHover={(card) => {
               if (card) {
-                setHoverPreview({
+                showCardPreview({
                   slug: card.slug,
                   name: card.name,
                   type: card.type
                 });
               } else {
-                setHoverPreview(null);
+                hideCardPreview();
               }
             }}
           />
@@ -1509,7 +1525,7 @@ function AuthenticatedDeckEditor() {
                   return aY - bY; // Lower Y values render first (behind higher Y values)
                 });
 
-                return sortedCards.map((p, index) => {
+                return sortedCards.map((p) => {
                   const isSite = (p.card.type || "")
                     .toLowerCase()
                     .includes("site");
@@ -1519,33 +1535,17 @@ function AuthenticatedDeckEditor() {
                   const x = stackPos ? stackPos.x : p.x;
                   const z = stackPos ? stackPos.z : p.z;
                   
-                  // Calculate base render order first
-                  const baseRenderOrder = isSortingEnabled
-                    ? 1500 + Math.floor((p.y || 0.002) * 1000)
+                  // Calculate base render order like draft-3d
+                  // Higher stack index = higher render order = rendered on top
+                  const baseRenderOrder = stackPos
+                    ? 1600 + stackPos.stackIndex * 10
                     : 1500;
 
-                  // Always use proper Y elevation for raycasting to work correctly
-                  // When sorting is enabled, use the actual p.y value
-                  // When sorting is disabled, use array index to create small Y differences for raycasting
-                  const y = isSortingEnabled 
-                    ? (p.y || 0.002)
-                    : 0.002 + (index * 0.00001); // Small incremental Y offset based on rendering order
+                  // Calculate Y position with proper stack height like draft-3d
+                  // Use stackPos.stackIndex * 0.05 for proper visual stacking height
+                  const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
 
                   // Determine if this card should be interactive (topmost card in its area)
-                  // Only cards that are actually on top should respond to raycasting
-                  const cardArea = `${Math.round(x * 10)},${Math.round(z * 10)}`; // Round to 0.1 precision
-                  const cardsInSameArea = sortedCards.filter((other) => {
-                    const otherStackPos = stackPositions?.get(other.id);
-                    const otherX = otherStackPos ? otherStackPos.x : other.x;
-                    const otherZ = otherStackPos ? otherStackPos.z : other.z;
-                    const otherArea = `${Math.round(otherX * 10)},${Math.round(otherZ * 10)}`;
-                    return otherArea === cardArea;
-                  });
-                  const highestYInArea = Math.max(...cardsInSameArea.map((_, i) => 
-                    isSortingEnabled ? (cardsInSameArea[i].y || 0.002) : 0.002 + (sortedCards.indexOf(cardsInSameArea[i]) * 0.00001)
-                  ));
-                  const isTopCard = Math.abs(y - highestYInArea) < 0.000001; // Account for floating point precision
-
                   return (
                     <DraggableCard3D
                       key={p.id}
@@ -1556,7 +1556,7 @@ function AuthenticatedDeckEditor() {
                       y={y}
                       baseRenderOrder={baseRenderOrder}
                       cardId={p.id}
-                      stackIndex={0}
+                      stackIndex={stackPos ? stackPos.stackIndex : 0}
                       totalInStack={1}
                       interactive={true}
                       onContextMenu={(cx, cy) =>

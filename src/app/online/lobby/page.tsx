@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useOnline } from "@/app/online/online-context";
 import { useGameStore } from "@/lib/game/store";
-import LobbyList from "@/components/online/LobbyList";
 import InvitesPanel from "@/components/online/InvitesPanel";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import LobbiesCentral from "@/components/online/LobbiesCentral";
@@ -45,13 +44,6 @@ export default function LobbyPage() {
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
   const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
   
-  // Lobby list filters/sorting
-  const [lobbyQuery, setLobbyQuery] = useState("");
-  const [hideFull, setHideFull] = useState(false);
-  const [hideStarted, setHideStarted] = useState(true);
-  const [invitedOnly, setInvitedOnly] = useState(false);
-  type SortKey = "invited" | "playersAsc" | "playersDesc" | "status";
-  const [sortKey, setSortKey] = useState<SortKey>("invited");
   const [topTab, setTopTab] = useState<"invites" | "friends">("invites");
   
   // Match type and sealed/draft configuration
@@ -91,43 +83,7 @@ export default function LobbyPage() {
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
 
-  const inviteLobbyIds = useMemo(() => invites.map((i) => i.lobbyId), [invites]);
-  const inviteSet = useMemo(() => new Set(inviteLobbyIds), [inviteLobbyIds]);
 
-  const filteredLobbies = useMemo(() => {
-    const q = lobbyQuery.trim().toLowerCase();
-    const list = lobbies.filter((l) => {
-      if (hideFull && l.players.length >= l.maxPlayers) return false;
-      if (hideStarted && l.status !== "open") return false;
-      if (invitedOnly && !inviteSet.has(l.id)) return false;
-      if (!q) return true;
-      const hostName = l.players.find((p) => p.id === l.hostId)?.displayName?.toLowerCase() || "";
-      const playerNames = l.players.map((p) => p.displayName.toLowerCase()).join(" ");
-      return (
-        l.id.toLowerCase().includes(q) ||
-        hostName.includes(q) ||
-        playerNames.includes(q)
-      );
-    });
-    const statusWeight = (s: string) => (s === "open" ? 0 : s === "started" ? 1 : 2);
-    list.sort((a, b) => {
-      switch (sortKey) {
-        case "invited":
-          if (inviteSet.has(a.id) !== inviteSet.has(b.id)) return inviteSet.has(a.id) ? -1 : 1;
-          if (statusWeight(a.status) !== statusWeight(b.status)) return statusWeight(a.status) - statusWeight(b.status);
-          return a.players.length - b.players.length;
-        case "playersAsc":
-          return a.players.length - b.players.length;
-        case "playersDesc":
-          return b.players.length - a.players.length;
-        case "status":
-          return statusWeight(a.status) - statusWeight(b.status);
-        default:
-          return 0;
-      }
-    });
-    return list;
-  }, [lobbies, lobbyQuery, hideFull, hideStarted, invitedOnly, sortKey, inviteSet]);
 
   const lobbyMessages = chatLog.filter((m) => m.scope === "lobby");
   const globalMessages = chatLog.filter((m) => m.scope === "global");
@@ -233,12 +189,6 @@ export default function LobbyPage() {
       .map(([set]) => set);
     return `Planned: Sealed • Packs: ${totalPacks} • Sets: ${activeSets.join(", ")} • Time: ${sealedConfig.timeLimit}m`;
   }, [isHost, matchType, sealedConfig, draftConfig]);
-  const plannedSummaries = useMemo(() => {
-    if (lobby && isHost && plannedSummary) {
-      return { [lobby.id]: plannedSummary } as Record<string, string>;
-    }
-    return {} as Record<string, string>;
-  }, [lobby, isHost, plannedSummary]);
 
   // removed startSealedMatch helper; start is confirmed via modal action
 
@@ -285,7 +235,15 @@ export default function LobbyPage() {
       </div>
       {/* Lobbies (central, full width) */}
       <LobbiesCentral
-        lobbies={lobbies as unknown as any[]}
+        lobbies={lobbies as unknown as Array<{
+          id: string;
+          name: string;
+          status: string;
+          players: Array<{ id: string; name: string }>;
+          maxPlayers: number;
+          gameType?: string;
+          isPrivate?: boolean;
+        }>}
         myId={me?.id ?? null}
         joinedLobbyId={lobby?.id ?? null}
         onJoin={(id) => joinLobby(id)}

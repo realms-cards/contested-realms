@@ -4,20 +4,14 @@ import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import CardPreview from "@/components/game/CardPreview";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
-import * as THREE from "three";
 import Board from "@/lib/game/Board";
-import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
-import {
-  MAT_PIXEL_W,
-  MAT_PIXEL_H,
-  CARD_LONG,
-} from "@/lib/game/constants";
+import { CARD_LONG } from "@/lib/game/constants";
 import { MOUSE } from "three";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
@@ -31,7 +25,7 @@ import {
   weightForRarity,
   choiceWeighted,
 } from "@/lib/game/cardSorting";
-import { handleStackHover, createStackHoverState } from "@/lib/game/stackHover";
+import { createStackHoverState } from "@/lib/game/stackHover";
 
 // --- Draft data types (mirrors /draft 2D) ---
 // Types moved to src/lib/game/cardSorting.ts
@@ -73,25 +67,23 @@ export default function Draft3DPage() {
   // Using shared Pick3D type from src/lib/game/cardSorting.ts
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
-  
+
   // Hover preview timer to prevent immediate clearing
   const clearHoverTimerRef = useRef<number | null>(null);
   const currentHoverCardRef = useRef<string | null>(null);
-  
+
   // Stack hover tracking for better navigation
   const stackHoverRef = useRef(createStackHoverState());
-
-
 
   // Global mouse tracking for stack navigation
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       stackHoverRef.current.lastMouseY = e.clientY;
     };
-    
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener("mousemove", handleMouseMove);
       if (clearHoverTimerRef.current) {
         window.clearTimeout(clearHoverTimerRef.current);
       }
@@ -381,7 +373,16 @@ export default function Draft3DPage() {
     // Commit the only remaining card immediately
     const idx = 0;
     commitPickAndPass(idx, STAGE_X, STAGE_Z);
-  }, [inProgress, needsPackChoice, currentPacks, packIndex, pickNumber, commitPickAndPass, STAGE_X, STAGE_Z]);
+  }, [
+    inProgress,
+    needsPackChoice,
+    currentPacks,
+    packIndex,
+    pickNumber,
+    commitPickAndPass,
+    STAGE_X,
+    STAGE_Z,
+  ]);
 
   // Spacebar Pick & Pass (only when draft in progress and a card is staged)
   useEffect(() => {
@@ -424,24 +425,27 @@ export default function Draft3DPage() {
   } | null>(null);
 
   // Helper functions for consistent hover management
-  const showCardPreview = useCallback((card: { slug: string; name: string; type: string | null }) => {
-    // Clear any pending hide timer - we're actively showing a card
-    if (clearHoverTimerRef.current) {
-      window.clearTimeout(clearHoverTimerRef.current);
-      clearHoverTimerRef.current = null;
-    }
-    
-    // Show preview immediately and keep it shown while hovering
-    currentHoverCardRef.current = card.slug;
-    setHoverPreview(card);
-  }, []); // setHoverPreview is stable, no need to include it
+  const showCardPreview = useCallback(
+    (card: { slug: string; name: string; type: string | null }) => {
+      // Clear any pending hide timer - we're actively showing a card
+      if (clearHoverTimerRef.current) {
+        window.clearTimeout(clearHoverTimerRef.current);
+        clearHoverTimerRef.current = null;
+      }
+
+      // Show preview immediately and keep it shown while hovering
+      currentHoverCardRef.current = card.slug;
+      setHoverPreview(card);
+    },
+    []
+  ); // setHoverPreview is stable, no need to include it
 
   const hideCardPreview = useCallback(() => {
     // Small delay before hiding to handle quick mouse movements between cards
     if (clearHoverTimerRef.current) {
       window.clearTimeout(clearHoverTimerRef.current);
     }
-    
+
     clearHoverTimerRef.current = window.setTimeout(() => {
       currentHoverCardRef.current = null;
       setHoverPreview(null);
@@ -576,40 +580,25 @@ export default function Draft3DPage() {
   // Calculate stack sizes for hitbox optimization
   const stackSizes = useMemo(() => {
     if (!stackPositions) return new Map<string, number>();
-    
+
     const sizeMap = new Map<string, number>();
     const stackGroups = new Map<string, number>();
-    
+
     // Group by position to find stack sizes
-    for (const [cardId, pos] of stackPositions) {
+    for (const [, pos] of stackPositions) {
       const key = `${pos.x.toFixed(3)},${pos.z.toFixed(3)}`;
       stackGroups.set(key, (stackGroups.get(key) || 0) + 1);
     }
-    
+
     // Map each position to its stack size
-    for (const [cardId, pos] of stackPositions) {
+    for (const [, pos] of stackPositions) {
       const key = `${pos.x.toFixed(3)},${pos.z.toFixed(3)}`;
       sizeMap.set(key, stackGroups.get(key) || 1);
     }
-    
+
     return sizeMap;
   }, [stackPositions]);
 
-  // Simple hover - just show the card under the cursor
-  const smartStackHover = useCallback((
-    cardId: number,
-    card: BoosterCard,
-    stackPos: any,
-    mouseY: number,
-    showPreview: (c: { slug: string; name: string; type: string | null }) => void
-  ) => {
-    // Simple rule: show the preview for the card that's actually being hovered
-    showPreview({
-      slug: card.slug,
-      name: card.cardName,
-      type: card.type,
-    });
-  }, []);
 
   async function saveDeck() {
     try {
@@ -699,10 +688,10 @@ export default function Draft3DPage() {
           </Physics>
 
           <TextureCache />
-          
+
           {/* Mouse tracking for precise card hover detection */}
-          <MouseTracker 
-            cards={pick3D} 
+          <MouseTracker
+            cards={pick3D}
             onHover={(card) => {
               if (card) {
                 showCardPreview({
@@ -713,9 +702,9 @@ export default function Draft3DPage() {
               } else {
                 hideCardPreview();
               }
-            }} 
+            }}
           />
-          
+
           {/* Threshold ring and per-card glow removed for cleaner draft UI */}
 
           {/* 3D Draft: current pack cards displayed as a straight hand row (no fan) */}
@@ -734,7 +723,9 @@ export default function Draft3DPage() {
                   // Check if current preview matches a hand card before clearing
                   const currentSlug = currentHoverCardRef.current;
                   if (currentSlug) {
-                    const isHandCard = currentPacks[0]?.some(c => c.slug === currentSlug);
+                    const isHandCard = currentPacks[0]?.some(
+                      (c) => c.slug === currentSlug
+                    );
                     if (isHandCard) {
                       // Keep preview if a card is selected
                       const sel = selectedRowIndex;
@@ -857,17 +848,25 @@ export default function Draft3DPage() {
                 // Use sorted position if sorting is enabled
                 const stackPos = stackPositions?.get(p.id);
                 // Add X offset for each card in stack for better targeting
-                const x = stackPos ? stackPos.x + (stackPos.stackIndex * 0.03) : p.x;
+                const x = stackPos
+                  ? stackPos.x + stackPos.stackIndex * 0.03
+                  : p.x;
                 const z = stackPos ? stackPos.z : p.z;
                 // Calculate Y position with very large spacing to prevent raycast blocking
-                const y = stackPos ? 0.002 + (stackPos.stackIndex * 0.05) : 0.002;
+                const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
                 const isVisible = stackPos ? stackPos.isVisible : true;
                 // Higher stack index = higher render order = rendered on top
-                const baseRO = stackPos ? 1600 + (stackPos.stackIndex * 10) : 1500;
-                
+                const baseRO = stackPos
+                  ? 1600 + stackPos.stackIndex * 10
+                  : 1500;
+
                 // Calculate stack information for hitbox optimization
-                const stackKey = stackPos ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}` : null;
-                const totalInStack = stackKey ? stackSizes.get(stackKey) || 1 : 1;
+                const stackKey = stackPos
+                  ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}`
+                  : null;
+                const totalInStack = stackKey
+                  ? stackSizes.get(stackKey) || 1
+                  : 1;
                 const stackIndex = stackPos ? stackPos.stackIndex : 0;
 
                 return (
@@ -938,8 +937,13 @@ export default function Draft3DPage() {
               title="How to use Draft mode"
               aria-label="How to use Draft mode"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15h2v2h-2v-2zm3.07-7.75c-.9-.9-2.24-1.17-3.43-.74-1.19.44-2.02 1.51-2.17 2.77l1.99.23c.09-.68.54-1.25 1.18-1.49.64-.24 1.36-.08 1.84.4.62.62.62 1.63 0 2.25-.37.37-.81.67-1.21.98-.77.6-1.27 1.15-1.27 2.35V13h2c0-.53.2-.74.82-1.21.45-.35.98-.74 1.46-1.22 1.24-1.24 1.24-3.26-.21-4.32z"/>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15h2v2h-2v-2zm3.07-7.75c-.9-.9-2.24-1.17-3.43-.74-1.19.44-2.02 1.51-2.17 2.77l1.99.23c.09-.68.54-1.25 1.18-1.49.64-.24 1.36-.08 1.84.4.62.62.62 1.63 0 2.25-.37.37-.81.67-1.21.98-.77.6-1.27 1.15-1.27 2.35V13h2c0-.53.2-.74.82-1.21.45-.35.98-.74 1.46-1.22 1.24-1.24 1.24-3.26-.21-4.32z" />
               </svg>
             </button>
           </div>
@@ -949,8 +953,16 @@ export default function Draft3DPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSortingEnabled(!isSortingEnabled)}
-                title={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
-                aria-label={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
+                title={
+                  isSortingEnabled
+                    ? "Disable auto-stacking"
+                    : "Enable auto-stacking"
+                }
+                aria-label={
+                  isSortingEnabled
+                    ? "Disable auto-stacking"
+                    : "Enable auto-stacking"
+                }
                 className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
                   isSortingEnabled
                     ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
@@ -958,8 +970,13 @@ export default function Draft3DPage() {
                 }`}
               >
                 {/* Shuffle/stack icon (same as editor) */}
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z"/>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z" />
                 </svg>
               </button>
             </div>
@@ -967,18 +984,26 @@ export default function Draft3DPage() {
           {inProgress && (
             <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] pointer-events-auto text-center">
               <button
-                onClick={() => staged && commitPickAndPass(staged.idx, staged.x, staged.z)}
+                onClick={() =>
+                  staged && commitPickAndPass(staged.idx, staged.x, staged.z)
+                }
                 disabled={!staged}
                 className="h-10 px-4 rounded border border-emerald-500 text-emerald-400 font-semibold disabled:opacity-50 bg-transparent hover:text-emerald-300 hover:border-emerald-400"
               >
                 {staged ? (
-                  <>Pick & Pass: <span className="font-fantaisie text-lg md:text-xl">{currentPacks[0]?.[staged.idx]?.cardName ?? "Card"}</span></>
+                  <>
+                    Pick & Pass:{" "}
+                    <span className="font-fantaisie text-lg md:text-xl">
+                      {currentPacks[0]?.[staged.idx]?.cardName ?? "Card"}
+                    </span>
+                  </>
                 ) : (
                   "Pick & Pass"
                 )}
               </button>
               <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
-                Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing {dir === 1 ? "Left" : "Right"}
+                Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing{" "}
+                {dir === 1 ? "Left" : "Right"}
               </div>
             </div>
           )}
@@ -1381,7 +1406,10 @@ export default function Draft3DPage() {
         {/* Help overlay */}
         {helpOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto">
-            <div className="absolute inset-0 bg-black/70" onClick={() => setHelpOpen(false)} />
+            <div
+              className="absolute inset-0 bg-black/70"
+              onClick={() => setHelpOpen(false)}
+            />
             <div className="relative bg-slate-900 text-white rounded-lg p-6 w-[min(90vw,720px)] ring-1 ring-white/20 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <div className="text-lg font-semibold">Draft Help</div>
@@ -1398,25 +1426,48 @@ export default function Draft3DPage() {
                 <div>
                   <div className="font-medium mb-1">Picking cards</div>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>Hover a card in your hand to preview it (left side).</li>
-                    <li>Click a card or drag it outward beyond the center ring to stage it (lower board).</li>
-                    <li>Press <b>Spacebar</b> or click <b>Pick &amp; Pass</b> to commit your pick.</li>
-                    <li>Drag a staged card back inside the ring to unstage it.</li>
+                    <li>
+                      Hover a card in your hand to preview it (left side).
+                    </li>
+                    <li>
+                      Click a card or drag it outward beyond the center ring to
+                      stage it (lower board).
+                    </li>
+                    <li>
+                      Press <b>Spacebar</b> or click <b>Pick &amp; Pass</b> to
+                      commit your pick.
+                    </li>
+                    <li>
+                      Drag a staged card back inside the ring to unstage it.
+                    </li>
                   </ul>
                 </div>
                 <div>
                   <div className="font-medium mb-1">Keyboard controls</div>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li><b>Left/Right</b>: browse cards in your hand (focus lifts and previews).</li>
-                    <li><b>Enter</b>: stage the focused/hovered card to the lower board.</li>
-                    <li><b>Space</b>: Pick &amp; Pass if a card is staged.</li>
+                    <li>
+                      <b>Left/Right</b>: browse cards in your hand (focus lifts
+                      and previews).
+                    </li>
+                    <li>
+                      <b>Enter</b>: stage the focused/hovered card to the lower
+                      board.
+                    </li>
+                    <li>
+                      <b>Space</b>: Pick &amp; Pass if a card is staged.
+                    </li>
                   </ul>
                 </div>
                 <div>
                   <div className="font-medium mb-1">Sorting</div>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>Toggle <b>Sort Cards</b> to auto‑stack your picks by mana/type near the top rows.</li>
-                    <li>With sorting off, you can freely reposition picked cards.</li>
+                    <li>
+                      Toggle <b>Sort Cards</b> to auto‑stack your picks by
+                      mana/type near the top rows.
+                    </li>
+                    <li>
+                      With sorting off, you can freely reposition picked cards.
+                    </li>
                   </ul>
                 </div>
                 <div>
@@ -1424,7 +1475,10 @@ export default function Draft3DPage() {
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Shows totals by type and your maximum thresholds.</li>
                     <li>Hover a row to preview the corresponding card.</li>
-                    <li>Use the Compact/Comfort toggle to adjust density; Hide/Show to collapse.</li>
+                    <li>
+                      Use the Compact/Comfort toggle to adjust density;
+                      Hide/Show to collapse.
+                    </li>
                   </ul>
                 </div>
               </div>
