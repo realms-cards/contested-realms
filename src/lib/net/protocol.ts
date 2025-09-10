@@ -30,6 +30,8 @@ export const LobbyInfoSchema = z.object({
   visibility: LobbyVisibilitySchema,
   // New: readiness information per lobby
   readyPlayerIds: z.array(z.string()).default([]),
+  // New: planned match type visible to all clients (host-controlled)
+  plannedMatchType: z.enum(["constructed", "sealed", "draft"]).optional(),
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
@@ -76,7 +78,7 @@ export const SealedPackSchema = z.object({
 export type SealedPack = z.infer<typeof SealedPackSchema>;
 
 export const DraftStateSchema = z.object({
-  phase: z.enum(["waiting", "picking", "passing", "complete"]),
+  phase: z.enum(["waiting", "pack_selection", "picking", "passing", "complete"]),
   packIndex: z.number(),
   pickNumber: z.number(),
   currentPacks: z.array(z.array(z.unknown())).nullable(),
@@ -205,6 +207,11 @@ export const InviteToLobbyPayload = z.object({
 export const RequestLobbiesPayload = z.object({});
 export const RequestPlayersPayload = z.object({});
 
+// New Client -> Server payload: host sets planned match type for lobby
+export const SetLobbyPlanPayload = z.object({
+  plannedMatchType: z.enum(["constructed", "sealed", "draft"]),
+});
+
 // Tournament payloads
 export const CreateTournamentPayload = z.object({
   name: z.string().min(1).max(100),
@@ -236,6 +243,7 @@ export type SetLobbyVisibilityPayloadT = z.infer<typeof SetLobbyVisibilityPayloa
 export type InviteToLobbyPayloadT = z.infer<typeof InviteToLobbyPayload>;
 export type RequestLobbiesPayloadT = z.infer<typeof RequestLobbiesPayload>;
 export type RequestPlayersPayloadT = z.infer<typeof RequestPlayersPayload>;
+export type SetLobbyPlanPayloadT = z.infer<typeof SetLobbyPlanPayload>;
 
 export type ClientEventMap = {
   hello: HelloPayloadT;
@@ -255,6 +263,7 @@ export type ClientEventMap = {
   requestLobbies: RequestLobbiesPayloadT;
   requestPlayers: RequestPlayersPayloadT;
   mulliganDone: MulliganDonePayloadT;
+  setLobbyPlan: SetLobbyPlanPayloadT;
 };
 
 // Server -> Client payloads
@@ -338,6 +347,7 @@ export const Protocol = {
   InviteToLobbyPayload,
   RequestLobbiesPayload,
   RequestPlayersPayload,
+  SetLobbyPlanPayload,
   MulliganDonePayload,
   // Server -> Client
   WelcomePayload,

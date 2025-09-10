@@ -10,12 +10,16 @@ import {
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
+import type { CardPreviewData } from "@/lib/game/hooks/useCardHover";
 
 export interface Piles3DProps {
   matW: number;
   matH: number;
   owner: PlayerKey; // p1 is TOP, p2 is BOTTOM
   noRaycast?: boolean; // Disable raycast to prevent interference
+  // Enhanced preview functions (optional for compatibility)
+  showCardPreview?: (card: CardPreviewData) => void;
+  hideCardPreview?: () => void;
 }
 
 const labels: Record<"spellbook" | "atlas" | "graveyard", string> = {
@@ -34,6 +38,8 @@ export default function Piles3D({
   matH: _matH,
   owner,
   noRaycast = false,
+  showCardPreview,
+  hideCardPreview,
 }: Piles3DProps) {
   const zones = useGameStore((s) => s.zones);
   const boardSize = useGameStore((s) => s.board.size);
@@ -112,15 +118,31 @@ export default function Piles3D({
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     if (!card?.slug) return;
-    hoverTimer.current = window.setTimeout(
-      () => setPreviewCard(card || null),
-      600
-    );
+    
+    // Use enhanced preview if available, otherwise fall back to legacy
+    if (showCardPreview) {
+      showCardPreview({
+        slug: card.slug,
+        name: card.name,
+        type: card.type || null,
+      });
+    } else {
+      hoverTimer.current = window.setTimeout(
+        () => setPreviewCard(card || null),
+        600
+      );
+    }
   }
   function clearHoverPreview() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
-    setPreviewCard(null);
+    
+    // Use enhanced preview if available, otherwise fall back to legacy
+    if (hideCardPreview) {
+      hideCardPreview();
+    } else {
+      setPreviewCard(null);
+    }
   }
 
   const pileDragStartRef = useRef<{

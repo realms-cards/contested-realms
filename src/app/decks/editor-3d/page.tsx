@@ -274,7 +274,8 @@ function AuthenticatedDeckEditor() {
 
       setSealedConfig(config);
       setIsSealed(true);
-      setDeckName("Deck Editor");
+      const matchName = searchParams.get("matchName");
+      setDeckName(matchName || "Deck Editor");
 
       // Generate packs for sealed construction (inline to avoid TDZ on generateSealedPacks)
       const { packCount, setMix } = config;
@@ -424,7 +425,10 @@ function AuthenticatedDeckEditor() {
         }
 
         // Name the deck for clarity in draft completion flow
-        if (!deckName || deckName === "New Deck") setDeckName("Draft Deck");
+        if (!deckName || deckName === "New Deck") {
+          const matchName = searchParams.get("matchName");
+          setDeckName(matchName || "Draft Deck");
+        }
       } catch (e) {
         console.error("Draft initialization failed:", e);
         setError(e instanceof Error ? e.message : String(e));
@@ -806,7 +810,8 @@ function AuthenticatedDeckEditor() {
 
       // Auto-save the deck with sealed naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-      const sealedDeckName = `sealed_opponent_${today}`;
+      const matchName = searchParams.get("matchName");
+      const sealedDeckName = matchName ? `${matchName} (Sealed)` : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
       await saveDeck();
 
@@ -881,12 +886,9 @@ function AuthenticatedDeckEditor() {
 
       // Auto-save the deck with draft naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-      // Generate a more interesting name for draft decks
-      const adjectives = ["Mystical", "Ancient", "Swift", "Noble", "Fierce", "Ethereal"];
-      const nouns = ["Phoenix", "Dragon", "Storm", "Blade", "Crown", "Journey"];
-      const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
-      const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-      const draftDeckName = `${randomAdj} ${randomNoun} Draft (${today})`;
+      const matchName = searchParams.get("matchName");
+      // Prefer lobby/match name when available
+      const draftDeckName = matchName ? `${matchName} (Draft)` : `Draft Deck (${today})`;
       setDeckName(draftDeckName);
       await saveDeck();
 

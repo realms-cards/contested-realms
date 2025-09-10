@@ -1,7 +1,7 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
 
 // PUT /api/tournaments/[id]/settings
 // Update tournament settings (only during registration phase and only by creator)

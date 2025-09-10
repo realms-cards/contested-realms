@@ -415,6 +415,7 @@ export default function DeckEditorPage() {
   const avatarCount = useMemo(() => {
     let n = 0;
     for (const it of Object.values(picks)) {
+      if (it.zone === "Sideboard") continue; // Only count main deck avatars
       const t = (it.type || "").toLowerCase();
       if (t.includes("avatar")) n += it.count;
     }

@@ -26,7 +26,12 @@ export default function EditorCanvas({ children }: EditorCanvasProps) {
       <Canvas
         camera={{ position: [0, 10, 0], fov: 50 }}
         shadows
-        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false, powerPreference: "high-performance" }}
+        gl={{
+          preserveDrawingBuffer: true,
+          antialias: true,
+          alpha: false,
+          powerPreference: "high-performance",
+        }}
       >
         <color attach="background" args={["#0b0b0c"]} />
         <ambientLight intensity={0.8} />
@@ -42,7 +47,11 @@ export default function EditorCanvas({ children }: EditorCanvasProps) {
           enableRotate={false}
           enablePan
           enableZoom
-          mouseButtons={{ LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }}
+          mouseButtons={{
+            LEFT: MOUSE.PAN,
+            MIDDLE: MOUSE.DOLLY,
+            RIGHT: MOUSE.ROTATE,
+          }}
           enableDamping
           dampingFactor={0.08}
           screenSpacePanning
@@ -68,9 +77,13 @@ function PanBounds({ minX, maxX, minZ, maxZ }: PanBoundsProps) {
   }));
   useEffect(() => {
     if (!controls) return;
-    let offset = camera.position.clone().sub((controls as OrbitControlsImpl).target.clone());
+    let offset = camera.position
+      .clone()
+      .sub((controls as OrbitControlsImpl).target.clone());
     const updateOffset = () => {
-      offset = camera.position.clone().sub((controls as OrbitControlsImpl).target.clone());
+      offset = camera.position
+        .clone()
+        .sub((controls as OrbitControlsImpl).target.clone());
     };
     const clampTarget = () => {
       const t = (controls as OrbitControlsImpl).target;
@@ -83,11 +96,17 @@ function PanBounds({ minX, maxX, minZ, maxZ }: PanBoundsProps) {
         invalidate();
       }
     };
-    (controls as OrbitControlsImpl).addEventListener('start', updateOffset);
-    (controls as OrbitControlsImpl).addEventListener('change', clampTarget);
+    (controls as OrbitControlsImpl).addEventListener("start", updateOffset);
+    (controls as OrbitControlsImpl).addEventListener("change", clampTarget);
     return () => {
-      (controls as OrbitControlsImpl).removeEventListener('start', updateOffset);
-      (controls as OrbitControlsImpl).removeEventListener('change', clampTarget);
+      (controls as OrbitControlsImpl).removeEventListener(
+        "start",
+        updateOffset
+      );
+      (controls as OrbitControlsImpl).removeEventListener(
+        "change",
+        clampTarget
+      );
     };
   }, [controls, camera, minX, maxX, minZ, maxZ, invalidate]);
   return null;

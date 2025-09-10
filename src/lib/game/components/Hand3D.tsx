@@ -17,6 +17,7 @@ import {
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
+import type { CardPreviewData } from "@/lib/game/hooks/useCardHover";
 
 export interface Hand3DProps {
   matW: number;
@@ -24,9 +25,18 @@ export interface Hand3DProps {
   owner?: PlayerKey; // default: p1 (bottom)
   showCardBacks?: boolean; // if true, render card backs instead of card faces
   viewerPlayerNumber?: number | null; // 1 or 2, for positioning opponent hands
+  // Enhanced preview functions (optional for compatibility)
+  showCardPreview?: (card: CardPreviewData) => void;
+  hideCardPreview?: () => void;
 }
 
-export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlayerNumber = null }: Hand3DProps) {
+export default function Hand3D({ 
+  owner = "p1", 
+  showCardBacks = false, 
+  viewerPlayerNumber = null,
+  showCardPreview,
+  hideCardPreview 
+}: Hand3DProps) {
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
@@ -420,15 +430,31 @@ export default function Hand3D({ owner = "p1", showCardBacks = false, viewerPlay
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
       if (!HAND_PREVIEW_ENABLED) return; // Preview disabled
       if (!card?.slug) return;
-      hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400); // Reduced from 600ms for more responsive preview
+      
+      // Use enhanced preview if available, otherwise fall back to legacy
+      if (showCardPreview) {
+        showCardPreview({
+          slug: card.slug,
+          name: card.name,
+          type: card.type || null,
+        });
+      } else {
+        hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400);
+      }
     },
-    [setPreviewCard, HAND_PREVIEW_ENABLED]
+    [setPreviewCard, HAND_PREVIEW_ENABLED, showCardPreview]
   );
   const clearHoverPreview = useCallback(() => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
-    setPreviewCard(null);
-  }, [setPreviewCard]);
+    
+    // Use enhanced preview if available, otherwise fall back to legacy
+    if (hideCardPreview) {
+      hideCardPreview();
+    } else {
+      setPreviewCard(null);
+    }
+  }, [setPreviewCard, hideCardPreview]);
 
   // Clear preview when any selection changes
   useEffect(() => {

@@ -396,13 +396,18 @@ export default function Draft3DPage() {
           ae.tagName === "TEXTAREA" ||
           ae.isContentEditable);
       if (isTyping) return;
+      
+      // Stop the event from being processed by other handlers (like OrbitControls)
       e.preventDefault();
+      e.stopPropagation();
+      
       if (staged) {
         commitPickAndPass(staged.idx, staged.x, staged.z);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Use capture phase to get the event before other handlers
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [inProgress, staged, commitPickAndPass]);
 
   // Map cardId -> { slug, type } for quick lookup (for previews in picks panel)

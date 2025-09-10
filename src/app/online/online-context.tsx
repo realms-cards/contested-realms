@@ -41,6 +41,7 @@ export type OnlineContextValue = {
   requestLobbies: () => void;
   requestPlayers: () => void;
   setLobbyVisibility: (visibility: LobbyVisibility) => void;
+  setLobbyPlan?: (planned: "constructed" | "sealed" | "draft") => void;
   inviteToLobby: (targetPlayerId: string, lobbyId?: string) => void;
   dismissInvite: (lobbyId: string, fromId: string) => void;
 };

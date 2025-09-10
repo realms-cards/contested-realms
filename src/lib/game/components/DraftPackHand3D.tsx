@@ -17,6 +17,10 @@ export interface DraftPackHand3DProps {
   cards: BoosterCard[];
   // Disable all interactions (e.g., while resolving pick)
   disabled?: boolean;
+  // Allow hover previews even when disabled (for dimmed waiting state)
+  allowHoverWhenDisabled?: boolean;
+  // Opacity for dimming cards (0.0 to 1.0, default 1.0)
+  opacity?: number;
   // Hide a specific index (e.g., when staged on the board)
   hiddenIndex?: number | null;
   // Lock/unlock orbit controls during drag
@@ -47,6 +51,8 @@ export interface DraftPackHand3DProps {
 export default function DraftPackHand3D({
   cards,
   disabled = false,
+  allowHoverWhenDisabled = false,
+  opacity = 1.0,
   hiddenIndex = null,
   onDragChange,
   onDragMove,
@@ -265,10 +271,11 @@ export default function DraftPackHand3D({
               x={x}
               z={z}
               scale={scale}
-              disabled={disabled}
-              onDragChange={(drag) => onDragChange?.(drag)}
-              onDragMove={onDragMove}
-              onRelease={onRelease}
+              disabled={disabled && !allowHoverWhenDisabled}
+              opacity={opacity}
+              onDragChange={disabled ? undefined : ((drag) => onDragChange?.(drag))}
+              onDragMove={disabled ? undefined : onDragMove}
+              onRelease={disabled ? undefined : onRelease}
               getTopRenderOrder={getTopRenderOrder}
               onHoverInfo={(info) => {
                 onHoverInfo?.(info);
@@ -313,6 +320,7 @@ function PackCard3D({
   z,
   scale,
   disabled,
+  opacity = 1.0,
   onDragChange,
   onDragMove,
   onRelease,
@@ -336,6 +344,7 @@ function PackCard3D({
   z: number;
   scale: number;
   disabled?: boolean;
+  opacity?: number;
   onDragChange?: (dragging: boolean) => void;
   onDragMove?: (index: number, wx: number, wz: number) => void;
   onRelease?: (index: number, wx: number, wz: number, wasDragging: boolean) => void;
@@ -669,6 +678,7 @@ function PackCard3D({
           renderOrder={roRef.current}
           interactive={false}
           elevation={0.002 + (hoverWeightForRow(scale, isDragging) ? 0.018 : 0)}
+          opacity={opacity}
         />
       </group>
     </group>

@@ -15,6 +15,8 @@ import {
 } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { DraftState, TransportEventMap } from "@/lib/net/transport";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 
 type Card = {
   id: string;
@@ -48,6 +50,7 @@ export default function OnlineDraftScreen({
   const { transport, match, me } = useOnline();
   const matchId = match?.id ?? null;
   const router = useRouter();
+  const { updateScreenType } = useVideoOverlay();
   
   // Draft UI state
   const [error, setError] = useState<string | null>(null);
@@ -98,12 +101,19 @@ export default function OnlineDraftScreen({
   // Camera controls
   const controlsRef = useRef(null);
 
+  // Set screen type for video overlay
+  useEffect(() => {
+    updateScreenType('draft');
+    return undefined;
+  }, [updateScreenType]);
+
   // Initialize draft state from match on component mount (for rejoining players)
   useEffect(() => {
     if (match?.draftState) {
       console.log(`[DraftClient 2D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`);
       setDraftState(match.draftState);
     }
+    return undefined;
   }, [match?.draftState]);
 
   // Listen for draft state updates from server
@@ -691,6 +701,17 @@ export default function OnlineDraftScreen({
           />
         </Canvas>
       </div>
+      
+      {/* Video Overlay */}
+      <GlobalVideoOverlay 
+        position="top-right"
+        showUserAvatar={true}
+        transport={transport}
+        myPlayerId={me?.id || null}
+        matchId={matchId}
+        userDisplayName={me?.displayName || ''}
+        userAvatarUrl={undefined} // No avatar URL available yet
+      />
     </div>
   );
 }

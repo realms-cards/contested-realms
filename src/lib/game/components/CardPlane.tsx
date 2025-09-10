@@ -28,6 +28,7 @@ interface CardPlaneProps {
   textureUrl?: string; // optional explicit texture (e.g., pile backs)
   textureRotation?: number; // rotation to apply to the texture itself
   forceTextureUrl?: boolean; // if true, ignore slug completely and only use textureUrl
+  opacity?: number; // transparency (0.0 to 1.0, default 1.0)
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -47,6 +48,7 @@ function CardFallback({
   interactive = true,
   depthWrite = true,
   depthTest = true,
+  opacity = 1.0,
   onContextMenu,
   onPointerDown,
   onPointerOver,
@@ -73,6 +75,8 @@ function CardFallback({
         toneMapped={false}
         depthWrite={depthWrite}
         depthTest={depthTest}
+        transparent={opacity < 1.0}
+        opacity={opacity}
       />
     </mesh>
   );
@@ -93,6 +97,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     textureUrl,
     textureRotation,
     forceTextureUrl = false,
+    opacity = 1.0,
     onContextMenu,
     onPointerDown,
     onPointerOver,
@@ -143,6 +148,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
         depthWrite={depthWrite}
         depthTest={depthTest}
         transparent={true}
+        opacity={opacity}
       />
     </mesh>
   );
