@@ -28,20 +28,26 @@ export default function CardPreview({
 }: Props) {
   if (!card?.slug) return null;
   
-  // Handle token assets properly
+  // Check if this is a site or a token that should be displayed like a site (e.g., Rubble)
+  const isRegularSite = (card.type || "").toLowerCase().includes("site");
   const isToken = card.slug.startsWith("token:");
-  let imgSrc = `/api/images/${card.slug}`;
-  let isSite = (card.type || "").toLowerCase().includes("site");
+  let isSiteReplacementToken = false;
   
+  if (isToken) {
+    const key = card.slug.split(":")[1]?.toLowerCase() || "";
+    const def = TOKEN_BY_KEY[key];
+    isSiteReplacementToken = def?.siteReplacement === true;
+  }
+  
+  const isSite = isRegularSite || isSiteReplacementToken;
+  
+  // Handle token assets properly
+  let imgSrc = `/api/images/${card.slug}`;
   if (isToken) {
     const key = card.slug.split(":")[1]?.toLowerCase() || "";
     const def = TOKEN_BY_KEY[key];
     if (def) {
       imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
-      // Check if this token should be treated as a site (e.g., Rubble)
-      if (def.siteReplacement) {
-        isSite = true;
-      }
     }
   } else {
     // Try ktx2 textures first, fallback to standard if needed
