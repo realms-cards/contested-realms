@@ -1,10 +1,10 @@
 'use client';
 
-import { getProviders, signIn, getSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { getProviders, signIn, getSession } from 'next-auth/react';
 import type { LiteralUnion, ClientSafeProvider } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { Suspense } from 'react';
 
 type ProvidersType = Record<LiteralUnion<string, string>, ClientSafeProvider> | null;
 

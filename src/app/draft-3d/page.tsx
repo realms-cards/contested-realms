@@ -1,21 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import CardPreview from "@/components/game/CardPreview";
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import Board from "@/lib/game/Board";
-import TextureCache from "@/lib/game/components/TextureCache";
-import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
-import MouseTracker from "@/lib/game/components/MouseTracker";
-import { CARD_LONG } from "@/lib/game/constants";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { MOUSE } from "three";
+import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import CardPreview from "@/components/game/CardPreview";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
-import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import Board from "@/lib/game/Board";
 import {
   BoosterCard,
   Pick3D,
@@ -25,6 +21,10 @@ import {
   weightForRarity,
   choiceWeighted,
 } from "@/lib/game/cardSorting";
+import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
+import MouseTracker from "@/lib/game/components/MouseTracker";
+import TextureCache from "@/lib/game/components/TextureCache";
+import { CARD_LONG } from "@/lib/game/constants";
 import { createStackHoverState } from "@/lib/game/stackHover";
 
 // --- Draft data types (mirrors /draft 2D) ---

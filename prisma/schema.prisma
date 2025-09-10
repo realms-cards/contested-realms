@@ -186,6 +186,7 @@ model User {
   accounts              Account[]
   sessions              Session[]
   decks                 Deck[]
+  createdTournaments    Tournament[]
   tournamentRegistrations TournamentRegistration[]
   standings             PlayerStanding[]
   leaderboardEntries    LeaderboardEntry[]
@@ -225,6 +226,7 @@ enum MatchStatus {
 model Tournament {
   id                String            @id @default(cuid())
   name              String
+  creatorId         String            // Tournament creator/host
   format            TournamentFormat
   status            TournamentStatus  @default(registering)
   maxPlayers        Int
@@ -235,7 +237,9 @@ model Tournament {
   draftConfig       Json?             // Draft configuration
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+  completedAt       DateTime?         // When tournament was completed
 
+  creator           User              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   registrations     TournamentRegistration[]
   standings         PlayerStanding[]
   rounds            TournamentRound[]
@@ -243,6 +247,7 @@ model Tournament {
 
   @@index([status])
   @@index([createdAt])
+  @@index([creatorId])
 }
 
 model TournamentRegistration {
@@ -250,6 +255,7 @@ model TournamentRegistration {
   tournamentId String
   playerId     String
   displayName  String
+  ready        Boolean    @default(false)
   joinedAt     DateTime   @default(now())
 
   tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

@@ -1,34 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { Physics } from "@react-three/rapier";
-import Board from "@/lib/game/Board";
-import Piles3D from "@/lib/game/components/Piles3D";
-import TextureCache from "@/lib/game/components/TextureCache";
-import CardPlane from "@/lib/game/components/CardPlane";
-import { MAT_PIXEL_W, MAT_PIXEL_H, CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+import { Canvas } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
+import { Physics } from "@react-three/rapier";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group } from "three";
 import { MOUSE } from "three";
-import Image from "next/image";
-
 import { useOnline } from "@/app/online/online-context";
-import type { DraftState, CustomMessage } from "@/lib/net/transport";
+import { WaitingOverlay, useWaitingOverlay } from "@/components/draft/WaitingOverlay";
+import { useDeckPersistence, useSubmissionCoordination } from "@/lib/draft/hooks/useDeckPersistence";
+import { useDraftSync, usePlayerSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
+import Board from "@/lib/game/Board";
+import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 import { 
   type Pick3D, 
   type BoosterCard,
   type CardMeta,
   computeStackPositions
 } from "@/lib/game/cardSorting";
-import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
+import CardPlane from "@/lib/game/components/CardPlane";
+import Piles3D from "@/lib/game/components/Piles3D";
+import TextureCache from "@/lib/game/components/TextureCache";
+import { MAT_PIXEL_W, MAT_PIXEL_H, CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+import type { DraftState, CustomMessage } from "@/lib/net/transport";
 
 // Import new draft sync system
-import { useDraftSync, usePlayerSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
-import { useDeckPersistence, useSubmissionCoordination } from "@/lib/draft/hooks/useDeckPersistence";
-import { WaitingOverlay, useWaitingOverlay } from "@/components/draft/WaitingOverlay";
 
 // Card shape used by OnlineDraftScreen; keep compatible
 interface DraftCard {

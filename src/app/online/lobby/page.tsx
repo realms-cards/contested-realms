@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
-import { useGameStore } from "@/lib/game/store";
-import InvitesPanel from "@/components/online/InvitesPanel";
-import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
-import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/LobbiesCentral";
 import { useTournaments, TournamentProvider } from "@/app/tournaments/tournament-context";
+import InvitesPanel from "@/components/online/InvitesPanel";
+import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/LobbiesCentral";
+import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
+import { useGameStore } from "@/lib/game/store";
 
 function LobbyPageContent() {
   const router = useRouter();
@@ -38,7 +38,7 @@ function LobbyPageContent() {
     dismissInvite,
   } = useOnline();
 
-  const { createTournament } = useTournaments();
+  const { createTournament, joinTournament, leaveTournament, updateTournamentSettings, toggleTournamentReady, startTournament, endTournament, tournaments } = useTournaments();
 
   const [lobbyIdInput, setLobbyIdInput] = useState("");
   // Tabs removed: we show all sections in the main view
@@ -238,34 +238,74 @@ function LobbyPageContent() {
       </div>
       {/* Lobbies (central, full width) */}
       <LobbiesCentral
-        lobbies={lobbies as unknown as Array<{
-          id: string;
-          hostId: string;
-          name: string;
-          status: string;
-          players: Array<{ id: string; displayName: string }>;
-          maxPlayers: number;
-          gameType?: string;
-          isPrivate?: boolean;
-        }>}
+        lobbies={lobbies}
+        tournaments={tournaments}
         myId={me?.id ?? null}
         joinedLobbyId={lobby?.id ?? null}
         onJoin={(id) => joinLobby(id)}
         onCreate={(cfg) => {
           console.log(`Creating lobby: "${cfg.name}" with ${cfg.maxPlayers} max players`);
           createLobby({ 
+            name: cfg.name,
             visibility: cfg.visibility, 
             maxPlayers: cfg.maxPlayers 
           });
-          // Note: lobby name will be supported in future backend updates
         }}
         onCreateTournament={async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {
             await createTournament(cfg);
-            router.push('/tournaments');
+            // Stay on lobby page - tournaments are now shown here
           } catch (error) {
             console.error('Failed to create tournament:', error);
+          }
+        }}
+        onJoinTournament={async (tournamentId: string) => {
+          console.log(`Joining tournament: ${tournamentId}`);
+          try {
+            await joinTournament(tournamentId);
+          } catch (error) {
+            console.error('Failed to join tournament:', error);
+          }
+        }}
+        onLeaveTournament={async (tournamentId: string) => {
+          console.log(`Leaving tournament: ${tournamentId}`);
+          try {
+            await leaveTournament(tournamentId);
+          } catch (error) {
+            console.error('Failed to leave tournament:', error);
+          }
+        }}
+        onUpdateTournamentSettings={async (tournamentId: string, settings) => {
+          console.log(`Updating tournament settings: ${tournamentId}`, settings);
+          try {
+            await updateTournamentSettings(tournamentId, settings);
+          } catch (error) {
+            console.error('Failed to update tournament settings:', error);
+          }
+        }}
+        onToggleTournamentReady={async (tournamentId: string, ready: boolean) => {
+          console.log(`Toggling tournament ready: ${tournamentId}`, ready);
+          try {
+            await toggleTournamentReady(tournamentId, ready);
+          } catch (error) {
+            console.error('Failed to toggle tournament ready:', error);
+          }
+        }}
+        onStartTournament={async (tournamentId: string) => {
+          console.log(`Starting tournament: ${tournamentId}`);
+          try {
+            await startTournament(tournamentId);
+          } catch (error) {
+            console.error('Failed to start tournament:', error);
+          }
+        }}
+        onEndTournament={async (tournamentId: string) => {
+          console.log(`Ending tournament: ${tournamentId}`);
+          try {
+            await endTournament(tournamentId);
+          } catch (error) {
+            console.error('Failed to end tournament:', error);
           }
         }}
         onRefresh={() => requestLobbies()}
@@ -407,8 +447,7 @@ function LobbyPageContent() {
                 </div>
               </div>
               {matchType === "draft" && (
-                <>
-                  <div>
+                <div>
                     <label className="block text-xs font-medium mb-3">
                       Draft Configuration
                     </label>
@@ -516,7 +555,6 @@ function LobbyPageContent() {
                       </div>
                     </div>
                   </div>
-                </>
               )}
               {matchType === "sealed" && (
                 <>

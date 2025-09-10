@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Group, PerspectiveCamera } from "three";
 import CardPlane from "@/lib/game/components/CardPlane";
-import { useGameStore } from "@/lib/game/store";
-import type { CardRef, PlayerKey } from "@/lib/game/store";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -16,7 +15,8 @@ import {
   HAND_CARD_SCALE,
 } from "@/lib/game/constants";
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
-import type { Group, PerspectiveCamera } from "three";
+import { useGameStore } from "@/lib/game/store";
+import type { CardRef, PlayerKey } from "@/lib/game/store";
 
 export interface Hand3DProps {
   matW: number;

@@ -6,12 +6,6 @@
 import { create } from 'zustand';
 import { Draft3DStateManager } from '@/lib/models/Draft3DState';
 import type { 
-  OnlineDraftState, 
-  PlayerDraftState, 
-  CardPreviewState, 
-  StackInteraction 
-} from '@/types/draft-models';
-import type { 
   Position3D, 
   PreviewType, 
   StackInteractionType, 
@@ -20,6 +14,12 @@ import type {
   UIUpdateData,
   UIUpdateType
 } from '@/types/draft-3d-events';
+import type { 
+  OnlineDraftState, 
+  PlayerDraftState, 
+  CardPreviewState, 
+  StackInteraction 
+} from '@/types/draft-models';
 
 interface Draft3DOnlineState {
   // State Manager Instance

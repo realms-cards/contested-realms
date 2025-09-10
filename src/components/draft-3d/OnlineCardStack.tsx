@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import OnlineCard3D from "./OnlineCard3D";
 import type { Position3D } from "@/types/draft-3d-events";
+import OnlineCard3D from "./OnlineCard3D";
 
 export interface CardInStack {
   cardId: string;

@@ -41,12 +41,9 @@ export class SocketTransport implements GameTransport {
     this.connectionState = 'connecting';
     this.isIntentionalDisconnect = false;
 
-    // Prefer explicit env; otherwise pick a sensible default based on current dev port
-    // If Next dev runs on 3002, we default WS to 3010 to avoid conflicts with other local apps
-    const defaultUrl =
-      typeof window !== "undefined" && window.location && window.location.port === "3002"
-        ? "http://localhost:3010"
-        : "http://localhost:3001";
+    // Prefer explicit env; otherwise use the standard local Socket.IO dev port (3010)
+    // Client runs on 3000/3002; signaling server on 3010.
+    const defaultUrl = "http://localhost:3010";
     const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
     // Sanitize and fallback the display name to avoid validation issues
     const trimmed = (opts.displayName ?? "").trim();
@@ -259,8 +256,9 @@ export class SocketTransport implements GameTransport {
     });
   }
 
-  async createLobby(options?: { visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }> {
+  async createLobby(options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }> {
     const s = this.requireSocket();
+    const name = options?.name;
     const visibility = options?.visibility;
     const maxPlayers = options?.maxPlayers;
     return new Promise((resolve) => {
@@ -273,7 +271,7 @@ export class SocketTransport implements GameTransport {
       s.on("joinedLobby", onJoin);
       s.emit(
         "createLobby",
-        Protocol.CreateLobbyPayload.parse({ visibility, maxPlayers })
+        Protocol.CreateLobbyPayload.parse({ name, visibility, maxPlayers })
       );
     });
   }

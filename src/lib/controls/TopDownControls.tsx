@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import { MapControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
+import { useEffect } from "react";
 
 type Props = {
   enabledPan?: boolean;

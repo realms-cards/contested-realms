@@ -7,9 +7,9 @@
  * ⚠️ CRITICAL: This test will fail initially as the integration doesn't work yet
  */
 
-import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import React, { act } from 'react';
 import { render, fireEvent, screen, waitFor } from '@testing-library/react';
+import React, { act } from 'react';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock React Testing Library
 vi.mock('@testing-library/react', () => ({

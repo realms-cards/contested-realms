@@ -3,8 +3,8 @@
  * This test MUST FAIL until the complete reconnection system is implemented
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { io, Socket } from 'socket.io-client';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { SocketTransport } from '@/lib/net/socketTransport';
 
 // Mock network conditions and reconnection system

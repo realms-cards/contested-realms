@@ -7,12 +7,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { DraftState } from '@/lib/net/transport';
 import { 
   MockSocketTransport, 
   createMockDraftSession, 
   simulateNetworkLatency 
 } from '../setup-draft-3d';
-import type { DraftState } from '@/lib/net/transport';
 
 describe('Draft Event Compatibility', () => {
   let transport: MockSocketTransport;

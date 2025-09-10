@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import DeckItem from "./DeckItem";
 import DeckImportCuriosa from "./DeckImportCuriosa";
+import DeckItem from "./DeckItem";
 
 export const dynamic = "force-dynamic";
 

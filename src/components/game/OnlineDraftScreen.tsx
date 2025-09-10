@@ -1,20 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
 import { Physics, RigidBody } from "@react-three/rapier";
-import CardPlane from "@/lib/game/components/CardPlane";
-import { useOnline } from "@/app/online/online-context";
-import { DraftState, TransportEventMap } from "@/lib/net/transport";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOnline } from "@/app/online/online-context";
 import { 
   type Pick3D, 
   type BoosterCard,
   type CardMeta,
   computeStackPositions
 } from "@/lib/game/cardSorting";
+import CardPlane from "@/lib/game/components/CardPlane";
+import { DraftState, TransportEventMap } from "@/lib/net/transport";
 
 type Card = {
   id: string;

@@ -100,13 +100,13 @@ export default function RightPanel(props: RightPanelProps) {
               <div className="mb-3 pointer-events-auto">
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-600 rounded"></div>
+                    <div className="w-3 h-3 bg-green-600 rounded" />
                     <span className="text-green-300">
                       Deck: {picksByType.deck}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-600 rounded"></div>
+                    <div className="w-3 h-3 bg-blue-600 rounded" />
                     <span className="text-blue-300">
                       Sideboard: {picksByType.sideboard}
                     </span>

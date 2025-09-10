@@ -1,10 +1,10 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import type { ContextMenuAction } from "@/lib/game/types";
-import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 
 interface ContextMenuProps {
   onClose: () => void;

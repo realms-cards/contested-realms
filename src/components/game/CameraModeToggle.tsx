@@ -1,7 +1,7 @@
 "use client";
 
-import { useGameStore } from "@/lib/game/store";
 import { clsx } from "clsx";
+import { useGameStore } from "@/lib/game/store";
 
 type Props = {
   disabled?: boolean;

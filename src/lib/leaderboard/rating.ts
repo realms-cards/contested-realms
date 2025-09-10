@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma';
 import { GameFormat } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 
 // ELO rating system constants
 const K_FACTOR = 32; // Rating change factor

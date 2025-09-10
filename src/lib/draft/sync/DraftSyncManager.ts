@@ -3,6 +3,7 @@
  * Implements the core requirement: "All players must pick before packs rotate"
  */
 
+import type { Draft3DEventMap } from '@/types/draft-3d-events';
 import type {
   DraftSession,
   PlayerDraftState,
@@ -16,7 +17,6 @@ import type {
   StateValidation,
   ValidationIssue
 } from './types';
-import type { Draft3DEventMap } from '@/types/draft-3d-events';
 
 export class DraftSyncManager {
   private sessions: Map<string, DraftSession> = new Map();

@@ -2,10 +2,10 @@
 
 import { Html } from "@react-three/drei";
 import { useMemo } from "react";
-import Threshold3D from "@/lib/game/components/Threshold3D";
-import { useGameStore, type PlayerKey } from "@/lib/game/store";
-import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 import { ManaCounterHUD } from "@/components/game/manacost";
+import Threshold3D from "@/lib/game/components/Threshold3D";
+import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import { useGameStore, type PlayerKey } from "@/lib/game/store";
 
 
 export interface Hud3DProps {

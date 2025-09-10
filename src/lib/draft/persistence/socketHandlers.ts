@@ -5,7 +5,6 @@
 
 import type { Socket } from 'socket.io-client';
 import { DeckPersistenceManager } from './DeckPersistenceManager';
-import { WaitingStateManager } from '../waiting/WaitingStateManager';
 import type {
   DeckSubmission,
   DeckComposition,
@@ -13,6 +12,7 @@ import type {
   SubmissionCoordination,
   PersistenceMetrics
 } from './types';
+import { WaitingStateManager } from '../waiting/WaitingStateManager';
 import type {
   WaitingUpdateEvent,
   WaitingType,

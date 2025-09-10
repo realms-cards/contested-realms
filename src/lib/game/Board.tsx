@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { Text, useTexture } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import {
+  RigidBody,
+  CuboidCollider,
+  useAfterPhysicsStep,
+} from "@react-three/rapier";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
   SRGBColorSpace,
   Raycaster,
@@ -10,16 +15,8 @@ import {
   type Intersection,
   type Group,
 } from "three";
-import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store";
-import {
-  RigidBody,
-  CuboidCollider,
-  useAfterPhysicsStep,
-} from "@react-three/rapier";
-import CardPlane from "@/lib/game/components/CardPlane";
 import CardGlow from "@/lib/game/components/CardGlow";
-import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
+import CardPlane from "@/lib/game/components/CardPlane";
 import {
   BASE_TILE_SIZE,
   TILE_SIZE,
@@ -35,6 +32,9 @@ import {
   DRAG_THRESHOLD,
   DRAG_HOLD_MS,
 } from "@/lib/game/constants";
+import { useGameStore } from "@/lib/game/store";
+import type { CardRef } from "@/lib/game/store";
+import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
 type BodyApi = {
@@ -1135,8 +1135,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                   contextMenu.target.who === who) ||
                 dragAvatar === who;
               return (
-                <>
-                  <RigidBody
+                <RigidBody
                     key={`avatar-${who}`}
                     ref={(api) => {
                       const id = `avatar:${who}`;
@@ -1336,7 +1335,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       </group>
                     </group>
                   </RigidBody>
-                </>
               );
             })()}
           </group>

@@ -1,10 +1,10 @@
-import DiscordProvider from 'next-auth/providers/discord';
-import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
-import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth/next';
 import type { NextAuthOptions, Session, User } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
+import { getServerSession } from 'next-auth/next';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import DiscordProvider from 'next-auth/providers/discord';
+import { prisma } from '@/lib/prisma';
 
 // Build providers list, always include Discord and optionally 2FA test provider
 const providers = [
@@ -18,36 +18,49 @@ const providers = [
           id: '2fa',
           name: '2FA (Test)',
           credentials: {
-            code: { label: '2FA Code', type: 'text', placeholder: '424242' },
+            code: { label: '2FA Code', type: 'text', placeholder: '111111, 222222, 333333, 444444, 555555, 666666, 777777, 888888' },
           },
           async authorize(credentials): Promise<User | null> {
             try {
               const submitted = credentials?.code?.trim();
-              const expected = (process.env.TEST_2FA_CODE || '424242').trim();
               
-              if (!submitted || submitted !== expected) {
+              // Define multiple test users with different codes
+              const testUsers = [
+                { code: '111111', email: 'player1@example.com', name: 'Alice' },
+                { code: '222222', email: 'player2@example.com', name: 'Bob' },
+                { code: '333333', email: 'player3@example.com', name: 'Charlie' },
+                { code: '444444', email: 'player4@example.com', name: 'Diana' },
+                { code: '555555', email: 'player5@example.com', name: 'Eve' },
+                { code: '666666', email: 'player6@example.com', name: 'Frank' },
+                { code: '777777', email: 'player7@example.com', name: 'Grace' },
+                { code: '888888', email: 'player8@example.com', name: 'Henry' },
+              ];
+              
+              // Find matching test user
+              const testUser = testUsers.find(user => user.code === submitted);
+              if (!testUser) {
                 return null;
               }
 
               // Ensure a DB user exists so session creation doesn't violate FK constraints
               const dbUser = await prisma.user.upsert({
-                where: { email: '2fa@example.com' },
+                where: { email: testUser.email },
                 // For the test 2FA flow, always ensure a friendly name exists
                 update: { 
-                  name: 'Test 2FA User',
+                  name: testUser.name,
                   emailVerified: new Date() // Mark as verified for test user
                 },
                 create: { 
-                  email: '2fa@example.com', 
-                  name: 'Test 2FA User',
+                  email: testUser.email, 
+                  name: testUser.name,
                   emailVerified: new Date()
                 },
               });
 
               return {
                 id: dbUser.id,
-                name: dbUser.name || 'Test 2FA User',
-                email: dbUser.email || '2fa@example.com',
+                name: dbUser.name || testUser.name,
+                email: dbUser.email || testUser.email,
                 image: dbUser.image || null,
               };
             } catch (error) {
@@ -68,10 +81,37 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user, account }): Promise<JWT> {
-      // Persist the user ID in the token right after signin
-      if (user) {
-        token.id = user.id;
+      // Ensure user record exists in database for all providers when using JWT strategy
+      if (user && account) {
+        try {
+          // For non-credentials providers, ensure user exists in database
+          if (account.provider !== '2fa') {
+            const dbUser = await prisma.user.upsert({
+              where: { 
+                email: user.email || `${account.providerAccountId}@${account.provider}.local` 
+              },
+              update: { 
+                name: user.name,
+                image: user.image,
+              },
+              create: { 
+                email: user.email || `${account.providerAccountId}@${account.provider}.local`,
+                name: user.name || `User ${account.providerAccountId}`,
+                image: user.image,
+                emailVerified: user.email ? new Date() : null,
+              },
+            });
+            token.id = dbUser.id;
+          } else {
+            // For credentials provider, user.id is already set from authorize
+            token.id = user.id;
+          }
+        } catch (error) {
+          console.error('Error ensuring user exists:', error);
+          token.id = user.id; // Fallback to provided user ID
+        }
       }
+      
       // Persist the account info for provider-specific handling
       if (account) {
         token.provider = account.provider;

@@ -1,10 +1,10 @@
 "use client";
 
+import type { ThreeEvent } from "@react-three/fiber";
 import { useRef, useState, useEffect, useCallback } from "react";
 import type { Group } from "three";
-import type { ThreeEvent } from "@react-three/fiber";
-import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 import CardPlane from "@/lib/game/components/CardPlane";
+import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 
 export default function DraggableCard3D({
   slug,

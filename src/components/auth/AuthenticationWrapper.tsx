@@ -1,8 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 export interface AuthenticationWrapperProps {
   /** The content to render when user is authenticated */

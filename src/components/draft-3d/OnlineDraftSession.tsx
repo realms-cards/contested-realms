@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useCallback, useState, useMemo } from "react";
-import OnlineCardStack from "./OnlineCardStack";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
-import { useDraft3DSession, useDraft3DPlayers } from "@/lib/stores/draft-3d-online";
 import type { GameTransport } from "@/lib/net/transport";
+import { useDraft3DSession, useDraft3DPlayers } from "@/lib/stores/draft-3d-online";
 import type { Position3D } from "@/types/draft-3d-events";
+import OnlineCardStack from "./OnlineCardStack";
 import type { CardInStack } from "./OnlineCardStack";
 
 export interface OnlineDraftSessionProps {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useGameStore } from "@/lib/game/store";
 import { useMemo } from "react";
+import { useGameStore } from "@/lib/game/store";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 
 interface PreloadTextureProps {

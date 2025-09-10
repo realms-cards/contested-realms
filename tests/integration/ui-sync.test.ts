@@ -6,6 +6,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { 
+  UISyncBatch
+} from '@/types/draft-3d-events';
 import { 
   MockSocketTransport, 
   createMockDraftSession, 
@@ -13,9 +16,6 @@ import {
   simulateNetworkLatency,
   measureRenderTime
 } from '../setup-draft-3d';
-import type { 
-  UISyncBatch
-} from '@/types/draft-3d-events';
 
 describe('UI State Synchronization', () => {
   let transport1: MockSocketTransport;

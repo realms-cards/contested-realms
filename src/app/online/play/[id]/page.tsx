@@ -1,36 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { useOnline } from "@/app/online/online-context";
-import { useGameStore, type PlayerKey } from "@/lib/game/store";
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import * as THREE from "three";
+import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import Image from "next/image";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
+import { useOnline } from "@/app/online/online-context";
+import ContextMenu from "@/components/game/ContextMenu";
+import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import MatchEndOverlay from "@/components/game/MatchEndOverlay";
+import MatchInfoPopup from "@/components/game/MatchInfoPopup";
+import OnlineConsole from "@/components/game/OnlineConsole";
+import OnlineD20Screen from "@/components/game/OnlineD20Screen";
+import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
+import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
+import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
+import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
+import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+import PileSearchDialog from "@/components/game/PileSearchDialog";
+import PlacementDialog from "@/components/game/PlacementDialog";
+import SeatMediaControls from "@/components/rtc/SeatMediaControls";
+import { FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import Board from "@/lib/game/Board";
 import Hand3D from "@/lib/game/components/Hand3D";
-import Piles3D from "@/lib/game/components/Piles3D";
-import TokenPile3D from "@/lib/game/components/TokenPile3D";
 import Hud3D from "@/lib/game/components/Hud3D";
+import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
-import Image from "next/image";
+import TokenPile3D from "@/lib/game/components/TokenPile3D";
+import { MAT_PIXEL_H, MAT_PIXEL_W, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
+import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { TOKEN_BY_KEY } from "@/lib/game/tokens";
-import ContextMenu from "@/components/game/ContextMenu";
-import PlacementDialog from "@/components/game/PlacementDialog";
-import PileSearchDialog from "@/components/game/PileSearchDialog";
-import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
-import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
-import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
-import OnlineD20Screen from "@/components/game/OnlineD20Screen";
-import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
-import OnlineStatusBar from "@/components/game/OnlineStatusBar";
-import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
-import OnlineConsole from "@/components/game/OnlineConsole";
-import MatchInfoPopup from "@/components/game/MatchInfoPopup";
-import MatchEndOverlay from "@/components/game/MatchEndOverlay";
-import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import { SeatVideo3D } from "@/lib/rtc/SeatVideo3D";
+import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -62,6 +66,16 @@ export default function OnlineMatchPage() {
   }, [match?.players, myPlayerId]);
   const myPlayerNumber = myPlayerIndex >= 0 ? myPlayerIndex + 1 : null;
   const myPlayerKey = myPlayerIndex >= 0 && myPlayerIndex < 2 ? (myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey : null;
+
+  // Seat Video (WebRTC) prototype state (always call hook; gated by enabled flag)
+  const rtc = useMatchWebRTC({
+    enabled: FEATURE_SEAT_VIDEO,
+    transport,
+    myPlayerId: me?.id ?? null,
+    matchId: match?.id ?? null,
+  });
+
+  // Remote audio is handled inside SeatMediaControls
 
   // One-shot guards for rejoin flow per connection
   const lastConnectedRef = useRef<boolean>(false);
@@ -836,6 +850,12 @@ export default function OnlineMatchPage() {
 
       {inThisMatch && (
         <>
+          {/* Seat Video Controls (icon-only) */}
+          {rtc.featureEnabled && (
+            <div className="absolute top-2 left-2 z-30">
+              <SeatMediaControls rtc={rtc} />
+            </div>
+          )}
           {/* Online Status Bar with turn restrictions */}
           {myPlayerNumber && (
             <OnlineStatusBar
@@ -1050,6 +1070,19 @@ export default function OnlineMatchPage() {
                 <PhysicsProbe mid={match?.id} />
                 <Board />
               </Physics>
+
+              {/* Seat Video planes at player positions (fixed orientation toward board) */}
+              {rtc.featureEnabled && myPlayerKey && (
+                <>
+                  {/* Local preview at my seat (muted via video texture; audio handled separately) */}
+                  <SeatVideo3D who={myPlayerKey} stream={rtc.localStream} />
+                  {/* Remote video at opponent seat */}
+                  <SeatVideo3D
+                    who={myPlayerKey === 'p1' ? 'p2' : 'p1'}
+                    stream={rtc.remoteStream}
+                  />
+                </>
+              )}
 
               {/* 3D Piles (sides of the board) */}
               <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />

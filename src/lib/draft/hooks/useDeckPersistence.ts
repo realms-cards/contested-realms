@@ -7,7 +7,6 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { useSocket } from '@/lib/hooks/useSocket';
 import { DeckPersistenceManager } from '../persistence/DeckPersistenceManager';
 import { SubmissionSocketHandler } from '../persistence/socketHandlers';
-import { WaitingStateManager } from '../waiting/WaitingStateManager';
 import type {
   DeckSubmission,
   DeckComposition,
@@ -16,6 +15,7 @@ import type {
   DeckModification,
   UndoRedoState
 } from '../persistence/types';
+import { WaitingStateManager } from '../waiting/WaitingStateManager';
 import type {
   WaitingOverlayState,
   PlayerStatus
