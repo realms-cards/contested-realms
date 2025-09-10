@@ -10,7 +10,7 @@ import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
 import LifeCounters from "@/components/game/LifeCounters";
-import MulliganScreen from "@/components/game/MulliganScreen";
+import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import StatusBar from "@/components/game/StatusBar";
@@ -148,7 +148,9 @@ export default function PlayPage() {
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
   const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
-  // Hotseat: Mulligan is handled for both players within MulliganScreen
+  // Hotseat: Player 1 performs mulligans for both players; start after both are ready
+  const [p1Ready, setP1Ready] = useState<boolean>(false);
+  const [p2Ready, setP2Ready] = useState<boolean>(false);
 
   // Event console: autoscroll and text formatting
   const eventsRef = useRef<HTMLDivElement | null>(null);
@@ -214,7 +216,13 @@ export default function PlayPage() {
     setPhase("Main");
   }, [setPhase]);
 
-  // Start game is triggered directly from MulliganScreen once both players finish
+  // Start once both players are confirmed in hotseat mulligan
+  useEffect(() => {
+    if (prepared && p1Ready && p2Ready) {
+      try { useGameStore.getState().finalizeMulligan(); } catch {}
+      startGame();
+    }
+  }, [prepared, p1Ready, p2Ready, startGame]);
 
   function gotoBaseline(mode: 'topdown' | 'orbit') {
     const c = controlsRef.current;
@@ -230,9 +238,7 @@ export default function PlayPage() {
     c.update();
   }
 
-  function resetCamera() {
-    gotoBaseline(cameraMode);
-  }
+  // Camera reset handled via gotoBaseline(cameraMode) where needed
 
   // Dynamic page title for offline play
   useEffect(() => {
@@ -305,14 +311,20 @@ export default function PlayPage() {
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
           <button
             className={`px-2 py-1 text-xs rounded ${cameraMode === 'topdown' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
-            onClick={() => { setCameraMode('topdown'); gotoBaseline('topdown'); }}
+            onClick={() => { 
+              setCameraMode('topdown'); 
+              gotoBaseline('topdown'); 
+            }}
             title="Top-down 2D camera"
           >
             2D
           </button>
           <button
             className={`ml-1 px-2 py-1 text-xs rounded ${cameraMode === 'orbit' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
-            onClick={() => { setCameraMode('orbit'); gotoBaseline('orbit'); }}
+            onClick={() => { 
+              setCameraMode('orbit'); 
+              gotoBaseline('orbit'); 
+            }}
             title="3D orbit camera"
           >
             3D
@@ -325,15 +337,31 @@ export default function PlayPage() {
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
           ) : (
-            <div className="w-full max-w-6xl mx-auto">
-              <MulliganScreen onStartGame={startGame} />
+            <div className="w-full max-w-6xl mx-auto space-y-4">
+              <OfflineMulliganScreen
+                myPlayerKey="p1"
+                playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                finalizeLabel="Ready"
+                onStartGame={() => setP1Ready(true)}
+              />
+              <OfflineMulliganScreen
+                myPlayerKey="p2"
+                playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                finalizeLabel="Ready"
+                onStartGame={() => setP2Ready(true)}
+              />
+              {!(p1Ready && p2Ready) && (
+                <div className="text-center text-xs opacity-80 text-white">
+                  Hotseat: Player 1 confirms mulligans for both players. Click Ready on each to begin.
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* HUD */}
-      <StatusBar dragFromHand={dragFromHand} onCameraReset={resetCamera} />
+      <StatusBar dragFromHand={dragFromHand} />
 
       <LifeCounters dragFromHand={dragFromHand} />
 

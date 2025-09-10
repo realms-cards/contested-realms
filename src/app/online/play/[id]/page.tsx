@@ -3,7 +3,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import Image from "next/image";
 import CardPreview from "@/components/game/CardPreview";
 import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useParams, useRouter } from "next/navigation";
@@ -40,7 +39,6 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
-import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
@@ -1026,7 +1024,6 @@ export default function OnlineMatchPage() {
               dragFromHand={dragFromHand}
               myPlayerNumber={myPlayerNumber}
               playerNames={playerNames}
-              onCameraReset={resetCamera}
               onOpenMatchInfo={() => setMatchInfoOpen(true)}
             />
           )}
@@ -1059,55 +1056,12 @@ export default function OnlineMatchPage() {
           
           {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) */}
           {previewCard?.slug && !hoverPreview && !contextMenu && !selectedHandCard && (
-            <div className="absolute right-3 top-20 z-30 pointer-events-none">
-              {(() => {
-                const isSite = (previewCard?.type || "")
-                  .toLowerCase()
-                  .includes("site");
-                const slug = previewCard.slug || "";
-                const isToken = slug.startsWith("token:");
-                let imgSrc = `/api/images/${slug}`;
-                let siteLike = isSite;
-                if (isToken) {
-                  const key = slug.split(":")[1]?.toLowerCase() || "";
-                  const def = TOKEN_BY_KEY[key];
-                  if (def) {
-                    imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
-                    siteLike = !!def.siteReplacement;
-                  }
-                }
-                return (
-                  <div className="relative">
-                    <div
-                      className={`relative ${
-                        siteLike
-                          ? "aspect-[4/3] h-[300px] md:h-[380px]"
-                          : "aspect-[3/4] w-[300px] md:w-[380px]"
-                      } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
-                    >
-                      <Image
-                        src={imgSrc}
-                        alt={previewCard.name}
-                        fill
-                        sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
-                        className={`${
-                          siteLike
-                            ? "object-contain rotate-90"
-                            : "object-contain"
-                        }`}
-                      />
-                    </div>
-                    <button
-                      className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
-                      onClick={() => setPreviewCard(null)}
-                      title="Close preview"
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })()}
-            </div>
+            <CardPreview
+              card={previewCard}
+              anchor="top-right"
+              zIndexClass="z-30"
+              onClose={() => setPreviewCard(null)}
+            />
           )}
 
           {/* Context Menu */}
@@ -1147,52 +1101,14 @@ export default function OnlineMatchPage() {
           )}
 
           {/* Hand Card Magnifier (selected hand card) */}
-          {(() => {
-            const c = selectedHandCard;
-            if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay)
-              return null;
-            const slug = c.slug || "";
-            const isSite = (c.type || "").toLowerCase().includes("site");
-            const isToken = slug.startsWith("token:");
-            let imgSrc = `/api/images/${slug}`;
-            let siteLike = isSite;
-            if (isToken) {
-              const key = slug.split(":")[1]?.toLowerCase() || "";
-              const def = TOKEN_BY_KEY[key];
-              if (def) {
-                imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
-                siteLike = !!def.siteReplacement;
-              }
-            }
-            return (
-              <div className="absolute right-3 top-20 z-30 pointer-events-none">
-                <div className="relative">
-                  <div
-                    className={`relative ${
-                      siteLike ? "aspect-[4/3]" : "aspect-[3/4]"
-                    } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
-                  >
-                    <Image
-                      src={imgSrc}
-                      alt={c.name}
-                      fill
-                      sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
-                      className={`${
-                        siteLike ? "object-contain rotate-90" : "object-contain"
-                      }`}
-                    />
-                  </div>
-                  <button
-                    className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
-                    onClick={() => clearSelection()}
-                    title="Close magnifier"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
+          {selectedHandCard?.slug && !dragFromHand && !contextMenu && magnifierDelay && (
+            <CardPreview
+              card={selectedHandCard}
+              anchor="top-right"
+              zIndexClass="z-30"
+              onClose={() => clearSelection()}
+            />
+          )}
 
           {/* Match Info Popup */}
           <MatchInfoPopup
