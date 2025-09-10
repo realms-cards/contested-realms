@@ -5,8 +5,8 @@
 
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
-import type { OnlineDraftState, PlayerDraftState } from '@/types/draft-models';
 import type { Draft3DEventMap } from '@/types/draft-3d-events';
+import type { OnlineDraftState, PlayerDraftState } from '@/types/draft-models';
 
 // Mock Socket.io client for testing
 const mockSocket = {

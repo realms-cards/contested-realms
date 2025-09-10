@@ -3,8 +3,8 @@
  * This test MUST FAIL until the DraftSyncManager is implemented
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { io, Socket } from 'socket.io-client';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Draft3DEventMap } from '@/types/draft-3d-events';
 
 // Mock socket connection for testing

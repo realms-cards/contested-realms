@@ -1,7 +1,7 @@
+import { GameFormat, TimeFrame } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { GameFormat, TimeFrame } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 

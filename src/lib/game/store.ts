@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { GameTransport } from "@/lib/net/transport";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import type { GameTransport } from "@/lib/net/transport";
 import type { 
   PermanentPosition, 
   SitePositionData, 

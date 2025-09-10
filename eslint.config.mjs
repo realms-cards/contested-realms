@@ -20,6 +20,13 @@ const eslintConfig = [
       "next-env.d.ts",
       "scripts/**",
       "server/**",
+      // Ignore tests and spec files
+      "tests/**",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/*.spec.ts",
+      "**/*.spec.tsx",
+      "specs/**",
       // Ignore local debug/test helpers executed with Node (CommonJS)
       "debug-*.js",
       "test-*.js",
@@ -62,17 +69,6 @@ const eslintConfig = [
       }],
       // Ensure Three.js objects are properly managed
       "no-global-assign": "error",
-    },
-  },
-  // Tests: allow pragmatic flexibility while keeping app code strict
-  {
-    files: [
-      "tests/**/*.ts",
-      "tests/**/*.tsx",
-    ],
-    rules: {
-      // Tests may intentionally use 'any' for mocks and helper utilities
-      "@typescript-eslint/no-explicit-any": "off",
     },
   },
 ];

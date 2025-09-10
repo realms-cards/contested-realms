@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,12 +23,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament not found' }), { status: 404 });
     }
 
+    // Only tournament creator can start the tournament
+    if (tournament.creatorId !== session.user.id) {
+      return new Response(JSON.stringify({ error: 'Only tournament creator can start the tournament' }), { status: 403 });
+    }
+
     if (tournament.status !== 'registering') {
       return new Response(JSON.stringify({ error: 'Tournament already started' }), { status: 400 });
     }
 
     if (tournament.registrations.length < 2) {
       return new Response(JSON.stringify({ error: 'Need at least 2 players to start tournament' }), { status: 400 });
+    }
+
+    // Check if all players are ready
+    const unreadyPlayers = tournament.registrations.filter(reg => !reg.ready);
+    if (unreadyPlayers.length > 0) {
+      return new Response(JSON.stringify({ 
+        error: `Cannot start tournament - ${unreadyPlayers.length} players not ready` 
+      }), { status: 400 });
     }
 
     // Determine next status based on match type
@@ -47,17 +61,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    // If going straight to playing (constructed), create first round
+    // If going straight to playing (constructed), create first round with matches
     if (nextStatus === 'playing') {
-      // TODO: Implement pairing logic in next task
-      // For now, just create the round without matches
-      await prisma.tournamentRound.create({
+      // Create the round
+      const newRound = await prisma.tournamentRound.create({
         data: {
           tournamentId: id,
           roundNumber: 1,
           status: 'pending'
         }
       });
+
+      // Generate pairings for the first round
+      const pairings = await generatePairings(id, 1);
+
+      // Create matches for the round
+      const matchIds = await createRoundMatches(id, newRound.id, pairings);
+
+      console.log(`Created ${matchIds.length} matches for tournament ${id}, round 1`);
     }
 
     return new Response(JSON.stringify({

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { useRef, useState, useEffect } from "react";
 import * as THREE from "three";
 import type { PlayerKey } from "../store";
 

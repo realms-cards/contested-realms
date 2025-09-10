@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useGameStore } from "@/lib/game/store";
 import { LogOut, MessageCircle, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useGameStore } from "@/lib/game/store";
 import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
 
 interface OnlineConsoleProps {

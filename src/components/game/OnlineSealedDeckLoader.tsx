@@ -123,7 +123,7 @@ export default function OnlineSealedDeckLoader({
           
           {loading && (
             <div className="flex items-center justify-center gap-2 text-blue-400">
-              <div className="w-6 h-6 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin"></div>
+              <div className="w-6 h-6 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
               Loading sealed decks...
             </div>
           )}
@@ -143,14 +143,14 @@ export default function OnlineSealedDeckLoader({
 
           {!loading && !deckError && waitingForMe && (
             <div className="flex items-center justify-center gap-2 text-slate-300">
-              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin"></div>
+              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
               Waiting for your sealed deck submission to be registered...
             </div>
           )}
 
           {!loading && !deckError && waitingForOpponent && (
             <div className="flex items-center justify-center gap-2 text-slate-300">
-              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin"></div>
+              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
               Waiting for other players to submit their sealed decks...
             </div>
           )}

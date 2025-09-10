@@ -1,10 +1,10 @@
 'use client';
 
-import { useSession, signOut, getProviders } from 'next-auth/react';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut, getProviders } from 'next-auth/react';
 import type { LiteralUnion, ClientSafeProvider } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 
 type ProvidersType = Record<LiteralUnion<string, string>, ClientSafeProvider> | null;
 

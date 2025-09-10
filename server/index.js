@@ -8,7 +8,7 @@ const {
   generateBoosterDeterministic,
 } = require("./booster");
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -24,7 +24,7 @@ const io = new Server(server, {
 const players = new Map();
 /** @type {Map<string, string>} socket.id -> playerId */
 const playerIdBySocket = new Map();
-/** @type {Map<string, { id: string, hostId: string, playerIds: Set<string>, status: 'open'|'started'|'closed', maxPlayers: number, ready: Set<string>, visibility: 'open'|'private' }>} */
+/** @type {Map<string, { id: string, name: string|null, hostId: string, playerIds: Set<string>, status: 'open'|'started'|'closed', maxPlayers: number, ready: Set<string>, visibility: 'open'|'private' }>} */
 const lobbies = new Map();
 /** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'deck_construction'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null, matchType?: 'constructed'|'sealed', sealedConfig?: { packCount: number, setMix: string[], timeLimit: number, constructionStartTime?: number, packCounts?: Record<string, number>, replaceAvatars?: boolean }, playerDecks?: Map<string, any>, sealedPacks?: Record<string, Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>> }>} */
 const matches = new Map();
@@ -60,6 +60,7 @@ function isPlayerConnected(playerId) {
 function getLobbyInfo(lobby) {
   return {
     id: lobby.id,
+    name: lobby.name,
     hostId: lobby.hostId,
     players: Array.from(lobby.playerIds).map(getPlayerInfo).filter(Boolean),
     status: lobby.status,
@@ -151,8 +152,10 @@ function createLobby(hostId, opts = {}) {
   const maxPlayers = Number.isInteger(opts.maxPlayers)
     ? Math.max(2, Math.min(8, opts.maxPlayers))
     : 2;
+  const name = opts.name && typeof opts.name === "string" ? opts.name.trim().slice(0, 50) : null;
   const lobby = {
     id: rid("lobby"),
+    name,
     hostId,
     playerIds: new Set(),
     status: "open",
@@ -613,7 +616,8 @@ io.on("connection", (socket) => {
     const maxPlayers = Number.isInteger(payload && payload.maxPlayers)
       ? Math.max(2, Math.min(8, payload.maxPlayers))
       : 2;
-    const lobby = createLobby(player.id, { visibility, maxPlayers });
+    const name = payload && payload.name ? String(payload.name) : null;
+    const lobby = createLobby(player.id, { name, visibility, maxPlayers });
     joinLobby(socket, player, lobby.id);
   });
 
@@ -942,6 +946,37 @@ io.on("connection", (socket) => {
     } else {
       socket.emit("resyncResponse", { snapshot: {} });
     }
+  });
+
+  // --- WebRTC signaling relay (prototype) ---------------------------------
+  // These lightweight endpoints relay SDP/ICE between peers in the same match room.
+  // No media flows through the server; it only brokers messages.
+  socket.on("rtc:join", () => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const room = `match:${player.matchId}`;
+    // Notify other peers that this player is ready for RTC negotiation
+    socket.to(room).emit("rtc:peer-joined", { from: getPlayerInfo(player.id) });
+  });
+
+  socket.on("rtc:signal", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const room = `match:${player.matchId}`;
+    const data = payload && typeof payload === "object" ? payload.data : null;
+    if (!data) return;
+    // Broadcast signal to all other peers in the match room
+    socket.to(room).emit("rtc:signal", { from: player.id, data });
+  });
+
+  socket.on("rtc:leave", () => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const room = `match:${player.matchId}`;
+    socket.to(room).emit("rtc:peer-left", { from: player.id });
   });
 
   // Submit sealed deck during deck construction phase

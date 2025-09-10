@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Image from "next/image";
+import { useMemo, useState } from "react";
 
 type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
 type Finish = "Standard" | "Foil";

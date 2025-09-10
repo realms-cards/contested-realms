@@ -3,9 +3,9 @@
  * This test MUST FAIL until the complete deck persistence system is implemented
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock deck editor components and persistence system
 const MockDeckEditor = ({ onAddStandardCards, draftedCards }: { 

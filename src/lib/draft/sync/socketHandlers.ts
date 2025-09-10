@@ -4,8 +4,8 @@
  */
 
 import type { Socket } from 'socket.io-client';
-import { DraftSyncManager } from './DraftSyncManager';
 import type { Draft3DEventMap, StackInteractionEvent, StackInteractionResult } from '@/types/draft-3d-events';
+import { DraftSyncManager } from './DraftSyncManager';
 import type { 
   DraftSession, 
   PlayerDraftState, 

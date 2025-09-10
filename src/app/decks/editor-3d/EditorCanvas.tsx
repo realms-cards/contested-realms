@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { MOUSE } from "three";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import Board from "@/lib/game/Board";
+import React, { useEffect } from "react";
+import { MOUSE } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import Board from "@/lib/game/Board";
 
 interface EditorCanvasProps {
   children?: React.ReactNode;

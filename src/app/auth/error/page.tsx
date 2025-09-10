@@ -1,7 +1,7 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

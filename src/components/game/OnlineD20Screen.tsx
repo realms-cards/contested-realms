@@ -1,10 +1,10 @@
 "use client";
 
+import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
+import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
-import { Canvas } from "@react-three/fiber";
-import D20Dice from "@/lib/game/components/D20Dice";
 
 interface OnlineD20ScreenProps {
   myPlayerKey: PlayerKey;

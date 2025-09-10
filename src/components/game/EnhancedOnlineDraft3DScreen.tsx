@@ -1,39 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MOUSE } from "three";
-
-// Import components from single-player draft-3d
-import Board from "@/lib/game/Board";
-import TextureCache from "@/lib/game/components/TextureCache";
-import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
-import MouseTracker from "@/lib/game/components/MouseTracker";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
-
-// Import sorting and metadata utilities
-import {
-  type Pick3D,
-  type BoosterCard,
-  type CardMeta,
-  computeStackPositions,
-  categorizeCard,
-} from "@/lib/game/cardSorting";
-import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
-import { CARD_LONG } from "@/lib/game/constants";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
-
-// Online integration
-import { useOnline } from "@/app/online/online-context";
+import SeatMediaControls from "@/components/rtc/SeatMediaControls";
+import { FEATURE_SEAT_VIDEO } from "@/lib/flags";
+import Board from "@/lib/game/Board";
+import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
+import {
+  type BoosterCard,
+  type CardMeta,
+  type Pick3D,
+  categorizeCard,
+  computeStackPositions,
+} from "@/lib/game/cardSorting";
+import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
+import MouseTracker from "@/lib/game/components/MouseTracker";
+import TextureCache from "@/lib/game/components/TextureCache";
+import { CARD_LONG } from "@/lib/game/constants";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
-import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
+import { SeatVideo3D } from "@/lib/rtc/SeatVideo3D";
+import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
+import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 
 // Card shape used by OnlineDraftScreen; keep compatible
 type DraftCard = {
@@ -50,8 +48,8 @@ type DraftCard = {
 
 // Player ready message type
 type PlayerReadyMessage = CustomMessage & {
-  type: 'playerReady';
-  playerKey: 'p1' | 'p2';
+  type: "playerReady";
+  playerKey: "p1" | "p2";
   ready: boolean;
 };
 
@@ -84,7 +82,18 @@ export default function EnhancedOnlineDraft3DScreen({
 
   const myPlayerIndex = myPlayerKey === "p1" ? 0 : 1;
   const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
-  const myPlayerId = useMemo(() => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null, [me?.id, match?.players, myPlayerIndex]);
+  const myPlayerId = useMemo(
+    () => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null,
+    [me?.id, match?.players, myPlayerIndex]
+  );
+
+  // Seat Video (WebRTC) prototype state (always call hook; gated by enabled flag)
+  const rtc = useMatchWebRTC({
+    enabled: FEATURE_SEAT_VIDEO,
+    transport,
+    myPlayerId: myPlayerId ?? null,
+    matchId: matchId ?? null,
+  });
 
   // Enhanced 3D Draft UI state (ported from single-player)
   const [orbitLocked, setOrbitLocked] = useState(false);
@@ -92,19 +101,30 @@ export default function EnhancedOnlineDraft3DScreen({
   const [loading, setLoading] = useState(false);
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [ready, setReady] = useState(false);
-  const [playerReadyStates, setPlayerReadyStates] = useState<{p1: boolean, p2: boolean}>({p1: false, p2: false});
+  const [playerReadyStates, setPlayerReadyStates] = useState<{
+    p1: boolean;
+    p2: boolean;
+  }>({ p1: false, p2: false });
   const [usedPacks, setUsedPacks] = useState<number[]>([]);
-  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<number | null>(null);
+  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<
+    number | null
+  >(null);
 
   // Enhanced hand and HUD state (from single-player draft-3d)
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
-  const [staged, setStaged] = useState<{ idx: number; x: number; z: number } | null>(null);
+  const [staged, setStaged] = useState<{
+    idx: number;
+    x: number;
+    z: number;
+  } | null>(null);
   const [readyIdx, setReadyIdx] = useState<number | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
-  
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
+    {}
+  );
+
   // Enhanced preview and hover state
   const [hoverPreview, setHoverPreview] = useState<{
     slug: string;
@@ -113,7 +133,7 @@ export default function EnhancedOnlineDraft3DScreen({
   } | null>(null);
   const clearHoverTimerRef = useRef<number | null>(null);
   const currentHoverCardRef = useRef<string | null>(null);
-  
+
   // Picks panel state (from single-player)
   const [picksOpen, setPicksOpen] = useState(true);
   const [compactPicks, setCompactPicks] = useState(true);
@@ -127,20 +147,16 @@ export default function EnhancedOnlineDraft3DScreen({
   }, []);
 
   // Enhanced Draft-3D Online Integration
-  const {
-    sendCardPreview,
-    sendStackInteraction,
-    sendUIUpdate,
-    isConnected,
-  } = useDraft3DTransport({
-    transport,
-    sessionId: matchId || 'unknown',
-    playerId: myPlayerId || 'unknown',
-    onError: (error) => {
-      console.error('[EnhancedOnlineDraft3D] Transport error:', error);
-      setError(String(error));
-    }
-  });
+  const { sendCardPreview, sendStackInteraction, isConnected } =
+    useDraft3DTransport({
+      transport,
+      sessionId: matchId || "unknown",
+      playerId: myPlayerId || "unknown",
+      onError: (error) => {
+        console.error("[EnhancedOnlineDraft3D] Transport error:", error);
+        setError(String(error));
+      },
+    });
 
   const { joinSession, leaveSession } = useDraft3DSession();
 
@@ -163,10 +179,10 @@ export default function EnhancedOnlineDraft3DScreen({
       }
       currentHoverCardRef.current = card.slug;
       setHoverPreview(card);
-      
+
       // Send preview to other players
       if (isConnected) {
-        sendCardPreview(card.slug, 'hover', { x: 0, y: 0.1, z: -0.5 }, 'low');
+        sendCardPreview(card.slug, "hover", { x: 0, y: 0.1, z: -0.5 }, "low");
       }
     },
     [isConnected, sendCardPreview]
@@ -184,17 +200,22 @@ export default function EnhancedOnlineDraft3DScreen({
   }, []);
 
   // Convert DraftCard to BoosterCard format for Pick3D
-  const draftCardToBoosterCard = useCallback((card: DraftCard): BoosterCard => ({
-    variantId: 0,
-    slug: card.slug,
-    finish: "Standard" as const,
-    product: "Draft",
-    rarity: (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") || "Ordinary",
-    type: card.type || null,
-    cardId: parseInt(card.id) || 0,
-    cardName: card.cardName || card.name,
-    setName: card.setName || "Beta",
-  }), []);
+  const draftCardToBoosterCard = useCallback(
+    (card: DraftCard): BoosterCard => ({
+      variantId: 0,
+      slug: card.slug,
+      finish: "Standard" as const,
+      product: "Draft",
+      rarity:
+        (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") ||
+        "Ordinary",
+      type: card.type || null,
+      cardId: parseInt(card.id) || 0,
+      cardName: card.cardName || card.name,
+      setName: card.setName || "Beta",
+    }),
+    []
+  );
 
   const PICK_CENTER = { x: 0, z: 0 };
   const PICK_RADIUS = CARD_LONG * 0.6;
@@ -202,10 +223,15 @@ export default function EnhancedOnlineDraft3DScreen({
 
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
-    return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
+    return (
+      draftState.phase === "picking" &&
+      !!myPlayerId &&
+      draftState.waitingFor.includes(myPlayerId)
+    );
   }, [draftState.phase, draftState.waitingFor, myPlayerId]);
 
-  const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+  const myPack = (draftState.currentPacks?.[myPlayerIndex] ||
+    []) as DraftCard[];
   const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
   const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
 
@@ -217,16 +243,19 @@ export default function EnhancedOnlineDraft3DScreen({
   // Initialize draft state from match on component mount
   useEffect(() => {
     if (match?.draftState) {
-      console.log(`[EnhancedOnlineDraft3D] Initializing from match draft state: phase=${match.draftState.phase}`);
+      console.log(
+        `[EnhancedOnlineDraft3D] Initializing from match draft state: phase=${match.draftState.phase}`
+      );
       setDraftState(match.draftState);
-      
+
       if (match.draftState.phase === "picking") {
         setStaged(null);
         setReady(false);
       }
-      
+
       // Rebuild pick3D array from existing picks
-      const existingPicks = (match.draftState.picks[myPlayerIndex] || []) as DraftCard[];
+      const existingPicks = (match.draftState.picks[myPlayerIndex] ||
+        []) as DraftCard[];
       if (existingPicks.length > 0) {
         const rebuiltPick3D: Pick3D[] = existingPicks.map((card, idx) => ({
           id: idx + 1,
@@ -247,51 +276,64 @@ export default function EnhancedOnlineDraft3DScreen({
     const handleDraftUpdate = (state: unknown) => {
       const s = state as DraftState;
       setDraftState(s);
-      console.log(`[EnhancedOnlineDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`);
-      
+      console.log(
+        `[EnhancedOnlineDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
+      );
+
       if (s.phase === "picking") {
         setStaged(null);
         setReady(false);
       }
-      
+
       if (s.phase === "complete") {
         const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
-        console.log(`[EnhancedOnlineDraft3D] Draft complete! Picked ${mine.length} cards`);
-        
+        console.log(
+          `[EnhancedOnlineDraft3D] Draft complete! Picked ${mine.length} cards`
+        );
+
         try {
           if (matchId) {
-            localStorage.setItem(`draftedCards_${matchId}`, JSON.stringify(mine));
+            localStorage.setItem(
+              `draftedCards_${matchId}`,
+              JSON.stringify(mine)
+            );
           }
         } catch (err) {
-          console.error(`[EnhancedOnlineDraft3D] Failed to save draft data:`, err);
+          console.error(
+            `[EnhancedOnlineDraft3D] Failed to save draft data:`,
+            err
+          );
         }
-        
+
         setTimeout(() => {
           if (matchId) {
             router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
           }
         }, 600);
-        
+
         onDraftComplete(mine);
       }
     };
 
     const handlePlayerReady = (message: CustomMessage) => {
-      if (message.type === 'playerReady') {
+      if (message.type === "playerReady") {
         const readyMessage = message as PlayerReadyMessage;
-        setPlayerReadyStates(prev => ({ ...prev, [readyMessage.playerKey]: readyMessage.ready }));
+        setPlayerReadyStates((prev) => ({
+          ...prev,
+          [readyMessage.playerKey]: readyMessage.ready,
+        }));
       }
     };
 
     const offDraft = transport.on("draftUpdate", handleDraftUpdate);
     const offMessage = transport.on("message", handlePlayerReady);
-    
+
     return () => {
       try {
         offDraft();
         offMessage?.();
       } catch (err) {
-        console.warn('Error cleaning up transport listeners:', err);
+        console.warn("Error cleaning up transport listeners:", err);
       }
     };
   }, [transport, myPlayerIndex, onDraftComplete, matchId, router]);
@@ -334,22 +376,26 @@ export default function EnhancedOnlineDraft3DScreen({
   useEffect(() => {
     if (draftState.phase === "picking" && amPicker) {
       setReady(false);
-      
+
       // Show pack choice overlay at start of each pack
-      if (draftState.pickNumber === 1 && !packChoiceOverlay && shownPackOverlayForRound !== draftState.packIndex) {
+      if (
+        draftState.pickNumber === 1 &&
+        !packChoiceOverlay &&
+        shownPackOverlayForRound !== draftState.packIndex
+      ) {
         setPackChoiceOverlay(true);
         setShownPackOverlayForRound(draftState.packIndex);
         return;
       }
-      
+
       // Auto-pick if only one card left
       if (myPack.length === 1 && !staged && !ready) {
         const lastCard = myPack[0];
         setStaged({ idx: 0, x: STAGE_CLICK_POS.x, z: STAGE_CLICK_POS.z });
-        
+
         setTimeout(() => {
           if (!transport || !match) return;
-          
+
           setReady(true);
           transport.makeDraftPick({
             matchId: match.id,
@@ -361,142 +407,189 @@ export default function EnhancedOnlineDraft3DScreen({
         }, 500);
       }
     }
-  }, [draftState, amPicker, staged, ready, myPack, transport, match, packChoiceOverlay, shownPackOverlayForRound]);
+  }, [
+    draftState,
+    amPicker,
+    staged,
+    ready,
+    myPack,
+    transport,
+    match,
+    packChoiceOverlay,
+    shownPackOverlayForRound,
+  ]);
 
   // Enhanced Pick & Pass with staging mechanics (from single-player)
-  const commitPickAndPass = useCallback((cardIdx: number, wx: number, wz: number) => {
-    if (!transport || !match || !amPicker) return;
-    
-    const card = myPack[cardIdx];
-    if (!card) return;
+  const commitPickAndPass = useCallback(
+    (cardIdx: number, wx: number, wz: number) => {
+      if (!transport || !match || !amPicker) return;
 
-    console.log(`[EnhancedOnlineDraft3D] commitPickAndPass -> cardId=${card.id}`);
-    
-    setReady(true);
-    
-    // Add picked card to 3D board display immediately
-    const boosterCard = draftCardToBoosterCard(card);
-    const newPick: Pick3D = {
-      id: nextPickId,
-      card: boosterCard,
-      x: wx,
-      z: wz,
-    };
-    setPick3D(prev => [...prev, newPick]);
-    setNextPickId(prev => prev + 1);
-    
-    // Send stack interaction for enhanced multiplayer feedback
-    sendStackInteraction('pick', [card.id], 'current-pack', 'picked-cards', {
-      targetPosition: { x: wx, y: 0.1, z: wz },
-      userInitiated: true,
-      hasAnimation: true,
-    });
+      const card = myPack[cardIdx];
+      if (!card) return;
 
-    try {
-      transport.makeDraftPick({
-        matchId: match.id,
-        cardId: card.id,
-        packIndex: draftState.packIndex,
-        pickNumber: draftState.pickNumber,
+      console.log(
+        `[EnhancedOnlineDraft3D] commitPickAndPass -> cardId=${card.id}`
+      );
+
+      setReady(true);
+
+      // Add picked card to 3D board display immediately
+      const boosterCard = draftCardToBoosterCard(card);
+      const newPick: Pick3D = {
+        id: nextPickId,
+        card: boosterCard,
+        x: wx,
+        z: wz,
+      };
+      setPick3D((prev) => [...prev, newPick]);
+      setNextPickId((prev) => prev + 1);
+
+      // Send stack interaction for enhanced multiplayer feedback
+      sendStackInteraction("pick", [card.id], "current-pack", "picked-cards", {
+        targetPosition: { x: wx, y: 0.1, z: wz },
+        userInitiated: true,
+        hasAnimation: true,
       });
-    } catch (err) {
-      console.error(`[EnhancedOnlineDraft3D] makeDraftPick error:`, err);
-    }
-    
-    // Clear staged state
-    setStaged(null);
-    setReadyIdx(null);
-    setSelectedRowIndex(null);
-  }, [transport, match, amPicker, myPack, draftCardToBoosterCard, nextPickId, sendStackInteraction, draftState]);
 
-  // Enhanced spacebar handling (from single-player)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!amPicker || !staged) return;
-      if (e.code !== "Space") return;
-      
-      const ae = document.activeElement as HTMLElement | null;
-      const isTyping = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
-      if (isTyping) return;
-      
-      e.preventDefault();
-      commitPickAndPass(staged.idx, staged.x, staged.z);
-    };
-    
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [amPicker, staged, commitPickAndPass]);
+      try {
+        transport.makeDraftPick({
+          matchId: match.id,
+          cardId: card.id,
+          packIndex: draftState.packIndex,
+          pickNumber: draftState.pickNumber,
+        });
+      } catch (err) {
+        console.error(`[EnhancedOnlineDraft3D] makeDraftPick error:`, err);
+      }
+
+      // Clear staged state
+      setStaged(null);
+      setReadyIdx(null);
+      setSelectedRowIndex(null);
+    },
+    [
+      transport,
+      match,
+      amPicker,
+      myPack,
+      draftCardToBoosterCard,
+      nextPickId,
+      sendStackInteraction,
+      draftState,
+    ]
+  );
 
   // Ready state management
   const handleToggleReady = useCallback(async () => {
     if (!transport || !match) return;
-    
+
     const newReadyState = !playerReadyStates[myPlayerKey];
-    setPlayerReadyStates(prev => ({ ...prev, [myPlayerKey]: newReadyState }));
-    
+    setPlayerReadyStates((prev) => ({ ...prev, [myPlayerKey]: newReadyState }));
+
     try {
       const message: PlayerReadyMessage = {
-        type: 'playerReady',
+        type: "playerReady",
         playerKey: myPlayerKey,
-        ready: newReadyState
+        ready: newReadyState,
       };
       await transport.sendMessage?.(message);
     } catch (err) {
-      console.error('Failed to send ready state:', err);
+      console.error("Failed to send ready state:", err);
     }
   }, [transport, match, myPlayerKey, playerReadyStates]);
 
-  // Start draft
-  const handleStartDraft = useCallback(async () => {
-    if (!transport || !match) return;
-    if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
-    
-    setError(null);
-    setLoading(true);
-    try {
-      const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
-      await transport.startDraft?.({ matchId: match.id, draftConfig });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start draft");
-    } finally {
-      setLoading(false);
+
+// Start draft
+const handleStartDraft = useCallback(async () => {
+  if (!transport || !match) return;
+  if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
+
+  setError(null);
+  setLoading(true);
+  try {
+    const baseCfg = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
+    const setMix = Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0 ? baseCfg.setMix : ["Beta"];
+    const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
+    let packCounts: Record<string, number> | undefined = undefined;
+    if (baseCfg) {
+      const bc = baseCfg as unknown as { packCounts?: Record<string, number> };
+      const pc = bc.packCounts;
+      if (pc && typeof pc === 'object') {
+      const total = Object.values(pc).reduce((a, b) => a + (Number(b) || 0), 0);
+      packCounts = total === packCount ? pc : undefined;
+      }
     }
-  }, [transport, match, playerReadyStates]);
+    if (!packCounts) {
+      // Evenly distribute packCount across setMix
+      const counts: Record<string, number> = {};
+      const n = setMix.length;
+      for (const s of setMix) counts[s] = 0;
+      const base = Math.floor(packCount / n);
+      const rem = packCount % n;
+      setMix.forEach((s, i) => {
+        counts[s] = base + (i < rem ? 1 : 0);
+      });
+      packCounts = counts;
+    }
+    const draftConfig = { ...baseCfg, setMix, packCount, packCounts } as typeof baseCfg & { packCounts: Record<string, number> };
+    await transport.startDraft?.({ matchId: match.id, draftConfig });
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to start draft");
+  } finally {
+    setLoading(false);
+  }
+}, [transport, match, playerReadyStates]);
 
   // Pack choice handling
-  const handlePackChoice = useCallback(async (packIndex: number) => {
-    if (!transport || !match) return;
-    
-    try {
-      const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15, packCounts: {} };
-      const packCounts = draftConfig.packCounts || {};
-      const packSequence: string[] = [];
-      
-      for (const [setName, count] of Object.entries(packCounts)) {
-        for (let i = 0; i < count; i++) {
-          packSequence.push(setName);
-        }
-      }
-      
-      const availableSets = packSequence.length > 0 ? packSequence : (draftConfig.setMix || ["Beta"]);
-      const setChoice = availableSets[packIndex] || availableSets[packIndex % availableSets.length];
-      
-      transport.chooseDraftPack?.({
-        matchId: match.id,
-        setChoice,
-        packIndex: draftState.packIndex
-      });
-    } catch (err) {
-      console.error(`[EnhancedOnlineDraft3D] chooseDraftPack error:`, err);
-    }
+  const handlePackChoice = useCallback(
+    async (packIndex: number) => {
+      if (!transport || !match) return;
 
-    setUsedPacks(prev => [...prev, packIndex]);
-    setPackChoiceOverlay(false);
-  }, [draftState.packIndex, transport, match]);
+      try {
+        const draftConfig = match.draftConfig ?? {
+          setMix: ["Beta"],
+          packCount: 3,
+          packSize: 15,
+          packCounts: {},
+        };
+        const packCounts = draftConfig.packCounts || {};
+        const packSequence: string[] = [];
+
+        for (const [setName, count] of Object.entries(packCounts)) {
+          for (let i = 0; i < count; i++) {
+            packSequence.push(setName);
+          }
+        }
+
+        const availableSets =
+          packSequence.length > 0
+            ? packSequence
+            : draftConfig.setMix || ["Beta"];
+        const setChoice =
+          availableSets[packIndex] ||
+          availableSets[packIndex % availableSets.length];
+
+        transport.chooseDraftPack?.({
+          matchId: match.id,
+          setChoice,
+          packIndex: draftState.packIndex,
+        });
+      } catch (err) {
+        console.error(`[EnhancedOnlineDraft3D] chooseDraftPack error:`, err);
+      }
+
+      setUsedPacks((prev) => [...prev, packIndex]);
+      setPackChoiceOverlay(false);
+    },
+    [draftState.packIndex, transport, match]
+  );
 
   // Enhanced stats calculations (from single-player)
   const yourCounts = useMemo(() => {
-    const map = new Map<number, { name: string; rarity: string; count: number }>();
+    const map = new Map<
+      number,
+      { name: string; rarity: string; count: number }
+    >();
     for (const pick of pick3D) {
       const it = map.get(pick.card.cardId) || {
         name: pick.card.cardName,
@@ -570,10 +663,10 @@ export default function EnhancedOnlineDraft3DScreen({
   }, [stackPositions]);
 
   const needsPackChoice =
-    draftState.phase === "picking" && 
-    amPicker && 
-    draftState.pickNumber === 1 && 
-    !staged && 
+    draftState.phase === "picking" &&
+    amPicker &&
+    draftState.pickNumber === 1 &&
+    !staged &&
     shownPackOverlayForRound !== draftState.packIndex;
 
   // UI: Lobby (phase waiting)
@@ -581,8 +674,13 @@ export default function EnhancedOnlineDraft3DScreen({
     return (
       <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-white mb-6">Enhanced Draft Lobby</h2>
-          
+          <h2 className="text-3xl font-bold text-white mb-6">
+            Enhanced Draft Lobby
+          </h2>
+          {rtc.featureEnabled && (
+            <SeatMediaControls rtc={rtc} className="mx-auto mb-4" />
+          )}
+
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="bg-slate-800 rounded-lg p-6">
               <h3 className="text-xl font-semibold text-white mb-4">Players</h3>
@@ -591,19 +689,37 @@ export default function EnhancedOnlineDraft3DScreen({
                   <div key={key} className="flex items-center justify-between">
                     <span className="text-slate-300">{name}</span>
                     <div className="flex items-center gap-2">
-                      <span className={playerReadyStates[key as keyof typeof playerReadyStates] ? "text-green-400" : "text-slate-400"}>
-                        {playerReadyStates[key as keyof typeof playerReadyStates] ? "Ready" : "Not Ready"}
+                      <span
+                        className={
+                          playerReadyStates[
+                            key as keyof typeof playerReadyStates
+                          ]
+                            ? "text-green-400"
+                            : "text-slate-400"
+                        }
+                      >
+                        {playerReadyStates[
+                          key as keyof typeof playerReadyStates
+                        ]
+                          ? "Ready"
+                          : "Not Ready"}
                       </span>
                       {myPlayerKey === key && (
                         <button
                           onClick={handleToggleReady}
                           className={`px-3 py-1 rounded text-sm font-medium ${
-                            playerReadyStates[key as keyof typeof playerReadyStates]
-                              ? "bg-red-600 hover:bg-red-700 text-white" 
+                            playerReadyStates[
+                              key as keyof typeof playerReadyStates
+                            ]
+                              ? "bg-red-600 hover:bg-red-700 text-white"
                               : "bg-green-600 hover:bg-green-700 text-white"
                           }`}
                         >
-                          {playerReadyStates[key as keyof typeof playerReadyStates] ? "Not Ready" : "Ready"}
+                          {playerReadyStates[
+                            key as keyof typeof playerReadyStates
+                          ]
+                            ? "Not Ready"
+                            : "Ready"}
                         </button>
                       )}
                     </div>
@@ -613,21 +729,24 @@ export default function EnhancedOnlineDraft3DScreen({
             </div>
 
             <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Enhanced Draft Settings</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Enhanced Draft Settings
+              </h3>
               <div className="space-y-2 text-slate-300">
-                <div>Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}</div>
+                <div>
+                  Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}
+                </div>
                 <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
                 <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
                 <div>Players: 2</div>
-                <div className="text-yellow-400">✨ Enhanced 3D Interface</div>
-                <div className="text-green-400">🎮 Advanced Hand Management</div>
-                <div className="text-blue-400">📊 Real-time Statistics</div>
               </div>
             </div>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">{error}</div>
+            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+              {error}
+            </div>
           )}
 
           <button
@@ -635,12 +754,11 @@ export default function EnhancedOnlineDraft3DScreen({
             disabled={loading || !playerReadyStates.p1 || !playerReadyStates.p2}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
-            {loading 
-              ? "Starting Enhanced Draft..." 
-              : (!playerReadyStates.p1 || !playerReadyStates.p2)
-                ? "Waiting for both players to be ready..."
-                : "Start Enhanced Draft"
-            }
+            {loading
+              ? "Starting Enhanced Draft..."
+              : !playerReadyStates.p1 || !playerReadyStates.p2
+              ? "Waiting for both players to be ready..."
+              : "Start Enhanced Draft"}
           </button>
         </div>
       </div>
@@ -656,9 +774,12 @@ export default function EnhancedOnlineDraft3DScreen({
         packSequence.push(setName);
       }
     }
-    const availableSets = packSequence.length > 0 ? packSequence : (match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"]);
-    const packs = [0, 1, 2]; 
-    
+    const availableSets =
+      packSequence.length > 0
+        ? packSequence
+        : match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"];
+    const packs = [0, 1, 2];
+
     return (
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
@@ -668,7 +789,9 @@ export default function EnhancedOnlineDraft3DScreen({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
               const isUsed = usedPacks.includes(packIdx);
-              const setName = availableSets[packIdx] || availableSets[packIdx % availableSets.length];
+              const setName =
+                availableSets[packIdx] ||
+                availableSets[packIdx % availableSets.length];
               const assetName = (() => {
                 const s = (setName || "").toLowerCase();
                 if (s.includes("arthur")) return "arthurian-booster.png";
@@ -676,19 +799,23 @@ export default function EnhancedOnlineDraft3DScreen({
                 if (s.includes("beta")) return "alphabeta-booster.png";
                 return "alphabeta-booster.png";
               })();
-              
+
               return (
                 <button
                   key={`pack-opt-${packIdx}`}
                   onClick={() => !isUsed && handlePackChoice(packIdx)}
                   disabled={isUsed}
                   className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left ${
-                    isUsed ? "opacity-40 cursor-not-allowed" : "hover:bg-black/50"
+                    isUsed
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-black/50"
                   }`}
                 >
-                  <div className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
-                    !isUsed ? "group-hover:ring-white/30" : ""
-                  }`}>
+                  <div
+                    className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
+                      !isUsed ? "group-hover:ring-white/30" : ""
+                    }`}
+                  >
                     {assetName ? (
                       <Image
                         src={`/api/assets/${assetName}`}
@@ -741,6 +868,14 @@ export default function EnhancedOnlineDraft3DScreen({
             <Board noRaycast={true} />
           </Physics>
 
+          {/* Seat Video planes at player positions (fixed orientation toward board) */}
+          {rtc.featureEnabled && (
+            <>
+              <SeatVideo3D who={myPlayerKey} stream={rtc.localStream} />
+              <SeatVideo3D who={opponentKey} stream={rtc.remoteStream} />
+            </>
+          )}
+
           <TextureCache />
 
           {/* Enhanced Mouse tracking for precise card hover detection */}
@@ -760,107 +895,124 @@ export default function EnhancedOnlineDraft3DScreen({
           />
 
           {/* Enhanced Draft Pack Hand (from single-player) */}
-          {draftState.phase !== "complete" && !needsPackChoice && packAsBoosterCards.length > 0 && (
-            <DraftPackHand3D
-              cards={packAsBoosterCards}
-              disabled={!amPicker}
-              hiddenIndex={staged?.idx ?? null}
-              onDragChange={setOrbitLocked}
-              getTopRenderOrder={getTopRenderOrder}
-              onHoverInfo={(info) => {
-                if (info) {
-                  showCardPreview(info);
-                } else {
-                  const currentSlug = currentHoverCardRef.current;
-                  if (currentSlug) {
-                    const isHandCard = packAsBoosterCards.some(c => c.slug === currentSlug);
-                    if (isHandCard) {
-                      const sel = selectedRowIndex;
-                      if (sel != null) {
-                        const c = packAsBoosterCards[sel];
-                        if (c) showCardPreview({ slug: c.slug, name: c.cardName, type: c.type ?? null });
-                        else hideCardPreview();
-                      } else hideCardPreview();
-                    }
-                  }
-                }
-              }}
-              onDragMove={(idx, wx, wz) => {
-                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-                if (d > PICK_RADIUS) setReadyIdx(idx);
-                else if (readyIdx === idx) setReadyIdx(null);
-              }}
-              onRelease={(idx, wx, wz) => {
-                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-                if (d > PICK_RADIUS) {
-                  setStaged({ idx, x: wx, z: wz });
-                  setSelectedRowIndex(null);
-                  const c = packAsBoosterCards[idx];
-                  if (c) showCardPreview({ slug: c.slug, name: c.cardName, type: c.type ?? null });
-                } else if (staged && staged.idx === idx) {
-                  setStaged(null);
-                }
-              }}
-              selectedIndex={selectedRowIndex}
-              onSelectIndex={(idx) => {
-                setSelectedRowIndex(idx);
-                if (idx != null) {
-                  setStaged({
-                    idx,
-                    x: STAGE_CLICK_POS.x,
-                    z: STAGE_CLICK_POS.z,
-                  });
-                  setSelectedRowIndex(null);
-                  const c = packAsBoosterCards[idx];
-                  if (c) showCardPreview({ slug: c.slug, name: c.cardName, type: c.type ?? null });
-                } else {
-                  hideCardPreview();
-                }
-              }}
-              orbitLocked={orbitLocked}
-            />
-          )}
-
-          {/* Enhanced staged card representation */}
-          {staged &&
+          {draftState.phase !== "complete" &&
             !needsPackChoice &&
-            packAsBoosterCards[staged.idx] && (
-              <DraggableCard3D
-                key={`staged-${draftState.packIndex}-${draftState.pickNumber}-${staged.idx}`}
-                slug={packAsBoosterCards[staged.idx]!.slug}
-                isSite={(packAsBoosterCards[staged.idx]!.type || "")
-                  .toLowerCase()
-                  .includes("site")}
-                x={staged.x}
-                z={staged.z}
-                onDrop={(wx, wz) => {
-                  setStaged((prev) =>
-                    prev && prev.idx === staged.idx
-                      ? { ...prev, x: wx, z: wz }
-                      : prev
-                  );
-                }}
+            packAsBoosterCards.length > 0 && (
+              <DraftPackHand3D
+                cards={packAsBoosterCards}
+                disabled={!amPicker}
+                hiddenIndex={staged?.idx ?? null}
                 onDragChange={setOrbitLocked}
                 getTopRenderOrder={getTopRenderOrder}
-                lockUpright
-                onHoverChange={(hover) => {
-                  if (hover && !orbitLocked) {
-                    const c = packAsBoosterCards[staged.idx]!;
-                    showCardPreview({
-                      slug: c.slug,
-                      name: c.cardName,
-                      type: c.type,
-                    });
+                onHoverInfo={(info) => {
+                  if (info) {
+                    showCardPreview(info);
+                  } else {
+                    const currentSlug = currentHoverCardRef.current;
+                    if (currentSlug) {
+                      const isHandCard = packAsBoosterCards.some(
+                        (c) => c.slug === currentSlug
+                      );
+                      if (isHandCard) {
+                        const sel = selectedRowIndex;
+                        if (sel != null) {
+                          const c = packAsBoosterCards[sel];
+                          if (c)
+                            showCardPreview({
+                              slug: c.slug,
+                              name: c.cardName,
+                              type: c.type ?? null,
+                            });
+                          else hideCardPreview();
+                        } else hideCardPreview();
+                      }
+                    }
                   }
                 }}
-                onRelease={(wx, wz) => {
+                onDragMove={(idx, wx, wz) => {
                   const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-                  if (d <= PICK_RADIUS) {
+                  if (d > PICK_RADIUS) setReadyIdx(idx);
+                  else if (readyIdx === idx) setReadyIdx(null);
+                }}
+                onRelease={(idx, wx, wz) => {
+                  const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                  if (d > PICK_RADIUS) {
+                    setStaged({ idx, x: wx, z: wz });
+                    setSelectedRowIndex(null);
+                    const c = packAsBoosterCards[idx];
+                    if (c)
+                      showCardPreview({
+                        slug: c.slug,
+                        name: c.cardName,
+                        type: c.type ?? null,
+                      });
+                  } else if (staged && staged.idx === idx) {
                     setStaged(null);
                   }
                 }}
+                selectedIndex={selectedRowIndex}
+                onSelectIndex={(idx) => {
+                  setSelectedRowIndex(idx);
+                  if (idx != null) {
+                    setStaged({
+                      idx,
+                      x: STAGE_CLICK_POS.x,
+                      z: STAGE_CLICK_POS.z,
+                    });
+                    setSelectedRowIndex(null);
+                    const c = packAsBoosterCards[idx];
+                    if (c)
+                      showCardPreview({
+                        slug: c.slug,
+                        name: c.cardName,
+                        type: c.type ?? null,
+                      });
+                  } else {
+                    hideCardPreview();
+                  }
+                }}
+                orbitLocked={orbitLocked}
               />
             )}
+
+          {/* Enhanced staged card representation */}
+          {staged && !needsPackChoice && packAsBoosterCards[staged.idx] && (
+            <DraggableCard3D
+              key={`staged-${draftState.packIndex}-${draftState.pickNumber}-${staged.idx}`}
+              slug={packAsBoosterCards[staged.idx]!.slug}
+              isSite={(packAsBoosterCards[staged.idx]!.type || "")
+                .toLowerCase()
+                .includes("site")}
+              x={staged.x}
+              z={staged.z}
+              onDrop={(wx, wz) => {
+                setStaged((prev) =>
+                  prev && prev.idx === staged.idx
+                    ? { ...prev, x: wx, z: wz }
+                    : prev
+                );
+              }}
+              onDragChange={setOrbitLocked}
+              getTopRenderOrder={getTopRenderOrder}
+              lockUpright
+              onHoverChange={(hover) => {
+                if (hover && !orbitLocked) {
+                  const c = packAsBoosterCards[staged.idx]!;
+                  showCardPreview({
+                    slug: c.slug,
+                    name: c.cardName,
+                    type: c.type,
+                  });
+                }
+              }}
+              onRelease={(wx, wz) => {
+                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                if (d <= PICK_RADIUS) {
+                  setStaged(null);
+                }
+              }}
+            />
+          )}
 
           {/* Enhanced picked cards with proper sorting */}
           {pick3D.length > 0 && (
@@ -950,7 +1102,9 @@ export default function EnhancedOnlineDraft3DScreen({
         {/* Enhanced Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
-            <div className="text-3xl font-fantaisie text-white">Enhanced Draft</div>
+            <div className="text-3xl font-fantaisie text-white">
+              Enhanced Draft
+            </div>
             <button
               onClick={() => setHelpOpen(true)}
               className="h-9 w-9 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
@@ -1017,9 +1171,14 @@ export default function EnhancedOnlineDraft3DScreen({
                 )}
               </button>
               <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
-                Pack {draftState.packIndex + 1} / 3 • Pick {draftState.pickNumber} / 15 • 
+                Pack {draftState.packIndex + 1} / 3 • Pick{" "}
+                {draftState.pickNumber} / 15 •
                 {draftState.phase === "passing" && (
-                  <span> Passing {draftState.packDirection === "left" ? "Left" : "Right"}</span>
+                  <span>
+                    {" "}
+                    Passing{" "}
+                    {draftState.packDirection === "left" ? "Left" : "Right"}
+                  </span>
                 )}
               </div>
             </div>
@@ -1027,7 +1186,9 @@ export default function EnhancedOnlineDraft3DScreen({
 
           <div className="ml-auto flex items-center gap-4 text-slate-300">
             <div>Your picks: {myPicks.length}</div>
-            <div>{playerNames[opponentKey]} picks: {oppPicks.length}</div>
+            <div>
+              {playerNames[opponentKey]} picks: {oppPicks.length}
+            </div>
           </div>
         </div>
 
@@ -1055,7 +1216,7 @@ export default function EnhancedOnlineDraft3DScreen({
                     </button>
                   </div>
                 </div>
-                
+
                 {/* Enhanced stats row */}
                 {pick3D.length > 0 && (
                   <div className="mb-2 text-[11px] text-white/90 flex flex-wrap items-center gap-3 pointer-events-auto">
@@ -1094,7 +1255,7 @@ export default function EnhancedOnlineDraft3DScreen({
                     )}
                   </div>
                 )}
-                
+
                 {/* Enhanced picks list */}
                 {picksOpen && (
                   <div
@@ -1102,12 +1263,21 @@ export default function EnhancedOnlineDraft3DScreen({
                   >
                     {yourCounts.map((it) => {
                       const meta = metaByCardId[it.cardId];
-                      const t = (meta?.thresholds as Record<string, number> | undefined) || {};
+                      const t =
+                        (meta?.thresholds as
+                          | Record<string, number>
+                          | undefined) || {};
                       const order = ["air", "water", "earth", "fire"] as const;
-                      const cardSlug = pick3D.find(p => p.card.cardId === it.cardId)?.card.slug;
-                      const cardType = pick3D.find(p => p.card.cardId === it.cardId)?.card.type;
-                      const isSite = (cardType || "").toLowerCase().includes("site");
-                      
+                      const cardSlug = pick3D.find(
+                        (p) => p.card.cardId === it.cardId
+                      )?.card.slug;
+                      const cardType = pick3D.find(
+                        (p) => p.card.cardId === it.cardId
+                      )?.card.type;
+                      const isSite = (cardType || "")
+                        .toLowerCase()
+                        .includes("site");
+
                       return (
                         <div
                           key={it.cardId}
@@ -1292,7 +1462,9 @@ export default function EnhancedOnlineDraft3DScreen({
               </div>
               <div className="space-y-4 text-sm opacity-90">
                 <div>
-                  <div className="font-medium mb-1 text-yellow-400">✨ Enhanced Features</div>
+                  <div className="font-medium mb-1 text-yellow-400">
+                    ✨ Enhanced Features
+                  </div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Advanced hand management with keyboard controls</li>
                     <li>Real-time card preview sharing with other players</li>
@@ -1305,16 +1477,25 @@ export default function EnhancedOnlineDraft3DScreen({
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Hover cards in your hand to preview (left side)</li>
                     <li>Click or drag cards outward to stage them</li>
-                    <li>Press <b>Spacebar</b> or click <b>Pick & Pass</b> to commit</li>
+                    <li>
+                      Press <b>Spacebar</b> or click <b>Pick & Pass</b> to
+                      commit
+                    </li>
                     <li>Drag staged cards back inside to unstage</li>
                   </ul>
                 </div>
                 <div>
                   <div className="font-medium mb-1">Keyboard controls</div>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li><b>Left/Right</b>: Browse cards in hand</li>
-                    <li><b>Enter</b>: Stage the focused card</li>
-                    <li><b>Space</b>: Pick & Pass if a card is staged</li>
+                    <li>
+                      <b>Left/Right</b>: Browse cards in hand
+                    </li>
+                    <li>
+                      <b>Enter</b>: Stage the focused card
+                    </li>
+                    <li>
+                      <b>Space</b>: Pick & Pass if a card is staged
+                    </li>
                   </ul>
                 </div>
                 <div>

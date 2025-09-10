@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma';
 import { TournamentFormat } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 
 export interface PlayerPairing {
   playerId: string;

@@ -4,14 +4,6 @@
  */
 
 import type { 
-  OnlineDraftState, 
-  PlayerDraftState, 
-  CardPreviewState, 
-  StackInteraction,
-  UIState,
-  PlayerPreferences
-} from '@/types/draft-models';
-import type { 
   Position3D, 
   EventPriority, 
   PreviewType, 
@@ -22,6 +14,14 @@ import type {
   BatchUpdateData,
   UIUpdateType
 } from '@/types/draft-3d-events';
+import type { 
+  OnlineDraftState, 
+  PlayerDraftState, 
+  CardPreviewState, 
+  StackInteraction,
+  UIState,
+  PlayerPreferences
+} from '@/types/draft-models';
 
 /**
  * Card Preview State Management

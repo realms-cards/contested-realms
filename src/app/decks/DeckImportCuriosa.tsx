@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function DeckImportCuriosa() {
   const enabled = process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";

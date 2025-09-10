@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useThree } from "@react-three/fiber";
-import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   SRGBColorSpace,
   Texture,
   TextureLoader,
   type WebGLRenderer,
 } from "three";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
 export interface UseCardTextureOptions {
   slug?: string;

@@ -1,8 +1,8 @@
 "use client";
 
+import { Gamepad2, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
-import { Gamepad2, Users, Zap } from "lucide-react";
 
 export default function Home() {
   // Set home page title

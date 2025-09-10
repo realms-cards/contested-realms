@@ -1,14 +1,15 @@
 "use client";
 
+import type { ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PlayerKey } from "@/lib/game/store";
-import { useGameStore } from "@/lib/game/store";
+import CardPlane from "@/lib/game/components/CardPlane";
 import {
   TILE_SIZE,
   CARD_SHORT,
   CARD_LONG,
 } from "@/lib/game/constants";
-import type { ThreeEvent } from "@react-three/fiber";
+import type { PlayerKey } from "@/lib/game/store";
+import { useGameStore } from "@/lib/game/store";
 // No label text for tokens pile
 import {
   TOKEN_DEFS,
@@ -16,7 +17,6 @@ import {
   tokenSlug,
   newTokenInstanceId,
 } from "@/lib/game/tokens";
-import CardPlane from "@/lib/game/components/CardPlane";
 
 export interface TokenPile3DProps {
   owner: PlayerKey; // p1 is TOP, p2 is BOTTOM

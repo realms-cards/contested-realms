@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { SocketTransport } from "@/lib/net/socketTransport";
 import type {
   LobbyInfo,
   MatchInfo,
@@ -11,6 +10,7 @@ import type {
   LobbyVisibility,
   ChatScope,
 } from "@/lib/net/protocol";
+import type { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 
 export type OnlineContextValue = {
@@ -24,7 +24,7 @@ export type OnlineContextValue = {
   ready: boolean;
   toggleReady: () => void;
   joinLobby: (id?: string) => Promise<void>;
-  createLobby: (options?: { visibility?: LobbyVisibility; maxPlayers?: number }) => Promise<void>;
+  createLobby: (options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }) => Promise<void>;
   leaveLobby: () => void;
   startMatch: (matchConfig?: StartMatchConfig) => void;
   joinMatch: (id: string) => Promise<void>;

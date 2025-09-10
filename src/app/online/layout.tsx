@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { OnlineContext } from "@/app/online/online-context";
+import type { OnlineContextValue } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
-import { SocketTransport } from "@/lib/net/socketTransport";
+import { useGameStore } from "@/lib/game/store";
 import type {
   LobbyInfo,
   MatchInfo,
@@ -15,11 +17,9 @@ import type {
   LobbyVisibility,
   ChatScope,
 } from "@/lib/net/protocol";
+import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
-import { useGameStore } from "@/lib/game/store";
 
-import { OnlineContext } from "@/app/online/online-context";
-import type { OnlineContextValue } from "@/app/online/online-context";
 
 
 export default function OnlineLayout({
@@ -357,7 +357,7 @@ export default function OnlineLayout({
       // Reset local ready state on lobby join; server updates will resync this shortly
       setReady(false);
     },
-    createLobby: async (options?: { visibility?: LobbyVisibility; maxPlayers?: number }) => {
+    createLobby: async (options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }) => {
       await transport.createLobby(options);
       // Reset local ready state on lobby creation; server updates will resync this shortly
       setReady(false);

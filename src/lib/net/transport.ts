@@ -85,7 +85,7 @@ export interface GameTransport {
   connect(opts: { displayName: string; playerId?: string }): Promise<void>;
   disconnect(): void;
 
-  createLobby(options?: { visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }>;
+  createLobby(options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }>;
   joinLobby(lobbyId?: string): Promise<{ lobbyId: string }>; // if omitted, auto-join/create
   joinMatch(matchId: string): Promise<void>;
   leaveMatch(): void;

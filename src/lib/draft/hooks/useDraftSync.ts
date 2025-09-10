@@ -6,8 +6,8 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useSocket } from '@/lib/hooks/useSocket';
 import { DraftSyncManager } from '../sync/DraftSyncManager';
-import { PickSyncSocketHandler } from '../sync/socketHandlers';
 import { useDraftSyncStore } from '../sync/DraftSyncStore';
+import { PickSyncSocketHandler } from '../sync/socketHandlers';
 import type { 
   DraftSession, 
   PlayerDraftState, 

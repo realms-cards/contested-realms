@@ -1,5 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import Image from "next/image";
+import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   useMemo,
   useRef,
@@ -8,23 +12,19 @@ import {
   useEffect,
   Suspense,
 } from "react";
-import dynamic from "next/dynamic";
-import { useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
-import Image from "next/image";
-import TextureCache from "@/lib/game/components/TextureCache";
+import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
+import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
+import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
+import { TournamentControls } from "@/components/deck-editor";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import {
   Pick3D,
   CardMeta,
   computeStackPositions,
 } from "@/lib/game/cardSorting";
-import { TournamentControls } from "@/components/deck-editor";
-import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
-import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
-import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
-import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
+import TextureCache from "@/lib/game/components/TextureCache";
 import { useCardHover, CardPreviewData } from "@/lib/game/hooks/useCardHover";
 
 const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
@@ -2077,7 +2077,7 @@ function AuthenticatedDeckEditor() {
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
             <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
                   Deck Submitted!
                 </h2>

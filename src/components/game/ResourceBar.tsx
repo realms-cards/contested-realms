@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { Dice6 } from "lucide-react";
+import { useState } from "react";
 import { useGameStore } from "@/lib/game/store";
 
 interface ResourceBarProps {

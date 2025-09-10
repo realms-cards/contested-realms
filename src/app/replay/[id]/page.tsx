@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
-import { useParams, useRouter } from "next/navigation";
-import { SocketTransport } from "@/lib/net/socketTransport";
-import { useGameStore } from "@/lib/game/store";
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useState, useEffect, useCallback } from "react";
+import OnlineConsole from "@/components/game/OnlineConsole";
 import Board from "@/lib/game/Board";
 import TextureCache from "@/lib/game/components/TextureCache";
-import OnlineConsole from "@/components/game/OnlineConsole";
+import { useGameStore } from "@/lib/game/store";
+import { SocketTransport } from "@/lib/net/socketTransport";
 
 interface MatchRecording {
   matchId: string;

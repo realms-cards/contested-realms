@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 
 // Fantasy-themed word lists for generating lobby names
 const ADJECTIVES = [
@@ -28,15 +29,6 @@ function generateLobbyName(): string {
 }
 
 type PlayerInfo = { id: string; displayName: string };
-type LobbyInfo = {
-  id: string;
-  name?: string;
-  hostId: string;
-  status: "open" | "started" | string;
-  visibility?: "open" | "private" | string;
-  maxPlayers: number;
-  players: PlayerInfo[];
-};
 
 export type CreateLobbyConfig = {
   name: string;
@@ -53,27 +45,57 @@ export type CreateTournamentConfig = {
 
 export default function LobbiesCentral({
   lobbies,
+  tournaments,
   myId,
   joinedLobbyId,
   onJoin,
   onCreate,
   onCreateTournament,
+  onJoinTournament,
+  onLeaveTournament,
+  onUpdateTournamentSettings,
+  onToggleTournamentReady,
+  onStartTournament,
+  onEndTournament,
   onRefresh,
 }: {
   lobbies: LobbyInfo[];
+  tournaments: TournamentInfo[];
   myId: string | null;
   joinedLobbyId: string | null;
   onJoin: (lobbyId: string) => void;
   onCreate: (config: CreateLobbyConfig) => void;
   onCreateTournament?: (config: CreateTournamentConfig) => void;
+  onJoinTournament?: (tournamentId: string) => void;
+  onLeaveTournament?: (tournamentId: string) => void;
+  onUpdateTournamentSettings?: (tournamentId: string, settings: {
+    name?: string;
+    format?: "swiss" | "elimination" | "round_robin";
+    matchType?: "constructed" | "sealed" | "draft";
+    maxPlayers?: number;
+  }) => void;
+  onToggleTournamentReady?: (tournamentId: string, ready: boolean) => void;
+  onStartTournament?: (tournamentId: string) => void;
+  onEndTournament?: (tournamentId: string) => void;
   onRefresh: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
   const [hideStarted, setHideStarted] = useState(true);
   const [sortKey, setSortKey] = useState<"invited" | "playersAsc" | "playersDesc" | "status">("status");
+  const [showTournaments, setShowTournaments] = useState(true);
+  const [showLobbies, setShowLobbies] = useState(true);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [editingTournament, setEditingTournament] = useState<TournamentInfo | null>(null);
+  const [endTournamentConfirm, setEndTournamentConfirm] = useState<string | null>(null);
   const [tournamentOverlayOpen, setTournamentOverlayOpen] = useState(false);
+  
+  // Check if user is already engaged in a lobby or tournament
+  const isInLobby = joinedLobbyId !== null;
+  const joinedTournament = tournaments.find(t => t.registeredPlayers.some(p => p.id === myId) && t.status !== "completed");
+  const isInTournament = joinedTournament !== undefined;
+  const isEngaged = isInLobby || isInTournament;
   const [cfgName, setCfgName] = useState<string>("");
   const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">("open");
   const [cfgMaxPlayers, setCfgMaxPlayers] = useState<number>(2);
@@ -82,7 +104,7 @@ export default function LobbiesCentral({
   const [tournamentName, setTournamentName] = useState<string>("");
   const [tournamentFormat, setTournamentFormat] = useState<"swiss" | "elimination" | "round_robin">("swiss");
   const [tournamentMatchType, setTournamentMatchType] = useState<"constructed" | "sealed" | "draft">("sealed");
-  const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(8);
+  const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
 
   // Generate a random name when overlay opens
   const handleOverlayOpen = () => {
@@ -99,8 +121,10 @@ export default function LobbiesCentral({
     const q = query.trim().toLowerCase();
     const statusWeight = (s: string) => (s === "open" ? 0 : s === "started" ? 1 : 2);
     const list = lobbies.filter((l) => {
-      if (hideFull && l.players.length >= l.maxPlayers) return false;
-      if (hideStarted && l.status !== "open") return false;
+      const isJoined = l.players.some(p => p.id === myId);
+      // Don't hide joined lobbies even if they're full or started
+      if (hideFull && l.players.length >= l.maxPlayers && !isJoined) return false;
+      if (hideStarted && l.status !== "open" && !isJoined) return false;
       if (!q) return true;
       const hostName = l.players.find((p) => p.id === l.hostId)?.displayName?.toLowerCase() || "";
       const players = l.players.map((p) => p.displayName.toLowerCase()).join(" ");
@@ -126,10 +150,56 @@ export default function LobbiesCentral({
     return list;
   }, [lobbies, query, hideFull, hideStarted, sortKey, joinedLobbyId]);
 
+  // Filter tournaments
+  const filteredTournaments = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tournaments.filter(tournament => {
+      const isJoined = tournament.registeredPlayers.some(p => p.id === myId);
+      if (q && !tournament.name.toLowerCase().includes(q)) return false;
+      // Don't hide joined tournaments even if they're full or started
+      if (hideFull && tournament.registeredPlayers.length >= tournament.maxPlayers && !isJoined) return false;
+      if (hideStarted && tournament.status !== "registering" && !isJoined) return false;
+      return true;
+    }).sort((a, b) => {
+      // Sort by status first (registering before others)
+      const statusOrder = { registering: 0, draft_phase: 1, sealed_phase: 1, playing: 2, completed: 3 };
+      const aStatus = statusOrder[a.status as keyof typeof statusOrder] ?? 4;
+      const bStatus = statusOrder[b.status as keyof typeof statusOrder] ?? 4;
+      if (aStatus !== bStatus) return aStatus - bStatus;
+      
+      // Then by player count
+      return b.registeredPlayers.length - a.registeredPlayers.length;
+    });
+  }, [tournaments, query, hideFull, hideStarted, myId]);
+
   return (
     <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold opacity-90">Lobbies</div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm font-semibold text-white">Active Games</div>
+          <div className="flex items-center gap-2">
+            <button
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                showLobbies 
+                  ? "bg-blue-600/80 text-white" 
+                  : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+              }`}
+              onClick={() => setShowLobbies(!showLobbies)}
+            >
+              Lobbies ({lobbies.length})
+            </button>
+            <button
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                showTournaments 
+                  ? "bg-purple-600/80 text-white" 
+                  : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+              }`}
+              onClick={() => setShowTournaments(!showTournaments)}
+            >
+              Tournaments ({tournaments.length})
+            </button>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
@@ -138,15 +208,27 @@ export default function LobbiesCentral({
             Refresh
           </button>
           <button
-            className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs"
-            onClick={handleOverlayOpen}
+            className={`rounded px-3 py-1 text-xs ${
+              isEngaged 
+                ? "bg-slate-600/50 text-slate-400 cursor-not-allowed" 
+                : "bg-green-600/80 hover:bg-green-600"
+            }`}
+            onClick={isEngaged ? undefined : handleOverlayOpen}
+            disabled={isEngaged}
+            title={isEngaged ? `Already in ${isInLobby ? 'lobby' : 'tournament'}` : "Create a new lobby"}
           >
             Create Lobby
           </button>
           {onCreateTournament && (
             <button
-              className="rounded bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-3 py-1 text-xs font-semibold"
-              onClick={handleTournamentOverlayOpen}
+              className={`rounded px-3 py-1 text-xs font-semibold ${
+                isEngaged 
+                  ? "bg-slate-600/50 text-slate-400 cursor-not-allowed" 
+                  : "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              }`}
+              onClick={isEngaged ? undefined : handleTournamentOverlayOpen}
+              disabled={isEngaged}
+              title={isEngaged ? `Already in ${isInLobby ? 'lobby' : 'tournament'}` : "Create a new tournament"}
             >
               Create Tournament
             </button>
@@ -184,18 +266,21 @@ export default function LobbiesCentral({
       </div>
 
       <div className="divide-y divide-white/5 rounded-lg overflow-hidden ring-1 ring-white/10">
-        {filtered.map((l) => {
+        {showLobbies && filtered.map((l) => {
           const isMine = l.id === joinedLobbyId;
           const host = l.players.find((p) => p.id === l.hostId)?.displayName || "Host";
           const open = l.status === "open";
           const full = l.players.length >= l.maxPlayers;
           return (
             <div
-              key={l.id}
-              className={`flex items-center gap-3 px-3 py-2 bg-black/20 ${
+              key={`lobby-${l.id}`}
+              className={`flex items-center gap-3 px-3 py-2 bg-black/20 border-l-4 border-blue-500/50 ${
                 isMine ? "ring-1 ring-emerald-500/40 bg-emerald-500/5" : ""
               }`}
             >
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600/20 text-blue-300">
+                <span className="text-xs font-bold">L</span>
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="text-base font-bold text-white mb-1 truncate">
                   {l.name || "Unnamed Lobby"}
@@ -225,8 +310,14 @@ export default function LobbiesCentral({
                 <button
                   className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs disabled:opacity-40"
                   onClick={() => onJoin(l.id)}
-                  disabled={!open || full || l.id === joinedLobbyId}
-                  title={open ? (full ? "Lobby is full" : "Join lobby") : "Lobby not open"}
+                  disabled={!open || full || l.id === joinedLobbyId || (isEngaged && l.id !== joinedLobbyId)}
+                  title={
+                    l.id === joinedLobbyId ? "You are in this lobby" :
+                    !open ? "Lobby not open" :
+                    full ? "Lobby is full" :
+                    isEngaged ? `Already in ${isInLobby ? 'another lobby' : 'tournament'}` :
+                    "Join lobby"
+                  }
                 >
                   {l.id === joinedLobbyId ? "Joined" : full ? "Full" : "Join"}
                 </button>
@@ -234,8 +325,171 @@ export default function LobbiesCentral({
             </div>
           );
         })}
-        {filtered.length === 0 && (
+        
+        {showTournaments && filteredTournaments.map((tournament) => {
+          const isRegistered = tournament.registeredPlayers.some(p => p.id === myId);
+          const myRegistration = tournament.registeredPlayers.find(p => p.id === myId);
+          const isReady = myRegistration?.ready || false;
+          const canJoin = tournament.status === "registering" && !isRegistered && tournament.registeredPlayers.length < tournament.maxPlayers && !isEngaged;
+          const allPlayersReady = tournament.registeredPlayers.length >= 2 && tournament.registeredPlayers.every(p => p.ready);
+          const canStart = tournament.creatorId === myId && tournament.status === "registering" && allPlayersReady;
+          const statusColors = {
+            registering: "text-green-400",
+            draft_phase: "text-blue-400", 
+            sealed_phase: "text-blue-400",
+            playing: "text-yellow-400",
+            completed: "text-slate-400"
+          };
+          const statusColor = statusColors[tournament.status as keyof typeof statusColors] || "text-slate-400";
+          
+          return (
+            <div
+              key={`tournament-${tournament.id}`}
+              className={`flex items-center gap-3 px-3 py-2 bg-black/20 border-l-4 border-purple-500/50 ${
+                isRegistered ? "ring-1 ring-purple-500/40 bg-purple-500/5" : ""
+              }`}
+            >
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-purple-600/20 text-purple-300">
+                <span className="text-xs font-bold">T</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-base font-bold text-white mb-1 truncate">
+                  {tournament.name}
+                </div>
+                <div className="text-xs text-slate-300 space-y-1">
+                  <div>
+                    Format: {tournament.format} • Type: {tournament.matchType}
+                  </div>
+                  <div>
+                    Players: {tournament.registeredPlayers.length}/{tournament.maxPlayers} • 
+                    Round: {tournament.currentRound}/{tournament.totalRounds}
+                  </div>
+                  <div className={statusColor}>
+                    Status: {tournament.status.replace('_', ' ')}
+                  </div>
+                  {isRegistered && tournament.status === "registering" && (
+                    <div className={isReady ? "text-green-400" : "text-yellow-400"}>
+                      You: {isReady ? "Ready" : "Not Ready"}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {canJoin && onJoinTournament && (
+                  <button
+                    className="rounded bg-purple-600/80 hover:bg-purple-600 px-3 py-1 text-xs"
+                    onClick={() => onJoinTournament(tournament.id)}
+                  >
+                    Join
+                  </button>
+                )}
+                {isRegistered && tournament.status === "registering" && onLeaveTournament && (
+                  <button
+                    className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
+                    onClick={() => onLeaveTournament(tournament.id)}
+                  >
+                    Leave
+                  </button>
+                )}
+                {tournament.creatorId === myId && tournament.status === "registering" && onUpdateTournamentSettings && (
+                  <button
+                    className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs"
+                    onClick={() => {
+                      setEditingTournament(tournament);
+                      setSettingsModalOpen(true);
+                    }}
+                  >
+                    Settings
+                  </button>
+                )}
+                {isRegistered && tournament.status === "registering" && onToggleTournamentReady && (
+                  <button
+                    className={`rounded px-3 py-1 text-xs ${
+                      isReady 
+                        ? "bg-yellow-600/80 hover:bg-yellow-600 text-yellow-100" 
+                        : "bg-green-600/80 hover:bg-green-600 text-green-100"
+                    }`}
+                    onClick={() => onToggleTournamentReady(tournament.id, !isReady)}
+                  >
+                    {isReady ? "Not Ready" : "Ready"}
+                  </button>
+                )}
+                {canStart && onStartTournament && (
+                  <button
+                    className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100 font-medium"
+                    onClick={() => onStartTournament(tournament.id)}
+                  >
+                    Start Tournament
+                  </button>
+                )}
+                {tournament.creatorId === myId && tournament.status !== "completed" && onEndTournament && (
+                  <button
+                    className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
+                    onClick={() => setEndTournamentConfirm(tournament.id)}
+                  >
+                    End Tournament
+                  </button>
+                )}
+                {isRegistered && tournament.status === "draft_phase" && (
+                  <button
+                    className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
+                    onClick={() => window.location.href = `/online/play/tournament-${tournament.id}`}
+                  >
+                    Enter Draft
+                  </button>
+                )}
+                {isRegistered && tournament.status === "sealed_phase" && (
+                  <button
+                    className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs text-green-100"
+                    onClick={() => window.location.href = `/decks/editor-3d?mode=sealed&tournament=${tournament.id}`}
+                  >
+                    Build Deck
+                  </button>
+                )}
+                {isRegistered && tournament.status === "playing" && (
+                  <button
+                    className="rounded bg-orange-600/80 hover:bg-orange-600 px-3 py-1 text-xs text-orange-100"
+                    onClick={() => console.log(`View tournament ${tournament.id} matches - matches UI needs implementation`)}
+                  >
+                    View Matches
+                  </button>
+                )}
+                {isRegistered && tournament.status === "completed" && (
+                  <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
+                    Completed
+                  </div>
+                )}
+                {tournament.status === "registering" && !isRegistered && tournament.registeredPlayers.length >= tournament.maxPlayers && (
+                  <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
+                    Full
+                  </div>
+                )}
+                {tournament.status === "registering" && !isRegistered && tournament.registeredPlayers.length < tournament.maxPlayers && isEngaged && (
+                  <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
+                    In {isInLobby ? 'Lobby' : 'Tournament'}
+                  </div>
+                )}
+                {tournament.status !== "registering" && !isRegistered && (
+                  <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
+                    Started
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        
+        {showLobbies && showTournaments && filtered.length === 0 && filteredTournaments.length === 0 && (
+          <div className="px-3 py-8 text-center text-sm opacity-60">No games match your filters.</div>
+        )}
+        {showLobbies && !showTournaments && filtered.length === 0 && (
           <div className="px-3 py-8 text-center text-sm opacity-60">No lobbies match your filters.</div>
+        )}
+        {!showLobbies && showTournaments && filteredTournaments.length === 0 && (
+          <div className="px-3 py-8 text-center text-sm opacity-60">No tournaments match your filters.</div>
+        )}
+        {!showLobbies && !showTournaments && (
+          <div className="px-3 py-8 text-center text-sm opacity-60">Select lobby or tournament filters to view games.</div>
         )}
       </div>
 
@@ -397,6 +651,7 @@ export default function LobbiesCentral({
                   onChange={(e) => setTournamentMaxPlayers(parseInt(e.target.value))}
                   className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
                 >
+                  <option value={2}>2 Players</option>
                   <option value={4}>4 Players</option>
                   <option value={8}>8 Players</option>
                   <option value={16}>16 Players</option>
@@ -434,6 +689,214 @@ export default function LobbiesCentral({
           </div>
         </div>
       )}
+
+      {/* Tournament Settings Modal */}
+      {settingsModalOpen && editingTournament && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-lg border border-slate-700 w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-white mb-4">Tournament Settings</h3>
+              
+              <TournamentSettingsForm
+                tournament={editingTournament}
+                onSave={(settings) => {
+                  if (onUpdateTournamentSettings) {
+                    onUpdateTournamentSettings(editingTournament.id, settings);
+                  }
+                  setSettingsModalOpen(false);
+                  setEditingTournament(null);
+                }}
+                onCancel={() => {
+                  setSettingsModalOpen(false);
+                  setEditingTournament(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End Tournament Confirmation Modal */}
+      {endTournamentConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-lg border border-slate-700 w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-white mb-4">End Tournament</h3>
+              <p className="text-slate-300 mb-6">
+                Are you sure you want to end this tournament? This action cannot be undone and will 
+                complete the tournament immediately.
+              </p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setEndTournamentConfirm(null)}
+                  className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (onEndTournament && endTournamentConfirm) {
+                      onEndTournament(endTournamentConfirm);
+                    }
+                    setEndTournamentConfirm(null);
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-md transition-colors"
+                >
+                  End Tournament
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TournamentSettingsForm({
+  tournament,
+  onSave,
+  onCancel,
+}: {
+  tournament: TournamentInfo;
+  onSave: (settings: {
+    name?: string;
+    format?: "swiss" | "elimination" | "round_robin";
+    matchType?: "constructed" | "sealed" | "draft";
+    maxPlayers?: number;
+  }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(tournament.name);
+  const [format, setFormat] = useState(tournament.format);
+  const [matchType, setMatchType] = useState(tournament.matchType);
+  const [maxPlayers, setMaxPlayers] = useState(tournament.maxPlayers);
+
+  const handleSave = () => {
+    const settings: {
+      name?: string;
+      format?: "swiss" | "elimination" | "round_robin";
+      matchType?: "constructed" | "sealed" | "draft";
+      maxPlayers?: number;
+    } = {};
+    
+    if (name !== tournament.name) settings.name = name;
+    if (format !== tournament.format) settings.format = format;
+    if (matchType !== tournament.matchType) settings.matchType = matchType;
+    if (maxPlayers !== tournament.maxPlayers) settings.maxPlayers = maxPlayers;
+    
+    onSave(settings);
+  };
+
+  const hasChanges = 
+    name !== tournament.name ||
+    format !== tournament.format ||
+    matchType !== tournament.matchType ||
+    maxPlayers !== tournament.maxPlayers;
+
+  return (
+    <div className="space-y-4">
+      {/* Tournament Name */}
+      <div>
+        <label className="block text-xs font-medium mb-2">Tournament Name *</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            placeholder="Enter tournament name"
+            maxLength={50}
+          />
+          <button
+            type="button"
+            onClick={() => setName(generateLobbyName())}
+            className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+            title="Generate random name"
+          >
+            🎲
+          </button>
+        </div>
+      </div>
+
+      {/* Tournament Format */}
+      <div>
+        <label className="block text-xs font-medium mb-2">Format</label>
+        <div className="grid grid-cols-3 gap-2">
+          {["swiss", "elimination", "round_robin"].map((formatOption) => (
+            <button
+              key={formatOption}
+              className={`px-3 py-2 text-xs rounded transition-colors ${
+                format === formatOption
+                  ? "bg-blue-600/80 text-white"
+                  : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+              }`}
+              onClick={() => setFormat(formatOption as "swiss" | "elimination" | "round_robin")}
+            >
+              {formatOption === "swiss" ? "Swiss" : formatOption === "elimination" ? "Elimination" : "Round Robin"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Match Type */}
+      <div>
+        <label className="block text-xs font-medium mb-2">Match Type</label>
+        <div className="grid grid-cols-3 gap-2">
+          {["constructed", "sealed", "draft"].map((type) => (
+            <button
+              key={type}
+              className={`px-3 py-2 text-xs rounded transition-colors ${
+                matchType === type
+                  ? "bg-purple-600/80 text-white"
+                  : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
+              }`}
+              onClick={() => setMatchType(type as "constructed" | "sealed" | "draft")}
+            >
+              {type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Max Players */}
+      <div>
+        <label className="block text-xs font-medium mb-2">Max Players</label>
+        <select
+          value={maxPlayers}
+          onChange={(e) => setMaxPlayers(Number(e.target.value))}
+          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+        >
+          <option value={2}>2 Players</option>
+          <option value={4}>4 Players</option>
+          <option value={8}>8 Players</option>
+          <option value={16}>16 Players</option>
+          <option value={32}>32 Players</option>
+        </select>
+        {maxPlayers < tournament.registeredPlayers.length && (
+          <p className="text-red-400 text-xs mt-1">
+            Cannot reduce below current player count ({tournament.registeredPlayers.length})
+          </p>
+        )}
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-2 mt-6">
+        <button
+          onClick={onCancel}
+          className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm text-slate-300 hover:text-white transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={!hasChanges || maxPlayers < tournament.registeredPlayers.length}
+          className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-sm text-white transition-colors"
+        >
+          Save Changes
+        </button>
+      </div>
     </div>
   );
 }

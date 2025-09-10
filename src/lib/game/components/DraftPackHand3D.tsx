@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera, Object3D, Intersection } from "three";
 import { Vector3, Plane, Raycaster, Vector2 } from "three";
+import type { BoosterCard } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT, HAND_DIST, HAND_BOTTOM_MARGIN, DRAG_HOLD_MS } from "@/lib/game/constants";
-import type { BoosterCard } from "@/lib/game/cardSorting";
 
 // Row card scale bounds relative to board card size (1.0 = board size)
 const ROW_MIN_SCALE = 0.55;

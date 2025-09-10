@@ -7,6 +7,13 @@ export const PlayerInfoSchema = z.object({
 });
 export type PlayerInfo = z.infer<typeof PlayerInfoSchema>;
 
+export const TournamentPlayerInfoSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  ready: z.boolean().default(false),
+});
+export type TournamentPlayerInfo = z.infer<typeof TournamentPlayerInfoSchema>;
+
 export const LobbyStatusSchema = z.enum(["open", "started", "closed"]);
 export type LobbyStatus = z.infer<typeof LobbyStatusSchema>;
 
@@ -15,6 +22,7 @@ export type LobbyVisibility = z.infer<typeof LobbyVisibilitySchema>;
 
 export const LobbyInfoSchema = z.object({
   id: z.string(),
+  name: z.string().nullable().optional(),
   hostId: z.string(),
   players: z.array(PlayerInfoSchema),
   status: LobbyStatusSchema,
@@ -137,10 +145,11 @@ export type PlayerStanding = z.infer<typeof PlayerStandingSchema>;
 export const TournamentInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
+  creatorId: z.string(),
   format: TournamentFormatSchema,
   status: TournamentStatusSchema,
-  maxPlayers: z.number().int().min(4).max(32),
-  registeredPlayers: z.array(PlayerInfoSchema),
+  maxPlayers: z.number().int().min(2).max(32),
+  registeredPlayers: z.array(TournamentPlayerInfoSchema),
   standings: z.array(PlayerStandingSchema),
   currentRound: z.number().int().min(0).default(0),
   totalRounds: z.number().int().min(1),
@@ -168,6 +177,7 @@ export const HelloPayload = z.object({
   playerId: z.string().optional() // Persistent player ID for reconnection
 });
 export const CreateLobbyPayload = z.object({
+  name: z.string().optional(),
   visibility: LobbyVisibilitySchema.optional(),
   maxPlayers: z.number().int().min(2).max(8).optional(),
 });
@@ -200,7 +210,7 @@ export const CreateTournamentPayload = z.object({
   name: z.string().min(1).max(100),
   format: TournamentFormatSchema,
   matchType: z.enum(["constructed", "sealed", "draft"]),
-  maxPlayers: z.number().int().min(4).max(32),
+  maxPlayers: z.number().int().min(2).max(32),
   sealedConfig: SealedConfigSchema.optional(),
   draftConfig: DraftConfigSchema.optional(),
 });
