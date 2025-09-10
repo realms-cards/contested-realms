@@ -3,11 +3,7 @@
 import type { ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import CardPlane from "@/lib/game/components/CardPlane";
-import {
-  TILE_SIZE,
-  CARD_SHORT,
-  CARD_LONG,
-} from "@/lib/game/constants";
+import { TILE_SIZE, CARD_SHORT, CARD_LONG } from "@/lib/game/constants";
 import type { PlayerKey } from "@/lib/game/store";
 import { useGameStore } from "@/lib/game/store";
 // No label text for tokens pile
@@ -151,8 +147,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
               const radius = 1.35;
               const px = Math.sin(angle) * radius;
               const pz = Math.cos(angle) * radius * (owner === "p2" ? 1 : -1);
-              const w = def.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
-              const h = def.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
+              let w = def.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
+              let h = def.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
+              // Swap dimensions for site replacement tokens so they appear landscape when rotated
+              if (def.siteReplacement) {
+                [w, h] = [h, w];
+              }
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
@@ -232,8 +232,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                   ];
             return big.map((def, i) => {
               const [px, pz] = centers[i] || [0, baseZ];
-              const w = CARD_SHORT;
-              const h = CARD_LONG;
+              let w = CARD_SHORT;
+              let h = CARD_LONG;
+              // Swap dimensions for site replacement tokens so they appear landscape when rotated
+              if (def.siteReplacement) {
+                [w, h] = [h, w];
+              }
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
@@ -270,7 +274,7 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                     forceTextureUrl
                     width={w}
                     height={h}
-                    rotationZ={rotZ + rotated}
+                    rotationZ={rotZ}
                     elevation={0.01}
                     renderOrder={660}
                     textureRotation={textureRotation}
