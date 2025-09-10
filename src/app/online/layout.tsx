@@ -471,6 +471,11 @@ export default function OnlineLayout({
         transport.setLobbyVisibility(visibility);
       } catch {}
     },
+    setLobbyPlan: (planned) => {
+      try {
+        if (transport.setLobbyPlan) transport.setLobbyPlan(planned);
+      } catch {}
+    },
     inviteToLobby: (targetPlayerId: string, lobbyId?: string) => {
       try {
         transport.inviteToLobby(targetPlayerId, lobbyId);

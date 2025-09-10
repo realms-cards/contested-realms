@@ -20,6 +20,8 @@ export type SeatRtcLike = {
   setAudioDeviceId: (id: string | null) => void;
   setVideoDeviceId: (id: string | null) => void;
   refreshDevices: () => void;
+  // Streams exposed by useMatchWebRTC
+  localStream?: MediaStream | null;
   remoteStream: MediaStream | null;
 };
 

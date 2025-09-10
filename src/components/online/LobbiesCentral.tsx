@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 
@@ -28,7 +29,7 @@ function generateLobbyName(): string {
   return `${adjective} ${noun}`;
 }
 
-type PlayerInfo = { id: string; displayName: string };
+//
 
 export type CreateLobbyConfig = {
   name: string;
@@ -50,6 +51,12 @@ export default function LobbiesCentral({
   joinedLobbyId,
   onJoin,
   onCreate,
+  // optional lobby actions
+  onLeaveLobby,
+  ready,
+  onToggleReady,
+  onSetLobbyVisibility,
+  onResync,
   onCreateTournament,
   onJoinTournament,
   onLeaveTournament,
@@ -65,6 +72,11 @@ export default function LobbiesCentral({
   joinedLobbyId: string | null;
   onJoin: (lobbyId: string) => void;
   onCreate: (config: CreateLobbyConfig) => void;
+  onLeaveLobby?: () => void;
+  ready?: boolean;
+  onToggleReady?: () => void;
+  onSetLobbyVisibility?: (visibility: "open" | "private") => void;
+  onResync?: () => void;
   onCreateTournament?: (config: CreateTournamentConfig) => void;
   onJoinTournament?: (tournamentId: string) => void;
   onLeaveTournament?: (tournamentId: string) => void;
@@ -148,7 +160,7 @@ export default function LobbiesCentral({
       }
     });
     return list;
-  }, [lobbies, query, hideFull, hideStarted, sortKey, joinedLobbyId]);
+  }, [lobbies, query, hideFull, hideStarted, sortKey, joinedLobbyId, myId]);
 
   // Filter tournaments
   const filteredTournaments = useMemo(() => {
@@ -175,38 +187,21 @@ export default function LobbiesCentral({
   return (
     <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           <div className="text-sm font-semibold text-white">Active Games</div>
-          <div className="flex items-center gap-2">
-            <button
-              className={`text-xs px-2 py-1 rounded transition-colors ${
-                showLobbies 
-                  ? "bg-blue-600/80 text-white" 
-                  : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-              }`}
-              onClick={() => setShowLobbies(!showLobbies)}
-            >
-              Lobbies ({lobbies.length})
-            </button>
-            <button
-              className={`text-xs px-2 py-1 rounded transition-colors ${
-                showTournaments 
-                  ? "bg-purple-600/80 text-white" 
-                  : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-              }`}
-              onClick={() => setShowTournaments(!showTournaments)}
-            >
-              Tournaments ({tournaments.length})
-            </button>
-          </div>
+          <button
+            className="rounded bg-slate-700/80 hover:bg-slate-600 p-1.5 text-[10px]"
+            onClick={() => {
+              if (onResync) onResync();
+              onRefresh();
+            }}
+            title="Sync"
+            aria-label="Sync"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
-            onClick={onRefresh}
-          >
-            Refresh
-          </button>
           <button
             className={`rounded px-3 py-1 text-xs ${
               isEngaged 
@@ -254,7 +249,27 @@ export default function LobbiesCentral({
           <option value="playersDesc">Players ↓</option>
         </select>
       </div>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex items-center gap-2">
+          <button
+            className={`text-[11px] px-2 py-0.5 rounded ${
+              showLobbies ? "bg-blue-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+            }`}
+            onClick={() => setShowLobbies(!showLobbies)}
+            title="Toggle lobbies"
+          >
+            Lobbies ({filtered.length})
+          </button>
+          <button
+            className={`text-[11px] px-2 py-0.5 rounded ${
+              showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+            }`}
+            onClick={() => setShowTournaments(!showTournaments)}
+            title="Toggle tournaments"
+          >
+            Tournaments ({filteredTournaments.length})
+          </button>
+        </div>
         <label className="text-xs flex items-center gap-1 opacity-80">
           <input type="checkbox" checked={hideFull} onChange={(e) => setHideFull(e.target.checked)} />
           Hide full
@@ -282,19 +297,46 @@ export default function LobbiesCentral({
                 <span className="text-xs font-bold">L</span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-base font-bold text-white mb-1 truncate">
-                  {l.name || "Unnamed Lobby"}
+                <div className="text-base font-bold text-white mb-1 truncate flex items-center gap-2">
+                  <span className="truncate">{l.name || "Unnamed Lobby"}</span>
+                  {l.plannedMatchType && (
+                    <span
+                      className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ring-1 ${
+                        l.plannedMatchType === 'constructed'
+                          ? 'bg-slate-600/30 text-slate-200 ring-slate-500/40'
+                          : l.plannedMatchType === 'sealed'
+                          ? 'bg-purple-600/15 text-purple-200 ring-purple-500/30'
+                          : 'bg-indigo-600/15 text-indigo-200 ring-indigo-500/30'
+                      }`}
+                      title={`Planned: ${l.plannedMatchType}`}
+                    >
+                      {l.plannedMatchType}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-mono opacity-50 text-xs truncate">{l.id}</span>
-                  <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
-                    open ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30" : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
-                  }`}>
-                    {l.status}
-                  </span>
+                  {l.status !== "open" && (
+                    <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                      l.status === "started" ? "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30" : "bg-white/10 text-white/70 ring-1 ring-white/20"
+                    }`}>
+                      {l.status}
+                    </span>
+                  )}
                   {l.visibility && (
-                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/5 text-white/70 ring-1 ring-white/10">
-                      {l.visibility}
+                    <span
+                      className={`inline-flex items-center justify-center w-5 h-5 rounded ring-1 ${
+                        l.visibility === "open"
+                          ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
+                          : "bg-amber-500/10 text-amber-300 ring-amber-500/30"
+                      }`}
+                      title={l.visibility === "open" ? "Open lobby" : "Private lobby"}
+                    >
+                      {l.visibility === "open" ? (
+                        <Eye className="w-3 h-3" />
+                      ) : (
+                        <EyeOff className="w-3 h-3" />
+                      )}
                     </span>
                   )}
                   <span className="opacity-70">•</span>
@@ -302,25 +344,103 @@ export default function LobbiesCentral({
                   <span className="opacity-70">•</span>
                   <span className="opacity-90">Players: {l.players.length}/{l.maxPlayers}</span>
                 </div>
-                <div className="text-xs opacity-70 truncate">
-                  {l.players.map((p) => p.displayName).join(", ") || "No players yet"}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {l.players.length === 0 && (
+                    <span className="text-xs opacity-70">No players yet</span>
+                  )}
+                  {l.players.map((p) => {
+                    const isReady = (l.readyPlayerIds || []).includes(p.id);
+                    const isHostP = p.id === l.hostId;
+                    const isYou = !!myId && p.id === myId;
+                    return (
+                      <span
+                        key={p.id}
+                        className={`text-[11px] px-1.5 py-0.5 rounded ring-1 ${
+                          isReady
+                            ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
+                            : "bg-slate-800/60 text-slate-300 ring-slate-700/60"
+                        }`}
+                        title={`${p.displayName}${isYou ? " • You" : ""}${isHostP ? " • Host" : ""}${
+                          isReady ? " • Ready" : " • Not ready"
+                        }`}
+                      >
+                        {p.displayName}
+                        {isYou && <span className="opacity-70"> • You</span>}
+                        {isHostP && <span className="opacity-70"> • Host</span>}
+                        <span className="opacity-80"> {isReady ? " • ✓" : " • …"}</span>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs disabled:opacity-40"
-                  onClick={() => onJoin(l.id)}
-                  disabled={!open || full || l.id === joinedLobbyId || (isEngaged && l.id !== joinedLobbyId)}
-                  title={
-                    l.id === joinedLobbyId ? "You are in this lobby" :
-                    !open ? "Lobby not open" :
-                    full ? "Lobby is full" :
-                    isEngaged ? `Already in ${isInLobby ? 'another lobby' : 'tournament'}` :
-                    "Join lobby"
-                  }
-                >
-                  {l.id === joinedLobbyId ? "Joined" : full ? "Full" : "Join"}
-                </button>
+                {isMine ? (
+                  <>
+                    <div className="flex items-center gap-1">
+                      {typeof ready === 'boolean' && onToggleReady && (
+                        <button
+                          className={`rounded px-3 py-1 text-xs ${
+                            ready
+                              ? "bg-yellow-600/80 hover:bg-yellow-600 text-yellow-100"
+                              : "bg-green-600/80 hover:bg-green-600 text-green-100"
+                          }`}
+                          onClick={() => onToggleReady()}
+                          title="Toggle your ready state"
+                        >
+                          {ready ? "Not Ready" : "Ready"}
+                        </button>
+                      )}
+                      {onLeaveLobby && (
+                        <button
+                          className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
+                          onClick={() => onLeaveLobby()}
+                        >
+                          Leave
+                        </button>
+                      )}
+                    </div>
+                    {onSetLobbyVisibility && myId && l.hostId === myId && (
+                      <button
+                        className="ml-1 rounded bg-slate-700 hover:bg-slate-600 p-1.5 text-xs"
+                        onClick={() => onSetLobbyVisibility(l.visibility === "open" ? "private" : "open")}
+                        title={l.visibility === "open" ? "Set lobby to private" : "Set lobby to open"}
+                        aria-label="Toggle lobby visibility"
+                      >
+                        {l.visibility === "open" ? (
+                          <Eye className="w-3.5 h-3.5" />
+                        ) : (
+                          <EyeOff className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+
+                    <button
+                      className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
+                      onClick={() => {
+                        try {
+                          if (navigator.clipboard) void navigator.clipboard.writeText(l.id);
+                        } catch {}
+                      }}
+                      title="Copy lobby ID"
+                    >
+                      Copy ID
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs disabled:opacity-40"
+                    onClick={() => onJoin(l.id)}
+                    disabled={!open || full || (isEngaged && l.id !== joinedLobbyId)}
+                    title={
+                      !open ? "Lobby not open" :
+                      full ? "Lobby is full" :
+                      isEngaged ? `Already in ${isInLobby ? 'another lobby' : 'tournament'}` :
+                      "Join lobby"
+                    }
+                  >
+                    {full ? "Full" : "Join"}
+                  </button>
+                )}
               </div>
             </div>
           );

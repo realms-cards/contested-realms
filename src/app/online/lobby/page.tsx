@@ -8,6 +8,7 @@ import InvitesPanel from "@/components/online/InvitesPanel";
 import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/LobbiesCentral";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { useGameStore } from "@/lib/game/store";
+ 
 
 function LobbyPageContent() {
   const router = useRouter();
@@ -19,10 +20,11 @@ function LobbyPageContent() {
     ready,
     toggleReady,
     joinLobby,
+    joinMatch,
     createLobby,
     leaveLobby,
     startMatch,
-    joinMatch,
+    
     leaveMatch,
     sendChat,
     chatLog,
@@ -34,15 +36,14 @@ function LobbyPageContent() {
     requestLobbies,
     requestPlayers,
     setLobbyVisibility,
+    setLobbyPlan,
     inviteToLobby,
     dismissInvite,
   } = useOnline();
 
   const { createTournament, joinTournament, leaveTournament, updateTournamentSettings, toggleTournamentReady, startTournament, endTournament, tournaments } = useTournaments();
 
-  const [lobbyIdInput, setLobbyIdInput] = useState("");
   // Tabs removed: we show all sections in the main view
-  const [matchIdInput, setMatchIdInput] = useState("");
   const [chatInput, setChatInput] = useState("");
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
   const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
@@ -154,19 +155,7 @@ function LobbyPageContent() {
     document.title = title;
   }, [connected, lobby, match]);
 
-  // Determine if this client is rejoining an ongoing match
-  const isRejoin = !!(
-    match &&
-    !declinedRejoin &&
-    match.status === "in_progress" &&
-    me?.id &&
-    match.players?.some((p) => p.id === me.id)
-  );
-  const matchJoinLabel = isRejoin ? "Rejoin" : "Join Match";
-  const manualJoinLabel =
-    matchIdInput.trim() && match?.id === matchIdInput.trim() && isRejoin
-      ? "Rejoin"
-      : "Join Match";
+  // Manual join removed with legacy Match Controls section
 
   // Derived lobby state for control visibility
   const joinedLobby = !!lobby;
@@ -176,6 +165,65 @@ function LobbyPageContent() {
     const readyIds = new Set(lobby.readyPlayerIds || []);
     return lobby.players.length > 1 && lobby.players.every((p) => readyIds.has(p.id));
   }, [lobby]);
+
+  // Game-state hints for richer rejoin labels
+  const serverPhase = useGameStore((s) => s.phase);
+  const d20Rolls = useGameStore((s) => s.d20Rolls);
+
+  // Determine if this client is rejoining an ongoing match
+  const isRejoin = !!(
+    match &&
+    match.status !== "ended" &&
+    me?.id &&
+    match.players?.some((p) => p.id === me.id)
+  );
+
+  // Local flags: has deck been submitted for sealed/draft flows?
+  const hasSubmittedForMatch = useMemo(() => {
+    if (!match?.id) return { sealed: false, draft: false } as const;
+    try {
+      const sealed = localStorage.getItem(`sealed_submitted_${match.id}`) === "true";
+      const draft = localStorage.getItem(`draft_submitted_${match.id}`) === "true";
+      return { sealed, draft } as const;
+    } catch {
+      return { sealed: false, draft: false } as const;
+    }
+  }, [match?.id]);
+
+  const matchCta = useMemo(() => {
+    if (!match) return { label: "", disabled: true } as const;
+    if (match.status === "ended") return { label: "Match Ended", disabled: true } as const;
+
+    // Draft-specific phases
+    if (match.matchType === "draft") {
+      // Active draft session (server keeps status "waiting" during draft)
+      if (match.status === "waiting") {
+        return { label: isRejoin ? "Rejoin Draft Session" : "Join Draft Session", disabled: false } as const;
+      }
+      // Deck construction after draft
+      if (match.status === "deck_construction" && !hasSubmittedForMatch.draft) {
+        return { label: "Rejoin Deck Construction for Draft", disabled: false } as const;
+      }
+    }
+
+    // Sealed deck construction
+    if (match.matchType === "sealed" && match.status === "deck_construction" && !hasSubmittedForMatch.sealed) {
+      return { label: "Rejoin Deck Construction for Sealed", disabled: false } as const;
+    }
+
+    // Setup vs Mulligan vs Game (approximate using game store hints if available)
+    if (serverPhase && serverPhase !== "Main") {
+      const r = d20Rolls || { p1: null, p2: null };
+      if (r.p1 == null || r.p2 == null) return { label: "Rejoin rolling for first player", disabled: false } as const;
+      return { label: "Rejoin Mulligan", disabled: false } as const;
+    }
+
+    // In-progress or default
+    if (match.status === "in_progress" || serverPhase === "Main") {
+      return { label: "Rejoin Game", disabled: false } as const;
+    }
+    return { label: isRejoin ? "Rejoin Match" : "Join Match", disabled: false } as const;
+  }, [match, serverPhase, d20Rolls, hasSubmittedForMatch, isRejoin]);
 
   // Planned match summary (client-side, only reliable for host)
   const plannedSummary = useMemo(() => {
@@ -197,45 +245,52 @@ function LobbyPageContent() {
 
   return (
     <div className="space-y-6">
-      {/* Top action bar: Ready / Start controls */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm font-semibold opacity-90">Lobby Actions</div>
-        <div className="flex flex-wrap gap-2 items-center">
-          {joinedLobby && (
+      {/* Match Controls - show when a match exists in context */}
+      {match && (
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm font-semibold opacity-90">Match Controls</div>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block text-xs opacity-70">
+              {match.matchType?.toUpperCase()} • Status: {match.status.replaceAll("_", " ")}
+              {match.lobbyName ? ` • ${match.lobbyName}` : ""}
+            </div>
             <button
-              className={`rounded-lg px-4 py-2 text-base font-semibold shadow ${
-                ready
-                  ? "bg-emerald-600/90 hover:bg-emerald-600"
-                  : "bg-slate-700 hover:bg-slate-600"
+              className={`rounded-lg px-4 py-2 text-sm font-semibold shadow ${
+                matchCta.disabled ? "bg-slate-700/80 text-slate-300 cursor-not-allowed" : "bg-blue-600/90 hover:bg-blue-600"
               }`}
-              onClick={toggleReady}
-              title="Toggle your ready state"
+              onClick={() => match?.id && !matchCta.disabled && joinMatch(match.id)}
+              disabled={matchCta.disabled}
+              title={matchCta.disabled ? "Match has ended" : `Go to match ${match.id}`}
             >
-              {ready ? "Ready ✓" : "Ready"}
+              {matchCta.label}
             </button>
-          )}
-          {isHost && (
-            <>
-              <button
-                className="rounded-lg px-3 py-2 text-sm bg-slate-700/80 hover:bg-slate-600 shadow"
-                onClick={() => setConfigOpen(true)}
-                title="Configure match settings"
-              >
-                Configure
-              </button>
-              {allReady && (
-                <button
-                  className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-5 py-2.5 text-base font-semibold shadow"
-                  onClick={() => setConfigOpen(true)}
-                  title={`Start ${matchType} match (confirm settings)`}
-                >
-                  Start Match
-                </button>
-              )}
-            </>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+      {/* Host-only match start/config controls, shown above Active Games */}
+      {isHost && (
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm font-semibold opacity-90">Host Controls</div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              className="rounded-lg px-3 py-2 text-sm bg-slate-700/80 hover:bg-slate-600 shadow"
+              onClick={() => setConfigOpen(true)}
+              title="Configure match settings"
+            >
+              Configure
+            </button>
+            {allReady && (
+              <button
+                className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-5 py-2.5 text-base font-semibold shadow"
+                onClick={() => setConfigOpen(true)}
+                title={`Start ${matchType} match (confirm settings)`}
+              >
+                Start Match
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {/* Lobbies (central, full width) */}
       <LobbiesCentral
         lobbies={lobbies}
@@ -251,6 +306,11 @@ function LobbyPageContent() {
             maxPlayers: cfg.maxPlayers 
           });
         }}
+        onLeaveLobby={leaveLobby}
+        ready={ready}
+        onToggleReady={toggleReady}
+        onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
+        onResync={() => resync()}
         onCreateTournament={async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {
@@ -370,12 +430,15 @@ function LobbyPageContent() {
               </div>
               <div className="flex gap-2">
                 <button
-                  className="rounded bg-orange-600/80 hover:bg-orange-600 px-4 py-2 text-sm font-medium transition-colors"
-                  onClick={() =>
-                    router.push(`/online/play/${encodeURIComponent(match.id)}`)
-                  }
+                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
+                    matchCta.disabled ? "bg-slate-700/80 text-slate-300 cursor-not-allowed" : "bg-orange-600/80 hover:bg-orange-600"
+                  }`}
+                  onClick={() => {
+                    if (!matchCta.disabled) router.push(`/online/play/${encodeURIComponent(match.id)}`);
+                  }}
+                  disabled={matchCta.disabled}
                 >
-                  {matchJoinLabel}
+                  {matchCta.label}
                 </button>
                 <button
                   className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
@@ -420,7 +483,10 @@ function LobbyPageContent() {
                         ? "bg-indigo-600/80 text-white"
                         : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                     }`}
-                    onClick={() => setMatchType("constructed")}
+                    onClick={() => {
+                      setMatchType("constructed");
+                      if (isHost && setLobbyPlan) setLobbyPlan("constructed");
+                    }}
                   >
                     Constructed
                   </button>
@@ -430,7 +496,10 @@ function LobbyPageContent() {
                         ? "bg-indigo-600/80 text-white"
                         : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                     }`}
-                    onClick={() => setMatchType("sealed")}
+                    onClick={() => {
+                      setMatchType("sealed");
+                      if (isHost && setLobbyPlan) setLobbyPlan("sealed");
+                    }}
                   >
                     Sealed
                   </button>
@@ -440,7 +509,10 @@ function LobbyPageContent() {
                         ? "bg-indigo-600/80 text-white"
                         : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
                     }`}
-                    onClick={() => setMatchType("draft")}
+                    onClick={() => {
+                      setMatchType("draft");
+                      if (isHost && setLobbyPlan) setLobbyPlan("draft");
+                    }}
                   >
                     Draft
                   </button>
@@ -701,265 +773,7 @@ function LobbyPageContent() {
         </div>
         )}
 
-      {/* Controls for lobby and match IDs */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
-          <div className="text-sm font-semibold opacity-90">Lobby Controls</div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={() => joinLobby()}
-              disabled={!connected}
-              title="Join an existing lobby or create one if none available"
-            >
-              Quick Join
-            </button>
-            <button
-              className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={() => createLobby()}
-              disabled={!connected}
-              title="Always create a new lobby"
-            >
-              Create New
-            </button>
-            <div className="flex-1 flex gap-2">
-              <input
-                className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                placeholder="Lobby ID"
-                value={lobbyIdInput}
-                onChange={(e) => setLobbyIdInput(e.target.value)}
-              />
-              <button
-                className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-40"
-                onClick={() => joinLobby(lobbyIdInput.trim())}
-                disabled={!connected || !lobbyIdInput.trim()}
-              >
-                Join by ID
-              </button>
-            </div>
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={leaveLobby}
-              disabled={!lobby}
-            >
-              Leave Lobby
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {lobby && (
-              <button
-                className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm"
-                onClick={() => {
-                  try {
-                    if (navigator.clipboard && lobby?.id)
-                      void navigator.clipboard.writeText(lobby.id);
-                  } catch {}
-                }}
-              >
-                Copy Lobby ID
-              </button>
-            )}
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={() => resync()}
-              disabled={!connected}
-            >
-              Resync
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
-          <div className="text-sm font-semibold opacity-90">Match Controls</div>
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-              placeholder="Match ID"
-              value={matchIdInput}
-              onChange={(e) => setMatchIdInput(e.target.value)}
-            />
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-40"
-              onClick={() => {
-                const id = matchIdInput.trim();
-                if (id) {
-                  console.log("[game] Joining match - resetting game state");
-                  useGameStore.getState().resetGameState();
-                  joinMatch(id);
-                }
-              }}
-              disabled={!connected || !matchIdInput.trim()}
-            >
-              {manualJoinLabel}
-            </button>
-            {match && (
-              <button
-                className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm"
-                onClick={() => {
-                  try {
-                    if (navigator.clipboard && match?.id)
-                      void navigator.clipboard.writeText(match.id);
-                  } catch {}
-                }}
-              >
-                Copy Match ID
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Lobby details */}
-      <div className="grid grid-cols-1 gap-4">
-        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-          <div className="text-sm font-semibold opacity-90">Lobby</div>
-          {lobby ? (
-            <div className="mt-3 text-sm space-y-2">
-              <div>
-                <span className="opacity-70">ID:</span>{" "}
-                <span className="font-mono">{lobby.id}</span>
-              </div>
-              <div>
-                <span className="opacity-70">Status:</span> {lobby.status}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="opacity-70">Visibility:</span>
-                <span
-                  className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
-                    lobby.visibility === "open"
-                      ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/30"
-                      : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
-                  }`}
-                >
-                  {lobby.visibility}
-                </span>
-                <div className="ml-auto flex gap-1">
-                  <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-0.5 text-xs disabled:opacity-40"
-                    onClick={() => setLobbyVisibility("open")}
-                    disabled={lobby.hostId !== me?.id}
-                    title={
-                      lobby.hostId !== me?.id
-                        ? "Only host can change"
-                        : "Set lobby to open"
-                    }
-                  >
-                    Open
-                  </button>
-                  <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-0.5 text-xs disabled:opacity-40"
-                    onClick={() => setLobbyVisibility("private")}
-                    disabled={lobby.hostId !== me?.id}
-                    title={
-                      lobby.hostId !== me?.id
-                        ? "Only host can change"
-                        : "Set lobby to private"
-                    }
-                  >
-                    Private
-                  </button>
-                </div>
-              </div>
-              <div>
-                <span className="opacity-70">Max Players:</span>{" "}
-                {lobby.maxPlayers}
-              </div>
-              {/* Planned match configuration (host view) */}
-              {isHost && (
-                <div className="text-xs opacity-80">
-                  <span className="opacity-70">Planned Match:</span>{" "}
-                  {matchType === "constructed"
-                    ? "Constructed"
-                    : (() => {
-                        const totalPacks = Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0);
-                        const activeSets = Object.entries(sealedConfig.packCounts)
-                          .filter(([, count]) => count > 0)
-                          .map(([set]) => set);
-                        return `Sealed • Packs: ${totalPacks} • Sets: ${activeSets.join(", ")} • Time: ${sealedConfig.timeLimit}m`;
-                      })()}
-                </div>
-              )}
-              <div className="mt-2">
-                <div className="font-medium flex items-center gap-2">
-                  <span>Players</span>
-                  <span className="text-xs opacity-70">
-                    Ready: {(lobby.readyPlayerIds || []).length}/{lobby.players.length}
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {lobby.players.map((p) => {
-                    const isReady = (lobby.readyPlayerIds || []).includes(p.id);
-                    const isHost = p.id === lobby.hostId;
-                    const isYou = !!me?.id && p.id === me.id;
-                    return (
-                      <span
-                        key={p.id}
-                        className={`text-[11px] px-1.5 py-0.5 rounded ring-1 ${
-                          isReady
-                            ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
-                            : "bg-slate-800/60 text-slate-300 ring-slate-700/60"
-                        }`}
-                        title={`${p.displayName}${isYou ? " • You" : ""}${isHost ? " • Host" : ""}${
-                          isReady ? " • Ready" : " • Not ready"
-                        }`}
-                      >
-                        {p.displayName}
-                        {isYou && <span className="opacity-70"> • You</span>}
-                        {isHost && <span className="opacity-70"> • Host</span>}
-                        <span className="opacity-80"> {isReady ? " • ✓" : " • …"}</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-2 text-sm opacity-70">Not in a lobby</div>
-          )}
-        </div>
-
-        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-          <div className="text-sm font-semibold opacity-90">Match</div>
-          {match ? (
-            <div className="mt-3 text-sm space-y-2">
-              <div>
-                <span className="opacity-70">ID:</span>{" "}
-                <span className="font-mono">{match.id}</span>
-              </div>
-              <div>
-                <span className="opacity-70">Status:</span> {match.status}
-              </div>
-              {match.matchType && (
-                <div>
-                  <span className="opacity-70">Mode:</span> {match.matchType}
-                </div>
-              )}
-              {match.sealedConfig && (
-                <div className="text-xs opacity-80">
-                  Sealed • Packs: {match.sealedConfig.packCount} • Sets: {match.sealedConfig.setMix.join(", ")} • Time: {match.sealedConfig.timeLimit}m
-                </div>
-              )}
-              <div>
-                <span className="opacity-70">Seed:</span>{" "}
-                <span className="font-mono">{match.seed}</span>
-              </div>
-              <div>
-                <span className="opacity-70">Turn:</span> {match.turn}
-              </div>
-              <div className="mt-2">
-                <div className="font-medium">Players</div>
-                <ul className="list-disc ml-5 space-y-0.5">
-                  {match.players.map((p) => (
-                    <li key={p.id}>{p.displayName}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-2 text-sm opacity-70">No active match</div>
-          )}
-        </div>
-      </div>
+      {/* Removed legacy controls + details sections; all lobby actions now live in Active Games */}
       {/* Chat */}
       <div className="grid grid-cols-1 gap-4">
         <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">

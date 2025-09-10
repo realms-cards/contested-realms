@@ -1,9 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import { useOnline } from "@/app/online/online-context";
 
 interface OnlineMulliganScreenProps {
   myPlayerKey: PlayerKey;
@@ -18,6 +21,8 @@ export default function OnlineMulliganScreen({
   onStartGame, 
   finalizeLabel = "Start Game",
 }: OnlineMulliganScreenProps) {
+  const { updateScreenType } = useVideoOverlay();
+  const { transport, match, me } = useOnline();
   const zones = useGameStore((s) => s.zones);
   const mulligans = useGameStore((s) => s.mulligans);
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
@@ -27,12 +32,18 @@ export default function OnlineMulliganScreen({
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
+
+  // Set screen type for video overlay
+  useEffect(() => {
+    updateScreenType('game');
+    return undefined;
+  }, [updateScreenType]);
   
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
 
   const handleCardClick = (index: number) => {
-    if (done) return;
+    if (done || myMulligans === 0) return;
     setSelected(prev => 
       prev.includes(index) 
         ? prev.filter(i => i !== index)
@@ -83,7 +94,7 @@ export default function OnlineMulliganScreen({
         </div>
         
         <div className="text-xs opacity-80 mb-3">
-          {!done ? "Click cards to select for mulligan." : "Mulligan complete."}
+          {!done && myMulligans > 0 ? "Click cards to select for mulligan." : myMulligans === 0 ? "Mulligan used. Ready to start game." : "Mulligan complete."}
         </div>
         
         {myHand.length > 0 ? (
@@ -96,12 +107,13 @@ export default function OnlineMulliganScreen({
                 <button
                   key={i}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
-                    !done ? "hover:scale-105 hover:-translate-y-4" : ""
+                    !done && myMulligans > 0 ? "hover:scale-105 hover:-translate-y-4" : ""
                   } ${
                     isSelected ? "ring-2 ring-red-400 -translate-y-2" : ""
+                  } ${
+                    done || myMulligans === 0 ? "cursor-default" : "cursor-pointer"
                   }`}
                   onClick={() => handleCardClick(i)}
-                  disabled={done}
                   onMouseEnter={() => setPreviewCard(card)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -110,6 +122,8 @@ export default function OnlineMulliganScreen({
                       isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
                     } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                       isSelected ? "opacity-70" : ""
+                    } ${
+                      done || myMulligans === 0 ? "opacity-60" : ""
                     }`}
                   >
                     <Image
@@ -171,6 +185,17 @@ export default function OnlineMulliganScreen({
       <div className="mt-4 text-xs opacity-60 text-center">
         {submitted ? "You are ready. Waiting for other players to finish mulligans…" : "Other players are making their mulligan decisions..."}
       </div>
+
+      {/* Video Overlay */}
+      <GlobalVideoOverlay 
+        position="bottom-right"
+        showUserAvatar={true}
+        transport={transport}
+        myPlayerId={me?.id || null}
+        matchId={match?.id || null}
+        userDisplayName={me?.displayName || ''}
+        userAvatarUrl={undefined} // No avatar URL available yet
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import { authOptions } from "@/lib/auth";
+import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,7 +42,11 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${fantaisieArtistique.variable} antialiased`}
         suppressHydrationWarning
       >
-        <AuthProvider session={session}>{children}</AuthProvider>
+        <AuthProvider session={session}>
+          <VideoOverlayProvider>
+            {children}
+          </VideoOverlayProvider>
+        </AuthProvider>
       </body>
     </html>
   );

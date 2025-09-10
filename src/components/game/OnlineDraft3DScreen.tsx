@@ -26,6 +26,8 @@ import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 
 // Import new draft sync system
 
@@ -238,6 +240,7 @@ export default function OnlineDraft3DScreen({
   const { transport, match, me } = useOnline();
   const matchId = match?.id ?? null;
   const router = useRouter();
+  const { updateScreenType } = useVideoOverlay();
 
   // Server-driven draft state
   const [draftState, setDraftState] = useState<DraftState>({
@@ -325,6 +328,12 @@ export default function OnlineDraft3DScreen({
   const amPicker = useMemo(() => {
     return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
   }, [draftState.phase, draftState.waitingFor, myPlayerId]);
+
+  // Set screen type for video overlay
+  useEffect(() => {
+    updateScreenType('draft-3d');
+    return undefined;
+  }, [updateScreenType]);
 
   // New draft sync system integration
   const draftSync = useDraftSync(myPlayerKey);
@@ -1205,6 +1214,12 @@ export default function OnlineDraft3DScreen({
           Unsaved changes
         </div>
       )}
+
+      {/* Video Overlay */}
+      <GlobalVideoOverlay 
+        position="top-right"
+        showUserAvatar={true}
+      />
     </div>
   );
 }

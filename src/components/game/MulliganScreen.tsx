@@ -42,7 +42,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
           </div>
           
           <div className="text-xs opacity-80 mb-2">
-            Click cards to select for mulligan.
+            {!doneP1 && mulligans.p1 > 0 ? "Click cards to select for mulligan." : mulligans.p1 === 0 ? "Mulligan used." : "Mulligan complete."}
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
@@ -53,17 +53,19 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                 <button
                   key={`${c.cardId}-${i}`}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
-                    !doneP1 ? "hover:scale-105 hover:-translate-y-4" : ""
-                  } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""}`}
+                    !doneP1 && mulligans.p1 > 0 ? "hover:scale-105 hover:-translate-y-4" : ""
+                  } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""} ${
+                    mulligans.p1 <= 0 || doneP1 ? "cursor-default" : "cursor-pointer"
+                  }`}
                   title={c.name}
-                  onClick={() =>
+                  onClick={() => {
+                    if (mulligans.p1 <= 0 || doneP1) return;
                     setSelP1((arr) =>
                       arr.includes(i)
                         ? arr.filter((x) => x !== i)
                         : [...arr, i]
                     )
-                  }
-                  disabled={mulligans.p1 <= 0 || doneP1}
+                  }}
                   onMouseEnter={() => setPreviewCard(c)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -72,7 +74,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                       className={`relative ${
                         isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
                       } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
-                        picked ? "opacity-70" : ""
+                        picked ? "opacity-70" : ""} ${mulligans.p1 <= 0 || doneP1 ? "opacity-60" : ""
                       }`}
                     >
                       <Image
@@ -171,7 +173,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
           </div>
           
           <div className="text-xs opacity-80 mb-2">
-            Click cards to select for mulligan.
+            {!doneP2 && mulligans.p2 > 0 ? "Click cards to select for mulligan." : mulligans.p2 === 0 ? "Mulligan used." : "Mulligan complete."}
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
@@ -182,17 +184,19 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                 <button
                   key={`${c.cardId}-${i}`}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
-                    !doneP2 ? "hover:scale-105 hover:-translate-y-4" : ""
-                  } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""}`}
+                    !doneP2 && mulligans.p2 > 0 ? "hover:scale-105 hover:-translate-y-4" : ""
+                  } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""} ${
+                    mulligans.p2 <= 0 || doneP2 ? "cursor-default" : "cursor-pointer"
+                  }`}
                   title={c.name}
-                  onClick={() =>
+                  onClick={() => {
+                    if (mulligans.p2 <= 0 || doneP2) return;
                     setSelP2((arr) =>
                       arr.includes(i)
                         ? arr.filter((x) => x !== i)
                         : [...arr, i]
                     )
-                  }
-                  disabled={mulligans.p2 <= 0 || doneP2}
+                  }}
                   onMouseEnter={() => setPreviewCard(c)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -201,7 +205,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                       className={`relative ${
                         isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
                       } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
-                        picked ? "opacity-70" : ""
+                        picked ? "opacity-70" : ""} ${mulligans.p2 <= 0 || doneP2 ? "opacity-60" : ""
                       }`}
                     >
                       <Image

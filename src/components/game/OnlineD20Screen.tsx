@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import { useOnline } from "@/app/online/online-context";
 
 interface OnlineD20ScreenProps {
   myPlayerKey: PlayerKey;
@@ -17,11 +20,19 @@ export default function OnlineD20Screen({
   playerNames,
   onRollingComplete,
 }: OnlineD20ScreenProps) {
+  const { updateScreenType } = useVideoOverlay();
+  const { transport, match, me } = useOnline();
   const d20Rolls = useGameStore((s) => s.d20Rolls);
   const rollD20 = useGameStore((s) => s.rollD20);
   const setupWinner = useGameStore((s) => s.setupWinner);
   const choosePlayerOrder = useGameStore((s) => s.choosePlayerOrder);
   const phase = useGameStore((s) => s.phase);
+
+  // Set screen type for video overlay
+  useEffect(() => {
+    updateScreenType('game');
+    return undefined;
+  }, [updateScreenType]);
 
   const myRoll = d20Rolls[myPlayerKey];
   const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
@@ -245,6 +256,17 @@ export default function OnlineD20Screen({
             game...
           </div>
         )}
+
+        {/* Video Overlay */}
+        <GlobalVideoOverlay 
+          position="bottom-right"
+          showUserAvatar={true}
+          transport={transport}
+          myPlayerId={me?.id || null}
+          matchId={match?.id || null}
+          userDisplayName={me?.displayName || ''}
+          userAvatarUrl={undefined} // No avatar URL available yet
+        />
       </div>
     </div>
   );

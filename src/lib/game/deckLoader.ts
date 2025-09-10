@@ -31,7 +31,7 @@ export async function loadDeckFor(
 
     const isAvatar = (c: CardRef) =>
       typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");
-    const avatars = [...rawSpellbook, ...sideboard].filter(isAvatar);
+    const avatars = [...rawSpellbook, ...rawAtlas].filter(isAvatar);
     
     if (avatars.length !== 1) {
       setError(

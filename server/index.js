@@ -24,7 +24,7 @@ const io = new Server(server, {
 const players = new Map();
 /** @type {Map<string, string>} socket.id -> playerId */
 const playerIdBySocket = new Map();
-/** @type {Map<string, { id: string, name: string|null, hostId: string, playerIds: Set<string>, status: 'open'|'started'|'closed', maxPlayers: number, ready: Set<string>, visibility: 'open'|'private' }>} */
+/** @type {Map<string, { id: string, name: string|null, hostId: string, playerIds: Set<string>, status: 'open'|'started'|'closed', maxPlayers: number, ready: Set<string>, visibility: 'open'|'private', plannedMatchType?: 'constructed'|'sealed'|'draft' }>} */
 const lobbies = new Map();
 /** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'deck_construction'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null, matchType?: 'constructed'|'sealed', sealedConfig?: { packCount: number, setMix: string[], timeLimit: number, constructionStartTime?: number, packCounts?: Record<string, number>, replaceAvatars?: boolean }, playerDecks?: Map<string, any>, sealedPacks?: Record<string, Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>> }>} */
 const matches = new Map();
@@ -32,6 +32,10 @@ const matches = new Map();
 const matchRecordings = new Map();
 /** @type {Map<string, Set<string>>} lobbyId -> set of invited playerIds */
 const lobbyInvites = new Map();
+/** @type {Map<string, Set<string>>} matchId -> set of playerIds participating in WebRTC */
+const rtcParticipants = new Map();
+/** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
+const participantDetails = new Map();
 
 function rid(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now()
@@ -68,6 +72,7 @@ function getLobbyInfo(lobby) {
     visibility: lobby.visibility,
     // Include readiness state for clients
     readyPlayerIds: Array.from(lobby.ready),
+    plannedMatchType: lobby.plannedMatchType,
   };
 }
 
@@ -75,6 +80,7 @@ function getMatchInfo(match) {
   return {
     id: match.id,
     lobbyId: match.lobbyId || undefined,
+    lobbyName: match.lobbyName || undefined,
     players: match.playerIds.map(getPlayerInfo).filter(Boolean),
     status: match.status,
     seed: match.seed,
@@ -162,6 +168,7 @@ function createLobby(hostId, opts = {}) {
     maxPlayers,
     ready: new Set(),
     visibility: vis,
+    plannedMatchType: 'constructed',
     lastActive: Date.now(),
   };
   lobbies.set(lobby.id, lobby);
@@ -285,6 +292,7 @@ async function startMatchFromLobby(
   const match = {
     id: rid("match"),
     lobbyId: lobby.id,
+    lobbyName: lobby.name || null,
     playerIds: Array.from(lobby.playerIds),
     status:
       matchType === "sealed"
@@ -349,8 +357,16 @@ async function startMatchFromLobby(
   // For sealed/draft matches, keep lobby active during deck construction/draft
   // For constructed matches, close lobby immediately
   if (matchType === "constructed") {
+    // Update plannedMatchType to reflect the started match
+    try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
     lobby.status = "closed";
     lobbies.delete(lobby.id);
+    broadcastLobbies();
+  }
+  else {
+    // Keep lobby open during setup phases; also update plannedMatchType
+    try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
+    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
     broadcastLobbies();
   }
 
@@ -656,6 +672,28 @@ io.on("connection", (socket) => {
     broadcastLobbies();
   });
 
+  // Host sets planned match type for lobby (visible to all clients)
+  socket.on("setLobbyPlan", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.lobbyId) return;
+    const lobby = lobbies.get(player.lobbyId);
+    if (!lobby) return;
+    if (lobby.hostId !== player.id) {
+      socket.emit("error", {
+        message: "Only host can set planned match",
+        code: "not_host",
+      });
+      return;
+    }
+    const t = payload && typeof payload.plannedMatchType === 'string' ? payload.plannedMatchType : null;
+    if (t !== 'constructed' && t !== 'sealed' && t !== 'draft') return;
+    lobby.plannedMatchType = t;
+    markLobbyActive(lobby);
+    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+    broadcastLobbies();
+  });
+
   socket.on("inviteToLobby", (payload = {}) => {
     if (!authed) return;
     const inviter = getPlayerBySocket(socket);
@@ -948,35 +986,171 @@ io.on("connection", (socket) => {
     }
   });
 
-  // --- WebRTC signaling relay (prototype) ---------------------------------
-  // These lightweight endpoints relay SDP/ICE between peers in the same match room.
-  // No media flows through the server; it only brokers messages.
+  // --- Enhanced WebRTC signaling with participant tracking ---------------
+  // Manages WebRTC participant state and scoped message delivery.
+  // Only participants who have joined WebRTC receive signals.
   socket.on("rtc:join", () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-    const room = `match:${player.matchId}`;
-    // Notify other peers that this player is ready for RTC negotiation
-    socket.to(room).emit("rtc:peer-joined", { from: getPlayerInfo(player.id) });
+    
+    const matchId = player.matchId;
+    const playerId = player.id;
+    
+    // Initialize match participants set if needed
+    if (!rtcParticipants.has(matchId)) {
+      rtcParticipants.set(matchId, new Set());
+    }
+    
+    // Add participant to tracking
+    const matchParticipants = rtcParticipants.get(matchId);
+    matchParticipants.add(playerId);
+    
+    // Store participant details
+    participantDetails.set(playerId, {
+      id: playerId,
+      displayName: player.displayName,
+      matchId: matchId,
+      joinedAt: Date.now()
+    });
+    
+    // Get current participant list for enhanced peer discovery
+    const participants = Array.from(matchParticipants).map(pid => {
+      const details = participantDetails.get(pid);
+      return details ? {
+        id: details.id,
+        displayName: details.displayName,
+        matchId: details.matchId,
+        joinedAt: details.joinedAt
+      } : null;
+    }).filter(Boolean);
+    
+    // Notify existing WebRTC participants about new joiner
+    matchParticipants.forEach(pid => {
+      if (pid !== playerId) {
+        const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
+        if (participantPlayer && participantPlayer.socketId) {
+          io.to(participantPlayer.socketId).emit("rtc:peer-joined", {
+            from: getPlayerInfo(playerId),
+            participants: participants
+          });
+        }
+      }
+    });
+    
+    // Send current participants list to newly joined participant
+    socket.emit("rtc:participants", { participants });
   });
 
   socket.on("rtc:signal", (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-    const room = `match:${player.matchId}`;
+    
+    const matchId = player.matchId;
+    const playerId = player.id;
     const data = payload && typeof payload === "object" ? payload.data : null;
     if (!data) return;
-    // Broadcast signal to all other peers in the match room
-    socket.to(room).emit("rtc:signal", { from: player.id, data });
+    
+    // Only send signals to WebRTC participants (not entire match room)
+    const matchParticipants = rtcParticipants.get(matchId);
+    if (!matchParticipants || !matchParticipants.has(playerId)) return;
+    
+    // Send signal to other WebRTC participants only
+    matchParticipants.forEach(pid => {
+      if (pid !== playerId) {
+        const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
+        if (participantPlayer && participantPlayer.socketId) {
+          io.to(participantPlayer.socketId).emit("rtc:signal", { 
+            from: playerId, 
+            data: data 
+          });
+        }
+      }
+    });
   });
 
   socket.on("rtc:leave", () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-    const room = `match:${player.matchId}`;
-    socket.to(room).emit("rtc:peer-left", { from: player.id });
+    
+    const matchId = player.matchId;
+    const playerId = player.id;
+    
+    // Remove from WebRTC participants
+    const matchParticipants = rtcParticipants.get(matchId);
+    if (matchParticipants) {
+      matchParticipants.delete(playerId);
+      
+      // Clean up empty match participant sets
+      if (matchParticipants.size === 0) {
+        rtcParticipants.delete(matchId);
+      }
+      
+      // Notify remaining WebRTC participants
+      const remainingParticipants = Array.from(matchParticipants).map(pid => {
+        const details = participantDetails.get(pid);
+        return details ? {
+          id: details.id,
+          displayName: details.displayName,
+          matchId: details.matchId,
+          joinedAt: details.joinedAt
+        } : null;
+      }).filter(Boolean);
+      
+      matchParticipants.forEach(pid => {
+        const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
+        if (participantPlayer && participantPlayer.socketId) {
+          io.to(participantPlayer.socketId).emit("rtc:peer-left", {
+            from: playerId,
+            participants: remainingParticipants
+          });
+        }
+      });
+    }
+    
+    // Remove participant details
+    participantDetails.delete(playerId);
+  });
+
+  // WebRTC connection failure reporting
+  socket.on("rtc:connection-failed", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    
+    const matchId = player.matchId;
+    const playerId = player.id;
+    const reason = payload.reason || "unknown";
+    const code = payload.code || "CONNECTION_ERROR";
+    
+    console.warn(`WebRTC connection failed for player ${playerId} in match ${matchId}: ${reason} (${code})`);
+    
+    // Notify other WebRTC participants about the connection failure
+    const matchParticipants = rtcParticipants.get(matchId);
+    if (matchParticipants && matchParticipants.has(playerId)) {
+      matchParticipants.forEach(pid => {
+        if (pid !== playerId) {
+          const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
+          if (participantPlayer && participantPlayer.socketId) {
+            io.to(participantPlayer.socketId).emit("rtc:peer-connection-failed", {
+              from: playerId,
+              reason: reason,
+              code: code,
+              timestamp: Date.now()
+            });
+          }
+        }
+      });
+    }
+    
+    // Send acknowledgment back to the failing client
+    socket.emit("rtc:connection-failed-ack", {
+      playerId: playerId,
+      matchId: matchId,
+      timestamp: Date.now()
+    });
   });
 
   // Submit sealed deck during deck construction phase
@@ -1134,10 +1308,10 @@ io.on("connection", (socket) => {
       }
 
       // Update draft state
-      match.draftState.phase = "picking";
+      match.draftState.phase = "pack_selection"; // Wait for pack choices before distributing
       match.draftState.allGeneratedPacks = currentPacks; // Store all generated packs
-      match.draftState.currentPacks = currentPacks.map((packs) => packs[0]); // Start with first pack
-      match.draftState.waitingFor = [...match.playerIds];
+      match.draftState.currentPacks = []; // Don't distribute packs yet
+      match.draftState.waitingFor = [...match.playerIds]; // Wait for pack choices
 
       const packSizes = match.draftState.currentPacks
         .map((p) => (Array.isArray(p) ? p.length : 0))
@@ -1276,9 +1450,26 @@ io.on("connection", (socket) => {
           
           // Load new packs from stored generated packs
           if (draftState.allGeneratedPacks && draftState.packIndex < 3) {
-            draftState.currentPacks = draftState.allGeneratedPacks.map((packs) => 
-              packs[draftState.packIndex] || []
-            );
+            // Use player's pack choice to determine which pack to give them
+            draftState.currentPacks = draftState.allGeneratedPacks.map((packs, playerIdx) => {
+              const playerChoice = draftState.packChoice[playerIdx];
+              
+              // If player made a choice, find the pack that matches their choice
+              if (playerChoice && packs.length > draftState.packIndex) {
+                // Find the first pack that matches the player's choice
+                for (let i = 0; i < packs.length; i++) {
+                  const pack = packs[i];
+                  if (pack && pack.length > 0 && pack[0].setName === playerChoice) {
+                    console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, using pack ${i} (was pack ${draftState.packIndex})`);
+                    return pack;
+                  }
+                }
+                console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, but no matching pack found, using default pack ${draftState.packIndex}`);
+              }
+              
+              // Fallback to default behavior
+              return packs[draftState.packIndex] || [];
+            });
             console.log(
               `[Draft] Moving to next pack. packIndex=${
                 draftState.packIndex
@@ -1353,6 +1544,37 @@ io.on("connection", (socket) => {
     const choices = match.draftState.packChoice.map((x) => x || "-").join(",");
     console.log(`[Draft] Current pack choices: ${choices}`);
 
+    // Check if all players have made their pack choices
+    const allChoicesMade = match.draftState.packChoice.every(choice => choice !== null);
+    
+    if (allChoicesMade && match.draftState.phase === "pack_selection") {
+      console.log(`[Draft] All players made pack choices, distributing first packs`);
+      
+      // Distribute first pack based on player choices
+      match.draftState.currentPacks = match.draftState.allGeneratedPacks.map((packs, playerIdx) => {
+        const playerChoice = match.draftState.packChoice[playerIdx];
+        
+        // Find the pack that matches the player's choice
+        for (let i = 0; i < packs.length; i++) {
+          const pack = packs[i];
+          if (pack && pack.length > 0 && pack[0].setName === playerChoice) {
+            console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, using pack ${i}`);
+            return pack;
+          }
+        }
+        
+        // Fallback to first pack if no match found
+        console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, no match found, using pack 0`);
+        return packs[0] || [];
+      });
+      
+      // Transition to picking phase
+      match.draftState.phase = "picking";
+      match.draftState.waitingFor = [...match.playerIds];
+      
+      console.log(`[Draft] Pack selection complete, transitioning to picking phase`);
+    }
+
     // Broadcast updated draft state
     io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
   });
@@ -1410,6 +1632,44 @@ io.on("connection", (socket) => {
     if (!pid) return;
     const player = players.get(pid);
     playerIdBySocket.delete(socket.id);
+    
+    // Clean up WebRTC participant state on disconnect
+    if (player && player.matchId) {
+      const matchParticipants = rtcParticipants.get(player.matchId);
+      if (matchParticipants && matchParticipants.has(pid)) {
+        matchParticipants.delete(pid);
+        
+        // Clean up empty match participant sets
+        if (matchParticipants.size === 0) {
+          rtcParticipants.delete(player.matchId);
+        }
+        
+        // Notify remaining WebRTC participants about disconnection
+        const remainingParticipants = Array.from(matchParticipants).map(participantId => {
+          const details = participantDetails.get(participantId);
+          return details ? {
+            id: details.id,
+            displayName: details.displayName,
+            matchId: details.matchId,
+            joinedAt: details.joinedAt
+          } : null;
+        }).filter(Boolean);
+        
+        matchParticipants.forEach(participantId => {
+          const participantPlayer = Array.from(players.values()).find(p => p.id === participantId);
+          if (participantPlayer && participantPlayer.socketId) {
+            io.to(participantPlayer.socketId).emit("rtc:peer-left", {
+              from: pid,
+              participants: remainingParticipants
+            });
+          }
+        });
+        
+        // Remove participant details
+        participantDetails.delete(pid);
+      }
+    }
+    
     if (player) {
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;

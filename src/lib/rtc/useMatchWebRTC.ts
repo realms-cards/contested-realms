@@ -215,6 +215,28 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     }
   }, [addLocalTracks, makeOffer, myPlayerId]);
 
+  // When we first join, the server sends us the current roster via `rtc:participants`.
+  // If there is already someone in the room and our id is lexicographically lower,
+  // we should initiate the offer (the existing peer will otherwise do it if their id is lower).
+  const handleParticipants = useCallback(async (payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return;
+    const obj = payload as { participants?: Array<{ id?: string }> };
+    const list = Array.isArray(obj.participants) ? obj.participants : [];
+    const others = list.map((p) => (p && p.id ? String(p.id) : null)).filter((x): x is string => !!x && x !== myPlayerId);
+    if (others.length === 0 || !myPlayerId) return;
+    // Pick a deterministic remote to compare (lowest id).
+    const remote = others.sort()[0];
+    remotePeerIdRef.current = remote;
+    if (String(myPlayerId) < String(remote)) {
+      try {
+        await addLocalTracks();
+        await makeOffer();
+      } catch {
+        setState('failed');
+      }
+    }
+  }, [addLocalTracks, makeOffer, myPlayerId]);
+
   const handlePeerLeft = useCallback(() => {
     // Remote left; keep local stream so user can rejoin quickly
     cleanupPc();
@@ -307,17 +329,20 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const onSignal = (p: unknown) => void handleSignal(p);
     const onJoined = (p: unknown) => void handlePeerJoined(p);
     const onLeft = () => void handlePeerLeft();
+    const onParticipants = (p: unknown) => void handleParticipants(p);
 
     transport.onGeneric?.('rtc:signal', onSignal);
     transport.onGeneric?.('rtc:peer-joined', onJoined);
     transport.onGeneric?.('rtc:peer-left', onLeft);
+    transport.onGeneric?.('rtc:participants', onParticipants);
 
     return () => {
       transport.offGeneric?.('rtc:signal', onSignal);
       transport.offGeneric?.('rtc:peer-joined', onJoined);
       transport.offGeneric?.('rtc:peer-left', onLeft);
+      transport.offGeneric?.('rtc:participants', onParticipants);
     };
-  }, [enabled, transport, handlePeerJoined, handleSignal, handlePeerLeft]);
+  }, [enabled, transport, handlePeerJoined, handleSignal, handlePeerLeft, handleParticipants]);
 
   // Auto-cleanup on unmount
   useEffect(() => () => { reset(); }, [reset]);

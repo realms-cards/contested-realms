@@ -366,6 +366,13 @@ export class SocketTransport implements GameTransport {
     );
   }
 
+  setLobbyPlan(planned: "constructed" | "sealed" | "draft"): void {
+    this.requireSocket().emit(
+      "setLobbyPlan",
+      Protocol.SetLobbyPlanPayload.parse({ plannedMatchType: planned })
+    );
+  }
+
   submitDeck(deck: unknown): void {
     this.requireSocket().emit("submitDeck", { deck });
   }

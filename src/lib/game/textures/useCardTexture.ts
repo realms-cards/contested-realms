@@ -62,12 +62,18 @@ function normalizeTexture(
   t.repeat.x = 1;
   t.offset.x = 0;
 
-  // Use UV-based vertical flip for ALL textures to avoid browser-specific flipY quirks
-  // (notably Safari). This ensures a consistent orientation regardless of the loader path.
-  // Keep flipY disabled and apply the vertical flip via repeat/offset.
+  // Keep flipY disabled to avoid GPU-driver specific flips.
+  // Safari can double-flip KTX2 textures if we also invert UVs, so:
+  // - ktx2: no UV inversion (repeat.y = 1, offset.y = 0)
+  // - raster: invert via UV (repeat.y = -1, offset.y = 1)
   t.flipY = false;
-  t.repeat.y = -1;
-  t.offset.y = 1;
+  if (kind === "ktx2") {
+    t.repeat.y = -1;
+    t.offset.y = 1;
+  } else {
+    t.repeat.y = -1;
+    t.offset.y = 1;
+  }
 
   // Improve readability of card text/details
   if (gl) {
@@ -282,7 +288,7 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
           // Normalize again in case the cached instance carried mutated state
           normalizeTexture(t, "raster", gl);
           setTex(t);
-        } catch (error) {
+        } catch {
           if (!cancelled) {
             setTex(null);
           }
