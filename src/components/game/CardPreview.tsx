@@ -27,17 +27,25 @@ export default function CardPreview({
   zIndexClass = "z-30",
 }: Props) {
   if (!card?.slug) return null;
-  const isSite = (card.type || "").toLowerCase().includes("site");
   
   // Handle token assets properly
   const isToken = card.slug.startsWith("token:");
   let imgSrc = `/api/images/${card.slug}`;
+  let isSite = (card.type || "").toLowerCase().includes("site");
+  
   if (isToken) {
     const key = card.slug.split(":")[1]?.toLowerCase() || "";
     const def = TOKEN_BY_KEY[key];
     if (def) {
       imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
+      // Check if this token should be treated as a site (e.g., Rubble)
+      if (def.siteReplacement) {
+        isSite = true;
+      }
     }
+  } else {
+    // Try ktx2 textures first, fallback to standard if needed
+    imgSrc = `/api/images/${card.slug}`;
   }
 
   const anchorClasses = (() => {

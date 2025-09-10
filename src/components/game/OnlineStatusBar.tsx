@@ -1,13 +1,12 @@
 "use client";
 
-import { Star, RotateCcw, Settings } from "lucide-react";
+import { Star, Settings } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 
 interface OnlineStatusBarProps {
   dragFromHand: boolean;
   myPlayerNumber: number | null;
   playerNames: { p1: string; p2: string };
-  onCameraReset?: () => void;
   onOpenMatchInfo: () => void;
 }
 
@@ -15,15 +14,12 @@ export default function OnlineStatusBar({
   dragFromHand, 
   myPlayerNumber, 
   playerNames, 
-  onCameraReset,
   onOpenMatchInfo
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const endTurn = useGameStore((s) => s.endTurn);
   const undo = useGameStore((s) => s.undo);
   const history = useGameStore((s) => s.history);
-  const showPlaymat = useGameStore((s) => s.showPlaymat);
-  const togglePlaymat = useGameStore((s) => s.togglePlaymat);
 
   // Check if this player can control the current turn
   const canControlTurn = myPlayerNumber === currentPlayer;
@@ -77,30 +73,6 @@ export default function OnlineStatusBar({
           onContextMenu={(e) => e.preventDefault()}
         >
           Undo
-        </button>
-        
-        {onCameraReset && (
-          <button
-            className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 flex items-center gap-1.5 transition-colors"
-            onClick={() => onCameraReset()}
-            title="Reset Camera"
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset Cam
-          </button>
-        )}
-        
-        <button
-          className={`rounded-full px-3 py-1 transition-colors ${
-            showPlaymat
-              ? "bg-indigo-500 text-white"
-              : "bg-white/15 hover:bg-white/25"
-          }`}
-          onClick={() => togglePlaymat()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          {showPlaymat ? "Mat On" : "Mat Off"}
         </button>
       </div>
     </div>

@@ -81,8 +81,8 @@ export default function Hand3D({
   // Simple hover tracking for card pop-up
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
-  // Hand card preview disabled per design (cards are large enough)
-  const HAND_PREVIEW_ENABLED = false;
+  // Hand card preview enabled for testing
+  const HAND_PREVIEW_ENABLED = true;
 
   // Hand cycling: focus index target and smoothed value
   const focusTargetRef = useRef(0);
