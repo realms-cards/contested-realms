@@ -115,12 +115,12 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
-  
+
   // Site edge placement functions
   const calculateEdgePosition = useGameStore((s) => s.calculateEdgePosition);
   const playerPositions = useGameStore((s) => s.playerPositions);
   const setPlayerPosition = useGameStore((s) => s.setPlayerPosition);
-  
+
   // Playmat texture is loaded inside the Playmat subcomponent via Suspense.
 
   // Removed baseline-shift helper to ensure only the moved card changes position
@@ -189,19 +189,19 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
     // Set player positions relative to board - P1 at bottom, P2 at top
     const boardCenterX = (board.size.w - 1) / 2;
     const boardCenterY = (board.size.h - 1) / 2;
-    
+
     // P1 is positioned "south" of the board center (higher Y in game coords)
     const p1Position = {
       playerId: 1,
-      position: { x: boardCenterX, z: boardCenterY + 3 } // 3 tiles south of center
+      position: { x: boardCenterX, z: boardCenterY + 3 }, // 3 tiles south of center
     };
-    
-    // P2 is positioned "north" of the board center (lower Y in game coords)  
+
+    // P2 is positioned "north" of the board center (lower Y in game coords)
     const p2Position = {
       playerId: 2,
-      position: { x: boardCenterX, z: boardCenterY - 3 } // 3 tiles north of center
+      position: { x: boardCenterX, z: boardCenterY - 3 }, // 3 tiles north of center
     };
-    
+
     // Only set player positions if the function is available (not in draft mode)
     if (setPlayerPosition) {
       setPlayerPosition("p1", p1Position);
@@ -610,7 +610,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       ).toLowerCase();
                       const isToken = type.includes("token");
                       const tokenDef = isToken
-                        ? TOKEN_BY_NAME[(selected.card?.name || "").toLowerCase()]
+                        ? TOKEN_BY_NAME[
+                            (selected.card?.name || "").toLowerCase()
+                          ]
                         : undefined;
                       const tokenSiteReplace = !!tokenDef?.siteReplacement;
                       if (!type.includes("site") && !tokenSiteReplace) {
@@ -626,7 +628,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       setGhost(null); // Also clear ghost immediately
                       const isToken = type.includes("token");
                       const tokenDef = isToken
-                        ? TOKEN_BY_NAME[(dragFromPile.card.name || "").toLowerCase()]
+                        ? TOKEN_BY_NAME[
+                            (dragFromPile.card.name || "").toLowerCase()
+                          ]
                         : undefined;
                       const tokenSiteReplace = !!tokenDef?.siteReplacement;
                       if (!type.includes("site") && !tokenSiteReplace) {
@@ -670,13 +674,16 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       contextMenu.target.kind === "site" &&
                       contextMenu.target.x === x &&
                       contextMenu.target.y === y;
-                    
+
                     // Calculate edge-based positioning toward owning player
                     const ownerKey = site.owner === 1 ? "p1" : "p2";
                     const playerPos = playerPositions[ownerKey];
                     const tileCoords = { x, z: y };
-                    const edgeOffset = calculateEdgePosition(tileCoords, playerPos.position);
-                    
+                    const edgeOffset = calculateEdgePosition(
+                      tileCoords,
+                      playerPos.position
+                    );
+
                     return (
                       <>
                         {isSel && !isHandVisible && (
@@ -767,26 +774,28 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                   const zBase = tokenSiteReplace
                     ? 0
                     : owner === 1
-                      ? -TILE_SIZE * 0.5 + marginZ
-                      : TILE_SIZE * 0.5 - marginZ;
+                    ? -TILE_SIZE * 0.5 + marginZ
+                    : TILE_SIZE * 0.5 - marginZ;
                   // Orientation: bottom toward owner; Rubble (site-like token) adds -90° like sites
                   const rotZ =
                     (owner === 1 ? 0 : Math.PI) +
-                    (tokenSiteReplace ? -Math.PI / 2 : 0) +
+                    (tokenSiteReplace ? Math.PI * 2 : 0) +
                     (p.tapped ? Math.PI / 2 : 0) +
                     (p.tilt || 0);
                   const offX = p.offset?.[0] ?? 0;
                   const offZ = p.offset?.[1] ?? 0;
-                  
+
                   // Check if this permanent is burrowed/submerged
                   const permanentId = p.card.cardId;
                   const permanentPosition = permanentPositions[permanentId];
-                  const isBurrowed = permanentPosition?.state === 'burrowed' || permanentPosition?.state === 'submerged';
-                  
+                  const isBurrowed =
+                    permanentPosition?.state === "burrowed" ||
+                    permanentPosition?.state === "submerged";
+
                   // Adjust Y position: normal cards at 0.25, burrowed cards at 0.0005 (below sites at 0.001)
                   // This puts burrowed cards under sites but still visible
                   const yPos = isBurrowed ? 0.0005 : 0.25;
-                  
+
                   return (
                     <RigidBody
                       key={`perm-${key}-${idx}`}
@@ -918,7 +927,10 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                         onPointerUp={(e) => {
                           if (e.button !== 0) return; // ignore non-left button releases
                           if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
-                          if (tokenSiteReplace) { e.stopPropagation(); return; }
+                          if (tokenSiteReplace) {
+                            e.stopPropagation();
+                            return;
+                          }
                           e.stopPropagation();
                           if (
                             dragging &&
@@ -1026,14 +1038,18 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                         >
                           {isToken ? (
                             (() => {
-                              const w =
+                              let w =
                                 tokenDef && tokenDef.size === "small"
                                   ? CARD_SHORT * 0.5
                                   : CARD_SHORT;
-                              const h =
+                              let h =
                                 tokenDef && tokenDef.size === "small"
                                   ? CARD_LONG * 0.5
                                   : CARD_LONG;
+                              // Swap dimensions for site replacement tokens so they appear landscape when rotated
+                              if (tokenSiteReplace) {
+                                [w, h] = [h, w];
+                              }
                               const texUrl = tokenDef
                                 ? tokenTextureUrl(tokenDef)
                                 : undefined;
@@ -1136,205 +1152,201 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                 dragAvatar === who;
               return (
                 <RigidBody
-                    key={`avatar-${who}`}
-                    ref={(api) => {
-                      const id = `avatar:${who}`;
-                      try {
-                        if (api) {
-                          bodyMap.current.set(id, api as unknown as BodyApi);
-                        } else {
-                          bodyMap.current.delete(id);
-                        }
-                      } catch (error) {
-                        console.warn(
-                          `[physics] Failed to update body map for ${id}:`,
-                          error
-                        );
+                  key={`avatar-${who}`}
+                  ref={(api) => {
+                    const id = `avatar:${who}`;
+                    try {
+                      if (api) {
+                        bodyMap.current.set(id, api as unknown as BodyApi);
+                      } else {
+                        bodyMap.current.delete(id);
+                      }
+                    } catch (error) {
+                      console.warn(
+                        `[physics] Failed to update body map for ${id}:`,
+                        error
+                      );
+                    }
+                  }}
+                  type="dynamic"
+                  ccd
+                  colliders={false}
+                  position={[worldX, 0.25, worldZ]}
+                  linearDamping={2}
+                  angularDamping={2}
+                  canSleep={false}
+                  enabledRotations={[false, true, false]}
+                >
+                  <CuboidCollider
+                    args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
+                    friction={0.9}
+                    restitution={0}
+                  />
+                  {isSel && !isHandVisible && (
+                    <CardGlow
+                      width={CARD_SHORT + 0.3}
+                      height={CARD_LONG + 0.4}
+                      rotationZ={rotZ}
+                      elevation={0}
+                      color={who === "p1" ? "#93c5fd" : "#fca5a5"}
+                      renderOrder={500}
+                    />
+                  )}
+                  <group
+                    onPointerDown={(e) => {
+                      // Only start potential drag on left-click
+                      if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
+                      if (e.button === 0) {
+                        e.stopPropagation();
+                        selectAvatar(who);
+                        // wait for small hold + movement before starting drag
+                        avatarDragStartRef.current = {
+                          who,
+                          start: [e.point.x, e.point.z],
+                          time: Date.now(),
+                        };
+                        clearHoverPreview();
                       }
                     }}
-                    type="dynamic"
-                    ccd
-                    colliders={false}
-                    position={[worldX, 0.25, worldZ]}
-                    linearDamping={2}
-                    angularDamping={2}
-                    canSleep={false}
-                    enabledRotations={[false, true, false]}
-                  >
-                    <CuboidCollider
-                      args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
-                      friction={0.9}
-                      restitution={0}
-                    />
-                    {isSel && !isHandVisible && (
-                      <CardGlow
-                        width={CARD_SHORT + 0.3}
-                        height={CARD_LONG + 0.4}
-                        rotationZ={rotZ}
-                        elevation={0}
-                        color={who === "p1" ? "#93c5fd" : "#fca5a5"}
-                        renderOrder={500}
-                      />
-                    )}
-                    <group
-                      onPointerDown={(e) => {
-                        // Only start potential drag on left-click
-                        if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
-                        if (e.button === 0) {
-                          e.stopPropagation();
-                          selectAvatar(who);
-                          // wait for small hold + movement before starting drag
-                          avatarDragStartRef.current = {
-                            who,
-                            start: [e.point.x, e.point.z],
-                            time: Date.now(),
-                          };
-                          clearHoverPreview();
-                        }
-                      }}
-                      onPointerOver={(e) => {
-                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
-                        e.stopPropagation();
-                        beginHoverPreview(a.card);
-                      }}
-                      onPointerOut={(e) => {
-                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
-                        e.stopPropagation();
-                        clearHoverPreview();
-                        // cancel pending drag if pointer leaves before threshold
-                        if (
-                          avatarDragStartRef.current &&
-                          avatarDragStartRef.current.who === who
-                        ) {
-                          avatarDragStartRef.current = null;
-                        }
-                      }}
-                      onPointerMove={(e) => {
-                        if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
-                        e.stopPropagation();
-                        // Start dragging once hold + threshold exceeded
-                        if (
-                          !dragAvatar &&
-                          avatarDragStartRef.current &&
-                          avatarDragStartRef.current.who === who
-                        ) {
-                          const [sx, sz] = avatarDragStartRef.current.start;
-                          const dx = e.point.x - sx;
-                          const dz = e.point.z - sz;
-                          const dist = Math.hypot(dx, dz);
-                          const heldFor =
-                            Date.now() - avatarDragStartRef.current.time;
-                          if (
-                            heldFor >= DRAG_HOLD_MS &&
-                            dist > DRAG_THRESHOLD
-                          ) {
-                            setDragAvatar(who);
-                            setDragFromHand(true);
-                            setGhost(null);
-                            // No ghost for avatar drags; just move the body
-                            draggedBody.current =
-                              bodyMap.current.get(`avatar:${who}`) || null;
-                            if (draggedBody.current) {
-                              moveDraggedBody(e.point.x, e.point.z, true);
-                            }
+                    onPointerOver={(e) => {
+                      if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                      e.stopPropagation();
+                      beginHoverPreview(a.card);
+                    }}
+                    onPointerOut={(e) => {
+                      if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                      e.stopPropagation();
+                      clearHoverPreview();
+                      // cancel pending drag if pointer leaves before threshold
+                      if (
+                        avatarDragStartRef.current &&
+                        avatarDragStartRef.current.who === who
+                      ) {
+                        avatarDragStartRef.current = null;
+                      }
+                    }}
+                    onPointerMove={(e) => {
+                      if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
+                      e.stopPropagation();
+                      // Start dragging once hold + threshold exceeded
+                      if (
+                        !dragAvatar &&
+                        avatarDragStartRef.current &&
+                        avatarDragStartRef.current.who === who
+                      ) {
+                        const [sx, sz] = avatarDragStartRef.current.start;
+                        const dx = e.point.x - sx;
+                        const dz = e.point.z - sz;
+                        const dist = Math.hypot(dx, dz);
+                        const heldFor =
+                          Date.now() - avatarDragStartRef.current.time;
+                        if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
+                          setDragAvatar(who);
+                          setDragFromHand(true);
+                          setGhost(null);
+                          // No ghost for avatar drags; just move the body
+                          draggedBody.current =
+                            bodyMap.current.get(`avatar:${who}`) || null;
+                          if (draggedBody.current) {
+                            moveDraggedBody(e.point.x, e.point.z, true);
                           }
-                        } else if (dragAvatar === who && draggedBody.current) {
-                          // While dragging and pointer is over the avatar, continue driving it (no ghost)
-                          moveDraggedBody(e.point.x, e.point.z, true);
                         }
+                      } else if (dragAvatar === who && draggedBody.current) {
+                        // While dragging and pointer is over the avatar, continue driving it (no ghost)
+                        moveDraggedBody(e.point.x, e.point.z, true);
+                      }
+                    }}
+                    onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                      e.stopPropagation();
+                      e.nativeEvent.preventDefault();
+                      selectAvatar(who);
+                      openContextMenu(
+                        { kind: "avatar", who },
+                        { x: e.clientX, y: e.clientY }
+                      );
+                    }}
+                    onPointerUp={(e) => {
+                      if (e.button !== 0) return; // ignore non-left button releases
+                      if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
+                      e.stopPropagation();
+                      if (dragAvatar === who) {
+                        // Compute nearest tile from world position and preserve exact world drop
+                        const wx = e.point.x;
+                        const wz = e.point.z;
+                        let tx = Math.round((wx - offsetX) / TILE_SIZE);
+                        let ty = Math.round((wz - offsetY) / TILE_SIZE);
+                        tx = Math.max(0, Math.min(board.size.w - 1, tx));
+                        ty = Math.max(0, Math.min(board.size.h - 1, ty));
+                        const tileX = offsetX + tx * TILE_SIZE;
+                        const tileZ = offsetY + ty * TILE_SIZE;
+                        const offX = wx - tileX;
+                        const offZ = wz - tileZ;
+                        if (draggedBody.current) moveDraggedBody(wx, wz, false);
+                        moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
+                        // Snap avatar body to the final drop point on next frame
+                        snapBodyTo(`avatar:${who}`, wx, wz);
+                        setDragAvatar(null);
+                        setDragFromHand(false);
+                        setGhost(null);
+                        avatarDragStartRef.current = null;
+                        lastDropAt.current = Date.now();
+                        draggedBody.current = null;
+                      }
+                    }}
+                  >
+                    <group
+                      onClick={(e) => {
+                        if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                        e.stopPropagation();
+                        // If dragging this avatar, ignore clicks
+                        if (dragAvatar === who) return;
+                        // Left-click selects only; context menu via right-click
+                        selectAvatar(who);
                       }}
                       onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                         e.stopPropagation();
                         e.nativeEvent.preventDefault();
+                        // Ensure the avatar is selected before opening the menu
                         selectAvatar(who);
                         openContextMenu(
                           { kind: "avatar", who },
                           { x: e.clientX, y: e.clientY }
                         );
                       }}
-                      onPointerUp={(e) => {
-                        if (e.button !== 0) return; // ignore non-left button releases
-                        if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
-                        e.stopPropagation();
-                        if (dragAvatar === who) {
-                          // Compute nearest tile from world position and preserve exact world drop
-                          const wx = e.point.x;
-                          const wz = e.point.z;
-                          let tx = Math.round((wx - offsetX) / TILE_SIZE);
-                          let ty = Math.round((wz - offsetY) / TILE_SIZE);
-                          tx = Math.max(0, Math.min(board.size.w - 1, tx));
-                          ty = Math.max(0, Math.min(board.size.h - 1, ty));
-                          const tileX = offsetX + tx * TILE_SIZE;
-                          const tileZ = offsetY + ty * TILE_SIZE;
-                          const offX = wx - tileX;
-                          const offZ = wz - tileZ;
-                          if (draggedBody.current)
-                            moveDraggedBody(wx, wz, false);
-                          moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
-                          // Snap avatar body to the final drop point on next frame
-                          snapBodyTo(`avatar:${who}`, wx, wz);
-                          setDragAvatar(null);
-                          setDragFromHand(false);
-                          setGhost(null);
-                          avatarDragStartRef.current = null;
-                          lastDropAt.current = Date.now();
-                          draggedBody.current = null;
-                        }
-                      }}
                     >
-                      <group
-                        onClick={(e) => {
-                          if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
-                          e.stopPropagation();
-                          // If dragging this avatar, ignore clicks
-                          if (dragAvatar === who) return;
-                          // Left-click selects only; context menu via right-click
-                          selectAvatar(who);
-                        }}
-                        onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                          e.stopPropagation();
-                          e.nativeEvent.preventDefault();
-                          // Ensure the avatar is selected before opening the menu
-                          selectAvatar(who);
-                          openContextMenu(
-                            { kind: "avatar", who },
-                            { x: e.clientX, y: e.clientY }
-                          );
-                        }}
-                      >
-                        {a.card?.slug ? (
-                          <>
-                            {(selectedAvatar === who || dragAvatar === who) &&
-                              !isHandVisible && (
-                                <CardGlow
-                                  width={CARD_SHORT}
-                                  height={CARD_LONG}
-                                  rotationZ={rotZ}
-                                  elevation={0.001}
-                                  color="#60a5fa"
-                                  renderOrder={600}
-                                />
-                              )}
-                            <CardPlane
-                              slug={a.card.slug!}
-                              width={CARD_SHORT}
-                              height={CARD_LONG}
-                              rotationZ={rotZ}
-                            />
-                          </>
-                        ) : (
-                          <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                            <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                            <meshStandardMaterial
-                              color={who === "p1" ? "#60a5fa" : "#f87171"}
-                              transparent
-                              opacity={0}
-                            />
-                          </mesh>
-                        )}
-                      </group>
+                      {a.card?.slug ? (
+                        <>
+                          {(selectedAvatar === who || dragAvatar === who) &&
+                            !isHandVisible && (
+                              <CardGlow
+                                width={CARD_SHORT}
+                                height={CARD_LONG}
+                                rotationZ={rotZ}
+                                elevation={0.001}
+                                color="#60a5fa"
+                                renderOrder={600}
+                              />
+                            )}
+                          <CardPlane
+                            slug={a.card.slug!}
+                            width={CARD_SHORT}
+                            height={CARD_LONG}
+                            rotationZ={rotZ}
+                          />
+                        </>
+                      ) : (
+                        <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
+                          <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
+                          <meshStandardMaterial
+                            color={who === "p1" ? "#60a5fa" : "#f87171"}
+                            transparent
+                            opacity={0}
+                          />
+                        </mesh>
+                      )}
                     </group>
-                  </RigidBody>
+                  </group>
+                </RigidBody>
               );
             })()}
           </group>
@@ -1376,7 +1388,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                 const c = dragFromPile.card;
                 const isSite = (c.type || "").toLowerCase().includes("site");
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
-                const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!c.slug) return null;
                 // Adjust ghost size for tokens
                 let w = CARD_SHORT;
@@ -1391,8 +1402,15 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       w = CARD_SHORT * 0.5;
                       h = CARD_LONG * 0.5;
                     }
-                    const ownerRotToken = dragFromPile?.who === 'p1' ? 0 : Math.PI;
-                    const rotZToken = ownerRotToken + (def && def.siteReplacement ? -Math.PI / 2 : 0);
+                    // Swap dimensions for site replacement tokens so they appear landscape when rotated
+                    if (def && def.siteReplacement) {
+                      [w, h] = [h, w];
+                    }
+                    const ownerRotToken =
+                      dragFromPile?.who === "p1" ? 0 : Math.PI;
+                    const rotZToken =
+                      ownerRotToken +
+                      (def && def.siteReplacement ? -Math.PI / 2 : 0);
                     return (
                       <CardPlane
                         slug={c.slug}
