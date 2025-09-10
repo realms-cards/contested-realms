@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CardRef } from "@/lib/game/store";
+import CardPreview from "@/components/game/CardPreview";
+import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
 
 interface PileSearchDialogProps {
   pileName: string;
@@ -18,6 +20,17 @@ export default function PileSearchDialog({
 }: PileSearchDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Enhanced card preview state using the draft-3d/editor-3d pattern
+  const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(null);
+  const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
+    onShow: (card: CardPreviewData) => {
+      setHoverPreview(card);
+    },
+    onHide: () => {
+      setHoverPreview(null);
+    },
+  });
 
   const filteredCards = cards.filter((card) => {
     if (!searchTerm) return true;
@@ -47,8 +60,10 @@ export default function PileSearchDialog({
     return () => {
       document.removeEventListener("keydown", handleEscape);
       document.removeEventListener("mousedown", handleClickOutside);
+      // Clean up hover timers on unmount
+      clearHoverTimers();
     };
-  }, [onClose]);
+  }, [onClose, clearHoverTimers]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -88,6 +103,18 @@ export default function PileSearchDialog({
                 <button
                   key={`${card.slug}-${index}`}
                   onClick={() => onSelectCard(card)}
+                  onMouseEnter={() => {
+                    if (card.slug) {
+                      showCardPreview({
+                        slug: card.slug,
+                        name: card.name,
+                        type: card.type || null,
+                      });
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    hideCardPreview();
+                  }}
                   className="w-full text-left bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors"
                 >
                   <div className="font-medium text-white mb-1">
@@ -113,6 +140,15 @@ export default function PileSearchDialog({
           </button>
         </div>
       </div>
+      
+      {/* Enhanced Card Preview Overlay */}
+      {hoverPreview && (
+        <CardPreview
+          card={hoverPreview}
+          anchor="top-left"
+          zIndexClass="z-[60]"
+        />
+      )}
     </div>
   );
 }
