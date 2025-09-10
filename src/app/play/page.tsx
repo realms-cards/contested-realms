@@ -10,7 +10,7 @@ import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
 import LifeCounters from "@/components/game/LifeCounters";
-import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
+import MulliganScreen from "@/components/game/MulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import StatusBar from "@/components/game/StatusBar";
@@ -148,9 +148,7 @@ export default function PlayPage() {
   const [setupOpen, setSetupOpen] = useState<boolean>(true);
   const [prepared, setPrepared] = useState<boolean>(false);
   const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
-  // Hotseat: Player 1 performs mulligans for both players; start after both are ready
-  const [p1Ready, setP1Ready] = useState<boolean>(false);
-  const [p2Ready, setP2Ready] = useState<boolean>(false);
+  // Hotseat: Mulligan is handled for both players within MulliganScreen
 
   // Event console: autoscroll and text formatting
   const eventsRef = useRef<HTMLDivElement | null>(null);
@@ -216,12 +214,7 @@ export default function PlayPage() {
     setPhase("Main");
   }, [setPhase]);
 
-  // Start once both players are confirmed in hotseat mulligan
-  useEffect(() => {
-    if (prepared && p1Ready && p2Ready) {
-      startGame();
-    }
-  }, [prepared, p1Ready, p2Ready, startGame]);
+  // Start game is triggered directly from MulliganScreen once both players finish
 
   function gotoBaseline(mode: 'topdown' | 'orbit') {
     const c = controlsRef.current;
@@ -332,24 +325,8 @@ export default function PlayPage() {
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
           ) : (
-            <div className="w-full max-w-6xl mx-auto space-y-4">
-              <OnlineMulliganScreen
-                myPlayerKey="p1"
-                playerNames={{ p1: "Player 1", p2: "Player 2" }}
-                finalizeLabel="Ready"
-                onStartGame={() => setP1Ready(true)}
-              />
-              <OnlineMulliganScreen
-                myPlayerKey="p2"
-                playerNames={{ p1: "Player 1", p2: "Player 2" }}
-                finalizeLabel="Ready"
-                onStartGame={() => setP2Ready(true)}
-              />
-              {!(p1Ready && p2Ready) && (
-                <div className="text-center text-xs opacity-80 text-white">
-                  Hotseat: Player 1 confirms mulligans for both players. Click Ready on each to begin.
-                </div>
-              )}
+            <div className="w-full max-w-6xl mx-auto">
+              <MulliganScreen onStartGame={startGame} />
             </div>
           )}
         </div>
