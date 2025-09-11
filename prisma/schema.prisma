@@ -190,8 +190,10 @@ model User {
   tournamentRegistrations TournamentRegistration[]
   standings             PlayerStanding[]
   leaderboardEntries    LeaderboardEntry[]
+  tournamentStatistics  TournamentStatistics[] @relation("TournamentPlayerStats")
   wonMatches            MatchResult[] @relation("MatchWinner")
   lostMatches           MatchResult[] @relation("MatchLoser")
+  draftParticipations   DraftParticipant[]
 }
 
 model VerificationToken {
@@ -204,23 +206,36 @@ model VerificationToken {
 
 // Tournament system models
 enum TournamentFormat {
-  swiss
-  elimination
-  round_robin
+  sealed
+  draft
+  constructed
 }
 
 enum TournamentStatus {
   registering
-  draft_phase
-  sealed_phase
-  playing
+  preparing
+  active
+  completed
+  cancelled
+}
+
+enum PreparationStatus {
+  notStarted
+  inProgress
+  completed
+}
+
+enum RoundStatus {
+  pending
+  active
   completed
 }
 
 enum MatchStatus {
   pending
-  in_progress
+  active
   completed
+  cancelled
 }
 
 model Tournament {
@@ -230,11 +245,9 @@ model Tournament {
   format            TournamentFormat
   status            TournamentStatus  @default(registering)
   maxPlayers        Int
-  currentRound      Int               @default(0)
-  totalRounds       Int
-  matchType         String            // constructed, sealed, draft
-  sealedConfig      Json?             // Sealed pack configuration
-  draftConfig       Json?             // Draft configuration
+  settings          Json              // Tournament settings (format-specific configuration)
+  featureFlags      Json?             // Tournament-specific feature toggles
+  startedAt         DateTime?         // When preparation phase began
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   completedAt       DateTime?         // When tournament was completed
@@ -244,6 +257,8 @@ model Tournament {
   standings         PlayerStanding[]
   rounds            TournamentRound[]
   matches           Match[]
+  statistics        TournamentStatistics[] @relation("TournamentStatistics")
+  draftSessions     DraftSession[]
 
   @@index([status])
   @@index([createdAt])
@@ -251,12 +266,13 @@ model Tournament {
 }
 
 model TournamentRegistration {
-  id           String     @id @default(cuid())
-  tournamentId String
-  playerId     String
-  displayName  String
-  ready        Boolean    @default(false)
-  joinedAt     DateTime   @default(now())
+  id                String            @id @default(cuid())
+  tournamentId      String
+  playerId          String
+  registeredAt      DateTime          @default(now())
+  preparationStatus PreparationStatus @default(notStarted)
+  deckSubmitted     Boolean           @default(false)
+  preparationData   Json?             // Format-specific preparation data
 
   tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   player       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -292,9 +308,10 @@ model TournamentRound {
   id           String      @id @default(cuid())
   tournamentId String
   roundNumber  Int
-  status       MatchStatus @default(pending)
+  status       RoundStatus @default(pending)
   startedAt    DateTime?
   completedAt  DateTime?
+  pairingData  Json?       // Swiss pairing information
 
   tournament   Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   matches      Match[]
@@ -320,6 +337,23 @@ model Match {
   @@index([tournamentId])
   @@index([roundId])
   @@index([status])
+}
+
+model TournamentStatistics {
+  id            String     @id @default(cuid())
+  tournamentId  String
+  playerId      String
+  wins          Int        @default(0)
+  losses        Int        @default(0)
+  draws         Int        @default(0)
+  matchPoints   Int        @default(0)
+  tiebreakers   Json       // Tiebreaker calculations
+  finalRanking  Int?       // Final tournament position
+  tournament    Tournament @relation("TournamentStatistics", fields: [tournamentId], references: [id], onDelete: Cascade)
+  player        User       @relation("TournamentPlayerStats", fields: [playerId], references: [id], onDelete: Cascade)
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+  @@index([matchPoints])
 }
 
 // Global leaderboard system
@@ -380,4 +414,55 @@ model MatchResult {
   @@index([format])
   @@index([tournamentId])
   @@index([completedAt])
+}
+
+// Draft session models for tournament draft format
+enum DraftStatus {
+  waiting
+  active
+  completed
+  cancelled
+}
+
+enum ParticipantStatus {
+  waiting
+  active
+  completed
+  disconnected
+}
+
+model DraftSession {
+  id                String             @id @default(cuid())
+  tournamentId      String
+  status            DraftStatus        @default(waiting)
+  packConfiguration Json               // Pack configuration for the draft
+  settings          Json               // Draft settings (time limits, etc.)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+
+  tournament        Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  participants      DraftParticipant[]
+
+  @@index([tournamentId])
+  @@index([status])
+}
+
+model DraftParticipant {
+  id              String            @id @default(cuid())
+  draftSessionId  String
+  playerId        String
+  seatNumber      Int
+  status          ParticipantStatus @default(waiting)
+  pickData        Json?             // Player's picks and pack data
+  deckData        Json?             // Final deck after draft
+  joinedAt        DateTime          @default(now())
+
+  draftSession    DraftSession      @relation(fields: [draftSessionId], references: [id], onDelete: Cascade)
+  player          User              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([draftSessionId, playerId])
+  @@unique([draftSessionId, seatNumber])
+  @@index([draftSessionId])
+  @@index([playerId])
 }

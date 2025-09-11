@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const body = await req.json();
+    // Handle empty request body gracefully
+    let body: { displayName?: string } = {};
+    try {
+      const text = await req.text();
+      if (text.trim()) {
+        body = JSON.parse(text);
+      }
+    } catch (jsonError) {
+      // If JSON parsing fails, use empty object (displayName will be inferred)
+      console.log("Invalid or empty JSON body, using default:", jsonError);
+    }
     
     console.log("Tournament join attempt:", { tournamentId: id, userId: session.user.id });
     
@@ -65,14 +76,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         playerId: session.user!.id,
         tournamentId: { not: id }, // Not this tournament
         tournament: {
-          status: { in: ['registering', 'draft_phase', 'sealed_phase', 'playing'] }
+          status: { in: ['registering', 'preparing', 'active'] }
         }
       },
       include: { tournament: { select: { name: true } } }
     });
 
     if (existingTournamentRegistrations.length > 0) {
-      const tournamentName = existingTournamentRegistrations[0].tournament.name;
+      const tournamentName = existingTournamentRegistrations[0]?.tournament?.name;
       return new Response(JSON.stringify({ 
         error: `You are already in tournament "${tournamentName}". Leave that tournament first.` 
       }), { status: 400 });
@@ -87,8 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const registration = await prisma.tournamentRegistration.create({
       data: {
         tournamentId: id,
-        playerId: session.user!.id,
-        displayName
+        playerId: session.user!.id
       }
     });
 
@@ -102,11 +112,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
+    // Get updated player count
+    const updatedTournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: { registrations: true }
+    });
+    const currentPlayerCount = updatedTournament?.registrations.length || 0;
+
+    // Broadcast player joined event via Socket.io
+    try {
+      await tournamentSocketService.broadcastPlayerJoined(
+        id,
+        session.user!.id,
+        displayName,
+        currentPlayerCount
+      );
+    } catch (socketError) {
+      console.warn('Failed to broadcast player joined event:', socketError);
+      // Don't fail the request if socket broadcast fails
+    }
+
     return new Response(JSON.stringify({
       success: true,
       registrationId: registration.id,
       playerId: session.user!.id,
-      displayName
+      displayName,
+      currentPlayerCount
     }), {
       status: 201,
       headers: { 'content-type': 'application/json' }

@@ -1,50 +1,141 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Sorcery Client TypeScript Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Type Safety First (NON-NEGOTIABLE)
+**Zero tolerance for `any` types.** Every value must have explicit, meaningful types. The `@typescript-eslint/no-explicit-any: "error"` rule enforces this constitutionally.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+**Violations include:**
+- Using `any` type annotations: `function foo(data: any)` ❌
+- Casting to `any`: `value as any` ❌ 
+- Destructuring from `any`: `const { prop } = anyValue` ❌
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**Acceptable alternatives:**
+- Proper interface definitions: `interface TournamentData { id: string; name: string; }`
+- Generic constraints: `function process<T extends Record<string, unknown>>(data: T)`
+- Type assertions to specific types: `value as TournamentInfo`
+- Union types: `string | number | boolean`
+- `unknown` for truly unknown data that gets type guarded
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Strict TypeScript Configuration
+**All strict TypeScript compiler options must remain enabled:**
+- `strict: true` - Master strict mode switch
+- `noImplicitAny: true` - No implicit any types 
+- `noImplicitReturns: true` - All code paths must return values
+- `noImplicitThis: true` - `this` context must be explicit
+- `noFallthroughCasesInSwitch: true` - Switch cases must break/return
+- `useUnknownInCatchVariables: true` - Catch variables default to `unknown`
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+**Constitutional violation:** Disabling any of these settings without documented justification and alternative type safety measures.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### III. Import Organization & Code Quality
+**Import order must follow ESLint `import/order` rule:**
+1. Built-in modules (Node.js)
+2. External packages (npm/yarn) 
+3. Internal packages (workspace)
+4. Parent directory imports
+5. Sibling directory imports
+6. Index imports
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+**Code quality rules (error-level):**
+- `prefer-const: "error"` - Use `const` for immutable values
+- `object-shorthand: "error"` - Use ES6 object shorthand syntax
+- `@typescript-eslint/no-unused-vars: "warn"` - No unused variables (warning to allow development)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### IV. Interface Design & Type Compatibility  
+**All interfaces must be compatible across boundaries:**
+- API response types must match frontend expectations
+- Socket event types must align between client and server
+- Component props must match their usage patterns
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+**Type mapping required when:**
+- Converting between external library types and internal types
+- Bridging protocol differences (e.g., `TournamentFormat` vs API format)
+- Transforming data between layers (API ↔ UI ↔ Socket)
+
+### V. Build-First Development
+**No code merges until build passes cleanly:**
+- TypeScript compilation: 0 errors
+- ESLint: 0 errors (warnings acceptable)  
+- Tests: All passing
+- Type validation: All strict rules satisfied
+
+**Critical error categories that block merges:**
+- `@typescript-eslint/no-explicit-any` violations
+- TypeScript compilation failures
+- Missing interface properties
+- Type compatibility mismatches
+
+## Development Workflow Standards
+
+### Type Definition Process
+1. **Interface First:** Define TypeScript interfaces before implementation
+2. **Validation Schema:** Use Zod or similar for runtime validation
+3. **Documentation:** JSDoc comments for complex type relationships
+4. **Testing:** Type tests for critical interfaces
+
+### Error Recovery Patterns
+**When encountering type errors:**
+1. **Investigate:** Understand the root type mismatch
+2. **Define:** Create proper interfaces/types
+3. **Transform:** Use mapping functions, not `any` casts
+4. **Validate:** Ensure type safety is maintained
+
+**Forbidden quick fixes:**
+- Adding `// @ts-ignore` comments
+- Casting to `any` to bypass errors
+- Disabling TypeScript rules temporarily
+- Using `unknown` without type guards
+
+### Code Review Requirements
+**All PRs must verify:**
+- [ ] No `any` types introduced
+- [ ] Import order follows ESLint rules
+- [ ] All TypeScript strict mode rules respected
+- [ ] Build passes with 0 TypeScript errors
+- [ ] Type compatibility across interfaces maintained
+
+## Technical Constraints
+
+### Framework Alignment
+**ESLint configuration is constitutional law:**
+- Rules marked `"error"` cannot be violated
+- Rules marked `"warn"` should be addressed but don't block
+- New rules require constitutional amendment process
+
+**Current error-level rules:**
+```javascript
+"@typescript-eslint/no-explicit-any": "error"
+"prefer-const": "error"
+"object-shorthand": "error"
+"no-var": "error"
+```
+
+### Performance Standards
+**Build time requirements:**
+- TypeScript compilation: <30 seconds
+- ESLint checking: <10 seconds  
+- Type checking regression: <5% increase per feature
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+**Constitution supersedes all other practices.** When in conflict, TypeScript type safety and ESLint error rules take precedence over convenience, speed, or legacy patterns.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Amendment Process:**
+1. Document recurring pain points with current rules
+2. Propose specific rule changes with justification
+3. Implement with migration plan for existing code
+4. Update templates and documentation
+5. Increment constitution version
+
+**Enforcement:**
+- Build pipeline enforces all error-level rules
+- Code reviews verify constitutional compliance  
+- Regression tests protect against type safety erosion
+
+**Emergency Exceptions:** Only for production-critical bugs where type safety cannot be immediately achieved. Must include:
+- Detailed technical justification
+- Timeline for proper resolution  
+- Tracking issue for constitutional compliance restoration
+
+**Version**: 2.2.0 | **Ratified**: 2025-01-11 | **Last Amended**: 2025-01-11

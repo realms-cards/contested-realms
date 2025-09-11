@@ -1,6 +1,6 @@
 "use client";
 
-import { Gamepad2, Users, Zap } from "lucide-react";
+import { Gamepad2, Users, Zap, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 
@@ -29,7 +29,7 @@ export default function Home() {
         </div>
 
         {/* Navigation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {/* Offline Play */}
           <Link
             href="/play"
@@ -64,6 +64,24 @@ export default function Home() {
               <p className="text-emerald-200/80 text-center">
                 Connect with players worldwide. Create or join matches, chat
                 with opponents, and compete online.
+              </p>
+            </div>
+          </Link>
+
+          {/* Tournaments */}
+          <Link
+            href="/tournaments"
+            className="group bg-gradient-to-br from-amber-900/50 to-amber-800/30 ring-1 ring-amber-500/30 rounded-2xl p-8 hover:ring-amber-400/50 hover:scale-[1.02] transition-all duration-200 md:col-span-2 lg:col-span-1"
+          >
+            <div className="flex flex-col items-center space-y-4">
+              <div className="p-4 bg-amber-500/20 rounded-full group-hover:bg-amber-500/30 transition-colors">
+                <Trophy className="w-8 h-8 text-amber-400" />
+              </div>
+              <h3 className="text-2xl font-semibold text-amber-100">
+                Tournaments
+              </h3>
+              <p className="text-amber-200/80 text-center">
+                Join competitive tournaments with Swiss pairings. Create your own or participate in community events.
               </p>
             </div>
           </Link>

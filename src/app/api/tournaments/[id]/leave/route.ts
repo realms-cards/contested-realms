@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Not registered for this tournament' }), { status: 400 });
     }
 
+    // Get player name for broadcast
+    const playerStanding = await prisma.playerStanding.findUnique({
+      where: {
+        tournamentId_playerId: {
+          tournamentId: id,
+          playerId: session.user!.id
+        }
+      },
+      select: { displayName: true }
+    });
+    const playerName = playerStanding?.displayName || 'Unknown Player';
+
     // Remove registration and standing
     await prisma.$transaction([
       prisma.tournamentRegistration.delete({
@@ -45,9 +58,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
     ]);
 
+    // Get updated player count
+    const updatedTournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: { registrations: true }
+    });
+    const currentPlayerCount = updatedTournament?.registrations.length || 0;
+
+    // Broadcast player left event via Socket.io
+    try {
+      await tournamentSocketService.broadcastPlayerLeft(
+        id,
+        session.user!.id,
+        playerName,
+        currentPlayerCount
+      );
+    } catch (socketError) {
+      console.warn('Failed to broadcast player left event:', socketError);
+      // Don't fail the request if socket broadcast fails
+    }
+
     return new Response(JSON.stringify({
       success: true,
-      playerId: session.user!.id
+      playerId: session.user!.id,
+      currentPlayerCount
     }), {
       status: 200,
       headers: { 'content-type': 'application/json' }

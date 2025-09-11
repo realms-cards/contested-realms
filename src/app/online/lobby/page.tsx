@@ -3,12 +3,49 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
-import { useTournaments, TournamentProvider } from "@/app/tournaments/tournament-context";
 import InvitesPanel from "@/components/online/InvitesPanel";
 import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/LobbiesCentral";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
+import { useRealtimeTournaments, RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { useGameStore } from "@/lib/game/store";
+import type { TournamentInfo as ProtocolTournamentInfo } from "@/lib/net/protocol";
  
+
+// Map context TournamentInfo to protocol TournamentInfo  
+function mapToProtocolTournament(tournament: { 
+  id: string; 
+  name: string; 
+  creatorId: string; 
+  format: string; 
+  status: string;
+  maxPlayers: number;
+  registeredPlayers?: Array<{ id: string; displayName: string; ready: boolean }>;
+  settings?: Record<string, unknown>;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}): ProtocolTournamentInfo {
+  return {
+    id: tournament.id,
+    name: tournament.name,
+    creatorId: tournament.creatorId,
+    format: tournament.format === 'constructed' ? 'swiss' : 'elimination',
+    status: tournament.status === 'registering' ? 'registering' : 
+            tournament.status === 'active' ? 'playing' : 'completed',
+    maxPlayers: tournament.maxPlayers,
+    registeredPlayers: tournament.registeredPlayers || [],
+    standings: [], // TODO: map when available
+    currentRound: 0, // TODO: map when available
+    totalRounds: (typeof tournament.settings?.totalRounds === 'number' ? tournament.settings.totalRounds : 3),
+    rounds: [], // TODO: map when available
+    matchType: tournament.format as "sealed" | "draft" | "constructed",
+    sealedConfig: null,
+    draftConfig: null,
+    createdAt: new Date(tournament.createdAt).getTime(),
+    startedAt: tournament.startedAt ? new Date(tournament.startedAt).getTime() : undefined,
+    completedAt: tournament.completedAt ? new Date(tournament.completedAt).getTime() : undefined,
+  };
+}
 
 function LobbyPageContent() {
   const router = useRouter();
@@ -41,7 +78,7 @@ function LobbyPageContent() {
     dismissInvite,
   } = useOnline();
 
-  const { createTournament, joinTournament, leaveTournament, updateTournamentSettings, toggleTournamentReady, startTournament, endTournament, tournaments } = useTournaments();
+  const { createTournament, joinTournament, leaveTournament, updateTournamentSettings, toggleTournamentReady, startTournament, endTournament, tournaments } = useRealtimeTournaments();
 
   // Tabs removed: we show all sections in the main view
   const [chatInput, setChatInput] = useState("");
@@ -294,7 +331,7 @@ function LobbyPageContent() {
       {/* Lobbies (central, full width) */}
       <LobbiesCentral
         lobbies={lobbies}
-        tournaments={tournaments}
+        tournaments={tournaments.map(mapToProtocolTournament)}
         myId={me?.id ?? null}
         joinedLobbyId={lobby?.id ?? null}
         onJoin={(id) => joinLobby(id)}
@@ -314,7 +351,16 @@ function LobbyPageContent() {
         onCreateTournament={async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {
-            await createTournament(cfg);
+            // Convert tournament format to match API expectation
+            const apiFormat: "sealed" | "draft" | "constructed" = 
+              cfg.format === "swiss" ? "constructed" : 
+              cfg.format === "elimination" ? "draft" : "sealed";
+            
+            await createTournament({
+              name: cfg.name,
+              format: apiFormat,
+              maxPlayers: cfg.maxPlayers
+            });
             // Stay on lobby page - tournaments are now shown here
           } catch (error) {
             console.error('Failed to create tournament:', error);
@@ -870,8 +916,8 @@ function LobbyPageContent() {
 
 export default function LobbyPage() {
   return (
-    <TournamentProvider>
+    <RealtimeTournamentProvider>
       <LobbyPageContent />
-    </TournamentProvider>
+    </RealtimeTournamentProvider>
   );
 }

@@ -252,11 +252,11 @@ function AuthenticatedDeckEditor() {
 
   // Initialize sealed mode from URL parameters (only once)
   useEffect(() => {
-    const sealed = searchParams.get("sealed");
-    const matchId = searchParams.get("matchId");
-    const timeLimit = searchParams.get("timeLimit");
-    const constructionStartTime = searchParams.get("constructionStartTime");
-    const replaceAvatars = searchParams.get("replaceAvatars") === "true";
+    const sealed = searchParams?.get("sealed");
+    const matchId = searchParams?.get("matchId");
+    const timeLimit = searchParams?.get("timeLimit");
+    const constructionStartTime = searchParams?.get("constructionStartTime");
+    const replaceAvatars = searchParams?.get("replaceAvatars") === "true";
 
     if (sealed === "true" && matchId && !isSealed) {
       console.log("Initializing sealed mode...");
@@ -265,16 +265,16 @@ function AuthenticatedDeckEditor() {
         constructionStartTime: parseInt(
           constructionStartTime || Date.now().toString()
         ),
-        packCount: parseInt(searchParams.get("packCount") || "6"),
-        setMix: searchParams.get("setMix")
-          ? (searchParams.get("setMix") || "").split(",")
+        packCount: parseInt(searchParams?.get("packCount") || "6"),
+        setMix: searchParams?.get("setMix")
+          ? (searchParams?.get("setMix") || "").split(",")
           : ["Beta"],
         replaceAvatars,
       };
 
       setSealedConfig(config);
       setIsSealed(true);
-      const matchName = searchParams.get("matchName");
+      const matchName = searchParams?.get("matchName");
       setDeckName(matchName || "Deck Editor");
 
       // Generate packs for sealed construction (inline to avoid TDZ on generateSealedPacks)
@@ -295,8 +295,8 @@ function AuthenticatedDeckEditor() {
 
   // Initialize draft completion mode from URL and localStorage
   useEffect(() => {
-    const draft = searchParams.get("draft");
-    const matchId = searchParams.get("matchId");
+    const draft = searchParams?.get("draft");
+    const matchId = searchParams?.get("matchId");
     if (draft !== "true" || !matchId) return;
     if (draftInitDone) return;
 
@@ -426,7 +426,7 @@ function AuthenticatedDeckEditor() {
 
         // Name the deck for clarity in draft completion flow
         if (!deckName || deckName === "New Deck") {
-          const matchName = searchParams.get("matchName");
+          const matchName = searchParams?.get("matchName");
           setDeckName(matchName || "Draft Deck");
         }
       } catch (e) {
@@ -759,7 +759,7 @@ function AuthenticatedDeckEditor() {
 
   // Submit sealed deck to match server
   const submitSealedDeck = useCallback(async () => {
-    if (!isSealed || !searchParams.get("matchId")) return;
+    if (!isSealed || !searchParams?.get("matchId")) return;
 
     try {
       setSaving(true);
@@ -810,13 +810,13 @@ function AuthenticatedDeckEditor() {
 
       // Auto-save the deck with sealed naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-      const matchName = searchParams.get("matchName");
+      const matchName = searchParams?.get("matchName");
       const sealedDeckName = matchName ? `${matchName} (Sealed)` : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
       await saveDeck();
 
       // Mark deck as submitted to prevent redirect loop
-      const matchId = searchParams.get("matchId");
+      const matchId = searchParams?.get("matchId");
       if (matchId) {
         localStorage.setItem(`sealed_submitted_${matchId}`, "true");
       }
@@ -886,14 +886,14 @@ function AuthenticatedDeckEditor() {
 
       // Auto-save the deck with draft naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-      const matchName = searchParams.get("matchName");
+      const matchName = searchParams?.get("matchName");
       // Prefer lobby/match name when available
       const draftDeckName = matchName ? `${matchName} (Draft)` : `Draft Deck (${today})`;
       setDeckName(draftDeckName);
       await saveDeck();
 
       // Mark deck as submitted to prevent redirect loop
-      const matchId = searchParams.get("matchId");
+      const matchId = searchParams?.get("matchId");
       if (matchId) {
         localStorage.setItem(`draft_submitted_${matchId}`, "true");
       }

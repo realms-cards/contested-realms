@@ -1,4 +1,5 @@
-export const FEATURE_SEAT_VIDEO: boolean = (process.env.NEXT_PUBLIC_FEATURE_SEAT_VIDEO || "").toLowerCase() === "true";
+import { FEATURE_SEAT_VIDEO } from './config/features';
+export { FEATURE_SEAT_VIDEO };
 
 function parseIceServersFromEnv(): RTCIceServer[] | null {
   const raw = process.env.NEXT_PUBLIC_ICE_SERVERS;
