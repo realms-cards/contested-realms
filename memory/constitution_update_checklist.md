@@ -76,9 +76,9 @@ Watch for these often-forgotten updates:
 
 ## Template Sync Status
 
-Last sync check: 2025-07-16
-- Constitution version: 2.1.1
-- Templates aligned: ❌ (missing versioning, observability details)
+Last sync check: 2025-01-11
+- Constitution version: 2.2.0
+- Templates aligned: ✅ (updated for TypeScript/ESLint alignment)
 
 ---
 

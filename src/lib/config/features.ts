@@ -1,0 +1,76 @@
+/**
+ * Feature Flags Configuration
+ * Centralized feature flag management for the application
+ */
+
+export interface FeatureFlags {
+  tournaments: {
+    enabled: boolean;
+    maxConcurrentTournaments: number;
+    supportedFormats: readonly ['sealed', 'draft', 'constructed'];
+  };
+  seatVideo: {
+    enabled: boolean;
+  };
+}
+
+/**
+ * Parse boolean from environment variable
+ */
+function parseBooleanFlag(envVar: string | undefined, defaultValue: boolean = false): boolean {
+  if (!envVar) return defaultValue;
+  return envVar.toLowerCase() === 'true';
+}
+
+/**
+ * Parse number from environment variable
+ */
+function parseNumberFlag(envVar: string | undefined, defaultValue: number): number {
+  if (!envVar) return defaultValue;
+  const parsed = parseInt(envVar, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+/**
+ * Global feature flags configuration
+ */
+export const FEATURE_FLAGS: FeatureFlags = {
+  tournaments: {
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_TOURNAMENTS, false),
+    maxConcurrentTournaments: parseNumberFlag(process.env.NEXT_PUBLIC_MAX_CONCURRENT_TOURNAMENTS, 10),
+    supportedFormats: ['sealed', 'draft', 'constructed'] as const
+  },
+  seatVideo: {
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_SEAT_VIDEO, false)
+  }
+};
+
+/**
+ * Check if a specific feature is enabled
+ */
+export function isFeatureEnabled(feature: keyof FeatureFlags): boolean {
+  return FEATURE_FLAGS[feature].enabled;
+}
+
+/**
+ * Get feature configuration
+ */
+export function getFeatureConfig<T extends keyof FeatureFlags>(feature: T): FeatureFlags[T] {
+  return FEATURE_FLAGS[feature];
+}
+
+/**
+ * Tournament-specific feature checks
+ */
+export const tournamentFeatures = {
+  isEnabled: () => FEATURE_FLAGS.tournaments.enabled,
+  getMaxConcurrentTournaments: () => FEATURE_FLAGS.tournaments.maxConcurrentTournaments,
+  getSupportedFormats: () => FEATURE_FLAGS.tournaments.supportedFormats,
+  isFormatSupported: (format: string) => 
+    FEATURE_FLAGS.tournaments.supportedFormats.includes(format as 'sealed' | 'draft' | 'constructed')
+} as const;
+
+/**
+ * Legacy compatibility - maintain existing API
+ */
+export const FEATURE_SEAT_VIDEO: boolean = FEATURE_FLAGS.seatVideo.enabled;

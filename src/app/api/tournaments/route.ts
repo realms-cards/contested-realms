@@ -18,7 +18,7 @@ export async function GET() {
     const tournaments = await prisma.tournament.findMany({
       where: {
         status: {
-          in: ['registering', 'draft_phase', 'sealed_phase', 'playing'] as TournamentStatus[]
+          in: ['registering', 'preparing', 'active'] as TournamentStatus[]
         }
       },
       include: {
@@ -41,6 +41,16 @@ export async function GET() {
 
     console.log('Found tournaments:', tournaments.length);
     
+    // Debug tournament registrations
+    tournaments.forEach(tournament => {
+      console.log(`Tournament ${tournament.name} has ${tournament.registrations.length} registrations:`, 
+        tournament.registrations.map(reg => ({ 
+          playerId: reg.playerId, 
+          playerName: reg.player?.name, 
+          hasPlayer: !!reg.player 
+        })));
+    });
+    
     // Transform to match protocol format
     const tournamentInfos = tournaments.map(tournament => ({
       id: tournament.id,
@@ -49,11 +59,14 @@ export async function GET() {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
-      registeredPlayers: tournament.registrations.map(reg => ({
-        id: reg.playerId,
-        displayName: reg.displayName,
-        ready: reg.ready
-      })),
+      registeredPlayers: tournament.registrations.map(reg => {
+        const prepData = reg.preparationData as Record<string, unknown> | null;
+        return {
+          id: reg.playerId,
+          displayName: reg.player.name || 'Anonymous',
+          ready: Boolean(prepData?.ready)
+        };
+      }),
       standings: tournament.standings.map(standing => ({
         playerId: standing.playerId,
         displayName: standing.displayName,
@@ -66,16 +79,14 @@ export async function GET() {
         isEliminated: standing.isEliminated,
         currentMatchId: standing.currentMatchId
       })),
-      currentRound: tournament.currentRound,
-      totalRounds: tournament.totalRounds,
+      currentRound: tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map(r => r.roundNumber)) : 0,
+      totalRounds: ((tournament.settings as Record<string, unknown>)?.totalRounds as number) || 3,
       rounds: tournament.rounds.map(round => ({
         roundNumber: round.roundNumber,
         status: round.status,
         matches: round.matches.map(match => match.id)
       })),
-      matchType: tournament.matchType,
-      sealedConfig: tournament.sealedConfig,
-      draftConfig: tournament.draftConfig,
+      settings: tournament.settings,
       createdAt: tournament.createdAt.getTime()
     }));
 
@@ -113,12 +124,8 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: 'Missing tournament name' }), { status: 400 });
     }
 
-    if (!['swiss', 'elimination', 'round_robin'].includes(format)) {
+    if (!['sealed', 'draft', 'constructed'].includes(format)) {
       return new Response(JSON.stringify({ error: 'Invalid tournament format' }), { status: 400 });
-    }
-
-    if (!['constructed', 'sealed', 'draft'].includes(matchType)) {
-      return new Response(JSON.stringify({ error: 'Invalid match type' }), { status: 400 });
     }
 
     if (![2, 4, 8, 16, 32].includes(maxPlayers)) {
@@ -130,7 +137,7 @@ export async function POST(req: NextRequest) {
       where: {
         playerId: session.user.id,
         tournament: {
-          status: { in: ['registering', 'draft_phase', 'sealed_phase', 'playing'] }
+          status: { in: ['registering', 'preparing', 'active'] }
         }
       },
       include: { tournament: { select: { name: true } } }
@@ -143,13 +150,9 @@ export async function POST(req: NextRequest) {
       }), { status: 400 });
     }
 
-    // Calculate total rounds based on format
-    let totalRounds = 3; // Default for swiss
-    if (format === 'elimination') {
-      totalRounds = Math.ceil(Math.log2(maxPlayers));
-    } else if (format === 'round_robin') {
-      totalRounds = maxPlayers - 1;
-    }
+    // Calculate optimal rounds based on player count (Swiss system)
+    const optimalRounds = Math.ceil(Math.log2(maxPlayers));
+    const totalRounds = Math.max(3, optimalRounds); // Minimum 3 rounds
 
     const tournament = await prisma.tournament.create({
       data: {
@@ -158,10 +161,13 @@ export async function POST(req: NextRequest) {
         format,
         status: 'registering',
         maxPlayers,
-        totalRounds,
-        matchType,
-        sealedConfig,
-        draftConfig
+        settings: {
+          totalRounds,
+          roundTimeLimit: 50,
+          matchTimeLimit: 60,
+          sealedConfig,
+          draftConfig
+        }
       }
     });
 
@@ -184,8 +190,7 @@ export async function POST(req: NextRequest) {
         prisma.tournamentRegistration.create({
           data: {
             tournamentId: tournament.id,
-            playerId: session.user.id,
-            displayName
+            playerId: session.user.id
           }
         }),
         prisma.playerStanding.create({
@@ -209,7 +214,7 @@ export async function POST(req: NextRequest) {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
-      matchType: tournament.matchType
+      settings: tournament.settings
     }), {
       status: 201,
       headers: { 'content-type': 'application/json' }

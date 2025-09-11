@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       maxPlayers: tournament.maxPlayers,
       registeredPlayers: tournament.registrations.map(reg => ({
         id: reg.playerId,
-        displayName: reg.displayName
+        displayName: reg.player.name || 'Anonymous'
       })),
       standings: tournament.standings.map(standing => ({
         playerId: standing.playerId,
@@ -61,16 +61,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         isEliminated: standing.isEliminated,
         currentMatchId: standing.currentMatchId
       })),
-      currentRound: tournament.currentRound,
-      totalRounds: tournament.totalRounds,
+      currentRound: tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map(r => r.roundNumber)) : 0,
+      totalRounds: 0, // Will be calculated based on player count and format
       rounds: tournament.rounds.map(round => ({
         roundNumber: round.roundNumber,
         status: round.status,
         matches: round.matches.map(match => match.id)
       })),
-      matchType: tournament.matchType,
-      sealedConfig: tournament.sealedConfig,
-      draftConfig: tournament.draftConfig,
+      settings: tournament.settings,
       createdAt: tournament.createdAt.getTime()
     };
 

@@ -23,7 +23,7 @@ interface SocketState {
 }
 
 const DEFAULT_OPTIONS: UseSocketOptions = {
-  url: process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001',
+  url: process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010',
   autoConnect: true,
   reconnection: true,
   reconnectionDelay: 1000,

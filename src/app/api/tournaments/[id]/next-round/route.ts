@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,15 +30,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament not found' }), { status: 404 });
     }
 
-    if (tournament.status !== 'playing') {
-      return new Response(JSON.stringify({ error: 'Tournament must be in playing status' }), { status: 400 });
+    if (tournament.status !== 'active') {
+      return new Response(JSON.stringify({ error: 'Tournament must be in active status' }), { status: 400 });
     }
 
-    if (tournament.currentRound >= tournament.totalRounds) {
-      return new Response(JSON.stringify({ error: 'Tournament is already complete' }), { status: 400 });
-    }
-
-    const nextRoundNumber = tournament.currentRound + 1;
+    // Calculate next round number from existing rounds
+    const maxRound = tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map(r => r.roundNumber)) : 0;
+    const nextRoundNumber = maxRound + 1;
 
     // Check if current round is complete (if any)
     if (tournament.rounds.length > 0) {
@@ -45,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const pendingMatches = await prisma.match.count({
         where: {
           roundId: currentRound.id,
-          status: { in: ['pending', 'in_progress'] }
+          status: { in: ['pending', 'active'] }
         }
       });
 
@@ -69,22 +68,57 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Create matches
     const matchIds = await createRoundMatches(id, newRound.id, pairings);
 
-    // Update tournament current round
-    await prisma.tournament.update({
-      where: { id },
-      data: {
-        currentRound: nextRoundNumber
-      }
-    });
-
-    // Update round status
+    // Update round status to active
     await prisma.tournamentRound.update({
       where: { id: newRound.id },
       data: {
-        status: 'in_progress',
+        status: 'active',
         startedAt: new Date()
       }
     });
+
+    // Get match data for broadcasting
+    const roundMatches = await prisma.match.findMany({
+      where: { roundId: newRound.id }
+    });
+
+    // Get player names for the matches
+    const allPlayerIds = roundMatches.flatMap(match => 
+      Array.isArray(match.players) ? match.players.filter(id => typeof id === 'string') as string[] : []
+    );
+    
+    const players = await prisma.user.findMany({
+      where: { id: { in: allPlayerIds } },
+      select: { id: true, name: true }
+    });
+    
+    const playerNameMap = new Map(players.map(p => [p.id, p.name]));
+
+    const matchData = roundMatches.map(match => {
+      const playerArray = Array.isArray(match.players) ? match.players as string[] : [];
+      const player1Id = playerArray[0] || '';
+      const player2Id = playerArray.length > 1 ? playerArray[1] : null;
+      
+      return {
+        id: match.id,
+        player1Id,
+        player1Name: playerNameMap.get(player1Id) || 'Unknown Player',
+        player2Id,
+        player2Name: player2Id ? playerNameMap.get(player2Id) || 'Unknown Player' : null
+      };
+    });
+
+    // Broadcast round started event via Socket.io
+    try {
+      await tournamentSocketService.broadcastRoundStarted(
+        id,
+        nextRoundNumber,
+        matchData
+      );
+    } catch (socketError) {
+      console.warn('Failed to broadcast round started event:', socketError);
+      // Don't fail the request if socket broadcast fails
+    }
 
     return new Response(JSON.stringify({
       success: true,

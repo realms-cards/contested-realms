@@ -33,7 +33,7 @@ interface MatchRecording {
 export default function ReplayViewerPage() {
   const params = useParams();
   const router = useRouter();
-  const matchId = params.id as string;
+  const matchId = params?.id as string;
   
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);

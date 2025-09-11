@@ -49,14 +49,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Validate the settings
     type TournamentSettingsUpdate = {
       name?: string;
-      format?: 'swiss' | 'elimination' | 'round_robin';
-      matchType?: 'constructed' | 'sealed' | 'draft';
+      format?: 'sealed' | 'draft' | 'constructed';
       maxPlayers?: number;
-      totalRounds?: number;
-      sealedConfig?: Prisma.InputJsonValue;
-      draftConfig?: Prisma.InputJsonValue;
+      settings?: Record<string, unknown>;
     };
-    const updates: TournamentSettingsUpdate = {};
+    const updates: Record<string, unknown> = {};
     
     if (body.name !== undefined) {
       const name = String(body.name).trim();
@@ -67,17 +64,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     if (body.format !== undefined) {
-      if (!['swiss', 'elimination', 'round_robin'].includes(body.format)) {
+      if (!['sealed', 'draft', 'constructed'].includes(body.format)) {
         return new Response(JSON.stringify({ error: 'Invalid tournament format' }), { status: 400 });
       }
-      updates.format = body.format as 'swiss' | 'elimination' | 'round_robin';
-    }
-
-    if (body.matchType !== undefined) {
-      if (!['constructed', 'sealed', 'draft'].includes(body.matchType)) {
-        return new Response(JSON.stringify({ error: 'Invalid match type' }), { status: 400 });
-      }
-      updates.matchType = body.matchType;
+      updates.format = body.format as 'sealed' | 'draft' | 'constructed';
     }
 
     if (body.maxPlayers !== undefined) {
@@ -96,33 +86,31 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       updates.maxPlayers = maxPlayers;
     }
 
-    if (body.sealedConfig !== undefined) {
-      updates.sealedConfig = body.sealedConfig;
+    // Handle settings updates
+    if (body.settings !== undefined) {
+      const currentSettings = tournament.settings as Record<string, unknown> || {};
+      updates.settings = {
+        ...currentSettings,
+        ...body.settings
+      };
     }
 
-    if (body.draftConfig !== undefined) {
-      updates.draftConfig = body.draftConfig;
-    }
-
-    // Recalculate total rounds if format changed
-    if (updates.format !== undefined) {
-      const maxPlayers = updates.maxPlayers || tournament.maxPlayers;
-      let totalRounds = 3; // Default for swiss
-      if (updates.format === 'elimination') {
-        totalRounds = Math.ceil(Math.log2(maxPlayers));
-      } else if (updates.format === 'round_robin') {
-        totalRounds = maxPlayers - 1;
-      }
-      updates.totalRounds = totalRounds;
-    } else if (updates.maxPlayers !== undefined) {
-      // Recalculate if maxPlayers changed but format didn't
-      let totalRounds = 3; // Default for swiss
-      if (tournament.format === 'elimination') {
-        totalRounds = Math.ceil(Math.log2(updates.maxPlayers));
-      } else if (tournament.format === 'round_robin') {
-        totalRounds = updates.maxPlayers - 1;
-      }
-      updates.totalRounds = totalRounds;
+    // Calculate tournament settings based on format and maxPlayers
+    if (updates.format !== undefined || updates.maxPlayers !== undefined) {
+      const format = updates.format || tournament.format;
+      const maxPlayers = (updates.maxPlayers as number) || tournament.maxPlayers;
+      
+      // Calculate optimal rounds based on player count (Swiss system)
+      const optimalRounds = Math.ceil(Math.log2(maxPlayers));
+      const currentSettings = tournament.settings as Record<string, unknown> || {};
+      
+      // Update settings with calculated values
+      updates.settings = {
+        ...currentSettings,
+        totalRounds: Math.max(3, optimalRounds), // Minimum 3 rounds
+        roundTimeLimit: currentSettings.roundTimeLimit || 50, // 50 minutes default
+        matchTimeLimit: currentSettings.matchTimeLimit || 60 // 60 minutes default
+      };
     }
 
     // If no updates provided, return current tournament
@@ -135,8 +123,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           format: tournament.format,
           status: tournament.status,
           maxPlayers: tournament.maxPlayers,
-          matchType: tournament.matchType,
-          totalRounds: tournament.totalRounds
+          settings: tournament.settings
         }
       }), {
         status: 200,
@@ -163,10 +150,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         format: updatedTournament.format,
         status: updatedTournament.status,
         maxPlayers: updatedTournament.maxPlayers,
-        matchType: updatedTournament.matchType,
-        totalRounds: updatedTournament.totalRounds,
-        sealedConfig: updatedTournament.sealedConfig,
-        draftConfig: updatedTournament.draftConfig
+        settings: updatedTournament.settings,
+        updatedAt: updatedTournament.updatedAt.getTime()
       }
     }), {
       status: 200,

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,18 +40,48 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Not registered for this tournament' }), { status: 400 });
     }
 
-    // Update ready status
+    // Note: ready field doesn't exist in current schema
+    // This would require adding ready field to TournamentRegistration model
+    // For now, we'll use preparationData to store ready status
     await prisma.tournamentRegistration.update({
       where: { id: registration.id },
-      data: { ready }
+      data: { 
+        preparationData: { ready }
+      }
     });
 
     console.log(`Tournament ready status updated: ${session.user.id} -> ${ready}`);
+
+    // Get updated ready player count
+    const updatedRegistrations = await prisma.tournamentRegistration.findMany({
+      where: { tournamentId: id },
+      select: { preparationData: true }
+    });
+
+    const readyPlayerCount = updatedRegistrations.filter(reg => {
+      const prepData = reg.preparationData as Record<string, unknown> | null;
+      return prepData?.ready;
+    }).length;
+
+    // Broadcast preparation update via Socket.io
+    try {
+      await tournamentSocketService.broadcastPreparationUpdate(
+        id,
+        session.user.id,
+        ready ? 'ready' : 'not-ready',
+        readyPlayerCount,
+        updatedRegistrations.length
+      );
+    } catch (socketError) {
+      console.warn('Failed to broadcast preparation update:', socketError);
+      // Don't fail the request if socket broadcast fails
+    }
 
     return new Response(JSON.stringify({
       success: true,
       playerId: session.user!.id,
       ready,
+      readyPlayerCount,
       message: ready ? 'You are now ready' : 'Ready status removed'
     }), {
       status: 200,

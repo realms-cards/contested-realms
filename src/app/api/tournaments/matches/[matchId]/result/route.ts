@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +70,51 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
         loserId,
         isDraw
       });
+
+      // Broadcast statistics update via Socket.io
+      try {
+        // Get updated statistics for the tournament
+        const updatedStandings = await prisma.playerStanding.findMany({
+          where: { tournamentId: match.tournamentId },
+          orderBy: [
+            { matchPoints: 'desc' },
+            { gameWinPercentage: 'desc' },
+            { opponentMatchWinPercentage: 'desc' }
+          ]
+        });
+
+        await tournamentSocketService.broadcastStatisticsUpdate(
+          match.tournamentId,
+          {
+            tournamentId: match.tournamentId,
+            standings: updatedStandings.map(standing => ({
+              playerId: standing.playerId,
+              playerName: standing.displayName,
+              wins: standing.wins,
+              losses: standing.losses,
+              draws: standing.draws,
+              matchPoints: standing.matchPoints,
+              tiebreakers: {
+                gameWinPercentage: standing.gameWinPercentage,
+                opponentMatchWinPercentage: standing.opponentMatchWinPercentage
+              },
+              finalRanking: null // Will be calculated after tournament completion
+            })),
+            rounds: [],
+            overallStats: {
+              totalMatches: 0,
+              completedMatches: 0,
+              averageMatchDuration: null,
+              tournamentDuration: null,
+              totalPlayers: updatedStandings.length,
+              roundsCompleted: 0
+            }
+          }
+        );
+      } catch (socketError) {
+        console.warn('Failed to broadcast statistics update:', socketError);
+        // Don't fail the request if socket broadcast fails
+      }
     }
 
     // Check if round is complete
@@ -76,7 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
       const pendingMatches = await prisma.match.count({
         where: {
           roundId: match.roundId,
-          status: { in: ['pending', 'in_progress'] }
+          status: { in: ['pending', 'active'] }
         }
       });
 
@@ -92,13 +138,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
 
         // Check if tournament is complete
         if (match.tournament && match.round) {
-          if (match.round.roundNumber >= match.tournament.totalRounds) {
+          const settings = match.tournament.settings as Record<string, unknown> || {};
+          const totalRounds = (settings.totalRounds as number) || 3;
+          if (match.round.roundNumber >= totalRounds) {
             await prisma.tournament.update({
               where: { id: match.tournament.id },
               data: {
-                status: 'completed'
+                status: 'completed',
+                completedAt: new Date()
               }
             });
+
+            // Broadcast tournament completion
+            try {
+              await tournamentSocketService.broadcastPhaseChanged(
+                match.tournament.id,
+                'completed',
+                {
+                  previousStatus: 'active',
+                  completedAt: new Date().toISOString(),
+                  finalRound: match.round.roundNumber,
+                  message: 'Tournament completed!'
+                }
+              );
+            } catch (socketError) {
+              console.warn('Failed to broadcast tournament completion:', socketError);
+            }
           }
         }
       }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         completedAt: new Date()
       }
     });
+
+    // Broadcast tournament ended event via Socket.io
+    try {
+      await tournamentSocketService.broadcastPhaseChanged(
+        id,
+        'completed',
+        {
+          previousStatus: tournament.status,
+          completedAt: updatedTournament.completedAt?.toISOString(),
+          endedBy: 'creator',
+          message: `Tournament "${tournament.name}" has been ended by the creator`
+        }
+      );
+    } catch (socketError) {
+      console.warn('Failed to broadcast tournament ended event:', socketError);
+      // Don't fail the request if socket broadcast fails
+    }
 
     return new Response(JSON.stringify({
       success: true,
