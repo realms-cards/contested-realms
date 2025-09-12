@@ -99,6 +99,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     setLobbyPlan,
     inviteToLobby,
     dismissInvite,
+    addCpuBot,
   } = useOnline();
 
   // Tournaments API is provided by parent when the feature is enabled; otherwise undefined
@@ -392,6 +393,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         onToggleReady={toggleReady}
         onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
         onResync={() => resync()}
+        onAddCpuBot={addCpuBot}
         onCreateTournament={tournamentsEnabled ? async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {

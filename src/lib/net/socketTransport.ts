@@ -373,6 +373,12 @@ export class SocketTransport implements GameTransport {
     );
   }
 
+  addCpuBot(displayName?: string): void {
+    // Host-only server handler will validate permissions.
+    // Optional displayName allows picking a difficulty label.
+    this.requireSocket().emit("addCpuBot", displayName ? { displayName } : {});
+  }
+
   submitDeck(deck: unknown): void {
     this.requireSocket().emit("submitDeck", { deck });
   }

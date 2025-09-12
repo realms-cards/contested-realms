@@ -44,6 +44,8 @@ export type OnlineContextValue = {
   setLobbyPlan?: (planned: "constructed" | "sealed" | "draft") => void;
   inviteToLobby: (targetPlayerId: string, lobbyId?: string) => void;
   dismissInvite: (lobbyId: string, fromId: string) => void;
+  // Server-managed CPU bot (host-only)
+  addCpuBot?: (displayName?: string) => void;
 };
 
 export const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);
