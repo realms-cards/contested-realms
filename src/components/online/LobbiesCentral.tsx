@@ -243,6 +243,7 @@ export default function LobbiesCentral({
   onToggleReady,
   onSetLobbyVisibility,
   onResync,
+  onAddCpuBot,
   onCreateTournament,
   onJoinTournament,
   onLeaveTournament,
@@ -264,6 +265,7 @@ export default function LobbiesCentral({
   onToggleReady?: () => void;
   onSetLobbyVisibility?: (visibility: "open" | "private") => void;
   onResync?: () => void;
+  onAddCpuBot?: (displayName?: string) => void;
   onCreateTournament?: (config: CreateTournamentConfig) => void;
   onJoinTournament?: (tournamentId: string) => void;
   onLeaveTournament?: (tournamentId: string) => void;
@@ -631,6 +633,17 @@ export default function LobbiesCentral({
                         ) : (
                           <EyeOff className="w-3.5 h-3.5" />
                         )}
+                      </button>
+                    )}
+
+                    {onAddCpuBot && myId && l.hostId === myId && (
+                      <button
+                        className="ml-1 rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1 text-xs disabled:opacity-40"
+                        onClick={() => onAddCpuBot("CPU Easy")}
+                        disabled={!(l.status === "open") || l.players.length >= l.maxPlayers}
+                        title={l.players.length >= l.maxPlayers ? "Lobby is full" : "Add a CPU bot to this lobby"}
+                      >
+                        Add CPU Bot
                       </button>
                     )}
 

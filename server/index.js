@@ -7,6 +7,7 @@ const {
   createRngFromString,
   generateBoosterDeterministic,
 } = require("./booster");
+const { BotClient } = require("./botClient");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 
@@ -36,6 +37,9 @@ const lobbyInvites = new Map();
 const rtcParticipants = new Map();
 /** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
+
+// Active headless bots managed by the server: playerId -> BotClient
+const activeBots = new Map();
 
 function rid(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now()
@@ -724,6 +728,47 @@ io.on("connection", (socket) => {
           visibility: lobby.visibility,
         });
       }
+    }
+  });
+
+  // Host-only: add a CPU bot to the current lobby
+  socket.on("addCpuBot", (payload = {}) => {
+    if (!authed) return;
+    const host = getPlayerBySocket(socket);
+    if (!host || !host.lobbyId) return;
+    const lobby = lobbies.get(host.lobbyId);
+    if (!lobby) return;
+    if (lobby.hostId !== host.id) {
+      socket.emit("error", { message: "Only host can add CPU bot", code: "not_host" });
+      return;
+    }
+    if (lobby.playerIds.size >= lobby.maxPlayers) {
+      socket.emit("error", { message: "Lobby is full", code: "lobby_full" });
+      return;
+    }
+
+    const botId = rid("cpu");
+    // Pre-authorize bot for private lobbies via invite
+    if (lobby.visibility === "private") {
+      if (!lobbyInvites.has(lobby.id)) lobbyInvites.set(lobby.id, new Set());
+      lobbyInvites.get(lobby.id).add(botId);
+    }
+
+    const nameBase = (payload && typeof payload.displayName === "string" ? payload.displayName : "").trim();
+    const displayName = (nameBase || `CPU Bot ${botId.slice(-4)}`).slice(0, 40);
+    const serverUrl = `http://localhost:${PORT}`;
+
+    try {
+      const bot = new BotClient({ serverUrl, displayName, playerId: botId, lobbyId: lobby.id });
+      activeBots.set(botId, bot);
+      bot.start().catch((err) => {
+        console.error(`[Bot] Failed to start bot ${botId}:`, err);
+        activeBots.delete(botId);
+      });
+      console.log(`[Bot] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`);
+    } catch (err) {
+      console.error(`[Bot] Error creating bot:`, err);
+      socket.emit("error", { message: "Failed to spawn CPU bot" });
     }
   });
 

@@ -104,6 +104,8 @@ export interface GameTransport {
   setLobbyVisibility(visibility: LobbyVisibility): void;
   inviteToLobby(targetPlayerId: string, lobbyId?: string): void;
   setLobbyPlan?(planned: "constructed" | "sealed" | "draft"): void;
+  // Server-managed CPU bot (host-only). Adds a bot to the current lobby.
+  addCpuBot?(displayName?: string): void;
 
   // Draft-specific methods (optional, may not be implemented by all transports)
   startDraft?(config: { matchId: string; draftConfig: DraftConfig }): Promise<void>;

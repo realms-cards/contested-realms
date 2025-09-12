@@ -486,6 +486,11 @@ export default function OnlineLayout({
         prev.filter((i) => !(i.lobbyId === lobbyId && i.from.id === fromId))
       );
     },
+    addCpuBot: (displayName?: string) => {
+      try {
+        if (transport.addCpuBot) transport.addCpuBot(displayName);
+      } catch {}
+    },
   };
 
   return (
