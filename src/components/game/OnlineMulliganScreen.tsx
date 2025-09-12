@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useGameStore } from "@/lib/game/store";
-import type { PlayerKey } from "@/lib/game/store";
+import { useOnline } from "@/app/online/online-context";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
-import { useOnline } from "@/app/online/online-context";
+import { useGameStore } from "@/lib/game/store";
+import type { PlayerKey } from "@/lib/game/store";
 
 interface OnlineMulliganScreenProps {
   myPlayerKey: PlayerKey;

@@ -74,8 +74,10 @@ export default function TournamentDetailsPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'standings' | 'rounds'>('overview');
 
   // Check if current user is registered
-  const isRegistered = tournament && session?.user?.id && 
-    statistics?.standings.some(s => s.playerId === session.user!.id);
+  const isRegistered = Boolean(
+    tournament && session?.user?.id &&
+    statistics?.standings.some(s => s.playerId === session.user?.id)
+  );
   
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;

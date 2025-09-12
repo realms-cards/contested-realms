@@ -5,15 +5,15 @@
  * into different parts of the application.
  */
 
+import { Canvas } from '@react-three/fiber';
 import React, { useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { Canvas } from '@react-three/fiber';
-import { VideoOverlayProvider, useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
 import { GlobalVideoOverlay } from '@/components/ui/GlobalVideoOverlay';
-import { SeatVideo3D, LegacySeatVideo3D } from '@/lib/rtc/SeatVideo3D';
+import { VideoOverlayProvider, useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
 import { useGlobalWebRTC } from '@/lib/hooks/useGlobalWebRTC';
-import { checkPermissionStatus, requestMediaPermissions } from '@/lib/utils/webrtc-permissions';
+import { SeatVideo3D, LegacySeatVideo3D } from '@/lib/rtc/SeatVideo3D';
 import { MediaDeviceManager } from '@/lib/utils/webrtc-devices';
+import { checkPermissionStatus, requestMediaPermissions } from '@/lib/utils/webrtc-permissions';
 
 /**
  * Example 1: Basic Video Overlay Setup

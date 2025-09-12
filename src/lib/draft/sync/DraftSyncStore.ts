@@ -5,13 +5,13 @@
 
 import { create } from 'zustand';
 import { DraftSyncManager } from './DraftSyncManager';
+// TODO(draft-sync): Reintroduce additional types as features land.
 import type {
   DraftSession,
   PlayerDraftState,
   PickCoordination,
   SyncMetrics,
   TimerState,
-  DraftSyncState
 } from './types';
 
 interface DraftSyncStoreState {

@@ -16,6 +16,7 @@ import Image from 'next/image';
 import React, { useEffect } from 'react';
 import SeatMediaControls, { SeatRtcLike } from '@/components/rtc/SeatMediaControls';
 import { useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
+import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { VideoStreamOverlay } from './VideoStreamOverlay';
 import type { GlobalVideoOverlayProps } from '../../../specs/006-live-video-and/contracts/ui-components';
@@ -41,9 +42,9 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   userDisplayName = '',
   userAvatarUrl = null,
   rtc: rtcProp = null,
-  autoConnectOnExpand = true,
+  autoConnectOnExpand = false,
 }) => {
-  const { shouldShowVideo, shouldShowControls } = useVideoOverlay();
+  const { shouldShowVideo: shouldShowVideoFromScreen, shouldShowControls } = useVideoOverlay();
   const [isMinimized, setIsMinimized] = React.useState(true); // Start collapsed by default
 
   // Prefer the RTC instance provided by the page (match-level). If none is provided,
@@ -67,6 +68,9 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
     'bottom-left': 'bottom-4 left-4', 
     'bottom-right': 'bottom-4 right-4'
   };
+
+  // Global audio-only flag disables video tiles regardless of screen config
+  const shouldShowVideo = FEATURE_AUDIO_ONLY ? false : shouldShowVideoFromScreen;
 
   // Don't render if overlay is disabled for current screen
   if (!shouldShowVideo && !shouldShowControls) {
@@ -115,7 +119,7 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
           {/* Media status indicators (camera/mic) */}
           <div className="absolute -top-0.5 -right-0.5 flex gap-0.5">
             {/* Camera indicator */}
-            {rtc && !rtc.camOff && (
+            {rtc && !rtc.camOff && !FEATURE_AUDIO_ONLY && (
               <div className="w-2 h-2 rounded-full bg-green-500 border border-white flex items-center justify-center">
                 <svg className="w-1 h-1 text-white" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z"/>
@@ -222,4 +226,3 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
     </div>
   );
 };
-

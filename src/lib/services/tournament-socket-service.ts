@@ -147,7 +147,8 @@ export class TournamentSocketService {
     if (!this.tournamentRooms.has(tournamentId)) {
       this.tournamentRooms.set(tournamentId, new Set());
     }
-    this.tournamentRooms.get(tournamentId)!.add(socket.id);
+    const roomSet = this.tournamentRooms.get(tournamentId);
+    if (roomSet) roomSet.add(socket.id);
 
     // Store tournament data in socket
     socket.data.tournamentId = tournamentId;

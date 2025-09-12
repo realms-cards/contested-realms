@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CardRef } from "@/lib/game/store";
 import CardPreview from "@/components/game/CardPreview";
 import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
+import type { CardRef } from "@/lib/game/store";
 
 interface PileSearchDialogProps {
   pileName: string;

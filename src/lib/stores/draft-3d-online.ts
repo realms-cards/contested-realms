@@ -15,7 +15,6 @@ import type {
   UIUpdateType
 } from '@/types/draft-3d-events';
 import type { 
-  OnlineDraftState, 
   PlayerDraftState, 
   CardPreviewState, 
   StackInteraction 
@@ -130,7 +129,7 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
       );
       
       // Update local state for immediate UI response
-      set(state => {
+      set(() => {
         const previews = stateManager.previews.getActivePreviews(sessionId);
         const previewMap = new Map();
         for (const preview of previews) {
@@ -151,7 +150,7 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
     stateManager.previews.clearPreview(previewId);
     
     if (sessionId) {
-      set(state => {
+      set(() => {
         const previews = stateManager.previews.getActivePreviews(sessionId);
         const previewMap = new Map();
         for (const preview of previews) {
@@ -187,8 +186,7 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
         currentPlayerId,
         interactionType,
         cardIds,
-        operationData,
-        Date.now()
+        operationData
       );
       
       return result;
@@ -209,14 +207,14 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
     const updated = stateManager.players.updatePlayerState(playerId, updates);
     
     if (sessionId) {
-      set(state => {
-        const players = stateManager.players.getSessionPlayers(sessionId);
-        const playerMap = new Map();
-        for (const player of players) {
-          playerMap.set(player.playerId, player);
-        }
-        return { playerStates: playerMap };
-      });
+    set(() => {
+      const players = stateManager.players.getSessionPlayers(sessionId);
+      const playerMap = new Map();
+      for (const player of players) {
+        playerMap.set(player.playerId, player);
+      }
+      return { playerStates: playerMap };
+    });
     }
     
     return updated;
@@ -228,7 +226,7 @@ export const useDraft3DOnlineStore = create<Draft3DOnlineState>((set, get) => ({
     stateManager.previews.clearPlayerPreviews(playerId);
     
     if (sessionId) {
-      set(state => {
+      set(() => {
         const players = stateManager.players.getSessionPlayers(sessionId);
         const playerMap = new Map();
         for (const player of players) {

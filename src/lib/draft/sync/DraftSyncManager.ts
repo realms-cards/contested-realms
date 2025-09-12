@@ -3,19 +3,14 @@
  * Implements the core requirement: "All players must pick before packs rotate"
  */
 
-import type { Draft3DEventMap } from '@/types/draft-3d-events';
+// TODO(draft-sync): Add back unused types when implementing full sync flows.
 import type {
   DraftSession,
   PlayerDraftState,
-  PlayerPickState,
-  PickCoordination,
   PickConflict,
-  ConflictingPick,
   PackRotationEvent,
   TimerState,
   SyncMetrics,
-  StateValidation,
-  ValidationIssue
 } from './types';
 
 export class DraftSyncManager {

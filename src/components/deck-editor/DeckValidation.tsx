@@ -11,7 +11,6 @@ interface DeckValidationProps {
   atlasCount: number;
   spellbookCount: number;
   validation: ValidationState;
-  isDraftMode?: boolean;
 }
 
 export default function DeckValidation({
@@ -19,7 +18,6 @@ export default function DeckValidation({
   atlasCount,
   spellbookCount,
   validation,
-  isDraftMode = false,
 }: DeckValidationProps) {
   return (
     <div className="flex items-center gap-6 text-sm">

@@ -6,7 +6,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import type {
   WaitingOverlayState,
   PlayerWaitingStatus,
@@ -216,7 +216,8 @@ export const WaitingOverlay: React.FC<WaitingOverlayProps> = ({
 }) => {
   const [announcements, setAnnouncements] = useState<AccessibilityAnnouncement[]>([]);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const announcementTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  // TODO(waiting): Introduce timed announcements if needed; unused for now
+  // const announcementTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Handle accessibility announcements
   useEffect(() => {

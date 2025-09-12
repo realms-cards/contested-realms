@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
+import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +96,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       // Create matches for the round
       const matchIds = await createRoundMatches(id, newRound.id, pairings);
+
+      // Mark the round as active now that matches exist
+      await prisma.tournamentRound.update({
+        where: { id: newRound.id },
+        data: { status: 'active', startedAt: new Date() }
+      });
+
+      // Build broadcast payload for ROUND_STARTED so clients refresh live without reload
+      try {
+        const createdMatches = await prisma.match.findMany({
+          where: { id: { in: matchIds } },
+          select: { id: true, players: true }
+        });
+        const broadcastMatches = createdMatches.map((m) => {
+          const players = (m.players as Array<{ id: string; displayName?: string; name?: string }>);
+          const p1 = players?.[0];
+          const p2 = players?.[1];
+          return {
+            id: m.id,
+            player1Id: p1?.id || '',
+            player1Name: (p1?.displayName || p1?.name || 'Player 1'),
+            player2Id: p2?.id || null,
+            player2Name: (p2?.displayName || p2?.name || null)
+          };
+        });
+        await tournamentSocketService.broadcastRoundStarted(id, 1, broadcastMatches);
+      } catch (socketErr) {
+        console.warn('Failed to broadcast ROUND_STARTED:', socketErr);
+      }
 
       console.log(`Created ${matchIds.length} matches for tournament ${id}, round 1`);
     }

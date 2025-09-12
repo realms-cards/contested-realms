@@ -7,8 +7,9 @@ import InvitesPanel from "@/components/online/InvitesPanel";
 import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/LobbiesCentral";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { useRealtimeTournaments, RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
+import { tournamentFeatures } from "@/lib/config/features";
 import { useGameStore } from "@/lib/game/store";
-import type { TournamentInfo as ProtocolTournamentInfo } from "@/lib/net/protocol";
+import type { TournamentInfo as ProtocolTournamentInfo, SealedConfig, DraftConfig } from "@/lib/net/protocol";
  
 
 // Map context TournamentInfo to protocol TournamentInfo  
@@ -29,25 +30,47 @@ function mapToProtocolTournament(tournament: {
     id: tournament.id,
     name: tournament.name,
     creatorId: tournament.creatorId,
-    format: tournament.format === 'constructed' ? 'swiss' : 'elimination',
-    status: tournament.status === 'registering' ? 'registering' : 
-            tournament.status === 'active' ? 'playing' : 'completed',
+    // Pairing format (swiss/elimination/round_robin) is stored in settings.pairingFormat when available, default to 'swiss'
+    format: (tournament.settings?.pairingFormat as 'swiss' | 'elimination' | 'round_robin' | undefined) || 'swiss',
+    // Treat 'preparing' as active/playing so it doesn't appear as completed
+    status: tournament.status === 'registering' ? 'registering'
+          : (tournament.status === 'active' || tournament.status === 'preparing') ? 'playing'
+          : 'completed',
     maxPlayers: tournament.maxPlayers,
     registeredPlayers: tournament.registeredPlayers || [],
     standings: [], // TODO: map when available
     currentRound: 0, // TODO: map when available
     totalRounds: (typeof tournament.settings?.totalRounds === 'number' ? tournament.settings.totalRounds : 3),
     rounds: [], // TODO: map when available
+    // DB 'format' is the actual match type (constructed | sealed | draft)
     matchType: tournament.format as "sealed" | "draft" | "constructed",
-    sealedConfig: null,
-    draftConfig: null,
+    // Pass through configs when present so UI can display/use them if needed
+    sealedConfig: (tournament.settings?.sealedConfig as SealedConfig | null) ?? null,
+    draftConfig: (tournament.settings?.draftConfig as DraftConfig | null) ?? null,
     createdAt: new Date(tournament.createdAt).getTime(),
     startedAt: tournament.startedAt ? new Date(tournament.startedAt).getTime() : undefined,
     completedAt: tournament.completedAt ? new Date(tournament.completedAt).getTime() : undefined,
   };
 }
 
-function LobbyPageContent() {
+// Minimal interface for the tournaments API we pass from context when enabled
+interface TournamentsAPI {
+  createTournament: (config: { name: string; format: "sealed" | "draft" | "constructed"; maxPlayers: number; settings?: Record<string, unknown> }) => Promise<unknown>;
+  joinTournament: (tournamentId: string) => Promise<void>;
+  leaveTournament: (tournamentId: string) => Promise<void>;
+  updateTournamentSettings: (tournamentId: string, settings: Record<string, unknown>) => Promise<void>;
+  toggleTournamentReady: (tournamentId: string, ready: boolean) => Promise<void>;
+  startTournament: (tournamentId: string) => Promise<void>;
+  endTournament: (tournamentId: string) => Promise<void>;
+  tournaments: Array<{
+    id: string; name: string; creatorId: string; format: string; status: string; maxPlayers: number;
+    registeredPlayers?: Array<{ id: string; displayName: string; ready: boolean }>;
+    settings?: Record<string, unknown>;
+    createdAt: string; startedAt?: string; completedAt?: string;
+  }>;
+}
+
+function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI }) {
   const router = useRouter();
   const {
     connected,
@@ -78,7 +101,28 @@ function LobbyPageContent() {
     dismissInvite,
   } = useOnline();
 
-  const { createTournament, joinTournament, leaveTournament, updateTournamentSettings, toggleTournamentReady, startTournament, endTournament, tournaments } = useRealtimeTournaments();
+  // Tournaments API is provided by parent when the feature is enabled; otherwise undefined
+  const tournamentsEnabled = !!tournamentsApi;
+  const {
+    createTournament,
+    joinTournament,
+    leaveTournament,
+    updateTournamentSettings,
+    toggleTournamentReady,
+    startTournament,
+    endTournament,
+    tournaments: tournamentsFromApi,
+  } = tournamentsApi ?? {
+    // Provide no-op placeholders; these should never be called when disabled as handlers won't be passed further down
+    createTournament: async () => { throw new Error("Tournaments are disabled"); },
+    joinTournament: async () => { throw new Error("Tournaments are disabled"); },
+    leaveTournament: async () => { throw new Error("Tournaments are disabled"); },
+    updateTournamentSettings: async () => { throw new Error("Tournaments are disabled"); },
+    toggleTournamentReady: async () => { throw new Error("Tournaments are disabled"); },
+    startTournament: async () => { throw new Error("Tournaments are disabled"); },
+    endTournament: async () => { throw new Error("Tournaments are disabled"); },
+    tournaments: [] as TournamentsAPI['tournaments'],
+  };
 
   // Tabs removed: we show all sections in the main view
   const [chatInput, setChatInput] = useState("");
@@ -331,7 +375,7 @@ function LobbyPageContent() {
       {/* Lobbies (central, full width) */}
       <LobbiesCentral
         lobbies={lobbies}
-        tournaments={tournaments.map(mapToProtocolTournament)}
+        tournaments={(tournamentsEnabled ? tournamentsFromApi : []).map(mapToProtocolTournament)}
         myId={me?.id ?? null}
         joinedLobbyId={lobby?.id ?? null}
         onJoin={(id) => joinLobby(id)}
@@ -348,72 +392,90 @@ function LobbyPageContent() {
         onToggleReady={toggleReady}
         onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
         onResync={() => resync()}
-        onCreateTournament={async (cfg: CreateTournamentConfig) => {
+        onCreateTournament={tournamentsEnabled ? async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {
-            // Convert tournament format to match API expectation
-            const apiFormat: "sealed" | "draft" | "constructed" = 
-              cfg.format === "swiss" ? "constructed" : 
-              cfg.format === "elimination" ? "draft" : "sealed";
-            
+            // DB "format" is the match type (constructed | sealed | draft)
+            // Store pairing system separately in settings.pairingFormat
+            const settings: Record<string, unknown> = {
+              pairingFormat: cfg.format,
+            };
+            // Provide sensible defaults per match type so tournament rounds carry correct configs
+            if (cfg.matchType === 'sealed') {
+              settings.sealedConfig = {
+                packCounts: { Beta: 6, "Arthurian Legends": 0 },
+                timeLimit: 40,
+                replaceAvatars: false,
+              };
+            } else if (cfg.matchType === 'draft') {
+              settings.draftConfig = {
+                setMix: ['Beta'],
+                packCount: 3,
+                packSize: 15,
+                packCounts: { Beta: 3, "Arthurian Legends": 0 },
+              };
+            }
+
             await createTournament({
               name: cfg.name,
-              format: apiFormat,
-              maxPlayers: cfg.maxPlayers
+              format: cfg.matchType,
+              maxPlayers: cfg.maxPlayers,
+              settings,
             });
             // Stay on lobby page - tournaments are now shown here
           } catch (error) {
             console.error('Failed to create tournament:', error);
           }
-        }}
-        onJoinTournament={async (tournamentId: string) => {
+        } : undefined}
+        onJoinTournament={tournamentsEnabled ? async (tournamentId: string) => {
           console.log(`Joining tournament: ${tournamentId}`);
           try {
             await joinTournament(tournamentId);
           } catch (error) {
             console.error('Failed to join tournament:', error);
           }
-        }}
-        onLeaveTournament={async (tournamentId: string) => {
+        } : undefined}
+        onLeaveTournament={tournamentsEnabled ? async (tournamentId: string) => {
           console.log(`Leaving tournament: ${tournamentId}`);
           try {
             await leaveTournament(tournamentId);
           } catch (error) {
             console.error('Failed to leave tournament:', error);
           }
-        }}
-        onUpdateTournamentSettings={async (tournamentId: string, settings) => {
+        } : undefined}
+        onUpdateTournamentSettings={tournamentsEnabled ? async (tournamentId: string, settings) => {
           console.log(`Updating tournament settings: ${tournamentId}`, settings);
           try {
             await updateTournamentSettings(tournamentId, settings);
           } catch (error) {
             console.error('Failed to update tournament settings:', error);
           }
-        }}
-        onToggleTournamentReady={async (tournamentId: string, ready: boolean) => {
+        } : undefined}
+        onToggleTournamentReady={tournamentsEnabled ? async (tournamentId: string, ready: boolean) => {
           console.log(`Toggling tournament ready: ${tournamentId}`, ready);
           try {
             await toggleTournamentReady(tournamentId, ready);
           } catch (error) {
             console.error('Failed to toggle tournament ready:', error);
           }
-        }}
-        onStartTournament={async (tournamentId: string) => {
+        } : undefined}
+        onStartTournament={tournamentsEnabled ? async (tournamentId: string) => {
           console.log(`Starting tournament: ${tournamentId}`);
           try {
             await startTournament(tournamentId);
           } catch (error) {
             console.error('Failed to start tournament:', error);
           }
-        }}
-        onEndTournament={async (tournamentId: string) => {
+        } : undefined}
+        onEndTournament={tournamentsEnabled ? async (tournamentId: string) => {
           console.log(`Ending tournament: ${tournamentId}`);
           try {
             await endTournament(tournamentId);
           } catch (error) {
             console.error('Failed to end tournament:', error);
           }
-        }}
+        } : undefined}
+        tournamentsEnabled={tournamentsEnabled}
         onRefresh={() => requestLobbies()}
       />
 
@@ -914,10 +976,21 @@ function LobbyPageContent() {
   );
 }
 
+// Helper component that provides tournaments API via context
+function LobbyPageWithTournaments() {
+  const api = useRealtimeTournaments();
+  return <LobbyPageContent tournamentsApi={api as unknown as TournamentsAPI} />;
+}
+
 export default function LobbyPage() {
+  const tournamentsEnabled = tournamentFeatures.isEnabled();
   return (
-    <RealtimeTournamentProvider>
+    tournamentsEnabled ? (
+      <RealtimeTournamentProvider>
+        <LobbyPageWithTournaments />
+      </RealtimeTournamentProvider>
+    ) : (
       <LobbyPageContent />
-    </RealtimeTournamentProvider>
+    )
   );
 }

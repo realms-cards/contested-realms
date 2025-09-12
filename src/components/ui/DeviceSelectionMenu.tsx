@@ -4,8 +4,8 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import type { DeviceSelectionMenuProps } from '../../../specs/006-live-video-and/contracts/ui-components';
 import { getDeviceDisplayName } from '@/lib/utils/webrtc-devices';
+import type { DeviceSelectionMenuProps } from '../../../specs/006-live-video-and/contracts/ui-components';
 
 export const DeviceSelectionMenu: React.FC<DeviceSelectionMenuProps> = ({
   audioDevices,

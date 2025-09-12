@@ -2,12 +2,12 @@
 
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
+import { useOnline } from "@/app/online/online-context";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
-import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
-import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
-import { useOnline } from "@/app/online/online-context";
 
 interface OnlineD20ScreenProps {
   myPlayerKey: PlayerKey;

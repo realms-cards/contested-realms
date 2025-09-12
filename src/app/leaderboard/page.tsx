@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface LeaderboardEntry {
   rank: number;
@@ -39,7 +40,7 @@ export default function LeaderboardPage() {
   const [format, setFormat] = useState<'constructed' | 'sealed' | 'draft'>('constructed');
   const [timeFrame, setTimeFrame] = useState<'all_time' | 'monthly' | 'weekly'>('all_time');
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -54,11 +55,11 @@ export default function LeaderboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [format, timeFrame]);
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [format, timeFrame]);
+    void fetchLeaderboard();
+  }, [fetchLeaderboard]);
 
   const formatWinRate = (winRate: number) => `${(winRate * 100).toFixed(1)}%`;
 
@@ -189,10 +190,12 @@ export default function LeaderboardPage() {
                   {/* Player Info */}
                   <div className="flex items-center gap-3">
                     {entry.playerImage ? (
-                      <img 
-                        src={entry.playerImage} 
+                      <Image
+                        src={entry.playerImage}
                         alt={entry.displayName}
-                        className="w-10 h-10 rounded-full"
+                        width={40}
+                        height={40}
+                        className="rounded-full"
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center text-white text-sm font-medium">

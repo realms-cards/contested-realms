@@ -48,11 +48,11 @@ export default function OnlineDraftSession({
   playerId,
   transport,
   draftState,
-  cameraPosition = { x: 0, y: 5, z: 10 },
-  cameraTarget = { x: 0, y: 0, z: 0 },
+  cameraPosition: _cameraPosition = { x: 0, y: 5, z: 10 },
+  cameraTarget: _cameraTarget = { x: 0, y: 0, z: 0 },
   onCardPick,
   onCardInspect,
-  onDraftComplete,
+  onDraftComplete: _onDraftComplete,
   onError,
 }: OnlineDraftSessionProps) {
   const [currentPack, setCurrentPack] = useState<CardInStack[]>([]);
@@ -63,7 +63,7 @@ export default function OnlineDraftSession({
   const {
     isConnected,
     sendCardPreview,
-    sendStackInteraction,
+    sendStackInteraction: _sendStackInteraction,
     activePreviews,
     playerStates
   } = useDraft3DTransport({
@@ -78,7 +78,7 @@ export default function OnlineDraftSession({
   
   // Session and player state management
   const { joinSession, leaveSession } = useDraft3DSession();
-  const { currentPlayerId } = useDraft3DPlayers();
+  const { currentPlayerId: _currentPlayerId } = useDraft3DPlayers();
   
   // Initialize session on mount
   useEffect(() => {
@@ -175,7 +175,7 @@ export default function OnlineDraftSession({
     return positions;
   }, [playerStates, playerId]);
   
-  const handleCardPick = useCallback((cardId: string, stackId: string) => {
+  const handleCardPick = useCallback((cardId: string, _stackId: string) => {
     // Send pick action through existing draft system
     onCardPick?.(cardId);
     

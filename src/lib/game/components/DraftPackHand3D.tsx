@@ -208,7 +208,7 @@ export default function DraftPackHand3D({
 
     return new Array(n).fill(0).map((_, i) => {
       const x = startX + i * (cardW + realGap);
-      const originalIndex = visibleIndices[i]!;
+      const originalIndex = visibleIndices[i] ?? 0;
       return { originalIndex, x, z: i * 0.001, scale };
     });
   }, [visibleIndices, camera, size.width, size.height]);
@@ -242,7 +242,7 @@ export default function DraftPackHand3D({
               const xs = layout.map((e) => e.x);
               const minX = Math.min(...xs);
               const maxX = Math.max(...xs);
-              const scale = layout[0]!.scale;
+              const scale = layout[0] ? layout[0].scale : ROW_MIN_SCALE;
               const cardW = CARD_SHORT * scale;
               const rowW = (maxX - minX) + cardW + 0.4; // add margin
               const rowD = CARD_LONG * scale * 1.6; // generous depth
@@ -257,7 +257,7 @@ export default function DraftPackHand3D({
         )}
         {layout.map((entry) => {
           const { originalIndex, x, z, scale } = entry;
-          const c = cards[originalIndex]!;
+          const c = cards[originalIndex] ?? cards[0];
           const isSite = (c.type || "").toLowerCase().includes("site");
           const key = c.variantId != null ? `v-${c.variantId}-${originalIndex}` : `c-${c.cardId}-${originalIndex}`;
           return (

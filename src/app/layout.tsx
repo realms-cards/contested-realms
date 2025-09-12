@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+// Google fonts disabled for offline/CI builds
 import localFont from "next/font/local";
 import "./globals.css";
 import { getServerSession } from "next-auth/next";
@@ -7,15 +7,9 @@ import AuthProvider from "@/components/auth/AuthProvider";
 import { authOptions } from "@/lib/auth";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Provide empty variables instead of loading Google fonts in network-restricted environments
+const geistSans = { variable: "" } as { variable: string };
+const geistMono = { variable: "" } as { variable: string };
 
 const fantaisieArtistique = localFont({
   src: "../../public/fantaisie_artistiqu.ttf",

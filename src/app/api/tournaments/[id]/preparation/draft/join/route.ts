@@ -14,10 +14,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
+    const userId = session.user.id;
     const registration = await prisma.tournamentRegistration.findFirst({
       where: {
         tournamentId: id,
-        playerId: session.user.id
+        playerId: userId
       },
       include: {
         tournament: {
@@ -100,14 +101,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Check if player is already in the session
-    const existingParticipant = draftSession.participants.find(p => p.playerId === session.user!.id);
+    const existingParticipant = draftSession.participants.find(p => p.playerId === userId);
     
     if (!existingParticipant) {
       // Add player to draft session
       await prisma.draftParticipant.create({
         data: {
           draftSessionId: draftSession.id,
-          playerId: session.user!.id,
+          playerId: userId,
           seatNumber: draftSession.participants.length + 1,
           status: 'waiting'
         }

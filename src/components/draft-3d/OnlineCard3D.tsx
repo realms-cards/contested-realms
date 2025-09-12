@@ -1,7 +1,7 @@
 "use client";
 
 import type { ThreeEvent } from "@react-three/fiber";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import type { Group } from "three";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
@@ -202,7 +202,6 @@ export default function OnlineCard3D({
   
   // Visual indicators for online state
   const isOwned = ownedByPlayer === playerId;
-  const isOwnedByOther = ownedByPlayer && ownedByPlayer !== playerId;
   
   // Adjust render order for previewed cards
   useEffect(() => {

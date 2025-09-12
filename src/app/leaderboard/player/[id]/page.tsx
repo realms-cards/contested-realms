@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
@@ -162,10 +163,12 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
           </button>
           <div className="flex items-center gap-4">
             {data.player.image ? (
-              <img 
-                src={data.player.image} 
+              <Image
+                src={data.player.image}
                 alt={data.player.name}
-                className="w-16 h-16 rounded-full"
+                width={64}
+                height={64}
+                className="rounded-full"
               />
             ) : (
               <div className="w-16 h-16 rounded-full bg-slate-600 flex items-center justify-center text-white text-xl font-bold">

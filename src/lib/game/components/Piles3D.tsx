@@ -8,9 +8,9 @@ import {
   CARD_SHORT,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import type { CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
-import type { CardPreviewData } from "@/lib/game/hooks/useCardHover";
 
 export interface Piles3DProps {
   matW: number;
@@ -196,7 +196,7 @@ export default function Piles3D({
                   .map((card, stackIndex) => (
                     <CardPlane
                       key={`stack-${card.slug}-${stackIndex}`}
-                      slug={card.slug!}
+                      slug={card.slug || ''}
                       textureUrl={cardbackUrl}
                       forceTextureUrl={!isCemetery}
                       width={w}

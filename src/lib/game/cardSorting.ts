@@ -103,7 +103,7 @@ export function categorizeAndSortPicks(
     const meta = metaByCardId[pick.card.cardId];
     const category = categorizeCard(pick.card, meta);
     if (!acc[category]) acc[category] = [];
-    acc[category]!.push(pick);
+    (acc[category] as Pick3D[]).push(pick);
     return acc;
   }, {} as CategorizedPicks);
 

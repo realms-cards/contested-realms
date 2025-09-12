@@ -3,11 +3,11 @@
  * Coordinates multi-player deck submission process with real-time updates
  */
 
+// TODO(waiting): Reintroduce additional waiting types when building full UX flows.
 import type {
   WaitingOverlayState,
   WaitingProgress,
   PlayerWaitingStatus,
-  WaitingMessage,
   WaitingUpdateEvent,
   WaitingCoordination,
   TimeoutConfiguration,
@@ -15,11 +15,7 @@ import type {
   WaitingManagerState,
   WaitingType,
   PlayerStatus,
-  WaitingUpdateType,
-  SubmissionPhase,
   SubmissionProgress,
-  AccessibilityAnnouncement,
-  AnnouncementPriority
 } from './types';
 
 export class WaitingStateManager {

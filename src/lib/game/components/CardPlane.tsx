@@ -1,7 +1,7 @@
 "use client";
 
 import type { ThreeEvent } from "@react-three/fiber";
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense } from "react";
 import { type Object3D, type Raycaster, type Intersection } from "three";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 

@@ -15,7 +15,6 @@ import type {
   DraftConfig,
   TournamentInfo,
 } from "@/lib/net/protocol";
-
 // Import Draft-3D event types for enhanced online integration
 import type { 
   Draft3DEventMap,

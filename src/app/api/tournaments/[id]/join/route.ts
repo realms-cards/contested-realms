@@ -15,6 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
+    const userId = session.user.id;
     // Handle empty request body gracefully
     let body: { displayName?: string } = {};
     try {
@@ -27,11 +28,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       console.log("Invalid or empty JSON body, using default:", jsonError);
     }
     
-    console.log("Tournament join attempt:", { tournamentId: id, userId: session.user.id });
+    console.log("Tournament join attempt:", { tournamentId: id, userId });
     
     // Get user info for display name fallback
     const user = await prisma.user.findUnique({
-      where: { id: session.user!.id },
+      where: { id: userId },
       select: { name: true, email: true }
     });
     
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Check if already registered
-    const existingRegistration = tournament.registrations.find(reg => reg.playerId === session.user!.id);
+    const existingRegistration = tournament.registrations.find(reg => reg.playerId === userId);
     if (existingRegistration) {
       return new Response(JSON.stringify({ error: 'Already registered for this tournament' }), { status: 400 });
     }
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Enforce "one lobby rule" - check if user is in any other active tournament or lobby
     const existingTournamentRegistrations = await prisma.tournamentRegistration.findMany({
       where: {
-        playerId: session.user!.id,
+        playerId: userId,
         tournamentId: { not: id }, // Not this tournament
         tournament: {
           status: { in: ['registering', 'preparing', 'active'] }
@@ -94,20 +95,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // For now, we'll rely on frontend validation for lobby conflicts
 
     // Create registration
-    console.log("Creating tournament registration:", { tournamentId: id, playerId: session.user.id, displayName });
+    console.log("Creating tournament registration:", { tournamentId: id, playerId: userId, displayName });
     const registration = await prisma.tournamentRegistration.create({
       data: {
         tournamentId: id,
-        playerId: session.user!.id
+        playerId: userId
       }
     });
 
     // Create initial standing
-    console.log("Creating player standing:", { tournamentId: id, playerId: session.user.id, displayName });
+    console.log("Creating player standing:", { tournamentId: id, playerId: userId, displayName });
     await prisma.playerStanding.create({
       data: {
         tournamentId: id,
-        playerId: session.user!.id,
+        playerId: userId,
         displayName
       }
     });
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     try {
       await tournamentSocketService.broadcastPlayerJoined(
         id,
-        session.user!.id,
+        userId,
         displayName,
         currentPlayerCount
       );
@@ -135,7 +136,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return new Response(JSON.stringify({
       success: true,
       registrationId: registration.id,
-      playerId: session.user!.id,
+      playerId: userId,
       displayName,
       currentPlayerCount
     }), {

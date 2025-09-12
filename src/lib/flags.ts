@@ -1,5 +1,5 @@
-import { FEATURE_SEAT_VIDEO } from './config/features';
-export { FEATURE_SEAT_VIDEO };
+import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY } from './config/features';
+export { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY };
 
 function parseIceServersFromEnv(): RTCIceServer[] | null {
   const raw = process.env.NEXT_PUBLIC_ICE_SERVERS;

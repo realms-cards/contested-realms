@@ -1,3 +1,6 @@
+/*
+  (moved) Tournament Matches Modal lives inside the component now.
+*/
 "use client";
 
 import { RefreshCw, Eye, EyeOff } from "lucide-react";
@@ -37,6 +40,189 @@ export type CreateLobbyConfig = {
   maxPlayers: number;
 };
 
+type TournamentMatchesResponse = {
+  tournament: {
+    id: string;
+    name: string;
+    format: string;
+    status: string;
+    maxPlayers: number;
+  };
+  summary: {
+    totalMatches: number;
+    completedMatches: number;
+    pendingMatches: number;
+    averageGameCount: number;
+    averageDuration: number | null;
+  };
+  matches: Array<{
+    id: string;
+    tournamentId: string;
+    tournamentName?: string;
+    roundNumber: number | null;
+    status: string;
+    players: Array<{ id: string; name: string; seat: number | null }>;
+    winnerId: string | null;
+    gameCount: number;
+    duration: number | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    createdAt: string;
+  }>;
+};
+
+function TournamentMatchesModal({
+  open,
+  onClose,
+  loading,
+  error,
+  data,
+  myId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  loading: boolean;
+  error: string | null;
+  data: TournamentMatchesResponse | null;
+  myId?: string | null;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-3xl p-5">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-base font-semibold">
+            {data?.tournament?.name ? `Matches – ${data.tournament.name}` : 'Tournament Matches'}
+          </div>
+          <button className="text-slate-300 hover:text-white text-sm" onClick={onClose}>Close</button>
+        </div>
+        {loading && (
+          <div className="py-10 text-center text-sm opacity-80">Loading matches…</div>
+        )}
+        {!loading && error && (
+          <div className="py-6 text-center text-sm text-rose-300">{error}</div>
+        )}
+        {!loading && !error && data && (
+          <div className="space-y-4">
+            <div className="text-xs text-slate-300">
+              <span className="mr-3">Total: {data.summary.totalMatches}</span>
+              <span className="mr-3">Completed: {data.summary.completedMatches}</span>
+              <span className="mr-3">Pending: {data.summary.pendingMatches}</span>
+              <span className="mr-3">Avg games: {data.summary.averageGameCount}</span>
+              {data.summary.averageDuration != null && (
+                <span>Avg duration: {data.summary.averageDuration}s</span>
+              )}
+            </div>
+            <div className="max-h-[60vh] overflow-auto pr-1">
+              {(() => {
+                const groups: Map<number | 'Unassigned', TournamentMatchesResponse['matches']> = new Map();
+                for (const m of data.matches) {
+                  const key = (m.roundNumber ?? 'Unassigned') as number | 'Unassigned';
+                  const arr = groups.get(key) ?? [];
+                  arr.push(m);
+                  groups.set(key, arr);
+                }
+                const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+                  if (a === 'Unassigned') return 1;
+                  if (b === 'Unassigned') return -1;
+                  return (a as number) - (b as number);
+                });
+                return (
+                  <div className="space-y-3">
+                    {sortedKeys.map((key) => {
+                      const group = groups.get(key) ?? [];
+                      return (
+                        <div key={String(key)} className="border border-slate-700 rounded">
+                          <div className="px-3 py-2 text-xs font-medium bg-slate-800/70">
+                            Round {key === 'Unassigned' ? '—' : key}
+                          </div>
+                          <div className="divide-y divide-slate-800">
+                            {group.map((m: TournamentMatchesResponse['matches'][number]) => (
+                              <div key={m.id} className="px-3 py-2 text-sm flex items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{m.players.map((p: TournamentMatchesResponse['matches'][number]['players'][number]) => p.name).join(' vs ')}</span>
+                                    <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-white/10 text-white/70 ring-1 ring-white/20">{m.status}</span>
+                                  </div>
+                                  <div className="text-xs opacity-70">
+                                    Games: {m.gameCount} {m.winnerId ? `• Winner: ${m.players.find((p: TournamentMatchesResponse['matches'][number]['players'][number]) => p.id === m.winnerId)?.name ?? '—'}` : ''}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-xs text-slate-300 whitespace-nowrap">
+                                    {m.startedAt ? new Date(m.startedAt).toLocaleString() : ''}
+                                  </div>
+                                  {/* Offer Join for current player's assignment */}
+                                  {myId && m.players.some(p => p.id === myId) && (
+                                    <button
+                                      className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
+                                      onClick={async () => {
+                                        try {
+                                          // Compute match type from tournament info without using 'any'
+                                          const tRaw = data?.tournament as unknown;
+                                          const tObj = (tRaw && typeof tRaw === 'object') ? (tRaw as Record<string, unknown>) : null;
+                                          const tMatchType = (tObj?.matchType as string | undefined)
+                                            ?? (tObj?.format as string | undefined)
+                                            ?? 'constructed';
+
+                                          // Try to get sealed/draft configs from matches payload; fallback to tournament details API
+                                          let sealedConfig: unknown = (tObj?.settings as Record<string, unknown> | undefined)?.sealedConfig || null;
+                                          let draftConfig: unknown = (tObj?.settings as Record<string, unknown> | undefined)?.draftConfig || null;
+                                          if (!sealedConfig && !draftConfig && (tObj?.id as string | undefined)) {
+                                            try {
+                                              const detailRes = await fetch(`/api/tournaments/${tObj?.id as string}`);
+                                              if (detailRes.ok) {
+                                                const detail = await detailRes.json();
+                                                sealedConfig = detail?.settings?.sealedConfig || null;
+                                                draftConfig = detail?.settings?.draftConfig || null;
+                                              }
+                                            } catch {}
+                                          }
+
+                                          // Sensible defaults if server settings absent
+                                          if (tMatchType === 'sealed' && !sealedConfig) {
+                                            sealedConfig = { packCounts: { Beta: 6 }, timeLimit: 40, replaceAvatars: false };
+                                          }
+                                          if (tMatchType === 'draft' && !draftConfig) {
+                                            draftConfig = { setMix: ['Beta'], packCount: 3, packSize: 15, packCounts: { Beta: 3 } };
+                                          }
+
+                                          // Persist bootstrap payload so the play page can initialize the match room
+                                          const payload = {
+                                            players: m.players.map(p => p.id),
+                                            matchType: tMatchType as 'constructed' | 'sealed' | 'draft',
+                                            lobbyName: (tObj?.name as string | undefined) || undefined,
+                                            sealedConfig,
+                                            draftConfig,
+                                          };
+                                          localStorage.setItem(`tournamentMatchBootstrap_${m.id}`, JSON.stringify(payload));
+                                          window.location.href = `/online/play/${encodeURIComponent(m.id)}`;
+                                        } catch {}
+                                      }}
+                                      title="Join your match"
+                                    >
+                                      Join Match
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export type CreateTournamentConfig = {
   name: string;
   format: "swiss" | "elimination" | "round_robin";
@@ -65,6 +251,7 @@ export default function LobbiesCentral({
   onStartTournament,
   onEndTournament,
   onRefresh,
+  tournamentsEnabled = true,
 }: {
   lobbies: LobbyInfo[];
   tournaments: TournamentInfo[];
@@ -90,18 +277,23 @@ export default function LobbiesCentral({
   onStartTournament?: (tournamentId: string) => void;
   onEndTournament?: (tournamentId: string) => void;
   onRefresh: () => void;
+  tournamentsEnabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
   const [hideStarted, setHideStarted] = useState(true);
   const [sortKey, setSortKey] = useState<"invited" | "playersAsc" | "playersDesc" | "status">("status");
-  const [showTournaments, setShowTournaments] = useState(true);
+  const [showTournaments, setShowTournaments] = useState(tournamentsEnabled);
   const [showLobbies, setShowLobbies] = useState(true);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [editingTournament, setEditingTournament] = useState<TournamentInfo | null>(null);
   const [endTournamentConfirm, setEndTournamentConfirm] = useState<string | null>(null);
   const [tournamentOverlayOpen, setTournamentOverlayOpen] = useState(false);
+  const [matchesModalOpen, setMatchesModalOpen] = useState(false);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
+  const [matchesData, setMatchesData] = useState<TournamentMatchesResponse | null>(null);
   
   // Check if user is already engaged in a lobby or tournament
   const isInLobby = joinedLobbyId !== null;
@@ -166,6 +358,8 @@ export default function LobbiesCentral({
   const filteredTournaments = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tournaments.filter(tournament => {
+      // Always exclude completed tournaments from Active Games view
+      if (tournament.status === "completed") return false;
       const isJoined = tournament.registeredPlayers.some(p => p.id === myId);
       if (q && !tournament.name.toLowerCase().includes(q)) return false;
       // Don't hide joined tournaments even if they're full or started
@@ -183,6 +377,30 @@ export default function LobbiesCentral({
       return b.registeredPlayers.length - a.registeredPlayers.length;
     });
   }, [tournaments, query, hideFull, hideStarted, myId]);
+
+  async function openMatchesModal(tournamentId: string) {
+    setMatchesModalOpen(true);
+    setMatchesLoading(true);
+    setMatchesError(null);
+    setMatchesData(null);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}/matches`);
+      if (!res.ok) {
+        let errMsg = `Failed to load matches (${res.status})`;
+        try {
+          const err = await res.json();
+          if (typeof err?.error === 'string') errMsg = err.error;
+        } catch {}
+        throw new Error(errMsg);
+      }
+      const data = await res.json() as TournamentMatchesResponse;
+      setMatchesData(data);
+    } catch (e) {
+      setMatchesError(e instanceof Error ? e.message : 'Failed to load matches');
+    } finally {
+      setMatchesLoading(false);
+    }
+  }
 
   return (
     <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
@@ -260,15 +478,17 @@ export default function LobbiesCentral({
           >
             Lobbies ({filtered.length})
           </button>
-          <button
-            className={`text-[11px] px-2 py-0.5 rounded ${
-              showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-            }`}
-            onClick={() => setShowTournaments(!showTournaments)}
-            title="Toggle tournaments"
-          >
-            Tournaments ({filteredTournaments.length})
-          </button>
+          {tournamentsEnabled && (
+            <button
+              className={`text-[11px] px-2 py-0.5 rounded ${
+                showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+              }`}
+              onClick={() => setShowTournaments(!showTournaments)}
+              title="Toggle tournaments"
+            >
+              Tournaments ({filteredTournaments.length})
+            </button>
+          )}
         </div>
         <label className="text-xs flex items-center gap-1 opacity-80">
           <input type="checkbox" checked={hideFull} onChange={(e) => setHideFull(e.target.checked)} />
@@ -446,7 +666,7 @@ export default function LobbiesCentral({
           );
         })}
         
-        {showTournaments && filteredTournaments.map((tournament) => {
+        {tournamentsEnabled && showTournaments && filteredTournaments.map((tournament) => {
           const isRegistered = tournament.registeredPlayers.some(p => p.id === myId);
           const myRegistration = tournament.registeredPlayers.find(p => p.id === myId);
           const isReady = myRegistration?.ready || false;
@@ -569,7 +789,7 @@ export default function LobbiesCentral({
                 {isRegistered && tournament.status === "playing" && (
                   <button
                     className="rounded bg-orange-600/80 hover:bg-orange-600 px-3 py-1 text-xs text-orange-100"
-                    onClick={() => console.log(`View tournament ${tournament.id} matches - matches UI needs implementation`)}
+                    onClick={() => openMatchesModal(tournament.id)}
                   >
                     View Matches
                   </button>
@@ -605,10 +825,10 @@ export default function LobbiesCentral({
         {showLobbies && !showTournaments && filtered.length === 0 && (
           <div className="px-3 py-8 text-center text-sm opacity-60">No lobbies match your filters.</div>
         )}
-        {!showLobbies && showTournaments && filteredTournaments.length === 0 && (
+        {tournamentsEnabled && !showLobbies && showTournaments && filteredTournaments.length === 0 && (
           <div className="px-3 py-8 text-center text-sm opacity-60">No tournaments match your filters.</div>
         )}
-        {!showLobbies && !showTournaments && (
+        {!showLobbies && !(tournamentsEnabled && showTournaments) && (
           <div className="px-3 py-8 text-center text-sm opacity-60">Select lobby or tournament filters to view games.</div>
         )}
       </div>
@@ -694,7 +914,7 @@ export default function LobbiesCentral({
       )}
 
       {/* Tournament Creation Overlay */}
-      {tournamentOverlayOpen && onCreateTournament && (
+      {tournamentsEnabled && tournamentOverlayOpen && onCreateTournament && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => setTournamentOverlayOpen(false)} />
           <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
@@ -811,7 +1031,7 @@ export default function LobbiesCentral({
       )}
 
       {/* Tournament Settings Modal */}
-      {settingsModalOpen && editingTournament && (
+      {tournamentsEnabled && settingsModalOpen && editingTournament && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-lg border border-slate-700 w-full max-w-md">
             <div className="p-6">
@@ -837,7 +1057,7 @@ export default function LobbiesCentral({
       )}
 
       {/* End Tournament Confirmation Modal */}
-      {endTournamentConfirm && (
+      {tournamentsEnabled && endTournamentConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-lg border border-slate-700 w-full max-w-md">
             <div className="p-6">
@@ -870,6 +1090,16 @@ export default function LobbiesCentral({
           </div>
         </div>
       )}
+
+      {/* Tournament Matches Modal */}
+      <TournamentMatchesModal
+        open={matchesModalOpen}
+        onClose={() => setMatchesModalOpen(false)}
+        loading={matchesLoading}
+        error={matchesError}
+        data={matchesData}
+        myId={myId}
+      />
     </div>
   );
 }
@@ -1020,4 +1250,3 @@ function TournamentSettingsForm({
     </div>
   );
 }
-

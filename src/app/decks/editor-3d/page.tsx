@@ -93,6 +93,8 @@ function AuthenticatedDeckEditor() {
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
 
   // Debug: Track picks changes
+  // Runs once on initial picks change logging; intentionally omits deckName/setName
+   
   useEffect(() => {
     const pickCount = Object.keys(picks).length;
     const totalCards = Object.values(picks).reduce(
@@ -117,8 +119,11 @@ function AuthenticatedDeckEditor() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [waitingForOtherPlayers, setWaitingForOtherPlayers] = useState(false);
+  const [orbitLocked, setOrbitLocked] = useState(false);
 
   // Clear transient errors when auth status changes to authenticated
+  // Intentionally running once per pick3D change; server batching relies on prior state
+   
   useEffect(() => {
     if (status === "authenticated") setError(null);
   }, [status]);
@@ -145,9 +150,8 @@ function AuthenticatedDeckEditor() {
   // Exact same 3D state as draft-3d
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [statsCollapsed, setStatsCollapsed] = useState(true);
-  const [infoBoxVisible, setInfoBoxVisible] = useState(true);
+  const [infoBoxVisible] = useState(true);
   const [picksOpen, setPicksOpen] = useState(true);
-  const [orbitLocked, setOrbitLocked] = useState(false);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
   // Ensure we only initialize draft mode once per load

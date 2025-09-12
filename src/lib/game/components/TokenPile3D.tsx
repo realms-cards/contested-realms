@@ -131,7 +131,6 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
         >
           {(() => {
             const defsAll = TOKEN_DEFS;
-            const big = defsAll.filter((d) => d.size === "normal"); // Bruin, Rubble
             const small = defsAll.filter((d) => d.size !== "normal");
             const leftCount = Math.floor(small.length / 2);
             const left = small.slice(0, leftCount);

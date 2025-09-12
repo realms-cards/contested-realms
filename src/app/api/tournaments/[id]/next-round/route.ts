@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
+import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -47,12 +46,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // For now, we'll allow settings changes during registration phase
 
     // Validate the settings
-    type TournamentSettingsUpdate = {
-      name?: string;
-      format?: 'sealed' | 'draft' | 'constructed';
-      maxPlayers?: number;
-      settings?: Record<string, unknown>;
-    };
     const updates: Record<string, unknown> = {};
     
     if (body.name !== undefined) {
@@ -97,7 +90,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Calculate tournament settings based on format and maxPlayers
     if (updates.format !== undefined || updates.maxPlayers !== undefined) {
-      const format = updates.format || tournament.format;
       const maxPlayers = (updates.maxPlayers as number) || tournament.maxPlayers;
       
       // Calculate optimal rounds based on player count (Swiss system)

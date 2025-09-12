@@ -73,8 +73,12 @@ interface UseTournamentSocketReturn {
 }
 
 export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTournamentSocketReturn {
+  // Prefer Next.js in-process Socket.IO server under '/api/socket' at current origin
+  // Fallback to explicit NEXT_PUBLIC_WS_URL (legacy external server)
+  const defaultUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
   const socket = useSocket({
-    url: process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010',
+    url: process.env.NEXT_PUBLIC_TOURNAMENT_WS_URL || defaultUrl,
+    path: process.env.NEXT_PUBLIC_TOURNAMENT_WS_PATH || '/api/socket',
     autoConnect: true,
     reconnection: true,
     reconnectionDelay: 1000,

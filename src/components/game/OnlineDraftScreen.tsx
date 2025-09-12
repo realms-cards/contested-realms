@@ -7,6 +7,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { 
   type Pick3D, 
   type BoosterCard,
@@ -15,8 +17,6 @@ import {
 } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { DraftState, TransportEventMap } from "@/lib/net/transport";
-import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
-import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 
 type Card = {
   id: string;
