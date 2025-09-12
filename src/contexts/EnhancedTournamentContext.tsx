@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react";
 import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
 import { useTournamentStatistics } from "@/hooks/useTournamentStatistics";
 
@@ -118,7 +118,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     settings?: Record<string, unknown>;
   }) => {
     return withOptimisticUpdate(async () => {
-      console.log("Creating tournament:", config);
       
       const response = await fetch('/api/tournaments', {
         method: 'POST',
@@ -132,7 +131,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
       }
 
       const tournament = await response.json();
-      console.log("Tournament created:", tournament);
       
       // Update tournaments list
       await refreshTournaments();
@@ -140,31 +138,30 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     })();
   }, []);
 
+  const isRefreshingRef = useRef(false);
   const refreshTournaments = useCallback(async () => {
-    return withOptimisticUpdate(async () => {
-      console.log("Fetching tournaments list");
-      
-      const response = await fetch('/api/tournaments');
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch tournaments');
-      }
-
-      const tournamentsData = await response.json() as TournamentInfo[];
-      console.log("Tournaments fetched:", tournamentsData);
-      
-      setTournaments(tournamentsData);
-      
-      // Update current tournament if it's in the list
-      if (currentTournament) {
-        const updatedCurrent = tournamentsData.find(t => t.id === currentTournament.id);
-        if (updatedCurrent) {
-          setCurrentTournament(updatedCurrent);
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    try {
+      await withOptimisticUpdate(async () => {
+        const response = await fetch('/api/tournaments');
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to fetch tournaments');
         }
-      }
-    })();
-  }, [currentTournament]);
+        const tournamentsData = await response.json() as TournamentInfo[];
+        setTournaments(tournamentsData);
+        if (currentTournament) {
+          const updatedCurrent = tournamentsData.find(t => t.id === currentTournament.id);
+          if (updatedCurrent) {
+            setCurrentTournament(updatedCurrent);
+          }
+        }
+      })();
+    } finally {
+      isRefreshingRef.current = false;
+    }
+  }, [currentTournament, withOptimisticUpdate]);
 
   const getTournament = useCallback(async (tournamentId: string): Promise<TournamentInfo> => {
     return withOptimisticUpdate(async () => {
@@ -191,7 +188,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     
     return withOptimisticUpdate(
       async () => {
-        console.log("Joining tournament:", tournamentId);
         
         const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
           method: 'POST',
@@ -203,7 +199,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
           throw new Error(error.error || 'Failed to join tournament');
         }
 
-        console.log("Joined tournament successfully");
         await refreshTournaments();
       },
       // Optimistic update
@@ -228,7 +223,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     
     return withOptimisticUpdate(
       async () => {
-        console.log("Leaving tournament:", tournamentId);
         
         const response = await fetch(`/api/tournaments/${tournamentId}/leave`, {
           method: 'POST',
@@ -240,7 +234,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
           throw new Error(error.error || 'Failed to leave tournament');
         }
 
-        console.log("Left tournament successfully");
         await refreshTournaments();
       },
       // Optimistic update
@@ -265,7 +258,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     
     return withOptimisticUpdate(
       async () => {
-        console.log("Starting tournament:", tournamentId);
         
         const response = await fetch(`/api/tournaments/${tournamentId}/start`, {
           method: 'POST',
@@ -277,7 +269,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
           throw new Error(error.error || 'Failed to start tournament');
         }
 
-        console.log("Tournament started successfully");
         await refreshTournaments();
       },
       // Optimistic update
@@ -302,7 +293,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     
     return withOptimisticUpdate(
       async () => {
-        console.log("Ending tournament:", tournamentId);
         
         const response = await fetch(`/api/tournaments/${tournamentId}/end`, {
           method: 'POST',
@@ -314,7 +304,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
           throw new Error(error.error || 'Failed to end tournament');
         }
 
-        console.log("Tournament ended successfully");
         await refreshTournaments();
       },
       // Optimistic update
@@ -339,7 +328,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     settings: Record<string, unknown>
   ) => {
     return withOptimisticUpdate(async () => {
-      console.log("Updating tournament settings:", { tournamentId, settings });
       
       const response = await fetch(`/api/tournaments/${tournamentId}/settings`, {
         method: 'PUT',
@@ -352,7 +340,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         throw new Error(error.error || 'Failed to update tournament settings');
       }
 
-      console.log("Tournament settings updated successfully");
       await refreshTournaments();
     })();
   }, [refreshTournaments]);
@@ -362,7 +349,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     
     return withOptimisticUpdate(
       async () => {
-        console.log("Toggling tournament ready status:", { tournamentId, ready });
         
         const response = await fetch(`/api/tournaments/${tournamentId}/ready`, {
           method: 'POST',
@@ -375,7 +361,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
           throw new Error(error.error || 'Failed to update ready status');
         }
 
-        console.log("Tournament ready status updated");
         await refreshTournaments();
       },
       // Optimistic update
@@ -395,16 +380,9 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     )();
   }, [tournaments, refreshTournaments]);
 
-  // Auto-fetch tournaments on mount and set up periodic refresh
+  // Auto-fetch tournaments on mount (single load). Subsequent updates should come via event-driven contexts.
   useEffect(() => {
-    refreshTournaments();
-    
-    // Set up periodic refresh every 15 seconds for real-time updates
-    const interval = setInterval(() => {
-      refreshTournaments();
-    }, 15000);
-    
-    return () => clearInterval(interval);
+    void refreshTournaments();
   }, [refreshTournaments]);
 
   const contextValue: EnhancedTournamentContextValue = {

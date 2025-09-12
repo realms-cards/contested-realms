@@ -15,12 +15,10 @@ import type {
   UIUpdateType
 } from '@/types/draft-3d-events';
 import type { 
-  OnlineDraftState, 
   PlayerDraftState, 
   CardPreviewState, 
   StackInteraction,
   UIState,
-  PlayerPreferences
 } from '@/types/draft-models';
 
 /**
@@ -148,8 +146,7 @@ export class StackInteractionManager {
     playerId: string,
     interactionType: StackInteractionType,
     cardIds: string[],
-    operationData: OperationData,
-    clientTimestamp: number
+    operationData: OperationData
   ): { interaction: StackInteraction; conflicts: string[] } {
     const interactionId = this.generateInteractionId();
     const serverTimestamp = Date.now();
@@ -205,6 +202,8 @@ export class StackInteractionManager {
     const interaction = this.activeInteractions.get(interactionId);
     if (interaction) {
       interaction.status = 'failed';
+      // Placeholder: reason could be surfaced to UI in future
+      try { console.warn('[Draft3D] Interaction failed:', interactionId, reason); } catch {}
       this.activeInteractions.delete(interactionId);
     }
   }
@@ -285,7 +284,8 @@ export class UIStateSyncManager {
       this.updateBatches.set(batchKey, []);
     }
 
-    const batch = this.updateBatches.get(batchKey)!;
+    const batch = this.updateBatches.get(batchKey);
+    if (!batch) return;
     batch.push({
       playerId,
       type: updateType,

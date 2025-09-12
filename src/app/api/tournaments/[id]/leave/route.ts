@@ -14,6 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
+    const userId = session.user.id;
     const tournament = await prisma.tournament.findUnique({
       where: { id },
       include: { registrations: true }
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Check if registered
-    const registration = tournament.registrations.find(reg => reg.playerId === session.user!.id);
+    const registration = tournament.registrations.find(reg => reg.playerId === userId);
     if (!registration) {
       return new Response(JSON.stringify({ error: 'Not registered for this tournament' }), { status: 400 });
     }
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: {
         tournamentId_playerId: {
           tournamentId: id,
-          playerId: session.user!.id
+          playerId: userId
         }
       },
       select: { displayName: true }
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       prisma.playerStanding.deleteMany({
         where: {
           tournamentId: id,
-          playerId: session.user!.id
+          playerId: userId
         }
       })
     ]);
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     try {
       await tournamentSocketService.broadcastPlayerLeft(
         id,
-        session.user!.id,
+        userId,
         playerName,
         currentPlayerCount
       );
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return new Response(JSON.stringify({
       success: true,
-      playerId: session.user!.id,
+      playerId: userId,
       currentPlayerCount
     }), {
       status: 200,

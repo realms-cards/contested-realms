@@ -3,13 +3,13 @@
  * Core requirement: "Deck editor preserves drafted cards when adding Standard Cards"
  */
 
+// TODO(deck-persistence): Add back unused types as features land.
 import type {
   DeckComposition,
   DeckSubmission,
   PersistenceState,
   DeckModification,
   DeckValidationResult,
-  StorageQuotaInfo,
   PersistenceMetrics,
   UndoRedoState,
   DeckAction,

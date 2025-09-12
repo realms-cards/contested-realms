@@ -11,6 +11,8 @@ import type { Group } from "three";
 import { MOUSE } from "three";
 import { useOnline } from "@/app/online/online-context";
 import { WaitingOverlay, useWaitingOverlay } from "@/components/draft/WaitingOverlay";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useDeckPersistence, useSubmissionCoordination } from "@/lib/draft/hooks/useDeckPersistence";
 import { useDraftSync, usePlayerSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
 import Board from "@/lib/game/Board";
@@ -26,8 +28,6 @@ import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
-import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
-import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 
 // Import new draft sync system
 
@@ -337,7 +337,8 @@ export default function OnlineDraft3DScreen({
 
   // New draft sync system integration
   const draftSync = useDraftSync(myPlayerKey);
-  const playerSync = usePlayerSync();
+  // TODO(draft-online): Wire playerSync to visualize presence/hover states.
+  // const playerSync = usePlayerSync();
   const pickTimer = usePickTimer();
   
   // Deck persistence system
@@ -460,7 +461,8 @@ export default function OnlineDraft3DScreen({
     for (const p of pick3D) {
       const setName = p.card.setName || "Beta";
       if (!groups.has(setName)) groups.set(setName, new Set());
-      groups.get(setName)!.add(p.card.cardId);
+      const set = groups.get(setName);
+      if (set) set.add(p.card.cardId);
     }
 
     // Fetch metadata for each set

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FEATURE_SEAT_VIDEO, RTC_STUN_SERVERS } from '@/lib/flags';
+import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY, RTC_STUN_SERVERS } from '@/lib/flags';
 import type { SocketTransport } from '@/lib/net/socketTransport';
 
 export type RtcState =
@@ -125,7 +125,8 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     // Build constraints from selected IDs; allow default when null
     const constraints: MediaStreamConstraints = {
       audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true,
-      video: videoDeviceId ? { deviceId: { exact: videoDeviceId } } : true,
+      // In audio-only mode, do not request video at all
+      video: FEATURE_AUDIO_ONLY ? false : (videoDeviceId ? { deviceId: { exact: videoDeviceId } } : true),
     };
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -133,7 +134,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     } catch (err) {
       // Fallback to permissive defaults if specific device failed
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: FEATURE_AUDIO_ONLY ? false : true });
         return stream;
       } catch {
         throw err;
@@ -316,6 +317,11 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   }, []);
 
   const toggleCam = useCallback(() => {
+    if (FEATURE_AUDIO_ONLY) {
+      // In audio-only mode, camera controls are disabled/no-op
+      setCamOff(true);
+      return;
+    }
     const tracks = localStreamRef.current?.getVideoTracks() || [];
     const next = !(tracks[0]?.enabled ?? true);
     tracks.forEach((t) => { t.enabled = next; });
@@ -348,7 +354,8 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   useEffect(() => () => { reset(); }, [reset]);
 
   return {
-    featureEnabled: FEATURE_SEAT_VIDEO && enabled,
+    // Enable RTC feature when either seat video or audio-only is enabled
+    featureEnabled: (FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY) && enabled,
     state,
     localStream,
     remoteStream,

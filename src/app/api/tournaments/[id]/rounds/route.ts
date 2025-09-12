@@ -61,7 +61,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       
       if (completedMatchesWithDuration.length > 0) {
         const totalMatchDuration = completedMatchesWithDuration.reduce((sum, match) => {
-          const duration = match.completedAt!.getTime() - match.startedAt!.getTime();
+          const started = match.startedAt;
+          const completed = match.completedAt;
+          if (!started || !completed) return sum;
+          const duration = completed.getTime() - started.getTime();
           return sum + duration;
         }, 0);
         averageMatchDuration = totalMatchDuration / completedMatchesWithDuration.length;

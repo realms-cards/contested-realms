@@ -205,19 +205,9 @@ export function useTournamentPhases(
         loading: false
       }));
 
-      // Auto-transition if conditions are met and auto-transition is enabled
-      if (state.currentPhase.phase.autoTransition) {
-        const autoTransition = PHASE_TRANSITIONS.find(t => 
-          t.from === currentStatus && 
-          t.action === 'auto_transition' &&
-          canPerformActions.includes('auto_transition')
-        );
-
-        if (autoTransition) {
-          console.log(`Auto-transitioning from ${autoTransition.from} to ${autoTransition.to}`);
-          updatePhase(autoTransition.to);
-        }
-      }
+      // Auto-transition disabled - transitions should only happen via explicit user actions
+      // The backend API should handle all tournament state transitions
+      // Frontend phase management is only for UI display purposes
 
     } catch (err) {
       setState(prev => ({

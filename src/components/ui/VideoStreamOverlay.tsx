@@ -158,10 +158,10 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
       {/* Connection Quality Indicator */}
       <div className="absolute top-2 right-2">
         <div className="flex items-center gap-1">
-          <div className="w-1 h-2 bg-green-400 rounded-sm"></div>
-          <div className="w-1 h-3 bg-green-400 rounded-sm"></div>
-          <div className="w-1 h-4 bg-green-400 rounded-sm"></div>
-          <div className="w-1 h-2 bg-gray-400 rounded-sm opacity-30"></div>
+          <div className="w-1 h-2 bg-green-400 rounded-sm" />
+          <div className="w-1 h-3 bg-green-400 rounded-sm" />
+          <div className="w-1 h-4 bg-green-400 rounded-sm" />
+          <div className="w-1 h-2 bg-gray-400 rounded-sm opacity-30" />
         </div>
       </div>
     </div>

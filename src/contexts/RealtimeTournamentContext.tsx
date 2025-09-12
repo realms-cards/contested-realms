@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
-import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react";
 import { useTournamentPhases } from "@/hooks/useTournamentPhases";
+import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
 import { useTournamentStatistics } from "@/hooks/useTournamentStatistics";
 
@@ -100,6 +100,12 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   const preparation = useTournamentPreparation(preparationId);
   const statistics = useTournamentStatistics(preparationId);
   const phases = useTournamentPhases(preparationId, currentTournament?.status);
+  // Stable refs for avoiding re-fetch loops
+  const currentTournamentIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentTournamentIdRef.current = currentTournament?.id ?? null;
+  }, [currentTournament?.id]);
+  const isRefreshingRef = useRef(false);
   
   // Only return hook results if we have a current tournament
   const activePreparation = currentTournament ? preparation : null;
@@ -174,18 +180,20 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     currentPlayerCount: number; 
   }) => {
     console.log('Player joined tournament:', data);
-    
-    // Update current player counts for all tournaments (we don't know which one)
-    setTournaments(prev => 
-      prev.map(t => ({ ...t, currentPlayers: data.currentPlayerCount }))
-    );
-    
+    // This event is scoped to the room of the tournament we joined via socket,
+    // so update only the current tournament if known.
+    if (currentTournament) {
+      setTournaments(prev => prev.map(t => (
+        t.id === currentTournament.id ? { ...t, currentPlayers: data.currentPlayerCount } : t
+      )));
+      setCurrentTournament({ ...currentTournament, currentPlayers: data.currentPlayerCount } as TournamentInfo);
+    }
     setRealtimeEvents(prev => ({
       ...prev,
       playerJoinedCount: prev.playerJoinedCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, []);
+  }, [currentTournament]);
 
   const handlePlayerLeft = useCallback((data: { 
     playerId: string; 
@@ -193,18 +201,18 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     currentPlayerCount: number; 
   }) => {
     console.log('Player left tournament:', data);
-    
-    // Update current player counts
-    setTournaments(prev => 
-      prev.map(t => ({ ...t, currentPlayers: data.currentPlayerCount }))
-    );
-    
+    if (currentTournament) {
+      setTournaments(prev => prev.map(t => (
+        t.id === currentTournament.id ? { ...t, currentPlayers: data.currentPlayerCount } : t
+      )));
+      setCurrentTournament({ ...currentTournament, currentPlayers: data.currentPlayerCount } as TournamentInfo);
+    }
     setRealtimeEvents(prev => ({
       ...prev,
       playerLeftCount: prev.playerLeftCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, []);
+  }, [currentTournament]);
 
   const handlePreparationUpdate = useCallback((data: { 
     tournamentId: string; 
@@ -215,7 +223,15 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     totalPlayerCount: number; 
   }) => {
     console.log('Preparation update:', data);
-    
+    const isReady = data.preparationStatus === 'ready' || data.deckSubmitted === true;
+    // Update local list to reflect per-player ready flag when available
+    setTournaments(prev => prev.map(t => {
+      if (t.id !== data.tournamentId) return t;
+      const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers;
+      if (!Array.isArray(reg)) return t;
+      const updated = reg.map(p => p.id === data.playerId ? { ...p, ready: isReady } : p);
+      return { ...(t as unknown as Record<string, unknown>), registeredPlayers: updated } as unknown as TournamentInfo;
+    }));
     // Refresh preparation status if it's for our current tournament
     if (currentTournament?.id === data.tournamentId && activePreparation) {
       activePreparation.actions.refreshStatus();
@@ -254,6 +270,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     if (currentTournament?.id === data.tournamentId && activeStatistics) {
       activeStatistics.actions.refreshAll();
     }
+    // List view will be updated via server events; avoid redundant list fetch
   }, [currentTournament, activeStatistics]);
 
   const handleMatchAssigned = useCallback((data: { 
@@ -312,39 +329,32 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
   // Tournament management functions
   const refreshTournaments = useCallback(async () => {
-    setLoading(true);
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     setError(null);
-    
+    setLoading(true);
     try {
-      console.log("Fetching tournaments list");
-      
       const response = await fetch('/api/tournaments');
-
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to fetch tournaments');
       }
-
       const tournamentsData = await response.json() as TournamentInfo[];
-      console.log("Tournaments fetched:", tournamentsData);
-      
       setTournaments(tournamentsData);
       setLastUpdated(new Date().toISOString());
-      
-      // Update current tournament if it's in the list
-      if (currentTournament) {
-        const updatedCurrent = tournamentsData.find(t => t.id === currentTournament.id);
-        if (updatedCurrent) {
-          setCurrentTournament(updatedCurrent);
-        }
+      const ctId = currentTournamentIdRef.current;
+      if (ctId) {
+        const updatedCurrent = tournamentsData.find(t => t.id === ctId);
+        if (updatedCurrent) setCurrentTournament(updatedCurrent);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
       setError(message);
     } finally {
+      isRefreshingRef.current = false;
       setLoading(false);
     }
-  }, [currentTournament]);
+  }, []);
 
   const createTournament = useCallback(async (config: {
     name: string;
@@ -371,9 +381,19 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
       const tournament = await response.json();
       console.log("Tournament created:", tournament);
-      
-      // Update tournaments list (real-time update should also handle this)
-      await refreshTournaments();
+      // Join this tournament room to receive real-time updates immediately
+      try {
+        socketJoinTournament(tournament.id);
+      } catch {}
+      // List updates will arrive via socket events; avoid redundant fetch
+      // Fetch full details and set as current tournament for downstream hooks
+      try {
+        const detailRes = await fetch(`/api/tournaments/${tournament.id}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          setCurrentTournament(detail as unknown as TournamentInfo);
+        }
+      } catch {}
       return tournament;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create tournament';
@@ -382,7 +402,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [refreshTournaments]);
+  }, [socketJoinTournament]);
 
   const joinTournament = useCallback(async (tournamentId: string) => {
     setLoading(true);
@@ -402,9 +422,19 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       }
 
       console.log("Joined tournament successfully");
-      
-      // Socket will handle real-time updates, but refresh as backup
-      await refreshTournaments();
+      // Join the tournament room immediately for real-time updates
+      try {
+        socketJoinTournament(tournamentId);
+      } catch {}
+      // Real-time events will update the list; avoid redundant fetch
+      // Fetch full details and set as current tournament for downstream hooks
+      try {
+        const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          setCurrentTournament(detail as unknown as TournamentInfo);
+        }
+      } catch {}
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to join tournament';
       setError(message);
@@ -412,7 +442,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [refreshTournaments]);
+  }, [socketJoinTournament]);
 
   const leaveTournament = useCallback(async (tournamentId: string) => {
     setLoading(true);
@@ -441,7 +471,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
         setCurrentTournament(null);
       }
       
-      await refreshTournaments();
+      // Rely on server events to update list
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to leave tournament';
       setError(message);
@@ -449,7 +479,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [currentTournament, socketLeaveTournament, refreshTournaments]);
+  }, [currentTournament, socketLeaveTournament]);
 
   const startTournament = useCallback(async (tournamentId: string) => {
     setLoading(true);
@@ -469,7 +499,18 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       }
 
       console.log("Tournament started successfully");
-      // Real-time events will handle the update
+      // Join the room to receive tournament-scoped updates immediately
+      try {
+        socketJoinTournament(tournamentId);
+      } catch {}
+      // Real-time events will propagate updates; fetch details only
+      try {
+        const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          setCurrentTournament(detail as unknown as TournamentInfo);
+        }
+      } catch {}
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start tournament';
       setError(message);
@@ -477,7 +518,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshTournaments, socketJoinTournament]);
 
   const endTournament = useCallback(async (tournamentId: string) => {
     setLoading(true);
@@ -558,8 +599,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       }
 
       console.log("Tournament ready status updated");
-      // Refresh tournaments to show updated ready status
-      await refreshTournaments();
+      // Server will emit preparation update or tournament update; avoid extra fetch
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update ready status';
       setError(message);
@@ -567,11 +607,12 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [refreshTournaments]);
+  }, []);
 
   // Auto-fetch tournaments on mount
   useEffect(() => {
-    refreshTournaments();
+    // Initial load only once; subsequent updates come from socket events
+    void refreshTournaments();
   }, [refreshTournaments]);
 
   const contextValue: RealtimeTournamentContextValue = {

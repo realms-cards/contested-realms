@@ -1,7 +1,7 @@
-import { NextRequest } from "next/server";
-export const dynamic = "force-dynamic";
 import fs from "fs";
 import path from "path";
+import { NextRequest } from "next/server";
+export const dynamic = "force-dynamic";
 
 function setDirFromSlug(slug: string): string | null {
   const code = slug.slice(0, 3);

@@ -236,7 +236,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       (site.card?.type || "").toLowerCase().includes("site")
     ) {
       doAddToAtlas = () => {
-        const cardName = site.card!.name;
+        const cardName = site.card?.name || 'Card';
         openPlacementDialog(cardName, "Atlas", (position) => {
           moveSiteToZone(t.x, t.y, "atlas", position);
         });
@@ -293,7 +293,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
       if (item?.card?.name) {
         doToSpellbook = () => {
-          const cardName = item.card!.name;
+          const cardName = item.card?.name || 'Card';
           openPlacementDialog(cardName, "Spellbook", (position) => {
             movePermanentToZone(t.at, t.index, "spellbook", position);
           });
@@ -328,7 +328,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const isCurrent = (t.who === "p1" ? 1 : 2) === currentPlayer;
     if (isCurrent && count > 0) {
       doDrawFromPile = () => {
-        const top: CardRef = pile[0]!;
+        const top = pile[0];
+        if (!top) return;
         setDragFromPile({ who: t.who, from: t.from, card: top });
         drawFromPileToHand();
         onClose();

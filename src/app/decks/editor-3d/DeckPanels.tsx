@@ -166,7 +166,6 @@ export default function DeckPanels(props: DeckPanelsProps) {
             atlasCount={atlasCount}
             spellbookCount={spellbookNonAvatar}
             validation={validation}
-            isDraftMode={isDraftMode}
           />
           {isSealed && (
             <button

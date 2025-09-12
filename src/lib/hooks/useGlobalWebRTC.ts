@@ -395,8 +395,7 @@ export function useGlobalWebRTC(options: WebRTCHookOptions): WebRTCHookReturn {
       }
     };
 
-    const handlePeerJoined = async (payload: unknown) => {
-      const peerPayload = payload as { from: string; participants: Array<{ id: string; name?: string }> };
+    const handlePeerJoined = async () => {
       if (!peerConnectionRef.current || !localStream) return;
       
       try {
@@ -419,7 +418,7 @@ export function useGlobalWebRTC(options: WebRTCHookOptions): WebRTCHookReturn {
       }
     };
 
-    const handleConnectionFailedAck = (payload: unknown) => {
+    const handleConnectionFailedAck = () => {
       // Server acknowledged our connection failure report
       if (retryCountRef.current < maxRetries) {
         retry();

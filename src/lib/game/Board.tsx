@@ -703,11 +703,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                             position={[edgeOffset.x, 0, edgeOffset.z]}
                             onPointerOver={(e) => {
                               e.stopPropagation();
-                              beginHoverPreview(site.card!);
+                              if (site.card) beginHoverPreview(site.card);
                             }}
                           >
                             <CardPlane
-                              slug={site.card.slug!}
+                              slug={site.card?.slug || ''}
                               width={CARD_SHORT}
                               height={CARD_LONG}
                               depthWrite={true}
@@ -1082,7 +1082,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                                   />
                                 )}
                               <CardPlane
-                                slug={p.card.slug!}
+                                slug={p.card?.slug || ''}
                                 width={CARD_SHORT}
                                 height={CARD_LONG}
                                 rotationZ={rotZ}
@@ -1328,7 +1328,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               />
                             )}
                           <CardPlane
-                            slug={a.card.slug!}
+                            slug={a.card?.slug || ''}
                             width={CARD_SHORT}
                             height={CARD_LONG}
                             rotationZ={rotZ}

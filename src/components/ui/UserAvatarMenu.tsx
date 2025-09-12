@@ -3,6 +3,7 @@
  * Shows user avatar with dropdown menu for camera/audio settings
  */
 
+import Image from 'next/image';
 import React, { useState, useRef, useEffect } from 'react';
 import type { UserAvatarMenuProps } from '../../../specs/006-live-video-and/contracts/ui-components';
 
@@ -85,10 +86,12 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
         title={`${displayName} - Click for menu`}
       >
         {avatarUrl ? (
-          <img
+          <Image
             src={avatarUrl}
             alt={displayName}
-            className="w-full h-full rounded-full object-cover"
+            fill
+            sizes="40px"
+            className="rounded-full object-cover"
           />
         ) : (
           <span className="text-white text-sm font-semibold">
@@ -130,10 +133,12 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
                   bg-gradient-to-br from-blue-500 to-purple-600
                 ">
                   {avatarUrl ? (
-                    <img
+                    <Image
                       src={avatarUrl}
                       alt={displayName}
-                      className="w-full h-full rounded-full object-cover"
+                      width={32}
+                      height={32}
+                      className="rounded-full object-cover"
                     />
                   ) : (
                     <span className="text-white text-xs font-semibold">

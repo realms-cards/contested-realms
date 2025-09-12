@@ -4,9 +4,10 @@
  */
 
 import React, { useState } from 'react';
-import type { MediaControlsPanelProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { DeviceSelectionMenu } from './DeviceSelectionMenu';
 import { PermissionRequestDialog } from './PermissionRequestDialog';
+import type { MediaControlsPanelProps } from '../../../specs/006-live-video-and/contracts/ui-components';
 
 export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
   rtcState,
@@ -29,6 +30,7 @@ export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
   };
 
   const handleCameraToggle = () => {
+    if (FEATURE_AUDIO_ONLY) return; // camera disabled in audio-only mode
     if (!rtcState.permissionsGranted) {
       setShowPermissionDialog(true);
       return;
@@ -83,28 +85,30 @@ export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
           )}
         </button>
 
-        {/* Camera Toggle */}
-        <button
-          onClick={handleCameraToggle}
-          className={`
-            p-2 rounded-full transition-colors duration-200
-            ${rtcState.cameraDisabled || needsPermissions
-              ? 'bg-red-500/80 hover:bg-red-600/80 text-white'
-              : 'bg-gray-700/80 hover:bg-gray-600/80 text-white'
-            }
-          `}
-          title={rtcState.cameraDisabled ? 'Enable camera' : 'Disable camera'}
-        >
-          {rtcState.cameraDisabled || needsPermissions ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M21 6.5l-4 4V7a1 1 0 00-1-1H9.5l3-3H16a1 1 0 011 1v2.5zM1 1l22 22-1.4 1.4L19 20.8A1 1 0 0118 21H4a1 1 0 01-1-1V8a1 1 0 01.8-1L1.6 4.4 1 1zm4.5 9L4 8.5V19h12l-3-3H4.5z"/>
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/>
-            </svg>
-          )}
-        </button>
+        {/* Camera Toggle (hidden in audio-only mode) */}
+        {!FEATURE_AUDIO_ONLY && (
+          <button
+            onClick={handleCameraToggle}
+            className={`
+              p-2 rounded-full transition-colors duration-200
+              ${rtcState.cameraDisabled || needsPermissions
+                ? 'bg-red-500/80 hover:bg-red-600/80 text-white'
+                : 'bg-gray-700/80 hover:bg-gray-600/80 text-white'
+              }
+            `}
+            title={rtcState.cameraDisabled ? 'Enable camera' : 'Disable camera'}
+          >
+            {rtcState.cameraDisabled || needsPermissions ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M21 6.5l-4 4V7a1 1 0 00-1-1H9.5l3-3H16a1 1 0 011 1v2.5zM1 1l22 22-1.4 1.4L19 20.8A1 1 0 0118 21H4a1 1 0 01-1-1V8a1 1 0 01.8-1L1.6 4.4 1 1zm4.5 9L4 8.5V19h12l-3-3H4.5z"/>
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/>
+              </svg>
+            )}
+          </button>
+        )}
 
         {/* Device Settings */}
         {showDeviceSettings && (
@@ -126,11 +130,11 @@ export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
         {/* Device Selection Menu */}
         <DeviceSelectionMenu
           audioDevices={rtcState.audioDevices}
-          videoDevices={rtcState.videoDevices}
+          videoDevices={FEATURE_AUDIO_ONLY ? [] : rtcState.videoDevices}
           selectedAudioId={rtcState.selectedAudioDeviceId}
-          selectedVideoId={rtcState.selectedVideoDeviceId}
+          selectedVideoId={FEATURE_AUDIO_ONLY ? null : rtcState.selectedVideoDeviceId}
           onAudioDeviceChange={rtcState.setAudioDevice}
-          onVideoDeviceChange={rtcState.setVideoDevice}
+          onVideoDeviceChange={FEATURE_AUDIO_ONLY ? () => {} : rtcState.setVideoDevice}
           onRefreshDevices={rtcState.refreshDevices}
           isOpen={showDeviceMenu}
           onClose={() => setShowDeviceMenu(false)}
@@ -292,11 +296,11 @@ export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
       {/* Device Selection Menu */}
       <DeviceSelectionMenu
         audioDevices={rtcState.audioDevices}
-        videoDevices={rtcState.videoDevices}
+        videoDevices={FEATURE_AUDIO_ONLY ? [] : rtcState.videoDevices}
         selectedAudioId={rtcState.selectedAudioDeviceId}
-        selectedVideoId={rtcState.selectedVideoDeviceId}
+        selectedVideoId={FEATURE_AUDIO_ONLY ? null : rtcState.selectedVideoDeviceId}
         onAudioDeviceChange={rtcState.setAudioDevice}
-        onVideoDeviceChange={rtcState.setVideoDevice}
+        onVideoDeviceChange={FEATURE_AUDIO_ONLY ? () => {} : rtcState.setVideoDevice}
         onRefreshDevices={rtcState.refreshDevices}
         isOpen={showDeviceMenu}
         onClose={() => setShowDeviceMenu(false)}
@@ -307,7 +311,7 @@ export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
         isOpen={showPermissionDialog}
         onRequestPermissions={handleRequestPermissions}
         onCancel={() => setShowPermissionDialog(false)}
-        permissionType="both"
+        permissionType={FEATURE_AUDIO_ONLY ? 'microphone' : 'both'}
       />
     </div>
   );

@@ -12,7 +12,9 @@ import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
-import { FEATURE_SEAT_VIDEO } from "@/lib/flags";
+import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY } from "@/lib/flags";
 import Board from "@/lib/game/Board";
 import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 import {
@@ -31,8 +33,6 @@ import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
-import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
-import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 
 // Card shape used by OnlineDraftScreen; keep compatible
 type DraftCard = {
@@ -91,7 +91,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
   // Seat Video (WebRTC) prototype state (always call hook; gated by enabled flag)
   const rtc = useMatchWebRTC({
-    enabled: FEATURE_SEAT_VIDEO,
+    enabled: FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY,
     transport,
     myPlayerId: myPlayerId ?? null,
     matchId: matchId ?? null,
@@ -227,7 +227,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
   const PICK_CENTER = { x: 0, z: 0 };
   const PICK_RADIUS = CARD_LONG * 0.6;
-  const STAGE_CLICK_POS = { x: 0, z: 1.7 };
+  const STAGE_CLICK_POS = useMemo(() => ({ x: 0, z: 1.7 }), []);
 
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
@@ -238,8 +238,10 @@ export default function EnhancedOnlineDraft3DScreen({
     );
   }, [draftState.phase, draftState.waitingFor, myPlayerId]);
 
-  const myPack = (draftState.currentPacks?.[myPlayerIndex] ||
-    []) as DraftCard[];
+  const myPack = useMemo(
+    () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
+    [draftState.currentPacks, myPlayerIndex]
+  );
   const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
   const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
 
@@ -357,7 +359,8 @@ export default function EnhancedOnlineDraft3DScreen({
     for (const p of pick3D) {
       const setName = p.card.setName || "Beta";
       if (!groups.has(setName)) groups.set(setName, new Set());
-      groups.get(setName)!.add(p.card.cardId);
+      const set = groups.get(setName);
+      if (set) set.add(p.card.cardId);
     }
 
     const requests = Array.from(groups.entries()).map(([s, ids]) => {
@@ -425,6 +428,7 @@ export default function EnhancedOnlineDraft3DScreen({
     match,
     packChoiceOverlay,
     shownPackOverlayForRound,
+    STAGE_CLICK_POS,
   ]);
 
   // Enhanced Pick & Pass with staging mechanics (from single-player)
@@ -598,11 +602,12 @@ const handleStartDraft = useCallback(async () => {
       const meta = metaByCardId[pick.card.cardId];
       if (meta?.thresholds) {
         Object.keys(meta.thresholds).forEach((element) => {
-          if (meta.thresholds![element] > 0) {
+          const value = meta.thresholds?.[element] ?? 0;
+          if (value > 0) {
             elements.add(element);
             summary[element as keyof typeof summary] = Math.max(
               summary[element as keyof typeof summary],
-              meta.thresholds![element]
+              value
             );
           }
         });
@@ -1002,8 +1007,8 @@ const handleStartDraft = useCallback(async () => {
           {staged && !needsPackChoice && packAsBoosterCards[staged.idx] && (
             <DraggableCard3D
               key={`staged-${draftState.packIndex}-${draftState.pickNumber}-${staged.idx}`}
-              slug={packAsBoosterCards[staged.idx]!.slug}
-              isSite={(packAsBoosterCards[staged.idx]!.type || "")
+              slug={packAsBoosterCards[staged.idx]?.slug || ''}
+              isSite={(packAsBoosterCards[staged.idx]?.type || "")
                 .toLowerCase()
                 .includes("site")}
               x={staged.x}
@@ -1022,7 +1027,8 @@ const handleStartDraft = useCallback(async () => {
               lockUpright
               onHoverChange={(hover) => {
                 if (hover && !orbitLocked) {
-                  const c = packAsBoosterCards[staged.idx]!;
+                  const c = packAsBoosterCards[staged.idx];
+                  if (!c) return;
                   showCardPreview({
                     slug: c.slug,
                     name: c.cardName,

@@ -67,6 +67,8 @@ export default function OnlineConsole({
     }, 10000);
   }, [clearAutoCloseTimer]);
   // Cleanup timer on unmount
+  // Intentionally not including 'matchChat' in deps to avoid overfiring scroll on every render.
+   
   useEffect(() => {
     return () => {
       clearAutoCloseTimer();
@@ -95,7 +97,7 @@ export default function OnlineConsole({
       }
     }
     prevMatchChatLenRef.current = matchChat.length;
-  }, [matchChat, myPlayerId, consoleOpen, startAutoCloseTimer]);
+  }, [myPlayerId, consoleOpen, startAutoCloseTimer]);
 
   // Ensure chat tab cannot be active when chat is hidden
   useEffect(() => {

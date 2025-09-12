@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TILE_SIZE } from '@/lib/game/constants';
 import { useGameStore } from '@/lib/game/store';
-import type { Vector3 } from 'three';
 import type { SeatVideo3DProps } from '../../../specs/006-live-video-and/contracts/ui-components';
 
 /**
@@ -57,6 +56,7 @@ export function SeatVideo3D({
   visible = true,
 }: SeatVideo3DProps) {
   const height = propHeight ?? width * (9 / 16);
+  const hasVideo = !!stream && stream.getVideoTracks().length > 0;
 
   // Use provided position directly or compute from legacy game store
   const finalPosition = providedPosition;
@@ -80,6 +80,8 @@ export function SeatVideo3D({
   }, []);
 
   useEffect(() => {
+    // Do nothing if there is no video track (audio-only stream)
+    if (!hasVideo) return;
     const vid = videoElRef.current;
     if (!vid) return;
     if (stream) {
@@ -100,7 +102,7 @@ export function SeatVideo3D({
       try { vid.pause(); } catch {}
       try { (vid as HTMLVideoElement).srcObject = null; } catch {}
     };
-  }, [stream]);
+  }, [stream, hasVideo]);
 
   // Invisible raycast handler to make plane non-interactive
   const noopRaycast = useMemo(() => function noop(this: THREE.Object3D) {
@@ -108,7 +110,8 @@ export function SeatVideo3D({
   }, []);
 
   // If no stream or not visible, render nothing to keep scene clean
-  if (!stream || !visible) return null;
+  // Only render when there is an actual video track to display
+  if (!hasVideo || !visible) return null;
 
   return (
     <group position={finalPosition.toArray()} rotation={[0, rotationY, 0]}>

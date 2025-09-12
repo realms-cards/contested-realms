@@ -110,8 +110,7 @@ export const useDraft3DTransport = ({
           event.playerId,
           event.interactionType,
           event.cardIds,
-          event.operationData,
-          event.clientTimestamp
+          event.operationData
         );
         
         if (result.conflicts.length > 0) {

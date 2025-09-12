@@ -69,15 +69,16 @@ export class LocalTransport implements GameTransport {
     this.matchId = matchId || `local-match-${Date.now()}`;
     const cfg = this.pendingStartConfig;
     this.pendingStartConfig = undefined;
-    const isSealed = cfg?.matchType === "sealed" && !!cfg.sealedConfig;
-    const sealedConfig = isSealed
+    const isSealed = cfg?.matchType === "sealed" && !!cfg?.sealedConfig;
+    const sealedCfg = cfg?.sealedConfig;
+    const sealedConfig = isSealed && sealedCfg
       ? {
-          packCount: cfg!.sealedConfig!.packCount,
-          setMix: cfg!.sealedConfig!.setMix,
-          timeLimit: cfg!.sealedConfig!.timeLimit,
+          packCount: sealedCfg.packCount,
+          setMix: sealedCfg.setMix,
+          timeLimit: sealedCfg.timeLimit,
           // Preserve extended optional fields
-          packCounts: cfg!.sealedConfig!.packCounts,
-          replaceAvatars: cfg!.sealedConfig!.replaceAvatars,
+          packCounts: sealedCfg.packCounts,
+          replaceAvatars: sealedCfg.replaceAvatars,
           // constructionStartTime optional; omit unless needed
         }
       : undefined;

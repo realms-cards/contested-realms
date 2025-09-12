@@ -53,8 +53,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const cards = deck.cards as DeckCardRow[];
 
     const pairs = cards
-      .filter((dc) => dc.setId != null)
-      .map((dc) => ({ cardId: dc.cardId, setId: dc.setId! }));
+      .filter((dc): dc is DeckCardRow & { setId: number } => dc.setId != null)
+      .map((dc) => ({ cardId: dc.cardId, setId: dc.setId }));
 
     const metaMap = new Map<string, { type: string | null; thresholds: Record<string, number> | null }>();
     if (pairs.length) {

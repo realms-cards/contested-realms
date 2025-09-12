@@ -550,11 +550,12 @@ export default function Draft3DPage() {
       const meta = metaByCardId[pick.cardId];
       if (meta?.thresholds) {
         Object.keys(meta.thresholds).forEach((element) => {
-          if (meta.thresholds![element] > 0) {
+          const value = meta.thresholds?.[element] ?? 0;
+          if (value > 0) {
             elements.add(element);
             summary[element as keyof typeof summary] = Math.max(
               summary[element as keyof typeof summary],
-              meta.thresholds![element]
+              value
             );
           }
         });
@@ -804,8 +805,8 @@ export default function Draft3DPage() {
             currentPacks[0]?.[staged.idx] && (
               <DraggableCard3D
                 key={`staged-${packIndex}-${pickNumber}-${staged.idx}`}
-                slug={currentPacks[0]![staged.idx]!.slug}
-                isSite={(currentPacks[0]![staged.idx]!.type || "")
+                slug={currentPacks[0]?.[staged.idx]?.slug ?? ''}
+                isSite={(currentPacks[0]?.[staged.idx]?.type || "")
                   .toLowerCase()
                   .includes("site")}
                 x={staged.x}
@@ -822,11 +823,11 @@ export default function Draft3DPage() {
                 lockUpright
                 onHoverChange={(hover) => {
                   if (hover && !orbitLocked) {
-                    const c = currentPacks[0]![staged.idx]!;
+                    const c = currentPacks[0]?.[staged.idx];
                     showCardPreview({
-                      slug: c.slug,
-                      name: c.cardName,
-                      type: c.type,
+                      slug: c?.slug || '',
+                      name: c?.cardName || '',
+                      type: c?.type || null,
                     });
                   }
                   // Don't call hideCardPreview on hover end - let natural timeout handle it

@@ -12,6 +12,14 @@ export interface FeatureFlags {
   seatVideo: {
     enabled: boolean;
   };
+  /**
+   * Global audio-only mode for RTC
+   * When enabled, the app establishes audio chat without requesting/using camera video.
+   * Intended as a fallback when video transports are unreliable.
+   */
+  audioOnlyRtc: {
+    enabled: boolean;
+  };
 }
 
 /**
@@ -42,6 +50,9 @@ export const FEATURE_FLAGS: FeatureFlags = {
   },
   seatVideo: {
     enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_SEAT_VIDEO, false)
+  },
+  audioOnlyRtc: {
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_AUDIO_ONLY, false)
   }
 };
 
@@ -74,3 +85,4 @@ export const tournamentFeatures = {
  * Legacy compatibility - maintain existing API
  */
 export const FEATURE_SEAT_VIDEO: boolean = FEATURE_FLAGS.seatVideo.enabled;
+export const FEATURE_AUDIO_ONLY: boolean = FEATURE_FLAGS.audioOnlyRtc.enabled;

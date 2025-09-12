@@ -783,6 +783,123 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Create or ensure a tournament match exists by a known matchId with given players
+  // Payload: { matchId: string, playerIds: string[], matchType?: 'constructed'|'sealed'|'draft', lobbyName?: string, sealedConfig?: any, draftConfig?: any }
+  socket.on("startTournamentMatch", (payload = {}) => {
+    if (!authed) return;
+    const matchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
+    const playerIds = Array.isArray(payload && payload.playerIds) ? payload.playerIds.filter(Boolean).map(String) : [];
+    const matchType = (payload && payload.matchType) || 'constructed';
+    const lobbyName = (payload && payload.lobbyName) || null;
+    const sealedConfig = payload && payload.sealedConfig ? payload.sealedConfig : null;
+    const draftConfig = payload && payload.draftConfig ? payload.draftConfig : null;
+    if (!matchId || playerIds.length < 1) return;
+
+    let match = matches.get(matchId);
+    if (!match) {
+      // Initialize a new match with provided id and roster
+      match = {
+        id: matchId,
+        lobbyId: null,
+        lobbyName,
+        playerIds: [...new Set(playerIds)],
+        status:
+          matchType === 'sealed' ? 'deck_construction' :
+          matchType === 'draft' ? 'waiting' : 'waiting',
+        seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        turn: playerIds[0] || null,
+        winnerId: null,
+        matchType,
+        sealedConfig: matchType === 'sealed' ? { ...sealedConfig, constructionStartTime: Date.now() } : null,
+        draftConfig: matchType === 'draft' ? draftConfig : null,
+        playerDecks: matchType === 'sealed' || matchType === 'draft' ? new Map() : null,
+        draftState: matchType === 'draft' ? {
+          phase: 'waiting', packIndex: 0, pickNumber: 1,
+          currentPacks: null, picks: playerIds.map(() => []),
+          playerReady: { p1: false, p2: false }, packDirection: 'left', packChoice: playerIds.map(() => null), waitingFor: []
+        } : null,
+        game: {},
+        lastTs: 0,
+      };
+      matches.set(matchId, match);
+      // Begin recording
+      startMatchRecording(match);
+    } else {
+      // Ensure provided players are present
+      for (const pid of playerIds) {
+        if (!match.playerIds.includes(pid)) match.playerIds.push(pid);
+      }
+    }
+
+    // Join all currently connected sockets for provided players
+    const room = `match:${match.id}`;
+    for (const pid of playerIds) {
+      const p = players.get(pid);
+      if (!p) continue;
+      p.matchId = match.id;
+      const s = io.sockets.sockets.get(p.socketId);
+      if (s) s.join(room);
+    }
+
+    // If sealed, generate packs deterministically (same logic as startMatchFromLobby)
+    if (match.matchType === 'sealed' && match.sealedConfig) {
+      (async () => {
+        try {
+          const sealedPacks = {};
+          for (const pid of match.playerIds) {
+            const rng = createRngFromString(`${match.seed}|${pid}|sealed`);
+            const sc = match.sealedConfig || {};
+            const packCounts = sc.packCounts && typeof sc.packCounts === 'object' ? sc.packCounts : null;
+            const replaceAvatars = !!sc.replaceAvatars;
+            /** @type {string[]} */
+            let sets = [];
+            if (packCounts) {
+              for (const [setName, cnt] of Object.entries(packCounts)) {
+                const c = Math.max(0, Number(cnt) || 0);
+                for (let i = 0; i < c; i++) sets.push(setName);
+              }
+              // Deterministic shuffle of sets using rng for variety
+              for (let i = sets.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [sets[i], sets[j]] = [sets[j], sets[i]];
+              }
+            } else {
+              console.error(`[Sealed] packCounts not provided for player ${pid} in match ${match.id}`);
+              continue;
+            }
+
+            /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>} */
+            const packs = [];
+            for (let i = 0; i < sets.length; i++) {
+              const setName = sets[i];
+              const picks = await generateBoosterDeterministic(setName, rng, replaceAvatars);
+              const cards = picks.map((p, idx) => ({
+                id: `${String(p.variantId)}_${i}_${idx}_${pid.slice(-4)}`,
+                name: p.cardName || "",
+                set: setName,
+                slug: String(p.slug || ""),
+                type: p.type ?? null,
+                cost: p.cost ?? null,
+                rarity: String(p.rarity || "Ordinary"),
+              }));
+              packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
+            }
+            sealedPacks[pid] = packs;
+          }
+          match.sealedPacks = sealedPacks;
+          io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+        } catch (err) {
+          console.error(`[Sealed] Error generating sealed packs for match ${match.id}:`, err);
+          io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+        }
+      })();
+      return; // will emit after packs are generated
+    }
+
+    // Broadcast updated match info to room (and initiator)
+    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+  });
+
   socket.on("joinMatch", (payload) => {
     if (!authed) return;
     const matchId = payload && payload.matchId;

@@ -3,12 +3,11 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import CardPreview from "@/components/game/CardPreview";
-import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useOnline } from "@/app/online/online-context";
+import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
@@ -24,8 +23,8 @@ import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
-import { FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY } from "@/lib/flags";
 import Board from "@/lib/game/Board";
 import Hand3D from "@/lib/game/components/Hand3D";
 import Hud3D from "@/lib/game/components/Hud3D";
@@ -38,6 +37,7 @@ import {
   BASE_TILE_SIZE,
   MAT_RATIO,
 } from "@/lib/game/constants";
+import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
@@ -90,21 +90,13 @@ export default function OnlineMatchPage() {
 
   // Seat Video (WebRTC) prototype state (always call hook; gated by enabled flag)
   const rtc = useMatchWebRTC({
-    enabled: FEATURE_SEAT_VIDEO,
+    enabled: FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY,
     transport,
     myPlayerId: me?.id ?? null,
     matchId: match?.id ?? null,
   });
 
-  // Auto-join WebRTC when prerequisites are ready to avoid perpetual "idle"
-  useEffect(() => {
-    if (!FEATURE_SEAT_VIDEO) return;
-    if (!transport || !me?.id || !match?.id) return;
-    const s = rtc.state;
-    if (s === "idle" || s === "failed" || s === "closed") {
-      try { void rtc.join(); } catch {}
-    }
-  }, [rtc, rtc.state, transport, me?.id, match?.id]);
+  // Do not auto-join WebRTC. Users must click the Join control to request mic access and connect.
 
   // Remote audio is handled inside SeatMediaControls
 
@@ -148,6 +140,46 @@ export default function OnlineMatchPage() {
 
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
+    // If we were navigated from tournament matches, ensure the match exists on the socket server
+    if (connected && matchId && transport) {
+      try {
+        const key = `tournamentMatchBootstrap_${matchId}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const payload = JSON.parse(raw) as {
+            players?: string[];
+            matchType?: 'constructed' | 'sealed' | 'draft';
+            lobbyName?: string;
+            sealedConfig?: {
+              packCount?: number;
+              setMix?: string[];
+              timeLimit?: number;
+              constructionStartTime?: number;
+              packCounts?: Record<string, number>;
+              replaceAvatars?: boolean;
+            } | null;
+            draftConfig?: {
+              setMix?: string[];
+              packCount?: number;
+              packSize?: number;
+              packCounts?: Record<string, number>;
+            } | null;
+          };
+          // Fire-and-forget: instruct server to create/ensure match exists with the given roster and configs
+          transport.emit('startTournamentMatch', {
+            matchId,
+            playerIds: Array.isArray(payload?.players) ? payload.players : [],
+            matchType: payload?.matchType || 'constructed',
+            lobbyName: payload?.lobbyName,
+            sealedConfig: payload?.sealedConfig || null,
+            draftConfig: payload?.draftConfig || null,
+          });
+          // Clear bootstrap to avoid duplicates on refresh/reconnect
+          localStorage.removeItem(key);
+        }
+      } catch {}
+    }
+
     if (!connected || !matchId) return;
 
     // If store still holds a different match, force a one-time hard reload to clear stale state
@@ -186,7 +218,7 @@ export default function OnlineMatchPage() {
     } catch {}
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
-  }, [connected, match?.id, matchId, joinMatch]);
+  }, [connected, match?.id, matchId, joinMatch, transport]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {

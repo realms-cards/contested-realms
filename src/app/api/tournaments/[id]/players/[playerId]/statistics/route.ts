@@ -152,7 +152,7 @@ export async function GET(
     const performanceByRound = matchHistory
       .filter(m => m.roundNumber !== null && m.result !== 'pending')
       .reduce((acc, match) => {
-        const round = match.roundNumber!;
+        const round = match.roundNumber as number;
         if (!acc[round]) {
           acc[round] = { wins: 0, losses: 0, draws: 0 };
         }

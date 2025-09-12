@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Position3D } from "@/types/draft-3d-events";
 import OnlineCard3D from "./OnlineCard3D";
 
@@ -60,7 +60,8 @@ export default function OnlineCardStack({
   showCardCount = false,
   disabled = false,
 }: OnlineCardStackProps) {
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  // Hover state for card highlighting
+  const [, setHoveredCard] = useState<string | null>(null); // placeholder for future hover UI
 
   // Calculate card positions based on stack type and layout
   const cardPositions = useMemo(() => {

@@ -371,7 +371,12 @@ function movePermanentCore(
 ): { per: Permanents; movedName: string } {
   const per: Permanents = { ...perIn };
   const fromArr = [...(per[fromKey] || [])];
-  const item = fromArr.splice(index, 1)[0]!;
+  const spliced = fromArr.splice(index, 1);
+  const item = spliced[0];
+  if (!item) {
+    // Nothing to move; return original state
+    return { per: perIn, movedName: '' };
+  }
   const toArr = [...(per[toKey] || [])];
   // When newOffset is null, keep existing offset; when provided, set it.
   // For tilt: if item has none, assign a random one on move; otherwise keep.
@@ -760,7 +765,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => {
       if (!s.history.length) return s as GameState;
       const nextHist = [...s.history];
-      const prev = nextHist.pop()!;
+      const prev = nextHist.pop();
+      if (!prev) return s as GameState;
       return {
         history: nextHist,
         // restore snapshot
@@ -840,7 +846,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => !((it.card.type || "").toLowerCase().includes("token")));
       if (nonTokenIndices.length === 0) return s;
-      const targetIdx = nonTokenIndices[nonTokenIndices.length - 1]!.i;
+      const last = nonTokenIndices[nonTokenIndices.length - 1];
+      const targetIdx = last ? last.i : 0;
       const per: Permanents = { ...s.permanents };
       const list = [...(per[at] || [])];
       list[index] = { ...token, attachedTo: { at, index: targetIdx } };
@@ -1483,7 +1490,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       // Non-site permanent: place on tile
       const per: Permanents = { ...s.permanents };
-      const arr = per[key] ? [...per[key]!] : [];
+      const arr = [...(per[key] || [])];
       arr.push({
         owner: (who === "p1" ? 1 : 2) as 1 | 2,
         card,
@@ -1664,7 +1671,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       // Non-site
       const per: Permanents = { ...s.permanents };
-      const arr = per[key] ? [...per[key]!] : [];
+      const arr = [...(per[key] || [])];
       arr.push({
         owner: (who === "p1" ? 1 : 2) as 1 | 2,
         card,

@@ -29,15 +29,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       };
     }
 
-    // Get tournament info first
+    // Get tournament info first (all scalars by default, including settings)
     const tournament = await prisma.tournament.findUnique({
-      where: { id },
-      select: { 
-        name: true, 
-        format: true, 
-        status: true,
-        maxPlayers: true
-      }
+      where: { id }
     });
 
     if (!tournament) {
@@ -72,7 +66,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Process matches to extract detailed information
     const processedMatches = filteredMatches.map(match => {
-      const players = match.players as Array<{ id: string; name: string; seat?: number }>;
+      const players = match.players as Array<{ id: string; displayName?: string; name?: string; seat?: number }>;
       const results = match.results as { winnerId?: string; gameResults?: Array<{ winner: string; duration?: number }> } | null;
       
       // Calculate match statistics
@@ -102,7 +96,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         status: match.status,
         players: players.map(p => ({
           id: p.id,
-          name: p.name,
+          name: (p.displayName ?? p.name ?? 'Unknown Player'),
           seat: p.seat || null
         })),
         winnerId,

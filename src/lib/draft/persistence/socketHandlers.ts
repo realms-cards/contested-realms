@@ -5,6 +5,7 @@
 
 import type { Socket } from 'socket.io-client';
 import { DeckPersistenceManager } from './DeckPersistenceManager';
+// TODO(deck-persistence): Reintroduce additional types as features land.
 import type {
   DeckSubmission,
   DeckComposition,

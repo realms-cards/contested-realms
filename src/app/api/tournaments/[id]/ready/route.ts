@@ -15,10 +15,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
+    const userId = session.user.id;
     const body = await req.json();
     const ready = Boolean(body.ready);
     
-    console.log(`Tournament ready toggle: ${id}, user: ${session.user.id}, ready: ${ready}`);
+    console.log(`Tournament ready toggle: ${id}, user: ${userId}, ready: ${ready}`);
     
     // Check if tournament exists and is in registration phase
     const tournament = await prisma.tournament.findUnique({
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Check if user is registered for this tournament
-    const registration = tournament.registrations.find(reg => reg.playerId === session.user!.id);
+    const registration = tournament.registrations.find(reg => reg.playerId === userId);
     if (!registration) {
       return new Response(JSON.stringify({ error: 'Not registered for this tournament' }), { status: 400 });
     }
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    console.log(`Tournament ready status updated: ${session.user.id} -> ${ready}`);
+    console.log(`Tournament ready status updated: ${userId} -> ${ready}`);
 
     // Get updated ready player count
     const updatedRegistrations = await prisma.tournamentRegistration.findMany({
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     try {
       await tournamentSocketService.broadcastPreparationUpdate(
         id,
-        session.user.id,
+        userId,
         ready ? 'ready' : 'not-ready',
         readyPlayerCount,
         updatedRegistrations.length
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return new Response(JSON.stringify({
       success: true,
-      playerId: session.user!.id,
+      playerId: userId,
       ready,
       readyPlayerCount,
       message: ready ? 'You are now ready' : 'Ready status removed'

@@ -117,8 +117,8 @@ export default function OnlineLayout({
     (async () => {
       try {
         await transport.connect({
-          displayName: user.name!,
-          playerId: user.id!,
+          displayName: user.name ?? 'Player',
+          playerId: user.id ?? undefined,
         });
         setConnected(true);
       } catch (e) {

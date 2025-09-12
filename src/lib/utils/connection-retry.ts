@@ -300,7 +300,7 @@ export class ConnectionRetry {
    */
   abortAll(): number {
     let aborted = 0;
-    for (const [id, controller] of this.abortControllers.entries()) {
+    for (const [, controller] of this.abortControllers.entries()) {
       controller.abort();
       aborted++;
     }

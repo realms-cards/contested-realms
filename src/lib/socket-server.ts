@@ -3,9 +3,9 @@
  * Handles WebSocket connections for real-time tournament updates
  */
 
-import { Server as SocketIOServer } from 'socket.io';
 import type { Server as HTTPServer } from 'http';
 import type { NextApiResponse } from 'next';
+import { Server as SocketIOServer } from 'socket.io';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export interface NextApiResponseWithSocket extends NextApiResponse {
