@@ -8,7 +8,8 @@ const {
   generateBoosterDeterministic,
 } = require("./booster");
 const { BotManager } = require("./botManager");
-const { applyTurnStart, validateAction } = require("./rules");
+const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
+const { applyGenesis } = require("./rules/triggers");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 
@@ -1237,12 +1238,33 @@ io.on("connection", (socket) => {
           }
         } catch {}
 
+        // Enforce costs with auto-tap if possible
+        try {
+          const costRes = ensureCosts(match.game || {}, patchToApply, player.id, { match });
+          if (costRes && costRes.ok === false) {
+            socket.emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
+            return;
+          }
+          if (costRes && costRes.autoPatch) {
+            // Merge auto-tapping into outgoing patch
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
+          }
+        } catch {}
+
         // Validate action against minimal rules
         try {
-          const v = validateAction(match.game || {}, patchToApply, player.id);
+          const v = validateAction(match.game || {}, patchToApply, player.id, { match });
           if (!v.ok) {
             socket.emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
             return;
+          }
+        } catch {}
+
+        // Apply trigger skeletons (e.g., Genesis) based on the action
+        try {
+          const trig = applyGenesis(match.game || {}, patchToApply, player.id, { match });
+          if (trig && typeof trig === 'object') {
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, trig);
           }
         } catch {}
 

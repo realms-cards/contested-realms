@@ -18,6 +18,7 @@
     "assets:compress:out": "node scripts/compress-ktx2.js --input data --outDir data-ktx2",
     "assets:compress:etc1s": "node scripts/compress-ktx2.js --format etc1s",
     "bot:add": "node scripts/add-cpu-bot.js",
+    "bots:spawn": "node scripts/spawn-bots.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:push": "prisma db push"
