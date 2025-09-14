@@ -45,13 +45,19 @@ export class SocketTransport implements GameTransport {
     // Client runs on 3000/3002; signaling server on 3010.
     const defaultUrl = "http://localhost:3010";
     const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
+    const path = process.env.NEXT_PUBLIC_WS_PATH || undefined;
+    const transportsEnv = (process.env.NEXT_PUBLIC_WS_TRANSPORTS || 'websocket')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean) as Array<'polling' | 'websocket'>;
     // Sanitize and fallback the display name to avoid validation issues
     const trimmed = (opts.displayName ?? "").trim();
     const finalName = (trimmed || "Player").slice(0, 40);
     console.log(`[Transport] Connecting to ${url} as ${finalName}${opts.playerId ? ` (${opts.playerId})` : ''}`);
     const socket = io(url, {
-      transports: ["websocket"],
+      transports: transportsEnv.length ? transportsEnv : ["websocket"],
       autoConnect: true,
+      path,
     }) as Socket;
 
     this.socket = socket;

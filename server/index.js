@@ -1,8 +1,14 @@
 // Simple Socket.IO server for Sorcery online MVP
 // Run with: node server/index.js
 
+// Load environment variables (.env, .env.local) for standalone server runs
+try { require('dotenv').config(); } catch {}
+
 const http = require("http");
 const { Server } = require("socket.io");
+const { PrismaClient } = require("@prisma/client");
+const { createAdapter } = require("@socket.io/redis-adapter");
+const Redis = require("ioredis");
 const {
   createRngFromString,
   generateBoosterDeterministic,
@@ -12,6 +18,14 @@ const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
+const prisma = new PrismaClient();
+const REDIS_URL = process.env.REDIS_URL || process.env.SOCKET_REDIS_URL || "redis://localhost:6379";
+const ENABLE_REDIS_ADAPTER = !(
+  process.env.SOCKET_REDIS_DISABLED === '1' ||
+  (process.env.SOCKET_REDIS_DISABLED || '').toLowerCase() === 'true'
+);
+let isReady = false; // readiness flips true once DB connected and recovery done
+let isShuttingDown = false;
 // Rules enforcement modes:
 //  - off: helpers only, no strict gating
 //  - bot_only: enforce for CPU bots only
@@ -23,11 +37,48 @@ const RULES_HELPERS_ENABLED = !(
 );
 
 const server = http.createServer();
+// Allow multiple origins via env to support localhost and LAN IPs in dev
+const CORS_ORIGINS = (process.env.SOCKET_CORS_ORIGIN || "http://localhost:3000")
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000"],
+    origin: CORS_ORIGINS,
     credentials: true,
   },
+});
+
+// Socket.IO Redis adapter (horizontal scaling)
+let pubClient = null;
+let subClient = null;
+try {
+  if (ENABLE_REDIS_ADAPTER) {
+    pubClient = new Redis(REDIS_URL);
+    subClient = pubClient.duplicate();
+    io.adapter(createAdapter(pubClient, subClient));
+    try { console.log(`[socket.io] Redis adapter enabled -> ${REDIS_URL}`); } catch {}
+  } else {
+    try { console.log("[socket.io] Redis adapter disabled by config"); } catch {}
+  }
+} catch (e) {
+  try { console.warn("[socket.io] Redis adapter initialization failed:", e?.message || e); } catch {}
+}
+
+// Basic health endpoints (liveness/readiness)
+server.on("request", async (req, res) => {
+  const url = (req && req.url) || "/";
+  if (url === "/healthz" || url === "/readyz" || url === "/status") {
+    const dbOk = !!isReady;
+    const redisOk = pubClient ? (pubClient.status === "ready" || pubClient.status === "connect") : false;
+    const body = JSON.stringify({ ok: true, db: dbOk, redis: redisOk, shuttingDown: isShuttingDown, matches: typeof matches !== 'undefined' && matches ? matches.size : 0, uptimeSec: Math.floor(process.uptime()) });
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(body);
+    return;
+  }
+  // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
+  return;
 });
 
 // In-memory state
@@ -48,6 +99,152 @@ const lobbyInvites = new Map();
 const rtcParticipants = new Map();
 /** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
+
+// -----------------------------
+// Persistence helpers (PostgreSQL via Prisma) and Redis cache
+// -----------------------------
+function toPlainPlayerDecks(playerDecks) {
+  if (!playerDecks || !(playerDecks instanceof Map)) return playerDecks || null;
+  return Object.fromEntries(playerDecks);
+}
+
+function matchToSessionUpsertData(match) {
+  return {
+    lobbyId: match.lobbyId || null,
+    lobbyName: match.lobbyName || null,
+    playerIds: Array.isArray(match.playerIds) ? match.playerIds : [],
+    status: match.status,
+    seed: match.seed,
+    turn: match.turn || null,
+    winnerId: match.winnerId || null,
+    matchType: (match.matchType || "constructed"),
+    sealedConfig: match.sealedConfig || null,
+    draftConfig: match.draftConfig || null,
+    draftState: match.draftState || null,
+    playerDecks: match.playerDecks ? toPlainPlayerDecks(match.playerDecks) : null,
+    sealedPacks: match.sealedPacks || null,
+    game: match.game || null,
+    lastTs: BigInt(Number(match.lastTs || Date.now())),
+  };
+}
+
+async function cacheSessionToRedis(sessionData) {
+  try {
+    if (!pubClient) return;
+    const key = `match:session:${sessionData.id}`;
+    await pubClient.set(
+      key,
+      JSON.stringify(sessionData, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)),
+      'EX',
+      60 * 60 * 24
+    );
+  } catch {}
+}
+
+async function persistMatchCreated(match) {
+  try {
+    const data = matchToSessionUpsertData(match);
+    const createData = { id: match.id, ...data };
+    const updateData = { ...data };
+    await prisma.onlineMatchSession.upsert({
+      where: { id: match.id },
+      update: updateData,
+      create: createData,
+    });
+    await cacheSessionToRedis({ ...data, id: match.id });
+  } catch (e) {
+    try { console.warn(`[persist] create session failed for ${match.id}:`, e?.message || e); } catch {}
+  }
+}
+
+async function persistMatchUpdate(match, patch, playerId, ts) {
+  try {
+    const data = matchToSessionUpsertData(match);
+    await prisma.$transaction([
+      prisma.onlineMatchSession.update({ where: { id: match.id }, data }),
+      ...(patch ? [prisma.onlineMatchAction.create({ data: { matchId: match.id, playerId: playerId || 'system', timestamp: BigInt(Number(ts || Date.now())), patch } })] : []),
+    ]);
+    await cacheSessionToRedis({ ...data, id: match.id });
+  } catch (e) {
+    try { console.warn(`[persist] update session failed for ${match.id}:`, e?.message || e); } catch {}
+  }
+}
+
+async function persistMatchEnded(match) {
+  try {
+    await prisma.onlineMatchSession.update({
+      where: { id: match.id },
+      data: { status: 'ended', winnerId: match.winnerId || null, lastTs: BigInt(Number(match.lastTs || Date.now())) },
+    });
+  } catch (e) {
+    try { console.warn(`[persist] end session failed for ${match.id}:`, e?.message || e); } catch {}
+  }
+}
+
+function rehydrateMatch(row) {
+  try {
+    const m = {
+      id: row.id,
+      lobbyId: row.lobbyId || null,
+      lobbyName: row.lobbyName || null,
+      playerIds: Array.isArray(row.playerIds) ? row.playerIds : [],
+      status: row.status,
+      seed: row.seed,
+      turn: row.turn || null,
+      winnerId: row.winnerId || null,
+      matchType: row.matchType || 'constructed',
+      sealedConfig: row.sealedConfig || null,
+      draftConfig: row.draftConfig || null,
+      playerDecks: row.playerDecks ? new Map(Object.entries(row.playerDecks)) : null,
+      sealedPacks: row.sealedPacks || null,
+      draftState: row.draftState || null,
+      game: row.game || {},
+      lastTs: Number(row.lastTs || 0) || 0,
+    };
+    return m;
+  } catch (e) {
+    try { console.warn(`[persist] rehydrate failed for ${row && row.id ? row.id : 'unknown'}:`, e?.message || e); } catch {}
+    return null;
+  }
+}
+
+async function recoverActiveMatches() {
+  try {
+    const rows = await prisma.onlineMatchSession.findMany({
+      where: { status: { in: ['waiting', 'deck_construction', 'in_progress'] } },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+    let count = 0;
+    for (const r of rows) {
+      if (matches.has(r.id)) continue;
+      const m = rehydrateMatch(r);
+      if (m) { matches.set(m.id, m); count++; }
+    }
+    try { console.log(`[persist] recovered ${count} active match(es) from DB`); } catch {}
+  } catch (e) {
+    try { console.warn(`[persist] recovery error:`, e?.message || e); } catch {}
+  }
+}
+
+async function findActiveMatchForPlayer(playerId) {
+  try {
+    const r = await prisma.onlineMatchSession.findFirst({
+      where: {
+        status: { in: ['waiting', 'deck_construction', 'in_progress'] },
+        playerIds: { has: playerId },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!r) return null;
+    if (matches.has(r.id)) return matches.get(r.id);
+    const m = rehydrateMatch(r);
+    if (m) { matches.set(m.id, m); }
+    return m;
+  } catch {
+    return null;
+  }
+}
 
 // Bot manager for headless CPU clients
 // Initialized after helper functions are hoisted
@@ -442,6 +639,9 @@ async function startMatchFromLobby(
 
   matches.set(match.id, match);
 
+  // Persist newly created match session
+  try { await persistMatchCreated(match); } catch {}
+
   // Start recording immediately when match is created
   startMatchRecording(match);
 
@@ -658,7 +858,7 @@ function finishMatchRecording(matchId) {
 io.on("connection", (socket) => {
   let authed = false;
 
-  socket.on("hello", (payload) => {
+  socket.on("hello", async (payload) => {
     const rawName = payload && typeof payload.displayName === "string" ? payload.displayName : "";
     const displayName = (rawName.trim() || "Player").slice(0, 40);
     const providedId = payload && payload.playerId ? String(payload.playerId) : null;
@@ -705,6 +905,19 @@ io.on("connection", (socket) => {
       socket.join(`lobby:${player.lobbyId}`);
       const l = lobbies.get(player.lobbyId);
       socket.emit("joinedLobby", { lobby: getLobbyInfo(l) });
+    } else {
+      // Server restart recovery path: attach player to an active match from DB if found
+      try {
+        const recovered = await findActiveMatchForPlayer(player.id);
+        if (recovered) {
+          player.matchId = recovered.id;
+          socket.join(`match:${recovered.id}`);
+          socket.emit("matchStarted", { match: getMatchInfo(recovered) });
+          if (recovered.matchType === 'draft' && recovered.draftState && recovered.draftState.phase !== 'waiting') {
+            socket.emit("draftUpdate", recovered.draftState);
+          }
+        }
+      } catch {}
     }
   });
 
@@ -751,7 +964,19 @@ io.on("connection", (socket) => {
         const sw = match.game ? match.game.setupWinner : null;
         cp = sw === 'p2' ? 2 : 1; // default to P1 if undefined
       }
-      const mainPatch = { phase: "Main", currentPlayer: cp };
+      // Ensure avatar positions exist so first-site placement rule can be applied client/server
+      const sz = (match.game && match.game.board && match.game.board.size) || { w: 5, h: 5 };
+      const cx = Math.floor(Math.max(1, Number(sz.w) || 5) / 2);
+      const topY = (Number(sz.h) || 5) - 1;
+      const botY = 0;
+      const avPrev = (match.game && match.game.avatars) || { p1: {}, p2: {} };
+      const p1Prev = avPrev.p1 || {};
+      const p2Prev = avPrev.p2 || {};
+      const avatars = {
+        p1: { ...p1Prev, pos: Array.isArray(p1Prev.pos) ? p1Prev.pos : [cx, topY] },
+        p2: { ...p2Prev, pos: Array.isArray(p2Prev.pos) ? p2Prev.pos : [cx, botY] },
+      };
+      const mainPatch = { phase: "Main", currentPlayer: cp, avatars };
       // Update server-side aggregated snapshot
       match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
       match.lastTs = now;
@@ -1327,9 +1552,12 @@ io.on("connection", (socket) => {
         recordMatchAction(player.matchId, patchToApply, player.id);
         // Relay the merged action to all clients
         io.to(matchRoom).emit("statePatch", { patch: patchToApply, t: now });
+        // Persist patch and aggregate state
+        try { persistMatchUpdate(match, patchToApply, player.id, now); } catch {}
       } else {
         // Relay the action as-is if not mergeable
         io.to(matchRoom).emit("statePatch", { patch, t: now });
+        try { persistMatchUpdate(match, patch || null, player.id, now); } catch {}
       }
     } catch {
       // Fallback relay if any unexpected error occurs
@@ -1832,6 +2060,8 @@ io.on("connection", (socket) => {
       );
       // Broadcast draft state update
       io.to(room).emit("draftUpdate", match.draftState);
+      // Persist draft state progress
+      try { persistMatchUpdate(match, null, requestingPlayer?.id || 'system', Date.now()); } catch {}
     } catch (error) {
       console.error(`[Draft] Error starting draft: ${error.message}`);
       const s = requestingPlayer
@@ -2027,6 +2257,8 @@ io.on("connection", (socket) => {
       `[Draft] Emitting draftUpdate: phase=${draftState.phase}, packIndex=${draftState.packIndex}, pickNumber=${draftState.pickNumber}, waitingFor=${draftState.waitingFor.length}`
     );
     io.to(`match:${match.id}`).emit("draftUpdate", draftState);
+    // Persist draft state progress
+    try { persistMatchUpdate(match, null, player?.id || 'system', Date.now()); } catch {}
   });
 
   socket.on("chooseDraftPack", (payload) => {
@@ -2073,6 +2305,8 @@ io.on("connection", (socket) => {
 
     // Broadcast updated draft state
     io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
+    // Persist draft state progress
+    try { persistMatchUpdate(match, null, player?.id || 'system', Date.now()); } catch {}
   });
 
   // Submit draft deck during deck construction phase (with validation)
@@ -2108,15 +2342,12 @@ io.on("connection", (socket) => {
     );
     if (allSubmitted && match.status === "deck_construction") {
       console.log(
-        `[Match] All decks submitted for match ${match.id}, transitioning to in_progress`
+        `[Match] All draft decks submitted for match ${match.id}, transitioning to waiting (setup)`
       );
-      match.status = "in_progress";
-      // Initialize game phase to Main immediately for draft flow
+      // Do NOT skip setup for draft; mirror sealed flow: move to waiting and let D20 + Start + Mulligans proceed
+      match.status = "waiting";
       try {
-        const now = Date.now();
-        match.game = deepMergeReplaceArrays(match.game || {}, { phase: "Main" });
-        match.lastTs = now;
-        io.to(`match:${match.id}`).emit("statePatch", { patch: { phase: "Main" }, t: now });
+        io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
       } catch {}
 
       // Clear lobby associations since match is starting
@@ -2141,6 +2372,7 @@ io.on("connection", (socket) => {
     io.to(`match:${match.id}`).emit("matchStarted", {
       match: getMatchInfo(match),
     });
+    try { persistMatchUpdate(match, null, player.id, Date.now()); } catch {}
   });
 
   // Explicit end match (optional). Allows cleanup and status update.
@@ -2154,6 +2386,7 @@ io.on("connection", (socket) => {
     match.winnerId = payload && typeof payload.winnerId === 'string' ? payload.winnerId : match.winnerId || null;
     io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
     try { botManager.cleanupBotsAfterMatch(match); } catch {}
+    try { persistMatchEnded(match); } catch {}
   });
 
   socket.on("disconnect", () => {
@@ -2266,3 +2499,36 @@ server.listen(PORT, () => {
     `[sorcery] Socket.IO server listening on http://localhost:${PORT}`
   );
 });
+
+// Startup: connect DB and attempt recovery
+(async () => {
+  try {
+    await prisma.$connect();
+    try { console.log('[db] connected'); } catch {}
+  } catch (e) {
+    try { console.error('[db] connection failed:', e?.message || e); } catch {}
+  }
+  try {
+    await recoverActiveMatches();
+  } catch {}
+  isReady = true;
+})();
+
+// Graceful shutdown
+async function shutdown() {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  const timeout = Number(process.env.SHUTDOWN_TIMEOUT_MS || 10000);
+  try { console.log('[server] shutting down...'); } catch {}
+  const timer = setTimeout(() => process.exit(0), timeout);
+  try { await new Promise((resolve) => io.close(() => resolve())); } catch {}
+  try { await new Promise((resolve) => server.close(() => resolve())); } catch {}
+  try { if (pubClient) await pubClient.quit(); } catch {}
+  try { if (subClient) await subClient.quit(); } catch {}
+  try { await prisma.$disconnect(); } catch {}
+  clearTimeout(timer);
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

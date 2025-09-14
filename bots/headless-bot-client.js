@@ -451,27 +451,62 @@ class BotClient {
         }
       }
 
-      // Helper: find a first empty board cell
-      const findEmptyCell = () => {
-        const w = (board.size && board.size.w) || 5;
-        const h = (board.size && board.size.h) || 5;
+      // Helpers for board cell picking respecting Sorcery site rules
+      const w = (board.size && board.size.w) || 5;
+      const h = (board.size && board.size.h) || 5;
+      const inBounds = (x, y) => x >= 0 && x < w && y >= 0 && y < h;
+      const isEmpty = (x, y) => {
+        const key = `${x},${y}`;
+        const tile = (board.sites && board.sites[key]) || null;
+        return !(tile && tile.card);
+      };
+      const findAnyEmptyCell = () => {
         for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
-            const key = `${x},${y}`;
-            const tile = (board.sites && board.sites[key]) || null;
-            if (!tile || !tile.card) return key;
+            if (isEmpty(x, y)) return `${x},${y}`;
           }
         }
         return '0,0';
       };
+      const ownedSiteKeys = Object.keys((board.sites || {})).filter((k) => {
+        const t = board.sites[k];
+        return !!(t && t.card && Number(t.owner) === myNum);
+      });
+      const getAvatarPos = () => {
+        const av = (avatars && avatars[meKey]) || {};
+        const pos = Array.isArray(av.pos) ? av.pos : null;
+        if (pos) return pos;
+        // Fallback to canonical start positions: p1 top middle, p2 bottom middle
+        const cx = Math.floor(Math.max(1, Number(w) || 5) / 2);
+        const yy = myNum === 1 ? (Number(h) || 5) - 1 : 0;
+        return [cx, yy];
+      };
+      const findAdjacentEmptyToOwned = () => {
+        const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (const key of ownedSiteKeys) {
+          const [xs, ys] = key.split(',');
+          const x0 = Number(xs), y0 = Number(ys);
+          for (const [dx, dy] of dirs) {
+            const x = x0 + dx, y = y0 + dy;
+            if (inBounds(x, y) && isEmpty(x, y)) return `${x},${y}`;
+          }
+        }
+        return null;
+      };
 
-      // 2) Play a site from hand to the first empty tile
+      // 2) Play a site from hand following first-site-at-avatar and adjacency rules
       let placedCell = null;
       const handNow = Array.isArray(myZones.hand) ? [...myZones.hand] : [];
       const siteIdx = handNow.findIndex((c) => c && typeof c.type === 'string' && c.type.toLowerCase().includes('site'));
       if (siteIdx !== -1) {
         const siteCard = handNow.splice(siteIdx, 1)[0];
-        const cellKey = findEmptyCell();
+        let cellKey = null;
+        if (ownedSiteKeys.length === 0) {
+          const [ax, ay] = getAvatarPos();
+          cellKey = isEmpty(ax, ay) ? `${ax},${ay}` : findAnyEmptyCell();
+        } else {
+          cellKey = findAdjacentEmptyToOwned() || findAnyEmptyCell();
+        }
         placedCell = cellKey;
         // Update zones
         myZones.hand = handNow;
@@ -764,8 +799,25 @@ class BotClient {
   }
 
   _fallbackSpellslinger() {
-    const slug = this._getSlugForName('Spellslinger');
-    return { id: `avatar_spellslinger_${Math.random().toString(36).slice(2,8)}`, name: "Spellslinger", type: "Avatar", set: 'Beta', slug: slug || undefined };
+    // Prefer Spellslinger first (important standard avatar), then other real Beta avatars
+    const candidates = ['Spellslinger', 'Geomancer', 'Flamecaller', 'Sparkmage', 'Waveshaper'];
+    for (const name of candidates) {
+      const slug = this._getSlugForName(name);
+      if (slug) {
+        return {
+          id: `avatar_${name.toLowerCase()}_${Math.random().toString(36).slice(2,8)}`,
+          name,
+          type: 'Avatar',
+          set: 'Beta',
+          slug,
+        };
+      }
+    }
+    // Fallback: pick any Avatar from DB if present
+    const any = this._chooseAvatarCardRef();
+    if (any) return any;
+    // Last resort: placeholder without slug (server will treat as generic avatar)
+    return { id: `avatar_placeholder_${Math.random().toString(36).slice(2,8)}`, name: 'Avatar', type: 'Avatar', set: 'Beta' };
   }
 
   _standardSites(preferred = []) {
@@ -840,8 +892,12 @@ class BotClient {
       }
       if (!chosen && sets.length) chosen = sets[0];
       const variants = Array.isArray(chosen?.variants) ? chosen.variants : [];
-      let v = variants.find((x) => String(x?.finish) === 'Standard' && String(x?.product || '').toLowerCase().includes('booster'));
-      if (!v && variants.length) v = variants[0];
+      const pickStandard = (pred) => variants.find((x) => String(x?.finish) === 'Standard' && pred(String(x?.product || '').toLowerCase()));
+      // Preference order: Standard Booster > Standard Draft Kit > any Standard > any
+      let v = pickStandard((p) => p.includes('booster'))
+           || pickStandard((p) => p.includes('draft_kit') || p.includes('draft kit'))
+           || variants.find((x) => String(x?.finish) === 'Standard')
+           || variants[0];
       return { slug: v?.slug ? String(v.slug) : null, setName: chosen?.name ? String(chosen.name) : null };
     } catch { return { slug: null, setName: null }; }
   }
@@ -856,9 +912,12 @@ class BotClient {
 
   _chooseAvatarCardRef() {
     const db = _loadCardsDb();
-    // Prefer Spellslinger; otherwise pick first Avatar in db
-    const sSlug = this._getSlugForName('Spellslinger');
-    if (sSlug) return { id: `avatar_spellslinger_${Math.random().toString(36).slice(2,6)}`, name: 'Spellslinger', type: 'Avatar', set: 'Beta', slug: sSlug };
+    // Prefer Spellslinger first; then other known avatars
+    const preferred = ['Spellslinger', 'Geomancer', 'Flamecaller', 'Sparkmage', 'Waveshaper'];
+    for (const name of preferred) {
+      const slug = this._getSlugForName(name);
+      if (slug) return { id: `avatar_${name.toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: 'Avatar', set: 'Beta', slug };
+    }
     const avatar = db.find((c) => String(c?.guardian?.type || c?.sets?.[0]?.metadata?.type || '').toLowerCase().includes('avatar'));
     if (avatar) {
       const name = String(avatar.name || 'Avatar');

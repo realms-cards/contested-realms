@@ -594,7 +594,8 @@ function AuthenticatedDeckEditor() {
   // Basic add-card helpers for the search UI
   const addCardAuto = useCallback(
     (r: SearchResult) => {
-      const isSite = (r.type || "").toLowerCase().includes("site");
+      const type = (r.type || "").toLowerCase();
+      const isSite = type.includes("site");
       const zone: Zone = isSite ? "Atlas" : "Spellbook";
       const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
 
@@ -1452,46 +1453,46 @@ function AuthenticatedDeckEditor() {
         const newX = 0.5 + Math.random() * 3;
         updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
 
-        // Sync picks state for draft mode
-        if (isDraftMode) {
-          const isSite = (card.card.type || "").toLowerCase().includes("site");
-          const variantId = card.card.variantId || undefined;
-          setPicks((prevPicks) => {
-            const next = { ...prevPicks } as Record<PickKey, PickItem>;
-            const deckKey = `${cardId}:${isSite ? 'Atlas' : 'Spellbook'}:${variantId ?? 'x'}` as PickKey;
-            const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
-            
-            const deckItem = next[deckKey];
-            if (deckItem && deckItem.count > 0) {
-              // Move one from deck zone to sideboard
-              if (deckItem.count > 1) {
-                next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
-              } else {
-                delete next[deckKey];
-              }
-              
-              const sideboardItem = next[sideboardKey];
-              next[sideboardKey] = sideboardItem
-                ? { ...sideboardItem, count: sideboardItem.count + 1 }
-                : {
-                    cardId,
-                    variantId: variantId ?? null,
-                    name: card.card.cardName,
-                    type: card.card.type,
-                    slug: card.card.slug || '',
-                    zone: 'Sideboard',
-                    count: 1,
-                    set: card.card.setName || '',
-                  };
+        // Sync picks state for all modes (draft, sealed, and normal editor)
+        const type = (card.card.type || "").toLowerCase();
+        const isSite = type.includes("site");
+        const zone = isSite ? 'Atlas' : 'Spellbook';
+        const variantId = card.card.variantId || undefined;
+        setPicks((prevPicks) => {
+          const next = { ...prevPicks } as Record<PickKey, PickItem>;
+          const deckKey = `${cardId}:${zone}:${variantId ?? 'x'}` as PickKey;
+          const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+          
+          const deckItem = next[deckKey];
+          if (deckItem && deckItem.count > 0) {
+            // Move one from deck zone to sideboard
+            if (deckItem.count > 1) {
+              next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+            } else {
+              delete next[deckKey];
             }
-            return next;
-          });
-        }
+            
+            const sideboardItem = next[sideboardKey];
+            next[sideboardKey] = sideboardItem
+              ? { ...sideboardItem, count: sideboardItem.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: card.card.cardName,
+                  type: card.card.type,
+                  slug: card.card.slug || '',
+                  zone: 'Sideboard',
+                  count: 1,
+                  set: card.card.setName || '',
+                };
+          }
+          return next;
+        });
 
         return updated;
       });
     },
-    [isStandardSite, isDraftMode]
+    [isStandardSite]
   );
 
   const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
@@ -1506,45 +1507,45 @@ function AuthenticatedDeckEditor() {
       const newX = -2 + Math.random() * 4;
       updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined };
 
-      // Sync picks state for draft mode
-      if (isDraftMode) {
-        const isSite = (card.card.type || "").toLowerCase().includes("site");
-        const variantId = card.card.variantId || undefined;
-        setPicks((prevPicks) => {
-          const next = { ...prevPicks } as Record<PickKey, PickItem>;
-          const deckKey = `${cardId}:${isSite ? 'Atlas' : 'Spellbook'}:${variantId ?? 'x'}` as PickKey;
-          const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
-          
-          const sideboardItem = next[sideboardKey];
-          if (sideboardItem && sideboardItem.count > 0) {
-            // Move one from sideboard to deck zone
-            if (sideboardItem.count > 1) {
-              next[sideboardKey] = { ...sideboardItem, count: sideboardItem.count - 1 };
-            } else {
-              delete next[sideboardKey];
-            }
-            
-            const deckItem = next[deckKey];
-            next[deckKey] = deckItem
-              ? { ...deckItem, count: deckItem.count + 1 }
-              : {
-                  cardId,
-                  variantId: variantId ?? null,
-                  name: card.card.cardName,
-                  type: card.card.type,
-                  slug: card.card.slug || '',
-                  zone: isSite ? 'Atlas' : 'Spellbook',
-                  count: 1,
-                  set: card.card.setName || '',
-                };
+      // Sync picks state for all modes (draft, sealed, and normal editor)
+      const type = (card.card.type || "").toLowerCase();
+      const isSite = type.includes("site");
+      const zone = isSite ? 'Atlas' : 'Spellbook';
+      const variantId = card.card.variantId || undefined;
+      setPicks((prevPicks) => {
+        const next = { ...prevPicks } as Record<PickKey, PickItem>;
+        const deckKey = `${cardId}:${zone}:${variantId ?? 'x'}` as PickKey;
+        const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+        
+        const sideboardItem = next[sideboardKey];
+        if (sideboardItem && sideboardItem.count > 0) {
+          // Move one from sideboard to deck zone
+          if (sideboardItem.count > 1) {
+            next[sideboardKey] = { ...sideboardItem, count: sideboardItem.count - 1 };
+          } else {
+            delete next[sideboardKey];
           }
-          return next;
-        });
-      }
+          
+          const deckItem = next[deckKey];
+          next[deckKey] = deckItem
+            ? { ...deckItem, count: deckItem.count + 1 }
+            : {
+                cardId,
+                variantId: variantId ?? null,
+                name: card.card.cardName,
+                type: card.card.type,
+                slug: card.card.slug || '',
+                zone,
+                count: 1,
+                set: card.card.setName || '',
+              };
+        }
+        return next;
+      });
 
       return updated;
     });
-  }, [isDraftMode]);
+  }, []);
 
   // Helper function to move specific card by its unique ID
   const moveSpecificCardToSideboard = useCallback(
@@ -1751,13 +1752,13 @@ function AuthenticatedDeckEditor() {
 
                           if (currentZone === "Deck") {
                             // Move from deck to sideboard
-                            moveOneToSideboard(p.card.cardId);
+                            moveSpecificCardToSideboard(p.id);
                             setFeedbackMessage(
                               `Moved "${p.card.cardName}" to Sideboard`
                             );
                           } else {
                             // Move from sideboard to deck
-                            moveOneFromSideboardToDeck(p.card.cardId);
+                            moveSpecificCardToDeck(p.id);
                             setFeedbackMessage(
                               `Moved "${p.card.cardName}" to Deck`
                             );
