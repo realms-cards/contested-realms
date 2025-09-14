@@ -7,7 +7,6 @@ const {
   createRngFromString,
   generateBoosterDeterministic,
 } = require("./booster");
-const { BotClient } = require("./botClient");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 
@@ -45,6 +44,18 @@ const activeBots = new Map();
 const CPU_BOTS_ENABLED =
   process.env.CPU_BOTS_ENABLED === "1" ||
   process.env.CPU_BOTS_ENABLED === "true";
+
+// Lazy loader: only require the headless BotClient when feature is enabled
+function loadBotClientCtor() {
+  if (!CPU_BOTS_ENABLED) return null;
+  try {
+    const mod = require("../bots/headless-bot-client");
+    return mod && mod.BotClient ? mod.BotClient : null;
+  } catch (e) {
+    try { console.warn("[Bot] BotClient module unavailable:", e?.message || e); } catch {}
+    return null;
+  }
+}
 
 // -----------------------------
 // Helpers: CPU detection & cleanup
@@ -894,6 +905,11 @@ io.on("connection", (socket) => {
       socket.emit("error", { message: "CPU bots are disabled", code: "feature_disabled" });
       return;
     }
+    const BotClient = loadBotClientCtor();
+    if (!BotClient) {
+      socket.emit("error", { message: "CPU bot component not available", code: "bot_unavailable" });
+      return;
+    }
     const host = getPlayerBySocket(socket);
     if (!host || !host.lobbyId) return;
     const lobby = lobbies.get(host.lobbyId);
@@ -930,6 +946,42 @@ io.on("connection", (socket) => {
       console.error(`[Bot] Error creating bot:`, err);
       socket.emit("error", { message: "Failed to spawn CPU bot" });
     }
+  });
+
+  // Host-only: remove a CPU bot from the current lobby
+  // Payload: { playerId?: string }
+  socket.on("removeCpuBot", (payload = {}) => {
+    if (!authed) return;
+    if (!CPU_BOTS_ENABLED) {
+      socket.emit("error", { message: "CPU bots are disabled", code: "feature_disabled" });
+      return;
+    }
+    const host = getPlayerBySocket(socket);
+    if (!host || !host.lobbyId) return;
+    const lobby = lobbies.get(host.lobbyId);
+    if (!lobby) return;
+    if (lobby.hostId !== host.id) {
+      socket.emit("error", { message: "Only host can remove CPU bot", code: "not_host" });
+      return;
+    }
+
+    // Determine target CPU player in this lobby
+    const requestedId = payload && typeof payload.playerId === 'string' ? payload.playerId : null;
+    let targetId = null;
+    if (requestedId && lobby.playerIds.has(requestedId) && isCpuPlayerId(requestedId)) {
+      targetId = requestedId;
+    } else {
+      // Fallback: pick any CPU in the lobby
+      for (const pid of lobby.playerIds) {
+        if (isCpuPlayerId(pid)) { targetId = pid; break; }
+      }
+    }
+    if (!targetId) {
+      socket.emit("error", { message: "No CPU bot found in this lobby", code: "no_cpu_in_lobby" });
+      return;
+    }
+
+    stopAndRemoveBot(targetId, 'removed_by_host');
   });
 
   socket.on("requestLobbies", () => {

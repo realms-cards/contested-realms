@@ -329,8 +329,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           </div>
         </div>
       )}
-      {/* Host-only match start/config controls, only when no active match exists */}
-      {isHost && !match && (
+      {/* Host-only match start/config controls, only when lobby is open and no active match exists */}
+      {isHost && !match && lobby?.status === "open" && (
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm font-semibold opacity-90">Host Controls</div>
           <div className="flex flex-wrap gap-2 items-center">
