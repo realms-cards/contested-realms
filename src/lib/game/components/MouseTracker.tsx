@@ -64,8 +64,17 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
         }
       }
       
-      // No card found under cursor
-      onHover(null);
+      // Check if mouse is in hand area (bottom 25% of screen) - don't clear hover in hand area
+      // as hand cards have their own hover management
+      if (rect) {
+        const relativeY = (event.clientY - rect.top) / rect.height;
+        const inHandArea = relativeY > 0.75; // bottom 25% of screen
+        
+        // Only clear hover if not in hand area
+        if (!inHandArea) {
+          onHover(null);
+        }
+      }
     };
     
     // Add event listener to the canvas

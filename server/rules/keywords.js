@@ -2,23 +2,26 @@
 const fs = require('fs');
 const path = require('path');
 
+// Map<string, string> where value is optional description
 let _KEYWORDS = null;
 
 function loadKeywords() {
   if (_KEYWORDS) return _KEYWORDS;
-  const out = new Set();
+  const out = new Map();
   try {
     const p = path.join(__dirname, '..', '..', 'reference', 'codex.csv');
     const text = fs.readFileSync(p, 'utf8');
-    for (const line of text.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const [kw] = trimmed.split(',');
-      if (kw) out.add(String(kw).trim());
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const parts = line.split(',');
+      const kw = String((parts[0] || '').trim());
+      const desc = String((parts[1] || '').trim());
+      if (kw) out.set(kw, desc);
     }
   } catch {
-    // Fallback: seed with common keywords we care about now
-    ['Genesis', 'Airborne'].forEach((k) => out.add(k));
+    // Fallback: seed with common keywords and empty descriptions
+    ['Genesis', 'Airborne'].forEach((k) => out.set(k, ''));
   }
   _KEYWORDS = out;
   return _KEYWORDS;
@@ -29,7 +32,7 @@ function getKeywordsFromCardText(text) {
   const found = [];
   if (!text) return found;
   const t = String(text);
-  for (const kw of kws) {
+  for (const kw of kws.keys()) {
     // Basic word boundary check; Sorcery keywords like 'Genesis' should match
     const re = new RegExp(`(^|[^A-Za-z])${kw}([^A-Za-z]|$)`);
     if (re.test(t)) found.push(kw);
@@ -44,4 +47,9 @@ function getKeywordsForCard(card) {
   return getKeywordsFromCardText(rulesText || '');
 }
 
-module.exports = { loadKeywords, getKeywordsFromCardText, getKeywordsForCard };
+function getKeywordDefinition(keyword) {
+  const map = loadKeywords();
+  return map.get(String(keyword)) || '';
+}
+
+module.exports = { loadKeywords, getKeywordsFromCardText, getKeywordsForCard, getKeywordDefinition };

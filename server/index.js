@@ -9,9 +9,18 @@ const {
 } = require("./booster");
 const { BotManager } = require("./botManager");
 const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
-const { applyGenesis } = require("./rules/triggers");
+const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
+// Rules enforcement modes:
+//  - off: helpers only, no strict gating
+//  - bot_only: enforce for CPU bots only
+//  - all: enforce for all players
+const RULES_ENFORCE_MODE = (process.env.RULES_ENFORCE_MODE || 'off').toLowerCase();
+const RULES_HELPERS_ENABLED = !(
+  process.env.RULES_HELPERS_ENABLED === '0' ||
+  (process.env.RULES_HELPERS_ENABLED || '').toLowerCase() === 'false'
+);
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -1238,25 +1247,43 @@ io.on("connection", (socket) => {
           }
         } catch {}
 
-        // Enforce costs with auto-tap if possible
+        // Determine enforcement for this actor
+        const actorIsCpu = isCpuPlayerId(player.id);
+        const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && actorIsCpu);
+
+        // Enforce costs (helpers can still adjust spend even when not enforcing)
         try {
           const costRes = ensureCosts(match.game || {}, patchToApply, player.id, { match });
-          if (costRes && costRes.ok === false) {
-            socket.emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
-            return;
-          }
-          if (costRes && costRes.autoPatch) {
+          if (costRes && costRes.autoPatch && RULES_HELPERS_ENABLED) {
             // Merge auto-tapping into outgoing patch
             patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
+          }
+          if (costRes && costRes.ok === false) {
+            if (enforce) {
+              socket.emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
+              return;
+            } else {
+              // Emit human-visible warning event in GameEvent shape
+              const warn = [{ id: 0, ts: Date.now(), text: `[Warning] ${costRes.error || 'Insufficient resources'}` }];
+              const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
+              patchToApply = { ...patchToApply, events: [...existing, ...warn] };
+            }
           }
         } catch {}
 
         // Validate action against minimal rules
         try {
           const v = validateAction(match.game || {}, patchToApply, player.id, { match });
-          if (!v.ok) {
+          if (!v.ok && enforce) {
             socket.emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
             return;
+          }
+          // When not enforcing (humans), append a warning event but allow the action
+          if (!v.ok && !enforce) {
+            // Use GameEvent format expected by UI console
+            const warnEvent = [{ id: 0, ts: Date.now(), text: `[Warning] ${v.error || 'Potential rules issue'}` }];
+            const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
+            patchToApply = { ...patchToApply, events: [...existing, ...warnEvent] };
           }
         } catch {}
 
@@ -1268,12 +1295,21 @@ io.on("connection", (socket) => {
           }
         } catch {}
 
-        // Special-case: merge events arrays to prevent overwriting on concurrent logs
-        if (Array.isArray(patch.events)) {
-          const prev = Array.isArray(match.game && match.game.events)
-            ? match.game.events
-            : [];
-          const mergedEvents = mergeEvents(prev, patch.events);
+        // Attach keyword metadata events for UI (no-op validations)
+        try {
+          const kw = applyKeywordAnnotations(match.game || {}, patchToApply, player.id, { match });
+          if (kw && typeof kw === 'object') {
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
+          }
+        } catch {}
+
+        // Special-case: merge console events (include both client-provided and server-added)
+        const eventsAdded = [];
+        if (Array.isArray(patch.events)) eventsAdded.push(...patch.events);
+        if (Array.isArray(patchToApply && patchToApply.events)) eventsAdded.push(...patchToApply.events);
+        if (eventsAdded.length > 0) {
+          const prev = Array.isArray(match.game && match.game.events) ? match.game.events : [];
+          const mergedEvents = mergeEvents(prev, eventsAdded);
           const mergedMaxId = mergedEvents.reduce(
             (mx, e) => Math.max(mx, Number(e.id) || 0),
             0

@@ -1,7 +1,17 @@
 // Trigger scaffolding: currently implements a minimal Genesis trigger skeleton
 // The trigger attaches a simple event into the patch when a permanent with 'Genesis' is placed.
 
-const { getKeywordsForCard } = require('./keywords');
+const { getKeywordsForCard, getKeywordDefinition } = require('./keywords');
+const { draw } = require('./effects');
+
+function getPlayerKey(match, playerId) {
+  if (!match || !Array.isArray(match.playerIds)) return null;
+  const idx = match.playerIds.indexOf(playerId);
+  if (idx === 0) return 'p1';
+  if (idx === 1) return 'p2';
+  return null;
+}
+
 
 function collectNewPermanents(action) {
   const out = [];
@@ -22,10 +32,22 @@ function applyGenesis(game, action, playerId, context) {
     const placements = collectNewPermanents(action);
     if (!placements.length) return null;
     const events = [];
+    const match = context && context.match ? context.match : null;
+    const meKey = getPlayerKey(match, playerId);
+    let zonesPatch = null;
     for (const { cell, entry } of placements) {
       const kws = getKeywordsForCard(entry.card);
       if (kws.includes('Genesis')) {
-        // For now, emit a basic event describing the trigger; effect resolution can be added later.
+        // Draw 1 card for the acting player (minimal effect)
+        if (meKey) {
+          const drawPatch = draw(game, meKey, 1);
+          if (drawPatch) {
+            // merge zones patches together for multiple triggers
+            const prevZones = (zonesPatch && zonesPatch.zones) || {};
+            zonesPatch = { zones: { ...prevZones, ...drawPatch.zones } };
+          }
+        }
+        // Emit a basic event describing the trigger
         events.push({
           id: 0, // Server will resequence via mergeEvents
           type: 'trigger',
@@ -33,8 +55,33 @@ function applyGenesis(game, action, playerId, context) {
           cell,
           playerId,
           cardName: entry.card && entry.card.name,
-          message: `Genesis triggers for ${entry.card && entry.card.name} at ${cell}`,
+          message: `Genesis: draw 1 card for ${meKey || 'player'}.`,
         });
+      }
+    }
+    if (!events.length) return null;
+    return zonesPatch ? { ...zonesPatch, events } : { events };
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { applyGenesis };
+ 
+// Attach keyword metadata events for UI (no-op validations like Airborne, etc.)
+function applyKeywordAnnotations(game, action, playerId, context) {
+  try {
+    const placements = collectNewPermanents(action);
+    if (!placements.length) return null;
+    const events = [];
+    for (const { cell, entry } of placements) {
+      const kws = getKeywordsForCard(entry.card) || [];
+      for (const kw of kws) {
+        // Only annotate safe, informational keywords for now
+        if (['Airborne'].includes(kw) || kw) {
+          const desc = getKeywordDefinition(kw) || '';
+          events.push({ id: 0, type: 'keyword', name: kw, cell, playerId, cardName: entry.card && entry.card.name, info: desc });
+        }
       }
     }
     if (!events.length) return null;
@@ -44,4 +91,4 @@ function applyGenesis(game, action, playerId, context) {
   }
 }
 
-module.exports = { applyGenesis };
+module.exports.applyKeywordAnnotations = applyKeywordAnnotations;

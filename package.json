@@ -19,6 +19,8 @@
     "assets:compress:etc1s": "node scripts/compress-ktx2.js --format etc1s",
     "bot:add": "node scripts/add-cpu-bot.js",
     "bots:spawn": "node scripts/spawn-bots.js",
+    "sim:tournament": "node scripts/simulate-tournament.js",
+    "test:rules": "vitest run tests/unit/rules*.test.ts tests/unit/triggers.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:push": "prisma db push"
