@@ -775,7 +775,7 @@ class BotClient {
 
   _fallbackSpellslinger() {
     const slug = this._getSlugForName('Spellslinger');
-    return { id: `avatar_spellslinger_${Math.random().toString(36).slice(2,8)}`, name: "Spellslinger", type: "Avatar", set: 'Beta', slug: slug || undefined };
+    return { id: `avatar_spellslinger_${Math.random().toString(36).slice(2,8)}`, name: 'Spellslinger', type: 'Avatar', set: 'Beta', slug: slug || undefined };
   }
 
   _standardSites(preferred = []) {
@@ -850,8 +850,12 @@ class BotClient {
       }
       if (!chosen && sets.length) chosen = sets[0];
       const variants = Array.isArray(chosen?.variants) ? chosen.variants : [];
-      let v = variants.find((x) => String(x?.finish) === 'Standard' && String(x?.product || '').toLowerCase().includes('booster'));
-      if (!v && variants.length) v = variants[0];
+      const pickStandard = (pred) => variants.find((x) => String(x?.finish) === 'Standard' && pred(String(x?.product || '').toLowerCase()));
+      // Preference order: Standard Booster > Standard Draft Kit > any Standard > any
+      let v = pickStandard((p) => p.includes('booster'))
+           || pickStandard((p) => p.includes('draft_kit') || p.includes('draft kit'))
+           || variants.find((x) => String(x?.finish) === 'Standard')
+           || variants[0];
       return { slug: v?.slug ? String(v.slug) : null, setName: chosen?.name ? String(chosen.name) : null };
     } catch { return { slug: null, setName: null }; }
   }

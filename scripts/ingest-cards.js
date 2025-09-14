@@ -3,6 +3,8 @@
   - Fetches https://api.sorcerytcg.com/api/cards
   - Normalizes Sets, Cards, CardSetMetadata, Variants
 */
+// Load .env for local development
+try { require('dotenv').config(); } catch {}
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');

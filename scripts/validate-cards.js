@@ -5,6 +5,8 @@
 
   Usage: npm run validate:cards
 */
+// Load .env for local development
+try { require('dotenv').config(); } catch {}
 const fs = require('fs');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');

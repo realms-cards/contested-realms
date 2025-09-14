@@ -6,9 +6,10 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  // For development, use a local SQLite file. You can switch to env("DATABASE_URL") later.
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 // Enums for consistency with Sorcery rarities and finishes
@@ -391,6 +392,53 @@ model LeaderboardEntry {
   @@index([format, timeFrame, rating])
   @@index([format, timeFrame, winRate])
   @@index([rank])
+}
+
+// Online match persistence for real-time games (non-tournament quick play)
+enum OnlineMatchStatus {
+  waiting
+  deck_construction
+  in_progress
+  ended
+}
+
+model OnlineMatchSession {
+  id           String            @id @default(cuid())
+  lobbyId      String?
+  lobbyName    String?
+  playerIds    String[]          // Array of player IDs participating in the match
+  status       OnlineMatchStatus @default(waiting)
+  seed         String
+  turn         String?
+  winnerId     String?
+  matchType    GameFormat        // constructed | sealed | draft
+  sealedConfig Json?
+  draftConfig  Json?
+  draftState   Json?
+  playerDecks  Json?
+  sealedPacks  Json?
+  game         Json?
+  lastTs       BigInt?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  actions      OnlineMatchAction[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OnlineMatchAction {
+  id        String             @id @default(cuid())
+  matchId   String
+  playerId  String
+  timestamp BigInt
+  patch     Json
+
+  match OnlineMatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([timestamp])
 }
 
 model MatchResult {

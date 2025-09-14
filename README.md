@@ -86,3 +86,133 @@ Set these in `.env.local` (or export for your shell). See `example.env` for defa
   ```bash
   npm run test:rules
   ```
+
+## Database: PostgreSQL (Dev & Prod)
+
+We now use PostgreSQL via Prisma for both development and production.
+
+- Local dev uses Docker (Postgres 16). See `docker-compose.yml`.
+- Production is designed for a managed Postgres (DigitalOcean or Supabase). Use a pooled connection for `DATABASE_URL` and a direct primary for `DIRECT_URL`.
+
+### 1) Start local Postgres
+
+```bash
+npm run db:up
+```
+
+This exposes Postgres on `localhost:5432` with database/user/password `sorcery`.
+
+### 2) Configure `.env.local`
+
+Copy `example.env` to `.env.local` and set:
+
+```bash
+DATABASE_URL="postgresql://sorcery:sorcery@localhost:5432/sorcery?schema=public"
+DIRECT_URL="postgresql://sorcery:sorcery@localhost:5432/sorcery?schema=public"
+```
+
+### 3) Generate client and run migrations
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate:dev
+```
+
+This will create/update the schema in your local Postgres. If switching from SQLite, Prisma will create a new migration history for Postgres.
+
+### 4) Seed core data
+
+```bash
+npm run db:seed
+```
+
+This ingests Sorcery cards/sets/variants from the public API and seeds pack configs for booster generation.
+
+### 5) Production
+
+Set `DATABASE_URL` to a pooled endpoint and `DIRECT_URL` to the primary endpoint of your managed Postgres.
+
+- DigitalOcean Managed Postgres: use the Connection Pooler for `DATABASE_URL` and the primary for `DIRECT_URL` (both with `sslmode=require`).
+- Supabase: use port `6543` (pooled) for `DATABASE_URL` and `5432` (direct) for `DIRECT_URL`.
+
+Deploy migrations in CI/CD with:
+
+```bash
+npm run prisma:migrate:deploy
+npm run db:seed   # optional, if you want to refresh/ingest data
+```
+
+Note: The standalone Socket.IO server (`server/index.js`) loads `.env` via `dotenv`, so it can connect to Postgres when run directly with `node`.
+
+## Realtime Server & Scaling (Socket.IO)
+
+### Client WebSocket configuration
+
+Configure the web app to talk to the Socket.IO server explicitly in development.
+
+Add these to `.env.local` (see `example.env` for comments):
+
+```bash
+# Point the Next.js client at the Socket.IO server
+NEXT_PUBLIC_WS_URL="http://localhost:3010"
+# Optional: custom Socket.IO path if you change from the default '/socket.io'
+# NEXT_PUBLIC_WS_PATH=
+# Recommended behind proxies/load balancers: force websocket transport
+NEXT_PUBLIC_WS_TRANSPORTS=websocket
+```
+
+On the server side (when running `npm run server` locally), allow your web origin:
+
+```bash
+SOCKET_CORS_ORIGIN="http://localhost:3000"
+```
+
+If you access the app via a LAN IP (e.g., `http://192.168.x.x:3000`), include it:
+
+```bash
+SOCKET_CORS_ORIGIN="http://localhost:3000,http://192.168.x.x:3000"
+```
+
+Restart the server and the Next.js dev server after changing env variables.
+
+### Troubleshooting common WebSocket errors
+
+- __Client cannot connect / 400 on polling__: set `NEXT_PUBLIC_WS_TRANSPORTS=websocket`.
+- __CORS error on handshake__: set `SOCKET_CORS_ORIGIN` on the server to include your web origin(s).
+- __Wrong host/port__: ensure `NEXT_PUBLIC_WS_URL` points to `http://localhost:3010` (or your Caddy endpoint).
+- __Health check__: `curl -s http://localhost:3010/healthz` should return JSON with `db`, `redis`, and `matches`.
+
+### Dockerized scaling (2 instances + Caddy load balancer)
+
+We provide a ready-to-run stack in `docker-compose.yml`:
+
+- `postgres` – database
+- `redis` – Socket.IO adapter (sessions/rooms across instances)
+- `migrate` – applies Prisma migrations
+- `server1`, `server2` – two Socket.IO instances (built from `Dockerfile.server`)
+- `caddy` – reverse proxy / load balancer on `http://localhost:3010`
+
+Commands:
+
+```bash
+# Build server images and caddy
+npm run server:docker:build
+
+# Start two servers behind Caddy
+npm run server:docker:up
+
+# Tail server and caddy logs
+npm run server:docker:logs
+
+# Bring up the full stack (Postgres, Redis, migrate, servers, Caddy)
+npm run stack:up
+
+# Tear down the stack
+npm run stack:down
+
+# Manage individual services
+npm run db:up
+npm run redis:up
+```
+
+By default, the client should connect to Caddy at `http://localhost:3010`.

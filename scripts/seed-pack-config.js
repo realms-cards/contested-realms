@@ -1,6 +1,8 @@
 /*
   Seed PackConfig for known sets (Alpha, Beta).
 */
+// Load .env for local development
+try { require('dotenv').config(); } catch {}
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 

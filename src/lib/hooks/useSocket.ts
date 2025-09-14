@@ -14,6 +14,7 @@ interface UseSocketOptions {
   reconnectionAttempts?: number;
   timeout?: number;
   path?: string; // Optional custom socket.io path (e.g., '/api/socket')
+  transports?: Array<'polling' | 'websocket'>; // Force transports to avoid proxy issues
 }
 
 interface SocketState {
@@ -23,15 +24,21 @@ interface SocketState {
   reconnectAttempts: number;
 }
 
-const DEFAULT_OPTIONS: UseSocketOptions = {
-  url: process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010',
-  autoConnect: true,
-  reconnection: true,
-  reconnectionDelay: 1000,
-  reconnectionAttempts: 5,
-  timeout: 20000,
-  path: undefined
-};
+const DEFAULT_OPTIONS: UseSocketOptions = (() => {
+  const url = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010';
+  const path = process.env.NEXT_PUBLIC_WS_PATH || undefined;
+  const transportsEnv = (process.env.NEXT_PUBLIC_WS_TRANSPORTS || '').split(',').map(s => s.trim()).filter(Boolean) as Array<'polling' | 'websocket'>;
+  return {
+    url,
+    autoConnect: true,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5,
+    timeout: 20000,
+    path,
+    transports: transportsEnv.length ? transportsEnv : ['websocket'],
+  } as UseSocketOptions;
+})();
 
 /**
  * useSocket hook provides Socket.io connection management
@@ -56,6 +63,7 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       reconnectionAttempts: opts.reconnectionAttempts,
       timeout: opts.timeout,
       path: opts.path,
+      transports: opts.transports,
     });
 
     socketRef.current = socketInstance;
@@ -97,7 +105,7 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       setSocket(null);
       socketRef.current = null;
     };
-  }, [opts.url, opts.autoConnect, opts.reconnection, opts.reconnectionDelay, opts.reconnectionAttempts, opts.timeout, opts.path]);
+  }, [opts.url, opts.autoConnect, opts.reconnection, opts.reconnectionDelay, opts.reconnectionAttempts, opts.timeout, opts.path, opts.transports]);
 
   return socket;
 }

@@ -107,7 +107,7 @@ export class SwissPairingService {
       where: {
         tournamentId,
         players: {
-          path: '$',
+          path: [],
           string_contains: `"${playerId}"`
         },
         status: {
