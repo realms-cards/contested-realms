@@ -106,6 +106,8 @@ export interface GameTransport {
   setLobbyPlan?(planned: "constructed" | "sealed" | "draft"): void;
   // Server-managed CPU bot (host-only). Adds a bot to the current lobby.
   addCpuBot?(displayName?: string): void;
+  // Remove a CPU bot from the current lobby (host-only). If playerId omitted, removes any CPU present.
+  removeCpuBot?(playerId?: string): void;
 
   // Draft-specific methods (optional, may not be implemented by all transports)
   startDraft?(config: { matchId: string; draftConfig: DraftConfig }): Promise<void>;

@@ -62,7 +62,7 @@ export default function BottomBar(props: BottomBarProps) {
             {!searchExpanded || isSealed ? (
               <div className="flex items-center gap-2 flex-1">
                 {isSealed ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full">
                     <div
                       className={`h-10 px-4 rounded-lg flex items-center gap-2 font-medium ${
                         timeRemaining <= 60000 ? "bg-red-600 text-white" : timeRemaining <= 300000 ? "bg-yellow-600 text-white" : "bg-blue-600 text-white"
@@ -119,6 +119,17 @@ export default function BottomBar(props: BottomBarProps) {
                           </div>
                         </div>
                       ))}
+                    </div>
+                    <div className="ml-auto">
+                      <button
+                        onClick={toggleTournamentControls}
+                        className={`h-10 px-4 rounded font-medium transition-colors ${
+                          tournamentControlsVisible ? "bg-yellow-600 text-white hover:bg-yellow-500" : "bg-white/10 text-white hover:bg-white/20"
+                        }`}
+                        title="Show tournament legal cards"
+                      >
+                        Add Standard Cards
+                      </button>
                     </div>
                   </div>
                 ) : (

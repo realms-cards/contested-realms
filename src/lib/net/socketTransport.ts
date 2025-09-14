@@ -379,6 +379,11 @@ export class SocketTransport implements GameTransport {
     this.requireSocket().emit("addCpuBot", displayName ? { displayName } : {});
   }
 
+  removeCpuBot(playerId?: string): void {
+    // Host-only server handler will validate permissions.
+    this.requireSocket().emit("removeCpuBot", playerId ? { playerId } : {});
+  }
+
   submitDeck(deck: unknown): void {
     this.requireSocket().emit("submitDeck", { deck });
   }

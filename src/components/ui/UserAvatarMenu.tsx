@@ -92,6 +92,7 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
             fill
             sizes="40px"
             className="rounded-full object-cover"
+            unoptimized
           />
         ) : (
           <span className="text-white text-sm font-semibold">
@@ -139,6 +140,7 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
                       width={32}
                       height={32}
                       className="rounded-full object-cover"
+                      unoptimized
                     />
                   ) : (
                     <span className="text-white text-xs font-semibold">

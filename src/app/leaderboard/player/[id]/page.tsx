@@ -169,6 +169,7 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
                 width={64}
                 height={64}
                 className="rounded-full"
+                unoptimized
               />
             ) : (
               <div className="w-16 h-16 rounded-full bg-slate-600 flex items-center justify-center text-white text-xl font-bold">
