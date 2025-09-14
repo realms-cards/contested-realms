@@ -159,7 +159,15 @@ function applyTurnStart(game) {
     avatars[nextKey] = { ...(avatars[nextKey] || {}), tapped: false };
 
     const boardNext = { ...board, sites };
-    return { board: boardNext, permanents, avatars };
+
+    // Reset per-turn spend for current player (sites do not tap in Sorcery)
+    const resPrev = (game && game.resources) || {};
+    const meKey = cp === 1 ? 'p1' : 'p2';
+    const meResPrev = resPrev[meKey] || {};
+    const meRes = { ...meResPrev, spentThisTurn: 0 };
+    const resources = { ...resPrev, [meKey]: meRes };
+
+    return { board: boardNext, permanents, avatars, resources };
   } catch {
     return null;
   }
@@ -192,6 +200,7 @@ function validateAction(game, action, playerId, context) {
     // Validate site placement into empty cells only
     if (action.board && action.board.sites && typeof action.board.sites === 'object') {
       const currentSites = (game && game.board && game.board.sites) || {};
+      const avatars = (game && game.avatars) || {};
       for (const key of Object.keys(action.board.sites)) {
         const nextTile = action.board.sites[key];
         const prevTile = currentSites[key];
@@ -206,6 +215,17 @@ function validateAction(game, action, playerId, context) {
         // Adjacency: after the player's first site, any new site must be adjacent to an owned site
         if (nextTile && nextTile.card && meNum) {
           const sitesOwned = Object.values(currentSites).filter((t) => t && t.card && Number(t.owner) === meNum).length;
+          // First site must be placed at the avatar's position
+          if (sitesOwned === 0 && meKey) {
+            const av = avatars[meKey] || {};
+            const pos = Array.isArray(av.pos) ? av.pos : null;
+            if (pos) {
+              const atKey = `${pos[0]},${pos[1]}`;
+              if (key !== atKey) {
+                return { ok: false, error: `First site must be played at your avatar's position (${atKey})` };
+              }
+            }
+          }
           if (sitesOwned > 0 && !isAdjacentToOwnedSite(game, meNum, key)) {
             return { ok: false, error: `New sites must be adjacent to your existing sites` };
           }
@@ -262,13 +282,14 @@ function validateAction(game, action, playerId, context) {
   }
 }
 
-// Cost/tap enforcement with optional auto-pay tapping
+// Cost enforcement using per-turn spend model (sites never tap; avatars tap to play sites)
 function ensureCosts(game, action, playerId, context) {
   try {
     const match = context && context.match ? context.match : null;
     const idx = match && Array.isArray(match.playerIds) ? match.playerIds.indexOf(playerId) : -1;
     const meNum = idx >= 0 ? (idx + 1) : null;
-    if (!meNum) return { ok: true };
+    const meKey = idx === 0 ? 'p1' : idx === 1 ? 'p2' : null;
+    if (!meNum || !meKey) return { ok: true };
 
     // Sum costs of permanents being placed now
     let totalCost = 0;
@@ -281,43 +302,55 @@ function ensureCosts(game, action, playerId, context) {
         }
       }
     }
-    if (totalCost <= 0) return { ok: true };
-
-    const currentSites = (game && game.board && game.board.sites) || {};
-    const patchSites = (action.board && action.board.sites) || {};
-
-    // Count newly tapped sites in the action
-    let newlyTapped = 0;
-    for (const key of Object.keys(patchSites)) {
-      const prev = currentSites[key];
-      const next = patchSites[key];
-      if (!prev || !next) continue;
-      if (Number(next.owner) !== meNum) continue;
-      const prevTapped = !!prev.tapped;
-      const nextTapped = !!next.tapped;
-      if (prevTapped === false && nextTapped === true) newlyTapped++;
+    // Detect if actor is placing any new site this action
+    let placingNewSite = false;
+    if (action.board && action.board.sites && typeof action.board.sites === 'object') {
+      const currentSites = (game && game.board && game.board.sites) || {};
+      for (const key of Object.keys(action.board.sites)) {
+        const nextTile = action.board.sites[key];
+        const prevTile = currentSites[key];
+        if (nextTile && nextTile.card && (!prevTile || !prevTile.card) && Number(nextTile.owner) === meNum) {
+          placingNewSite = true;
+          break;
+        }
+      }
     }
 
-    // Count available untapped sites we could auto-tap
-    const availableKeys = Object.keys(currentSites).filter((k) => {
-      const tile = currentSites[k];
-      return tile && Number(tile.owner) === meNum && (!!tile.tapped === false);
-    });
+    // Build auto patch accumulator (resources + potential avatar tap)
+    const auto = { resources: {}, avatars: {} };
+    let hasAuto = false;
 
-    if (newlyTapped >= totalCost) return { ok: true };
-    const need = totalCost - newlyTapped;
-    if (availableKeys.length < need) return { ok: false, error: 'Insufficient sites to pay costs' };
-
-    // Build auto-tap patch for first N available sites
-    const autoSites = {};
-    let taken = 0;
-    for (const k of availableKeys) {
-      if (taken >= need) break;
-      const tile = currentSites[k];
-      autoSites[k] = { ...tile, tapped: true };
-      taken++;
+    // Mana spend check (per-turn spend model)
+    if (totalCost > 0) {
+      const currentSites = (game && game.board && game.board.sites) || {};
+      const ownedSiteCount = Object.values(currentSites).filter((t) => t && t.card && Number(t.owner) === meNum).length;
+      const spentPrev = (game && game.resources && game.resources[meKey] && Number(game.resources[meKey].spentThisTurn)) || 0;
+      const available = Math.max(0, ownedSiteCount - spentPrev);
+      if (totalCost > available) return { ok: false, error: 'Insufficient resources to pay costs' };
+      const newSpent = spentPrev + totalCost;
+      auto.resources[meKey] = { spentThisTurn: newSpent };
+      hasAuto = true;
     }
-    return { ok: true, autoPatch: { board: { sites: autoSites } } };
+
+    // Avatar tap requirement to play any site
+    if (placingNewSite) {
+      const avPrev = (game && game.avatars && game.avatars[meKey]) || {};
+      const tappedPrev = !!avPrev.tapped;
+      const avPatch = action.avatars && action.avatars[meKey];
+      const tappedNext = avPatch && Object.prototype.hasOwnProperty.call(avPatch, 'tapped') ? !!avPatch.tapped : tappedPrev;
+      if (tappedPrev) {
+        // Already tapped -> cannot pay site placement cost again this turn
+        return { ok: false, error: 'Avatar must be untapped to play a site' };
+      }
+      if (!tappedNext) {
+        // Auto-tap avatar as a helper
+        auto.avatars[meKey] = { ...(avPrev || {}), tapped: true };
+        hasAuto = true;
+      }
+    }
+
+    if (hasAuto) return { ok: true, autoPatch: auto };
+    return { ok: true };
   } catch {
     return { ok: true };
   }
