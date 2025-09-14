@@ -715,6 +715,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               rotationZ={rotZ}
                               elevation={0.001}
                               renderOrder={10}
+                              textureUrl={!site.card?.slug ? "/api/assets/earth.png" : undefined}
                               onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                                 e.stopPropagation();
                                 e.nativeEvent.preventDefault();
@@ -1092,14 +1093,16 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               />
                             </>
                           ) : (
-                            <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                              <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                              <meshStandardMaterial
-                                color={owner === 1 ? "#3b82f6" : "#ef4444"}
-                                transparent
-                                opacity={0}
-                              />
-                            </mesh>
+                            <CardPlane
+                              slug={p.card?.slug || ''}
+                              width={CARD_SHORT}
+                              height={CARD_LONG}
+                              rotationZ={rotZ}
+                              renderOrder={isBurrowed ? -10 : 0}
+                              depthWrite={!isBurrowed}
+                              depthTest={true}
+                              textureUrl={!p.card?.slug ? "/api/assets/air.png" : undefined}
+                            />
                           )}
                         </group>
                       </group>
@@ -1314,36 +1317,26 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                         );
                       }}
                     >
-                      {a.card?.slug ? (
-                        <>
-                          {(selectedAvatar === who || dragAvatar === who) &&
-                            !isHandVisible && (
-                              <CardGlow
-                                width={CARD_SHORT}
-                                height={CARD_LONG}
-                                rotationZ={rotZ}
-                                elevation={0.001}
-                                color="#60a5fa"
-                                renderOrder={600}
-                              />
-                            )}
-                          <CardPlane
-                            slug={a.card?.slug || ''}
-                            width={CARD_SHORT}
-                            height={CARD_LONG}
-                            rotationZ={rotZ}
-                          />
-                        </>
-                      ) : (
-                        <mesh rotation-x={-Math.PI / 2} rotation-z={rotZ}>
-                          <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                          <meshStandardMaterial
-                            color={who === "p1" ? "#60a5fa" : "#f87171"}
-                            transparent
-                            opacity={0}
-                          />
-                        </mesh>
-                      )}
+                      <>
+                        {(selectedAvatar === who || dragAvatar === who) &&
+                          !isHandVisible && (
+                            <CardGlow
+                              width={CARD_SHORT}
+                              height={CARD_LONG}
+                              rotationZ={rotZ}
+                              elevation={0.001}
+                              color="#60a5fa"
+                              renderOrder={600}
+                            />
+                          )}
+                        <CardPlane
+                          slug={a.card?.slug || ''}
+                          width={CARD_SHORT}
+                          height={CARD_LONG}
+                          rotationZ={rotZ}
+                          textureUrl={!a.card?.slug ? "/api/assets/air.png" : undefined}
+                        />
+                      </>
                     </group>
                   </group>
                 </RigidBody>

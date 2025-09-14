@@ -11,6 +11,7 @@ import type {
   PackRotationEvent,
   TimerState,
   SyncMetrics,
+  StateValidation,
 } from './types';
 
 export class DraftSyncManager {

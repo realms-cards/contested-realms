@@ -63,17 +63,11 @@ function normalizeTexture(
   t.offset.x = 0;
 
   // Keep flipY disabled to avoid GPU-driver specific flips.
-  // Safari can double-flip KTX2 textures if we also invert UVs, so:
-  // - ktx2: no UV inversion (repeat.y = 1, offset.y = 0)
-  // - raster: invert via UV (repeat.y = -1, offset.y = 1)
+  // With current meshes/UVs we need the same vertical inversion for both KTX2 and raster.
+  // Invert via UV: repeat.y = -1, offset.y = 1.
   t.flipY = false;
-  if (kind === "ktx2") {
-    t.repeat.y = -1;
-    t.offset.y = 1;
-  } else {
-    t.repeat.y = -1;
-    t.offset.y = 1;
-  }
+  t.repeat.y = -1;
+  t.offset.y = 1;
 
   // Improve readability of card text/details
   if (gl) {

@@ -244,6 +244,7 @@ export default function LobbiesCentral({
   onSetLobbyVisibility,
   onResync,
   onAddCpuBot,
+  onRemoveCpuBot,
   onCreateTournament,
   onJoinTournament,
   onLeaveTournament,
@@ -266,6 +267,7 @@ export default function LobbiesCentral({
   onSetLobbyVisibility?: (visibility: "open" | "private") => void;
   onResync?: () => void;
   onAddCpuBot?: (displayName?: string) => void;
+  onRemoveCpuBot?: (playerId?: string) => void;
   onCreateTournament?: (config: CreateTournamentConfig) => void;
   onJoinTournament?: (tournamentId: string) => void;
   onLeaveTournament?: (tournamentId: string) => void;
@@ -644,6 +646,17 @@ export default function LobbiesCentral({
                         title={l.players.length >= l.maxPlayers ? "Lobby is full" : "Add a CPU bot to this lobby"}
                       >
                         Add CPU Bot
+                      </button>
+                    )}
+
+                    {onRemoveCpuBot && myId && l.hostId === myId && (
+                      <button
+                        className="ml-1 rounded bg-rose-600/80 hover:bg-rose-600 px-3 py-1 text-xs disabled:opacity-40"
+                        onClick={() => onRemoveCpuBot()}
+                        disabled={!l.players.some(p => p.id.startsWith('cpu_'))}
+                        title="Remove a CPU bot from this lobby"
+                      >
+                        Remove CPU Bot
                       </button>
                     )}
 

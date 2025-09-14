@@ -41,6 +41,120 @@ const participantDetails = new Map();
 // Active headless bots managed by the server: playerId -> BotClient
 const activeBots = new Map();
 
+// Global feature flag for CPU bots (default: disabled)
+const CPU_BOTS_ENABLED =
+  process.env.CPU_BOTS_ENABLED === "1" ||
+  process.env.CPU_BOTS_ENABLED === "true";
+
+// -----------------------------
+// Helpers: CPU detection & cleanup
+// -----------------------------
+function isCpuPlayerId(id) {
+  return typeof id === 'string' && id.startsWith('cpu_');
+}
+
+// Returns true if there is at least one non-CPU (human) player in the lobby
+function lobbyHasHumanPlayers(lobby) {
+  if (!lobby || !lobby.playerIds || lobby.playerIds.size === 0) return false;
+  for (const pid of lobby.playerIds) {
+    if (!isCpuPlayerId(pid)) return true;
+  }
+  return false;
+}
+
+function stopAndRemoveBot(botId, reason = 'cleanup') {
+  try {
+    const p = players.get(botId);
+    if (p) {
+      // Remove from lobby if present
+      if (p.lobbyId && lobbies.has(p.lobbyId)) {
+        const lobby = lobbies.get(p.lobbyId);
+        lobby.playerIds.delete(botId);
+        lobby.ready.delete(botId);
+        io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
+      }
+      // Remove from match roster if present
+      if (p.matchId && matches.has(p.matchId)) {
+        const match = matches.get(p.matchId);
+        match.playerIds = match.playerIds.filter((pid) => pid !== botId);
+        io.to(`match:${match.id}`).emit('matchStarted', { match: getMatchInfo(match) });
+      }
+      // Disconnect socket if connected
+      if (p.socketId) {
+        const s = io.sockets.sockets.get(p.socketId);
+        if (s) {
+          try { s.disconnect(true); } catch {}
+        }
+      }
+      players.delete(botId);
+    }
+  } catch {}
+  // Stop headless client
+  const bot = activeBots.get(botId);
+  if (bot) {
+    try { bot.stop(); } catch {}
+    activeBots.delete(botId);
+  }
+  console.log(`[Bot] Removed CPU ${botId} (${reason})`);
+}
+
+function cleanupBotsForLobby(lobbyId) {
+  for (const [pid, p] of players.entries()) {
+    if (isCpuPlayerId(pid) && p.lobbyId === lobbyId && !p.matchId) {
+      stopAndRemoveBot(pid, 'lobby_closed');
+    }
+  }
+}
+
+function cleanupBotsAfterMatch(match) {
+  if (!match) return;
+  for (const pid of match.playerIds.slice()) {
+    if (isCpuPlayerId(pid)) stopAndRemoveBot(pid, 'match_ended');
+  }
+}
+
+// -----------------------------
+// Helpers: deck normalization & validation
+// -----------------------------
+function normalizeDeckPayload(deckPayload) {
+  if (!deckPayload) return [];
+  if (Array.isArray(deckPayload)) return deckPayload;
+  if (deckPayload.main && Array.isArray(deckPayload.main)) return deckPayload.main;
+  if (deckPayload.mainboard && Array.isArray(deckPayload.mainboard)) return deckPayload.mainboard;
+  // Accept direct object with cards
+  return [];
+}
+
+function isSiteType(t) {
+  return typeof t === 'string' && t.toLowerCase().includes('site');
+}
+function isAvatarType(t) {
+  return typeof t === 'string' && t.toLowerCase().includes('avatar');
+}
+
+function validateDeckCards(cards) {
+  const errors = [];
+  if (!Array.isArray(cards) || cards.length === 0) {
+    errors.push('Deck is empty or invalid');
+  }
+  // Count
+  let avatarCount = 0;
+  let siteCount = 0;
+  let spellCount = 0;
+  for (const c of cards) {
+    const t = c?.type || '';
+    if (isAvatarType(t)) avatarCount++;
+    else if (isSiteType(t) || (typeof c?.name === 'string' && ['Spire','Stream','Valley','Wasteland'].includes(c.name))) siteCount++;
+    else spellCount++;
+  }
+  if (avatarCount !== 1) {
+    errors.push(avatarCount === 0 ? 'Deck requires exactly 1 Avatar' : 'Deck has multiple Avatars');
+  }
+  if (siteCount < 12) errors.push('Atlas needs at least 12 sites');
+  if (spellCount < 24) errors.push('Spellbook needs at least 24 cards (excluding Avatar)');
+  return { isValid: errors.length === 0, errors, counts: { avatarCount, siteCount, spellCount } };
+}
+
 function rid(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now()
     .toString(36)
@@ -254,10 +368,19 @@ function leaveLobby(socket, player) {
   // Reassign or close lobby if empty or host left
   if (lobby.playerIds.size === 0) {
     lobby.status = "closed";
+    // Clean up any idle CPU bots from this lobby before deletion
+    try { cleanupBotsForLobby(lobbyId); } catch {}
+    lobbies.delete(lobbyId);
+  } else if (!lobbyHasHumanPlayers(lobby)) {
+    // If only CPUs remain, close the lobby and cleanup bots instead of promoting a CPU to host
+    lobby.status = "closed";
+    try { cleanupBotsForLobby(lobbyId); } catch {}
     lobbies.delete(lobbyId);
   } else if (lobby.hostId === player.id) {
-    // Reassign host to first remaining
-    lobby.hostId = Array.from(lobby.playerIds)[0];
+    // Reassign host to a remaining human if possible, otherwise first remaining
+    const remaining = Array.from(lobby.playerIds);
+    const humanNext = remaining.find((pid) => !isCpuPlayerId(pid)) || remaining[0];
+    lobby.hostId = humanNext;
     // Reset all ready states when host changes
     lobby.ready.clear();
   }
@@ -358,12 +481,20 @@ async function startMatchFromLobby(
     }
   }
 
+  // Notify lobby participants immediately that a match has started so UI can show join controls
+  try {
+    const basicInfo = getMatchInfo(match);
+    io.to(`lobby:${lobby.id}`).emit("matchStarted", { match: basicInfo });
+  } catch {}
+
   // For sealed/draft matches, keep lobby active during deck construction/draft
   // For constructed matches, close lobby immediately
   if (matchType === "constructed") {
     // Update plannedMatchType to reflect the started match
     try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
     lobby.status = "closed";
+    // Clean up bots associated with this lobby
+    try { cleanupBotsForLobby(lobby.id); } catch {}
     lobbies.delete(lobby.id);
     broadcastLobbies();
   }
@@ -454,6 +585,10 @@ async function startMatchFromLobby(
 
   const matchInfo = getMatchInfo(match);
   io.to(`match:${match.id}`).emit("matchStarted", { match: matchInfo });
+  // Also echo to lobby room if still open (sealed/draft) to keep UI in sync
+  if (lobbies.has(lobby.id)) {
+    io.to(`lobby:${lobby.id}`).emit("matchStarted", { match: matchInfo });
+  }
 
   return { ok: true, matchId: match.id };
 }
@@ -610,6 +745,16 @@ io.on("connection", (socket) => {
     }
     match.mulliganDone.add(player.id);
 
+    try {
+      const doneCount = match.mulliganDone.size;
+      const total = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
+      const waitingFor = Array.isArray(match.playerIds)
+        ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
+        : [];
+      const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
+      console.log(`[Setup] mulliganDone from ${player.displayName} (${player.id}). ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
+    } catch {}
+
     // If all current players have finished mulligans, start the game
     const allDone =
       Array.isArray(match.playerIds) &&
@@ -621,10 +766,21 @@ io.on("connection", (socket) => {
       io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
       // Broadcast a deterministic patch to set phase to Main
       const now = Date.now();
+      // If currentPlayer isn't set yet (e.g., human winner hasn't chosen), set a sensible default:
+      // prefer setupWinner to go first, otherwise P1.
+      let cp = (match.game && typeof match.game.currentPlayer === 'number') ? match.game.currentPlayer : null;
+      if (cp !== 1 && cp !== 2) {
+        const sw = match.game ? match.game.setupWinner : null;
+        cp = sw === 'p2' ? 2 : 1; // default to P1 if undefined
+      }
+      const mainPatch = { phase: "Main", currentPlayer: cp };
       // Update server-side aggregated snapshot
-      match.game = deepMergeReplaceArrays(match.game || {}, { phase: "Main" });
+      match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
       match.lastTs = now;
-      io.to(room).emit("statePatch", { patch: { phase: "Main" }, t: now });
+      io.to(room).emit("statePatch", { patch: mainPatch, t: now });
+      try {
+        console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`);
+      } catch {}
     }
   });
 
@@ -734,6 +890,10 @@ io.on("connection", (socket) => {
   // Host-only: add a CPU bot to the current lobby
   socket.on("addCpuBot", (payload = {}) => {
     if (!authed) return;
+    if (!CPU_BOTS_ENABLED) {
+      socket.emit("error", { message: "CPU bots are disabled", code: "feature_disabled" });
+      return;
+    }
     const host = getPlayerBySocket(socket);
     if (!host || !host.lobbyId) return;
     const lobby = lobbies.get(host.lobbyId);
@@ -1006,6 +1166,99 @@ io.on("connection", (socket) => {
       // Update server-side aggregated snapshot
       if (match && patch && typeof patch === "object") {
         let patchToApply = patch;
+
+        // Special-case: merge d20Rolls objects so clients get a complete view
+        if (patch && typeof patch === 'object' && patch.d20Rolls) {
+          const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
+          const inc = patch.d20Rolls || {};
+          const mergedD20 = {
+            p1: (inc.p1 !== undefined ? inc.p1 : (prev.p1 ?? null)),
+            p2: (inc.p2 !== undefined ? inc.p2 : (prev.p2 ?? null)),
+          };
+          // Determine tie/reset or winner if both present
+          if (mergedD20.p1 != null && mergedD20.p2 != null) {
+            if (Number(mergedD20.p1) === Number(mergedD20.p2)) {
+              // Tie -> reset both to null
+              patchToApply = { ...patchToApply, d20Rolls: { p1: null, p2: null }, setupWinner: null };
+              // Cancel any pending auto-seat timer on tie
+              try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
+              try { match._autoSeatApplied = false; } catch {}
+            } else {
+              const winner = Number(mergedD20.p1) > Number(mergedD20.p2) ? 'p1' : 'p2';
+              patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
+              if (patchToApply.setupWinner === undefined) patchToApply.setupWinner = winner;
+              // If both rolls are present and we have a winner, include Start transition directly in this merged patch
+              // BUT only auto-seat if the winner is a CPU. Human winners must choose manually.
+              try {
+                const g = match.game || {};
+                const phaseNow = g.phase;
+                const winnerIdx = winner === 'p1' ? 0 : 1;
+                const winnerId = Array.isArray(match.playerIds) ? match.playerIds[winnerIdx] : null;
+                const winnerIsCpu = winnerId ? isCpuPlayerId(winnerId) : false;
+                if (winnerIsCpu && !match._autoSeatApplied && match.status === 'waiting' && phaseNow !== 'Start' && phaseNow !== 'Main') {
+                  const firstPlayer = winner === 'p1' ? 1 : 2;
+                  patchToApply = { ...patchToApply, phase: 'Start', currentPlayer: firstPlayer };
+                  match._autoSeatApplied = true;
+                  try { console.log(`[Setup] Inline auto-seat (CPU winner) for match ${match.id}. winner=${winner} -> firstPlayer=P${firstPlayer}`); } catch {}
+                }
+              } catch {}
+            }
+          } else {
+            // Partial update, still send merged so clients don't lose the other value
+            patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
+          }
+        }
+
+        // If client explicitly chose Start or Main, clear any pending auto-seat timer
+        if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
+          try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
+        }
+
+        // Auto-untap at turn start (when currentPlayer changes or a Main-phase handoff is applied)
+        try {
+          const prevCP = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
+          const nextCP = (patchToApply && typeof patchToApply.currentPlayer === 'number') ? patchToApply.currentPlayer : null;
+          const phaseIsMain = patchToApply && patchToApply.phase === 'Main';
+          if (nextCP === 1 || nextCP === 2) {
+            if (nextCP !== prevCP || phaseIsMain) {
+              // Build untap updates based on existing snapshot
+              const board = (match.game && match.game.board) || { sites: {} };
+              const sitesPrev = (board && board.sites) || {};
+              const sites = { ...sitesPrev };
+              for (const key of Object.keys(sites)) {
+                try {
+                  const st = sites[key] || {};
+                  if (st && Number(st.owner) === nextCP) {
+                    sites[key] = { ...st, tapped: false };
+                  }
+                } catch {}
+              }
+
+              const permsPrev = (match.game && match.game.permanents) || {};
+              const permanents = {};
+              for (const cellKey of Object.keys(permsPrev)) {
+                const arr = Array.isArray(permsPrev[cellKey]) ? permsPrev[cellKey] : [];
+                permanents[cellKey] = arr.map((p) => {
+                  try {
+                    return Number(p.owner) === nextCP ? { ...p, tapped: false } : p;
+                  } catch {
+                    return p;
+                  }
+                });
+              }
+
+              const avatarsPrev = (match.game && match.game.avatars) || { p1: { card: null }, p2: { card: null } };
+              const avatars = { ...avatarsPrev };
+              const nextKey = nextCP === 1 ? 'p1' : 'p2';
+              avatars[nextKey] = { ...(avatars[nextKey] || {}), tapped: false };
+
+              // Merge untap changes into the outgoing patch
+              const boardNext = { ...board, sites };
+              patchToApply = { ...patchToApply, board: boardNext, permanents, avatars };
+            }
+          }
+        } catch {}
+
         // Special-case: merge events arrays to prevent overwriting on concurrent logs
         if (Array.isArray(patch.events)) {
           const prev = Array.isArray(match.game && match.game.events)
@@ -1315,19 +1568,31 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Submit sealed deck during deck construction phase
+  // Submit sealed deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
     const match = matches.get(player.matchId);
     if (!match || match.status !== "deck_construction") return;
+    if (match.matchType !== 'sealed') return;
 
-    const deck = payload && payload.deck;
-    if (!deck) return;
+    // Idempotency: if this player already submitted, ignore duplicates
+    if (match.playerDecks && match.playerDecks.has(player.id)) {
+      return;
+    }
+
+    const deckRaw = payload && payload.deck;
+    if (!deckRaw) return;
+    const cards = normalizeDeckPayload(deckRaw);
+    const val = validateDeckCards(cards);
+    if (!val.isValid) {
+      socket.emit("error", { message: `Deck invalid: ${val.errors.join(", ")}` });
+      return;
+    }
 
     // Store the player's deck
-    match.playerDecks.set(player.id, deck);
+    match.playerDecks.set(player.id, cards);
 
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) =>
@@ -1354,6 +1619,7 @@ io.on("connection", (socket) => {
       const lobby = lobbies.get(match.lobbyId);
       if (lobby) {
         lobby.status = "closed";
+        try { cleanupBotsForLobby(lobby.id); } catch {}
         lobbies.delete(lobby.id);
         broadcastLobbies();
       }
@@ -1474,6 +1740,38 @@ io.on("connection", (socket) => {
       match.draftState.allGeneratedPacks = currentPacks; // Store all generated packs
       match.draftState.currentPacks = []; // Don't distribute packs yet
       match.draftState.waitingFor = [...match.playerIds]; // Wait for pack choices
+
+      // Fallback: if not all players choose within 2s, auto-assign first pack for those who didn't
+      setTimeout(() => {
+        try {
+          const m = matches.get(match.id);
+          if (!m || m.matchType !== "draft" || !m.draftState) return;
+          const ds = m.draftState;
+          if (ds.phase !== "pack_selection") return; // choices already resolved
+          const pendingIdx = ds.packChoice.findIndex((c) => c === null);
+          if (pendingIdx === -1) return; // all chosen
+          // Auto-choose for remaining players based on their first generated pack's set
+          ds.packChoice = ds.packChoice.map((c, idx) => {
+            if (c !== null) return c;
+            const packs = Array.isArray(ds.allGeneratedPacks?.[idx]) ? ds.allGeneratedPacks[idx] : [];
+            const first = Array.isArray(packs) && packs[0] && packs[0][0] ? packs[0][0] : null;
+            return (first && (first.setName || first.set)) || "Beta";
+          });
+          ds.currentPacks = ds.allGeneratedPacks.map((packs, playerIdx) => {
+            const choice = ds.packChoice[playerIdx];
+            for (let i = 0; i < packs.length; i++) {
+              const pack = packs[i];
+              if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
+            }
+            return packs[0] || [];
+          });
+          ds.phase = "picking";
+          ds.waitingFor = [...m.playerIds];
+          io.to(`match:${m.id}`).emit("draftUpdate", ds);
+        } catch (e) {
+          console.warn(`[Draft] auto-pack assignment failed for match ${match.id}:`, e);
+        }
+      }, 2000);
 
       const packSizes = match.draftState.currentPacks
         .map((p) => (Array.isArray(p) ? p.length : 0))
@@ -1694,9 +1992,13 @@ io.on("connection", (socket) => {
     const match = matches.get(player.matchId);
     if (!match || match.matchType !== "draft" || !match.draftState) return;
 
-    const { setChoice, packIndex } = payload;
+    const { setChoice, packIndex } = payload || {};
     const playerIndex = match.playerIds.indexOf(player.id);
     if (playerIndex === -1) return;
+
+    // Guard: accept only during pack_selection and only once per player
+    if (match.draftState.phase !== "pack_selection") return;
+    if (match.draftState.packChoice[playerIndex] !== null) return;
 
     // Store pack choice
     match.draftState.packChoice[playerIndex] = setChoice;
@@ -1706,34 +2008,21 @@ io.on("connection", (socket) => {
     const choices = match.draftState.packChoice.map((x) => x || "-").join(",");
     console.log(`[Draft] Current pack choices: ${choices}`);
 
-    // Check if all players have made their pack choices
-    const allChoicesMade = match.draftState.packChoice.every(choice => choice !== null);
-    
+    // If all players chose, distribute and transition to picking
+    const allChoicesMade = match.draftState.packChoice.every((choice) => choice !== null);
     if (allChoicesMade && match.draftState.phase === "pack_selection") {
-      console.log(`[Draft] All players made pack choices, distributing first packs`);
-      
-      // Distribute first pack based on player choices
-      match.draftState.currentPacks = match.draftState.allGeneratedPacks.map((packs, playerIdx) => {
-        const playerChoice = match.draftState.packChoice[playerIdx];
-        
-        // Find the pack that matches the player's choice
-        for (let i = 0; i < packs.length; i++) {
-          const pack = packs[i];
-          if (pack && pack.length > 0 && pack[0].setName === playerChoice) {
-            console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, using pack ${i}`);
-            return pack;
+      match.draftState.currentPacks = match.draftState.allGeneratedPacks.map(
+        (packs, idx) => {
+          const choice = match.draftState.packChoice[idx];
+          for (let i = 0; i < packs.length; i++) {
+            const pack = packs[i];
+            if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
           }
+          return packs[0] || [];
         }
-        
-        // Fallback to first pack if no match found
-        console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, no match found, using pack 0`);
-        return packs[0] || [];
-      });
-      
-      // Transition to picking phase
+      );
       match.draftState.phase = "picking";
       match.draftState.waitingFor = [...match.playerIds];
-      
       console.log(`[Draft] Pack selection complete, transitioning to picking phase`);
     }
 
@@ -1741,6 +2030,7 @@ io.on("connection", (socket) => {
     io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
   });
 
+  // Submit draft deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
@@ -1748,9 +2038,20 @@ io.on("connection", (socket) => {
 
     const match = matches.get(player.matchId);
     if (!match || !match.playerDecks) return;
+    if (match.matchType !== 'draft') return;
 
-    // Store the submitted deck
-    match.playerDecks.set(player.id, payload.deck || payload);
+    // Idempotency: ignore duplicate submissions by the same player
+    if (match.playerDecks.has(player.id)) return;
+
+    // Validate and store the submitted deck cards
+    const deckRaw = payload && payload.deck ? payload.deck : payload;
+    const cards = normalizeDeckPayload(deckRaw);
+    const val = validateDeckCards(cards);
+    if (!val.isValid) {
+      socket.emit("error", { message: `Deck invalid: ${val.errors.join(", ")}` });
+      return;
+    }
+    match.playerDecks.set(player.id, cards);
 
     console.log(
       `[Match] Deck submitted by ${player.displayName} for match ${match.id}`
@@ -1765,6 +2066,13 @@ io.on("connection", (socket) => {
         `[Match] All decks submitted for match ${match.id}, transitioning to in_progress`
       );
       match.status = "in_progress";
+      // Initialize game phase to Main immediately for draft flow
+      try {
+        const now = Date.now();
+        match.game = deepMergeReplaceArrays(match.game || {}, { phase: "Main" });
+        match.lastTs = now;
+        io.to(`match:${match.id}`).emit("statePatch", { patch: { phase: "Main" }, t: now });
+      } catch {}
 
       // Clear lobby associations since match is starting
       for (const pid of match.playerIds) {
@@ -1777,6 +2085,7 @@ io.on("connection", (socket) => {
         const lobby = lobbies.get(match.lobbyId);
         if (lobby) {
           lobby.status = "closed";
+          try { cleanupBotsForLobby(lobby.id); } catch {}
           lobbies.delete(match.lobbyId);
           broadcastLobbies();
         }
@@ -1787,6 +2096,19 @@ io.on("connection", (socket) => {
     io.to(`match:${match.id}`).emit("matchStarted", {
       match: getMatchInfo(match),
     });
+  });
+
+  // Explicit end match (optional). Allows cleanup and status update.
+  socket.on("endMatch", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const match = matches.get(player.matchId);
+    if (!match) return;
+    match.status = 'ended';
+    match.winnerId = payload && typeof payload.winnerId === 'string' ? payload.winnerId : match.winnerId || null;
+    io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
+    try { cleanupBotsAfterMatch(match); } catch {}
   });
 
   socket.on("disconnect", () => {
@@ -1833,6 +2155,31 @@ io.on("connection", (socket) => {
     }
     
     if (player) {
+      // If the player was in a lobby, remove them immediately to prevent ghost lobbies
+      if (player.lobbyId && lobbies.has(player.lobbyId)) {
+        const lobby = lobbies.get(player.lobbyId);
+        lobby.playerIds.delete(player.id);
+        lobby.ready.delete(player.id);
+        // If now empty or CPU-only, close and cleanup bots; otherwise if host left, reassign preferring humans
+        if (lobby.playerIds.size === 0 || !lobbyHasHumanPlayers(lobby)) {
+          lobby.status = "closed";
+          try { cleanupBotsForLobby(lobby.id); } catch {}
+          lobbies.delete(lobby.id);
+          broadcastLobbies();
+        } else if (lobby.hostId === player.id) {
+          const remaining = Array.from(lobby.playerIds);
+          const humanNext = remaining.find((id) => !isCpuPlayerId(id)) || remaining[0];
+          lobby.hostId = humanNext;
+          lobby.ready.clear();
+          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+          broadcastLobbies();
+        } else {
+          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+          broadcastLobbies();
+        }
+        // Clear association last so future logic sees player out of lobby
+        player.lobbyId = null;
+      }
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;
     }
@@ -1845,6 +2192,14 @@ setInterval(() => {
   const now = Date.now();
   for (const lobby of lobbies.values()) {
     if (lobby.status !== "open") continue;
+    // Close CPU-only lobbies immediately
+    if (!lobbyHasHumanPlayers(lobby)) {
+      lobby.status = "closed";
+      try { cleanupBotsForLobby(lobby.id); } catch {}
+      lobbies.delete(lobby.id);
+      broadcastLobbies();
+      continue;
+    }
     const connectedCount = Array.from(lobby.playerIds).reduce(
       (acc, pid) => acc + (isPlayerConnected(pid) ? 1 : 0),
       0
@@ -1854,6 +2209,7 @@ setInterval(() => {
       now - (lobby.lastActive || now) > 3 * 60 * 1000
     ) {
       lobby.status = "closed";
+      try { cleanupBotsForLobby(lobby.id); } catch {}
       lobbies.delete(lobby.id);
       broadcastLobbies();
     }

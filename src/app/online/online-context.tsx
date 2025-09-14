@@ -46,6 +46,7 @@ export type OnlineContextValue = {
   dismissInvite: (lobbyId: string, fromId: string) => void;
   // Server-managed CPU bot (host-only)
   addCpuBot?: (displayName?: string) => void;
+  removeCpuBot?: (playerId?: string) => void;
 };
 
 export const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);

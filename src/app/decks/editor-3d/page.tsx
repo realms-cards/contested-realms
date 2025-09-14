@@ -1248,15 +1248,15 @@ function AuthenticatedDeckEditor() {
     const remainingDeckByCard = new Map<number, number>();
     for (const [cardId] of totalByCard.entries()) {
       const initialDeck = initialDeckByCard.get(cardId) || 0;
-      
-      // In draft mode, check actual 3D positions to determine deck target
-      // since draft cards start in Sideboard zone but may have been moved to deck area
+      // In draft/sealed mode, derive current deck target from cached zone counts
+      // to avoid depending on pick3D (which is set in this effect) and prevent loops.
       let deckTarget = initialDeck;
-      if (isDraftMode) {
-        const cardsInDeckArea = pick3D.filter(p => p.card.cardId === cardId && p.z < 0).length;
+      if (isDraftMode || isSealed) {
+        const key = `${cardId}:Deck`;
+        const cardsInDeckArea = zoneCountsRef.current.get(key) || 0;
         deckTarget = Math.max(initialDeck, cardsInDeckArea);
       }
-      
+
       remainingDeckByCard.set(cardId, deckTarget);
     }
 

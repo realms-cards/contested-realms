@@ -721,40 +721,24 @@ export default function Hand3D({
             )}
 
             <group>
-              {c.slug ? (
-                <CardPlane
-                  slug={showCardBacks ? "" : c.slug}
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={
-                    showCardBacks 
-                      ? 0 // Card backs don't use fan rotation
-                      : (isSite ? -rot - Math.PI / 2 : -rot) // Sites need -90° rotation for correct art orientation
-                  }
-                  upright
-                  depthWrite={false}
-                  depthTest={false}
-                  renderOrder={renderOrder}
-                  interactive={!isDragging && !showCardBacks}
-                  elevation={0.002 + 0.018 * (hoverWeight || 0)}
-                  textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
-                  forceTextureUrl={showCardBacks}
-                />
-              ) : (
-                <mesh
-                  rotation-x={0}
-                  rotation-z={-rot}
-                  position={[0, 0.002 + 0.018 * (hoverWeight || 0), 0]}
-                  renderOrder={renderOrder}
-                >
-                  <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-                  <meshBasicMaterial
-                    color={"#fff00"}
-                    depthTest={false}
-                    depthWrite={false}
-                  />
-                </mesh>
-              )}
+              <CardPlane
+                slug={showCardBacks ? "" : (c.slug || "")}
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={
+                  showCardBacks 
+                    ? 0 // Card backs don't use fan rotation
+                    : (isSite ? -rot - Math.PI / 2 : -rot) // Sites need -90° rotation for correct art orientation
+                }
+                upright
+                depthWrite={false}
+                depthTest={false}
+                renderOrder={renderOrder}
+                interactive={!isDragging && !showCardBacks}
+                elevation={0.002 + 0.018 * (hoverWeight || 0)}
+                textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
+                forceTextureUrl={showCardBacks}
+              />
             </group>
           </group>
         );

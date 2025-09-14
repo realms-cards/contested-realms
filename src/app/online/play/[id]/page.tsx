@@ -604,11 +604,15 @@ export default function OnlineMatchPage() {
   function PhysicsProbe({ mid }: { mid: string | undefined | null }) {
     useEffect(() => {
       try {
-        console.debug("[physics] mount", { matchId: mid });
+        if (process.env.NEXT_PUBLIC_DEBUG_PHYSICS === '1') {
+          console.debug("[physics] mount", { matchId: mid });
+        }
       } catch {}
       return () => {
         try {
-          console.debug("[physics] unmount", { matchId: mid });
+          if (process.env.NEXT_PUBLIC_DEBUG_PHYSICS === '1') {
+            console.debug("[physics] unmount", { matchId: mid });
+          }
         } catch {}
       };
     }, [mid]);
@@ -749,6 +753,13 @@ export default function OnlineMatchPage() {
       setMatchEndOverlayOpen(true);
     }
   }, [matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
+
+  // Reset match end overlay when joining a new match
+  useEffect(() => {
+    // Reset the overlay states when the match ID changes (new match)
+    setMatchEndOverlayOpen(false);
+    setMatchEndOverlayDismissed(false);
+  }, [matchId]);
 
   // Check if we're in the correct match
   const inThisMatch = !!matchId && match?.id === matchId;
@@ -1249,22 +1260,6 @@ export default function OnlineMatchPage() {
               {myPlayerKey &&
                 (() => {
                   const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
-                  const myHandSize = zones[myPlayerKey]?.hand?.length || 0;
-                  const opponentHandSize =
-                    zones[opponentKey]?.hand?.length || 0;
-                  console.debug("[hand] Hand sizes", {
-                    myPlayerKey,
-                    myPlayerNumber,
-                    myHandSize,
-                    opponentKey,
-                    opponentHandSize,
-                    allZones: Object.keys(zones).map(
-                      (k) =>
-                        `${k}: ${
-                          zones[k as keyof typeof zones]?.hand?.length || 0
-                        } cards`
-                    ),
-                  });
                   return (
                     <Hand3D
                       owner={opponentKey}

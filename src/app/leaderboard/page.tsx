@@ -196,6 +196,7 @@ export default function LeaderboardPage() {
                         width={40}
                         height={40}
                         className="rounded-full"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center text-white text-sm font-medium">

@@ -491,6 +491,11 @@ export default function OnlineLayout({
         if (transport.addCpuBot) transport.addCpuBot(displayName);
       } catch {}
     },
+    removeCpuBot: (playerId?: string) => {
+      try {
+        if (transport.removeCpuBot) transport.removeCpuBot(playerId);
+      } catch {}
+    },
   };
 
   return (

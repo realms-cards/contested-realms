@@ -106,10 +106,18 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     cardId,
   } = props;
 
+  // If slug is missing and no explicit textureUrl is provided, fall back to a generic cardback
+  // so that unknown cards (e.g., CPU placeholders) still render visibly.
+  const effectiveTextureUrl = React.useMemo(() => {
+    if (textureUrl !== undefined) return textureUrl;
+    if (!slug || slug.trim() === "") return "/api/assets/cardback_spellbook.png";
+    return undefined;
+  }, [textureUrl, slug]);
+
   // Simple texture loading - just use the hook for everything
   const tex = useCardTexture({ 
     slug: forceTextureUrl ? "" : slug, 
-    textureUrl 
+    textureUrl: effectiveTextureUrl 
   });
   
   if (!tex) {

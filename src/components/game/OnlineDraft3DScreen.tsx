@@ -14,7 +14,7 @@ import { WaitingOverlay, useWaitingOverlay } from "@/components/draft/WaitingOve
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useDeckPersistence, useSubmissionCoordination } from "@/lib/draft/hooks/useDeckPersistence";
-import { useDraftSync, usePlayerSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
+import { useDraftSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
 import Board from "@/lib/game/Board";
 import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 import { 

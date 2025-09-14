@@ -8,7 +8,6 @@ import LobbiesCentral, { CreateTournamentConfig } from "@/components/online/Lobb
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { useRealtimeTournaments, RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
-import { useGameStore } from "@/lib/game/store";
 import type { TournamentInfo as ProtocolTournamentInfo, SealedConfig, DraftConfig } from "@/lib/net/protocol";
  
 
@@ -80,7 +79,6 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     ready,
     toggleReady,
     joinLobby,
-    joinMatch,
     createLobby,
     leaveLobby,
     startMatch,
@@ -100,6 +98,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     inviteToLobby,
     dismissInvite,
     addCpuBot,
+    removeCpuBot,
   } = useOnline();
 
   // Tournaments API is provided by parent when the feature is enabled; otherwise undefined
@@ -165,7 +164,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   const draftValid = draftAssigned === draftConfig.packCount;
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevLobbyIdRef = useRef<string | null>(null);
-  const [declinedRejoin, setDeclinedRejoin] = useState(false);
+  
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -199,21 +198,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   // Note: Removed auto-redirect to match to allow players to choose whether to rejoin
 
   // Track if the user explicitly left this match and declined rejoin (persisted)
-  useEffect(() => {
-    try {
-      const id = match?.id;
-      if (!id) {
-        setDeclinedRejoin(false);
-        return;
-      }
-      const key = `sorcery:declinedRejoin:${id}`;
-      const flag =
-        typeof window !== "undefined" ? localStorage.getItem(key) : null;
-      setDeclinedRejoin(!!flag);
-    } catch {
-      setDeclinedRejoin(false);
-    }
-  }, [match?.id]);
+  
 
   // Dynamic page title
   useEffect(() => {
@@ -248,17 +233,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     return lobby.players.length > 1 && lobby.players.every((p) => readyIds.has(p.id));
   }, [lobby]);
 
-  // Game-state hints for richer rejoin labels
-  const serverPhase = useGameStore((s) => s.phase);
-  const d20Rolls = useGameStore((s) => s.d20Rolls);
-
-  // Determine if this client is rejoining an ongoing match
-  const isRejoin = !!(
-    match &&
-    match.status !== "ended" &&
-    me?.id &&
-    match.players?.some((p) => p.id === me.id)
-  );
+  // Determine if this client is rejoining an ongoing match (not used in simplified CTA)
 
   // Local flags: has deck been submitted for sealed/draft flows?
   const hasSubmittedForMatch = useMemo(() => {
@@ -278,34 +253,28 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
 
     // Draft-specific phases
     if (match.matchType === "draft") {
-      // Active draft session (server keeps status "waiting" during draft)
       if (match.status === "waiting") {
-        return { label: isRejoin ? "Rejoin Draft Session" : "Join Draft Session", disabled: false } as const;
+        return { label: "Join Draft Session", disabled: false } as const;
       }
-      // Deck construction after draft
       if (match.status === "deck_construction" && !hasSubmittedForMatch.draft) {
-        return { label: "Rejoin Deck Construction for Draft", disabled: false } as const;
+        return { label: "Join Deck Construction for Draft", disabled: false } as const;
       }
     }
 
     // Sealed deck construction
     if (match.matchType === "sealed" && match.status === "deck_construction" && !hasSubmittedForMatch.sealed) {
-      return { label: "Rejoin Deck Construction for Sealed", disabled: false } as const;
+      return { label: "Join Deck Construction for Sealed", disabled: false } as const;
     }
 
-    // Setup vs Mulligan vs Game (approximate using game store hints if available)
-    if (serverPhase && serverPhase !== "Main") {
-      const r = d20Rolls || { p1: null, p2: null };
-      if (r.p1 == null || r.p2 == null) return { label: "Rejoin rolling for first player", disabled: false } as const;
-      return { label: "Rejoin Mulligan", disabled: false } as const;
-    }
+    // Waiting/default should always say Join (avoid confusing "Rejoin" wording before first entry)
+    if (match.status === "waiting") return { label: "Join Match", disabled: false } as const;
 
-    // In-progress or default
-    if (match.status === "in_progress" || serverPhase === "Main") {
-      return { label: "Rejoin Game", disabled: false } as const;
-    }
-    return { label: isRejoin ? "Rejoin Match" : "Join Match", disabled: false } as const;
-  }, [match, serverPhase, d20Rolls, hasSubmittedForMatch, isRejoin]);
+    // In-progress
+    if (match.status === "in_progress") return { label: "Rejoin Game", disabled: false } as const;
+
+    // Fallback
+    return { label: "Join Match", disabled: false } as const;
+  }, [match, hasSubmittedForMatch]);
 
   // Planned match summary (client-side, only reliable for host)
   const plannedSummary = useMemo(() => {
@@ -340,17 +309,28 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
               className={`rounded-lg px-4 py-2 text-sm font-semibold shadow ${
                 matchCta.disabled ? "bg-slate-700/80 text-slate-300 cursor-not-allowed" : "bg-blue-600/90 hover:bg-blue-600"
               }`}
-              onClick={() => match?.id && !matchCta.disabled && joinMatch(match.id)}
+              onClick={() => {
+                if (!matchCta.disabled && match?.id) {
+                  router.push(`/online/play/${encodeURIComponent(match.id)}`);
+                }
+              }}
               disabled={matchCta.disabled}
               title={matchCta.disabled ? "Match has ended" : `Go to match ${match.id}`}
             >
               {matchCta.label}
             </button>
+            <button
+              className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
+              onClick={() => leaveMatch()}
+              title="Leave current match"
+            >
+              Leave Match
+            </button>
           </div>
         </div>
       )}
-      {/* Host-only match start/config controls, shown above Active Games */}
-      {isHost && (
+      {/* Host-only match start/config controls, only when no active match exists */}
+      {isHost && !match && (
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm font-semibold opacity-90">Host Controls</div>
           <div className="flex flex-wrap gap-2 items-center">
@@ -394,6 +374,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
         onResync={() => resync()}
         onAddCpuBot={addCpuBot}
+        onRemoveCpuBot={removeCpuBot}
         onCreateTournament={tournamentsEnabled ? async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {
@@ -517,57 +498,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           )}
         </div>
 
-      {/* Match Section - only show for joinable matches and not when user declined rejoin */}
-      {match &&
-        !declinedRejoin &&
-        (match.status === "waiting" || match.status === "in_progress" || match.status === "deck_construction") && (
-          <div className="rounded-xl bg-orange-900/20 ring-1 ring-orange-600/30 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-orange-200 mb-1">
-                  {match.status === "waiting"
-                    ? "New Match Starting"
-                    : match.status === "deck_construction"
-                    ? "Sealed Deck Construction"
-                    : "Ongoing Match Found"}
-                </div>
-                <div className="text-xs opacity-70">Match ID: {match.id}</div>
-                <div className="text-xs opacity-70">
-                  Status: {match.status} • Players:{" "}
-                  {match.players?.map((p) => p.displayName).join(", ") ||
-                    "Loading..."}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-                    matchCta.disabled ? "bg-slate-700/80 text-slate-300 cursor-not-allowed" : "bg-orange-600/80 hover:bg-orange-600"
-                  }`}
-                  onClick={() => {
-                    if (!matchCta.disabled) router.push(`/online/play/${encodeURIComponent(match.id)}`);
-                  }}
-                  disabled={matchCta.disabled}
-                >
-                  {matchCta.label}
-                </button>
-                <button
-                  className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
-                  onClick={() => {
-                    if (
-                      confirm(
-                        "Are you sure you want to permanently leave this match? This cannot be undone."
-                      )
-                    ) {
-                      leaveMatch();
-                    }
-                  }}
-                >
-                  Leave Match
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+      
 
       {/* Match Configuration Overlay (Host) */}
       {isHost && configOpen && (

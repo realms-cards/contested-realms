@@ -16,6 +16,8 @@ import type {
   WaitingType,
   PlayerStatus,
   SubmissionProgress,
+  AnnouncementPriority,
+  AccessibilityAnnouncement,
 } from './types';
 
 export class WaitingStateManager {
