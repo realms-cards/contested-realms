@@ -7,6 +7,8 @@ const {
   createRngFromString,
   generateBoosterDeterministic,
 } = require("./booster");
+const { BotManager } = require("./botManager");
+const { applyTurnStart, validateAction } = require("./rules");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 
@@ -37,8 +39,8 @@ const rtcParticipants = new Map();
 /** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
 
-// Active headless bots managed by the server: playerId -> BotClient
-const activeBots = new Map();
+// Bot manager for headless CPU clients
+// Initialized after helper functions are hoisted
 
 // Global feature flag for CPU bots (default: disabled)
 const CPU_BOTS_ENABLED =
@@ -57,6 +59,9 @@ function loadBotClientCtor() {
   }
 }
 
+// Instantiate bot manager (functions are hoisted, safe to pass)
+const botManager = new BotManager(io, players, lobbies, matches, getLobbyInfo, getMatchInfo, isCpuPlayerId);
+
 // -----------------------------
 // Helpers: CPU detection & cleanup
 // -----------------------------
@@ -73,56 +78,7 @@ function lobbyHasHumanPlayers(lobby) {
   return false;
 }
 
-function stopAndRemoveBot(botId, reason = 'cleanup') {
-  try {
-    const p = players.get(botId);
-    if (p) {
-      // Remove from lobby if present
-      if (p.lobbyId && lobbies.has(p.lobbyId)) {
-        const lobby = lobbies.get(p.lobbyId);
-        lobby.playerIds.delete(botId);
-        lobby.ready.delete(botId);
-        io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
-      }
-      // Remove from match roster if present
-      if (p.matchId && matches.has(p.matchId)) {
-        const match = matches.get(p.matchId);
-        match.playerIds = match.playerIds.filter((pid) => pid !== botId);
-        io.to(`match:${match.id}`).emit('matchStarted', { match: getMatchInfo(match) });
-      }
-      // Disconnect socket if connected
-      if (p.socketId) {
-        const s = io.sockets.sockets.get(p.socketId);
-        if (s) {
-          try { s.disconnect(true); } catch {}
-        }
-      }
-      players.delete(botId);
-    }
-  } catch {}
-  // Stop headless client
-  const bot = activeBots.get(botId);
-  if (bot) {
-    try { bot.stop(); } catch {}
-    activeBots.delete(botId);
-  }
-  console.log(`[Bot] Removed CPU ${botId} (${reason})`);
-}
-
-function cleanupBotsForLobby(lobbyId) {
-  for (const [pid, p] of players.entries()) {
-    if (isCpuPlayerId(pid) && p.lobbyId === lobbyId && !p.matchId) {
-      stopAndRemoveBot(pid, 'lobby_closed');
-    }
-  }
-}
-
-function cleanupBotsAfterMatch(match) {
-  if (!match) return;
-  for (const pid of match.playerIds.slice()) {
-    if (isCpuPlayerId(pid)) stopAndRemoveBot(pid, 'match_ended');
-  }
-}
+// Bot lifecycle helpers moved into BotManager
 
 // -----------------------------
 // Helpers: deck normalization & validation
@@ -380,13 +336,14 @@ function leaveLobby(socket, player) {
   if (lobby.playerIds.size === 0) {
     lobby.status = "closed";
     // Clean up any idle CPU bots from this lobby before deletion
-    try { cleanupBotsForLobby(lobbyId); } catch {}
+    try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
     lobbies.delete(lobbyId);
   } else if (!lobbyHasHumanPlayers(lobby)) {
     // If only CPUs remain, close the lobby and cleanup bots instead of promoting a CPU to host
     lobby.status = "closed";
-    try { cleanupBotsForLobby(lobbyId); } catch {}
+    try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
     lobbies.delete(lobbyId);
+    broadcastLobbies();
   } else if (lobby.hostId === player.id) {
     // Reassign host to a remaining human if possible, otherwise first remaining
     const remaining = Array.from(lobby.playerIds);
@@ -505,7 +462,7 @@ async function startMatchFromLobby(
     try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
     lobby.status = "closed";
     // Clean up bots associated with this lobby
-    try { cleanupBotsForLobby(lobby.id); } catch {}
+    try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
     lobbies.delete(lobby.id);
     broadcastLobbies();
   }
@@ -936,10 +893,10 @@ io.on("connection", (socket) => {
 
     try {
       const bot = new BotClient({ serverUrl, displayName, playerId: botId, lobbyId: lobby.id });
-      activeBots.set(botId, bot);
+      botManager.registerBot(botId, bot);
       bot.start().catch((err) => {
         console.error(`[Bot] Failed to start bot ${botId}:`, err);
-        activeBots.delete(botId);
+        botManager.stopAndRemoveBot(botId, 'start_failed');
       });
       console.log(`[Bot] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`);
     } catch (err) {
@@ -981,7 +938,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    stopAndRemoveBot(targetId, 'removed_by_host');
+    botManager.stopAndRemoveBot(targetId, 'removed_by_host');
   });
 
   socket.on("requestLobbies", () => {
@@ -1266,48 +1223,26 @@ io.on("connection", (socket) => {
           try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
         }
 
-        // Auto-untap at turn start (when currentPlayer changes or a Main-phase handoff is applied)
+        // Turn start effects: apply via rules layer
         try {
           const prevCP = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
           const nextCP = (patchToApply && typeof patchToApply.currentPlayer === 'number') ? patchToApply.currentPlayer : null;
           const phaseIsMain = patchToApply && patchToApply.phase === 'Main';
-          if (nextCP === 1 || nextCP === 2) {
-            if (nextCP !== prevCP || phaseIsMain) {
-              // Build untap updates based on existing snapshot
-              const board = (match.game && match.game.board) || { sites: {} };
-              const sitesPrev = (board && board.sites) || {};
-              const sites = { ...sitesPrev };
-              for (const key of Object.keys(sites)) {
-                try {
-                  const st = sites[key] || {};
-                  if (st && Number(st.owner) === nextCP) {
-                    sites[key] = { ...st, tapped: false };
-                  }
-                } catch {}
-              }
-
-              const permsPrev = (match.game && match.game.permanents) || {};
-              const permanents = {};
-              for (const cellKey of Object.keys(permsPrev)) {
-                const arr = Array.isArray(permsPrev[cellKey]) ? permsPrev[cellKey] : [];
-                permanents[cellKey] = arr.map((p) => {
-                  try {
-                    return Number(p.owner) === nextCP ? { ...p, tapped: false } : p;
-                  } catch {
-                    return p;
-                  }
-                });
-              }
-
-              const avatarsPrev = (match.game && match.game.avatars) || { p1: { card: null }, p2: { card: null } };
-              const avatars = { ...avatarsPrev };
-              const nextKey = nextCP === 1 ? 'p1' : 'p2';
-              avatars[nextKey] = { ...(avatars[nextKey] || {}), tapped: false };
-
-              // Merge untap changes into the outgoing patch
-              const boardNext = { ...board, sites };
-              patchToApply = { ...patchToApply, board: boardNext, permanents, avatars };
+          if ((nextCP === 1 || nextCP === 2) && (nextCP !== prevCP || phaseIsMain)) {
+            const tsPatch = applyTurnStart({ ...(match.game || {}), currentPlayer: nextCP });
+            if (tsPatch && typeof tsPatch === 'object') {
+              // Shallow merge is fine as tsPatch defines full nested objects for board/permanents/avatars
+              patchToApply = { ...patchToApply, ...tsPatch };
             }
+          }
+        } catch {}
+
+        // Validate action against minimal rules
+        try {
+          const v = validateAction(match.game || {}, patchToApply, player.id);
+          if (!v.ok) {
+            socket.emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
+            return;
           }
         } catch {}
 
@@ -1671,7 +1606,7 @@ io.on("connection", (socket) => {
       const lobby = lobbies.get(match.lobbyId);
       if (lobby) {
         lobby.status = "closed";
-        try { cleanupBotsForLobby(lobby.id); } catch {}
+        try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
         lobbies.delete(lobby.id);
         broadcastLobbies();
       }
@@ -2137,7 +2072,7 @@ io.on("connection", (socket) => {
         const lobby = lobbies.get(match.lobbyId);
         if (lobby) {
           lobby.status = "closed";
-          try { cleanupBotsForLobby(lobby.id); } catch {}
+          try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
           lobbies.delete(match.lobbyId);
           broadcastLobbies();
         }
@@ -2160,7 +2095,7 @@ io.on("connection", (socket) => {
     match.status = 'ended';
     match.winnerId = payload && typeof payload.winnerId === 'string' ? payload.winnerId : match.winnerId || null;
     io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
-    try { cleanupBotsAfterMatch(match); } catch {}
+    try { botManager.cleanupBotsAfterMatch(match); } catch {}
   });
 
   socket.on("disconnect", () => {
@@ -2215,7 +2150,7 @@ io.on("connection", (socket) => {
         // If now empty or CPU-only, close and cleanup bots; otherwise if host left, reassign preferring humans
         if (lobby.playerIds.size === 0 || !lobbyHasHumanPlayers(lobby)) {
           lobby.status = "closed";
-          try { cleanupBotsForLobby(lobby.id); } catch {}
+          try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
           lobbies.delete(lobby.id);
           broadcastLobbies();
         } else if (lobby.hostId === player.id) {
@@ -2247,7 +2182,7 @@ setInterval(() => {
     // Close CPU-only lobbies immediately
     if (!lobbyHasHumanPlayers(lobby)) {
       lobby.status = "closed";
-      try { cleanupBotsForLobby(lobby.id); } catch {}
+      try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
       lobbies.delete(lobby.id);
       broadcastLobbies();
       continue;
@@ -2261,7 +2196,7 @@ setInterval(() => {
       now - (lobby.lastActive || now) > 3 * 60 * 1000
     ) {
       lobby.status = "closed";
-      try { cleanupBotsForLobby(lobby.id); } catch {}
+      try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
       lobbies.delete(lobby.id);
       broadcastLobbies();
     }
