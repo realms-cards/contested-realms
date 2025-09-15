@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 function isEnabled() {
   const v = (process.env.BASIC_AUTH_ENABLED || process.env.LOCKDOWN_ENABLED || '').toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  const explicit = v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  const vercelEnv = (process.env.VERCEL_ENV || '').toLowerCase();
+  const preview = vercelEnv === 'preview';
+  return explicit || preview;
 }
 
 function setLockdown(res: NextResponse, state: string) {
@@ -13,13 +16,6 @@ function setLockdown(res: NextResponse, state: string) {
   return res;
 }
 
-function unauthorized() {
-  const res = new NextResponse('Authentication required', {
-    status: 401,
-    headers: { 'WWW-Authenticate': 'Basic realm="Realms", charset="UTF-8"' },
-  });
-  return setLockdown(res, 'unauthorized');
-}
 
 function decodeBase64(b64: string): string {
   try {
@@ -34,8 +30,6 @@ export async function middleware(req: NextRequest) {
 
   const expectedPass = process.env.BASIC_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || '';
   const expectedUser = process.env.BASIC_AUTH_USER || '';
-  // If enabled but password not configured, fail closed to avoid accidental exposure
-  if (!expectedPass) return unauthorized();
 
   const { pathname } = req.nextUrl;
 
@@ -50,13 +44,28 @@ export async function middleware(req: NextRequest) {
     return setLockdown(NextResponse.next(), 'enabled-static');
   }
 
+  // Allow the custom lockdown page and diagnostics without auth to avoid loops
+  if (pathname.startsWith('/_lockdown') || pathname.startsWith('/_diag')) {
+    return setLockdown(NextResponse.next(), 'lockpage');
+  }
+
+  // If enabled but password not configured, redirect to lock page with error
+  if (!expectedPass) {
+    const url = new URL('/_lockdown', req.url);
+    try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
+    try { url.searchParams.set('error', 'server'); } catch {}
+    return setLockdown(NextResponse.redirect(url), 'redirect');
+  }
+
   // If a previous successful auth set a cookie, allow
   const cookieOk = req.cookies.get('basic_auth')?.value === 'ok';
   if (cookieOk) return setLockdown(NextResponse.next(), 'enabled-cookie');
 
   const auth = req.headers.get('authorization') || '';
   if (!auth.startsWith('Basic ')) {
-    return unauthorized();
+    const url = new URL('/_lockdown', req.url);
+    try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
+    return setLockdown(NextResponse.redirect(url), 'redirect');
   }
 
   try {
@@ -80,7 +89,11 @@ export async function middleware(req: NextRequest) {
     }
   } catch {}
 
-  return unauthorized();
+  // On failure, redirect back to lock screen with error
+  const url = new URL('/_lockdown', req.url);
+  try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
+  try { url.searchParams.set('error', '1'); } catch {}
+  return setLockdown(NextResponse.redirect(url), 'redirect');
 }
 
 // Apply to all routes except static/image optimizer/favicon/robots/sitemap
