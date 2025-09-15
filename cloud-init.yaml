@@ -1,0 +1,77 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-plugin
+  - git
+  - ca-certificates
+  - curl
+  - jq
+
+write_files:
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: '0644'
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {"max-size": "50m", "max-file": "3"}
+      }
+  - path: /root/DEPLOY_README.txt
+    owner: root:root
+    permissions: '0644'
+    content: |
+      Contested Realms WS Server
+      ======================================
+      Repo: /opt/sorcery-client
+      Config: /opt/sorcery-client/.env.production
+
+      1) Edit .env.production and set:
+         - NEXTAUTH_SECRET=...
+         - DATABASE_URL=... (pooled)
+         - DIRECT_URL=... (primary)
+         - REDIS_URL=...
+         - SOCKET_REQUIRE_JWT=true
+         - SOCKET_CORS_ORIGIN=https://realms.cards,https://*.vercel.app
+
+      2) Start stack:
+         cd /opt/sorcery-client && docker compose -f docker-compose.prod.yml up -d --build
+
+      3) Check health:
+         curl -fsS https://ws.realms.cards/healthz | jq .
+
+      Logs:
+         docker compose -f docker-compose.prod.yml logs -f caddy server1 server2
+
+runcmd:
+  - |
+    set -euxo pipefail
+    # Enable and start Docker
+    systemctl enable --now docker
+    # Create app dir
+    mkdir -p /opt/sorcery-client
+    cd /opt/sorcery-client
+    # Clone repo if missing (replace REPO_URL before use)
+    if [ ! -d .git ]; then
+      git clone REPO_URL .
+    else
+      git pull --ff-only || true
+    fi
+    # Prepare env
+    if [ ! -f .env.production ]; then
+      if [ -f env.production.example ]; then
+        cp env.production.example .env.production
+      else
+        touch .env.production
+      fi
+    fi
+    # Start stack only if essential secrets are filled (non-empty)
+    if grep -qE '^NEXTAUTH_SECRET=.+$' .env.production \
+       && grep -qE '^DATABASE_URL=.+$' .env.production \
+       && grep -qE '^DIRECT_URL=.+$' .env.production \
+       && grep -qE '^REDIS_URL=.+$' .env.production; then
+      docker compose -f docker-compose.prod.yml up -d --build
+    else
+      echo "[cloud-init] .env.production not fully configured; stack not started. Edit /opt/sorcery-client/.env.production and run: docker compose -f docker-compose.prod.yml up -d --build" | tee /root/DEPLOYMENT_INSTRUCTIONS.txt
+    fi
