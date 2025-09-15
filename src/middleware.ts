@@ -44,8 +44,13 @@ export async function middleware(req: NextRequest) {
     return setLockdown(NextResponse.next(), 'enabled-static');
   }
 
-  // Allow the custom lockdown page(s) and diagnostics without auth to avoid loops
-  if (pathname.startsWith('/lock') || pathname.startsWith('/_lockdown') || pathname.startsWith('/_diag')) {
+  // Allow the custom lockdown page(s), API, and diagnostics without auth to avoid loops
+  if (
+    pathname.startsWith('/lock') ||
+    pathname.startsWith('/_lockdown') ||
+    pathname.startsWith('/api/lock') ||
+    pathname.startsWith('/_diag')
+  ) {
     return setLockdown(NextResponse.next(), 'lockpage');
   }
 

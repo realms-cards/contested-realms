@@ -19,7 +19,7 @@ export default function LockPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/_lockdown", {
+      const res = await fetch("/api/lock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user, pass }),
@@ -51,18 +51,14 @@ export default function LockPage() {
 
   return (
     <main className="lock-root">
-      <div className="bg">
-        <div className="blob b1" />
-        <div className="blob b2" />
-        <div className="blob b3" />
-      </div>
 
       <section className="card">
         <div className="icon">
+          {/* Skull icon */}
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <rect x="3" y="11" width="18" height="10" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            <circle cx="12" cy="16" r="1" />
+            <path d="M5 12a7 7 0 1 1 14 0v2a3 3 0 0 1-3 3v2a1 1 0 0 1-1 1h-1v-2h-2v2h-1a1 1 0 0 1-1-1v-2a3 3 0 0 1-3-3v-2Z" />
+            <circle cx="9.5" cy="11" r="1.5" />
+            <circle cx="14.5" cy="11" r="1.5" />
           </svg>
         </div>
         <h1>Private Access</h1>
@@ -113,16 +109,7 @@ export default function LockPage() {
       </section>
 
       <style jsx>{`
-        .lock-root { min-height: 100svh; display: grid; place-items: center; position: relative; overflow: hidden; background: radial-gradient(1200px 600px at 0% 0%, #1d2340 0%, #0b0f1d 60%, #070a13 100%); color: #e9ecf1; }
-        .bg { position: absolute; inset: -20%; filter: blur(60px); opacity: 0.6; }
-        .blob { position: absolute; width: 40vmax; height: 40vmax; border-radius: 50%; mix-blend-mode: screen; }
-        .b1 { background: #6a5acd; top: -10%; left: -10%; animation: float1 22s ease-in-out infinite; }
-        .b2 { background: #00c2ff; bottom: -15%; right: -15%; animation: float2 26s ease-in-out infinite; }
-        .b3 { background: #ff5ea0; top: 30%; right: 10%; width: 30vmax; height: 30vmax; animation: float3 28s ease-in-out infinite; }
-        @keyframes float1 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(5%, -4%) } }
-        @keyframes float2 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(-6%, 3%) } }
-        @keyframes float3 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(4%, -5%) } }
-
+        .lock-root { min-height: 100svh; display: grid; place-items: center; position: relative; overflow: hidden; background: #0b0f1d; color: #e9ecf1; }
         .card { position: relative; z-index: 1; width: 92vw; max-width: 480px; padding: 28px; border-radius: 18px; background: rgba(255,255,255,0.06); backdrop-filter: blur(14px) saturate(120%); box-shadow: 0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12); }
         .icon { display: grid; place-items: center; width: 84px; height: 84px; margin: 8px auto 10px; border-radius: 50%; color: #e9ecf1; background: linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 10px 30px rgba(0,0,0,0.25); }
         h1 { margin: 8px 0 6px; font-size: 22px; letter-spacing: 0.2px; text-align: center; }
