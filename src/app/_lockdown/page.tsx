@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 export default function LockdownPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const from = useMemo(() => params.get("from") || "/", [params]);
+  const from = useMemo(() => (params?.get?.("from") ?? "/"), [params]);
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export default function LockdownPage() {
       }
       // Cookie set by route; redirect to original path
       router.replace(from);
-    } catch (err) {
+    } catch {
       setError("Network error");
       setBusy(false);
     }
@@ -62,9 +62,9 @@ export default function LockdownPage() {
       <section className="card">
         <div className="icon">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <rect x="3" y="11" width="18" height="10" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            <circle cx="12" cy="16" r="1"/>
+            <rect x="3" y="11" width="18" height="10" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            <circle cx="12" cy="16" r="1" />
           </svg>
         </div>
         <h1>Private Access</h1>
