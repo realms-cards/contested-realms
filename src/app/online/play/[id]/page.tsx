@@ -384,6 +384,18 @@ export default function OnlineMatchPage() {
         params.set("replaceAvatars", "true");
       }
 
+      // Persist my exact server-generated sealed packs for the editor to consume
+      try {
+        const myId = me?.id ?? myPlayerId ?? null;
+        const packsByPlayer = match.sealedPacks as unknown as Record<string, unknown[]> | undefined;
+        if (myId && packsByPlayer && Array.isArray(packsByPlayer[myId])) {
+          localStorage.setItem(
+            `sealedPacks_${match.id}`,
+            JSON.stringify(packsByPlayer[myId])
+          );
+        }
+      } catch {}
+
       // Redirect to editor
       window.location.href = `/decks/editor-3d?${params.toString()}`;
       return; // Don't execute the rest of the setup logic
@@ -412,6 +424,8 @@ export default function OnlineMatchPage() {
     hasSubmittedSealedDeck,
     isDraftDeckConstruction,
     hasSubmittedDraftDeck,
+    me?.id,
+    myPlayerId,
   ]);
 
   // Listen for sealed deck submissions via postMessage (when editor opened in a new window)

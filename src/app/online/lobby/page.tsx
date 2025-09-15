@@ -167,6 +167,10 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  
+  // Track previous match status to detect when match ends
+  const prevMatchStatusRef = useRef<string | null>(null);
 
 
 
@@ -197,6 +201,24 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
 
   // Note: Removed auto-redirect to match to allow players to choose whether to rejoin
 
+  // Auto-prompt lobby leave when match ends
+  useEffect(() => {
+    const prevStatus = prevMatchStatusRef.current;
+    const currentStatus = match?.status || null;
+    
+    // Detect transition from in_progress to ended
+    if (prevStatus === "in_progress" && currentStatus === "ended") {
+      // Small delay to avoid conflicts with other UI updates
+      setTimeout(() => {
+        if (!leaveConfirmOpen) { // Only show if not already open
+          setLeaveConfirmOpen(true);
+        }
+      }, 500);
+    }
+    
+    prevMatchStatusRef.current = currentStatus;
+  }, [match?.status, leaveConfirmOpen]);
+
   // Track if the user explicitly left this match and declined rejoin (persisted)
   
 
@@ -205,14 +227,19 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     const baseTitle = "Contested Realms";
     let title = `${baseTitle} - Lobby`;
 
-    if (lobby) {
-      title = `${baseTitle} - Lobby ${lobby.id} (${lobby.players.length}/${lobby.maxPlayers})`;
+    if (lobby && !match) {
+      const label = lobby.name && lobby.name.trim().length > 0 ? lobby.name : lobby.id;
+      title = `${baseTitle} - Lobby: ${label} (${lobby.players.length}/${lobby.maxPlayers})`;
     }
 
     if (match) {
-      const playerNames =
-        match.players?.map((p) => p.displayName).join(" vs ") || "Players";
-      title = `${baseTitle} - ${playerNames} (${match.status})`;
+      // Prefer lobbyName provided by the server to maintain continuity during matches
+      if (match.lobbyName && match.lobbyName.trim().length > 0) {
+        title = `${baseTitle} - ${match.lobbyName} (${match.status.replaceAll("_", " ")})`;
+      } else {
+        const playerNames = match.players?.map((p) => p.displayName).join(" vs ") || "Players";
+        title = `${baseTitle} - ${playerNames} (${match.status.replaceAll("_", " ")})`;
+      }
     }
 
     if (!connected) {
@@ -321,7 +348,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
             </button>
             <button
               className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
-              onClick={() => leaveMatch()}
+              onClick={() => setLeaveConfirmOpen(true)}
               title="Leave current match"
             >
               Leave Match
@@ -461,6 +488,46 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         tournamentsEnabled={tournamentsEnabled}
         onRefresh={() => requestLobbies()}
       />
+
+      {/* Leave Match confirmation dialog */}
+      {leaveConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setLeaveConfirmOpen(false)} />
+          <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
+            <div className="text-base font-semibold">Leave match</div>
+            <div className="mt-2 text-sm text-slate-300">
+              Do you also want to leave the lobby? If you stay in the lobby, you can quickly rematch.
+            </div>
+            <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-end">
+              <button
+                className="px-4 py-2 text-sm rounded bg-slate-700/70 hover:bg-slate-600/70"
+                onClick={() => setLeaveConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 text-sm rounded bg-blue-600/90 hover:bg-blue-600 text-white"
+                onClick={() => {
+                  try { leaveMatch(); } finally { setLeaveConfirmOpen(false); }
+                }}
+              >
+                Leave match only
+              </button>
+              <button
+                className="px-4 py-2 text-sm rounded bg-red-600/90 hover:bg-red-600 text-white"
+                onClick={() => {
+                  try { leaveMatch(); } finally {
+                    try { leaveLobby(); } catch {}
+                    setLeaveConfirmOpen(false);
+                  }
+                }}
+              >
+                Leave match and lobby
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Social (invites/friends) */}
       <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>

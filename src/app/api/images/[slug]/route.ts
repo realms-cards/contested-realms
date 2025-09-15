@@ -60,6 +60,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         return false;
       }
     })();
+
+    // If a CDN origin is configured, 302-redirect there instead of streaming from disk.
+    const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
+    if (cdn) {
+      // Build CDN path using the same set/slug logic
+      const setDir = setDirFromSlug(slug);
+      if (!setDir) return new Response("Unknown set", { status: 404 });
+      const base = imageBasenameFromSlug(slug);
+      const suffix = suffixDirFromBasename(base);
+      const name = wantKtx2 ? `${base}.ktx2` : `${base}.png`;
+      const pathParts = suffix ? [setDir, suffix, name] : [setDir, name];
+      const cdnUrl = `${cdn.replace(/\/$/, '')}/${pathParts.join('/')}`;
+      return Response.redirect(cdnUrl, 302);
+    }
     // Roots to search. For KTX2, prefer data-ktx2 output dir then fallback to data.
     const roots = wantKtx2
       ? [

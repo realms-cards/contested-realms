@@ -32,6 +32,7 @@ interface RealtimeTournamentContextValue {
   tournaments: TournamentInfo[];
   currentTournament: TournamentInfo | null;
   setCurrentTournament: (tournament: TournamentInfo | null) => void;
+  setCurrentTournamentById: (id: string | null) => void;
   
   // Real-time connection status
   isSocketConnected: boolean;
@@ -112,6 +113,19 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   const activeStatistics = currentTournament ? statistics : null;
   const activePhases = currentTournament ? phases : null;
 
+  // Helper: set current tournament by id (uses the loaded list)
+  const setCurrentTournamentById = useCallback((id: string | null) => {
+    if (!id) {
+      setCurrentTournament(null);
+      return;
+    }
+    setCurrentTournament(prev => {
+      if (prev?.id === id) return prev;
+      const found = tournaments.find(t => t.id === id) || null;
+      return found;
+    });
+  }, [tournaments]);
+
   // Socket event handlers
   const handleTournamentUpdated = useCallback((data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
     console.log('Tournament updated:', data);
@@ -175,18 +189,26 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }, [currentTournament, activePhases, preparationId]);
 
   const handlePlayerJoined = useCallback((data: { 
+    tournamentId: string;
     playerId: string; 
     playerName: string; 
     currentPlayerCount: number; 
   }) => {
     console.log('Player joined tournament:', data);
-    // This event is scoped to the room of the tournament we joined via socket,
-    // so update only the current tournament if known.
-    if (currentTournament) {
-      setTournaments(prev => prev.map(t => (
-        t.id === currentTournament.id ? { ...t, currentPlayers: data.currentPlayerCount } : t
-      )));
-      setCurrentTournament({ ...currentTournament, currentPlayers: data.currentPlayerCount } as TournamentInfo);
+    // Update the specific tournament in our global list, including registeredPlayers when present
+    setTournaments(prev => prev.map(t => {
+      if (t.id !== data.tournamentId) return t;
+      const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
+      const without = reg.filter(p => p.id !== data.playerId);
+      const updated = [...without, { id: data.playerId, displayName: data.playerName, ready: false }];
+      return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
+    }));
+    // Update current tournament if it matches
+    if (currentTournament?.id === data.tournamentId) {
+      const reg = (currentTournament as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
+      const without = reg.filter(p => p.id !== data.playerId);
+      const updated = [...without, { id: data.playerId, displayName: data.playerName, ready: false }];
+      setCurrentTournament({ ...(currentTournament as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo);
     }
     setRealtimeEvents(prev => ({
       ...prev,
@@ -196,16 +218,22 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }, [currentTournament]);
 
   const handlePlayerLeft = useCallback((data: { 
+    tournamentId: string;
     playerId: string; 
     playerName: string; 
     currentPlayerCount: number; 
   }) => {
     console.log('Player left tournament:', data);
-    if (currentTournament) {
-      setTournaments(prev => prev.map(t => (
-        t.id === currentTournament.id ? { ...t, currentPlayers: data.currentPlayerCount } : t
-      )));
-      setCurrentTournament({ ...currentTournament, currentPlayers: data.currentPlayerCount } as TournamentInfo);
+    setTournaments(prev => prev.map(t => {
+      if (t.id !== data.tournamentId) return t;
+      const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
+      const updated = reg.filter(p => p.id !== data.playerId);
+      return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
+    }));
+    if (currentTournament?.id === data.tournamentId) {
+      const reg = (currentTournament as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
+      const updated = reg.filter(p => p.id !== data.playerId);
+      setCurrentTournament({ ...(currentTournament as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo);
     }
     setRealtimeEvents(prev => ({
       ...prev,
@@ -619,6 +647,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     tournaments,
     currentTournament,
     setCurrentTournament,
+    setCurrentTournamentById,
     isSocketConnected: isConnected,
     connectionError,
     createTournament,

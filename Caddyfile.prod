@@ -1,0 +1,26 @@
+ws.realms.cards {
+    encode zstd gzip
+    log
+
+    # Remove server header
+    header {
+        -Server
+        # CORS for the apex frontend
+        Access-Control-Allow-Origin "https://realms.cards"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+        Access-Control-Allow-Credentials false
+    }
+
+    @preflight {
+        method OPTIONS
+        path /socket.io/*
+    }
+    respond @preflight 204
+
+    # WebSockets reverse proxy to Socket.IO servers
+    reverse_proxy server1:3010 server2:3010 {
+        lb_policy least_conn
+        health_uri /healthz
+    }
+}

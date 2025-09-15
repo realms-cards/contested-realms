@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useRealtimeTournaments } from '@/contexts/RealtimeTournamentContext';
 
 interface Tournament {
   id: string;
@@ -32,8 +33,13 @@ interface CreateTournamentForm {
 export default function TournamentsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    tournaments,
+    createTournament: rtCreateTournament,
+    joinTournament: rtJoinTournament,
+    loading: rtLoading,
+    error: rtError
+  } = useRealtimeTournaments();
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,39 +55,26 @@ export default function TournamentsPage() {
     }
   });
 
-  // Fetch tournaments list
-  const fetchTournaments = useCallback(async (): Promise<void> => {
-    try {
-      const response = await fetch('/api/tournaments');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setTournaments(data.tournaments || []);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch tournaments:', err);
-      setError('Failed to load tournaments');
-      setTournaments([]);
-    }
-  }, []);
+  // Type guard helpers
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+  function getCurrentPlayersCount(t: unknown): number {
+    if (!isRecord(t)) return 0;
+    const cp = t.currentPlayers;
+    if (typeof cp === 'number') return cp;
+    const rp = (t as Record<string, unknown>).registeredPlayers;
+    if (Array.isArray(rp)) return rp.length;
+    return 0;
+  }
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      fetchTournaments().finally(() => setLoading(false));
-    } else if (status === 'unauthenticated') {
+    if (status === 'unauthenticated') {
       router.push('/auth/signin?callbackUrl=/tournaments');
     }
-  }, [status, fetchTournaments, router]);
+  }, [status, router]);
 
-  // Auto-refresh tournaments every 5 seconds
-  useEffect(() => {
-    if (status === 'authenticated') {
-      const interval = setInterval(fetchTournaments, 5000);
-      return () => clearInterval(interval);
-    }
-    return undefined;
-  }, [status, fetchTournaments]);
+  // Polling removed; realtime provider handles live updates
 
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,23 +84,15 @@ export default function TournamentsPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/tournaments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
+      const newTournament = await rtCreateTournament({
+        name: form.name,
+        format: form.format,
+        maxPlayers: form.maxPlayers,
+        settings: form.settings as unknown as Record<string, unknown>
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create tournament');
-      }
-
-      const newTournament = await response.json();
       
       // Add to local state immediately for better UX
-      setTournaments(prev => [newTournament, ...prev]);
+      // Realtime context updates list; no manual setState needed
       
       // Reset form and close modal
       setForm({
@@ -136,20 +121,7 @@ export default function TournamentsPage() {
     if (!session) return;
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          displayName: session.user?.name || 'Anonymous Player'
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to join tournament');
-      }
+      await rtJoinTournament(tournamentId);
 
       // Navigate to tournament page
       router.push(`/tournaments/${tournamentId}`);
@@ -189,7 +161,7 @@ export default function TournamentsPage() {
     }
   };
 
-  if (status === 'loading' || loading) {
+  if (status === 'loading' || rtLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournaments...</div>
@@ -219,13 +191,13 @@ export default function TournamentsPage() {
         </div>
 
         {/* Error Display */}
-        {error && (
+        {(error || rtError) && (
           <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
             <div className="flex items-center">
               <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
-              {error}
+              {error || rtError}
             </div>
           </div>
         )}
@@ -273,7 +245,7 @@ export default function TournamentsPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Players:</span>
                     <span className="text-white">
-                      {tournament.currentPlayers}/{tournament.maxPlayers}
+                      {getCurrentPlayersCount(tournament)}/{tournament.maxPlayers}
                     </span>
                   </div>
                   
@@ -281,7 +253,7 @@ export default function TournamentsPage() {
                     <div
                       className="bg-blue-600 h-2 rounded-full transition-all"
                       style={{
-                        width: `${Math.min((tournament.currentPlayers / tournament.maxPlayers) * 100, 100)}%`
+                        width: `${Math.min((getCurrentPlayersCount(tournament) / tournament.maxPlayers) * 100, 100)}%`
                       }}
                     />
                   </div>

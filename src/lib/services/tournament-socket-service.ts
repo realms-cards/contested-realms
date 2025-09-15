@@ -219,18 +219,12 @@ export class TournamentSocketService {
     });
 
     // Get updated registration counts
-    const registrations = await prisma.tournamentRegistration.findMany({
-      where: { tournamentId },
-      include: {
-        player: {
-          select: { name: true }
-        }
-      }
-    });
-
-    const readyCount = registrations.filter(reg => 
-      reg.preparationStatus === 'completed' && reg.deckSubmitted
-    ).length;
+    const [readyCount, totalCount] = await Promise.all([
+      prisma.tournamentRegistration.count({
+        where: { tournamentId, preparationStatus: 'completed', deckSubmitted: true }
+      }),
+      prisma.tournamentRegistration.count({ where: { tournamentId } })
+    ]);
 
     // Broadcast preparation update
     this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, {
@@ -239,7 +233,7 @@ export class TournamentSocketService {
       preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
       deckSubmitted: Boolean(preparationData.deckSubmitted),
       readyPlayerCount: readyCount,
-      totalPlayerCount: registrations.length
+      totalPlayerCount: totalCount
     });
   }
 
@@ -320,11 +314,15 @@ export class TournamentSocketService {
     playerName: string,
     currentPlayerCount: number
   ): Promise<void> {
-    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, {
+    const payload = {
+      tournamentId,
       playerId,
       playerName,
       currentPlayerCount
-    });
+    } as const;
+    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, payload as unknown as Record<string, unknown>);
+    // Also emit globally so lobby pages can reflect counts live
+    if (this.io) this.io.emit(TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, payload as unknown as Record<string, unknown>);
   }
 
   /**
@@ -336,11 +334,15 @@ export class TournamentSocketService {
     playerName: string,
     currentPlayerCount: number
   ): Promise<void> {
-    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, {
+    const payload = {
+      tournamentId,
       playerId,
       playerName,
       currentPlayerCount
-    });
+    } as const;
+    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, payload as unknown as Record<string, unknown>);
+    // Also emit globally so lobby pages can reflect counts live
+    if (this.io) this.io.emit(TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, payload as unknown as Record<string, unknown>);
   }
 
   /**
@@ -415,7 +417,38 @@ export class TournamentSocketService {
    * Broadcast tournament update
    */
   async broadcastTournamentUpdate(tournamentData: TournamentResponse): Promise<void> {
-    this.broadcastToTournament(tournamentData.id, TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED, tournamentData);
+    // Emit to the tournament room for connected participants
+    this.broadcastToTournament(
+      tournamentData.id,
+      TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED,
+      tournamentData as unknown as Record<string, unknown>
+    );
+    // Also emit globally so lobby lists across the app can auto-sync
+    if (this.io) {
+      this.io.emit(
+        TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED,
+        tournamentData as unknown as Record<string, unknown>
+      );
+    }
+  }
+
+  /**
+   * Convenience: fetch the tournament by id and broadcast an update
+   */
+  async broadcastTournamentUpdateById(tournamentId: string): Promise<void> {
+    try {
+      const tournament = await prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        include: {
+          registrations: true,
+        },
+      });
+      if (!tournament) return;
+      const data = this.mapTournamentToResponse(tournament);
+      await this.broadcastTournamentUpdate(data);
+    } catch (err) {
+      console.warn('broadcastTournamentUpdateById failed:', err);
+    }
   }
 
   /**
@@ -592,10 +625,10 @@ export class TournamentSocketService {
     status: string;
     maxPlayers: number;
     creatorId: string;
-    settings: unknown;
+    settings?: unknown;
     createdAt: Date;
-    startedAt: Date | null;
-    completedAt: Date | null;
+    startedAt?: Date | null;
+    completedAt?: Date | null;
     registrations?: Array<{ id: string }>;
   }): TournamentResponse {
     return {
@@ -606,10 +639,10 @@ export class TournamentSocketService {
       maxPlayers: tournament.maxPlayers,
       currentPlayers: tournament.registrations?.length || 0,
       creatorId: tournament.creatorId,
-      settings: tournament.settings as Record<string, unknown>,
+      settings: (tournament.settings ?? {}) as Record<string, unknown>,
       createdAt: tournament.createdAt.toISOString(),
-      startedAt: tournament.startedAt?.toISOString() || null,
-      completedAt: tournament.completedAt?.toISOString() || null
+      startedAt: tournament.startedAt ? tournament.startedAt.toISOString() : null,
+      completedAt: tournament.completedAt ? tournament.completedAt.toISOString() : null
     };
   }
 

@@ -7,29 +7,76 @@ import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 
-// Fantasy-themed word lists for generating lobby names
-const ADJECTIVES = [
-  "Ancient", "Mystic", "Golden", "Silver", "Crystal", "Shadow", "Bright", "Dark",
-  "Eternal", "Sacred", "Wild", "Hidden", "Lost", "Frozen", "Burning", "Stormy",
-  "Peaceful", "Mighty", "Noble", "Brave", "Swift", "Wise", "Fierce", "Gentle",
-  "Enchanted", "Forgotten", "Legendary", "Celestial", "Divine", "Ethereal",
-  "Crimson", "Azure", "Emerald", "Royal", "Arcane", "Primal", "Spectral"
+// Fantasy-themed word lists for generating lobby names in format: "$Predicate of $adjective $subjects"
+
+// Forms of contest, conflict, confrontation
+const PREDICATES = [
+  "Tournament", "Championship", "Contest", "Challenge", "Trial", "Confrontation",
+  "Battle", "Combat", "Duel", "Clash", "Conflict", "War", "Siege", "Skirmish",
+  "Conquest", "Campaign", "Crusade", "Expedition", "Quest", "Hunt", "Pursuit",
+  "Gathering", "Assembly", "Conclave", "Summit", "Council", "Meeting", "Convergence",
+  "Ritual", "Ceremony", "Rite", "Festival", "Celebration", "Games", "Trials"
 ];
 
-const NOUNS = [
-  "Dragon", "Phoenix", "Griffin", "Unicorn", "Wyrm", "Basilisk", "Chimera",
-  "Tower", "Castle", "Keep", "Citadel", "Fortress", "Sanctum", "Temple", 
-  "Mountain", "Valley", "Forest", "Grove", "Meadow", "River", "Lake", "Sea",
-  "Crown", "Throne", "Scepter", "Orb", "Blade", "Shield", "Staff", "Wand",
-  "Storm", "Thunder", "Lightning", "Flame", "Frost", "Wind", "Earth", "Star",
-  "Moon", "Sun", "Dawn", "Dusk", "Night", "Light", "Shadow", "Dream",
-  "Quest", "Journey", "Path", "Gate", "Portal", "Realm", "Domain", "Kingdom"
+// Colors, dark themes, and funny adjectives
+const ADJECTIVES = [
+  // Colors
+  "Crimson", "Scarlet", "Ruby", "Golden", "Amber", "Silver", "Platinum", "Azure", 
+  "Sapphire", "Emerald", "Jade", "Violet", "Obsidian", "Onyx", "Pearl", "Ivory",
+  "Copper", "Bronze", "Steel", "Iron", "Ebony", "Alabaster", "Coral", "Turquoise",
+  
+  // Dark themes
+  "Shadow", "Dark", "Black", "Cursed", "Doomed", "Fallen", "Corrupt", "Twisted",
+  "Wicked", "Sinister", "Malevolent", "Grim", "Dire", "Ominous", "Haunted", "Forsaken",
+  "Lost", "Forgotten", "Hidden", "Secret", "Ancient", "Elder", "Primordial",
+  
+  // Funny/quirky
+  "Confused", "Sleepy", "Grumpy", "Dizzy", "Wobbly", "Giggly", "Sneaky", "Clumsy",
+  "Bouncy", "Fluffy", "Squeaky", "Wiggly", "Ticklish", "Peculiar", "Absurd", "Silly",
+  "Bumbling", "Fumbling", "Stumbling", "Mumbling", "Rambling", "Scrambling",
+  
+  // Traditional fantasy
+  "Mystic", "Arcane", "Enchanted", "Sacred", "Divine", "Celestial", "Ethereal",
+  "Legendary", "Mythical", "Fabled", "Noble", "Royal", "Imperial", "Majestic",
+  "Mighty", "Fierce", "Wild", "Primal", "Elemental", "Eternal", "Infinite"
+];
+
+// Subjects from card names and flavor text
+const SUBJECTS = [
+  // Dragons and creatures from cards
+  "Dragons", "Wyrms", "Drakes", "Wyverns", "Phoenix", "Griffins", "Chimeras",
+  "Basilisks", "Hydras", "Manticores", "Sphinxes", "Unicorns", "Pegasi",
+  
+  // Sorcerers and people
+  "Sorcerers", "Wizards", "Mages", "Archmages", "Scholars", "Artificers", "Alchemists",
+  "Knights", "Warriors", "Guardians", "Sentinels", "Champions", "Heroes", "Legends",
+  "Prophets", "Seers", "Oracles", "Mystics", "Cultists", "Disciples", "Acolytes",
+  
+  // Places and structures
+  "Spires", "Towers", "Citadels", "Bastions", "Sanctuaries", "Temples", "Shrines",
+  "Ruins", "Dungeons", "Caverns", "Crypts", "Vaults", "Chambers", "Halls",
+  "Gardens", "Groves", "Forests", "Meadows", "Valleys", "Mountains", "Peaks",
+  
+  // Magical items and concepts
+  "Artifacts", "Relics", "Treasures", "Gems", "Crystals", "Orbs", "Scepters",
+  "Crowns", "Rings", "Amulets", "Talismans", "Charms", "Runes", "Scrolls",
+  "Tomes", "Grimoires", "Codices", "Mysteries", "Secrets", "Whispers",
+  
+  // Elements and forces
+  "Flames", "Embers", "Sparks", "Storms", "Tempests", "Gales", "Zephyrs",
+  "Shadows", "Echoes", "Dreams", "Visions", "Omens", "Portents", "Signs",
+  "Stars", "Moons", "Suns", "Comets", "Meteors", "Auroras", "Eclipses",
+  
+  // Abstract concepts
+  "Destinies", "Fates", "Fortunes", "Curses", "Blessings", "Wishes", "Hopes",
+  "Fears", "Doubts", "Truths", "Lies", "Oaths", "Vows", "Promises", "Bonds"
 ];
 
 function generateLobbyName(): string {
+  const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
   const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-  return `${adjective} ${noun}`;
+  const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
+  return `${predicate} of ${adjective} ${subject}`;
 }
 
 //
@@ -300,7 +347,11 @@ export default function LobbiesCentral({
   const [matchesData, setMatchesData] = useState<TournamentMatchesResponse | null>(null);
   
   // Check if user is already engaged in a lobby or tournament
-  const isInLobby = joinedLobbyId !== null;
+  // Be robust against stale joinedLobbyId by also checking membership from the list
+  const memberLobby = useMemo(() => {
+    return lobbies.find((l) => l.players.some((p) => p.id === myId)) || null;
+  }, [lobbies, myId]);
+  const isInLobby = joinedLobbyId !== null || !!memberLobby;
   const joinedTournament = tournaments.find(t => t.registeredPlayers.some(p => p.id === myId) && t.status !== "completed");
   const isInTournament = joinedTournament !== undefined;
   const isEngaged = isInLobby || isInTournament;
@@ -436,6 +487,15 @@ export default function LobbiesCentral({
           >
             Create Lobby
           </button>
+          {onLeaveLobby && isInLobby && (
+            <button
+              className="rounded px-3 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
+              onClick={() => onLeaveLobby()}
+              title={`Leave ${memberLobby?.name || memberLobby?.id || 'current lobby'}`}
+            >
+              Leave Lobby
+            </button>
+          )}
           {onCreateTournament && (
             <button
               className={`rounded px-3 py-1 text-xs font-semibold ${
@@ -506,7 +566,8 @@ export default function LobbiesCentral({
 
       <div className="divide-y divide-white/5 rounded-lg overflow-hidden ring-1 ring-white/10">
         {showLobbies && filtered.map((l) => {
-          const isMine = l.id === joinedLobbyId;
+          const amMember = l.players.some((p) => p.id === myId);
+          const isMine = amMember; // robust: show controls for any lobby that includes me
           const host = l.players.find((p) => p.id === l.hostId)?.displayName || "Host";
           const open = l.status === "open";
           const full = l.players.length >= l.maxPlayers;

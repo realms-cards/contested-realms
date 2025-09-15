@@ -17,7 +17,11 @@ export default function PlayersInvitePanel({ players, me, lobby, onInvite, onRef
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = players.filter((p) => p.id !== me?.id);
+    // Filter out the current user - check both id and displayName for safety
+    const list = players.filter((p) => {
+      if (!me) return true; // If me is not loaded yet, show all for now
+      return p.id !== me.id;
+    });
     if (!q) return list;
     return list.filter((p) => p.displayName.toLowerCase().includes(q));
   }, [players, me?.id, query]);

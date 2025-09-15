@@ -19,6 +19,7 @@ interface OnlineConsoleProps {
   hideLeaveButton?: boolean;
   defaultOpen?: boolean;
   hideChat?: boolean;
+  position?: 'bottom-left' | 'top-right';
 }
 
 type TabType = 'events' | 'chat';
@@ -36,10 +37,13 @@ export default function OnlineConsole({
   hideLeaveButton = false,
   defaultOpen = false,
   hideChat = false,
+  position = 'bottom-left',
 }: OnlineConsoleProps) {
   const router = useRouter();
   const [consoleOpen, setConsoleOpen] = useState<boolean>(defaultOpen);
   const [activeTab, setActiveTab] = useState<TabType>('events');
+  const [showToast, setShowToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string>("");
   // Only show match chat in match console (or hide entirely in replay)
   const matchChat = hideChat ? [] : chatLog.filter((m) => m.scope === 'match');
   
@@ -89,9 +93,14 @@ export default function OnlineConsole({
       });
       if (hasIncoming) {
         if (!consoleOpen) {
-          setConsoleOpen(true);
-          lastOpenReasonRef.current = 'auto';
-          startAutoCloseTimer();
+          // Show toast instead of auto-opening
+          const latestMessage = newMessages[newMessages.length - 1];
+          const senderName = latestMessage.from?.displayName || "Someone";
+          setToastMessage(`${senderName}: ${latestMessage.content}`);
+          setShowToast(true);
+          
+          // Auto-hide toast after 4 seconds
+          setTimeout(() => setShowToast(false), 4000);
         } else if (lastOpenReasonRef.current === 'auto') {
           // While auto-open, reset the collapse timer on further incoming messages
           startAutoCloseTimer();
@@ -148,9 +157,13 @@ export default function OnlineConsole({
     }
   };
 
+  const positionClasses = position === 'top-right' 
+    ? 'right-3 top-2' 
+    : 'left-3 bottom-2';
+
   return (
     <div
-      className={`absolute left-3 bottom-2 z-10 ${
+      className={`absolute ${positionClasses} z-10 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white w-80`}
     >
@@ -167,7 +180,14 @@ export default function OnlineConsole({
                   ? 'bg-white/20 text-white' 
                   : 'hover:bg-white/10 opacity-70'
               }`}
-              onClick={() => setActiveTab('events')}
+              onClick={() => {
+                setActiveTab('events');
+                if (!consoleOpen) {
+                  setConsoleOpen(true);
+                  lastOpenReasonRef.current = 'manual';
+                  clearAutoCloseTimer();
+                }
+              }}
               onContextMenu={(e) => e.preventDefault()}
             >
               <ScrollText className="w-3 h-3" />
@@ -185,7 +205,14 @@ export default function OnlineConsole({
                     ? 'bg-white/20 text-white' 
                     : 'hover:bg-white/10 opacity-70'
                 }`}
-                onClick={() => setActiveTab('chat')}
+                onClick={() => {
+                  setActiveTab('chat');
+                  if (!consoleOpen) {
+                    setConsoleOpen(true);
+                    lastOpenReasonRef.current = 'manual';
+                    clearAutoCloseTimer();
+                  }
+                }}
                 onContextMenu={(e) => e.preventDefault()}
               >
                 <MessageCircle className="w-3 h-3" />
@@ -251,9 +278,9 @@ export default function OnlineConsole({
                       key={`${ev.id}-${index}`}
                       className={`opacity-85 ${
                         isWarn 
-                          ? "text-red-400" 
-                          : isSearch 
                           ? "text-yellow-400" 
+                          : isSearch 
+                          ? "text-blue-400" 
                           : ""
                       }`}
                     >
@@ -313,6 +340,29 @@ export default function OnlineConsole({
           </div>
         )}
       </div>
+
+      {/* Toast notification for chat messages when console is collapsed or chat not active */}
+      {showToast && (!consoleOpen || activeTab !== 'chat') && (
+        <div 
+          className="absolute top-[-70px] left-0 right-0 bg-gradient-to-r from-blue-600 to-green-600 border border-white/20 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out animate-bounce z-20"
+          style={{
+            animation: 'slideInUp 0.4s ease-out, pulse 2s infinite 0.4s'
+          }}
+          onClick={() => {
+            setConsoleOpen(true);
+            setActiveTab('chat');
+            setShowToast(false);
+            lastOpenReasonRef.current = 'manual';
+            clearAutoCloseTimer();
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">💬</span>
+            <span className="font-medium truncate">{toastMessage}</span>
+            <span className="text-xs opacity-75 ml-auto">Click to view</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

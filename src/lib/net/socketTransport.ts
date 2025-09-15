@@ -54,10 +54,21 @@ export class SocketTransport implements GameTransport {
     const trimmed = (opts.displayName ?? "").trim();
     const finalName = (trimmed || "Player").slice(0, 40);
     console.log(`[Transport] Connecting to ${url} as ${finalName}${opts.playerId ? ` (${opts.playerId})` : ''}`);
+    // Fetch short-lived auth token from app API (signed by NEXTAUTH_SECRET)
+    let token: string | undefined = undefined;
+    try {
+      const res = await fetch('/api/socket-token', { credentials: 'include' });
+      if (res.ok) {
+        const j = await res.json();
+        token = j?.token as string | undefined;
+      }
+    } catch {}
+
     const socket = io(url, {
       transports: transportsEnv.length ? transportsEnv : ["websocket"],
       autoConnect: true,
       path,
+      auth: token ? { token } : undefined,
     }) as Socket;
 
     this.socket = socket;
@@ -229,6 +240,19 @@ export class SocketTransport implements GameTransport {
       socket.on("tournamentsListUpdated", (payload) =>
         this.dispatch("tournamentsListUpdated", payload)
       );
+    });
+
+    // Refresh token prior to reconnection attempts
+    type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
+    (this.socket as Socket).io.on('reconnect_attempt', async () => {
+      try {
+        const res = await fetch('/api/socket-token', { credentials: 'include' });
+        if (res.ok) {
+          const j = await res.json();
+          const mgr = (this.socket as Socket).io as unknown as ManagerWithOpts;
+          mgr.opts.auth = { token: j?.token as string };
+        }
+      } catch {}
     });
   }
 

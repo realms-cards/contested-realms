@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TournamentControls } from "@/components/deck-editor";
 
@@ -46,6 +47,7 @@ type PickItem = {
 };
 
 export default function DeckEditorPage() {
+  const searchParams = useSearchParams();
   const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(false);
 
@@ -590,11 +592,17 @@ export default function DeckEditorPage() {
         if (!res.ok) throw new Error(data?.error || "Failed to update deck");
         setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
       } else {
+        // Generate meaningful deck name using match/lobby info when available
+        const matchName = searchParams?.get("matchName");
+        const lobbyName = searchParams?.get("lobbyName");
+        const gameName = matchName || lobbyName;
+        const finalDeckName = gameName ? `${gameName} (Constructed)` : deckName || "New Deck";
+
         const res = await fetch("/api/decks", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            name: deckName || "New Deck",
+            name: finalDeckName,
             format: "Constructed",
             set: setName,
             cards,

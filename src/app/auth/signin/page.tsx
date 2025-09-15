@@ -1,5 +1,6 @@
 'use client';
 
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getProviders, signIn, getSession } from 'next-auth/react';
 import type { LiteralUnion, ClientSafeProvider } from 'next-auth/react';
@@ -16,6 +17,8 @@ function SignInContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [twoFactorCode, setTwoFactorCode] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isPasskeyBusy, setIsPasskeyBusy] = useState<boolean>(false);
+  const [registerDisplayName, setRegisterDisplayName] = useState<string>('');
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,6 +53,54 @@ function SignInContent() {
       console.error('Discord sign-in error:', error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Passkey sign-in (authentication)
+  const handlePasskeySignIn = async (): Promise<void> => {
+    setIsPasskeyBusy(true);
+    try {
+      const res = await fetch('/api/webauthn/authentication/options', { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to get authentication options');
+      const { options } = await res.json();
+      const assertion = await startAuthentication(options);
+      const result = await signIn('passkey', { assertion: JSON.stringify(assertion), callbackUrl, redirect: false });
+      if (result?.ok) {
+        router.push(callbackUrl);
+      } else if (result?.error) {
+        console.error('Passkey sign-in error:', result.error);
+      }
+    } catch (err) {
+      console.error('Passkey sign-in failed:', err);
+    } finally {
+      setIsPasskeyBusy(false);
+    }
+  };
+
+  // Passkey registration flow
+  const handlePasskeyRegistration = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setIsPasskeyBusy(true);
+    try {
+      const res = await fetch('/api/webauthn/registration/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: registerDisplayName }),
+      });
+      if (!res.ok) throw new Error('Failed to get registration options');
+      const { options } = await res.json();
+      const attestation = await startRegistration(options);
+      const vr = await fetch('/api/webauthn/registration/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attestation }),
+      });
+      if (!vr.ok) throw new Error('Registration verification failed');
+      await handlePasskeySignIn();
+    } catch (err) {
+      console.error('Passkey registration failed:', err);
+    } finally {
+      setIsPasskeyBusy(false);
     }
   };
 
@@ -124,6 +175,15 @@ function SignInContent() {
             </button>
           )}
 
+          {/* Passkey Sign-In */}
+          <button
+            onClick={handlePasskeySignIn}
+            disabled={isPasskeyBusy}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold py-3 px-4 rounded transition-colors"
+          >
+            {isPasskeyBusy ? 'Working…' : 'Sign in with Passkey'}
+          </button>
+
           {/* 2FA Provider (Development/Test) */}
           {providers?.['2fa'] && (
             <div className="border-t border-slate-600 pt-4">
@@ -150,6 +210,28 @@ function SignInContent() {
               </form>
             </div>
           )}
+
+          {/* Passkey Registration */}
+          <div className="border-t border-slate-600 pt-4">
+            <p className="text-sm text-gray-400 mb-3 text-center">Register a Passkey</p>
+            <form onSubmit={handlePasskeyRegistration} className="space-y-3">
+              <input
+                type="text"
+                value={registerDisplayName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegisterDisplayName(e.target.value)}
+                placeholder="Display name (optional)"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                disabled={isPasskeyBusy}
+              />
+              <button
+                type="submit"
+                disabled={isPasskeyBusy}
+                className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white font-bold py-2 px-4 rounded transition-colors"
+              >
+                {isPasskeyBusy ? 'Working…' : 'Register Passkey'}
+              </button>
+            </form>
+          </div>
         </div>
 
         <p className="mt-6 text-xs text-gray-400 text-center">

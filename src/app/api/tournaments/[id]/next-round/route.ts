@@ -115,6 +115,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         nextRoundNumber,
         matchData
       );
+      // Additionally, send MATCH_ASSIGNED to each participant of created matches
+      const t = await prisma.tournament.findUnique({ where: { id }, select: { name: true } });
+      const lobbyName = t?.name || 'Tournament Match';
+      for (const m of matchData) {
+        if (m.player1Id) {
+          await tournamentSocketService.broadcastMatchAssigned(id, m.player1Id, {
+            matchId: m.id,
+            opponentId: m.player2Id,
+            opponentName: m.player2Name,
+            lobbyName,
+          });
+        }
+        if (m.player2Id) {
+          await tournamentSocketService.broadcastMatchAssigned(id, m.player2Id, {
+            matchId: m.id,
+            opponentId: m.player1Id,
+            opponentName: m.player1Name,
+            lobbyName,
+          });
+        }
+      }
     } catch (socketError) {
       console.warn('Failed to broadcast round started event:', socketError);
       // Don't fail the request if socket broadcast fails

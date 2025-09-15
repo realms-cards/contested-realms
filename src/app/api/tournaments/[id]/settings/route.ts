@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 // PUT /api/tournaments/[id]/settings
 // Update tournament settings (only during registration phase and only by creator)
@@ -133,6 +134,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     });
 
     console.log(`Tournament settings updated by ${session.user.id}:`, updates);
+
+    // Broadcast updated tournament to all clients (global + room)
+    try {
+      await tournamentSocketService.broadcastTournamentUpdateById(id);
+    } catch (socketErr) {
+      console.warn('Failed to broadcast tournament update after settings change:', socketErr);
+    }
 
     return new Response(JSON.stringify({
       message: 'Tournament settings updated successfully',
