@@ -19,7 +19,7 @@ export default function LockPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/lock", {
+      const res = await fetch("/_lockdown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user, pass }),
