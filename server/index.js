@@ -1595,31 +1595,39 @@ const REQUIRE_JWT = Boolean(
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
 );
 
-io.on("connection", (socket) => {
-  let authed = false;
-  let authUser = null;
-
-  // Verify short-lived JWT from handshake auth
+// Enforce NextAuth-signed JWT at connect time
+io.use((socket, next) => {
   try {
     const token = (socket.handshake && socket.handshake.auth && socket.handshake.auth.token) || null;
     if (token && process.env.NEXTAUTH_SECRET) {
       const payload = jwt.verify(token, process.env.NEXTAUTH_SECRET);
-      authUser = {
-        id: payload && (payload.uid || payload.sub),
+      socket.data = socket.data || {};
+      socket.data.authUser = {
+        id: (payload && (payload.uid || payload.sub)) || null,
         name: payload && payload.name,
       };
-    } else if (REQUIRE_JWT) {
-      socket.emit("error", { message: "auth_required" });
-      try { socket.disconnect(true); } catch {}
-      return;
+      return next();
     }
-  } catch (e) {
-    try { console.warn("[auth] JWT verify failed:", e && e.message ? e.message : String(e)); } catch {}
     if (REQUIRE_JWT) {
-      try { socket.emit("error", { message: "invalid_token" }); } catch {}
-      try { socket.disconnect(true); } catch {}
-      return;
+      return next(new Error("auth_required"));
     }
+    return next();
+  } catch (e) {
+    return next(new Error("invalid_token"));
+  }
+});
+
+io.on("connection", (socket) => {
+  let authed = false;
+  let authUser = null;
+
+  // Read auth result from middleware (fallback to soft-allow if not required)
+  if (socket.data && socket.data.authUser) {
+    authUser = socket.data.authUser;
+  } else if (REQUIRE_JWT) {
+    try { socket.emit("error", { message: "auth_required" }); } catch {}
+    try { socket.disconnect(true); } catch {}
+    return;
   }
 
   socket.on("hello", async (payload) => {
