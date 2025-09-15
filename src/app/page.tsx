@@ -10,6 +10,8 @@ export default function Home() {
     document.title = "Contested Realms";
   }, []);
 
+  const tournamentsEnabled = process.env.NEXT_PUBLIC_FEATURE_TOURNAMENTS === 'true';
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white flex items-center justify-center p-8">
       <div className="max-w-4xl w-full text-center space-y-12">
@@ -69,22 +71,24 @@ export default function Home() {
           </Link>
 
           {/* Tournaments */}
-          <Link
-            href="/tournaments"
-            className="group bg-gradient-to-br from-amber-900/50 to-amber-800/30 ring-1 ring-amber-500/30 rounded-2xl p-8 hover:ring-amber-400/50 hover:scale-[1.02] transition-all duration-200 md:col-span-2 lg:col-span-1"
-          >
-            <div className="flex flex-col items-center space-y-4">
-              <div className="p-4 bg-amber-500/20 rounded-full group-hover:bg-amber-500/30 transition-colors">
-                <Trophy className="w-8 h-8 text-amber-400" />
+          {tournamentsEnabled && (
+            <Link
+              href="/tournaments"
+              className="group bg-gradient-to-br from-amber-900/50 to-amber-800/30 ring-1 ring-amber-500/30 rounded-2xl p-8 hover:ring-amber-400/50 hover:scale-[1.02] transition-all duration-200 md:col-span-2 lg:col-span-1"
+            >
+              <div className="flex flex-col items-center space-y-4">
+                <div className="p-4 bg-amber-500/20 rounded-full group-hover:bg-amber-500/30 transition-colors">
+                  <Trophy className="w-8 h-8 text-amber-400" />
+                </div>
+                <h3 className="text-2xl font-semibold text-amber-100">
+                  Tournaments
+                </h3>
+                <p className="text-amber-200/80 text-center">
+                  Join competitive tournaments with Swiss pairings. Create your own or participate in community events.
+                </p>
               </div>
-              <h3 className="text-2xl font-semibold text-amber-100">
-                Tournaments
-              </h3>
-              <p className="text-amber-200/80 text-center">
-                Join competitive tournaments with Swiss pairings. Create your own or participate in community events.
-              </p>
-            </div>
-          </Link>
+            </Link>
+          )}
         </div>
 
         {/* Features */}
@@ -99,7 +103,7 @@ export default function Home() {
             <div>• Deck Import System</div>
             <div>• Real-time Multiplayer</div>
             <div>• Match Spectating</div>
-            <div>• Tournament Support</div>
+            {tournamentsEnabled && <div>• Tournament Support</div>}
           </div>
         </div>
 

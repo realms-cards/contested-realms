@@ -15,12 +15,13 @@ function unauthorized() {
   });
 }
 
-export default async function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   if (!isEnabled()) return NextResponse.next();
 
   const expectedPass = process.env.BASIC_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || '';
   const expectedUser = process.env.BASIC_AUTH_USER || '';
-  if (!expectedPass) return NextResponse.next(); // misconfigured -> do not block
+  // If enabled but password not configured, fail closed to avoid accidental exposure
+  if (!expectedPass) return unauthorized();
 
   const { pathname } = req.nextUrl;
 
