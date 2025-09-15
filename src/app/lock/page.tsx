@@ -54,11 +54,10 @@ export default function LockPage() {
 
       <section className="card">
         <div className="icon">
-          {/* Skull icon */}
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M5 12a7 7 0 1 1 14 0v2a3 3 0 0 1-3 3v2a1 1 0 0 1-1 1h-1v-2h-2v2h-1a1 1 0 0 1-1-1v-2a3 3 0 0 1-3-3v-2Z" />
-            <circle cx="9.5" cy="11" r="1.5" />
-            <circle cx="14.5" cy="11" r="1.5" />
+            <rect x="3" y="11" width="18" height="10" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            <circle cx="12" cy="16" r="1" />
           </svg>
         </div>
         <h1>Private Access</h1>
