@@ -10,6 +10,7 @@
     "server": "node server/index.js",
     "server:docker:build": "docker compose build server1 server2 caddy",
     "server:docker:up": "docker compose up -d server1 server2 caddy",
+    "server:docker:up:single": "docker compose up -d server1 caddy",
     "server:docker:restart": "docker compose restart server1 server2 caddy",
     "server:docker:logs": "docker compose logs -f server1 server2 caddy",
     "lint": "eslint",
@@ -38,6 +39,7 @@
     "redis:up": "docker compose up -d redis",
     "redis:down": "docker compose stop redis",
     "stack:up": "docker compose up -d postgres redis server1 server2 caddy",
+    "stack:up:single": "docker compose up -d postgres redis migrate server1 caddy",
     "stack:down": "docker compose down"
   },
   "dependencies": {

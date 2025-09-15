@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
     let setId: number | null = null;
     if (setName) {
       const set = await prisma.set.findUnique({ where: { name: setName } });
-      if (!set) return new Response(JSON.stringify({ error: `Unknown set: ${setName}` }), { status: 400 });
+      // Be forgiving: if set is unknown, return empty list instead of a hard error so editor UX isn't blocked
+      if (!set) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      }
       setId = set.id;
     }
 
@@ -30,8 +33,15 @@ export async function GET(req: NextRequest) {
     const variants = await prisma.variant.findMany({
       where: {
         ...whereVariant,
-        // NOTE: Some providers/types may not expose QueryMode in generated types; omit for compatibility
-        card: q ? { name: { contains: q } } : undefined,
+        // Search by card name OR slug; make it case-insensitive for friendlier UX
+        ...(q
+          ? {
+              OR: [
+                { card: { name: { contains: q, mode: "insensitive" } } },
+                { slug: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -105,7 +115,7 @@ export async function GET(req: NextRequest) {
         const t = (it.type || "").toLowerCase();
         if (typeFilt === "site") return t.includes("site");
         if (typeFilt === "avatar") return t.includes("avatar");
-        if (typeFilt === "spell") return !t.includes("site"); // treat non-site as spellbook bucket
+        if (typeFilt === "spell") return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
         return true;
       })
       .slice(0, 200);

@@ -58,6 +58,7 @@ services:
       DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       REDIS_URL: redis://redis:6379
+      INSTANCE_ID: server1
       PORT: 3010
       CPU_BOTS_ENABLED: "0"
       RULES_ENFORCE_MODE: off
@@ -79,6 +80,7 @@ services:
       DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       REDIS_URL: redis://redis:6379
+      INSTANCE_ID: server2
       PORT: 3010
       CPU_BOTS_ENABLED: "0"
       RULES_ENFORCE_MODE: off

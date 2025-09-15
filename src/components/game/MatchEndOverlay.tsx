@@ -10,6 +10,7 @@ interface MatchEndOverlayProps {
   myPlayerKey: PlayerKey | null;
   onClose: () => void;
   onLeave?: () => void;
+  onLeaveLobby?: () => void;
 }
 
 export default function MatchEndOverlay({
@@ -18,13 +19,25 @@ export default function MatchEndOverlay({
   playerNames,
   myPlayerKey,
   onClose,
-  onLeave
+  onLeave,
+  onLeaveLobby
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
   const isDraw = winner === null;
   const didIWin = winner === myPlayerKey;
   const winnerName = winner ? playerNames[winner] : null;
+
+  const handleLeaveMatch = () => {
+    if (onLeave) {
+      onLeave();
+      
+      // Ask if they also want to leave the lobby
+      if (onLeaveLobby && confirm("Would you also like to leave the lobby? You can always join another lobby or create a new one.")) {
+        onLeaveLobby();
+      }
+    }
+  };
 
   return (
     <div 
@@ -91,7 +104,7 @@ export default function MatchEndOverlay({
           
           {onLeave && (
             <button
-              onClick={onLeave}
+              onClick={handleLeaveMatch}
               className="w-full bg-red-700 hover:bg-red-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
             >
               Leave Match & Return to Lobby

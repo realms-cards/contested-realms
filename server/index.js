@@ -4,6 +4,445 @@
 // Load environment variables (.env, .env.local) for standalone server runs
 try { require('dotenv').config(); } catch {}
 
+// -----------------------------
+// Leader-aware Draft helpers (match-level)
+// -----------------------------
+async function leaderDraftPlayerReady(matchId, playerId, ready) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match || match.matchType !== 'draft' || !match.draftState) return;
+  const room = `match:${matchId}`;
+  const idx = Array.isArray(match.playerIds) ? match.playerIds.indexOf(playerId) : -1;
+  if (idx === -1) return;
+  const playerKey = idx === 1 ? 'p2' : 'p1';
+  if (!match.draftState.playerReady || typeof match.draftState.playerReady !== 'object') {
+    match.draftState.playerReady = { p1: false, p2: false };
+  }
+  match.draftState.playerReady[playerKey] = !!ready;
+  io.to(room).emit('message', { type: 'playerReady', playerKey, ready: !!ready });
+  // Auto-start if both ready and still in waiting
+  const pr = match.draftState.playerReady;
+  if (match.draftState.phase === 'waiting' && pr && pr.p1 === true && pr.p2 === true) {
+    try { await leaderStartDraft(matchId, playerId); } catch (e) { try { console.warn('[Draft] auto-start failed:', e?.message || e); } catch {} }
+  }
+  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
+}
+
+async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraftConfig = null, requestingSocketId = null) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match || match.matchType !== 'draft' || !match.draftState) return;
+  if (match.draftState.phase !== 'waiting') return;
+  if (match.draftState.__startingDraft) return;
+  match.draftState.__startingDraft = true;
+  const room = `match:${match.id}`;
+  // Start with match config; allow client override from leader-approved request
+  let dc = match.draftConfig || { setMix: ['Beta'], packCount: 3, packSize: 15 };
+  if (overrideDraftConfig && typeof overrideDraftConfig === 'object') {
+    try {
+      // Merge and normalize: prefer explicit override fields
+      dc = {
+        ...dc,
+        ...overrideDraftConfig,
+      };
+    } catch {}
+  }
+  // Normalize setMix
+  const setMix = Array.isArray(dc.setMix) && dc.setMix.length > 0 ? dc.setMix : ['Beta'];
+  // Normalize packCount/packSize
+  const packCount = Math.max(1, Number(dc.packCount) || 3);
+  const packSize = Math.max(8, Number(dc.packSize) || 15);
+  // Normalize packCounts: ensure it sums exactly to packCount; if not, generate even distribution across setMix
+  let packCounts = dc && typeof dc.packCounts === 'object' ? { ...dc.packCounts } : undefined;
+  const sumPackCounts = (obj) =>
+    obj ? Object.values(obj).reduce((a, b) => a + (Math.max(0, Number(b) || 0)), 0) : 0;
+  if (!packCounts || sumPackCounts(packCounts) !== packCount) {
+    const counts = {};
+    const n = setMix.length;
+    for (const s of setMix) counts[s] = 0;
+    const base = Math.floor(packCount / n);
+    const rem = packCount % n;
+    setMix.forEach((s, i) => {
+      counts[s] = base + (i < rem ? 1 : 0);
+    });
+    packCounts = counts;
+  }
+  // Persist normalized config back to match (so followers/clients see canonical config)
+  match.draftConfig = { setMix, packCount, packSize, packCounts };
+  try {
+    // Build set sequence from exact packCounts
+    let setSequence = [];
+    if (packCounts && typeof packCounts === 'object') {
+      for (const [name, cnt] of Object.entries(packCounts)) {
+        const c = Math.max(0, Number(cnt) || 0);
+        for (let i = 0; i < c; i++) setSequence.push(name);
+      }
+    }
+    if (setSequence.length !== packCount) {
+      console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
+      // Notify requester if available
+      try {
+        if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: `Draft configuration error: pack counts must sum to ${packCount}` });
+      } catch {}
+      return;
+    }
+    const currentPacks = [];
+    for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
+      const playerPacks = [];
+      for (let packIdx = 0; packIdx < packCount; packIdx++) {
+        const setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
+        const rng = createRngFromString(`${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`);
+        const picks = await generateBoosterDeterministic(setName, rng, false);
+        const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
+          id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[playerIdx].slice(-4)}`,
+          name: p.cardName || '',
+          slug: String(p.slug || ''),
+          type: p.type || null,
+          cost: String(p.cost || ''),
+          rarity: p.rarity || 'common',
+          element: p.element || [],
+          setName,
+        }));
+        playerPacks.push(cards);
+      }
+      currentPacks.push(playerPacks);
+    }
+    // Prepare draft phases
+    // Ensure draft state arrays are shaped properly
+    if (!Array.isArray(match.draftState.packChoice) || match.draftState.packChoice.length !== match.playerIds.length) {
+      match.draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
+    }
+    if (!Array.isArray(match.draftState.picks) || match.draftState.picks.length !== match.playerIds.length) {
+      match.draftState.picks = Array.from({ length: match.playerIds.length }, () => []);
+    }
+    match.draftState.phase = 'pack_selection';
+    match.draftState.allGeneratedPacks = currentPacks;
+    match.draftState.currentPacks = [];
+    match.draftState.waitingFor = [...match.playerIds];
+    // Auto-assign fallback after 2s if someone doesn't choose
+    setTimeout(() => {
+      try {
+        const m = matches.get(matchId);
+        if (!m || m.matchType !== 'draft' || !m.draftState) return;
+        const ds = m.draftState;
+        if (ds.phase !== 'pack_selection') return;
+        const pendingIdx = ds.packChoice.findIndex((c) => c === null);
+        if (pendingIdx === -1) return;
+        ds.packChoice = ds.packChoice.map((c, idx) => {
+          if (c !== null) return c;
+          const packs = Array.isArray(ds.allGeneratedPacks?.[idx]) ? ds.allGeneratedPacks[idx] : [];
+          const first = Array.isArray(packs) && packs[0] && packs[0][0] ? packs[0][0] : null;
+          return (first && (first.setName || first.set)) || 'Beta';
+        });
+        ds.currentPacks = ds.allGeneratedPacks.map((packs, playerIdx) => {
+          const choice = ds.packChoice[playerIdx];
+          for (let i = 0; i < packs.length; i++) {
+            const pack = packs[i];
+            if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
+          }
+          return packs[0] || [];
+        });
+        ds.phase = 'picking';
+        ds.waitingFor = [...m.playerIds];
+        io.to(`match:${m.id}`).emit('draftUpdate', ds);
+      } catch {}
+    }, 2000);
+    io.to(room).emit('draftUpdate', match.draftState);
+    try { await persistMatchUpdate(match, null, requestingPlayerId || 'system', Date.now()); } catch {}
+  } catch (e) {
+    console.error(`[Draft] Error starting draft: ${e && e.message ? e.message : String(e)}`);
+    try {
+      if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: 'Failed to start draft' });
+    } catch {}
+  } finally {
+    match.draftState.__startingDraft = false;
+  }
+}
+
+async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickNumber }) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match || match.matchType !== 'draft' || !match.draftState) return;
+  const draftState = match.draftState;
+  if (draftState.phase !== 'picking') return;
+  if (draftState.packIndex !== packIndex || draftState.pickNumber !== pickNumber) return;
+  if (!draftState.waitingFor.includes(playerId)) return;
+  const playerIndex = match.playerIds.indexOf(playerId);
+  if (playerIndex === -1) return;
+  const currentPack = draftState.currentPacks[playerIndex];
+  if (!currentPack) return;
+  const cardIndex = currentPack.findIndex((card) => card.id === cardId);
+  if (cardIndex === -1) return;
+  const pickedCard = currentPack.splice(cardIndex, 1)[0];
+  draftState.picks[playerIndex].push(pickedCard);
+  draftState.waitingFor = draftState.waitingFor.filter((id) => id !== playerId);
+  if (draftState.waitingFor.length === 0) {
+    if (draftState.pickNumber >= 15 || currentPack.length === 0) {
+      draftState.packIndex++;
+      draftState.pickNumber = 1;
+      if (draftState.packIndex >= 3) {
+        draftState.phase = 'complete';
+        match.status = 'deck_construction';
+      } else {
+        draftState.pickNumber = 1;
+        draftState.packDirection = draftState.packDirection === 'left' ? 'right' : 'left';
+        draftState.waitingFor = [...match.playerIds];
+        if (draftState.allGeneratedPacks && draftState.packIndex < 3) {
+          draftState.currentPacks = draftState.allGeneratedPacks.map((packs, playerIdx) => {
+            const playerChoice = draftState.packChoice[playerIdx];
+            if (playerChoice && packs.length > draftState.packIndex) {
+              for (let i = 0; i < packs.length; i++) {
+                const pack = packs[i];
+                if (pack && pack.length > 0 && pack[0].setName === playerChoice) return pack;
+              }
+            }
+            return packs[draftState.packIndex] || [];
+          });
+        }
+      }
+    } else {
+      // Pass packs
+      draftState.pickNumber++;
+      draftState.phase = 'passing';
+      const temp = [...draftState.currentPacks];
+      if (draftState.packDirection === 'left') {
+        for (let i = 0; i < temp.length; i++) {
+          draftState.currentPacks[(i + 1) % temp.length] = temp[i];
+        }
+      } else {
+        for (let i = 0; i < temp.length; i++) {
+          draftState.currentPacks[i] = temp[(i + 1) % temp.length];
+        }
+      }
+      draftState.phase = 'picking';
+      draftState.waitingFor = [...match.playerIds];
+    }
+  }
+  io.to(`match:${match.id}`).emit('draftUpdate', draftState);
+  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
+}
+
+async function leaderChooseDraftPack(matchId, playerId, { setChoice, packIndex }) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match || match.matchType !== 'draft' || !match.draftState) return;
+  const draftState = match.draftState;
+  const playerIndex = match.playerIds.indexOf(playerId);
+  if (playerIndex === -1) return;
+  if (draftState.phase !== 'pack_selection') return;
+  if (draftState.packChoice[playerIndex] !== null) return;
+  draftState.packChoice[playerIndex] = setChoice;
+  const allChoicesMade = draftState.packChoice.every((choice) => choice !== null);
+  if (allChoicesMade && draftState.phase === 'pack_selection') {
+    draftState.currentPacks = draftState.allGeneratedPacks.map((packs, idx) => {
+      const choice = draftState.packChoice[idx];
+      for (let i = 0; i < packs.length; i++) {
+        const pack = packs[i];
+        if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
+      }
+      return packs[0] || [];
+    });
+    draftState.phase = 'picking';
+    draftState.waitingFor = [...match.playerIds];
+  }
+  io.to(`match:${match.id}`).emit('draftUpdate', draftState);
+  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
+}
+
+// -----------------------------
+// Lobby coordination helpers (leader + state replication)
+// -----------------------------
+async function getOrClaimLobbyLeader() {
+  try {
+    if (!storeRedis) return INSTANCE_ID;
+    const key = 'lobby:leader';
+    const current = await storeRedis.get(key);
+    if (current) {
+      if (current === INSTANCE_ID) { try { await storeRedis.expire(key, 30); } catch {} }
+      return current;
+    }
+    const setRes = await storeRedis.set(key, INSTANCE_ID, 'NX', 'EX', 30);
+    if (setRes) return INSTANCE_ID;
+    return await storeRedis.get(key);
+  } catch { return INSTANCE_ID; }
+}
+
+function serializeLobby(lobby) {
+  return {
+    id: lobby.id,
+    name: lobby.name,
+    hostId: lobby.hostId,
+    status: lobby.status,
+    maxPlayers: lobby.maxPlayers,
+    visibility: lobby.visibility,
+    plannedMatchType: lobby.plannedMatchType,
+    lastActive: lobby.lastActive,
+    playerIds: Array.from(lobby.playerIds || []),
+    ready: Array.from(lobby.ready || []),
+  };
+}
+
+function upsertLobbyFromSerialized(obj) {
+  const lb = lobbies.get(obj.id) || { id: obj.id, name: null, hostId: null, playerIds: new Set(), status: 'open', maxPlayers: 2, ready: new Set(), visibility: 'open', plannedMatchType: 'constructed', lastActive: Date.now() };
+  lb.name = obj.name;
+  lb.hostId = obj.hostId;
+  lb.status = obj.status;
+  lb.maxPlayers = obj.maxPlayers;
+  lb.visibility = obj.visibility;
+  lb.plannedMatchType = obj.plannedMatchType;
+  lb.lastActive = obj.lastActive || Date.now();
+  lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
+  lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);
+  lobbies.set(lb.id, lb);
+}
+
+async function publishLobbyState(lobby) {
+  try { if (storeRedis) await storeRedis.publish(LOBBY_STATE_CHANNEL, JSON.stringify({ type: 'upsert', lobby: serializeLobby(lobby) })); } catch {}
+}
+
+async function publishLobbyDelete(lobbyId) {
+  try { if (storeRedis) await storeRedis.publish(LOBBY_STATE_CHANNEL, JSON.stringify({ type: 'delete', id: lobbyId })); } catch {}
+}
+
+async function handleLobbyControlAsLeader(msg) {
+  // msg.type: 'create' | 'join' | 'leave' | 'visibility' | 'plan' | 'ready'
+  function findLobbyForPlayer(pid, explicitLobbyId) {
+    if (explicitLobbyId && lobbies.has(explicitLobbyId)) return lobbies.get(explicitLobbyId);
+    for (const lb of lobbies.values()) {
+      if (lb && lb.status === 'open' && lb.playerIds && lb.playerIds.has(pid)) return lb;
+    }
+    return null;
+  }
+  if (msg.type === 'create') {
+    const { hostId, socketId, options } = msg;
+    const vis = options && options.visibility === 'private' ? 'private' : 'open';
+    const maxPlayers = Number.isInteger(options && options.maxPlayers) ? Math.max(2, Math.min(8, options.maxPlayers)) : 2;
+    const name = options && options.name ? String(options.name).trim().slice(0, 50) : null;
+    const lobby = { id: rid('lobby'), name, hostId, playerIds: new Set(), status: 'open', maxPlayers, ready: new Set(), visibility: vis, plannedMatchType: 'constructed', lastActive: Date.now() };
+    lobbies.set(lobby.id, lobby);
+    // Join host
+    if (socketId) { try { await io.in(socketId).socketsJoin(`lobby:${lobby.id}`); } catch {} }
+    lobby.playerIds.add(hostId);
+    const p = await ensurePlayerCached(hostId);
+    try { p.lobbyId = lobby.id; } catch {}
+    // Emit to room and global lists
+    const info = getLobbyInfo(lobby);
+    if (socketId) try { io.to(socketId).emit('joinedLobby', { lobby: info }); } catch {}
+    try { io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: info }); } catch {}
+    await publishLobbyState(lobby);
+    await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
+    return;
+  }
+  if (msg.type === 'join') {
+    const { playerId, socketId, lobbyId } = msg;
+    // Decide target lobby
+    let lobby = null;
+    if (lobbyId && lobbies.has(lobbyId)) lobby = lobbies.get(lobbyId);
+    else lobby = findOpenLobby() || createLobby(playerId);
+    if (!lobby) lobby = createLobby(playerId);
+    // Validate
+    if (lobby.status !== 'open') { if (socketId) io.to(socketId).emit('error', { message: 'Lobby is not open', code: 'lobby_not_open' }); return; }
+    if (lobby.playerIds.size >= lobby.maxPlayers) { if (socketId) io.to(socketId).emit('error', { message: 'Lobby is full', code: 'lobby_full' }); return; }
+    // Join
+    lobby.playerIds.add(playerId);
+    const p = await ensurePlayerCached(playerId);
+    try { p.lobbyId = lobby.id; } catch {}
+    if (socketId) { try { await io.in(socketId).socketsJoin(`lobby:${lobby.id}`); } catch {} }
+    markLobbyActive(lobby);
+    if (!lobby.hostId) lobby.hostId = playerId;
+    const info = getLobbyInfo(lobby);
+    if (socketId) try { io.to(socketId).emit('joinedLobby', { lobby: info }); } catch {}
+    try { io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: info }); } catch {}
+    await publishLobbyState(lobby);
+    await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
+    return;
+  }
+  if (msg.type === 'leave') {
+    const { playerId, socketId } = msg;
+    const p = await ensurePlayerCached(playerId);
+    const lobby = findLobbyForPlayer(playerId, p.lobbyId);
+    const lobbyId = lobby?.id;
+    if (!lobby || !lobbyId) { if (socketId) try { await io.in(socketId).socketsLeave(`lobby:${lobbyId}`); } catch {} return; }
+    lobby.playerIds.delete(playerId);
+    lobby.ready.delete(playerId);
+    if (socketId) { try { await io.in(socketId).socketsLeave(`lobby:${lobbyId}`); } catch {} }
+    try { p.lobbyId = null; } catch {}
+    markLobbyActive(lobby);
+    if (lobby.playerIds.size === 0) {
+      lobby.status = 'closed';
+      try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
+      lobbies.delete(lobbyId);
+      await publishLobbyDelete(lobbyId);
+      return;
+    } else if (!lobbyHasHumanPlayers(lobby)) {
+      lobby.status = 'closed';
+      try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
+      lobbies.delete(lobbyId);
+      await publishLobbyDelete(lobbyId);
+      return;
+    } else if (lobby.hostId === playerId) {
+      const remaining = Array.from(lobby.playerIds);
+      const humanNext = remaining.find((pid) => !isCpuPlayerId(pid)) || remaining[0];
+      lobby.hostId = humanNext;
+      lobby.ready.clear();
+    }
+    if (lobbies.has(lobbyId)) {
+      io.to(`lobby:${lobbyId}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
+    }
+    await publishLobbyState(lobby);
+    await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
+    return;
+  }
+  if (msg.type === 'visibility') {
+    const { playerId, lobbyId, visibility } = msg;
+    const lobby = findLobbyForPlayer(playerId, lobbyId);
+    if (!lobby) return;
+    if (lobby.hostId !== playerId) return;
+    lobby.visibility = visibility === 'private' ? 'private' : 'open';
+    markLobbyActive(lobby);
+    io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
+    await publishLobbyState(lobby);
+    await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
+    return;
+  }
+  if (msg.type === 'plan') {
+    const { playerId, lobbyId, plannedMatchType } = msg;
+    const lobby = findLobbyForPlayer(playerId, lobbyId);
+    if (!lobby) return;
+    if (lobby.hostId !== playerId) return;
+    if (plannedMatchType !== 'constructed' && plannedMatchType !== 'sealed' && plannedMatchType !== 'draft') return;
+    lobby.plannedMatchType = plannedMatchType;
+    markLobbyActive(lobby);
+    io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
+    await publishLobbyState(lobby);
+    await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
+    return;
+  }
+  if (msg.type === 'ready') {
+    const { playerId, lobbyId, ready } = msg;
+    const lobby = findLobbyForPlayer(playerId, lobbyId);
+    if (!lobby) return;
+    if (ready) lobby.ready.add(playerId); else lobby.ready.delete(playerId);
+    markLobbyActive(lobby);
+    io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
+    await publishLobbyState(lobby);
+    return;
+  }
+  if (msg.type === 'startMatch') {
+    const { playerId, matchType, sealedConfig, draftConfig } = msg;
+    const p = await ensurePlayerCached(playerId);
+    // Ensure we know which lobby the player belongs to on this leader
+    let lobby = findLobbyForPlayer(playerId, p.lobbyId);
+    if (!lobby) return;
+    try { p.lobbyId = lobby.id; } catch {}
+    const res = await startMatchFromLobby(p, matchType || 'constructed', sealedConfig || null, draftConfig || null);
+    // Publish lobby state or deletion depending on result
+    if (lobby && lobbies.has(lobby.id)) {
+      await publishLobbyState(lobbies.get(lobby.id));
+    } else if (res && res.ok && res.matchId) {
+      // Lobby likely closed for constructed; publish delete for followers
+      try { await publishLobbyDelete(lobby?.id); } catch {}
+    }
+    return;
+  }
+}
+
 const http = require("http");
 const { Server } = require("socket.io");
 const { PrismaClient } = require("@prisma/client");
@@ -65,13 +504,100 @@ try {
   try { console.warn("[socket.io] Redis adapter initialization failed:", e?.message || e); } catch {}
 }
 
+// Dedicated Redis clients for shared state and control plane
+const INSTANCE_ID = process.env.INSTANCE_ID || `srv-${Math.random().toString(36).slice(2, 7)}`;
+let storeRedis = null;
+let storeSub = null;
+try {
+  storeRedis = new Redis(REDIS_URL);
+  storeSub = storeRedis.duplicate();
+  try { console.log(`[store] Redis state connected -> ${REDIS_URL} (instance=${INSTANCE_ID})`); } catch {}
+} catch (e) {
+  try { console.warn(`[store] Redis state init failed:`, e?.message || e); } catch {}
+}
+
+// Match control pub/sub channel
+const MATCH_CONTROL_CHANNEL = 'match:control';
+const LOBBY_CONTROL_CHANNEL = 'lobby:control';
+const LOBBY_STATE_CHANNEL = 'lobby:state';
+let clusterStateReady = false; // flip after maps are initialized
+if (storeSub) {
+  try {
+    storeSub.subscribe(MATCH_CONTROL_CHANNEL, (err) => {
+      if (err) try { console.warn(`[store] subscribe ${MATCH_CONTROL_CHANNEL} failed:`, err?.message || err); } catch {}
+    });
+    storeSub.subscribe(LOBBY_CONTROL_CHANNEL, (err) => {
+      if (err) try { console.warn(`[store] subscribe ${LOBBY_CONTROL_CHANNEL} failed:`, err?.message || err); } catch {}
+    });
+    storeSub.subscribe(LOBBY_STATE_CHANNEL, (err) => {
+      if (err) try { console.warn(`[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
+    });
+    storeSub.on('message', async (channel, message) => {
+      if (!clusterStateReady) return;
+      let msg = null;
+      try { msg = JSON.parse(message); } catch { return; }
+      if (channel === MATCH_CONTROL_CHANNEL) {
+        if (!msg || !msg.type) return;
+        const { matchId } = msg;
+        if (!matchId) return;
+        try {
+          const leader = await getOrClaimMatchLeader(matchId);
+          if (leader !== INSTANCE_ID) return;
+        } catch { return; }
+        try {
+          if (msg.type === 'join' && msg.playerId && msg.socketId) {
+            await ensurePlayerCached(msg.playerId);
+            await leaderJoinMatch(matchId, msg.playerId, msg.socketId);
+          } else if (msg.type === 'action' && msg.playerId) {
+            await leaderApplyAction(matchId, msg.playerId, msg.patch || null, msg.socketId || null);
+          } else if (msg.type === 'draft:playerReady' && typeof msg.ready === 'boolean' && msg.playerId) {
+            await leaderDraftPlayerReady(matchId, msg.playerId, !!msg.ready);
+          } else if (msg.type === 'draft:start' && msg.playerId) {
+            await leaderStartDraft(matchId, msg.playerId, msg.draftConfig || null, msg.socketId || null);
+          } else if (msg.type === 'draft:pick' && msg.playerId && msg.cardId) {
+            await leaderMakeDraftPick(matchId, msg.playerId, { cardId: msg.cardId, packIndex: Number(msg.packIndex || 0), pickNumber: Number(msg.pickNumber || 1) });
+          } else if (msg.type === 'draft:choosePack' && msg.playerId && msg.setChoice) {
+            await leaderChooseDraftPack(matchId, msg.playerId, { setChoice: msg.setChoice, packIndex: Number(msg.packIndex || 0) });
+          }
+        } catch (e) {
+          try { console.warn('[match:control] handler error:', e?.message || e); } catch {}
+        }
+        return;
+      }
+      if (channel === LOBBY_CONTROL_CHANNEL) {
+        if (!msg || !msg.type) return;
+        try {
+          const leader = await getOrClaimLobbyLeader();
+          if (leader !== INSTANCE_ID) return;
+        } catch { return; }
+        try {
+          await handleLobbyControlAsLeader(msg);
+        } catch (e) {
+          try { console.warn('[lobby:control] handler error:', e?.message || e); } catch {}
+        }
+        return;
+      }
+      if (channel === LOBBY_STATE_CHANNEL) {
+        if (!msg) return;
+        if (msg.type === 'upsert' && msg.lobby && msg.lobby.id) {
+          try { upsertLobbyFromSerialized(msg.lobby); } catch {}
+        } else if (msg.type === 'delete' && msg.id) {
+          try { lobbies.delete(msg.id); } catch {}
+        }
+        return;
+      }
+    });
+  } catch {}
+}
+
 // Basic health endpoints (liveness/readiness)
 server.on("request", async (req, res) => {
   const url = (req && req.url) || "/";
   if (url === "/healthz" || url === "/readyz" || url === "/status") {
     const dbOk = !!isReady;
     const redisOk = pubClient ? (pubClient.status === "ready" || pubClient.status === "connect") : false;
-    const body = JSON.stringify({ ok: true, db: dbOk, redis: redisOk, shuttingDown: isShuttingDown, matches: typeof matches !== 'undefined' && matches ? matches.size : 0, uptimeSec: Math.floor(process.uptime()) });
+    const storeOk = storeRedis ? (storeRedis.status === 'ready' || storeRedis.status === 'connect') : false;
+    const body = JSON.stringify({ ok: true, db: dbOk, redis: redisOk, store: storeOk, shuttingDown: isShuttingDown, matches: typeof matches !== 'undefined' && matches ? matches.size : 0, uptimeSec: Math.floor(process.uptime()) });
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.end(body);
@@ -99,6 +625,7 @@ const lobbyInvites = new Map();
 const rtcParticipants = new Map();
 /** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
+clusterStateReady = true;
 
 // -----------------------------
 // Persistence helpers (PostgreSQL via Prisma) and Redis cache
@@ -347,10 +874,228 @@ function getPlayerBySocket(socket) {
   return players.get(pid) || null;
 }
 
+// Ensure basic player profile is cached locally; fetch displayName from Redis if needed
+async function ensurePlayerCached(playerId) {
+  if (players.has(playerId)) return players.get(playerId);
+  try {
+    const dn = storeRedis ? await storeRedis.hget(`player:${playerId}`, 'displayName') : null;
+    const p = { id: playerId, displayName: dn || `Player ${String(playerId).slice(-4)}`, socketId: null, lobbyId: null, matchId: null };
+    players.set(playerId, p);
+    return p;
+  } catch {
+    const p = { id: playerId, displayName: `Player ${String(playerId).slice(-4)}`, socketId: null, lobbyId: null, matchId: null };
+    players.set(playerId, p);
+    return p;
+  }
+}
+
 function isPlayerConnected(playerId) {
   const p = players.get(playerId);
   if (!p || !p.socketId) return false;
   return !!io.sockets.sockets.get(p.socketId);
+}
+
+// -----------------------------
+// Distributed match coordination helpers (Redis)
+// -----------------------------
+async function getOrClaimMatchLeader(matchId) {
+  try {
+    if (!storeRedis) return INSTANCE_ID; // single-instance fallback
+    const key = `match:leader:${matchId}`;
+    const current = await storeRedis.get(key);
+    if (current) {
+      if (current === INSTANCE_ID) {
+        try { await storeRedis.expire(key, 60); } catch {}
+      }
+      return current;
+    }
+    // Try to claim leadership
+    const setRes = await storeRedis.set(key, INSTANCE_ID, 'NX', 'EX', 60);
+    if (setRes) return INSTANCE_ID;
+    // Someone else won
+    return await storeRedis.get(key);
+  } catch {
+    return INSTANCE_ID;
+  }
+}
+
+async function getOrLoadMatch(matchId) {
+  if (matches.has(matchId)) return matches.get(matchId);
+  // Try Redis cache first
+  try {
+    if (storeRedis) {
+      const raw = await storeRedis.get(`match:session:${matchId}`);
+      if (raw) {
+        try {
+          const cached = JSON.parse(raw);
+          if (cached && cached.id === matchId) {
+            const m = rehydrateMatch(cached);
+            if (m) { matches.set(matchId, m); return m; }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+  // Fallback to DB
+  try {
+    const row = await prisma.onlineMatchSession.findUnique({ where: { id: matchId } });
+    if (row) {
+      const m = rehydrateMatch(row);
+      if (m) { matches.set(matchId, m); return m; }
+    }
+  } catch {}
+  return null;
+}
+
+async function leaderJoinMatch(matchId, playerId, socketId) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match) return;
+  // Update roster
+  if (!Array.isArray(match.playerIds)) match.playerIds = [];
+  if (!match.playerIds.includes(playerId)) match.playerIds.push(playerId);
+  // Update player mapping in local cache
+  const p = await ensurePlayerCached(playerId);
+  try { p.matchId = matchId; } catch {}
+  // Join the socket (works cluster-wide with Redis adapter)
+  const room = `match:${matchId}`;
+  try { await io.in(socketId).socketsJoin(room); } catch {}
+  // Broadcast match info
+  try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
+  // Persist roster change and refresh cache
+  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
+  // Keep our leadership fresh
+  try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
+}
+
+async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match) return;
+  const matchRoom = `match:${matchId}`;
+  const now = Date.now();
+  try {
+    const patch = incomingPatch;
+    if (
+      match &&
+      match.status === 'waiting' &&
+      patch && typeof patch === 'object' && patch.phase === 'Main'
+    ) {
+      match.status = 'in_progress';
+      io.to(matchRoom).emit('matchStarted', { match: getMatchInfo(match) });
+    }
+    if (match && patch && typeof patch === 'object') {
+      let patchToApply = patch;
+      if (patch && typeof patch === 'object' && patch.d20Rolls) {
+        const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
+        const inc = patch.d20Rolls || {};
+        const mergedD20 = {
+          p1: (inc.p1 !== undefined ? inc.p1 : (prev.p1 ?? null)),
+          p2: (inc.p2 !== undefined ? inc.p2 : (prev.p2 ?? null)),
+        };
+        if (mergedD20.p1 != null && mergedD20.p2 != null) {
+          if (Number(mergedD20.p1) === Number(mergedD20.p2)) {
+            patchToApply = { ...patchToApply, d20Rolls: { p1: null, p2: null }, setupWinner: null };
+            try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
+            try { match._autoSeatApplied = false; } catch {}
+          } else {
+            const winner = Number(mergedD20.p1) > Number(mergedD20.p2) ? 'p1' : 'p2';
+            patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
+            if (patchToApply.setupWinner === undefined) patchToApply.setupWinner = winner;
+            try {
+              const g = match.game || {};
+              const phaseNow = g.phase;
+              const winnerIdx = winner === 'p1' ? 0 : 1;
+              const winnerId = Array.isArray(match.playerIds) ? match.playerIds[winnerIdx] : null;
+              const winnerIsCpu = winnerId ? isCpuPlayerId(winnerId) : false;
+              if (winnerIsCpu && !match._autoSeatApplied && match.status === 'waiting' && phaseNow !== 'Start' && phaseNow !== 'Main') {
+                const firstPlayer = winner === 'p1' ? 1 : 2;
+                patchToApply = { ...patchToApply, phase: 'Start', currentPlayer: firstPlayer };
+                match._autoSeatApplied = true;
+              }
+            } catch {}
+          }
+        } else {
+          patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
+        }
+      }
+      if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
+        try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
+      }
+      try {
+        const prevCP = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
+        const nextCP = (patchToApply && typeof patchToApply.currentPlayer === 'number') ? patchToApply.currentPlayer : null;
+        const phaseIsMain = patchToApply && patchToApply.phase === 'Main';
+        if ((nextCP === 1 || nextCP === 2) && (nextCP !== prevCP || phaseIsMain)) {
+          const tsPatch = applyTurnStart({ ...(match.game || {}), currentPlayer: nextCP });
+          if (tsPatch && typeof tsPatch === 'object') {
+            patchToApply = { ...patchToApply, ...tsPatch };
+          }
+        }
+      } catch {}
+      const actorIsCpu = isCpuPlayerId(playerId);
+      const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && actorIsCpu);
+      try {
+        const costRes = ensureCosts(match.game || {}, patchToApply, playerId, { match });
+        if (costRes && costRes.autoPatch && RULES_HELPERS_ENABLED) {
+          patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
+        }
+        if (costRes && costRes.ok === false) {
+          if (enforce) {
+            if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
+            return;
+          } else {
+            const warn = [{ id: 0, ts: Date.now(), text: `[Warning] ${costRes.error || 'Insufficient resources'}` }];
+            const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
+            patchToApply = { ...patchToApply, events: [...existing, ...warn] };
+          }
+        }
+      } catch {}
+      try {
+        const v = validateAction(match.game || {}, patchToApply, playerId, { match });
+        if (!v.ok && enforce) {
+          if (actorSocketId) io.to(actorSocketId).emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
+          return;
+        }
+        if (!v.ok && !enforce) {
+          const warnEvent = [{ id: 0, ts: Date.now(), text: `[Warning] ${v.error || 'Potential rules issue'}` }];
+          const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
+          patchToApply = { ...patchToApply, events: [...existing, ...warnEvent] };
+        }
+      } catch {}
+      try {
+        const trig = applyGenesis(match.game || {}, patchToApply, playerId, { match });
+        if (trig && typeof trig === 'object') {
+          patchToApply = deepMergeReplaceArrays(patchToApply || {}, trig);
+        }
+      } catch {}
+      try {
+        const kw = applyKeywordAnnotations(match.game || {}, patchToApply, playerId, { match });
+        if (kw && typeof kw === 'object') {
+          patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
+        }
+      } catch {}
+      const eventsAdded = [];
+      if (Array.isArray(patch && patch.events)) eventsAdded.push(...patch.events);
+      if (Array.isArray(patchToApply && patchToApply.events)) eventsAdded.push(...patchToApply.events);
+      if (eventsAdded.length > 0) {
+        const prev = Array.isArray(match.game && match.game.events) ? match.game.events : [];
+        const mergedEvents = mergeEvents(prev, eventsAdded);
+        const mergedMaxId = mergedEvents.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0);
+        const seq = Math.max(mergedMaxId, Number(patch && patch.eventSeq || 0) || 0);
+        patchToApply = { ...patchToApply, events: mergedEvents, eventSeq: seq };
+      }
+      match.game = deepMergeReplaceArrays(match.game || {}, patchToApply);
+      match.lastTs = now;
+      recordMatchAction(matchId, patchToApply, playerId);
+      io.to(matchRoom).emit('statePatch', { patch: patchToApply, t: now });
+      try { await persistMatchUpdate(match, patchToApply, playerId, now); } catch {}
+    } else {
+      io.to(matchRoom).emit('statePatch', { patch, t: now });
+      try { await persistMatchUpdate(match, patch || null, playerId, now); } catch {}
+    }
+  } catch {
+    io.to(matchRoom).emit('statePatch', { patch: incomingPatch || null, t: Date.now() });
+  }
+  try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
 }
 
 function getLobbyInfo(lobby) {
@@ -638,6 +1383,8 @@ async function startMatchFromLobby(
   }
 
   matches.set(match.id, match);
+  // Elect this instance as initial match leader
+  try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
 
   // Persist newly created match session
   try { await persistMatchCreated(match); } catch {}
@@ -791,7 +1538,10 @@ function playersArray() {
 }
 
 function broadcastLobbies() {
-  io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+  // Emit only from the lobby leader to avoid duplicate broadcasts
+  (async () => {
+    try { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit("lobbiesUpdated", { lobbies: lobbiesArray() }); } catch {}
+  })();
 }
 
 function broadcastPlayers() {
@@ -880,6 +1630,9 @@ io.on("connection", (socket) => {
     }
     playerIdBySocket.set(socket.id, playerId);
     authed = true;
+
+    // Cache player displayName in Redis for cross-instance lookups
+    try { if (storeRedis) { await storeRedis.hset(`player:${playerId}`, { displayName }); } } catch {}
 
     console.log(
       `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} socket=${socket.id}`
@@ -987,74 +1740,81 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("createLobby", (payload = {}) => {
+  socket.on("createLobby", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    const visibility =
-      payload && payload.visibility === "private" ? "private" : "open";
-    const maxPlayers = Number.isInteger(payload && payload.maxPlayers)
-      ? Math.max(2, Math.min(8, payload.maxPlayers))
-      : 2;
-    const name = payload && payload.name ? String(payload.name) : null;
-    const lobby = createLobby(player.id, { name, visibility, maxPlayers });
-    joinLobby(socket, player, lobby.id);
+    if (!player) return;
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      const msg = { type: 'create', hostId: player.id, socketId: socket.id, options: { name: payload?.name || null, visibility: payload?.visibility || 'open', maxPlayers: payload?.maxPlayers } };
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
-  socket.on("joinLobby", (payload = {}) => {
+  socket.on("joinLobby", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
+    if (!player) return;
     const lobbyId = payload.lobbyId || undefined;
-    joinLobby(socket, player, lobbyId);
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      const msg = { type: 'join', playerId: player.id, socketId: socket.id, lobbyId };
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
-  socket.on("leaveLobby", () => {
+  socket.on("leaveLobby", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    leaveLobby(socket, player);
+    if (!player) return;
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      const msg = { type: 'leave', playerId: player.id, socketId: socket.id };
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
-  socket.on("setLobbyVisibility", (payload = {}) => {
+  socket.on("setLobbyVisibility", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player || !player.lobbyId) return;
-    const lobby = lobbies.get(player.lobbyId);
-    if (!lobby) return;
-    if (lobby.hostId !== player.id) {
-      socket.emit("error", {
-        message: "Only host can change visibility",
-        code: "not_host",
-      });
-      return;
-    }
-    const vis = payload.visibility === "private" ? "private" : "open";
-    lobby.visibility = vis;
-    markLobbyActive(lobby);
-    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
-      lobby: getLobbyInfo(lobby),
-    });
-    broadcastLobbies();
+    if (!player) return;
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      const msg = { type: 'visibility', playerId: player.id, lobbyId: player.lobbyId || null, visibility: payload?.visibility };
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
   // Host sets planned match type for lobby (visible to all clients)
-  socket.on("setLobbyPlan", (payload = {}) => {
+  socket.on("setLobbyPlan", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player || !player.lobbyId) return;
-    const lobby = lobbies.get(player.lobbyId);
-    if (!lobby) return;
-    if (lobby.hostId !== player.id) {
-      socket.emit("error", {
-        message: "Only host can set planned match",
-        code: "not_host",
-      });
-      return;
-    }
-    const t = payload && typeof payload.plannedMatchType === 'string' ? payload.plannedMatchType : null;
-    if (t !== 'constructed' && t !== 'sealed' && t !== 'draft') return;
-    lobby.plannedMatchType = t;
-    markLobbyActive(lobby);
-    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
-    broadcastLobbies();
+    if (!player) return;
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      const msg = { type: 'plan', playerId: player.id, lobbyId: player.lobbyId || null, plannedMatchType: payload?.plannedMatchType };
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
   socket.on("inviteToLobby", (payload = {}) => {
@@ -1186,50 +1946,34 @@ io.on("connection", (socket) => {
     socket.emit("playerList", { players: playersArray() });
   });
 
-  socket.on("ready", (payload) => {
+  socket.on("ready", async (payload) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player.lobbyId) return;
-    const lobby = lobbies.get(player.lobbyId);
-    if (!lobby) return;
-    if (payload && payload.ready) lobby.ready.add(player.id);
-    else lobby.ready.delete(player.id);
-    markLobbyActive(lobby);
-    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
-      lobby: getLobbyInfo(lobby),
-    });
+    if (!player) return;
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      const msg = { type: 'ready', playerId: player.id, lobbyId: player.lobbyId || null, ready: !!(payload && payload.ready) };
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
   socket.on("startMatch", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    const matchType = payload.matchType || "constructed";
-    const sealedConfig = payload.sealedConfig || null;
-
-    // Debug logging
-    console.log(
-      `[DEBUG] startMatch request from player ${player?.id}, lobbyId: ${player?.lobbyId}, matchType: ${matchType}`
-    );
-    if (player?.lobbyId) {
-      const lobby = lobbies.get(player.lobbyId);
-      console.log(
-        `[DEBUG] lobby found: ${!!lobby}, lobby status: ${
-          lobby?.status
-        }, players in lobby: ${lobby?.playerIds?.size}`
-      );
-    }
-
-    const draftConfig = payload.draftConfig || null;
-    const res = await startMatchFromLobby(
-      player,
-      matchType,
-      sealedConfig,
-      draftConfig
-    );
-    if (!res.ok) {
-      console.log(`[DEBUG] startMatchFromLobby failed: ${res.error}`);
-      socket.emit("error", { message: res.error || "Unable to start match" });
-    }
+    if (!player) return;
+    const msg = { type: 'startMatch', playerId: player.id, matchType: payload?.matchType || 'constructed', sealedConfig: payload?.sealedConfig || null, draftConfig: payload?.draftConfig || null };
+    try {
+      const leader = await getOrClaimLobbyLeader();
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(LOBBY_CONTROL_CHANNEL, JSON.stringify(msg));
+        return;
+      }
+      await handleLobbyControlAsLeader(msg);
+    } catch {}
   });
 
   // Create or ensure a tournament match exists by a known matchId with given players
@@ -1349,22 +2093,22 @@ io.on("connection", (socket) => {
     io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
   });
 
-  socket.on("joinMatch", (payload) => {
+  socket.on("joinMatch", async (payload) => {
     if (!authed) return;
     const matchId = payload && payload.matchId;
-    const match = matches.get(matchId);
-    if (!match) return;
+    if (!matchId) return;
     const player = getPlayerBySocket(socket);
     if (!player) return;
-    player.matchId = match.id;
-    // Ensure roster contains the player exactly once
-    if (!match.playerIds.includes(player.id)) {
-      match.playerIds.push(player.id);
-    }
-    const room = `match:${match.id}`;
-    socket.join(room);
-    // Broadcast updated match info to everyone in the match (including this socket)
-    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        // Forward to leader via pub/sub
+        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'join', matchId, playerId: player.id, socketId: socket.id }));
+        return;
+      }
+      // We are the leader (or no leader configured but we claimed it), handle locally
+      await leaderJoinMatch(matchId, player.id, socket.id);
+    } catch {}
   });
 
   socket.on("leaveMatch", () => {
@@ -1386,186 +2130,20 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("action", (payload) => {
+  socket.on("action", async (payload) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-    const matchRoom = `match:${player.matchId}`;
-    // If this is the first transition to main phase, mark match as in_progress and broadcast updated match info
+    const matchId = player.matchId;
+    const patch = payload ? payload.action : null;
     try {
-      const match = matches.get(player.matchId);
-      const patch = payload ? payload.action : null;
-      const now = Date.now();
-      if (
-        match &&
-        match.status === "waiting" &&
-        patch &&
-        typeof patch === "object" &&
-        patch.phase === "Main"
-      ) {
-        match.status = "in_progress";
-        // Recording was already started when match was created, so just update status
-        io.to(matchRoom).emit("matchStarted", { match: getMatchInfo(match) });
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'action', matchId, playerId: player.id, socketId: socket.id, patch }));
+        return;
       }
-      // Update server-side aggregated snapshot
-      if (match && patch && typeof patch === "object") {
-        let patchToApply = patch;
-
-        // Special-case: merge d20Rolls objects so clients get a complete view
-        if (patch && typeof patch === 'object' && patch.d20Rolls) {
-          const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
-          const inc = patch.d20Rolls || {};
-          const mergedD20 = {
-            p1: (inc.p1 !== undefined ? inc.p1 : (prev.p1 ?? null)),
-            p2: (inc.p2 !== undefined ? inc.p2 : (prev.p2 ?? null)),
-          };
-          // Determine tie/reset or winner if both present
-          if (mergedD20.p1 != null && mergedD20.p2 != null) {
-            if (Number(mergedD20.p1) === Number(mergedD20.p2)) {
-              // Tie -> reset both to null
-              patchToApply = { ...patchToApply, d20Rolls: { p1: null, p2: null }, setupWinner: null };
-              // Cancel any pending auto-seat timer on tie
-              try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
-              try { match._autoSeatApplied = false; } catch {}
-            } else {
-              const winner = Number(mergedD20.p1) > Number(mergedD20.p2) ? 'p1' : 'p2';
-              patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
-              if (patchToApply.setupWinner === undefined) patchToApply.setupWinner = winner;
-              // If both rolls are present and we have a winner, include Start transition directly in this merged patch
-              // BUT only auto-seat if the winner is a CPU. Human winners must choose manually.
-              try {
-                const g = match.game || {};
-                const phaseNow = g.phase;
-                const winnerIdx = winner === 'p1' ? 0 : 1;
-                const winnerId = Array.isArray(match.playerIds) ? match.playerIds[winnerIdx] : null;
-                const winnerIsCpu = winnerId ? isCpuPlayerId(winnerId) : false;
-                if (winnerIsCpu && !match._autoSeatApplied && match.status === 'waiting' && phaseNow !== 'Start' && phaseNow !== 'Main') {
-                  const firstPlayer = winner === 'p1' ? 1 : 2;
-                  patchToApply = { ...patchToApply, phase: 'Start', currentPlayer: firstPlayer };
-                  match._autoSeatApplied = true;
-                  try { console.log(`[Setup] Inline auto-seat (CPU winner) for match ${match.id}. winner=${winner} -> firstPlayer=P${firstPlayer}`); } catch {}
-                }
-              } catch {}
-            }
-          } else {
-            // Partial update, still send merged so clients don't lose the other value
-            patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
-          }
-        }
-
-        // If client explicitly chose Start or Main, clear any pending auto-seat timer
-        if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
-          try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
-        }
-
-        // Turn start effects: apply via rules layer
-        try {
-          const prevCP = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
-          const nextCP = (patchToApply && typeof patchToApply.currentPlayer === 'number') ? patchToApply.currentPlayer : null;
-          const phaseIsMain = patchToApply && patchToApply.phase === 'Main';
-          if ((nextCP === 1 || nextCP === 2) && (nextCP !== prevCP || phaseIsMain)) {
-            const tsPatch = applyTurnStart({ ...(match.game || {}), currentPlayer: nextCP });
-            if (tsPatch && typeof tsPatch === 'object') {
-              // Shallow merge is fine as tsPatch defines full nested objects for board/permanents/avatars
-              patchToApply = { ...patchToApply, ...tsPatch };
-            }
-          }
-        } catch {}
-
-        // Determine enforcement for this actor
-        const actorIsCpu = isCpuPlayerId(player.id);
-        const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && actorIsCpu);
-
-        // Enforce costs (helpers can still adjust spend even when not enforcing)
-        try {
-          const costRes = ensureCosts(match.game || {}, patchToApply, player.id, { match });
-          if (costRes && costRes.autoPatch && RULES_HELPERS_ENABLED) {
-            // Merge auto-tapping into outgoing patch
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
-          }
-          if (costRes && costRes.ok === false) {
-            if (enforce) {
-              socket.emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
-              return;
-            } else {
-              // Emit human-visible warning event in GameEvent shape
-              const warn = [{ id: 0, ts: Date.now(), text: `[Warning] ${costRes.error || 'Insufficient resources'}` }];
-              const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
-              patchToApply = { ...patchToApply, events: [...existing, ...warn] };
-            }
-          }
-        } catch {}
-
-        // Validate action against minimal rules
-        try {
-          const v = validateAction(match.game || {}, patchToApply, player.id, { match });
-          if (!v.ok && enforce) {
-            socket.emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
-            return;
-          }
-          // When not enforcing (humans), append a warning event but allow the action
-          if (!v.ok && !enforce) {
-            // Use GameEvent format expected by UI console
-            const warnEvent = [{ id: 0, ts: Date.now(), text: `[Warning] ${v.error || 'Potential rules issue'}` }];
-            const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
-            patchToApply = { ...patchToApply, events: [...existing, ...warnEvent] };
-          }
-        } catch {}
-
-        // Apply trigger skeletons (e.g., Genesis) based on the action
-        try {
-          const trig = applyGenesis(match.game || {}, patchToApply, player.id, { match });
-          if (trig && typeof trig === 'object') {
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, trig);
-          }
-        } catch {}
-
-        // Attach keyword metadata events for UI (no-op validations)
-        try {
-          const kw = applyKeywordAnnotations(match.game || {}, patchToApply, player.id, { match });
-          if (kw && typeof kw === 'object') {
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
-          }
-        } catch {}
-
-        // Special-case: merge console events (include both client-provided and server-added)
-        const eventsAdded = [];
-        if (Array.isArray(patch.events)) eventsAdded.push(...patch.events);
-        if (Array.isArray(patchToApply && patchToApply.events)) eventsAdded.push(...patchToApply.events);
-        if (eventsAdded.length > 0) {
-          const prev = Array.isArray(match.game && match.game.events) ? match.game.events : [];
-          const mergedEvents = mergeEvents(prev, eventsAdded);
-          const mergedMaxId = mergedEvents.reduce(
-            (mx, e) => Math.max(mx, Number(e.id) || 0),
-            0
-          );
-          const seq = Math.max(mergedMaxId, Number(patch.eventSeq || 0) || 0);
-          patchToApply = {
-            ...patchToApply,
-            events: mergedEvents,
-            eventSeq: seq,
-          };
-        }
-        match.game = deepMergeReplaceArrays(match.game || {}, patchToApply);
-        match.lastTs = now;
-        // Record the action for replay
-        recordMatchAction(player.matchId, patchToApply, player.id);
-        // Relay the merged action to all clients
-        io.to(matchRoom).emit("statePatch", { patch: patchToApply, t: now });
-        // Persist patch and aggregate state
-        try { persistMatchUpdate(match, patchToApply, player.id, now); } catch {}
-      } else {
-        // Relay the action as-is if not mergeable
-        io.to(matchRoom).emit("statePatch", { patch, t: now });
-        try { persistMatchUpdate(match, patch || null, player.id, now); } catch {}
-      }
-    } catch {
-      // Fallback relay if any unexpected error occurs
-      io.to(matchRoom).emit("statePatch", {
-        patch: payload ? payload.action : null,
-        t: Date.now(),
-      });
-    }
+      await leaderApplyAction(matchId, player.id, patch, socket.id);
+    } catch {}
   });
 
   socket.on("chat", (payload = {}) => {
@@ -1611,45 +2189,22 @@ io.on("connection", (socket) => {
   });
 
   // Generic lightweight message channel
-  socket.on("message", (payload = {}) => {
+  socket.on("message", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-    const match = matches.get(player.matchId);
-    if (!match || match.matchType !== "draft") return;
-
-    const room = `match:${match.id}`;
+    const matchId = player.matchId;
     const type = payload && typeof payload.type === "string" ? payload.type : null;
-
     if (type === "playerReady") {
       const ready = !!(payload && payload.ready);
-      // Determine sender's player key by roster index; ignore spoofed playerKey in payload
-      const idx = match.playerIds.indexOf(player.id);
-      if (idx === -1) return;
-      const playerKey = idx === 1 ? "p2" : "p1";
-
-      // Persist readiness in draftState for resync/debug visibility
-      if (match.draftState) {
-        if (!match.draftState.playerReady || typeof match.draftState.playerReady !== "object") {
-          match.draftState.playerReady = { p1: false, p2: false };
+      try {
+        const leader = await getOrClaimMatchLeader(matchId);
+        if (leader && leader !== INSTANCE_ID) {
+          if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:playerReady', matchId, playerId: player.id, ready }));
+          return;
         }
-        match.draftState.playerReady[playerKey] = ready;
-        const pr = match.draftState.playerReady;
-        // If both players are ready and we're still in lobby/waiting phase, auto-start the draft
-        if (
-          match.draftState.phase === "waiting" &&
-          pr && pr.p1 === true && pr.p2 === true
-        ) {
-          console.log(`[Draft] Both players ready in match ${match.id}. Auto-starting draft.`);
-          // Fire and forget; handler above will emit draftUpdate or error
-          startDraftForMatch(match).catch((err) =>
-            console.error(`[Draft] Auto-start error: ${err && err.message ? err.message : String(err)}`)
-          );
-        }
-      }
-
-      // Broadcast canonical message to all clients in the match room
-      io.to(room).emit("message", { type: "playerReady", playerKey, ready });
+        await leaderDraftPlayerReady(matchId, player.id, ready);
+      } catch {}
     }
   });
 
@@ -1659,7 +2214,25 @@ io.on("connection", (socket) => {
     if (player && player.matchId && matches.has(player.matchId)) {
       const match = matches.get(player.matchId);
       const snap = { match: getMatchInfo(match) };
-      if (match && match.game) {
+      // Only include a game snapshot when it's meaningful.
+      // During sealed/draft setup the server-side game can be an empty object ({}),
+      // while the client has already loaded decks locally. Sending an empty game here
+      // would wipe the client state on every resync. Avoid that by requiring either
+      // an in-progress match or detectable game content.
+      const hasMeaningfulGame = (() => {
+        if (!match || !match.game) return false;
+        if (match.status === "in_progress") return true;
+        if (typeof match.game === "object") {
+          const keys = Object.keys(match.game);
+          if (keys.length === 0) return false;
+          // Heuristic: presence of phase/libraries/zones indicates a real snapshot
+          if ("phase" in match.game) return true;
+          if ("libraries" in match.game) return true;
+          if ("zones" in match.game) return true;
+        }
+        return false;
+      })();
+      if (hasMeaningfulGame) {
         snap.game = match.game;
         snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
       }
@@ -2078,235 +2651,47 @@ io.on("connection", (socket) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-
-    const match = matches.get(player.matchId);
-    if (!match || match.matchType !== "draft" || !match.draftState) return;
-    await startDraftForMatch(match, player);
-  });
-
-  socket.on("makeDraftPick", (payload) => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
-
-    const match = matches.get(player.matchId);
-    if (!match || match.matchType !== "draft" || !match.draftState) return;
-
-    const { cardId, packIndex, pickNumber } = payload;
-    const draftState = match.draftState;
-
-    console.log(
-      `[Draft] makeDraftPick <- ${player.displayName} (${player.id}): cardId=${cardId}, packIndex=${packIndex}, pickNumber=${pickNumber}`
-    );
-    // Validate pick
-    if (draftState.phase !== "picking") {
-      console.warn(`[Draft] Reject pick: wrong phase ${draftState.phase}`);
-      return;
-    }
-    if (
-      draftState.packIndex !== packIndex ||
-      draftState.pickNumber !== pickNumber
-    ) {
-      console.warn(
-        `[Draft] Reject pick: client at pack=${packIndex}/pick=${pickNumber} but server at pack=${draftState.packIndex}/pick=${draftState.pickNumber}`
-      );
-      return;
-    }
-    if (!draftState.waitingFor.includes(player.id)) {
-      console.warn(`[Draft] Reject pick: not waiting for player ${player.id}`);
-      return;
-    }
-
-    const playerIndex = match.playerIds.indexOf(player.id);
-    if (playerIndex === -1) {
-      console.warn(
-        `[Draft] Reject pick: player ${player.id} not in match roster`
-      );
-      return;
-    }
-
-    const currentPack = draftState.currentPacks[playerIndex];
-    if (!currentPack) {
-      console.warn(
-        `[Draft] Reject pick: current pack missing for playerIndex=${playerIndex}`
-      );
-      return;
-    }
-
-    const cardIndex = currentPack.findIndex((card) => card.id === cardId);
-    if (cardIndex === -1) {
-      console.warn(
-        `[Draft] Reject pick: cardId ${cardId} not found in current pack for player ${player.id}`
-      );
-      return;
-    }
-
-    // Make the pick
-    const pickedCard = currentPack.splice(cardIndex, 1)[0];
-    draftState.picks[playerIndex].push(pickedCard);
-    draftState.waitingFor = draftState.waitingFor.filter(
-      (id) => id !== player.id
-    );
-    console.log(
-      `[Draft] Pick accepted: ${player.id} -> ${
-        pickedCard.slug || pickedCard.name
-      } (${pickedCard.id}). Pack now has ${
-        currentPack.length
-      } cards. Picks count=${draftState.picks[playerIndex]?.length}`
-    );
-
-    // Check if all players have picked
-    if (draftState.waitingFor.length === 0) {
-      console.log(
-        `[Draft] All picks received for pack=${draftState.packIndex}, pick=${pickNumber}`
-      );
-      // Advance pick number or pack
-      if (draftState.pickNumber >= 15 || currentPack.length === 0) {
-        // Move to next pack
-        draftState.packIndex++;
-        draftState.pickNumber = 1;
-
-        if (draftState.packIndex >= 3) {
-          // Draft complete
-          draftState.phase = "complete";
-          match.status = "deck_construction";
-          const totals = draftState.picks
-            .map((p) => (Array.isArray(p) ? p.length : 0))
-            .join(",");
-          console.log(
-            `[Draft] Draft complete for match ${match.id}. Picks per player: ${totals}`
-          );
-        } else {
-          // Start next pack
-          draftState.pickNumber = 1;
-          draftState.packDirection =
-            draftState.packDirection === "left" ? "right" : "left";
-          draftState.waitingFor = [...match.playerIds];
-          
-          // Load new packs from stored generated packs
-          if (draftState.allGeneratedPacks && draftState.packIndex < 3) {
-            // Use player's pack choice to determine which pack to give them
-            draftState.currentPacks = draftState.allGeneratedPacks.map((packs, playerIdx) => {
-              const playerChoice = draftState.packChoice[playerIdx];
-              
-              // If player made a choice, find the pack that matches their choice
-              if (playerChoice && packs.length > draftState.packIndex) {
-                // Find the first pack that matches the player's choice
-                for (let i = 0; i < packs.length; i++) {
-                  const pack = packs[i];
-                  if (pack && pack.length > 0 && pack[0].setName === playerChoice) {
-                    console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, using pack ${i} (was pack ${draftState.packIndex})`);
-                    return pack;
-                  }
-                }
-                console.log(`[Draft] Player ${playerIdx} chose ${playerChoice}, but no matching pack found, using default pack ${draftState.packIndex}`);
-              }
-              
-              // Fallback to default behavior
-              return packs[draftState.packIndex] || [];
-            });
-            console.log(
-              `[Draft] Moving to next pack. packIndex=${
-                draftState.packIndex
-              }, direction=${
-                draftState.packDirection
-              }. Loaded new packs with sizes: ${draftState.currentPacks.map(p => p.length).join(",")}. waitingFor reset for players: ${draftState.waitingFor.join("|")}`
-            );
-          } else {
-            console.log(
-              `[Draft] Moving to next pack. packIndex=${
-                draftState.packIndex
-              }, direction=${
-                draftState.packDirection
-              }. waitingFor reset for players: ${draftState.waitingFor.join("|")}`
-            );
-          }
-        }
-      } else {
-        // Pass packs and continue picking
-        draftState.pickNumber++;
-        draftState.phase = "passing";
-
-        // Pass packs (rotate current packs)
-        const temp = [...draftState.currentPacks];
-        if (draftState.packDirection === "left") {
-          for (let i = 0; i < temp.length; i++) {
-            draftState.currentPacks[(i + 1) % temp.length] = temp[i];
-          }
-        } else {
-          for (let i = 0; i < temp.length; i++) {
-            draftState.currentPacks[i] = temp[(i + 1) % temp.length];
-          }
-        }
-
-        draftState.phase = "picking";
-        draftState.waitingFor = [...match.playerIds];
-        const sizes = draftState.currentPacks
-          .map((p) => (Array.isArray(p) ? p.length : 0))
-          .join(",");
-        console.log(
-          `[Draft] Passing packs ${draftState.packDirection}. Next pick=${
-            draftState.pickNumber
-          }. packSizes=${sizes}. waitingFor=${draftState.waitingFor.join("|")}`
-        );
+    const matchId = player.matchId;
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:start', matchId, playerId: player.id, draftConfig: payload?.draftConfig || null, socketId: socket.id }));
+        return;
       }
-    }
-
-    // Broadcast updated draft state
-    console.log(
-      `[Draft] Emitting draftUpdate: phase=${draftState.phase}, packIndex=${draftState.packIndex}, pickNumber=${draftState.pickNumber}, waitingFor=${draftState.waitingFor.length}`
-    );
-    io.to(`match:${match.id}`).emit("draftUpdate", draftState);
-    // Persist draft state progress
-    try { persistMatchUpdate(match, null, player?.id || 'system', Date.now()); } catch {}
+      await leaderStartDraft(matchId, player.id, payload?.draftConfig || null, socket.id);
+    } catch {}
   });
 
-  socket.on("chooseDraftPack", (payload) => {
+  socket.on("makeDraftPick", async (payload) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
+    const matchId = player.matchId;
+    const { cardId, packIndex, pickNumber } = payload || {};
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:pick', matchId, playerId: player.id, cardId, packIndex, pickNumber }));
+        return;
+      }
+      await leaderMakeDraftPick(matchId, player.id, { cardId, packIndex, pickNumber });
+    } catch {}
+  });
 
-    const match = matches.get(player.matchId);
-    if (!match || match.matchType !== "draft" || !match.draftState) return;
-
+  socket.on("chooseDraftPack", async (payload) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const matchId = player.matchId;
     const { setChoice, packIndex } = payload || {};
-    const playerIndex = match.playerIds.indexOf(player.id);
-    if (playerIndex === -1) return;
-
-    // Guard: accept only during pack_selection and only once per player
-    if (match.draftState.phase !== "pack_selection") return;
-    if (match.draftState.packChoice[playerIndex] !== null) return;
-
-    // Store pack choice
-    match.draftState.packChoice[playerIndex] = setChoice;
-    console.log(
-      `[Draft] chooseDraftPack by ${player.displayName} (${player.id}): packIndex=${packIndex} choice=${setChoice}`
-    );
-    const choices = match.draftState.packChoice.map((x) => x || "-").join(",");
-    console.log(`[Draft] Current pack choices: ${choices}`);
-
-    // If all players chose, distribute and transition to picking
-    const allChoicesMade = match.draftState.packChoice.every((choice) => choice !== null);
-    if (allChoicesMade && match.draftState.phase === "pack_selection") {
-      match.draftState.currentPacks = match.draftState.allGeneratedPacks.map(
-        (packs, idx) => {
-          const choice = match.draftState.packChoice[idx];
-          for (let i = 0; i < packs.length; i++) {
-            const pack = packs[i];
-            if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
-          }
-          return packs[0] || [];
-        }
-      );
-      match.draftState.phase = "picking";
-      match.draftState.waitingFor = [...match.playerIds];
-      console.log(`[Draft] Pack selection complete, transitioning to picking phase`);
-    }
-
-    // Broadcast updated draft state
-    io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
-    // Persist draft state progress
-    try { persistMatchUpdate(match, null, player?.id || 'system', Date.now()); } catch {}
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:choosePack', matchId, playerId: player.id, setChoice, packIndex }));
+        return;
+      }
+      await leaderChooseDraftPack(matchId, player.id, { setChoice, packIndex });
+    } catch {}
   });
 
   // Submit draft deck during deck construction phase (with validation)
