@@ -38,6 +38,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/_next/static') ||
     pathname.startsWith('/_next/image') ||
     pathname === '/favicon.ico' ||
+    pathname === '/skull.txt' ||
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml'
   ) {

@@ -12,6 +12,7 @@ export default function LockPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState(false);
+  const [ascii, setAscii] = useState<string | null>(null);
 
   async function unlock(e: React.FormEvent) {
     e.preventDefault();
@@ -49,8 +50,24 @@ export default function LockPage() {
     try { sessionStorage.setItem("lock_user", user); } catch {}
   }, [user]);
 
+  // Load ASCII background from public/skull.txt
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/skull.txt", { cache: "force-cache" })
+      .then(r => r.ok ? r.text() : Promise.reject(new Error("not_ok")))
+      .then(t => { if (!cancelled) setAscii(t); })
+      .catch(() => { if (!cancelled) setAscii(null); });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <main className="lock-root">
+
+      {ascii ? (
+        <pre className="ascii" aria-hidden>
+{ascii}
+        </pre>
+      ) : null}
 
       <section className="card">
         <div className="icon">
@@ -109,6 +126,7 @@ export default function LockPage() {
 
       <style jsx>{`
         .lock-root { min-height: 100svh; display: grid; place-items: center; position: relative; overflow: hidden; background: #0b0f1d; color: #e9ecf1; }
+        .ascii { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh; overflow: hidden; z-index: 0; opacity: 0.08; pointer-events: none; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space: pre; line-height: 0.9; }
         .card { position: relative; z-index: 1; width: 92vw; max-width: 480px; padding: 28px; border-radius: 18px; background: rgba(255,255,255,0.06); backdrop-filter: blur(14px) saturate(120%); box-shadow: 0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12); }
         .icon { display: grid; place-items: center; width: 84px; height: 84px; margin: 8px auto 10px; border-radius: 50%; color: #e9ecf1; background: linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 10px 30px rgba(0,0,0,0.25); }
         h1 { margin: 8px 0 6px; font-size: 22px; letter-spacing: 0.2px; text-align: center; }
