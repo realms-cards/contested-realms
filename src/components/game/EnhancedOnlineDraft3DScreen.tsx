@@ -127,6 +127,9 @@ export default function EnhancedOnlineDraft3DScreen({
     {}
   );
 
+  // Extend DraftState with optional server-provided packs shape for precise set derivation
+  type DraftStateWithGenerated = DraftState & { allGeneratedPacks?: DraftCard[][][] };
+
   // Enhanced preview and hover state
   const [hoverPreview, setHoverPreview] = useState<{
     slug: string;
@@ -383,12 +386,24 @@ export default function EnhancedOnlineDraft3DScreen({
       });
   }, [pick3D]);
 
-  // Auto-pick logic
+  // Auto-pick logic and timely pack choice overlay
   useEffect(() => {
+    // Show pack choice overlay immediately during server 'pack_selection'
+    if (
+      draftState.phase === "pack_selection" &&
+      shownPackOverlayForRound !== draftState.packIndex
+    ) {
+      // New round: show overlay and clear any prior used pack indices
+      setPackChoiceOverlay(true);
+      setUsedPacks([]);
+      setShownPackOverlayForRound(draftState.packIndex);
+      return;
+    }
+
     if (draftState.phase === "picking" && amPicker) {
       setReady(false);
 
-      // Show pack choice overlay at start of each pack
+      // Also show overlay at start of picking if it wasn't shown yet (rejoin case)
       if (
         draftState.pickNumber === 1 &&
         !packChoiceOverlay &&
@@ -554,14 +569,21 @@ const handleStartDraft = useCallback(async () => {
 
   // Pack choice handling
   const handlePackChoice = useCallback(
-    async (packIndex: number, setName: string) => {
+    async (packIndex: number) => {
       if (!transport || !match) return;
 
       try {
+        // Derive setChoice from server-generated packs to ensure exact match
+        const s = draftState as DraftStateWithGenerated;
+        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+        const myPacks: DraftCard[][] = Array.isArray(packsMaybe) ? packsMaybe : [];
+        const first = myPacks[packIndex] && myPacks[packIndex][0];
+        const setChoice: string = (first && (first.setName as string)) || "Beta";
+
         transport.chooseDraftPack?.({
           matchId: match.id,
-          setChoice: setName,
-          packIndex: draftState.packIndex, // This should be the current draft round, not UI pack index
+          setChoice,
+          packIndex: draftState.packIndex, // server tracks the round internally
         });
       } catch (err) {
         console.error(`[EnhancedOnlineDraft3D] chooseDraftPack error:`, err);
@@ -570,7 +592,7 @@ const handleStartDraft = useCallback(async () => {
       setUsedPacks((prev) => [...prev, packIndex]);
       setPackChoiceOverlay(false);
     },
-    [draftState.packIndex, transport, match]
+    [draftState, myPlayerIndex, transport, match]
   );
 
   // Enhanced stats calculations (from single-player)
@@ -780,27 +802,23 @@ const handleStartDraft = useCallback(async () => {
   }
 
   // Pack choice overlay (enhanced with better visuals)
-  if (packChoiceOverlay && draftState.packIndex < 3) {
-    const packCounts = match?.draftConfig?.packCounts || {};
-    const packSequence: string[] = [];
-    // Use consistent ordering by sorting the entries to ensure UI and handler match
-    const sortedEntries = Object.entries(packCounts).sort(([a], [b]) => a.localeCompare(b));
-    for (const [setName, count] of sortedEntries) {
-      for (let i = 0; i < count; i++) {
-        packSequence.push(setName);
-      }
-    }
-    const availableSets =
-      packSequence.length > 0
-        ? packSequence
-        : match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"];
-    const packs = [0, 1, 2];
+  const totalPacks = match?.draftConfig?.packCount ?? 3;
+  if (packChoiceOverlay && draftState.packIndex < totalPacks) {
+    // Derive set order directly from server-generated packs to avoid any mismatch
+    const s = draftState as DraftStateWithGenerated;
+    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+    const myPacks: DraftCard[][] = Array.isArray(packsMaybe) ? packsMaybe : [];
+    const availableSets: string[] = myPacks.map((pack: DraftCard[]) => {
+      const first = pack && pack[0];
+      return (first && (first.setName as string)) || "Beta";
+    });
+    const packs = availableSets.map((_, idx) => idx);
 
     return (
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
           <div className="text-lg font-semibold mb-3">
-            Choose a pack to crack (Round {draftState.packIndex + 1}/3)
+            Choose a pack to crack (Round {draftState.packIndex + 1}/{totalPacks})
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
@@ -819,7 +837,7 @@ const handleStartDraft = useCallback(async () => {
               return (
                 <button
                   key={`pack-opt-${packIdx}`}
-                  onClick={() => !isUsed && handlePackChoice(packIdx, setName)}
+                  onClick={() => !isUsed && handlePackChoice(packIdx)}
                   disabled={isUsed}
                   className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left ${
                     isUsed

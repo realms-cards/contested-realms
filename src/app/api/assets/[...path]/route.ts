@@ -60,6 +60,20 @@ export async function GET(
       }
     })();
 
+    // If a CDN origin is configured, 302-redirect there instead of streaming from disk.
+    const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
+    if (cdn) {
+      const last = segments[segments.length - 1];
+      const outName = (() => {
+        if (wantKtx2 && requestedExt !== 'ktx2') {
+          return last.replace(/\.[^.]+$/, '.ktx2');
+        }
+        return last;
+      })();
+      const cdnUrl = `${cdn.replace(/\/$/, '')}/${[...segments.slice(0, -1), outName].join('/')}`;
+      return Response.redirect(cdnUrl, 302);
+    }
+
     // Force specific assets to only use data directory (not ktx2)
     const dataOnlyAssets = new Set([
       "fire.png",

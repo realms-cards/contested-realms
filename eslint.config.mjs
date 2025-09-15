@@ -20,6 +20,7 @@ const eslintConfig = [
       "next-env.d.ts",
       "scripts/**",
       "server/**",
+      "public/ktx2/**", // Ignore third-party transcoder files
       // Ignore tests and spec files
       "tests/**",
       "**/*.test.ts",

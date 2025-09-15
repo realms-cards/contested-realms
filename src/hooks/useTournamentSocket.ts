@@ -13,11 +13,13 @@ interface TournamentSocketEvents {
     timestamp: string; 
   }) => void;
   onPlayerJoined?: (data: { 
+    tournamentId: string;
     playerId: string; 
     playerName: string; 
     currentPlayerCount: number; 
   }) => void;
   onPlayerLeft?: (data: { 
+    tournamentId: string;
     playerId: string; 
     playerName: string; 
     currentPlayerCount: number; 
@@ -112,6 +114,7 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
     };
 
     const handlePlayerJoined = (data: { 
+      tournamentId: string;
       playerId: string; 
       playerName: string; 
       currentPlayerCount: number; 
@@ -120,6 +123,7 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
     };
 
     const handlePlayerLeft = (data: { 
+      tournamentId: string;
       playerId: string; 
       playerName: string; 
       currentPlayerCount: number; 

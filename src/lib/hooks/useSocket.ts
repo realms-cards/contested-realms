@@ -54,20 +54,34 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
   useEffect(() => {
     if (!opts.autoConnect) return;
 
-    console.log(`[useSocket] Initializing socket connection to ${opts.url}`);
+    let cancelled = false;
 
-    const socketInstance = io(opts.url as string, {
-      autoConnect: opts.autoConnect,
-      reconnection: opts.reconnection,
-      reconnectionDelay: opts.reconnectionDelay,
-      reconnectionAttempts: opts.reconnectionAttempts,
-      timeout: opts.timeout,
-      path: opts.path,
-      transports: opts.transports,
-    });
+    async function init() {
+      console.log(`[useSocket] Initializing socket connection to ${opts.url}`);
+      // Fetch short-lived auth token from app API (signed by NEXTAUTH_SECRET)
+      let token: string | undefined = undefined;
+      try {
+        const res = await fetch('/api/socket-token', { credentials: 'include' });
+        if (res.ok) {
+          const j = await res.json();
+          token = j?.token as string | undefined;
+        }
+      } catch {}
+      if (cancelled) return;
 
-    socketRef.current = socketInstance;
-    setSocket(socketInstance);
+      const socketInstance = io(opts.url as string, {
+        autoConnect: opts.autoConnect,
+        reconnection: opts.reconnection,
+        reconnectionDelay: opts.reconnectionDelay,
+        reconnectionAttempts: opts.reconnectionAttempts,
+        timeout: opts.timeout,
+        path: opts.path,
+        transports: opts.transports,
+        auth: token ? { token } : undefined,
+      });
+
+      socketRef.current = socketInstance;
+      setSocket(socketInstance);
 
     const handleConnect = () => console.log('[useSocket] Connected to server');
     const handleDisconnect = (reason: string) => console.log(`[useSocket] Disconnected: ${reason}`);
@@ -88,6 +102,21 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
     socketInstance.on('reconnect_error', handleReconnectError);
     socketInstance.on('reconnect_failed', handleReconnectFailed);
 
+      // Refresh token before reconnect attempts
+      // Refresh token before reconnect attempts
+      type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
+      socketInstance.io.on('reconnect_attempt', async () => {
+        try {
+          const res = await fetch('/api/socket-token', { credentials: 'include' });
+          if (res.ok) {
+            const j = await res.json();
+            // Update auth token for next engine attempt
+            const mgr = socketInstance.io as unknown as ManagerWithOpts;
+            mgr.opts.auth = { token: j?.token as string };
+          }
+        } catch {}
+      });
+
     // Cleanup function
     return () => {
       console.log('[useSocket] Cleaning up socket connection');
@@ -104,7 +133,12 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       socketInstance.disconnect();
       setSocket(null);
       socketRef.current = null;
-    };
+      };
+    }
+
+    init();
+
+    return () => { cancelled = true; };
   }, [opts.url, opts.autoConnect, opts.reconnection, opts.reconnectionDelay, opts.reconnectionAttempts, opts.timeout, opts.path, opts.transports]);
 
   return socket;

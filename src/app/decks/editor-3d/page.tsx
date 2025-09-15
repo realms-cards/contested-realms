@@ -159,6 +159,8 @@ function AuthenticatedDeckEditor() {
 
   // Sealed mode flag (similar to isDraftMode but for sealed deck construction)
   const [isSealed, setIsSealed] = useState(false);
+  // Ensure we only initialize sealed mode picks once per load
+  const [sealedInitDone, setSealedInitDone] = useState(false);
 
   // Sealed mode state
   const [sealedConfig, setSealedConfig] = useState<{
@@ -296,6 +298,120 @@ function AuthenticatedDeckEditor() {
       setPacks(generatedPacks);
     }
   }, [searchParams, isSealed]); // Only initialize if not already sealed
+
+  // If server-provided sealed packs were persisted, resolve them to cards and pre-seed sideboard picks
+  useEffect(() => {
+    if (!isSealed || sealedInitDone) return;
+    const matchId = searchParams?.get("matchId");
+    if (!matchId) return;
+
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(`sealedPacks_${matchId}`);
+    } catch {
+      raw = null;
+    }
+    if (!raw) {
+      setSealedInitDone(true);
+      return;
+    }
+
+    type SealedCardLike = {
+      slug?: string;
+      cardName?: string;
+      name?: string;
+      type?: string | null;
+      set?: string;
+      setName?: string;
+    };
+    type StoredPack = { id: string; set: string; cards: SealedCardLike[] };
+
+    let stored: StoredPack[] = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) stored = parsed as StoredPack[];
+    } catch {
+      stored = [];
+    }
+    if (!Array.isArray(stored) || stored.length === 0) {
+      setSealedInitDone(true);
+      return;
+    }
+
+    (async () => {
+      try {
+        // Flatten all cards from all packs
+        const cards: SealedCardLike[] = stored.flatMap((p) =>
+          Array.isArray(p.cards) ? p.cards.map((c) => ({ ...c, set: c.set || p.set })) : []
+        );
+
+        // Resolve each sealed card to a concrete SearchResult via slug first, fallback to name
+        const resolved: SearchResult[] = [];
+        for (const c of cards) {
+          const slug = (c.slug || "").toString().trim();
+          const name = (c.name || c.cardName || "").toString().trim();
+          const cardSetName = (c.setName || c.set || setName).toString();
+
+          let hit: SearchResult | null = null;
+          if (slug) {
+            try {
+              const list = await searchCards({ q: slug, setName: cardSetName, type: "all" });
+              hit = list[0] || null;
+            } catch {}
+          }
+          if (!hit && name) {
+            try {
+              const list = await searchCards({ q: name, setName: cardSetName, type: "all" });
+              hit = list[0] || null;
+            } catch {}
+          }
+          if (hit) resolved.push(hit);
+        }
+
+        if (resolved.length > 0) {
+          // Add all resolved sealed cards to Sideboard, preserving any existing picks
+          setPicks((prev) => {
+            const next = { ...prev } as Record<PickKey, PickItem>;
+            for (const r of resolved) {
+              const zone: Zone = "Sideboard";
+              const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+              const exists = next[key];
+              next[key] = exists
+                ? { ...exists, count: exists.count + 1 }
+                : {
+                    cardId: r.cardId,
+                    variantId: r.variantId ?? null,
+                    name: r.cardName,
+                    type: r.type,
+                    slug: r.slug,
+                    zone,
+                    count: 1,
+                    set: r.set,
+                  };
+            }
+            return next;
+          });
+
+          // Infer deck set from majority of resolved hits for better defaults
+          const counts = new Map<string, number>();
+          for (const r of resolved) counts.set(r.set, (counts.get(r.set) || 0) + 1);
+          if (counts.size) {
+            let best = setName;
+            let bestN = -1;
+            for (const [nm, n] of counts.entries()) {
+              if (n > bestN) {
+                best = nm;
+                bestN = n;
+              }
+            }
+            setSetName(best);
+          }
+        }
+      } finally {
+        setSealedInitDone(true);
+      }
+    })();
+  }, [isSealed, sealedInitDone, searchParams, setName]);
 
   // Initialize draft completion mode from URL and localStorage
   useEffect(() => {
@@ -724,10 +840,16 @@ function AuthenticatedDeckEditor() {
         if (!res.ok) throw new Error(data?.error || "Failed to update deck");
         setSaveMsg(`Updated deck ${data.name} (id: ${data.id})`);
       } else {
-        // Generate clean filename for sealed mode
+        // Generate meaningful deck name using match/lobby info when available
+        const matchName = searchParams?.get("matchName");
+        const lobbyName = searchParams?.get("lobbyName");
+        const gameName = matchName || lobbyName;
+        
         const finalDeckName = isSealed
-          ? `Sealed Deck ${new Date().toLocaleDateString()}`
-          : deckName || "New Deck";
+          ? (gameName ? `${gameName} (Sealed)` : `Sealed Deck ${new Date().toLocaleDateString()}`)
+          : isDraftMode
+          ? (gameName ? `${gameName} (Draft)` : `Draft Deck ${new Date().toLocaleDateString()}`)
+          : (gameName ? `${gameName} (Constructed)` : deckName || "New Deck");
 
         const res = await fetch("/api/decks", {
           method: "POST",

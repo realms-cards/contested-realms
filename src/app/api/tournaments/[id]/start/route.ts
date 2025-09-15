@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { TournamentStatus as DBTournamentStatus, TournamentFormat as DBTournamentFormat, RoundStatus as DBRoundStatus } from '@prisma/client';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Only tournament creator can start the tournament' }), { status: 403 });
     }
 
-    if (tournament.status !== 'registering') {
+    if (tournament.status !== DBTournamentStatus.registering) {
       return new Response(JSON.stringify({ error: 'Tournament already started' }), { status: 400 });
     }
 
@@ -49,9 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Determine next status based on format
-    let nextStatus: 'preparing' | 'active' = 'active';
-    if (tournament.format === 'draft' || tournament.format === 'sealed') {
-      nextStatus = 'preparing';
+    let nextStatus: DBTournamentStatus = DBTournamentStatus.active;
+    if (tournament.format === DBTournamentFormat.draft || tournament.format === DBTournamentFormat.sealed) {
+      nextStatus = DBTournamentStatus.preparing;
     }
 
     // Start tournament
@@ -75,19 +76,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           totalPlayers: tournament.registrations.length
         }
       );
+      // Also broadcast a full tournament snapshot so lists sync immediately
+      await tournamentSocketService.broadcastTournamentUpdateById(id);
     } catch (socketError) {
       console.warn('Failed to broadcast phase changed event:', socketError);
       // Don't fail the request if socket broadcast fails
     }
 
     // If going straight to active (constructed), create first round with matches
-    if (nextStatus === 'active') {
+    if (nextStatus === DBTournamentStatus.active) {
       // Create the round
       const newRound = await prisma.tournamentRound.create({
         data: {
           tournamentId: id,
           roundNumber: 1,
-          status: 'pending'
+          status: DBRoundStatus.pending
         }
       });
 
@@ -100,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Mark the round as active now that matches exist
       await prisma.tournamentRound.update({
         where: { id: newRound.id },
-        data: { status: 'active', startedAt: new Date() }
+        data: { status: DBRoundStatus.active, startedAt: new Date() }
       });
 
       // Build broadcast payload for ROUND_STARTED so clients refresh live without reload
@@ -122,6 +125,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           };
         });
         await tournamentSocketService.broadcastRoundStarted(id, 1, broadcastMatches);
+
+        // Additionally, send targeted MATCH_ASSIGNED events to each participant
+        const tournamentName = tournament.name;
+        for (const m of broadcastMatches) {
+          // Player 1 always present
+          await tournamentSocketService.broadcastMatchAssigned(id, m.player1Id, {
+            matchId: m.id,
+            opponentId: m.player2Id,
+            opponentName: m.player2Name,
+            lobbyName: tournamentName,
+          });
+          // Player 2 when present
+          if (m.player2Id) {
+            await tournamentSocketService.broadcastMatchAssigned(id, m.player2Id, {
+              matchId: m.id,
+              opponentId: m.player1Id,
+              opponentName: m.player1Name,
+              lobbyName: tournamentName,
+            });
+          }
+        }
       } catch (socketErr) {
         console.warn('Failed to broadcast ROUND_STARTED:', socketErr);
       }

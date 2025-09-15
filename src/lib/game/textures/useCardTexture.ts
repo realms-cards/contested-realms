@@ -29,10 +29,9 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
   let loader = ktx2LoaderByRenderer.get(gl);
   if (!loader) {
     loader = new KTX2Loader();
-    // Use CDN-hosted transcoder binaries; switch to "/ktx2/" in public if self-hosting.
-    loader.setTranscoderPath(
-      "https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/"
-    );
+    // Allow overriding transcoder path via env; default to self-hosted /ktx2/
+    const envPath = process.env.NEXT_PUBLIC_KTX2_TRANSCODER_PATH;
+    loader.setTranscoderPath(envPath && envPath.trim() ? envPath : "/ktx2/");
     try {
       loader.detectSupport(gl);
     } catch {

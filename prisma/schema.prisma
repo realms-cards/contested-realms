@@ -195,6 +195,7 @@ model User {
   wonMatches            MatchResult[] @relation("MatchWinner")
   lostMatches           MatchResult[] @relation("MatchLoser")
   draftParticipations   DraftParticipant[]
+  passkeys              PasskeyCredential[]
 }
 
 model VerificationToken {
@@ -513,4 +514,24 @@ model DraftParticipant {
   @@unique([draftSessionId, seatNumber])
   @@index([draftSessionId])
   @@index([playerId])
+}
+
+// WebAuthn passkey credentials per user
+model PasskeyCredential {
+  id                String   @id @default(cuid())
+  userId            String
+  credentialId      Bytes    @unique         // Raw credential ID bytes
+  publicKey         Bytes                     // Raw public key bytes (COSE)
+  counter           Int       @default(0)
+  transports        String?                    // CSV of transports
+  aaguid            String?                    // Authenticator AAGUID
+  attestationType   String?                    // none, basic, etc.
+  deviceType        String?                    // platform or cross-platform
+  backedUp          Boolean?                   // authenticator backups supported
+  createdAt         DateTime @default(now())
+  lastUsedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

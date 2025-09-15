@@ -128,6 +128,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         displayName,
         currentPlayerCount
       );
+      // Also broadcast a full tournament update snapshot
+      await tournamentSocketService.broadcastTournamentUpdateById(id);
     } catch (socketError) {
       console.warn('Failed to broadcast player joined event:', socketError);
       // Don't fail the request if socket broadcast fails

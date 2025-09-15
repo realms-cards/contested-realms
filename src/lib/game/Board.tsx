@@ -1317,8 +1317,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                         );
                       }}
                     >
-                      <>
-                        {(selectedAvatar === who || dragAvatar === who) &&
+                      {(selectedAvatar === who || dragAvatar === who) &&
                           !isHandVisible && (
                             <CardGlow
                               width={CARD_SHORT}
@@ -1336,7 +1335,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                           rotationZ={rotZ}
                           textureUrl={!a.card?.slug ? "/api/assets/air.png" : undefined}
                         />
-                      </>
                     </group>
                   </group>
                 </RigidBody>

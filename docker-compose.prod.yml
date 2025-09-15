@@ -1,0 +1,60 @@
+services:
+  # One-off migration runner against Managed Postgres
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-migrate
+    restart: "no"
+    env_file:
+      - .env.production
+    command: ["npx", "prisma", "migrate", "deploy"]
+
+  # Socket.IO server instances (horizontal scaling via Redis adapter)
+  server1:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-1
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      INSTANCE_ID: server1
+      PORT: 3010
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "3010"
+
+  server2:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-2
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      INSTANCE_ID: server2
+      PORT: 3010
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "3010"
+
+  # Public entrypoint: TLS + reverse-proxy/load-balancer
+  caddy:
+    image: caddy:2-alpine
+    container_name: sorcery-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - server1
+      - server2

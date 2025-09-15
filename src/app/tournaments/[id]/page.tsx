@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useRealtimeTournaments } from '@/contexts/RealtimeTournamentContext';
 
 interface Tournament {
   id: string;
@@ -23,55 +24,66 @@ interface Tournament {
   };
 }
 
-interface PlayerStanding {
-  playerId: string;
-  playerName: string;
-  wins: number;
-  losses: number;
-  draws: number;
-  matchPoints: number;
-  tiebreakers: Record<string, number>;
-  finalRanking: number | null;
-}
-
-interface TournamentRound {
-  id: string;
-  roundNumber: number;
-  status: 'pending' | 'active' | 'completed';
-  startedAt: string | null;
-  completedAt: string | null;
-}
+// Removed local interfaces; we rely on realtime context shapes
 
 
-interface TournamentStatistics {
-  tournamentId: string;
-  standings: PlayerStanding[];
-  rounds: TournamentRound[];
-  overallStats: {
-    totalMatches: number;
-    completedMatches: number;
-    averageMatchDuration: number | null;
-    tournamentDuration: number | null;
-    totalPlayers: number;
-    roundsCompleted: number;
-  };
-}
+// Statistics are obtained from realtime context; local interface not required here
 
 export default function TournamentDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const { data: session, status } = useSession();
   const tournamentId = params?.id as string;
-
-  const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [statistics, setStatistics] = useState<TournamentStatistics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    tournaments,
+    currentTournament,
+    setCurrentTournamentById,
+    joinTournament: rtJoinTournament,
+    leaveTournament: rtLeaveTournament,
+    startTournament: rtStartTournament,
+    statistics: rtStatistics,
+    loading: rtLoading,
+    error: rtError
+  } = useRealtimeTournaments();
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [starting, setStarting] = useState(false);
   
   const [activeTab, setActiveTab] = useState<'overview' | 'standings' | 'rounds'>('overview');
+
+  // Redirect unauthenticated users to signin
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push(`/auth/signin?callbackUrl=/tournaments/${tournamentId}`);
+    }
+  }, [status, tournamentId, router]);
+
+  // Derive tournament from realtime context and ensure we set it as current
+  const derivedTournament: Tournament | null = (currentTournament && currentTournament.id === tournamentId)
+    ? (currentTournament as unknown as Tournament)
+    : ((tournaments.find(t => t.id === tournamentId)) as unknown as Tournament | undefined) || null;
+
+  useEffect(() => {
+    if (derivedTournament && (!currentTournament || currentTournament.id !== derivedTournament.id)) {
+      setCurrentTournamentById(derivedTournament.id);
+    }
+  }, [derivedTournament, currentTournament, setCurrentTournamentById]);
+
+  // Alias realtime statistics for easier usage
+  const statistics = rtStatistics;
+
+  // Choose tournament reference for below sections
+  const tournament = derivedTournament;
+
+  // Helpers: safe currentPlayers count
+  function getCurrentPlayersCount(t: Tournament | null): number {
+    if (!t) return 0;
+    const cp = (t as Partial<Tournament>).currentPlayers;
+    if (typeof cp === 'number') return cp;
+    const rp = (t as unknown as { registeredPlayers?: Array<unknown> }).registeredPlayers;
+    return Array.isArray(rp) ? rp.length : 0;
+  }
 
   // Check if current user is registered
   const isRegistered = Boolean(
@@ -82,66 +94,6 @@ export default function TournamentDetailsPage() {
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
 
-  // Fetch tournament data
-  const fetchTournament = useCallback(async (): Promise<void> => {
-    if (!tournamentId) return;
-
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Tournament not found');
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setTournament(data);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch tournament:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load tournament');
-    }
-  }, [tournamentId]);
-
-  // Fetch tournament statistics
-  const fetchStatistics = useCallback(async (): Promise<void> => {
-    if (!tournamentId) return;
-
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/statistics`);
-      if (!response.ok) {
-        // Statistics might not exist yet, that's okay
-        return;
-      }
-      const data = await response.json();
-      setStatistics(data);
-    } catch (err) {
-      console.error('Failed to fetch statistics:', err);
-      // Don't set error for statistics failure
-    }
-  }, [tournamentId]);
-
-  useEffect(() => {
-    if (status === 'authenticated' && tournamentId) {
-      Promise.all([fetchTournament(), fetchStatistics()])
-        .finally(() => setLoading(false));
-    } else if (status === 'unauthenticated') {
-      router.push(`/auth/signin?callbackUrl=/tournaments/${tournamentId}`);
-    }
-  }, [status, tournamentId, fetchTournament, fetchStatistics, router]);
-
-  // Auto-refresh every 3 seconds
-  useEffect(() => {
-    if (status === 'authenticated' && tournamentId) {
-      const interval = setInterval(() => {
-        fetchTournament();
-        fetchStatistics();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-    return undefined;
-  }, [status, tournamentId, fetchTournament, fetchStatistics]);
-
   const handleJoinTournament = async () => {
     if (!session || !tournament) return;
 
@@ -149,23 +101,7 @@ export default function TournamentDetailsPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          displayName: session.user?.name || 'Anonymous Player'
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to join tournament');
-      }
-
-      // Refresh data
-      await Promise.all([fetchTournament(), fetchStatistics()]);
+      await rtJoinTournament(tournamentId);
     } catch (err) {
       console.error('Failed to join tournament:', err);
       setError(err instanceof Error ? err.message : 'Failed to join tournament');
@@ -181,20 +117,7 @@ export default function TournamentDetailsPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/leave`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to leave tournament');
-      }
-
-      // Refresh data
-      await Promise.all([fetchTournament(), fetchStatistics()]);
+      await rtLeaveTournament(tournamentId);
     } catch (err) {
       console.error('Failed to leave tournament:', err);
       setError(err instanceof Error ? err.message : 'Failed to leave tournament');
@@ -210,20 +133,7 @@ export default function TournamentDetailsPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start tournament');
-      }
-
-      // Refresh data
-      await Promise.all([fetchTournament(), fetchStatistics()]);
+      await rtStartTournament(tournamentId);
     } catch (err) {
       console.error('Failed to start tournament:', err);
       setError(err instanceof Error ? err.message : 'Failed to start tournament');
@@ -262,7 +172,7 @@ export default function TournamentDetailsPage() {
     }
   };
 
-  if (status === 'loading' || loading) {
+  if (status === 'loading' || rtLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournament...</div>
@@ -274,11 +184,11 @@ export default function TournamentDetailsPage() {
     return null; // Redirecting to signin
   }
 
-  if (error) {
+  if (error || rtError) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-red-400 text-xl mb-4">{error}</div>
+          <div className="text-red-400 text-xl mb-4">{error || rtError}</div>
           <Link
             href="/tournaments"
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
@@ -378,13 +288,13 @@ export default function TournamentDetailsPage() {
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
             <div className="text-slate-400 text-sm">Players</div>
             <div className="text-2xl font-bold text-white">
-              {tournament.currentPlayers}/{tournament.maxPlayers}
+              {getCurrentPlayersCount(tournament)}/{tournament.maxPlayers}
             </div>
             <div className="w-full bg-slate-700 rounded-full h-2 mt-2">
               <div
                 className="bg-blue-600 h-2 rounded-full transition-all"
                 style={{
-                  width: `${Math.min((tournament.currentPlayers / tournament.maxPlayers) * 100, 100)}%`
+                  width: `${Math.min((getCurrentPlayersCount(tournament) / tournament.maxPlayers) * 100, 100)}%`
                 }}
               />
             </div>
@@ -393,14 +303,14 @@ export default function TournamentDetailsPage() {
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
             <div className="text-slate-400 text-sm">Rounds</div>
             <div className="text-2xl font-bold text-white">
-              {statistics?.overallStats.roundsCompleted || 0}/{tournament.settings.totalRounds || 3}
+              {(statistics?.rounds?.filter(r => r.status === 'completed').length ?? 0)}/{tournament.settings.totalRounds || 3}
             </div>
           </div>
 
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
             <div className="text-slate-400 text-sm">Matches</div>
             <div className="text-2xl font-bold text-white">
-              {statistics?.overallStats.completedMatches || 0}/{statistics?.overallStats.totalMatches || 0}
+              {statistics?.overview.completedMatches || 0}/{statistics?.overview.totalMatches || 0}
             </div>
           </div>
 

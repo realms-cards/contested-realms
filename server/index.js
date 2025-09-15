@@ -117,7 +117,7 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
     match.draftState.allGeneratedPacks = currentPacks;
     match.draftState.currentPacks = [];
     match.draftState.waitingFor = [...match.playerIds];
-    // Auto-assign fallback after 2s if someone doesn't choose
+    // Auto-assign fallback after 12s if someone doesn't choose (give humans time)
     setTimeout(() => {
       try {
         const m = matches.get(matchId);
@@ -144,7 +144,7 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
         ds.waitingFor = [...m.playerIds];
         io.to(`match:${m.id}`).emit('draftUpdate', ds);
       } catch {}
-    }, 2000);
+    }, 12000);
     io.to(room).emit('draftUpdate', match.draftState);
     try { await persistMatchUpdate(match, null, requestingPlayerId || 'system', Date.now()); } catch {}
   } catch (e) {
@@ -446,6 +446,7 @@ async function handleLobbyControlAsLeader(msg) {
 const http = require("http");
 const { Server } = require("socket.io");
 const { PrismaClient } = require("@prisma/client");
+const jwt = require("jsonwebtoken");
 const { createAdapter } = require("@socket.io/redis-adapter");
 const Redis = require("ioredis");
 const {
@@ -1399,11 +1400,7 @@ async function startMatchFromLobby(
     const s = io.sockets.sockets.get(p.socketId);
     if (s) s.join(`match:${match.id}`);
     p.matchId = match.id;
-    // For sealed/draft matches, keep lobby association during deck construction/draft
-    // For constructed matches, clear lobby association immediately
-    if (matchType === "constructed") {
-      p.lobbyId = null;
-    }
+    // Keep lobby association during all match types so the lobby remains visible
   }
 
   // Notify lobby participants immediately that a match has started so UI can show join controls
@@ -1412,23 +1409,11 @@ async function startMatchFromLobby(
     io.to(`lobby:${lobby.id}`).emit("matchStarted", { match: basicInfo });
   } catch {}
 
-  // For sealed/draft matches, keep lobby active during deck construction/draft
-  // For constructed matches, close lobby immediately
-  if (matchType === "constructed") {
-    // Update plannedMatchType to reflect the started match
-    try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
-    lobby.status = "closed";
-    // Clean up bots associated with this lobby
-    try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
-    lobbies.delete(lobby.id);
-    broadcastLobbies();
-  }
-  else {
-    // Keep lobby open during setup phases; also update plannedMatchType
-    try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
-    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
-    broadcastLobbies();
-  }
+  // Keep lobby visible during matches; mark as 'started' instead of closing
+  try { const lb = lobbies.get(lobby.id); if (lb) lb.plannedMatchType = matchType; } catch {}
+  try { lobby.status = "started"; } catch {}
+  io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+  broadcastLobbies();
 
   // Deterministic sealed pack generation per player
   if (matchType === "sealed" && match.sealedConfig) {
@@ -1605,14 +1590,47 @@ function finishMatchRecording(matchId) {
   );
 }
 
+const REQUIRE_JWT = Boolean(
+  (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "1" ||
+  (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
+);
+
 io.on("connection", (socket) => {
   let authed = false;
+  let authUser = null;
+
+  // Verify short-lived JWT from handshake auth
+  try {
+    const token = (socket.handshake && socket.handshake.auth && socket.handshake.auth.token) || null;
+    if (token && process.env.NEXTAUTH_SECRET) {
+      const payload = jwt.verify(token, process.env.NEXTAUTH_SECRET);
+      authUser = {
+        id: payload && (payload.uid || payload.sub),
+        name: payload && payload.name,
+      };
+    } else if (REQUIRE_JWT) {
+      socket.emit("error", { message: "auth_required" });
+      try { socket.disconnect(true); } catch {}
+      return;
+    }
+  } catch (e) {
+    try { console.warn("[auth] JWT verify failed:", e && e.message ? e.message : String(e)); } catch {}
+    if (REQUIRE_JWT) {
+      try { socket.emit("error", { message: "invalid_token" }); } catch {}
+      try { socket.disconnect(true); } catch {}
+      return;
+    }
+  }
 
   socket.on("hello", async (payload) => {
     const rawName = payload && typeof payload.displayName === "string" ? payload.displayName : "";
-    const displayName = (rawName.trim() || "Player").slice(0, 40);
+    let displayName = (rawName.trim() || "Player").slice(0, 40);
+    if (authUser && authUser.name) {
+      displayName = String(authUser.name).slice(0, 40);
+    }
     const providedId = payload && payload.playerId ? String(payload.playerId) : null;
-    const playerId = providedId || rid("p");
+    const tokenId = authUser && authUser.id ? String(authUser.id) : null;
+    const playerId = tokenId || providedId || rid("p");
 
     let player = players.get(playerId);
     if (!player) {
@@ -1635,7 +1653,7 @@ io.on("connection", (socket) => {
     try { if (storeRedis) { await storeRedis.hset(`player:${playerId}`, { displayName }); } } catch {}
 
     console.log(
-      `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} socket=${socket.id}`
+      `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} tokenId=${tokenId ? "yes" : "no"} socket=${socket.id}`
     );
 
     socket.emit("welcome", {
@@ -2453,20 +2471,11 @@ io.on("connection", (socket) => {
       // All decks submitted, transition to waiting phase for game start
       match.status = "waiting";
 
-      // Clear lobby associations for all players in this sealed match
-      for (const pid of match.playerIds) {
-        const p = players.get(pid);
-        if (p) {
-          p.lobbyId = null;
-        }
-      }
-
-      // Now that sealed deck construction is complete, close the lobby
-      const lobby = lobbies.get(match.lobbyId);
+      // Keep lobby visible during the match for rematch/voting UX
+      const lobby = match.lobbyId ? lobbies.get(match.lobbyId) : null;
       if (lobby) {
-        lobby.status = "closed";
-        try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
-        lobbies.delete(lobby.id);
+        try { lobby.status = "started"; } catch {}
+        try { publishLobbyState(lobby); } catch {}
         broadcastLobbies();
       }
 
@@ -2587,7 +2596,7 @@ io.on("connection", (socket) => {
       match.draftState.currentPacks = []; // Don't distribute packs yet
       match.draftState.waitingFor = [...match.playerIds]; // Wait for pack choices
 
-      // Fallback: if not all players choose within 2s, auto-assign first pack for those who didn't
+      // Fallback: if not all players choose within 12s, auto-assign first pack for those who didn't
       setTimeout(() => {
         try {
           const m = matches.get(match.id);
@@ -2617,7 +2626,7 @@ io.on("connection", (socket) => {
         } catch (e) {
           console.warn(`[Draft] auto-pack assignment failed for match ${match.id}:`, e);
         }
-      }, 2000);
+      }, 12000);
 
       const packSizes = match.draftState.currentPacks
         .map((p) => (Array.isArray(p) ? p.length : 0))
@@ -2729,25 +2738,16 @@ io.on("connection", (socket) => {
       console.log(
         `[Match] All draft decks submitted for match ${match.id}, transitioning to waiting (setup)`
       );
-      // Do NOT skip setup for draft; mirror sealed flow: move to waiting and let D20 + Start + Mulligans proceed
+      // Do NOT skip setup for draft; mirror sealed flow: move to waiting and keep lobby visible
       match.status = "waiting";
-      try {
-        io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
-      } catch {}
+      try { io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) }); } catch {}
 
-      // Clear lobby associations since match is starting
-      for (const pid of match.playerIds) {
-        const p = players.get(pid);
-        if (p) p.lobbyId = null;
-      }
-
-      // Close associated lobby
+      // Keep lobby visible (mark as started) for in-progress match
       if (match.lobbyId) {
         const lobby = lobbies.get(match.lobbyId);
         if (lobby) {
-          lobby.status = "closed";
-          try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
-          lobbies.delete(match.lobbyId);
+          try { lobby.status = "started"; } catch {}
+          try { publishLobbyState(lobby); } catch {}
           broadcastLobbies();
         }
       }

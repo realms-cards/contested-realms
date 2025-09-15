@@ -376,6 +376,7 @@ export default function ReplayViewerPage() {
         hideLeaveButton={true}
         defaultOpen={true}
         hideChat={true}
+        position="top-right"
       />
     </div>
   );

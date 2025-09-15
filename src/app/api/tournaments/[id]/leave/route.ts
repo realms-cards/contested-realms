@@ -74,6 +74,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         playerName,
         currentPlayerCount
       );
+      // Also broadcast a full tournament update snapshot
+      await tournamentSocketService.broadcastTournamentUpdateById(id);
     } catch (socketError) {
       console.warn('Failed to broadcast player left event:', socketError);
       // Don't fail the request if socket broadcast fails
