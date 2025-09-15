@@ -44,14 +44,14 @@ export async function middleware(req: NextRequest) {
     return setLockdown(NextResponse.next(), 'enabled-static');
   }
 
-  // Allow the custom lockdown page and diagnostics without auth to avoid loops
-  if (pathname.startsWith('/_lockdown') || pathname.startsWith('/_diag')) {
+  // Allow the custom lockdown page(s) and diagnostics without auth to avoid loops
+  if (pathname.startsWith('/lock') || pathname.startsWith('/_lockdown') || pathname.startsWith('/_diag')) {
     return setLockdown(NextResponse.next(), 'lockpage');
   }
 
   // If enabled but password not configured, redirect to lock page with error
   if (!expectedPass) {
-    const url = new URL('/_lockdown', req.url);
+    const url = new URL('/lock', req.url);
     try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
     try { url.searchParams.set('error', 'server'); } catch {}
     return setLockdown(NextResponse.redirect(url), 'redirect');
@@ -63,7 +63,7 @@ export async function middleware(req: NextRequest) {
 
   const auth = req.headers.get('authorization') || '';
   if (!auth.startsWith('Basic ')) {
-    const url = new URL('/_lockdown', req.url);
+    const url = new URL('/lock', req.url);
     try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
     return setLockdown(NextResponse.redirect(url), 'redirect');
   }
@@ -90,7 +90,7 @@ export async function middleware(req: NextRequest) {
   } catch {}
 
   // On failure, redirect back to lock screen with error
-  const url = new URL('/_lockdown', req.url);
+  const url = new URL('/lock', req.url);
   try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
   try { url.searchParams.set('error', '1'); } catch {}
   return setLockdown(NextResponse.redirect(url), 'redirect');
