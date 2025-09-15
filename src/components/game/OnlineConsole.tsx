@@ -13,6 +13,7 @@ interface OnlineConsoleProps {
   setChatInput: (value: string) => void;
   onSendChat: (message: string, scope?: ChatScope) => void;
   onLeaveMatch: () => void;
+  onLeaveLobby?: () => void;
   connected: boolean;
   myPlayerId?: string | null;
   hideLeaveButton?: boolean;
@@ -29,6 +30,7 @@ export default function OnlineConsole({
   setChatInput,
   onSendChat,
   onLeaveMatch,
+  onLeaveLobby,
   connected,
   myPlayerId,
   hideLeaveButton = false,
@@ -136,6 +138,12 @@ export default function OnlineConsole({
   const handleLeaveMatch = () => {
     if (confirm("Leave match? You won't be prompted to rejoin automatically. You can still join again later from the lobby by entering the match ID.")) {
       onLeaveMatch();
+      
+      // Ask if they also want to leave the lobby
+      if (onLeaveLobby && confirm("Would you also like to leave the lobby? You can always join another lobby or create a new one.")) {
+        onLeaveLobby();
+      }
+      
       router.push('/online/lobby');
     }
   };

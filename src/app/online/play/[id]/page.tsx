@@ -71,6 +71,7 @@ export default function OnlineMatchPage() {
     chatLog,
     sendChat,
     leaveMatch,
+    leaveLobby,
     resync,
     me,
     resyncing,
@@ -1084,6 +1085,7 @@ export default function OnlineMatchPage() {
             setChatInput={setChatInput}
             onSendChat={sendChat}
             onLeaveMatch={leaveMatch}
+            onLeaveLobby={leaveLobby}
             connected={connected}
             myPlayerId={myPlayerId}
           />
@@ -1177,6 +1179,7 @@ export default function OnlineMatchPage() {
               leaveMatch();
               router.push("/online/lobby");
             }}
+            onLeaveLobby={leaveLobby}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}

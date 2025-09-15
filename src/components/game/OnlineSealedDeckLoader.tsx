@@ -53,6 +53,9 @@ export default function OnlineSealedDeckLoader({
       if (!myDeckData || !allPlayerDecksReady) {
         setWaitingForMe(!myDeckData && !meSubmitted);
         setWaitingForOpponent(!allPlayerDecksReady && !allOthersSubmitted);
+        try { console.debug('[Sealed] Waiting for decks -> meSubmitted:', meSubmitted, 'othersSubmitted:', allOthersSubmitted); } catch {}
+        // Do not keep spinner running while waiting
+        setLoading(false);
         return;
       }
       

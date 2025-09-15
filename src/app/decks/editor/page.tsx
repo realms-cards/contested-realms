@@ -163,18 +163,31 @@ export default function DeckEditorPage() {
     };
   }, [setName]);
 
-  // Prefetch Spellslinger avatar for current set
+  // Prefetch Spellslinger avatar (prefer current set, fallback to any set)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
-            setName
-          )}&type=avatar`
-        );
-        const data = (await res.json()) as SearchResult[];
-        if (!cancelled) setSpellslingerCard(res.ok ? data[0] || null : null);
+        // 1) Try current set
+        let hit: SearchResult | null = null;
+        try {
+          const resSet = await fetch(
+            `/api/cards/search?q=spellslinger&set=${encodeURIComponent(setName)}&type=avatar`
+          );
+          const dataSet = (await resSet.json()) as SearchResult[];
+          hit = resSet.ok ? dataSet[0] || null : null;
+        } catch {}
+
+        // 2) Fallback across all sets
+        if (!hit) {
+          try {
+            const resAny = await fetch(`/api/cards/search?q=spellslinger&type=avatar`);
+            const dataAny = (await resAny.json()) as SearchResult[];
+            hit = resAny.ok ? dataAny[0] || null : null;
+          } catch {}
+        }
+
+        if (!cancelled) setSpellslingerCard(hit);
       } catch {
         if (!cancelled) setSpellslingerCard(null);
       }
@@ -348,31 +361,39 @@ export default function DeckEditorPage() {
   async function setAvatarSpellslinger() {
     try {
       setError(null);
-      const res = await fetch(
-        `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
-          setName
-        )}&type=avatar`
-      );
-      const raw = await res.json();
-      if (!res.ok) {
-        const apiErr = (raw as { error?: string } | null)?.error;
-        throw new Error(apiErr || "Search failed");
+      let hit: SearchResult | null = null;
+      // 1) Try in current set
+      try {
+        const resSet = await fetch(
+          `/api/cards/search?q=spellslinger&set=${encodeURIComponent(setName)}&type=avatar`
+        );
+        const dataSet = await resSet.json();
+        if (resSet.ok) hit = (dataSet as SearchResult[])[0] || null;
+      } catch {}
+
+      // 2) Fallback across all sets
+      if (!hit) {
+        try {
+          const resAny = await fetch(`/api/cards/search?q=spellslinger&type=avatar`);
+          const dataAny = await resAny.json();
+          if (resAny.ok) hit = (dataAny as SearchResult[])[0] || null;
+        } catch {}
       }
-      const data = raw as SearchResult[];
-      const hit = data[0];
-      if (!hit) throw new Error("Spellslinger not found in this set");
+
+      if (!hit) throw new Error("Spellslinger not found");
+      const h = hit as SearchResult; // non-null after guard
       // Add spellslinger to spellbook without removing other avatars
-      const key = `${hit.cardId}:Spellbook:${hit.variantId ?? "x"}`;
+      const key = `${h.cardId}:Spellbook:${h.variantId ?? "x"}`;
       setPicks((prev) => ({
         ...prev,
         [key]: prev[key]
           ? { ...prev[key], count: prev[key].count + 1 }
           : {
-              cardId: hit.cardId,
-              variantId: hit.variantId ?? null,
-              name: hit.cardName,
-              type: hit.type ?? null,
-              slug: hit.slug ?? null,
+              cardId: h.cardId,
+              variantId: h.variantId ?? null,
+              name: h.cardName,
+              type: h.type ?? null,
+              slug: h.slug ?? null,
               zone: "Spellbook",
               count: 1,
             },
