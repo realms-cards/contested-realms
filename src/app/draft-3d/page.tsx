@@ -1511,15 +1511,9 @@ export default function Draft3DPage() {
                 <button
                   onClick={saveDeck}
                   disabled={saving}
-                  className="h-10 px-4 rounded bg-white/90 text-black disabled:opacity-50"
+                  className="h-10 px-4 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-semibold disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Build Deck (3D)"}
-                </button>
-                <button
-                  onClick={() => router.push("/decks/editor-3d")}
-                  className="h-10 px-4 rounded border border-white/30 text-white"
-                >
-                  Deck Editor (3D)
+                  {saving ? "Saving..." : "Save Deck & Continue to Editor"}
                 </button>
                 {saveMsg && <div className="text-sm">{saveMsg}</div>}
               </div>

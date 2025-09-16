@@ -604,6 +604,198 @@ server.on("request", async (req, res) => {
     res.end(body);
     return;
   }
+  // Minimal REST API router (for Next.js proxy)
+  try {
+    const method = (req.method || 'GET').toUpperCase();
+    // Node http req.url is a path; use a dummy origin for URL parsing
+    const u = new URL(url, 'http://local');
+    const pathname = u.pathname || '/';
+
+    // Helper: write JSON
+    const writeJson = (code, obj) => {
+      try { res.statusCode = code; } catch {}
+      try { res.setHeader('Content-Type', 'application/json'); } catch {}
+      try { res.end(JSON.stringify(obj)); } catch {}
+    };
+
+    // Helper: read JSON body
+    const readJsonBody = async () => {
+      return await new Promise((resolve) => {
+        try {
+          const chunks = [];
+          req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c))));
+          req.on('end', () => {
+            try {
+              const raw = Buffer.concat(chunks).toString('utf8');
+              if (!raw) return resolve({});
+              return resolve(JSON.parse(raw));
+            } catch {
+              return resolve({});
+            }
+          });
+        } catch {
+          resolve({});
+        }
+      });
+    };
+
+    // Secure internal API with a shared token to prevent public misuse
+    const requireInternalAuth = () => {
+      const token = req.headers['x-internal-auth'] || req.headers['X-Internal-Auth'];
+      const expected = process.env.INTERNAL_API_TOKEN || '';
+      return expected && token === expected;
+    };
+
+    // /api/tournaments
+    if (pathname === '/api/tournaments') {
+      if (!requireInternalAuth()) {
+        return writeJson(401, { error: 'Unauthorized' });
+      }
+
+      if (method === 'GET') {
+        try {
+          const tournaments = await prisma.tournament.findMany({
+            where: {
+              status: {
+                in: ['registering', 'preparing', 'active']
+              }
+            },
+            include: {
+              registrations: {
+                include: {
+                  player: { select: { id: true, name: true } }
+                }
+              },
+              standings: true,
+              rounds: { include: { matches: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          const tournamentInfos = tournaments.map((t) => ({
+            id: t.id,
+            name: t.name,
+            creatorId: t.creatorId,
+            format: t.format,
+            status: t.status,
+            maxPlayers: t.maxPlayers,
+            registeredPlayers: t.registrations.map((reg) => ({
+              id: reg.playerId,
+              displayName: (reg.player && reg.player.name) || 'Anonymous',
+              ready: Boolean((reg.preparationData && reg.preparationData.ready) || false),
+            })),
+            standings: t.standings.map((s) => ({
+              playerId: s.playerId,
+              displayName: s.displayName,
+              wins: s.wins,
+              losses: s.losses,
+              draws: s.draws,
+              matchPoints: s.matchPoints,
+              gameWinPercentage: s.gameWinPercentage,
+              opponentMatchWinPercentage: s.opponentMatchWinPercentage,
+              isEliminated: s.isEliminated,
+              currentMatchId: s.currentMatchId,
+            })),
+            currentRound: t.rounds.length > 0 ? Math.max(...t.rounds.map((r) => r.roundNumber)) : 0,
+            totalRounds: (t.settings && t.settings.totalRounds) || 3,
+            rounds: t.rounds.map((r) => ({
+              roundNumber: r.roundNumber,
+              status: r.status,
+              matches: r.matches.map((m) => m.id),
+            })),
+            settings: t.settings,
+            createdAt: t.createdAt.getTime(),
+          }));
+
+          return writeJson(200, tournamentInfos);
+        } catch (e) {
+          try { console.error('[api] tournaments GET error:', e?.message || e); } catch {}
+          return writeJson(500, { error: 'Failed to fetch tournaments' });
+        }
+      }
+
+      if (method === 'POST') {
+        try {
+          const body = await readJsonBody();
+          const userId = (req.headers['x-user-id'] || req.headers['X-User-Id'] || '').toString();
+          const name = String(body?.name || '').trim();
+          const format = String(body?.format || 'sealed');
+          const matchType = String(body?.matchType || 'sealed');
+          const maxPlayers = Number(body?.maxPlayers || 8);
+          const sealedConfig = body?.sealedConfig || null;
+          const draftConfig = body?.draftConfig || null;
+
+          if (!userId) return writeJson(400, { error: 'Missing x-user-id' });
+          if (!name) return writeJson(400, { error: 'Missing tournament name' });
+          if (!['sealed', 'draft', 'constructed'].includes(format)) return writeJson(400, { error: 'Invalid tournament format' });
+          if (![2, 4, 8, 16, 32].includes(maxPlayers)) return writeJson(400, { error: 'Invalid max players count' });
+
+          // Enforce one active tournament per user
+          const existing = await prisma.tournamentRegistration.findMany({
+            where: {
+              playerId: userId,
+              tournament: { status: { in: ['registering', 'preparing', 'active'] } },
+            },
+            include: { tournament: { select: { name: true } } },
+          });
+          if (existing.length > 0) {
+            return writeJson(400, { error: `You are already in tournament "${existing[0].tournament.name}". Leave that tournament before creating a new one.` });
+          }
+
+          const optimalRounds = Math.ceil(Math.log2(maxPlayers));
+          const totalRounds = Math.max(3, optimalRounds);
+
+          const tournament = await prisma.tournament.create({
+            data: {
+              name,
+              creatorId: userId,
+              format,
+              status: 'registering',
+              maxPlayers,
+              settings: {
+                totalRounds,
+                roundTimeLimit: 50,
+                matchTimeLimit: 60,
+                sealedConfig,
+                draftConfig,
+              },
+            },
+          });
+
+          // Auto-register creator into the tournament and initial standings
+          try {
+            const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+            const displayName = (user?.name) || (user?.email ? user.email.split('@')[0] : null) || 'Tournament Host';
+            await prisma.$transaction([
+              prisma.tournamentRegistration.create({ data: { tournamentId: tournament.id, playerId: userId } }),
+              prisma.playerStanding.create({ data: { tournamentId: tournament.id, playerId: userId, displayName } }),
+            ]);
+          } catch (e) {
+            try { console.warn('[api] tournaments POST auto-register failed:', e?.message || e); } catch {}
+          }
+
+          return writeJson(201, {
+            id: tournament.id,
+            name: tournament.name,
+            format: tournament.format,
+            status: tournament.status,
+            maxPlayers: tournament.maxPlayers,
+            settings: tournament.settings,
+          });
+        } catch (e) {
+          try { console.error('[api] tournaments POST error:', e?.message || e); } catch {}
+          return writeJson(500, { error: 'Failed to create tournament' });
+        }
+      }
+
+      // Method not allowed
+      res.statusCode = 405;
+      res.setHeader('Allow', 'GET, POST');
+      res.end();
+      return;
+    }
+  } catch {}
+
   // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
   return;
 });
