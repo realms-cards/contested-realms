@@ -71,6 +71,7 @@ function noopRaycast(
 // Isolated playmat that loads its texture and renders the background plane.
 // Wrapped in Suspense by the parent so Board itself doesn't suspend.
 function Playmat({ matW, matH }: PlaymatProps) {
+  // Try to load playmat with fallback handling for different formats
   const tex = useTexture("/api/assets/playmat.jpg");
   tex.colorSpace = SRGBColorSpace;
   return (

@@ -65,6 +65,20 @@ export async function GET(
     const cdn = (process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN)?.trim();
     if (cdn) {
       const last = segments[segments.length - 1];
+
+      // For playmat specifically, handle the path differently
+      if (last.includes("playmat")) {
+        // Playmat should be directly at CDN root as playmat.webp
+        const cdnUrl = `${cdn.replace(/\/$/, "")}/playmat.webp`;
+        return new Response(null, {
+          status: 308,
+          headers: {
+            Location: cdnUrl,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      }
+
       const outName = (() => {
         if (wantKtx2 && requestedExt !== "ktx2") {
           return last.replace(/\.[^.]+$/, ".ktx2");
