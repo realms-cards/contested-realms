@@ -25,10 +25,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ nam
     const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
     if (cdn) {
       const outName = (() => {
+        // Special case: playmat stays as .jpg
+        if (name === 'playmat.jpg') return name;
         if (name.toLowerCase().endsWith('.ktx2')) return name;
-        if (name.match(/\.(png|jpe?g|webp)$/i)) {
+        // For other images, prefer .webp (elements, cardbacks)
+        if (name.match(/\.(png|jpe?g)$/i)) {
           return name.replace(/\.[^.]+$/, '.webp');
         }
+        if (name.endsWith('.webp')) return name;
         return name;
       })();
       const cdnUrl = `${cdn.replace(/\/$/, '')}/${outName}`;
