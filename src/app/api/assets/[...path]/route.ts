@@ -77,10 +77,10 @@ export async function GET(
       const relPath = [...segments.slice(0, -1), outName].join("/");
       const cdnUrl = `${cdn.replace(/\/$/, "")}/${baseDir}/${relPath}`;
       return new Response(null, {
-        status: 308,
+        status: 302,
         headers: {
           Location: cdnUrl,
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": "public, max-age=300",
         },
       });
     }
