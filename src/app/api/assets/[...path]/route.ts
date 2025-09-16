@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const ROOT_DATA = path.join(process.cwd(), "data");
 const ROOT_KTX2 = path.join(process.cwd(), "data-ktx2");
+const ROOT_WEBP = path.join(process.cwd(), "data-webp");
 const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "ktx2"]);
 
 function contentTypeFor(ext: string): string {
@@ -60,18 +61,29 @@ export async function GET(
       }
     })();
 
-    // If a CDN origin is configured, 302-redirect there instead of streaming from disk.
+    // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
     const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
     if (cdn) {
       const last = segments[segments.length - 1];
       const outName = (() => {
-        if (wantKtx2 && requestedExt !== 'ktx2') {
-          return last.replace(/\.[^.]+$/, '.ktx2');
+        if (wantKtx2 && requestedExt !== "ktx2") {
+          return last.replace(/\.[^.]+$/, ".ktx2");
+        }
+        // Prefer .webp for raster assets on CDN
+        const ext = path.extname(last).toLowerCase();
+        if ([".png", ".jpg", ".jpeg", ".webp"].includes(ext)) {
+          return last.replace(/\.[^.]+$/, ".webp");
         }
         return last;
       })();
-      const cdnUrl = `${cdn.replace(/\/$/, '')}/${[...segments.slice(0, -1), outName].join('/')}`;
-      return Response.redirect(cdnUrl, 302);
+      const cdnUrl = `${cdn.replace(/\/$/, "")}/${[...segments.slice(0, -1), outName].join("/")}`;
+      return new Response(null, {
+        status: 308,
+        headers: {
+          Location: cdnUrl,
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
     }
 
     // Force specific assets to only use data directory (not ktx2)
@@ -92,16 +104,27 @@ export async function GET(
         dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
     );
 
-    const roots =
-      wantKtx2 && !shouldForceDataOnly ? [ROOT_KTX2, ROOT_DATA] : [ROOT_DATA];
+    const roots = wantKtx2 && !shouldForceDataOnly
+      ? [ROOT_KTX2, ROOT_WEBP, ROOT_DATA]
+      : [ROOT_WEBP, ROOT_DATA];
 
-    // Build candidate paths. If ?ktx2 was requested for a raster path, also try swapping extension to .ktx2
+    // Build candidate paths.
+    // If ?ktx2 was requested for a raster path, first try swapping extension to .ktx2.
+    // For raster fallback, prefer a .webp variant before the originally requested file.
     const candidates: string[] = [];
     for (const root of roots) {
       if (wantKtx2 && requestedExt !== "ktx2" && !shouldForceDataOnly) {
         const ktx2Name = last.replace(/\.[^.]+$/, ".ktx2");
         const ktx2Path = path.join(root, ...segments.slice(0, -1), ktx2Name);
         candidates.push(ktx2Path);
+      }
+      if (requestedExt !== "ktx2") {
+        const ext = requestedExt;
+        if (["png", "jpg", "jpeg"].includes(ext)) {
+          const webpName = last.replace(/\.[^.]+$/, ".webp");
+          const webpPath = path.join(root, ...segments.slice(0, -1), webpName);
+          candidates.push(webpPath);
+        }
       }
       candidates.push(path.join(root, ...segments));
     }

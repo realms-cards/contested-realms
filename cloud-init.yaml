@@ -8,6 +8,8 @@ packages:
   - ca-certificates
   - curl
   - jq
+  - fail2ban
+  - logrotate
 
 write_files:
   - path: /etc/docker/daemon.json
@@ -44,17 +46,59 @@ write_files:
       Logs:
          docker compose -f docker-compose.prod.yml logs -f caddy server1 server2
 
+  - path: /etc/fail2ban/filter.d/caddy-json.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Definition]
+      # Match Caddy JSON access logs for undesirable statuses
+      failregex = ^.*"request":\{"remote_addr":"<HOST>:[0-9]+".*"status":\s?(?:400|401|403|404|429).*$
+      ignoreregex =
+
+  - path: /etc/fail2ban/jail.d/caddy.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [caddy]
+      enabled = true
+      port = http,https
+      filter = caddy-json
+      logpath = /var/log/caddy/access.log
+      maxretry = 15
+      findtime = 10m
+      bantime = 1h
+      backend = auto
+      action = iptables-multiport[name=caddy, port="http,https"]
+
+  - path: /etc/logrotate.d/caddy
+    owner: root:root
+    permissions: '0644'
+    content: |
+      /var/log/caddy/*.log {
+        daily
+        rotate 7
+        missingok
+        notifempty
+        compress
+        delaycompress
+        copytruncate
+      }
+
 runcmd:
   - |
     set -euxo pipefail
     # Enable and start Docker
     systemctl enable --now docker
+    # Enable fail2ban and prepare log dir for Caddy (for Fail2ban)
+    mkdir -p /var/log/caddy
+    chmod 755 /var/log/caddy
+    systemctl enable --now fail2ban
     # Create app dir
     mkdir -p /opt/sorcery-client
     cd /opt/sorcery-client
-    # Clone repo if missing (replace REPO_URL before use)
+    # Clone repo if missing (replace https://github.com/geleeroyale/contested-realms.git before use)
     if [ ! -d .git ]; then
-      git clone REPO_URL .
+      git clone https://github.com/geleeroyale/contested-realms.git .
     else
       git pull --ff-only || true
     fi

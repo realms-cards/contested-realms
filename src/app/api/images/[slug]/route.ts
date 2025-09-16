@@ -61,7 +61,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       }
     })();
 
-    // If a CDN origin is configured, 302-redirect there instead of streaming from disk.
+    // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
     const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
     if (cdn) {
       // Build CDN path using the same set/slug logic
@@ -69,20 +69,34 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       if (!setDir) return new Response("Unknown set", { status: 404 });
       const base = imageBasenameFromSlug(slug);
       const suffix = suffixDirFromBasename(base);
-      const name = wantKtx2 ? `${base}.ktx2` : `${base}.png`;
+      // Prefer .ktx2 when requested, otherwise default to .webp for better raster compression
+      const name = wantKtx2 ? `${base}.ktx2` : `${base}.webp`;
       const pathParts = suffix ? [setDir, suffix, name] : [setDir, name];
       const cdnUrl = `${cdn.replace(/\/$/, '')}/${pathParts.join('/')}`;
-      return Response.redirect(cdnUrl, 302);
+      return new Response(null, {
+        status: 308,
+        headers: {
+          Location: cdnUrl,
+          // Allow the redirect to be cached by the browser/CDN
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
     }
-    // Roots to search. For KTX2, prefer data-ktx2 output dir then fallback to data.
+    // Roots to search.
+    // - For KTX2, prefer data-ktx2 output dir then fallback to data (original rasters).
+    // - For raster, prefer WebP under data-webp first, then fallback to original data.
     const roots = wantKtx2
       ? [
           path.join(process.cwd(), "data-ktx2", setDir),
           path.join(process.cwd(), "data", setDir),
         ]
-      : [path.join(process.cwd(), "data", setDir)];
+      : [
+          path.join(process.cwd(), "data-webp", setDir),
+          path.join(process.cwd(), "data", setDir),
+        ];
 
-    const exts = wantKtx2 ? ["ktx2"] : ["png", "jpg", "jpeg", "webp"];
+    // Prefer WebP for raster when available, then PNG/JPEG as fallback
+    const exts = wantKtx2 ? ["ktx2"] : ["webp", "png", "jpg", "jpeg"];
     const candidates: string[] = [];
 
     // 1) Try within the resolved set directory first (strict match)
@@ -120,7 +134,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
               path.join(process.cwd(), "data-ktx2", setName),
               path.join(process.cwd(), "data", setName),
             ]
-          : [path.join(process.cwd(), "data", setName)];
+          : [
+              path.join(process.cwd(), "data-webp", setName),
+              path.join(process.cwd(), "data", setName),
+            ];
         for (const root of altRoots) {
           if (suffix) {
             for (const ext of exts)
