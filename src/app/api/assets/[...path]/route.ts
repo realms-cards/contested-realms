@@ -69,11 +69,7 @@ export async function GET(
         if (wantKtx2 && requestedExt !== "ktx2") {
           return last.replace(/\.[^.]+$/, ".ktx2");
         }
-        // Prefer .webp for raster assets on CDN
-        const ext = path.extname(last).toLowerCase();
-        if ([".png", ".jpg", ".jpeg", ".webp"].includes(ext)) {
-          return last.replace(/\.[^.]+$/, ".webp");
-        }
+        // Keep the requested raster extension for general assets; we cannot assume a .webp exists on CDN
         return last;
       })();
       const outExt = path.extname(outName).slice(1).toLowerCase();
