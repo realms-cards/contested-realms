@@ -62,7 +62,7 @@ export async function GET(
     })();
 
     // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
-    const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
+    const cdn = (process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN)?.trim();
     if (cdn) {
       const last = segments[segments.length - 1];
       const outName = (() => {
@@ -76,7 +76,10 @@ export async function GET(
         }
         return last;
       })();
-      const cdnUrl = `${cdn.replace(/\/$/, "")}/${[...segments.slice(0, -1), outName].join("/")}`;
+      const outExt = path.extname(outName).slice(1).toLowerCase();
+      const baseDir = outExt === "ktx2" ? "data-ktx2" : outExt === "webp" ? "data-webp" : "data";
+      const relPath = [...segments.slice(0, -1), outName].join("/");
+      const cdnUrl = `${cdn.replace(/\/$/, "")}/${baseDir}/${relPath}`;
       return new Response(null, {
         status: 308,
         headers: {

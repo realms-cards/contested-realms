@@ -1,3 +1,4 @@
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata } from "next";
 // Google fonts disabled for offline/CI builds
 import localFont from "next/font/local";
@@ -21,8 +22,8 @@ const fantaisieArtistique = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Contested Realms",
-  description: "Play Sorcery: Contested Realm online and offline",
+  title: "Realms.cards",
+  description: "",
 };
 
 export default async function RootLayout({
@@ -42,14 +43,13 @@ export default async function RootLayout({
         <ThemeProvider defaultMode="grayscale">
           <AuthProvider session={session}>
             <ThemeScope>
-              <VideoOverlayProvider>
-                {children}
-              </VideoOverlayProvider>
+              <VideoOverlayProvider>{children}</VideoOverlayProvider>
             </ThemeScope>
             {/* Global theme toggle button */}
             <ThemeToggle />
           </AuthProvider>
         </ThemeProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
