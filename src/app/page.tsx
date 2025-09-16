@@ -1,8 +1,9 @@
 "use client";
 
-import { Gamepad2, Users, Zap, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import AsciiLogo from "@/components/ui/AsciiLogo";
+import AsciiPanel from "@/components/ui/AsciiPanel";
 
 export default function Home() {
   // Set home page title
@@ -10,101 +11,62 @@ export default function Home() {
     document.title = "Contested Realms";
   }, []);
 
-  const tournamentsEnabled = process.env.NEXT_PUBLIC_FEATURE_TOURNAMENTS === 'true';
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white flex items-center justify-center p-8">
-      <div className="max-w-4xl w-full text-center space-y-12">
-        {/* Header */}
-        <div className="space-y-4">
-          <h1 className="text-6xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 bg-clip-text text-transparent">
-            Sorcery
-          </h1>
-          <p className="text-xl text-slate-300">
-            Contested Realm • Digital Client
-          </p>
-          <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-            Experience the strategic depth of Sorcery: Contested Realm with this
-            immersive 3D digital client. Play online with friends or practice
-            offline.
-          </p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center pt-10 pb-12 px-5">
+      <div className="max-w-5xl w-full text-center space-y-8">
+        {/* ASCII Logotype */}
+        <AsciiLogo className="max-w-4xl mx-auto" />
 
-        {/* Navigation Cards */}
-        <div className={`grid grid-cols-1 md:grid-cols-2 ${tournamentsEnabled ? 'lg:grid-cols-3' : ''} gap-8 max-w-5xl mx-auto`}>
-          {/* Offline Play */}
-          <Link
-            href="/play"
-            className="group bg-gradient-to-br from-blue-900/50 to-blue-800/30 ring-1 ring-blue-500/30 rounded-2xl p-8 hover:ring-blue-400/50 hover:scale-[1.02] transition-all duration-200"
-          >
-            <div className="flex flex-col items-center space-y-4">
-              <div className="p-4 bg-blue-500/20 rounded-full group-hover:bg-blue-500/30 transition-colors">
-                <Gamepad2 className="w-8 h-8 text-blue-400" />
-              </div>
-              <h3 className="text-2xl font-semibold text-blue-100">
-                Offline Play
-              </h3>
-              <p className="text-blue-200/80 text-center">
-                Play locally with hot-seat multiplayer. Perfect for learning the
-                game or playing with friends at the same computer.
-              </p>
-            </div>
-          </Link>
-
-          {/* Online Multiplayer */}
-          <Link
-            href="/online/lobby"
-            className="group bg-gradient-to-br from-emerald-900/50 to-emerald-800/30 ring-1 ring-emerald-500/30 rounded-2xl p-8 hover:ring-emerald-400/50 hover:scale-[1.02] transition-all duration-200"
-          >
-            <div className="flex flex-col items-center space-y-4">
-              <div className="p-4 bg-emerald-500/20 rounded-full group-hover:bg-emerald-500/30 transition-colors">
-                <Users className="w-8 h-8 text-emerald-400" />
-              </div>
-              <h3 className="text-2xl font-semibold text-emerald-100">
-                Online Multiplayer
-              </h3>
-              <p className="text-emerald-200/80 text-center">
-                Connect with players worldwide. Create or join matches, chat
-                with opponents, and compete online.
-              </p>
-            </div>
-          </Link>
-
-          {/* Tournaments */}
-          {tournamentsEnabled && (
+        {/* Primary Navigation */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          {/* Local Hotseat */}
+          <AsciiPanel>
             <Link
-              href="/tournaments"
-              className="group bg-gradient-to-br from-amber-900/50 to-amber-800/30 ring-1 ring-amber-500/30 rounded-2xl p-8 hover:ring-amber-400/50 hover:scale-[1.02] transition-all duration-200 md:col-span-2 lg:col-span-1"
+              href="/play"
+              className="group block hover:scale-[1.02] transition-transform duration-200"
             >
-              <div className="flex flex-col items-center space-y-4">
-                <div className="p-4 bg-amber-500/20 rounded-full group-hover:bg-amber-500/30 transition-colors">
-                  <Trophy className="w-8 h-8 text-amber-400" />
-                </div>
-                <h3 className="text-2xl font-semibold text-amber-100">
-                  Tournaments
-                </h3>
-                <p className="text-amber-200/80 text-center">
-                  Join competitive tournaments with Swiss pairings. Create your own or participate in community events.
-                </p>
+              <div className="flex items-center justify-center py-7">
+                <h3 className="text-2xl font-semibold tracking-wide">Local Hotseat</h3>
               </div>
             </Link>
-          )}
+          </AsciiPanel>
+
+          {/* Contest a Realm (Online) */}
+          <AsciiPanel>
+            <Link
+              href="/online/lobby"
+              className="group block hover:scale-[1.02] transition-transform duration-200"
+            >
+              <div className="flex items-center justify-center py-7">
+                <h3 className="text-2xl font-semibold tracking-wide">Contest a Realm</h3>
+              </div>
+            </Link>
+          </AsciiPanel>
         </div>
 
-        {/* Features */}
-        <div className="bg-slate-800/50 ring-1 ring-slate-700/50 rounded-2xl p-8 max-w-2xl mx-auto">
-          <div className="flex items-center justify-center mb-4">
-            <Zap className="w-6 h-6 text-yellow-400 mr-2" />
-            <h3 className="text-xl font-semibold">Features</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-sm text-slate-300">
-            <div>• 3D Interactive Board</div>
-            <div>• Full Sorcery Rules</div>
-            <div>• Deck Import System</div>
-            <div>• Real-time Multiplayer</div>
-            <div>• Match Spectating</div>
-            {tournamentsEnabled && <div>• Tournament Support</div>}
-          </div>
+        {/* Secondary Links */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-5xl mx-auto">
+          <AsciiPanel>
+            <Link href="/draft-3d" className="group block hover:scale-[1.02] transition-transform duration-200">
+              <div className="flex items-center justify-center py-4">
+                <h4 className="text-lg font-semibold tracking-wide">Draft Simulator</h4>
+              </div>
+            </Link>
+          </AsciiPanel>
+          <AsciiPanel>
+            <Link href="/decks" className="group block hover:scale-[1.02] transition-transform duration-200">
+              <div className="flex items-center justify-center py-4">
+                <h4 className="text-lg font-semibold tracking-wide">Decks</h4>
+              </div>
+            </Link>
+          </AsciiPanel>
+          <AsciiPanel>
+            <Link href="/decks/editor-3d" className="group block hover:scale-[1.02] transition-transform duration-200">
+              <div className="flex items-center justify-center py-4">
+                <h4 className="text-lg font-semibold tracking-wide">Deck Editor (3D)</h4>
+              </div>
+            </Link>
+          </AsciiPanel>
         </div>
 
         {/* Footer */}

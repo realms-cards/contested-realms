@@ -32,6 +32,13 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
     // Allow overriding transcoder path via env; default to self-hosted /ktx2/
     const envPath = process.env.NEXT_PUBLIC_KTX2_TRANSCODER_PATH;
     loader.setTranscoderPath(envPath && envPath.trim() ? envPath : "/ktx2/");
+    // Ensure cross-origin requests (after CDN redirect) are made with anonymous CORS
+    try {
+      // KTX2Loader extends Loader, which supports setCrossOrigin
+      (loader as unknown as { setCrossOrigin?: (v: string) => void }).setCrossOrigin?.(
+        "anonymous"
+      );
+    } catch {}
     try {
       loader.detectSupport(gl);
     } catch {
@@ -138,8 +145,9 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
       // Special-case token slugs: token:<fileBase>
       if (slug.startsWith("token:")) {
         const base = slug.slice("token:".length);
-        // Request raster with ?ktx2=1 to allow KTX2 swap server-side
-        return `/api/assets/tokens/${base}.png?ktx2=1`;
+        // Raster fallback (TextureLoader) must NOT request ktx2 variants.
+        // The KTX2 attempt is handled separately via ktx2Url below.
+        return `/api/assets/tokens/${base}.png`;
       }
       return `/api/images/${slug}`;
     }
@@ -266,7 +274,9 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
       if (baseUrl) {
         try {
           const t = await acquire(baseUrl, async () => {
-            const tex = await new TextureLoader().loadAsync(baseUrl);
+            const tex = await new TextureLoader()
+              .setCrossOrigin("anonymous")
+              .loadAsync(baseUrl);
             normalizeTexture(tex as Texture, "raster", gl);
             return tex as Texture;
           });

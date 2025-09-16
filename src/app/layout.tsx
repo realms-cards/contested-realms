@@ -4,7 +4,10 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
+import ThemeScope from "@/components/ui/ThemeScope";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 import { authOptions } from "@/lib/auth";
+import { ThemeProvider } from "@/lib/contexts/ThemeContext";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
 
 // Provide empty variables instead of loading Google fonts in network-restricted environments
@@ -36,11 +39,17 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${fantaisieArtistique.variable} antialiased`}
         suppressHydrationWarning
       >
-        <AuthProvider session={session}>
-          <VideoOverlayProvider>
-            {children}
-          </VideoOverlayProvider>
-        </AuthProvider>
+        <ThemeProvider defaultMode="grayscale">
+          <AuthProvider session={session}>
+            <ThemeScope>
+              <VideoOverlayProvider>
+                {children}
+              </VideoOverlayProvider>
+            </ThemeScope>
+            {/* Global theme toggle button */}
+            <ThemeToggle />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

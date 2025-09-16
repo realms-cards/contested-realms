@@ -10,6 +10,20 @@ services:
       - .env.production
     command: ["npx", "prisma", "migrate", "deploy"]
 
+  # Self-hosted Redis for Socket.IO adapter and shared state
+  redis:
+    image: redis:7-alpine
+    container_name: sorcery-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redisdata:/data
+
   # Socket.IO server instances (horizontal scaling via Redis adapter)
   server1:
     build:
@@ -25,6 +39,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     expose:
       - "3010"
 
@@ -42,6 +58,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     expose:
       - "3010"
 
@@ -49,12 +67,17 @@ services:
   caddy:
     image: caddy:2-alpine
     container_name: sorcery-caddy
+    user: root
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - /var/log/caddy:/var/log/caddy
     depends_on:
       - server1
       - server2
+
+volumes:
+  redisdata:
