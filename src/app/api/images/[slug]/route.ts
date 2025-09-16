@@ -62,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     })();
 
     // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
-    const cdn = process.env.ASSET_CDN_ORIGIN?.trim();
+    const cdn = (process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN)?.trim();
     if (cdn) {
       // Build CDN path using the same set/slug logic
       const setDir = setDirFromSlug(slug);
@@ -71,7 +71,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       const suffix = suffixDirFromBasename(base);
       // Prefer .ktx2 when requested, otherwise default to .webp for better raster compression
       const name = wantKtx2 ? `${base}.ktx2` : `${base}.webp`;
-      const pathParts = suffix ? [setDir, suffix, name] : [setDir, name];
+      const baseDir = wantKtx2 ? 'data-ktx2' : 'data-webp';
+      const pathParts = suffix ? [baseDir, setDir, suffix, name] : [baseDir, setDir, name];
       const cdnUrl = `${cdn.replace(/\/$/, '')}/${pathParts.join('/')}`;
       return new Response(null, {
         status: 308,
