@@ -71,7 +71,7 @@ function noopRaycast(
 // Isolated playmat that loads its texture and renders the background plane.
 // Wrapped in Suspense by the parent so Board itself doesn't suspend.
 function Playmat({ matW, matH }: PlaymatProps) {
-  const tex = useTexture("/api/assets/playmat.jpg");
+  const tex = useTexture("/api/assets/playmat.jpg?v=2");
   tex.colorSpace = SRGBColorSpace;
   return (
     <mesh
@@ -715,7 +715,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               rotationZ={rotZ}
                               elevation={0.001}
                               renderOrder={10}
-                              textureUrl={!site.card?.slug ? "/api/assets/earth.png" : undefined}
+                              textureUrl={!site.card?.slug ? "/api/assets/earth.png?v=2" : undefined}
                               onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                                 e.stopPropagation();
                                 e.nativeEvent.preventDefault();
