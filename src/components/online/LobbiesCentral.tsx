@@ -7,6 +7,12 @@ import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 
+// Check if CPU bots are enabled via environment variable
+function isCpuBotsEnabled(): boolean {
+  const enabled = process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED;
+  return enabled === "1" || enabled === "true";
+}
+
 // Fantasy-themed word lists for generating lobby names in format: "$Predicate of $adjective $subjects"
 
 // Forms of contest, conflict, confrontation
@@ -699,7 +705,7 @@ export default function LobbiesCentral({
                       </button>
                     )}
 
-                    {onAddCpuBot && myId && l.hostId === myId && (
+                    {onAddCpuBot && myId && l.hostId === myId && isCpuBotsEnabled() && (
                       <button
                         className="ml-1 rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1 text-xs disabled:opacity-40"
                         onClick={() => onAddCpuBot("CPU Easy")}
@@ -710,7 +716,7 @@ export default function LobbiesCentral({
                       </button>
                     )}
 
-                    {onRemoveCpuBot && myId && l.hostId === myId && (
+                    {onRemoveCpuBot && myId && l.hostId === myId && isCpuBotsEnabled() && (
                       <button
                         className="ml-1 rounded bg-rose-600/80 hover:bg-rose-600 px-3 py-1 text-xs disabled:opacity-40"
                         onClick={() => onRemoveCpuBot()}
