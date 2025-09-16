@@ -779,8 +779,8 @@ async function findActiveMatchForPlayer(playerId) {
 
 // Global feature flag for CPU bots (default: disabled)
 const CPU_BOTS_ENABLED =
-  process.env.CPU_BOTS_ENABLED === "1" ||
-  process.env.CPU_BOTS_ENABLED === "true";
+  process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
+  process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "true";
 
 // Lazy loader: only require the headless BotClient when feature is enabled
 function loadBotClientCtor() {
