@@ -65,11 +65,29 @@ export async function GET(
     const cdn = (process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN)?.trim();
     if (cdn) {
       const last = segments[segments.length - 1];
+      const baseName = last.replace(/\.[^.]+$/, ""); // filename without extension
 
-      // For playmat specifically, handle the path differently
-      if (last.includes("playmat")) {
-        // Playmat should be directly at CDN root as playmat.webp
-        const cdnUrl = `${cdn.replace(/\/$/, "")}/playmat.webp`;
+      // Assets that should be at CDN root (elements, card backs, playmat)
+      const rootAssets = new Set([
+        "playmat.jpg",
+        "fire.png", "fire.webp",
+        "air.png", "air.webp",
+        "water.png", "water.webp",
+        "earth.png", "earth.webp",
+        "cardback_spellbook.png", "cardback_spellbook.webp",
+        "cardback_atlas.png", "cardback_atlas.webp"
+      ]);
+
+      // Check if this is a root asset
+      if (rootAssets.has(last)) {
+        // First try .webp version for elements and cardbacks (except playmat which is .jpg)
+        let cdnFile = last;
+        if (!last.includes("playmat") && (last.endsWith(".png") || last.endsWith(".jpg"))) {
+          // For elements and cardbacks, prefer .webp at root
+          cdnFile = baseName + ".webp";
+        }
+        const cdnUrl = `${cdn.replace(/\/$/, "")}/${cdnFile}`;
+        console.log(`[API assets] Redirecting ${last} to CDN root as ${cdnFile}: ${cdnUrl}`);
         return new Response(null, {
           status: 308,
           headers: {
@@ -79,17 +97,32 @@ export async function GET(
         });
       }
 
-      const outName = (() => {
-        if (wantKtx2 && requestedExt !== "ktx2") {
-          return last.replace(/\.[^.]+$/, ".ktx2");
-        }
-        // Keep the requested raster extension for general assets; we cannot assume a .webp exists on CDN
-        return last;
-      })();
-      const outExt = path.extname(outName).slice(1).toLowerCase();
-      const baseDir = outExt === "ktx2" ? "data-ktx2" : outExt === "webp" ? "data-webp" : "data";
-      const relPath = [...segments.slice(0, -1), outName].join("/");
-      const cdnUrl = `${cdn.replace(/\/$/, "")}/${baseDir}/${relPath}`;
+      // For card images and other assets
+      // Determine the CDN directory based on format preference
+      let cdnPath = "";
+
+      if (segments[0] === "tokens") {
+        // Token images - preserve the tokens subdirectory
+        cdnPath = segments.join("/");
+      } else if (wantKtx2 || requestedExt === "ktx2") {
+        // Prefer ktx2 format for cards
+        const ktx2Name = baseName + ".ktx2";
+        cdnPath = `ktx2/${ktx2Name}`;
+      } else if (requestedExt === "webp") {
+        // Already requesting webp
+        cdnPath = `webp/${last}`;
+      } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+        // For raster images, try webp first
+        const webpName = baseName + ".webp";
+        cdnPath = `webp/${webpName}`;
+      } else {
+        // Default fallback to data directory for PNG
+        cdnPath = `data/${last}`;
+      }
+
+      const cdnUrl = `${cdn.replace(/\/$/, "")}/${cdnPath}`;
+      console.log(`[API assets] Redirecting ${segments.join("/")} to CDN: ${cdnUrl}`);
+
       return new Response(null, {
         status: 308,
         headers: {
