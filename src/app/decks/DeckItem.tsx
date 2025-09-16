@@ -42,7 +42,7 @@ export default function DeckItem({ deck }: DeckItemProps) {
 
   return (
     <Link
-      href={`/decks/editor?id=${encodeURIComponent(deck.id)}`}
+      href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
       className="border rounded p-3 hover:bg-muted/60 relative group block"
     >
       <div className="font-medium line-clamp-1 pr-8">{deck.name}</div>
