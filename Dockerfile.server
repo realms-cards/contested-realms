@@ -13,6 +13,7 @@ COPY prisma ./prisma
 COPY server ./server
 COPY bots ./bots
 COPY data ./data
+COPY scripts ./scripts
 
 # Generate Prisma client inside the container
 RUN ./node_modules/.bin/prisma generate
