@@ -4,7 +4,10 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactStrictMode: true,
   images: {
-    remotePatterns: [new URL("https://cdn.discordapp.com/avatars/**")],
+    remotePatterns: [
+      { protocol: "https", hostname: "cdn.discordapp.com", pathname: "/avatars/**" },
+      { protocol: "https", hostname: "cdn.realms.cards", pathname: "/**" },
+    ],
   },
 };
 
