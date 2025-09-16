@@ -101,9 +101,27 @@ export async function GET(
       // Determine the CDN directory based on format preference
       let cdnPath = "";
 
+      // Check if this is a subdirectory request (like Dragonlord/cardname.png)
+      const hasSubdir = segments.length > 1;
+      const subdir = hasSubdir ? segments.slice(0, -1).join("/") : "";
+
       if (segments[0] === "tokens") {
         // Token images - preserve the tokens subdirectory
         cdnPath = segments.join("/");
+      } else if (segments[0] === "Dragonlord") {
+        // Dragonlord assets - special handling since they're webp in both folders
+        // For CDN, they should be in /webp/Dragonlord/
+        const webpName = baseName + ".webp";
+        cdnPath = `webp/Dragonlord/${webpName}`;
+      } else if (hasSubdir) {
+        // Other subdirectory assets - preserve path structure
+        if (wantKtx2 || requestedExt === "ktx2") {
+          const ktx2Name = baseName + ".ktx2";
+          cdnPath = `ktx2/${subdir}/${ktx2Name}`;
+        } else {
+          const webpName = baseName + ".webp";
+          cdnPath = `webp/${subdir}/${webpName}`;
+        }
       } else if (wantKtx2 || requestedExt === "ktx2") {
         // Prefer ktx2 format for cards
         const ktx2Name = baseName + ".ktx2";
@@ -121,7 +139,17 @@ export async function GET(
       }
 
       const cdnUrl = `${cdn.replace(/\/$/, "")}/${cdnPath}`;
-      console.log(`[API assets] Redirecting ${segments.join("/")} to CDN: ${cdnUrl}`);
+
+      // Enhanced logging for texture usage tracking
+      const logDetails = {
+        requested: segments.join("/"),
+        redirectTo: cdnUrl,
+        format: requestedExt,
+        wantKtx2,
+        hasSubdir,
+        subdir
+      };
+      console.log(`[API assets] Texture request:`, JSON.stringify(logDetails, null, 2));
 
       return new Response(null, {
         status: 308,
