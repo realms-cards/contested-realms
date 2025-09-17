@@ -558,6 +558,17 @@ function AuthenticatedDeckEditor() {
     })();
   }, [searchParams, draftInitDone]);
 
+  // Load deck from URL parameter (for draft completion and regular editing)
+  useEffect(() => {
+    const deckIdParam = searchParams?.get("id");
+    const fromDraft = searchParams?.get("from") === "draft";
+
+    if (deckIdParam && status === "authenticated" && !deckId) {
+      console.log("Loading deck from URL parameter:", deckIdParam, { fromDraft });
+      loadDeck(deckIdParam);
+    }
+  }, [searchParams, status, deckId, loadDeck]);
+
   // Tab state for cards view - default to "Your Deck"
   const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
 
