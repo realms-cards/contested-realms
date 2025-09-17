@@ -661,12 +661,22 @@ export default function Draft3DPage() {
       }
       setSaveMsg(`Saved deck ${data.name} (id: ${data.id})${botMsg}`);
       // Navigate to 3D deck editor with new deck loaded in draft completion mode
-      router.push(
-        `/decks/editor-3d?id=${encodeURIComponent(data.id)}&from=draft`
-      );
+      console.log('Navigating to editor-3d with deck:', data.id);
+      const editorUrl = `/decks/editor-3d?id=${encodeURIComponent(data.id)}&from=draft`;
+      console.log('Editor URL:', editorUrl);
+
+      // Use window.location.href as a fallback if router.push fails
+      try {
+        await router.push(editorUrl);
+        // If navigation succeeds, don't reset saving state - let the next page handle it
+        return;
+      } catch (navError) {
+        console.error('Router navigation failed, using window.location:', navError);
+        window.location.href = editorUrl;
+        return; // Don't reset saving state on redirect
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
       setSaving(false);
     }
   }
