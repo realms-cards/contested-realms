@@ -5,19 +5,49 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // GET /api/decks
-// Returns: [{ id, name, format }]
+// Returns: { myDecks: [{ id, name, format, isPublic }], publicDecks: [{ id, name, format, userName }] }
 export async function GET() {
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
   try {
-        const decks = await prisma.deck.findMany({
+    // Get user's own decks (both public and private)
+    const myDecks = await prisma.deck.findMany({
       where: { userId: session.user.id },
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, name: true, format: true },
+      select: { id: true, name: true, format: true, isPublic: true, imported: true },
     });
-    return new Response(JSON.stringify(decks), { status: 200, headers: { 'content-type': 'application/json' } });
+
+    // Get public decks from other users
+    const publicDecks = await prisma.deck.findMany({
+      where: {
+        isPublic: true,
+        userId: { not: session.user.id }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // Limit to recent 50 public decks
+      select: {
+        id: true,
+        name: true,
+        format: true,
+        imported: true,
+        user: { select: { name: true } }
+      },
+    });
+
+    const response = {
+      myDecks,
+      publicDecks: publicDecks.map(deck => ({
+        id: deck.id,
+        name: deck.name,
+        format: deck.format,
+        imported: deck.imported,
+        userName: deck.user.name || 'Unknown Player'
+      }))
+    };
+
+    return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
@@ -25,7 +55,7 @@ export async function GET() {
 }
 
 // POST /api/decks
-// Body: { name: string, format?: string, set?: string, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
+// Body: { name: string, format?: string, set?: string, isPublic?: boolean, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
 // Notes:
 // - For backward compatibility, a top-level 'set' may be provided; if present, it will be used as the default set for cards that do not specify a variantId.
 // - If a card has a variantId, its set will be inferred from that variant, overriding the top-level 'set' for that card.
@@ -38,6 +68,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const name = String(body?.name || '').trim();
     const format = (body?.format && String(body.format)) || 'Sealed';
+    const isPublic = Boolean(body?.isPublic || false);
     const setName = body?.set ? String(body.set) : undefined;
     const cards = Array.isArray(body?.cards) ? body.cards : [];
 
@@ -89,7 +120,7 @@ export async function POST(req: NextRequest) {
     for (const v of variants) setByVariant.set(v.id, v.setId);
 
         const deck = await prisma.deck.create({
-      data: { name, format, userId: session.user.id },
+      data: { name, format, isPublic, userId: session.user.id },
     });
 
     for (const { cardId, zone, count, variantId } of agg.values()) {

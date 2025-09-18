@@ -31,6 +31,8 @@ export default function DeckImportCuriosa() {
         setUrl("");
         setName("");
         setTts("");
+        // Notify listeners on the page to refetch deck lists immediately
+        try { window.dispatchEvent(new Event("decks:refresh")); } catch {}
         router.refresh();
       }
     } catch {

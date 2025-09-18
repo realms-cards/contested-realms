@@ -6,6 +6,7 @@
     }
     # Load balance across the Socket.IO server instances
     reverse_proxy server1:3010 server2:3010 {
-        lb_policy least_conn
+        # Stick each client IP to the same backend to avoid bouncing between instances
+        lb_policy ip_hash
     }
 }

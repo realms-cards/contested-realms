@@ -3,7 +3,6 @@
  * Implements the core requirement: "All players must pick before packs rotate"
  */
 
-// TODO(draft-sync): Add back unused types when implementing full sync flows.
 import type {
   DraftSession,
   PlayerDraftState,
@@ -15,6 +14,13 @@ import type {
 } from './types';
 
 export class DraftSyncManager {
+  /**
+   * Strictly typed coordination layer for draft synchronization.
+   *
+   * - All state structures (sessions, players, metrics) are typed via `./types`.
+   * - Socket transport and event wiring are owned by `socketHandlers.ts`. This class
+   *   remains transport-agnostic and focuses purely on business rules and state changes.
+   */
   private sessions: Map<string, DraftSession> = new Map();
   private playerStates: Map<string, PlayerDraftState> = new Map();
   private activeTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -237,18 +243,6 @@ export class DraftSyncManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    const timerState: TimerState = {
-      sessionId,
-      playerId,
-      timerType: 'pick',
-      startTime: Date.now(),
-      duration: this.PICK_TIMER_DURATION,
-      remaining: this.PICK_TIMER_DURATION,
-      warnings: [],
-      hasTimedOut: false,
-      autoActionTaken: false
-    };
-
     // Set warning timers at 15s, 10s, 5s remaining
     this.WARNING_THRESHOLDS.forEach((threshold) => {
       const warningTime = this.PICK_TIMER_DURATION - threshold;
@@ -408,10 +402,10 @@ export class DraftSyncManager {
   }
 
   private async checkPickConflicts(
-    sessionId: string,
-    cardId: string,
-    playerId: string,
-    timing: { clientTimestamp: number; serverTimestamp: number; networkLatency: number }
+    _sessionId: string,
+    _cardId: string,
+    _playerId: string,
+    _timing: { clientTimestamp: number; serverTimestamp: number; networkLatency: number }
   ): Promise<PickConflict | null> {
     // Implementation would check for simultaneous picks of the same card
     // For now, return null (no conflicts)

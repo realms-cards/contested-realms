@@ -60,6 +60,7 @@ export default function Threshold3D({
               interactive={false}
             />
             <Text
+              font="/fantaisie_artistiqu.ttf"
               position={[0, yElev + 0.002, -size * 0.75]}
               rotation-x={-Math.PI / 2}
               rotation-z={rotationZ}

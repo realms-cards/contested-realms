@@ -17,12 +17,30 @@ async function leaderDraftPlayerReady(matchId, playerId, ready) {
   if (!match.draftState.playerReady || typeof match.draftState.playerReady !== 'object') {
     match.draftState.playerReady = { p1: false, p2: false };
   }
-  match.draftState.playerReady[playerKey] = !!ready;
+  // One-way ready: ignore attempts to unready
+  if (!ready) {
+    return;
+  }
+  match.draftState.playerReady[playerKey] = true;
   io.to(room).emit('message', { type: 'playerReady', playerKey, ready: !!ready });
   // Auto-start if both ready and still in waiting
   const pr = match.draftState.playerReady;
   if (match.draftState.phase === 'waiting' && pr && pr.p1 === true && pr.p2 === true) {
     try { await leaderStartDraft(matchId, playerId); } catch (e) { try { console.warn('[Draft] auto-start failed:', e?.message || e); } catch {} }
+    // Watchdog: if we're still in 'waiting' shortly after, attempt again (handles leader handoff/race)
+    try { if (draftStartWatchdogs.has(matchId)) { clearTimeout(draftStartWatchdogs.get(matchId)); } } catch {}
+    const t = setTimeout(async () => {
+      try {
+        const m = await getOrLoadMatch(matchId);
+        if (!m || m.matchType !== 'draft' || !m.draftState) return;
+        const pr2 = m.draftState.playerReady || { p1: false, p2: false };
+        if (m.draftState.phase === 'waiting' && pr2.p1 === true && pr2.p2 === true && !m.draftState.__startingDraft) {
+          await leaderStartDraft(matchId, playerId);
+        }
+      } catch {}
+      try { draftStartWatchdogs.delete(matchId); } catch {}
+    }, 1500);
+    draftStartWatchdogs.set(matchId, t);
   }
   try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
 }
@@ -143,9 +161,17 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
         ds.phase = 'picking';
         ds.waitingFor = [...m.playerIds];
         io.to(`match:${m.id}`).emit('draftUpdate', ds);
+        if (requestingSocketId) { try { io.to(requestingSocketId).emit('draftUpdate', ds); } catch {} }
+        // Keep match context in sync with new draft state
+        try { io.to(`match:${m.id}`).emit('matchStarted', { match: getMatchInfo(m) }); } catch {}
       } catch {}
     }, 12000);
     io.to(room).emit('draftUpdate', match.draftState);
+    if (requestingSocketId) { try { io.to(requestingSocketId).emit('draftUpdate', match.draftState); } catch {} }
+    // Also emit matchStarted so clients observing only matchStarted get updated draftState
+    try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
+    // Clear any pending watchdog once we transition away from waiting
+    try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
     try { await persistMatchUpdate(match, null, requestingPlayerId || 'system', Date.now()); } catch {}
   } catch (e) {
     console.error(`[Draft] Error starting draft: ${e && e.message ? e.message : String(e)}`);
@@ -369,18 +395,37 @@ async function handleLobbyControlAsLeader(msg) {
       try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
       lobbies.delete(lobbyId);
       await publishLobbyDelete(lobbyId);
+      // Ensure clients receive a fresh lobbies list
+      await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
       return;
     } else if (!lobbyHasHumanPlayers(lobby)) {
       lobby.status = 'closed';
       try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
       lobbies.delete(lobbyId);
       await publishLobbyDelete(lobbyId);
+      // Ensure clients receive a fresh lobbies list
+      await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
       return;
     } else if (lobby.hostId === playerId) {
-      const remaining = Array.from(lobby.playerIds);
-      const humanNext = remaining.find((pid) => !isCpuPlayerId(pid)) || remaining[0];
-      lobby.hostId = humanNext;
-      lobby.ready.clear();
+      // Host is leaving: close and delete the lobby instead of reassigning host
+      // Proactively remove remaining players from the lobby and clear their lobbyId
+      try {
+        const remaining = Array.from(lobby.playerIds);
+        for (const pid of remaining) {
+          const pl = await ensurePlayerCached(pid);
+          if (pl?.socketId) {
+            try { await io.in(pl.socketId).socketsLeave(`lobby:${lobbyId}`); } catch {}
+          }
+          try { pl.lobbyId = null; } catch {}
+        }
+      } catch {}
+      lobby.status = 'closed';
+      try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
+      lobbies.delete(lobbyId);
+      await publishLobbyDelete(lobbyId);
+      // Ensure clients receive a fresh lobbies list
+      await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
+      return;
     }
     if (lobbies.has(lobbyId)) {
       io.to(`lobby:${lobbyId}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
@@ -418,10 +463,17 @@ async function handleLobbyControlAsLeader(msg) {
     const { playerId, lobbyId, ready } = msg;
     const lobby = findLobbyForPlayer(playerId, lobbyId);
     if (!lobby) return;
-    if (ready) lobby.ready.add(playerId); else lobby.ready.delete(playerId);
+    // One-way ready: ignore attempts to unready
+    if (!ready) {
+      return;
+    }
+    // Allow host (and any player) to mark ready at any time
+    lobby.ready.add(playerId);
     markLobbyActive(lobby);
     io.to(`lobby:${lobby.id}`).emit('lobbyUpdated', { lobby: getLobbyInfo(lobby) });
     await publishLobbyState(lobby);
+    // Also broadcast updated lobbies list so lobby cards reflect readiness without manual refresh
+    await (async () => { const leader = await getOrClaimLobbyLeader(); if (leader === INSTANCE_ID) io.emit('lobbiesUpdated', { lobbies: lobbiesArray() }); })();
     return;
   }
   if (msg.type === 'startMatch') {
@@ -519,6 +571,8 @@ try {
 
 // Match control pub/sub channel
 const MATCH_CONTROL_CHANNEL = 'match:control';
+const MATCH_CLEANUP_DELAY_MS = Number(process.env.MATCH_CLEANUP_DELAY_MS || 60000); // 60s default
+const STALE_WAITING_MS = Number(process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000); // 10 min default
 const LOBBY_CONTROL_CHANNEL = 'lobby:control';
 const LOBBY_STATE_CHANNEL = 'lobby:state';
 let clusterStateReady = false; // flip after maps are initialized
@@ -554,11 +608,22 @@ if (storeSub) {
           } else if (msg.type === 'draft:playerReady' && typeof msg.ready === 'boolean' && msg.playerId) {
             await leaderDraftPlayerReady(matchId, msg.playerId, !!msg.ready);
           } else if (msg.type === 'draft:start' && msg.playerId) {
-            await leaderStartDraft(matchId, msg.playerId, msg.draftConfig || null, msg.socketId || null);
+            const m = await getOrLoadMatch(matchId);
+            if (!m || m.matchType !== 'draft' || !m.draftState) return;
+            if (m.draftState.phase !== 'waiting') {
+              // Already started: broadcast current state to sync clients
+              try { io.to(`match:${m.id}`).emit('draftUpdate', m.draftState); } catch {}
+            } else {
+              await leaderStartDraft(matchId, msg.playerId, msg.draftConfig || null, msg.socketId || null);
+            }
           } else if (msg.type === 'draft:pick' && msg.playerId && msg.cardId) {
             await leaderMakeDraftPick(matchId, msg.playerId, { cardId: msg.cardId, packIndex: Number(msg.packIndex || 0), pickNumber: Number(msg.pickNumber || 1) });
           } else if (msg.type === 'draft:choosePack' && msg.playerId && msg.setChoice) {
             await leaderChooseDraftPack(matchId, msg.playerId, { setChoice: msg.setChoice, packIndex: Number(msg.packIndex || 0) });
+          } else if (msg.type === 'mulligan:done' && msg.playerId) {
+            await leaderHandleMulliganDone(matchId, msg.playerId);
+          } else if (msg.type === 'match:cleanup' && msg.reason) {
+            await cleanupMatchNow(matchId, msg.reason, !!msg.force);
           }
         } catch (e) {
           try { console.warn('[match:control] handler error:', e?.message || e); } catch {}
@@ -626,6 +691,8 @@ const lobbyInvites = new Map();
 const rtcParticipants = new Map();
 /** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
+/** @type {Map<string, NodeJS.Timeout>} */
+const draftStartWatchdogs = new Map();
 clusterStateReady = true;
 
 // -----------------------------
@@ -960,12 +1027,50 @@ async function leaderJoinMatch(matchId, playerId, socketId) {
   // Join the socket (works cluster-wide with Redis adapter)
   const room = `match:${matchId}`;
   try { await io.in(socketId).socketsJoin(room); } catch {}
-  // Broadcast match info
+  // Send match info directly to the joiner to avoid any race, then broadcast to the room
+  try { if (socketId) io.to(socketId).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
   try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
+  // If a draft is in progress, immediately sync the joining socket with the current draft state
+  try {
+    if (match.matchType === 'draft' && match.draftState && match.draftState.phase && match.draftState.phase !== 'waiting') {
+      if (socketId) io.to(socketId).emit('draftUpdate', match.draftState);
+    }
+  } catch {}
   // Persist roster change and refresh cache
   try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
   // Keep our leadership fresh
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
+}
+
+// Permanently remove a match if truly empty (no players, no sockets in room)
+async function cleanupMatchNow(matchId, reason, force = false) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match) return;
+  // Check roster empty condition
+  const rosterEmpty = !Array.isArray(match.playerIds) || match.playerIds.length === 0;
+  // Check room occupancy across cluster (requires Redis adapter)
+  let roomEmpty = true;
+  try {
+    const room = `match:${matchId}`;
+    if (typeof io.in(room).allSockets === 'function') {
+      const sockets = await io.in(room).allSockets();
+      roomEmpty = !sockets || sockets.size === 0;
+    }
+  } catch {}
+  // Force allows cleanup of orphaned waiting matches even if roster still lists players,
+  // as long as the room is empty across the cluster.
+  if ((!(rosterEmpty) && !force) || !roomEmpty) {
+    try { console.log(`[match] cleanup skipped for ${matchId}: rosterEmpty=${rosterEmpty}, roomEmpty=${roomEmpty}, force=${force}`); } catch {}
+    return;
+  }
+  // Clear any pending timers
+  try { if (match._cleanupTimer) { clearTimeout(match._cleanupTimer); match._cleanupTimer = null; } } catch {}
+  try { console.log(`[match] cleaning up ${matchId} (reason=${reason})`); } catch {}
+  // Delete from DB and cache
+  try { if (storeRedis) await storeRedis.del(`match:session:${matchId}`); } catch {}
+  try { await prisma.onlineMatchAction.deleteMany({ where: { matchId } }); } catch {}
+  try { await prisma.onlineMatchSession.delete({ where: { id: matchId } }); } catch {}
+  try { matches.delete(matchId); } catch {}
 }
 
 async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId) {
@@ -992,8 +1097,10 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           p1: (inc.p1 !== undefined ? inc.p1 : (prev.p1 ?? null)),
           p2: (inc.p2 !== undefined ? inc.p2 : (prev.p2 ?? null)),
         };
+        try { console.log('[d20] merge', { prev, inc, merged: mergedD20, matchId }); } catch {}
         if (mergedD20.p1 != null && mergedD20.p2 != null) {
           if (Number(mergedD20.p1) === Number(mergedD20.p2)) {
+            try { console.log('[d20] tie detected -> resetting for reroll', { merged: mergedD20, matchId }); } catch {}
             patchToApply = { ...patchToApply, d20Rolls: { p1: null, p2: null }, setupWinner: null };
             try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
             try { match._autoSeatApplied = false; } catch {}
@@ -1001,6 +1108,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
             const winner = Number(mergedD20.p1) > Number(mergedD20.p2) ? 'p1' : 'p2';
             patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
             if (patchToApply.setupWinner === undefined) patchToApply.setupWinner = winner;
+            try { console.log('[d20] winner decided', { merged: mergedD20, winner, matchId }); } catch {}
             try {
               const g = match.game || {};
               const phaseNow = g.phase;
@@ -1096,6 +1204,68 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
   } catch {
     io.to(matchRoom).emit('statePatch', { patch: incomingPatch || null, t: Date.now() });
   }
+  try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
+}
+
+// Handle per-player mulligan completion as the cluster leader
+async function leaderHandleMulliganDone(matchId, playerId) {
+  const match = await getOrLoadMatch(matchId);
+  if (!match) return;
+  if (match.status !== "waiting") return; // Only relevant during setup
+
+  // Track per-player mulligan completion for this match
+  if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
+    match.mulliganDone = new Set();
+  }
+  match.mulliganDone.add(playerId);
+
+  try {
+    const doneCount = match.mulliganDone.size;
+    const total = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
+    const waitingFor = Array.isArray(match.playerIds)
+      ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
+      : [];
+    const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
+    console.log(`[Setup] mulliganDone <= ${playerId}. ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
+  } catch {}
+
+  // If all current players have finished mulligans, start the game
+  const allDone =
+    Array.isArray(match.playerIds) &&
+    match.playerIds.every((pid) => match.mulliganDone.has(pid));
+  if (!allDone) return;
+
+  const room = `match:${match.id}`;
+  // Flip match status and broadcast updated match info for strict sync
+  match.status = "in_progress";
+  io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+  // Broadcast a deterministic patch to set phase to Main
+  const now = Date.now();
+  // If currentPlayer isn't set yet (e.g., human winner hasn't chosen), set a sensible default
+  let cp = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
+  if (cp !== 1 && cp !== 2) {
+    const sw = match.game ? match.game.setupWinner : null;
+    cp = sw === 'p2' ? 2 : 1; // default to P1 if undefined
+  }
+  // Ensure avatar positions exist so first-site placement rule can be applied client/server
+  const sz = (match.game && match.game.board && match.game.board.size) || { w: 5, h: 5 };
+  const cx = Math.floor(Math.max(1, Number(sz.w) || 5) / 2);
+  const topY = (Number(sz.h) || 5) - 1;
+  const botY = 0;
+  const avPrev = (match.game && match.game.avatars) || { p1: {}, p2: {} };
+  const p1Prev = avPrev.p1 || {};
+  const p2Prev = avPrev.p2 || {};
+  const avatars = {
+    p1: { ...p1Prev, pos: Array.isArray(p1Prev.pos) ? p1Prev.pos : [cx, topY] },
+    p2: { ...p2Prev, pos: Array.isArray(p2Prev.pos) ? p2Prev.pos : [cx, botY] },
+  };
+  const mainPatch = { phase: "Main", currentPlayer: cp, avatars };
+  // Update server-side aggregated snapshot
+  match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
+  match.lastTs = now;
+  io.to(room).emit("statePatch", { patch: mainPatch, t: now });
+  try { await persistMatchUpdate(match, mainPatch, playerId, now); } catch {}
+  try { console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`); } catch {}
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
 }
 
@@ -1291,25 +1461,33 @@ function leaveLobby(socket, player) {
     // Clean up any idle CPU bots from this lobby before deletion
     try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
     lobbies.delete(lobbyId);
+    // Replicate deletion cluster-wide
+    try { publishLobbyDelete(lobbyId); } catch {}
   } else if (!lobbyHasHumanPlayers(lobby)) {
     // If only CPUs remain, close the lobby and cleanup bots instead of promoting a CPU to host
     lobby.status = "closed";
     try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
     lobbies.delete(lobbyId);
+    // Replicate deletion cluster-wide
+    try { publishLobbyDelete(lobbyId); } catch {}
     broadcastLobbies();
   } else if (lobby.hostId === player.id) {
-    // Reassign host to a remaining human if possible, otherwise first remaining
-    const remaining = Array.from(lobby.playerIds);
-    const humanNext = remaining.find((pid) => !isCpuPlayerId(pid)) || remaining[0];
-    lobby.hostId = humanNext;
-    // Reset all ready states when host changes
-    lobby.ready.clear();
+    // Host left: close and delete the lobby (do not reassign host)
+    lobby.status = "closed";
+    try { botManager.cleanupBotsForLobby(lobbyId); } catch {}
+    lobbies.delete(lobbyId);
+    // Replicate deletion cluster-wide
+    try { publishLobbyDelete(lobbyId); } catch {}
+    broadcastLobbies();
+    return;
   }
 
   if (lobbies.has(lobbyId)) {
     io.to(`lobby:${lobbyId}`).emit("lobbyUpdated", {
       lobby: getLobbyInfo(lobby),
     });
+    // Replicate state cluster-wide
+    try { publishLobbyState(lobby); } catch {}
   }
   broadcastLobbies();
 }
@@ -1393,12 +1571,13 @@ async function startMatchFromLobby(
   // Start recording immediately when match is created
   startMatchRecording(match);
 
-  // Join all sockets to match room
+  // Join all sockets to match room (cross-instance via Redis adapter)
   for (const pid of match.playerIds) {
     const p = players.get(pid);
     if (!p) continue;
-    const s = io.sockets.sockets.get(p.socketId);
-    if (s) s.join(`match:${match.id}`);
+    const room = `match:${match.id}`;
+    const sid = p.socketId || null;
+    if (sid) { try { await io.in(sid).socketsJoin(room); } catch {} }
     p.matchId = match.id;
     // Keep lobby association during all match types so the lobby remains visible
   }
@@ -1701,69 +1880,19 @@ io.on("connection", (socket) => {
   });
 
   // Per-player mulligan completion. When all players are done, advance to Main.
-  socket.on("mulliganDone", () => {
+  socket.on("mulliganDone", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
-    const match = matches.get(player.matchId);
-    if (!match) return;
-    if (match.status !== "waiting") return; // Only relevant during setup
-
-    // Track per-player mulligan completion for this match
-    if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
-      match.mulliganDone = new Set();
-    }
-    match.mulliganDone.add(player.id);
-
+    const matchId = player.matchId;
     try {
-      const doneCount = match.mulliganDone.size;
-      const total = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
-      const waitingFor = Array.isArray(match.playerIds)
-        ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
-        : [];
-      const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
-      console.log(`[Setup] mulliganDone from ${player.displayName} (${player.id}). ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
-    } catch {}
-
-    // If all current players have finished mulligans, start the game
-    const allDone =
-      Array.isArray(match.playerIds) &&
-      match.playerIds.every((pid) => match.mulliganDone.has(pid));
-    if (allDone) {
-      const room = `match:${match.id}`;
-      // Flip match status and broadcast updated match info for strict sync
-      match.status = "in_progress";
-      io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
-      // Broadcast a deterministic patch to set phase to Main
-      const now = Date.now();
-      // If currentPlayer isn't set yet (e.g., human winner hasn't chosen), set a sensible default:
-      // prefer setupWinner to go first, otherwise P1.
-      let cp = (match.game && typeof match.game.currentPlayer === 'number') ? match.game.currentPlayer : null;
-      if (cp !== 1 && cp !== 2) {
-        const sw = match.game ? match.game.setupWinner : null;
-        cp = sw === 'p2' ? 2 : 1; // default to P1 if undefined
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'mulligan:done', matchId, playerId: player.id }));
+        return;
       }
-      // Ensure avatar positions exist so first-site placement rule can be applied client/server
-      const sz = (match.game && match.game.board && match.game.board.size) || { w: 5, h: 5 };
-      const cx = Math.floor(Math.max(1, Number(sz.w) || 5) / 2);
-      const topY = (Number(sz.h) || 5) - 1;
-      const botY = 0;
-      const avPrev = (match.game && match.game.avatars) || { p1: {}, p2: {} };
-      const p1Prev = avPrev.p1 || {};
-      const p2Prev = avPrev.p2 || {};
-      const avatars = {
-        p1: { ...p1Prev, pos: Array.isArray(p1Prev.pos) ? p1Prev.pos : [cx, topY] },
-        p2: { ...p2Prev, pos: Array.isArray(p2Prev.pos) ? p2Prev.pos : [cx, botY] },
-      };
-      const mainPatch = { phase: "Main", currentPlayer: cp, avatars };
-      // Update server-side aggregated snapshot
-      match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
-      match.lastTs = now;
-      io.to(room).emit("statePatch", { patch: mainPatch, t: now });
-      try {
-        console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`);
-      } catch {}
-    }
+      await leaderHandleMulliganDone(matchId, player.id);
+    } catch {}
   });
 
   socket.on("createLobby", async (payload = {}) => {
@@ -2004,7 +2133,7 @@ io.on("connection", (socket) => {
 
   // Create or ensure a tournament match exists by a known matchId with given players
   // Payload: { matchId: string, playerIds: string[], matchType?: 'constructed'|'sealed'|'draft', lobbyName?: string, sealedConfig?: any, draftConfig?: any }
-  socket.on("startTournamentMatch", (payload = {}) => {
+  socket.on("startTournamentMatch", async (payload = {}) => {
     if (!authed) return;
     const matchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
     const playerIds = Array.isArray(payload && payload.playerIds) ? payload.playerIds.filter(Boolean).map(String) : [];
@@ -2050,14 +2179,14 @@ io.on("connection", (socket) => {
       }
     }
 
-    // Join all currently connected sockets for provided players
+    // Join all currently connected sockets for provided players (cross-instance)
     const room = `match:${match.id}`;
     for (const pid of playerIds) {
       const p = players.get(pid);
       if (!p) continue;
       p.matchId = match.id;
-      const s = io.sockets.sockets.get(p.socketId);
-      if (s) s.join(room);
+      const sid = p.socketId || null;
+      if (sid) { try { await io.in(sid).socketsJoin(room); } catch {} }
     }
 
     // If sealed, generate packs deterministically (same logic as startMatchFromLobby)
@@ -2137,7 +2266,7 @@ io.on("connection", (socket) => {
     } catch {}
   });
 
-  socket.on("leaveMatch", () => {
+  socket.on("leaveMatch", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
@@ -2153,6 +2282,29 @@ io.on("connection", (socket) => {
       io.to(`match:${matchId}`).emit("matchStarted", {
         match: getMatchInfo(match),
       });
+      // Persist roster change
+      try { await persistMatchUpdate(match, null, player.id, Date.now()); } catch {}
+      // If no players left, schedule cleanup
+      if (!Array.isArray(match.playerIds) || match.playerIds.length === 0) {
+        try {
+          // Debounce existing timer
+          if (match._cleanupTimer) { clearTimeout(match._cleanupTimer); match._cleanupTimer = null; }
+        } catch {}
+        const delay = MATCH_CLEANUP_DELAY_MS;
+        try { console.log(`[match] scheduling cleanup in ${delay}ms for ${matchId} (both players left)`); } catch {}
+        try {
+          match._cleanupTimer = setTimeout(async () => {
+            try {
+              const leader = await getOrClaimMatchLeader(matchId);
+              if (leader && leader !== INSTANCE_ID) {
+                if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId, reason: 'timeout_after_empty' }));
+                return;
+              }
+              await cleanupMatchNow(matchId, 'timeout_after_empty');
+            } catch {}
+          }, delay);
+        } catch {}
+      }
     }
   });
 
@@ -2234,40 +2386,53 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("resyncRequest", () => {
+  socket.on("resyncRequest", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (player && player.matchId && matches.has(player.matchId)) {
-      const match = matches.get(player.matchId);
-      const snap = { match: getMatchInfo(match) };
-      // Only include a game snapshot when it's meaningful.
-      // During sealed/draft setup the server-side game can be an empty object ({}),
-      // while the client has already loaded decks locally. Sending an empty game here
-      // would wipe the client state on every resync. Avoid that by requiring either
-      // an in-progress match or detectable game content.
-      const hasMeaningfulGame = (() => {
-        if (!match || !match.game) return false;
-        if (match.status === "in_progress") return true;
-        if (typeof match.game === "object") {
-          const keys = Object.keys(match.game);
-          if (keys.length === 0) return false;
-          // Heuristic: presence of phase/libraries/zones indicates a real snapshot
-          if ("phase" in match.game) return true;
-          if ("libraries" in match.game) return true;
-          if ("zones" in match.game) return true;
+    if (player && player.matchId) {
+      const match = await getOrLoadMatch(player.matchId);
+      if (match) {
+        const snap = { match: getMatchInfo(match) };
+        // Only include a game snapshot when it's meaningful.
+        // During sealed/draft setup the server-side game can be an empty object ({}),
+        // while the client has already loaded decks locally. Sending an empty game here
+        // would wipe the client state on every resync. Avoid that by requiring either
+        // an in-progress match or detectable game content.
+        const hasMeaningfulGame = (() => {
+          if (!match || !match.game) return false;
+          if (match.status === "in_progress") return true;
+          if (typeof match.game === "object") {
+            const keys = Object.keys(match.game);
+            if (keys.length === 0) return false;
+            // Heuristic: presence of phase/libraries/zones indicates a real snapshot
+            if ("phase" in match.game) return true;
+            if ("libraries" in match.game) return true;
+            if ("zones" in match.game) return true;
+            // New: include D20 setup state so clients don't lose rolls on resync during Setup
+            try {
+              const d20 = match.game.d20Rolls;
+              if (d20 && (d20.p1 != null || d20.p2 != null)) return true;
+            } catch {}
+          }
+          return false;
+        })();
+        if (hasMeaningfulGame) {
+          snap.game = match.game;
+          snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
         }
-        return false;
-      })();
-      if (hasMeaningfulGame) {
-        snap.game = match.game;
-        snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
+        socket.emit("resyncResponse", { snapshot: snap });
+        // If a draft is in progress, proactively sync draft state to this socket
+        try {
+          if (match.matchType === 'draft' && match.draftState && match.draftState.phase && match.draftState.phase !== 'waiting') {
+            io.to(socket.id).emit('draftUpdate', match.draftState);
+          }
+        } catch {}
+        return;
       }
-      socket.emit("resyncResponse", { snapshot: snap });
-    } else if (player && player.lobbyId && lobbies.has(player.lobbyId)) {
+    }
+    if (player && player.lobbyId && lobbies.has(player.lobbyId)) {
       const lobby = lobbies.get(player.lobbyId);
-      socket.emit("resyncResponse", {
-        snapshot: { lobby: getLobbyInfo(lobby) },
-      });
+      socket.emit("resyncResponse", { snapshot: { lobby: getLobbyInfo(lobby) } });
     } else {
       socket.emit("resyncResponse", { snapshot: {} });
     }
@@ -2675,7 +2840,21 @@ io.on("connection", (socket) => {
         if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:start', matchId, playerId: player.id, draftConfig: payload?.draftConfig || null, socketId: socket.id }));
         return;
       }
-      await leaderStartDraft(matchId, player.id, payload?.draftConfig || null, socket.id);
+      const match = await getOrLoadMatch(matchId);
+      if (!match || match.matchType !== 'draft' || !match.draftState) return;
+      if (match.draftState.phase !== 'waiting') {
+        // Already started or in-progress: re-emit current state to salvage stuck clients
+        try { io.to(`match:${match.id}`).emit('draftUpdate', match.draftState); } catch {}
+      } else {
+        await leaderStartDraft(matchId, player.id, payload?.draftConfig || null, socket.id);
+      }
+      // Failsafe: fetch fresh state and broadcast to ensure clients transition
+      try {
+        const m2 = await getOrLoadMatch(matchId);
+        if (m2 && m2.draftState) {
+          io.to(`match:${m2.id}`).emit('draftUpdate', m2.draftState);
+        }
+      } catch {}
     } catch {}
   });
 
@@ -2780,6 +2959,7 @@ io.on("connection", (socket) => {
     io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
     try { botManager.cleanupBotsAfterMatch(match); } catch {}
     try { persistMatchEnded(match); } catch {}
+    try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
   });
 
   socket.on("disconnect", () => {
@@ -2836,6 +3016,8 @@ io.on("connection", (socket) => {
           lobby.status = "closed";
           try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
           lobbies.delete(lobby.id);
+          // Replicate deletion cluster-wide
+          try { publishLobbyDelete(lobby.id); } catch {}
           broadcastLobbies();
         } else if (lobby.hostId === player.id) {
           const remaining = Array.from(lobby.playerIds);
@@ -2843,9 +3025,13 @@ io.on("connection", (socket) => {
           lobby.hostId = humanNext;
           lobby.ready.clear();
           io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+          // Replicate update cluster-wide
+          try { publishLobbyState(lobby); } catch {}
           broadcastLobbies();
         } else {
           io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+          // Replicate update cluster-wide
+          try { publishLobbyState(lobby); } catch {}
           broadcastLobbies();
         }
         // Clear association last so future logic sees player out of lobby
@@ -2887,6 +3073,36 @@ setInterval(() => {
   }
 }, 30 * 1000);
 
+// Periodic cleanup: remove long-idle waiting matches with no connected sockets.
+setInterval(async () => {
+  const now = Date.now();
+  for (const match of matches.values()) {
+    try {
+      if (!match || match.status !== 'waiting') continue;
+      const age = now - (Number(match.lastTs) || now);
+      if (age < STALE_WAITING_MS) continue;
+      const room = `match:${match.id}`;
+      let roomEmpty = true;
+      try {
+        if (typeof io.in(room).allSockets === 'function') {
+          const sockets = await io.in(room).allSockets();
+          roomEmpty = !sockets || sockets.size === 0;
+        }
+      } catch {}
+      if (!roomEmpty) continue;
+      // Coordinate via leader; followers request cleanup through pub/sub
+      try {
+        const leader = await getOrClaimMatchLeader(match.id);
+        if (leader && leader !== INSTANCE_ID) {
+          if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId: match.id, reason: 'stale_waiting', force: true }));
+          continue;
+        }
+        await cleanupMatchNow(match.id, 'stale_waiting', true);
+      } catch {}
+    } catch {}
+  }
+}, 60 * 1000);
+
 server.listen(PORT, () => {
   console.log(
     `[sorcery] Socket.IO server listening on http://localhost:${PORT}`
@@ -2904,6 +3120,8 @@ server.listen(PORT, () => {
   try {
     await recoverActiveMatches();
   } catch {}
+  // Enable cluster pub/sub processing now that maps are initialized
+  try { clusterStateReady = true; console.log('[store] cluster state ready; pub/sub handlers active'); } catch {}
   isReady = true;
 })();
 

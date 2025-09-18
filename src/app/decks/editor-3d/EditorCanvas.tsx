@@ -11,6 +11,7 @@ import Board from "@/lib/game/Board";
 
 interface EditorCanvasProps {
   children?: React.ReactNode;
+  orbitLocked?: boolean;
 }
 
 interface PanBoundsProps {
@@ -20,7 +21,7 @@ interface PanBoundsProps {
   maxZ: number;
 }
 
-export default function EditorCanvas({ children }: EditorCanvasProps) {
+export default function EditorCanvas({ children, orbitLocked = false }: EditorCanvasProps) {
   return (
     <div className="absolute inset-0 w-full h-full">
       <Canvas
@@ -45,7 +46,7 @@ export default function EditorCanvas({ children }: EditorCanvasProps) {
           target={[0, 0, 0]}
           // Drag-to-pan on left mouse; disable rotate on single click
           enableRotate={false}
-          enablePan
+          enablePan={!orbitLocked}
           enableZoom
           mouseButtons={{
             LEFT: MOUSE.PAN,

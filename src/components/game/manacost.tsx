@@ -44,8 +44,8 @@ export function NumberBadge({
         cx={50}
         cy={50}
         r={radius}
-        fill="#fff"
-        stroke="#000"
+        fill="#9CA3AF"
+        stroke="#6B7280"
         strokeWidth={strokeWidth}
       />
       <text
@@ -53,7 +53,7 @@ export function NumberBadge({
         y={50}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="#000"
+        fill="#6B7280"
         fontWeight={800}
         fontSize={fontScale * 100}
         className="font-fantaisie select-none"
@@ -173,7 +173,7 @@ export function ManaCounterHUD({
   return (
     <div className={"flex flex-col items-center " + (className ?? "")}>
       <div className="relative inline-flex group">
-        <div className="flex items-center gap-1 select-none font-fantaisie invert">
+        <div className="flex items-center gap-1 select-none font-fantaisie">
           {digits.length === 0 ? (
             <NumberBadge value={0} size={size} strokeWidth={6} />
           ) : (

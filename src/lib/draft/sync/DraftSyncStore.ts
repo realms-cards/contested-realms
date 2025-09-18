@@ -5,7 +5,6 @@
 
 import { create } from 'zustand';
 import { DraftSyncManager } from './DraftSyncManager';
-// TODO(draft-sync): Reintroduce additional types as features land.
 import type {
   DraftSession,
   PlayerDraftState,
@@ -73,6 +72,15 @@ interface DraftSyncStoreState {
   };
 }
 
+/**
+ * Fully-typed Zustand store for Draft Sync.
+ *
+ * - All state and actions are strictly typed via `./types`.
+ * - Business logic is implemented in `DraftSyncManager`; this store orchestrates
+ *   state transitions for the React app.
+ * - Socket event handling is owned by `socketHandlers.ts` which bridges network
+ *   events to `DraftSyncManager` and then into this store via typed actions.
+ */
 export const useDraftSyncStore = create<DraftSyncStoreState>((set, get) => ({
   // Initial state
   syncManager: new DraftSyncManager(),

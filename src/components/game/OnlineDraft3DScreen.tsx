@@ -378,6 +378,7 @@ export default function OnlineDraft3DScreen({
           card: draftCardToBoosterCard(card),
           x: 0, // Default position - will be arranged by computeStackPositions
           z: 0,
+          zone: "Deck" as const,
         }));
         setPick3D(rebuiltPick3D);
         setNextPickId(existingPicks.length + 1);
@@ -532,19 +533,20 @@ export default function OnlineDraft3DScreen({
     }
   }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker, staged, ready, myPlayerIndex, transport, match, draftState, packChoiceOverlay, shownPackOverlayForRound]);
 
-  // Toggle ready state
+  // Ready state (one-way)
   const handleToggleReady = useCallback(async () => {
     if (!transport || !match) return;
-    
-    const newReadyState = !playerReadyStates[myPlayerKey];
-    setPlayerReadyStates(prev => ({ ...prev, [myPlayerKey]: newReadyState }));
+    // If already ready, ignore
+    if (playerReadyStates[myPlayerKey]) return;
+
+    setPlayerReadyStates(prev => ({ ...prev, [myPlayerKey]: true }));
     
     // Notify other player of ready state change
     try {
       const message: PlayerReadyMessage = {
         type: 'playerReady',
         playerKey: myPlayerKey,
-        ready: newReadyState
+        ready: true
       };
       await transport.sendMessage?.(message);
     } catch (err) {
@@ -678,6 +680,7 @@ export default function OnlineDraft3DScreen({
       card: boosterCard,
       x: staged.x,
       z: staged.z,
+      zone: staged.z < 0 ? "Deck" : "Sideboard",
     };
     setPick3D(prev => [...prev, newPick]);
     setNextPickId(prev => prev + 1);
@@ -742,16 +745,12 @@ export default function OnlineDraft3DScreen({
                     <span className={playerReadyStates.p1 ? "text-green-400" : "text-slate-400"}>
                       {playerReadyStates.p1 ? "Ready" : "Not Ready"}
                     </span>
-                    {myPlayerKey === "p1" && (
+                    {myPlayerKey === "p1" && !playerReadyStates.p1 && (
                       <button
                         onClick={handleToggleReady}
-                        className={`px-3 py-1 rounded text-sm font-medium ${
-                          playerReadyStates.p1 
-                            ? "bg-red-600 hover:bg-red-700 text-white" 
-                            : "bg-green-600 hover:bg-green-700 text-white"
-                        }`}
+                        className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
                       >
-                        {playerReadyStates.p1 ? "Not Ready" : "Ready"}
+                        Ready
                       </button>
                     )}
                   </div>
@@ -762,16 +761,12 @@ export default function OnlineDraft3DScreen({
                     <span className={playerReadyStates.p2 ? "text-green-400" : "text-slate-400"}>
                       {playerReadyStates.p2 ? "Ready" : "Not Ready"}
                     </span>
-                    {myPlayerKey === "p2" && (
+                    {myPlayerKey === "p2" && !playerReadyStates.p2 && (
                       <button
                         onClick={handleToggleReady}
-                        className={`px-3 py-1 rounded text-sm font-medium ${
-                          playerReadyStates.p2 
-                            ? "bg-red-600 hover:bg-red-700 text-white" 
-                            : "bg-green-600 hover:bg-green-700 text-white"
-                        }`}
+                        className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
                       >
-                        {playerReadyStates.p2 ? "Not Ready" : "Ready"}
+                        Ready
                       </button>
                     )}
                   </div>

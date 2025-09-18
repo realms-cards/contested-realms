@@ -119,6 +119,8 @@ model Deck {
   id        String   @id @default(cuid())
   name      String
   format    String   @default("Constructed")
+  isPublic  Boolean  @default(false)
+  imported  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String
@@ -127,6 +129,7 @@ model Deck {
   cards DeckCard[]
 
   @@index([userId])
+  @@index([isPublic, createdAt])
 }
 
 model DeckCard {

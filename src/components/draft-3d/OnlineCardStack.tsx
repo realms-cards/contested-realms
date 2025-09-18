@@ -246,9 +246,8 @@ export default function OnlineCardStack({
               depthWrite={false}
             />
           </mesh>
-          
-          {/* TODO: Add text mesh for actual count display when text rendering is available */}
-          {/* For now, just show a visual indicator */}
+
+          {/* Visual indicator for count */}
           <mesh position={[0, 0.001, 0]} rotation-x={-Math.PI / 2}>
             <planeGeometry args={[0.02, 0.01]} />
             <meshBasicMaterial

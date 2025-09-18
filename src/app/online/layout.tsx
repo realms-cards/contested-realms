@@ -45,6 +45,8 @@ export default function OnlineLayout({
   const [resyncing, setResyncing] = useState<boolean>(false);
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
+  // Track latest lobby across event handlers
+  const lobbyRef = useRef<LobbyInfo | null>(null);
 
 
   const gamePhase = useGameStore((s) => s.phase);
@@ -100,6 +102,10 @@ export default function OnlineLayout({
   }, [me]);
 
   useEffect(() => {
+    lobbyRef.current = lobby;
+  }, [lobby]);
+
+  useEffect(() => {
     // Only connect if the user is authenticated
     if (sessionStatus !== "authenticated" || !session?.user?.name) {
       return;
@@ -145,6 +151,19 @@ export default function OnlineLayout({
       }),
       transport.on("lobbiesUpdated", (p) => {
         setLobbies(p.lobbies);
+        // Failsafe: if our current joined lobby is missing or no longer lists us, clear local lobby state
+        try {
+          const curr = lobbyRef.current;
+          if (curr) {
+            const inList = p.lobbies.find((l) => l.id === curr.id);
+            const meNow = meRef.current;
+            const stillMember = inList ? inList.players.some((pl) => pl.id === (meNow?.id || "")) : false;
+            if (!inList || !stillMember) {
+              setLobby(null);
+              setReady(false);
+            }
+          }
+        } catch {}
       }),
       transport.on("playerList", (p) => {
         setPlayers(p.players);
@@ -346,10 +365,11 @@ export default function OnlineLayout({
     match,
     ready,
     toggleReady: () => {
-      const next = !ready;
-      setReady(next);
+      // One-way ready: players cannot unready. If already ready, ignore.
+      if (ready) return;
+      setReady(true);
       try {
-        transport.ready(next);
+        transport.ready(true);
       } catch {}
     },
     joinLobby: async (id?: string) => {

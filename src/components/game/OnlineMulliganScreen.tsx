@@ -44,9 +44,10 @@ export default function OnlineMulliganScreen({
 
   const handleCardClick = (index: number) => {
     if (done || myMulligans === 0) return;
-    setSelected(prev => 
-      prev.includes(index) 
+    setSelected(prev =>
+      prev.includes(index)
         ? prev.filter(i => i !== index)
+        : prev.length >= 3 ? prev // Maximum 3 cards can be mulliganed
         : [...prev, index]
     );
   };
@@ -81,7 +82,7 @@ export default function OnlineMulliganScreen({
           Playing as: <span className="font-medium text-blue-400">{playerNames[myPlayerKey]}</span>
         </div>
         <div className="text-xs opacity-60 mt-1">
-          Select cards to put back. You&apos;ll draw the same number from the appropriate pile.
+          Select up to 3 cards to put back. You&apos;ll draw the same number from the appropriate pile.
         </div>
       </div>
       
@@ -94,7 +95,7 @@ export default function OnlineMulliganScreen({
         </div>
         
         <div className="text-xs opacity-80 mb-3">
-          {!done && myMulligans > 0 ? "Click cards to select for mulligan." : myMulligans === 0 ? "Mulligan used. Ready to start game." : "Mulligan complete."}
+          {!done && myMulligans > 0 ? "Click cards to select for mulligan (max 3)." : myMulligans === 0 ? "Mulligan used. Ready to start game." : "Mulligan complete."}
         </div>
         
         {myHand.length > 0 ? (
