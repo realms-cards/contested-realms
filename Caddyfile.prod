@@ -23,7 +23,11 @@ ws.realms.cards {
 
     # WebSockets reverse proxy to Socket.IO servers
     reverse_proxy server1:3010 server2:3010 {
-        lb_policy least_conn
+        lb_policy ip_hash
+        transport http {
+            read_timeout 3m
+            write_timeout 3m
+        }
         health_uri /healthz
     }
 }
