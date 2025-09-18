@@ -276,7 +276,7 @@ export default function Draft3DPage() {
       setYourPicks((prev) => [...prev, picked]);
       setPick3D((prev) => [
         ...prev,
-        { id: nextPickId, card: picked, x: wx, z: wz },
+        { id: nextPickId, card: picked, x: wx, z: wz, zone: wz < 0 ? "Deck" : "Sideboard" },
       ]);
       setNextPickId((n) => n + 1);
 
@@ -949,18 +949,11 @@ export default function Draft3DPage() {
             <div className="text-3xl font-fantaisie text-white">Draft</div>
             <button
               onClick={() => setHelpOpen(true)}
-              className="h-9 w-9 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+              className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
               title="How to use Draft mode"
               aria-label="How to use Draft mode"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
-                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15h2v2h-2v-2zm3.07-7.75c-.9-.9-2.24-1.17-3.43-.74-1.19.44-2.02 1.51-2.17 2.77l1.99.23c.09-.68.54-1.25 1.18-1.49.64-.24 1.36-.08 1.84.4.62.62.62 1.63 0 2.25-.37.37-.81.67-1.21.98-.77.6-1.27 1.15-1.27 2.35V13h2c0-.53.2-.74.82-1.21.45-.35.98-.74 1.46-1.22 1.24-1.24 1.24-3.26-.21-4.32z" />
-              </svg>
+              <span className="font-fantaisie text-xl font-bold">?</span>
             </button>
           </div>
 

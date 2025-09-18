@@ -353,11 +353,13 @@ export default function LobbiesCentral({
   const [matchesData, setMatchesData] = useState<TournamentMatchesResponse | null>(null);
   
   // Check if user is already engaged in a lobby or tournament
-  // Be robust against stale joinedLobbyId by also checking membership from the list
-  const memberLobby = useMemo(() => {
-    return lobbies.find((l) => l.players.some((p) => p.id === myId)) || null;
-  }, [lobbies, myId]);
-  const isInLobby = joinedLobbyId !== null || !!memberLobby;
+  // IMPORTANT: Use joinedLobbyId as the single source of truth for membership.
+  // The global lobbies list can be stale (e.g., leader on another instance) and
+  // may incorrectly show this player as present even when they already left.
+  const joinedLobby = useMemo(() => {
+    return (joinedLobbyId ? lobbies.find((l) => l.id === joinedLobbyId) || null : null);
+  }, [lobbies, joinedLobbyId]);
+  const isInLobby = joinedLobbyId !== null;
   const joinedTournament = tournaments.find(t => t.registeredPlayers.some(p => p.id === myId) && t.status !== "completed");
   const isInTournament = joinedTournament !== undefined;
   const isEngaged = isInLobby || isInTournament;
@@ -386,10 +388,11 @@ export default function LobbiesCentral({
     const q = query.trim().toLowerCase();
     const statusWeight = (s: string) => (s === "open" ? 0 : s === "started" ? 1 : 2);
     const list = lobbies.filter((l) => {
-      const isJoined = l.players.some(p => p.id === myId);
-      // Don't hide joined lobbies even if they're full or started
-      if (hideFull && l.players.length >= l.maxPlayers && !isJoined) return false;
-      if (hideStarted && l.status !== "open" && !isJoined) return false;
+      // Pin the currently joined lobby regardless of filters
+      const pinned = joinedLobbyId === l.id;
+      // Don't hide the joined lobby even if it's full or started; otherwise apply filters
+      if (hideFull && l.players.length >= l.maxPlayers && !pinned) return false;
+      if (hideStarted && l.status !== "open" && !pinned) return false;
       if (!q) return true;
       const hostName = l.players.find((p) => p.id === l.hostId)?.displayName?.toLowerCase() || "";
       const players = l.players.map((p) => p.displayName.toLowerCase()).join(" ");
@@ -413,7 +416,7 @@ export default function LobbiesCentral({
       }
     });
     return list;
-  }, [lobbies, query, hideFull, hideStarted, sortKey, joinedLobbyId, myId]);
+  }, [lobbies, query, hideFull, hideStarted, sortKey, joinedLobbyId]);
 
   // Filter tournaments
   const filteredTournaments = useMemo(() => {
@@ -493,11 +496,11 @@ export default function LobbiesCentral({
           >
             Create Lobby
           </button>
-          {onLeaveLobby && isInLobby && (
+          {onLeaveLobby && !!joinedLobbyId && (
             <button
               className="rounded px-3 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
               onClick={() => onLeaveLobby()}
-              title={`Leave ${memberLobby?.name || memberLobby?.id || 'current lobby'}`}
+              title={`Leave ${joinedLobby?.name || joinedLobby?.id || 'current lobby'}`}
             >
               Leave Lobby
             </button>
@@ -572,8 +575,7 @@ export default function LobbiesCentral({
 
       <div className="divide-y divide-white/5 rounded-lg overflow-hidden ring-1 ring-white/10">
         {showLobbies && filtered.map((l) => {
-          const amMember = l.players.some((p) => p.id === myId);
-          const isMine = amMember; // robust: show controls for any lobby that includes me
+          const isMine = joinedLobbyId === l.id; // Source of truth: joinedLobbyId
           const host = l.players.find((p) => p.id === l.hostId)?.displayName || "Host";
           const open = l.status === "open";
           const full = l.players.length >= l.maxPlayers;
@@ -669,25 +671,23 @@ export default function LobbiesCentral({
                   <>
                     <div className="flex items-center gap-1">
                       {typeof ready === 'boolean' && onToggleReady && (
-                        <button
-                          className={`rounded px-3 py-1 text-xs ${
-                            ready
-                              ? "bg-yellow-600/80 hover:bg-yellow-600 text-yellow-100"
-                              : "bg-green-600/80 hover:bg-green-600 text-green-100"
-                          }`}
-                          onClick={() => onToggleReady()}
-                          title="Toggle your ready state"
-                        >
-                          {ready ? "Not Ready" : "Ready"}
-                        </button>
-                      )}
-                      {onLeaveLobby && (
-                        <button
-                          className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
-                          onClick={() => onLeaveLobby()}
-                        >
-                          Leave
-                        </button>
+                        ready ? (
+                          <button
+                            className="rounded px-3 py-1 text-xs bg-green-600/60 text-green-100 cursor-not-allowed opacity-70"
+                            disabled
+                            title="You're marked as ready"
+                          >
+                            Ready
+                          </button>
+                        ) : (
+                          <button
+                            className="rounded px-3 py-1 text-xs bg-green-600/80 hover:bg-green-600 text-green-100"
+                            onClick={() => onToggleReady()}
+                            title="Ready up"
+                          >
+                            Ready
+                          </button>
+                        )
                       )}
                     </div>
                     {onSetLobbyVisibility && myId && l.hostId === myId && (
@@ -698,13 +698,12 @@ export default function LobbiesCentral({
                         aria-label="Toggle lobby visibility"
                       >
                         {l.visibility === "open" ? (
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-3 h-3" />
                         ) : (
-                          <EyeOff className="w-3.5 h-3.5" />
+                          <EyeOff className="w-3 h-3" />
                         )}
                       </button>
                     )}
-
                     {onAddCpuBot && myId && l.hostId === myId && isCpuBotsEnabled() && (
                       <button
                         className="ml-1 rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1 text-xs disabled:opacity-40"

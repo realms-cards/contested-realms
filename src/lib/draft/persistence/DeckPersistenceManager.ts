@@ -3,7 +3,6 @@
  * Core requirement: "Deck editor preserves drafted cards when adding Standard Cards"
  */
 
-// TODO(deck-persistence): Add back unused types as features land.
 import type {
   DeckComposition,
   DeckSubmission,
@@ -117,7 +116,7 @@ export class DeckPersistenceManager {
         draftedCards: preservedDraftedCards,
         // Add new standard cards to existing ones
         standardCards: updatedStandardCards,
-        totalCards: preservedDraftedCards.length + updatedStandardCards.length + this.currentDeck.sideboard.length,
+        totalCards: preservedDraftedCards.length + updatedStandardCards.length + this.currentDeck.sideboardCards.length,
         lastModified: Date.now()
       };
 
@@ -131,6 +130,19 @@ export class DeckPersistenceManager {
       // Add modification to history
       this.modifications.push(modification);
       modification.applied = true;
+
+      // Reflect into undo/redo tracking
+      if (this.undoRedoState) {
+        const u = this.undoRedoState;
+        u.undoStack.push(modification);
+        // Enforce history size constraint
+        if (u.undoStack.length > u.maxHistorySize) {
+          u.undoStack.shift();
+        }
+        u.currentHistorySize = u.undoStack.length;
+        u.canUndo = u.currentHistorySize > 0;
+        u.canRedo = u.redoStack.length > 0;
+      }
 
       // Update composition history
       this.currentDeck.compositionHistory.push({
@@ -189,14 +201,6 @@ export class DeckPersistenceManager {
     try {
       const persistStart = Date.now();
 
-      // Record route change in modification history
-      const modification = this.createModification({
-        action: 'route_transition',
-        sourceSection: 'drafted', // Preserving context
-        triggerSource: 'route_change',
-        userInitiated: false
-      });
-
       // Update persistence state
       this.persistenceState.lastRoute = fromRoute;
       this.persistenceState.currentRoute = toRoute;
@@ -213,9 +217,8 @@ export class DeckPersistenceManager {
 
       // Persist with route context
       await this.persistDeckToStorage();
-
-      // TODO: Set route persistence flag on submission when available
-      // this.currentSubmission.routePersisted = true;
+      // Mark last route persistence timestamp
+      this.persistenceState.lastRoutePersistedAt = Date.now();
 
       const persistTime = Date.now() - persistStart;
       console.log(`[DeckPersistence] Persisted for route change ${fromRoute} -> ${toRoute} in ${persistTime}ms`);
@@ -313,8 +316,12 @@ export class DeckPersistenceManager {
 
     try {
       // Create storage data
+      // Ensure sideboard mirror for backward compatibility
+      this.currentDeck.sideboard = [...this.currentDeck.sideboardCards];
+
       const storageData = {
         ...this.currentDeck,
+        sideboard: [...this.currentDeck.sideboardCards],
         persistedAt: Date.now(),
         sessionId: this.persistenceState.sessionId,
         playerId: this.persistenceState.playerId
@@ -337,7 +344,7 @@ export class DeckPersistenceManager {
       const backupData = {
         draftedCards: this.currentDeck.draftedCards,
         standardCards: this.currentDeck.standardCards,
-        sideboard: this.currentDeck.sideboard,
+        sideboard: this.currentDeck.sideboardCards,
         lastModified: this.currentDeck.lastModified,
         totalCards: this.currentDeck.totalCards
       };
@@ -414,7 +421,7 @@ export class DeckPersistenceManager {
     const allCards = [
       ...this.currentDeck.draftedCards,
       ...this.currentDeck.standardCards,
-      ...this.currentDeck.sideboard
+      ...this.currentDeck.sideboardCards
     ];
 
     const duplicates = allCards.filter((card, index) => allCards.indexOf(card) !== index);
@@ -498,7 +505,7 @@ export class DeckPersistenceManager {
       playerId,
       sessionStorageData: {
         key: `${this.SESSION_STORAGE_PREFIX}-${sessionId}-${playerId}`,
-        data: this.currentDeck!,
+        data: this.currentDeck ?? this.createNewDeck(sessionId, playerId),
         lastSaved: Date.now(),
         dataSize: 0,
         compressionUsed: false,
@@ -557,7 +564,7 @@ export class DeckPersistenceManager {
       sessionStorage.setItem(testKey, testData);
       sessionStorage.removeItem(testKey);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -612,6 +619,11 @@ export class DeckPersistenceManager {
       this.metrics.timestamp = Date.now();
       this.metrics.deckSize = this.currentDeck?.totalCards || 0;
     }
+
+    // Mirror metrics onto deck state for consumers expecting it on state
+    if (this.currentDeck && this.metrics) {
+      this.currentDeck.metrics = this.metrics;
+    }
   }
 
   /**
@@ -625,15 +637,20 @@ export class DeckPersistenceManager {
     // Ensure critical fields exist and are arrays
     if (!Array.isArray(deckData.draftedCards)) return null;
     if (!Array.isArray(deckData.standardCards)) deckData.standardCards = [];
-    if (!Array.isArray(deckData.sideboard)) deckData.sideboard = [];
+    // Normalize sideboard arrays and mirror to sideboardCards
+    const sideboardArr: string[] = Array.isArray(deckData.sideboardCards)
+      ? (deckData.sideboardCards as string[])
+      : Array.isArray(deckData.sideboard)
+        ? (deckData.sideboard as string[])
+        : [];
 
     return {
       draftedCards: deckData.draftedCards as string[],
       standardCards: deckData.standardCards as string[],
-      sideboard: deckData.sideboard as string[],
-      sideboardCards: (deckData.sideboardCards as string[]) || (deckData.sideboard as string[]) || [],
+      sideboard: [...sideboardArr],
+      sideboardCards: [...sideboardArr],
       deckName: typeof deckData.deckName === 'string' ? deckData.deckName : 'Restored Deck',
-      totalCards: (deckData.draftedCards as string[]).length + (deckData.standardCards as string[]).length + ((deckData.sideboard as string[]) || []).length,
+      totalCards: (deckData.draftedCards as string[]).length + (deckData.standardCards as string[]).length + sideboardArr.length,
       colors: Array.isArray(deckData.colors) ? deckData.colors as string[] : [],
       manaCurve: typeof deckData.manaCurve === 'object' ? deckData.manaCurve as Record<number, number> : {},
       compositionHistory: Array.isArray(deckData.compositionHistory) ? deckData.compositionHistory as DeckCompositionEntry[] : [],
@@ -684,6 +701,27 @@ export class DeckPersistenceManager {
     return this.metrics;
   }
 
+  /**
+   * Strictly typed accessor for Undo/Redo state
+   */
+  public getUndoRedoState(): UndoRedoState | null {
+    return this.undoRedoState;
+  }
+
+  /**
+   * Read-only snapshot of modification history
+   */
+  public getModifications(): ReadonlyArray<DeckModification> {
+    return [...this.modifications];
+  }
+
+  /**
+   * Strictly typed accessor for browser persistence state
+   */
+  public getPersistenceState(): PersistenceState | null {
+    return this.persistenceState;
+  }
+
   public async initializeSession(sessionId: string): Promise<void> {
     console.log(`[DeckPersistence] Initializing session: ${sessionId}`);
     // Implementation would initialize session-specific storage
@@ -708,10 +746,41 @@ export class DeckPersistenceManager {
     });
     
     this.currentDeck[targetList].splice(cardIndex, 1);
-    this.currentDeck.totalCards = this.currentDeck.draftedCards.length + 
-                                  this.currentDeck.standardCards.length + 
+    // Keep sideboard mirror consistent
+    if (targetList === 'sideboardCards') {
+      this.currentDeck.sideboard = [...this.currentDeck.sideboardCards];
+    }
+    this.currentDeck.totalCards = this.currentDeck.draftedCards.length +
+                                  this.currentDeck.standardCards.length +
                                   this.currentDeck.sideboardCards.length;
     
+    await this.persistDeckToStorage();
+    return true;
+  }
+
+  public async moveToMainboard(cardId: string): Promise<boolean> {
+    if (!this.currentDeck) return false;
+
+    const sideboardIndex = this.currentDeck.sideboardCards.indexOf(cardId);
+    if (sideboardIndex === -1) return false;
+
+    this.createModification({
+      action: 'move_to_mainboard',
+      cardId,
+      sourceSection: 'sideboard',
+      targetSection: 'standard',
+      triggerSource: 'user_action',
+      userInitiated: true
+    });
+
+    this.currentDeck.sideboardCards.splice(sideboardIndex, 1);
+    this.currentDeck.standardCards.push(cardId);
+    this.currentDeck.sideboard = [...this.currentDeck.sideboardCards];
+    this.currentDeck.totalCards =
+      this.currentDeck.draftedCards.length +
+      this.currentDeck.standardCards.length +
+      this.currentDeck.sideboardCards.length;
+
     await this.persistDeckToStorage();
     return true;
   }
@@ -732,36 +801,24 @@ export class DeckPersistenceManager {
       triggerSource: 'user_action',
       userInitiated: true
     });
-    
+
+    // Remove from mainboard or drafted
     if (standardIndex !== -1) {
       this.currentDeck.standardCards.splice(standardIndex, 1);
-    } else {
+    } else if (draftedIndex !== -1) {
       this.currentDeck.draftedCards.splice(draftedIndex, 1);
     }
-    
-    this.currentDeck.sideboardCards.push(cardId);
-    await this.persistDeckToStorage();
-    return true;
-  }
 
-  public async moveToMainboard(cardId: string): Promise<boolean> {
-    if (!this.currentDeck) return false;
-    
-    const sideboardIndex = this.currentDeck.sideboardCards.indexOf(cardId);
-    if (sideboardIndex === -1) return false;
-    
-    this.createModification({
-      action: 'move_to_mainboard',
-      cardId,
-      sourceSection: 'sideboard',
-      targetSection: 'standard',
-      triggerSource: 'user_action',
-      userInitiated: true
-    });
-    
-    this.currentDeck.sideboardCards.splice(sideboardIndex, 1);
-    this.currentDeck.standardCards.push(cardId);
-    
+    // Add to sideboard
+    this.currentDeck.sideboardCards.push(cardId);
+    // Mirror deprecated field for backward compatibility
+    this.currentDeck.sideboard = [...this.currentDeck.sideboardCards];
+    // Recompute totals
+    this.currentDeck.totalCards =
+      this.currentDeck.draftedCards.length +
+      this.currentDeck.standardCards.length +
+      this.currentDeck.sideboardCards.length;
+
     await this.persistDeckToStorage();
     return true;
   }
@@ -843,23 +900,102 @@ export class DeckPersistenceManager {
     }
   }
 
+  /**
+   * Return a shallow-frozen snapshot of the current deck state for safe consumption.
+   *
+   * Arrays are cloned and Object.freeze()'d to discourage mutation by consumers.
+   * This does not alter the internally managed `currentDeck`; it only affects the
+   * returned snapshot. Backwards-compat fields like `sideboard` are mirrored from
+   * `sideboardCards`.
+   */
   public getState(): DeckComposition | null {
-    return this.currentDeck;
+    if (!this.currentDeck) return null;
+    // Provide a lightweight summary for UI consumers
+    const historyLength = this.undoRedoState?.undoStack.length ?? this.modifications.length;
+    const canUndo = this.undoRedoState?.canUndo ?? historyLength > 0;
+    const canRedo = this.undoRedoState?.canRedo ?? false;
+
+    const d = this.currentDeck;
+
+    const snapshot: DeckComposition = {
+      ...d,
+      // Shallow-frozen clones (cast back to mutable type for compatibility)
+      draftedCards: Object.freeze([...d.draftedCards]) as unknown as string[],
+      standardCards: Object.freeze([...d.standardCards]) as unknown as string[],
+      sideboardCards: Object.freeze([...d.sideboardCards]) as unknown as string[],
+      sideboard: Object.freeze([...d.sideboardCards]) as unknown as string[],
+      compositionHistory: Object.freeze([...d.compositionHistory]) as unknown as DeckCompositionEntry[],
+      colors: Object.freeze([...d.colors]) as unknown as string[],
+      manaCurve: { ...d.manaCurve },
+    };
+
+    snapshot.undoRedo = { canUndo, canRedo, historyLength };
+    if (this.metrics) {
+      snapshot.metrics = this.metrics;
+    }
+    return snapshot;
   }
 
   public async undo(): Promise<boolean> {
-    // Simple implementation - would be more sophisticated in production
     const lastMod = this.modifications[this.modifications.length - 1];
     if (!lastMod || lastMod.rolledBack) return false;
-    
+
     await this.rollbackLastModification();
+
+    // Maintain undo/redo stacks
+    if (this.undoRedoState) {
+      const u = this.undoRedoState;
+      const idx = u.undoStack.findIndex(m => m.modificationId === lastMod.modificationId);
+      if (idx !== -1) {
+        const [undone] = u.undoStack.splice(idx, 1);
+        u.redoStack.push(undone);
+      }
+      u.currentHistorySize = u.undoStack.length;
+      u.canUndo = u.currentHistorySize > 0;
+      u.canRedo = u.redoStack.length > 0;
+      u.lastUndoTimestamp = Date.now();
+    }
+
     return true;
   }
 
   public async redo(): Promise<boolean> {
-    // Placeholder - would implement redo logic
-    console.log('[DeckPersistence] Redo not implemented');
-    return false;
+    if (!this.undoRedoState || !this.currentDeck) return false;
+    const u = this.undoRedoState;
+    if (u.redoStack.length === 0) return false;
+
+    const mod = u.redoStack.pop();
+    if (!mod) return false;
+
+    // Re-apply minimal 'after' state when available
+    try {
+      if (mod.after.draftedCards) {
+        this.currentDeck.draftedCards = [...mod.after.draftedCards];
+      }
+      if (mod.after.standardCards) {
+        this.currentDeck.standardCards = [...mod.after.standardCards];
+      }
+      if (typeof mod.after.totalCards === 'number') {
+        this.currentDeck.totalCards = mod.after.totalCards;
+      } else {
+        // Keep totalCards consistent
+        this.currentDeck.totalCards = this.currentDeck.draftedCards.length + this.currentDeck.standardCards.length + this.currentDeck.sideboardCards.length;
+      }
+      this.currentDeck.lastModified = Date.now();
+      mod.applied = true;
+
+      // Move back to undo stack
+      u.undoStack.push(mod);
+      u.currentHistorySize = u.undoStack.length;
+      u.canUndo = u.currentHistorySize > 0;
+      u.canRedo = u.redoStack.length > 0;
+
+      await this.persistDeckToStorage();
+      return true;
+    } catch (error) {
+      console.error('[DeckPersistence] Redo failed:', error);
+      return false;
+    }
   }
 
   public clearHistory(): void {

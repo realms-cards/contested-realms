@@ -35,10 +35,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             set: true,
           },
         },
+        user: {
+          select: { name: true }
+        }
       },
     });
 
-    if (!deck || deck.userId !== session.user.id) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    // Allow access if it's the user's own deck OR if it's a public deck
+    if (!deck || (deck.userId !== session.user.id && !deck.isPublic)) {
+      return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    }
 
     // Gather metas for thresholds/type per (cardId, setId)
     type DeckCardRow = {
@@ -91,7 +97,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     return new Response(
-      JSON.stringify({ id: deck.id, name: deck.name, format: deck.format, spellbook, atlas, sideboard }),
+      JSON.stringify({
+        id: deck.id,
+        name: deck.name,
+        format: deck.format,
+        isPublic: deck.isPublic,
+        imported: deck.imported,
+        isOwner: deck.userId === session.user.id,
+        userName: deck.user?.name || 'Unknown Player',
+        spellbook,
+        atlas,
+        sideboard
+      }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
   } catch (e: unknown) {
@@ -124,7 +141,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 }
 
 // PUT /api/decks/[id]
-// Body: { name?: string, format?: string, set?: string, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
+// Body: { name?: string, format?: string, set?: string, isPublic?: boolean, cards: [{ cardId, zone: 'Spellbook'|'Atlas'|'Sideboard', count: number, variantId?: number }] }
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -137,10 +154,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json();
     const name = body?.name ? String(body.name) : undefined;
     const format = body?.format ? String(body.format) : undefined;
+    const isPublic = body?.isPublic !== undefined ? Boolean(body.isPublic) : undefined;
     const setName = body?.set ? String(body.set) : undefined;
     const cards = Array.isArray(body?.cards) ? body.cards : [];
 
-    if (!cards.length && !name && !format) {
+    if (!cards.length && !name && !format && isPublic === undefined) {
       return new Response(JSON.stringify({ error: 'Nothing to update' }), { status: 400 });
     }
 
@@ -154,9 +172,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       setId = set.id;
     }
 
-    // Update name/format if provided
-    if (name || format) {
-      await prisma.deck.update({ where: { id }, data: { name: name ?? undefined, format: format ?? undefined } });
+    // Update name/format/isPublic if provided
+    if (name || format || isPublic !== undefined) {
+      await prisma.deck.update({
+        where: { id },
+        data: {
+          name: name ?? undefined,
+          format: format ?? undefined,
+          isPublic: isPublic ?? undefined
+        }
+      });
     }
 
     if (cards.length) {
@@ -192,7 +217,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       });
     }
 
-    const updated = await prisma.deck.findUnique({ where: { id }, select: { id: true, name: true, format: true } });
+    const updated = await prisma.deck.findUnique({ where: { id }, select: { id: true, name: true, format: true, isPublic: true } });
     return new Response(JSON.stringify(updated), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';

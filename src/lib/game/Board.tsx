@@ -1114,6 +1114,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
 
               {showGrid && isHover && (
                 <Text
+                  font="/fantaisie_artistiqu.ttf"
                   position={[0, 0.02, 0]}
                   rotation-x={-Math.PI / 2}
                   fontSize={0.18}

@@ -5,13 +5,11 @@
 
 import type { Socket } from 'socket.io-client';
 import { DeckPersistenceManager } from './DeckPersistenceManager';
-// TODO(deck-persistence): Reintroduce additional types as features land.
 import type {
   DeckSubmission,
   DeckComposition,
   DeckValidationResult,
-  SubmissionCoordination,
-  PersistenceMetrics
+  SubmissionCoordination
 } from './types';
 import { WaitingStateManager } from '../waiting/WaitingStateManager';
 import type {
@@ -94,31 +92,8 @@ export interface BulkSubmissionEvent {
   timestamp: number;
 }
 
-// Extended event map for deck submission coordination
-interface SubmissionEventMap {
-  // Deck submission events
-  'deck:submission:submit': DeckSubmissionEvent;
-  'deck:submission:result': DeckSubmissionResultEvent;
-  'deck:submission:status': PlayerSubmissionStatusEvent;
-  'deck:submission:bulk': BulkSubmissionEvent;
-  
-  // Deck validation events
-  'deck:validation:validate': DeckValidationEvent;
-  'deck:validation:result': DeckValidationResultEvent;
-  
-  // Submission coordination
-  'deck:coordination:update': SubmissionCoordinationEvent;
-  'deck:coordination:timeout': SubmissionTimeoutEvent;
-  
-  // Waiting overlay events
-  'deck:waiting:overlay': WaitingOverlayEvent;
-  'deck:waiting:update': WaitingUpdateEvent;
-  
-  // Persistence events
-  'deck:persistence:save': { sessionId: string; playerId: string; deck: DeckComposition; timestamp: number };
-  'deck:persistence:restore': { sessionId: string; playerId: string; timestamp: number };
-  'deck:persistence:metrics': { sessionId: string; metrics: PersistenceMetrics; timestamp: number };
-}
+// Note: when a typed event map is needed for strict typing of addSocketListener,
+// introduce it where actually used to avoid unused-type lint warnings.
 
 /**
  * SubmissionSocketHandler manages Socket.io events for deck submission coordination

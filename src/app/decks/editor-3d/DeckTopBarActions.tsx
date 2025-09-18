@@ -10,12 +10,17 @@ type DeckTopBarActionsProps = {
   decks: DeckListItem[];
   deckId: string | null;
   deckName: string;
+  deckIsPublic: boolean;
+  deckIsOwner: boolean;
+  deckCreatorName: string | null;
   loadingDecks: boolean;
   saving: boolean;
   validation: { avatar: boolean; atlas: boolean; spellbook: boolean };
   onLoadDeck: (id: string) => void;
   onClearEditor: () => void;
   onSetDeckName: (name: string) => void;
+  onTogglePublic: (isPublic: boolean) => void;
+  onMakeCopy: () => void;
   onSaveDeck: () => void;
   onSubmitSealed: () => void;
   onSubmitDraft: () => void;
@@ -29,12 +34,17 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
     decks,
     deckId,
     deckName,
+    deckIsPublic,
+    deckIsOwner,
+    deckCreatorName,
     loadingDecks,
     saving,
     validation,
     onLoadDeck,
     onClearEditor,
     onSetDeckName,
+    onTogglePublic,
+    onMakeCopy,
     onSaveDeck,
     onSubmitSealed,
     onSubmitDraft,
@@ -59,9 +69,9 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
               title={status !== "authenticated" ? "Sign in to load decks" : "Load deck"}
               aria-label="Load deck"
             >
-              {/* Folder icon */}
+              {/* Cogwheel icon */}
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/>
+                <path d="M11.828 2.25c-.916 0-1.699.663-1.85 1.567l-.091.549a.798.798 0 0 1-.517.608 7.45 7.45 0 0 0-.478.198.798.798 0 0 1-.796-.064l-.453-.324a1.875 1.875 0 0 0-2.416.2l-.243.243a1.875 1.875 0 0 0-.2 2.416l.324.453a.798.798 0 0 1 .064.796 7.602 7.602 0 0 0-.198.478.798.798 0 0 1-.608.517l-.55.092C2.663 9.24 2 10.023 2 10.939v.122c0 .916.663 1.699 1.567 1.85l.549.091c.281.047.508.25.608.517.06.162.127.321.198.478a.798.798 0 0 1-.064.796l-.324.453a1.875 1.875 0 0 0 .2 2.416l.243.243c.648.648 1.67.733 2.416.2l.453-.324a.798.798 0 0 1 .796-.064c.157.071.316.138.478.198.267.1.47.327.517.608l.092.55c.15.903.933 1.566 1.849 1.566h.122c.916 0 1.699-.663 1.85-1.567l.091-.549a.798.798 0 0 1 .517-.608 7.52 7.52 0 0 0 .478-.198.798.798 0 0 1 .796.064l.453.324a1.875 1.875 0 0 0 2.416-.2l.243-.243c.648-.648.733-1.67.2-2.416l-.324-.453a.798.798 0 0 1-.064-.796c.071-.157.138-.316.198-.478.1-.267.327-.47.608-.517l.55-.092C21.337 14.76 22 13.977 22 13.061v-.122c0-.916-.663-1.699-1.567-1.85l-.549-.091a.798.798 0 0 1-.608-.517 7.507 7.507 0 0 0-.198-.478.798.798 0 0 1 .064-.796l.324-.453a1.875 1.875 0 0 0-.2-2.416l-.243-.243a1.875 1.875 0 0 0-2.416-.2l-.453.324a.798.798 0 0 1-.796.064 7.462 7.462 0 0 0-.478-.198.798.798 0 0 1-.517-.608l-.092-.55C14.699 2.663 13.916 2 13 2h-.172ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z"/>
               </svg>
             </button>
             {chooserOpen && (
@@ -78,7 +88,7 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
                 <div className="my-2 h-px bg-white/10" />
                 {loadingDecks ? (
                   <div className="px-2 py-1 text-white/60">Loading…</div>
-                ) : decks.length === 0 ? (
+                ) : !decks || decks.length === 0 ? (
                   <div className="px-2 py-1 text-white/60">No decks</div>
                 ) : (
                   decks.map((d) => (
@@ -104,9 +114,13 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
             )}
           </div>
 
-          {/* Deck name display + edit */}
+          {/* Deck name display + edit or read-only indicator */}
           <div className="flex items-center gap-2">
-            {editingName ? (
+            {!deckIsOwner ? (
+              <div className="px-3 py-2 rounded bg-blue-500/15 text-blue-200 border border-blue-500/30 max-w-[28ch] truncate" title={`${deckName} by ${deckCreatorName}`}>
+                {deckName} {deckCreatorName && `(by ${deckCreatorName})`}
+              </div>
+            ) : editingName ? (
               <input
                 value={tempName}
                 onChange={(e) => setTempName(e.target.value)}
@@ -129,17 +143,19 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
                 {deckName || "New Deck"}
               </div>
             )}
-            <button
-              onClick={() => setEditingName((v) => !v)}
-              className="h-9 w-9 grid place-items-center rounded bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
-              title={editingName ? "Stop editing name" : "Edit name"}
-              aria-label="Edit name"
-            >
-              {/* Pen icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
-              </svg>
-            </button>
+            {deckIsOwner && (
+              <button
+                onClick={() => setEditingName((v) => !v)}
+                className="h-9 w-9 grid place-items-center rounded bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+                title={editingName ? "Stop editing name" : "Edit name"}
+                aria-label="Edit name"
+              >
+                {/* Pen icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
+                </svg>
+              </button>
+            )}
           </div>
         </>
       )}
@@ -157,40 +173,70 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
       )}
 
       <div className="flex items-center gap-2">
-        {isSealed ? (
+        {!deckIsOwner ? (
+          // Read-only view - show copy button
           <button
-            onClick={onSubmitSealed}
+            onClick={onMakeCopy}
             disabled={saving || status !== "authenticated"}
-            className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
-            title={status !== "authenticated" ? "Sign in to submit" : "Submit sealed deck to match"}
+            className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600/80 hover:bg-blue-600"
+            title="Create a private copy of this deck that you can edit"
           >
-            {saving ? "Submitting..." : "Submit Sealed Deck"}
-          </button>
-        ) : isDraftMode ? (
-          <button
-            onClick={onSubmitDraft}
-            disabled={
-              saving || status !== "authenticated" ||
-              !validation.avatar || !validation.atlas || !validation.spellbook
-            }
-            className="h-10 px-4 rounded text-white disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
-            title={!validation.avatar || !validation.atlas || !validation.spellbook ? "Cannot submit invalid deck" : "Submit draft deck"}
-          >
-            {saving ? "Submitting..." : "Submit Draft Deck"}
+            {saving ? "Copying..." : "Make Private Copy"}
           </button>
         ) : (
-          <button
-            onClick={onSaveDeck}
-            disabled={saving || status !== "authenticated"}
-            className="h-9 w-9 grid place-items-center rounded bg-green-600/80 hover:bg-green-600 text-white disabled:opacity-50"
-            title={status !== "authenticated" ? "Sign in to save" : deckId ? "Update deck" : "Save new deck"}
-            aria-label="Save deck"
-          >
-            {/* Disk icon */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-              <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
-            </svg>
-          </button>
+          // Owner view - show edit controls
+          <>
+            {!isSealed && !isDraftMode && (
+              <button
+                onClick={() => onTogglePublic(!deckIsPublic)}
+                disabled={status !== "authenticated"}
+                className={`h-9 px-3 rounded text-xs font-medium border transition ${
+                  deckIsPublic
+                    ? 'bg-green-600/80 hover:bg-green-600 text-white border-green-500'
+                    : 'bg-gray-600/80 hover:bg-gray-600 text-white border-gray-500'
+                } disabled:opacity-50`}
+                title={deckIsPublic ? "Deck is public - others can view it" : "Deck is private - only you can view it"}
+              >
+                {deckIsPublic ? "Public" : "Private"}
+              </button>
+            )}
+
+            {isSealed ? (
+              <button
+                onClick={onSubmitSealed}
+                disabled={saving || status !== "authenticated"}
+                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+                title={status !== "authenticated" ? "Sign in to submit" : "Submit sealed deck to match"}
+              >
+                {saving ? "Submitting..." : "Submit Sealed Deck"}
+              </button>
+            ) : isDraftMode ? (
+              <button
+                onClick={onSubmitDraft}
+                disabled={
+                  saving || status !== "authenticated" ||
+                  !validation.avatar || !validation.atlas || !validation.spellbook
+                }
+                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
+                title={!validation.avatar || !validation.atlas || !validation.spellbook ? "Cannot submit invalid deck" : "Submit draft deck"}
+              >
+                {saving ? "Submitting..." : "Submit Draft Deck"}
+              </button>
+            ) : (
+              <button
+                onClick={onSaveDeck}
+                disabled={saving || status !== "authenticated"}
+                className="h-9 w-9 grid place-items-center rounded bg-green-600/80 hover:bg-green-600 text-white disabled:opacity-50"
+                title={status !== "authenticated" ? "Sign in to save" : deckId ? "Update deck" : "Save new deck"}
+                aria-label="Save deck"
+              >
+                {/* Disk icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+                </svg>
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

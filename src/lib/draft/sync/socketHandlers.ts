@@ -4,7 +4,7 @@
  */
 
 import type { Socket } from 'socket.io-client';
-import type { Draft3DEventMap, StackInteractionEvent, StackInteractionResult } from '@/types/draft-3d-events';
+import type { Draft3DEventMap } from '@/types/draft-3d-events';
 import { DraftSyncManager } from './DraftSyncManager';
 import type { 
   DraftSession, 
@@ -36,6 +36,14 @@ interface PickSyncEventMap extends Draft3DEventMap {
   'draft:session:sync_response': SessionSyncResponseEvent;
   'draft:session:metrics_update': MetricsUpdateEvent;
 }
+
+// Internal map includes socket lifecycle events
+type SocketLifecycleEventMap = {
+  connect: void;
+  disconnect: void;
+};
+
+type HandlerEventMap = PickSyncEventMap & SocketLifecycleEventMap;
 
 // Pick synchronization event interfaces
 export interface PickAttemptEvent {
@@ -251,49 +259,49 @@ export class PickSyncSocketHandler {
   // Private socket event handlers
   private setupSocketListeners(): void {
     // Pick result handling
-    this.addSocketListener<PickResultEvent>('draft:pick:result', (event) => {
+    this.addSocketListener('draft:pick:result', (event) => {
       this.handlePickResult(event);
     });
 
     // Pick conflict handling
-    this.addSocketListener<PickConflictEvent>('draft:pick:conflict', (event) => {
+    this.addSocketListener('draft:pick:conflict', (event) => {
       this.handlePickConflict(event);
     });
 
     // Pack rotation handling
-    this.addSocketListener<PackRotationEvent>('draft:pack:rotation', (event) => {
+    this.addSocketListener('draft:pack:rotation', (event) => {
       this.handlePackRotation(event);
     });
 
-    this.addSocketListener<PackRotationCompleteEvent>('draft:pack:rotation_complete', (event) => {
+    this.addSocketListener('draft:pack:rotation_complete', (event) => {
       this.handlePackRotationComplete(event);
     });
 
     // Player state synchronization
-    this.addSocketListener<PlayerStateUpdateEvent>('draft:player:state_update', (event) => {
+    this.addSocketListener('draft:player:state_update', (event) => {
       this.handlePlayerStateUpdate(event);
     });
 
-    this.addSocketListener<PlayerDisconnectedEvent>('draft:player:disconnected', (event) => {
+    this.addSocketListener('draft:player:disconnected', (event) => {
       this.handlePlayerDisconnection(event);
     });
 
-    this.addSocketListener<PlayerReconnectedEvent>('draft:player:reconnected', (event) => {
+    this.addSocketListener('draft:player:reconnected', (event) => {
       this.handlePlayerReconnection(event);
     });
 
     // Session synchronization
-    this.addSocketListener<SessionSyncResponseEvent>('draft:session:sync_response', (event) => {
+    this.addSocketListener('draft:session:sync_response', (event) => {
       this.handleSessionSync(event);
     });
 
     // Metrics updates
-    this.addSocketListener<MetricsUpdateEvent>('draft:session:metrics_update', (event) => {
+    this.addSocketListener('draft:session:metrics_update', (event) => {
       this.handleMetricsUpdate(event);
     });
 
     // Connection event handling
-    this.addSocketListener<void>('connect', () => {
+    this.addSocketListener('connect', () => {
       console.log('[PickSyncSocketHandler] Socket connected');
       if (this.currentSessionId && this.currentPlayerId) {
         // Reconnect to current session
@@ -301,18 +309,21 @@ export class PickSyncSocketHandler {
       }
     });
 
-    this.addSocketListener<void>('disconnect', () => {
+    this.addSocketListener('disconnect', () => {
       console.log('[PickSyncSocketHandler] Socket disconnected');
       this.isConnected = false;
     });
   }
 
-  private addSocketListener<T>(event: string, handler: (data: T) => void): void {
+  private addSocketListener<K extends keyof HandlerEventMap>(
+    event: K,
+    handler: (data: HandlerEventMap[K]) => void
+  ): void {
     const wrappedHandler = (data: unknown) => {
-      handler(data as T);
+      handler(data as HandlerEventMap[K]);
     };
-    this.socket.on(event, wrappedHandler);
-    this.eventListeners.set(event, wrappedHandler);
+    this.socket.on(event as string, wrappedHandler);
+    this.eventListeners.set(event as string, wrappedHandler);
   }
 
   private handlePickResult(event: PickResultEvent): void {

@@ -14,12 +14,14 @@ type DeckPanelsProps = {
   decks: Array<{ id: string; name: string; format: string }>;
   deckId: string | null;
   deckName: string;
+  deckIsPublic: boolean;
+  deckIsOwner: boolean;
+  deckCreatorName: string | null;
   loadingDecks: boolean;
   // Sorting
   pick3DLength: number;
   isSortingEnabled: boolean;
   onToggleSort: () => void;
-  onForceSort: () => void;
   // Validation
   avatarCount: number;
   atlasCount: number;
@@ -30,6 +32,8 @@ type DeckPanelsProps = {
   onLoadDeck: (id: string) => void;
   onClearEditor: () => void;
   onSetDeckName: (name: string) => void;
+  onTogglePublic: (isPublic: boolean) => void;
+  onMakeCopy: () => void;
   onSaveDeck: () => void;
   onSubmitSealed: () => void;
   onSubmitDraft: () => void;
@@ -45,11 +49,13 @@ export default function DeckPanels(props: DeckPanelsProps) {
     decks,
     deckId,
     deckName,
+    deckIsPublic,
+    deckIsOwner,
+    deckCreatorName,
     loadingDecks,
     pick3DLength,
     isSortingEnabled,
     onToggleSort,
-    onForceSort,
     avatarCount,
     atlasCount,
     spellbookNonAvatar,
@@ -58,6 +64,8 @@ export default function DeckPanels(props: DeckPanelsProps) {
     onLoadDeck,
     onClearEditor,
     onSetDeckName,
+    onTogglePublic,
+    onMakeCopy,
     onSaveDeck,
     onSubmitSealed,
     onSubmitDraft,
@@ -75,44 +83,28 @@ export default function DeckPanels(props: DeckPanelsProps) {
           </div>
           <button
             onClick={() => setHelpOpen(true)}
-            className="h-9 w-9 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+            className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
             title="How to use the editor"
             aria-label="How to use the editor"
           >
-            {/* Question mark icon */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-              <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15h2v2h-2v-2zm3.07-7.75c-.9-.9-2.24-1.17-3.43-.74-1.19.44-2.02 1.51-2.17 2.77l1.99.23c.09-.68.54-1.25 1.18-1.49.64-.24 1.36-.08 1.84.4.62.62.62 1.63 0 2.25-.37.37-.81.67-1.21.98-.77.6-1.27 1.15-1.27 2.35V13h2c0-.53.2-.74.82-1.21.45-.35.98-.74 1.46-1.22 1.24-1.24 1.24-3.26-.21-4.32z"/>
-            </svg>
+            <span className="font-fantaisie text-xl font-bold">?</span>
           </button>
           {pick3DLength > 0 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onToggleSort}
-                title={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
-                aria-label={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
-                className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
-                  isSortingEnabled
-                    ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
-                    : "bg-white/10 text-white ring-white/20 hover:bg-white/20"
-                }`}
-              >
-                {/* Shuffle/stack icon */}
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z"/>
-                </svg>
-              </button>
-              <button
-                onClick={onForceSort}
-                title="Re-apply stacking"
-                aria-label="Re-apply stacking"
-                className="h-9 w-9 rounded-full grid place-items-center ring-1 ring-blue-400 bg-blue-600 text-white hover:bg-blue-500"
-              >
-                {/* Refresh icon */}
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path d="M12 6V3L8 7l4 4V8a4 4 0 1 1-4 4H6a6 6 0 1 0 6-6z"/>
-                </svg>
-              </button>
-            </div>
+            <button
+              onClick={onToggleSort}
+              title={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
+              aria-label={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
+              className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
+                isSortingEnabled
+                  ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
+                  : "bg-white/10 text-white ring-white/20 hover:bg-white/20"
+              }`}
+            >
+              {/* Shuffle/stack icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z"/>
+              </svg>
+            </button>
           )}
           <div className="relative">
             <button
@@ -138,12 +130,17 @@ export default function DeckPanels(props: DeckPanelsProps) {
                     decks={decks}
                     deckId={deckId}
                     deckName={deckName}
+                    deckIsPublic={deckIsPublic}
+                    deckIsOwner={deckIsOwner}
+                    deckCreatorName={deckCreatorName}
                     loadingDecks={loadingDecks}
                     saving={saving}
                     validation={validation}
                     onLoadDeck={onLoadDeck}
                     onClearEditor={onClearEditor}
                     onSetDeckName={onSetDeckName}
+                    onTogglePublic={onTogglePublic}
+                    onMakeCopy={onMakeCopy}
                     onSaveDeck={onSaveDeck}
                     onSubmitSealed={onSubmitSealed}
                     onSubmitDraft={onSubmitDraft}
@@ -225,7 +222,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
                 <ul className="list-disc pl-5 space-y-1">
                   <li>Drag cards to position them; drop on deck (top) or sideboard (bottom).</li>
                   <li>Click a card to quickly move between Deck ⇄ Sideboard.</li>
-                  <li>Enable/disable auto-stacking with the stack icon; use refresh to re-apply.</li>
+                  <li>Enable/disable auto-stacking with the stack icon (automatically re-applies when toggled).</li>
                 </ul>
               </div>
               <div>

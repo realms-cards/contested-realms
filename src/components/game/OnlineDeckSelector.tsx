@@ -3,11 +3,21 @@
 import { useState, useEffect } from "react";
 import type { PlayerKey } from "@/lib/game/store";
 
-interface DeckInfo {
+type MyDeckInfo = {
   id: string;
   name: string;
   format: string;
-}
+  isPublic?: boolean;
+  imported?: boolean;
+};
+
+type PublicDeckInfo = {
+  id: string;
+  name: string;
+  format: string;
+  imported?: boolean;
+  userName: string;
+};
 
 interface OnlineDeckSelectorProps {
   myPlayerKey: PlayerKey;
@@ -21,7 +31,9 @@ export default function OnlineDeckSelector({
   onPrepareComplete 
 }: OnlineDeckSelectorProps) {
   const curiosaEnabled = process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
-  const [decks, setDecks] = useState<DeckInfo[]>([]);
+  const [myDecks, setMyDecks] = useState<MyDeckInfo[]>([]);
+  const [publicDecks, setPublicDecks] = useState<PublicDeckInfo[]>([]);
+  const [includePublic, setIncludePublic] = useState<boolean>(false);
   const [selectedDeck, setSelectedDeck] = useState<string>("");
   const [deckError, setDeckError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,7 +49,14 @@ export default function OnlineDeckSelector({
         const res = await fetch("/api/decks", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
-        setDecks(Array.isArray(data) ? data : []);
+        // Backward compatibility: older API returned a flat array
+        if (Array.isArray(data)) {
+          setMyDecks(data as MyDeckInfo[]);
+          setPublicDecks([]);
+        } else {
+          setMyDecks(Array.isArray(data?.myDecks) ? data.myDecks : []);
+          setPublicDecks(Array.isArray(data?.publicDecks) ? data.publicDecks : []);
+        }
       } catch {}
     })();
   }, []);
@@ -82,8 +101,8 @@ export default function OnlineDeckSelector({
         return;
       }
       // data: { id, name, format }
-      const newDeck: DeckInfo = { id: String(data.id), name: String(data.name), format: String(data.format) };
-      setDecks((prev) => [newDeck, ...prev]);
+      const newDeck: MyDeckInfo = { id: String(data.id), name: String(data.name), format: String(data.format) };
+      setMyDecks((prev) => [newDeck, ...prev]);
       setSelectedDeck(newDeck.id);
       setImpUrl("");
       setImpName("");
@@ -153,6 +172,18 @@ export default function OnlineDeckSelector({
 
         <div>
           <label className="block text-sm font-medium mb-2">Choose Deck</label>
+          <div className="flex items-center justify-between mb-2 text-xs">
+            <span className="opacity-60">Your own decks are always shown.</span>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="rounded"
+                checked={includePublic}
+                onChange={(e) => setIncludePublic(e.target.checked)}
+              />
+              Include public decks
+            </label>
+          </div>
           <select
             className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
             value={selectedDeck}
@@ -160,11 +191,24 @@ export default function OnlineDeckSelector({
             disabled={isLoading}
           >
             <option value="">Select a deck...</option>
-            {decks.map((deck) => (
-              <option key={deck.id} value={deck.id}>
-                {deck.name} ({deck.format})
-              </option>
-            ))}
+            {myDecks.length > 0 && (
+              <optgroup label="My Decks">
+                {myDecks.map((deck) => (
+                  <option key={deck.id} value={deck.id}>
+                    {deck.name} ({deck.format})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {includePublic && publicDecks.length > 0 && (
+              <optgroup label="Public Decks">
+                {publicDecks.map((deck) => (
+                  <option key={deck.id} value={deck.id}>
+                    {deck.name} ({deck.format}) — {deck.userName}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
 

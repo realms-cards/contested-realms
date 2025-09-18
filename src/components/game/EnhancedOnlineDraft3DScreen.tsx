@@ -128,7 +128,9 @@ export default function EnhancedOnlineDraft3DScreen({
   );
 
   // Extend DraftState with optional server-provided packs shape for precise set derivation
-  type DraftStateWithGenerated = DraftState & { allGeneratedPacks?: DraftCard[][][] };
+  type DraftStateWithGenerated = DraftState & {
+    allGeneratedPacks?: DraftCard[][][];
+  };
 
   // Enhanced preview and hover state
   const [hoverPreview, setHoverPreview] = useState<{
@@ -143,10 +145,12 @@ export default function EnhancedOnlineDraft3DScreen({
   const [picksOpen, setPicksOpen] = useState(true);
   const [compactPicks, setCompactPicks] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Once we've seen any non-waiting draft phase, never allow a later 'waiting' snapshot to regress UI
+  const everOutOfWaitingRef = useRef(false);
 
   // Set screen type for video overlay
   useEffect(() => {
-    updateScreenType('draft-3d');
+    updateScreenType("draft-3d");
     return undefined;
   }, [updateScreenType]);
 
@@ -253,34 +257,81 @@ export default function EnhancedOnlineDraft3DScreen({
     return myPack.map(draftCardToBoosterCard);
   }, [myPack, draftCardToBoosterCard]);
 
-  // Initialize draft state from match on component mount
+  // Initialize/sync draft state from match, but never regress to an older phase/index
   useEffect(() => {
-    if (match?.draftState) {
-      console.log(
-        `[EnhancedOnlineDraft3D] Initializing from match draft state: phase=${match.draftState.phase}`
-      );
-      setDraftState(match.draftState);
+    if (!match?.draftState) return;
 
-      if (match.draftState.phase === "picking") {
-        setStaged(null);
-        setReady(false);
-      }
+    const incoming = match.draftState as DraftState;
+    const cur = draftState;
 
-      // Rebuild pick3D array from existing picks
-      const existingPicks = (match.draftState.picks[myPlayerIndex] ||
-        []) as DraftCard[];
-      if (existingPicks.length > 0) {
-        const rebuiltPick3D: Pick3D[] = existingPicks.map((card, idx) => ({
-          id: idx + 1,
-          card: draftCardToBoosterCard(card),
-          x: 0,
-          z: 0,
-        }));
-        setPick3D(rebuiltPick3D);
-        setNextPickId(existingPicks.length + 1);
-      }
+    if (everOutOfWaitingRef.current && incoming.phase === "waiting") {
+      // We already progressed; ignore spurious regressions from stale snapshots
+      return;
     }
-  }, [match?.draftState, myPlayerIndex, draftCardToBoosterCard]);
+
+    const phaseOrder: Record<string, number> = {
+      waiting: 0,
+      pack_selection: 1,
+      picking: 2,
+      passing: 3,
+      complete: 4,
+    };
+
+    const isNewerOrEqual = (() => {
+      const poCur = phaseOrder[cur?.phase ?? "waiting"] ?? 0;
+      const poInc = phaseOrder[incoming?.phase ?? "waiting"] ?? 0;
+      if (poInc > poCur) return true;
+      if (poInc < poCur) return false;
+      // Same phase: compare packIndex then pickNumber
+      if ((incoming.packIndex ?? 0) > (cur.packIndex ?? 0)) return true;
+      if ((incoming.packIndex ?? 0) < (cur.packIndex ?? 0)) return false;
+      if ((incoming.pickNumber ?? 0) >= (cur.pickNumber ?? 0)) return true;
+      return false;
+    })();
+
+    if (!isNewerOrEqual) {
+      // Guard: ignore stale snapshot (prevents reverting from picking -> waiting)
+      return;
+    }
+
+    console.log(
+      `[EnhancedOnlineDraft3D] Initializing from match draft state: phase=${incoming.phase}`
+    );
+    setDraftState(incoming);
+
+    if (incoming.phase === "picking") {
+      setStaged(null);
+      setReady(false);
+    }
+
+    // Rebuild pick3D array from existing picks
+    const existingPicks = (incoming.picks[myPlayerIndex] || []) as DraftCard[];
+    if (existingPicks.length > 0) {
+      const rebuiltPick3D: Pick3D[] = existingPicks.map((card, idx) => ({
+        id: idx + 1,
+        card: draftCardToBoosterCard(card),
+        x: 0,
+        z: 0,
+        zone: "Deck" as const,
+      }));
+      setPick3D(rebuiltPick3D);
+      setNextPickId(existingPicks.length + 1);
+    }
+  }, [match?.draftState, draftState, myPlayerIndex, draftCardToBoosterCard]);
+
+  // Client-side fallback: if both players are ready and we remain in 'waiting', auto-request start after ~1.1s
+  useEffect(() => {
+    if (!transport || !match) return;
+    if (draftState.phase !== "waiting") return;
+    if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
+    const t = window.setTimeout(() => {
+      try {
+        const baseCfg = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
+        transport.startDraft?.({ matchId: match.id, draftConfig: baseCfg });
+      } catch {}
+    }, 1100);
+    return () => window.clearTimeout(t);
+  }, [transport, match, draftState.phase, playerReadyStates.p1, playerReadyStates.p2]);
 
   // Listen for server draft updates
   useEffect(() => {
@@ -288,6 +339,9 @@ export default function EnhancedOnlineDraft3DScreen({
 
     const handleDraftUpdate = (state: unknown) => {
       const s = state as DraftState;
+      if (s?.phase && s.phase !== "waiting") {
+        everOutOfWaitingRef.current = true;
+      }
       setDraftState(s);
       console.log(
         `[EnhancedOnlineDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
@@ -467,6 +521,7 @@ export default function EnhancedOnlineDraft3DScreen({
         card: boosterCard,
         x: wx,
         z: wz,
+        zone: wz < 0 ? "Deck" : "Sideboard",
       };
       setPick3D((prev) => [...prev, newPick]);
       setNextPickId((prev) => prev + 1);
@@ -506,18 +561,19 @@ export default function EnhancedOnlineDraft3DScreen({
     ]
   );
 
-  // Ready state management
+  // Ready state management (one-way: cannot unready)
   const handleToggleReady = useCallback(async () => {
     if (!transport || !match) return;
+    // If already ready, do nothing
+    if (playerReadyStates[myPlayerKey]) return;
 
-    const newReadyState = !playerReadyStates[myPlayerKey];
-    setPlayerReadyStates((prev) => ({ ...prev, [myPlayerKey]: newReadyState }));
+    setPlayerReadyStates((prev) => ({ ...prev, [myPlayerKey]: true }));
 
     try {
       const message: PlayerReadyMessage = {
         type: "playerReady",
         playerKey: myPlayerKey,
-        ready: newReadyState,
+        ready: true,
       };
       await transport.sendMessage?.(message);
     } catch (err) {
@@ -525,47 +581,63 @@ export default function EnhancedOnlineDraft3DScreen({
     }
   }, [transport, match, myPlayerKey, playerReadyStates]);
 
+  // Start draft
+  const handleStartDraft = useCallback(async () => {
+    if (!transport || !match) return;
+    if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
 
-// Start draft
-const handleStartDraft = useCallback(async () => {
-  if (!transport || !match) return;
-  if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
-
-  setError(null);
-  setLoading(true);
-  try {
-    const baseCfg = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
-    const setMix = Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0 ? baseCfg.setMix : ["Beta"];
-    const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
-    let packCounts: Record<string, number> | undefined = undefined;
-    if (baseCfg) {
-      const bc = baseCfg as unknown as { packCounts?: Record<string, number> };
-      const pc = bc.packCounts;
-      if (pc && typeof pc === 'object') {
-      const total = Object.values(pc).reduce((a, b) => a + (Number(b) || 0), 0);
-      packCounts = total === packCount ? pc : undefined;
+    setError(null);
+    setLoading(true);
+    try {
+      const baseCfg = match.draftConfig ?? {
+        setMix: ["Beta"],
+        packCount: 3,
+        packSize: 15,
+      };
+      const setMix =
+        Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0
+          ? baseCfg.setMix
+          : ["Beta"];
+      const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
+      let packCounts: Record<string, number> | undefined = undefined;
+      if (baseCfg) {
+        const bc = baseCfg as unknown as {
+          packCounts?: Record<string, number>;
+        };
+        const pc = bc.packCounts;
+        if (pc && typeof pc === "object") {
+          const total = Object.values(pc).reduce(
+            (a, b) => a + (Number(b) || 0),
+            0
+          );
+          packCounts = total === packCount ? pc : undefined;
+        }
       }
+      if (!packCounts) {
+        // Evenly distribute packCount across setMix
+        const counts: Record<string, number> = {};
+        const n = setMix.length;
+        for (const s of setMix) counts[s] = 0;
+        const base = Math.floor(packCount / n);
+        const rem = packCount % n;
+        setMix.forEach((s, i) => {
+          counts[s] = base + (i < rem ? 1 : 0);
+        });
+        packCounts = counts;
+      }
+      const draftConfig = {
+        ...baseCfg,
+        setMix,
+        packCount,
+        packCounts,
+      } as typeof baseCfg & { packCounts: Record<string, number> };
+      await transport.startDraft?.({ matchId: match.id, draftConfig });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start draft");
+    } finally {
+      setLoading(false);
     }
-    if (!packCounts) {
-      // Evenly distribute packCount across setMix
-      const counts: Record<string, number> = {};
-      const n = setMix.length;
-      for (const s of setMix) counts[s] = 0;
-      const base = Math.floor(packCount / n);
-      const rem = packCount % n;
-      setMix.forEach((s, i) => {
-        counts[s] = base + (i < rem ? 1 : 0);
-      });
-      packCounts = counts;
-    }
-    const draftConfig = { ...baseCfg, setMix, packCount, packCounts } as typeof baseCfg & { packCounts: Record<string, number> };
-    await transport.startDraft?.({ matchId: match.id, draftConfig });
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Failed to start draft");
-  } finally {
-    setLoading(false);
-  }
-}, [transport, match, playerReadyStates]);
+  }, [transport, match, playerReadyStates]);
 
   // Pack choice handling
   const handlePackChoice = useCallback(
@@ -575,10 +647,15 @@ const handleStartDraft = useCallback(async () => {
       try {
         // Derive setChoice from server-generated packs to ensure exact match
         const s = draftState as DraftStateWithGenerated;
-        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
-        const myPacks: DraftCard[][] = Array.isArray(packsMaybe) ? packsMaybe : [];
+        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as
+          | DraftCard[][]
+          | undefined;
+        const myPacks: DraftCard[][] = Array.isArray(packsMaybe)
+          ? packsMaybe
+          : [];
         const first = myPacks[packIndex] && myPacks[packIndex][0];
-        const setChoice: string = (first && (first.setName as string)) || "Beta";
+        const setChoice: string =
+          (first && (first.setName as string)) || "Beta";
 
         transport.chooseDraftPack?.({
           matchId: match.id,
@@ -687,18 +764,19 @@ const handleStartDraft = useCallback(async () => {
           ae.tagName === "TEXTAREA" ||
           ae.isContentEditable);
       if (isTyping) return;
-      
+
       // Stop the event from being processed by other handlers (like OrbitControls)
       e.preventDefault();
       e.stopPropagation();
-      
+
       if (staged) {
         commitPickAndPass(staged.idx, staged.x, staged.z);
       }
     };
     // Use capture phase to get the event before other handlers
     window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", onKey, { capture: true });
   }, [draftState.phase, amPicker, staged, commitPickAndPass]);
 
   const needsPackChoice =
@@ -713,9 +791,7 @@ const handleStartDraft = useCallback(async () => {
     return (
       <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-white mb-6">
-            Enhanced Draft Lobby
-          </h2>
+          <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="bg-slate-800 rounded-lg p-6">
@@ -740,22 +816,12 @@ const handleStartDraft = useCallback(async () => {
                           ? "Ready"
                           : "Not Ready"}
                       </span>
-                      {myPlayerKey === key && (
+                      {myPlayerKey === key && !playerReadyStates[key as keyof typeof playerReadyStates] && (
                         <button
                           onClick={handleToggleReady}
-                          className={`px-3 py-1 rounded text-sm font-medium ${
-                            playerReadyStates[
-                              key as keyof typeof playerReadyStates
-                            ]
-                              ? "bg-red-600 hover:bg-red-700 text-white"
-                              : "bg-green-600 hover:bg-green-700 text-white"
-                          }`}
+                          className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
                         >
-                          {playerReadyStates[
-                            key as keyof typeof playerReadyStates
-                          ]
-                            ? "Not Ready"
-                            : "Ready"}
+                          Ready
                         </button>
                       )}
                     </div>
@@ -806,7 +872,9 @@ const handleStartDraft = useCallback(async () => {
   if (packChoiceOverlay && draftState.packIndex < totalPacks) {
     // Derive set order directly from server-generated packs to avoid any mismatch
     const s = draftState as DraftStateWithGenerated;
-    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as
+      | DraftCard[][]
+      | undefined;
     const myPacks: DraftCard[][] = Array.isArray(packsMaybe) ? packsMaybe : [];
     const availableSets: string[] = myPacks.map((pack: DraftCard[]) => {
       const first = pack && pack[0];
@@ -818,7 +886,8 @@ const handleStartDraft = useCallback(async () => {
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
           <div className="text-lg font-semibold mb-3">
-            Choose a pack to crack (Round {draftState.packIndex + 1}/{totalPacks})
+            Choose a pack to crack (Round {draftState.packIndex + 1}/
+            {totalPacks})
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
@@ -977,7 +1046,7 @@ const handleStartDraft = useCallback(async () => {
                 onRelease={(idx, wx, wz) => {
                   // Only allow staging when it's the player's turn
                   if (!amPicker) return;
-                  
+
                   const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
                   if (d > PICK_RADIUS) {
                     setStaged({ idx, x: wx, z: wz });
@@ -1025,7 +1094,7 @@ const handleStartDraft = useCallback(async () => {
           {staged && !needsPackChoice && packAsBoosterCards[staged.idx] && (
             <DraggableCard3D
               key={`staged-${draftState.packIndex}-${draftState.pickNumber}-${staged.idx}`}
-              slug={packAsBoosterCards[staged.idx]?.slug || ''}
+              slug={packAsBoosterCards[staged.idx]?.slug || ""}
               isSite={(packAsBoosterCards[staged.idx]?.type || "")
                 .toLowerCase()
                 .includes("site")}
@@ -1158,17 +1227,10 @@ const handleStartDraft = useCallback(async () => {
             </div>
             <button
               onClick={() => setHelpOpen(true)}
-              className="h-9 w-9 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
+              className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
               title="Enhanced Draft controls"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
-                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15h2v2h-2v-2zm3.07-7.75c-.9-.9-2.24-1.17-3.43-.74-1.19.44-2.02 1.51-2.17 2.77l1.99.23c.09-.68.54-1.25 1.18-1.49.64-.24 1.36-.08 1.84.4.62.62.62 1.63 0 2.25-.37.37-.81.67-1.21.98-.77.6-1.27 1.15-1.27 2.35V13h2c0-.53.2-.74.82-1.21.45-.35.98-.74 1.46-1.22 1.24-1.24 1.24-3.26-.21-4.32z" />
-              </svg>
+              <span className="font-fantaisie text-xl font-bold">?</span>
             </button>
           </div>
 
@@ -1206,7 +1268,9 @@ const handleStartDraft = useCallback(async () => {
               {/* Pick & Pass button - only show when a card is staged */}
               {staged && (
                 <button
-                  onClick={() => commitPickAndPass(staged.idx, staged.x, staged.z)}
+                  onClick={() =>
+                    commitPickAndPass(staged.idx, staged.x, staged.z)
+                  }
                   disabled={!amPicker}
                   className="h-10 px-4 rounded border border-emerald-500 text-emerald-400 font-semibold disabled:opacity-50 bg-transparent hover:text-emerald-300 hover:border-emerald-400"
                 >
@@ -1568,13 +1632,13 @@ const handleStartDraft = useCallback(async () => {
         )}
 
         {/* Video Overlay */}
-        <GlobalVideoOverlay 
+        <GlobalVideoOverlay
           position="top-right"
           showUserAvatar={true}
           transport={transport}
           myPlayerId={myPlayerId}
           matchId={matchId}
-          userDisplayName={me?.displayName || ''}
+          userDisplayName={me?.displayName || ""}
           userAvatarUrl={undefined} // No avatar URL available yet
           rtc={rtc}
         />
