@@ -135,38 +135,7 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
     match.draftState.allGeneratedPacks = currentPacks;
     match.draftState.currentPacks = [];
     match.draftState.waitingFor = [...match.playerIds];
-    // Auto-assign fallback after 12s if someone doesn't choose (give humans time)
-    setTimeout(() => {
-      try {
-        const m = matches.get(matchId);
-        if (!m || m.matchType !== 'draft' || !m.draftState) return;
-        const ds = m.draftState;
-        if (ds.phase !== 'pack_selection') return;
-        const pendingIdx = ds.packChoice.findIndex((c) => c === null);
-        if (pendingIdx === -1) return;
-        ds.packChoice = ds.packChoice.map((c, idx) => {
-          if (c !== null) return c;
-          const packs = Array.isArray(ds.allGeneratedPacks?.[idx]) ? ds.allGeneratedPacks[idx] : [];
-          const first = Array.isArray(packs) && packs[0] && packs[0][0] ? packs[0][0] : null;
-          return (first && (first.setName || first.set)) || 'Beta';
-        });
-        ds.currentPacks = ds.allGeneratedPacks.map((packs, playerIdx) => {
-          const choice = ds.packChoice[playerIdx];
-          for (let i = 0; i < packs.length; i++) {
-            const pack = packs[i];
-            if (pack && pack.length > 0 && pack[0].setName === choice) return [...pack];
-          }
-          const fallback = packs[0] || [];
-          return fallback ? [...fallback] : [];
-        });
-        ds.phase = 'picking';
-        ds.waitingFor = [...m.playerIds];
-        io.to(`match:${m.id}`).emit('draftUpdate', ds);
-        if (requestingSocketId) { try { io.to(requestingSocketId).emit('draftUpdate', ds); } catch {} }
-        // Keep match context in sync with new draft state
-        try { io.to(`match:${m.id}`).emit('matchStarted', { match: getMatchInfo(m) }); } catch {}
-      } catch {}
-    }, 12000);
+    try { console.log(`[Draft] Draft start -> enter pack_selection (round 1)`); } catch {}
     io.to(room).emit('draftUpdate', match.draftState);
     if (requestingSocketId) { try { io.to(requestingSocketId).emit('draftUpdate', match.draftState); } catch {} }
     // Also emit matchStarted so clients observing only matchStarted get updated draftState
