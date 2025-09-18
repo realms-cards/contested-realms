@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
 
     // 8) Create the deck
     const deckName = overrideName || `Curiosa Import ${extractDeckId(rawUrl) || "Deck"}`;
-    const deck = await prisma.deck.create({ data: { name: deckName, format: "Constructed", user: { connect: { id: session.user.id } } } });
+    const deck = await prisma.deck.create({ data: { name: deckName, format: "Constructed", imported: true, user: { connect: { id: session.user.id } } } });
 
     // createMany doesn't allow relation inference per row, so compute setId per variant
     const createRows = Array.from(agg.values()).map((v) => ({

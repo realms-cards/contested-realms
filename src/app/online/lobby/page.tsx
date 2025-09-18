@@ -356,27 +356,18 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           </div>
         </div>
       )}
-      {/* Host-only match start/config controls, only when lobby is open and no active match exists */}
-      {isHost && !match && lobby?.status === "open" && (
+      {/* Host-only match start/config controls, only when lobby is open, all players ready, and no active match exists */}
+      {isHost && !match && lobby?.status === "open" && allReady && (
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm font-semibold opacity-90">Host Controls</div>
           <div className="flex flex-wrap gap-2 items-center">
             <button
-              className="rounded-lg px-3 py-2 text-sm bg-slate-700/80 hover:bg-slate-600 shadow"
+              className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-5 py-2.5 text-base font-semibold shadow"
               onClick={() => setConfigOpen(true)}
-              title="Configure match settings"
+              title="Set up match and start when all players are ready"
             >
-              Configure
+              Set up and Start
             </button>
-            {allReady && (
-              <button
-                className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-5 py-2.5 text-base font-semibold shadow"
-                onClick={() => setConfigOpen(true)}
-                title={`Start ${matchType} match (confirm settings)`}
-              >
-                Start Match
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -496,7 +487,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
             <div className="text-base font-semibold">Leave match</div>
             <div className="mt-2 text-sm text-slate-300">
-              Do you also want to leave the lobby? If you stay in the lobby, you can quickly rematch.
+              Are you sure you want to leave the match?
             </div>
             <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-end">
               <button
@@ -504,14 +495,6 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                 onClick={() => setLeaveConfirmOpen(false)}
               >
                 Cancel
-              </button>
-              <button
-                className="px-4 py-2 text-sm rounded bg-blue-600/90 hover:bg-blue-600 text-white"
-                onClick={() => {
-                  try { leaveMatch(); } finally { setLeaveConfirmOpen(false); }
-                }}
-              >
-                Leave match only
               </button>
               <button
                 className="px-4 py-2 text-sm rounded bg-red-600/90 hover:bg-red-600 text-white"
@@ -522,7 +505,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                   }
                 }}
               >
-                Leave match and lobby
+                Leave Match
               </button>
             </div>
           </div>

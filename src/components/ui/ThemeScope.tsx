@@ -30,8 +30,8 @@ export default function ThemeScope({ children }: { children: React.ReactNode }) 
   const classNames: string[] = [];
   if (applyGrayscale) classNames.push("grayscale-ui");
   if (exempt) classNames.push("game-font");
-  // Even in colorful mode, lower color intensity slightly for a cohesive look
-  if (mode === "colorful") classNames.push("color-dim");
+  // Even in colorful mode, lower color intensity slightly for a cohesive look (but NOT on game views)
+  if (mode === "colorful" && !exempt) classNames.push("color-dim");
 
   return (
     <div className={classNames.length ? classNames.join(" ") : undefined}>{children}</div>

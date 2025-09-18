@@ -32,6 +32,8 @@ export type Pick3D = {
   z: number;
   // Optional vertical offset used by some UIs to influence render order
   y?: number;
+  // Explicit zone tracking - no longer derived from z coordinate
+  zone: "Deck" | "Sideboard";
 };
 
 export type StackPosition = {

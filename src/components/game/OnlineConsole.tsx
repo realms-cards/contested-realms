@@ -145,14 +145,11 @@ export default function OnlineConsole({
   };
 
   const handleLeaveMatch = () => {
-    if (confirm("Leave match? You won't be prompted to rejoin automatically. You can still join again later from the lobby by entering the match ID.")) {
+    if (confirm("Leave match? You won't be prompted to rejoin automatically.")) {
       onLeaveMatch();
-      
-      // Ask if they also want to leave the lobby
-      if (onLeaveLobby && confirm("Would you also like to leave the lobby? You can always join another lobby or create a new one.")) {
+      if (onLeaveLobby) {
         onLeaveLobby();
       }
-      
       router.push('/online/lobby');
     }
   };

@@ -8,12 +8,10 @@ import { useSocket } from '@/lib/hooks/useSocket';
 import { DeckPersistenceManager } from '../persistence/DeckPersistenceManager';
 import { SubmissionSocketHandler } from '../persistence/socketHandlers';
 import type {
-  DeckSubmission,
   DeckComposition,
   DeckValidationResult,
   PersistenceMetrics,
   DeckModification,
-  UndoRedoState
 } from '../persistence/types';
 import { WaitingStateManager } from '../waiting/WaitingStateManager';
 import type {
@@ -348,14 +346,14 @@ export function useDeckPersistence(sessionId: string, playerId: string): UseDeck
     return () => clearInterval(autoSaveInterval);
   }, []);
 
-  // Get current state
-  const state = persistenceManagerRef.current?.getState();
-  const currentDeck = state?.currentDeck || null;
-  const isDirty = state?.isDirty || false;
-  const isRestoring = state?.isRestoring || false;
-  const isValidating = state?.isValidating || false;
-  const hasErrors = state?.hasErrors || false;
-  const metrics = state?.metrics || null;
+  // Get current state (typed DeckComposition)
+  const deckState = persistenceManagerRef.current?.getState();
+  const currentDeck = deckState || null;
+  const isDirty = deckState?.isDirty ?? false;
+  const isRestoring = deckState?.isRestoring ?? false;
+  const isValidating = deckState?.isValidating ?? false;
+  const hasErrors = deckState?.hasErrors ?? false;
+  const metrics = deckState?.metrics || null;
 
   return {
     // Deck state
@@ -390,7 +388,7 @@ export function useDeckPersistence(sessionId: string, playerId: string): UseDeck
 /**
  * Hook for managing submission coordination
  */
-export function useSubmissionCoordination(sessionId: string, playerId: string): UseSubmissionCoordinationReturn {
+export function useSubmissionCoordination(_sessionId: string, _playerId: string): UseSubmissionCoordinationReturn {
   const waitingManagerRef = useRef<WaitingStateManager | null>(null);
   const socketHandlerRef = useRef<SubmissionSocketHandler | null>(null);
   const [submissionDeadline, setSubmissionDeadline] = useState<number | null>(null);
@@ -491,23 +489,22 @@ export function useDeckUndoRedo(sessionId: string, playerId: string): UseDeckUnd
     persistenceManagerRef.current.clearHistory();
   }, []);
 
-  const state = persistenceManagerRef.current?.getState();
-  const undoRedo = state?.undoRedo;
+  const undoRedo = persistenceManagerRef.current?.getUndoRedoState();
 
   return {
     // Undo/Redo state
-    canUndo: undoRedo?.canUndo || false,
-    canRedo: undoRedo?.canRedo || false,
-    historySize: undoRedo?.historyLength || 0,
+    canUndo: undoRedo?.canUndo ?? false,
+    canRedo: undoRedo?.canRedo ?? false,
+    historySize: undoRedo?.currentHistorySize ?? 0,
     
     // Actions
     undo,
     redo,
     clearHistory,
     
-    // History inspection - TODO: implement proper history stack access
-    undoStack: [],
-    redoStack: []
+    // History inspection
+    undoStack: undoRedo?.undoStack || [],
+    redoStack: undoRedo?.redoStack || []
   };
 }
 
