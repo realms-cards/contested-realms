@@ -4,6 +4,7 @@ import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { MOUSE } from "three";
@@ -850,6 +851,8 @@ export default function Draft3DPage() {
                     setStaged(null);
                   }
                 }}
+                // For draft session, prefer raster textures for lower cost and faster churn
+                preferRaster
               />
             )}
 
@@ -910,6 +913,8 @@ export default function Draft3DPage() {
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
                     disabled={isSortingEnabled && !isVisible}
+                    // Prefer raster textures for draft board
+                    preferRaster
                   />
                 );
               })}
@@ -943,6 +948,18 @@ export default function Draft3DPage() {
 
       {/* Overlays */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
+        {/* Minimal Navigation (top-right) */}
+        <div className="absolute top-3 right-4 z-[60] pointer-events-auto text-xs flex items-center gap-3">
+          <Link href="/" className="underline text-white/80 hover:text-white">
+            Home
+          </Link>
+          <Link
+            href="/online/lobby"
+            className="underline text-white/80 hover:text-white"
+          >
+            Lobby
+          </Link>
+        </div>
         {/* Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -1972,6 +1973,18 @@ function AuthenticatedDeckEditor() {
 
       {/* HUD Overlay - EXACT same structure as draft-3d */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
+        {/* Minimal Navigation (top-right) */}
+        <div className="absolute top-3 right-4 z-[60] pointer-events-auto text-xs flex items-center gap-3">
+          <Link href="/" className="underline text-white/80 hover:text-white">
+            Home
+          </Link>
+          <Link
+            href="/online/lobby"
+            className="underline text-white/80 hover:text-white"
+          >
+            Lobby
+          </Link>
+        </div>
         <DeckPanels
           isDraftMode={isDraftMode}
           isSealed={isSealed}

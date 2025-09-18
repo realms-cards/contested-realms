@@ -70,12 +70,20 @@ export default function DecksPage() {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold font-fantaisie">Your Decks</h1>
-        <Link
-          href="/decks/editor-3d"
-          className="ml-auto px-3 py-2 rounded bg-foreground text-background"
-        >
-          New Deck
-        </Link>
+        <div className="ml-auto flex items-center gap-3">
+          <Link href="/" className="text-xs underline text-foreground/70 hover:text-foreground">
+            Home
+          </Link>
+          <Link href="/online/lobby" className="text-xs underline text-foreground/70 hover:text-foreground">
+            Lobby
+          </Link>
+          <Link
+            href="/decks/editor-3d"
+            className="px-3 py-2 rounded bg-foreground text-background"
+          >
+            New Deck
+          </Link>
+        </div>
       </div>
 
       {/* Curiosa import panel */}

@@ -77,11 +77,16 @@ export default function CardPreview({
       className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
     >
       <div className="relative">
-        <div
-          className={`relative ${base} rounded-xl overflow-hidden ${
-            isSite ? "rotate-90" : ""
-          }`}
-        >
+        {(() => {
+          // Force a remount when orientation changes (Safari workaround for rotation/layout lag)
+          const orientationKey = `${card.slug}:${isSite ? "land" : "port"}`;
+          return (
+            <div
+              key={orientationKey}
+              className={`relative ${base} rounded-xl overflow-hidden ${
+                isSite ? "rotate-90" : ""
+              }`}
+            >
           <Image
             src={imgSrc}
             alt={card.name}
@@ -90,7 +95,9 @@ export default function CardPreview({
             className={`${isSite ? "object-contain" : "object-cover"}`}
             priority={false}
           />
-        </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
