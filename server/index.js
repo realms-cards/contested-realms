@@ -539,6 +539,9 @@ const io = new Server(server, {
     origin: CORS_ORIGINS,
     credentials: true,
   },
+  // Be a bit more tolerant behind proxies/CDNs to avoid false disconnects
+  pingInterval: Number(process.env.SOCKET_PING_INTERVAL_MS || 15000),
+  pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT_MS || 30000),
 });
 
 // Socket.IO Redis adapter (horizontal scaling)
@@ -1788,11 +1791,19 @@ io.use((socket, next) => {
       return next();
     }
     if (REQUIRE_JWT) {
-      return next(new Error("auth_required"));
+      try {
+        console.warn('[auth] connect rejected: auth_required', {
+          tokenPresent: !!token,
+          origin: socket.handshake && socket.handshake.headers && socket.handshake.headers.origin,
+          referer: socket.handshake && socket.handshake.headers && socket.handshake.headers.referer,
+        });
+      } catch {}
+      return next(new Error('auth_required'));
     }
     return next();
   } catch (e) {
-    return next(new Error("invalid_token"));
+    try { console.warn('[auth] connect rejected: invalid_token', { message: e?.message || String(e) }); } catch {}
+    return next(new Error('invalid_token'));
   }
 });
 
