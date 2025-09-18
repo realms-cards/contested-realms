@@ -1095,12 +1095,42 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       let patchToApply = patch;
       if (patch && typeof patch === 'object' && patch.d20Rolls) {
         const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
-        const inc = patch.d20Rolls || {};
+        const incRaw = patch.d20Rolls || {};
+        // Determine the seat (p1/p2) for the acting player
+        const seat = (() => {
+          const idx = Array.isArray(match.playerIds) ? match.playerIds.indexOf(playerId) : -1;
+          return idx === 0 ? 'p1' : idx === 1 ? 'p2' : null;
+        })();
+        // Only allow a player to set their own seat, and only if it hasn't been set yet
+        /** @type {{ p1?: number, p2?: number }} */
+        const inc = {};
+        if (seat === 'p1') {
+          if (incRaw.p1 !== undefined) {
+            if (prev.p1 == null) {
+              const v = Number(incRaw.p1);
+              if (Number.isFinite(v)) inc.p1 = v;
+            } else {
+              try { console.warn('[d20] ignoring extra roll from p1; already rolled', { prev, incRaw, matchId, playerId }); } catch {}
+            }
+          }
+        } else if (seat === 'p2') {
+          if (incRaw.p2 !== undefined) {
+            if (prev.p2 == null) {
+              const v = Number(incRaw.p2);
+              if (Number.isFinite(v)) inc.p2 = v;
+            } else {
+              try { console.warn('[d20] ignoring extra roll from p2; already rolled', { prev, incRaw, matchId, playerId }); } catch {}
+            }
+          }
+        } else {
+          // Spectators or unknown seats cannot affect d20 rolls
+          try { console.warn('[d20] ignoring roll from non-seated actor', { incRaw, matchId, playerId }); } catch {}
+        }
         const mergedD20 = {
           p1: (inc.p1 !== undefined ? inc.p1 : (prev.p1 ?? null)),
           p2: (inc.p2 !== undefined ? inc.p2 : (prev.p2 ?? null)),
         };
-        try { console.log('[d20] merge', { prev, inc, merged: mergedD20, matchId }); } catch {}
+        try { console.log('[d20] merge', { prev, inc: incRaw, merged: mergedD20, matchId }); } catch {}
         if (mergedD20.p1 != null && mergedD20.p2 != null) {
           if (Number(mergedD20.p1) === Number(mergedD20.p2)) {
             try { console.log('[d20] tie detected -> resetting for reroll', { merged: mergedD20, matchId }); } catch {}
@@ -1110,7 +1140,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           } else {
             const winner = Number(mergedD20.p1) > Number(mergedD20.p2) ? 'p1' : 'p2';
             patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
-            if (patchToApply.setupWinner === undefined) patchToApply.setupWinner = winner;
+            if (patchToApply.setupWinner === undefined) patchToApply = { ...patchToApply, setupWinner: winner };
             try { console.log('[d20] winner decided', { merged: mergedD20, winner, matchId }); } catch {}
             try {
               const g = match.game || {};

@@ -106,35 +106,49 @@ export async function GET(
       const subdir = hasSubdir ? segments.slice(0, -1).join("/") : "";
 
       if (segments[0] === "tokens") {
-        // Token images - preserve the tokens subdirectory
-        cdnPath = segments.join("/");
-      } else if (segments[0] === "Dragonlord") {
-        // Dragonlord assets - special handling since they're webp in both folders
-        // For CDN, they should be in /webp/Dragonlord/
-        const webpName = baseName + ".webp";
-        cdnPath = `webp/Dragonlord/${webpName}`;
-      } else if (hasSubdir) {
-        // Other subdirectory assets - preserve path structure
+        // Token images - map into data-* folders on the CDN
         if (wantKtx2 || requestedExt === "ktx2") {
           const ktx2Name = baseName + ".ktx2";
-          cdnPath = `ktx2/${subdir}/${ktx2Name}`;
-        } else {
+          cdnPath = `data-ktx2/tokens/${ktx2Name}`;
+        } else if (requestedExt === "webp") {
+          cdnPath = `data-webp/tokens/${last}`;
+        } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
           const webpName = baseName + ".webp";
-          cdnPath = `webp/${subdir}/${webpName}`;
+          cdnPath = `data-webp/tokens/${webpName}`;
+        } else {
+          cdnPath = `data/tokens/${last}`;
+        }
+      } else if (segments[0] === "Dragonlord") {
+        // Dragonlord assets - special handling since they're webp in both folders
+        // For CDN, they should be in /data-webp/Dragonlord/
+        const webpName = baseName + ".webp";
+        cdnPath = `data-webp/Dragonlord/${webpName}`;
+      } else if (hasSubdir) {
+        // Other subdirectory assets - preserve path structure within data-* folders
+        if (wantKtx2 || requestedExt === "ktx2") {
+          const ktx2Name = baseName + ".ktx2";
+          cdnPath = `data-ktx2/${subdir}/${ktx2Name}`;
+        } else if (requestedExt === "webp") {
+          cdnPath = `data-webp/${subdir}/${last}`;
+        } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+          const webpName = baseName + ".webp";
+          cdnPath = `data-webp/${subdir}/${webpName}`;
+        } else {
+          cdnPath = `data/${subdir}/${last}`;
         }
       } else if (wantKtx2 || requestedExt === "ktx2") {
-        // Prefer ktx2 format for cards
+        // Prefer ktx2 format for cards at CDN
         const ktx2Name = baseName + ".ktx2";
-        cdnPath = `ktx2/${ktx2Name}`;
+        cdnPath = `data-ktx2/${ktx2Name}`;
       } else if (requestedExt === "webp") {
         // Already requesting webp
-        cdnPath = `webp/${last}`;
+        cdnPath = `data-webp/${last}`;
       } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
         // For raster images, try webp first
         const webpName = baseName + ".webp";
-        cdnPath = `webp/${webpName}`;
+        cdnPath = `data-webp/${webpName}`;
       } else {
-        // Default fallback to data directory for PNG
+        // Default fallback to data directory
         cdnPath = `data/${last}`;
       }
 

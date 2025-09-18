@@ -461,7 +461,8 @@ export default function EnhancedOnlineDraft3DScreen({
       if (
         draftState.pickNumber === 1 &&
         !packChoiceOverlay &&
-        shownPackOverlayForRound !== draftState.packIndex
+        shownPackOverlayForRound !== draftState.packIndex &&
+        myPack.length === 0
       ) {
         setPackChoiceOverlay(true);
         setShownPackOverlayForRound(draftState.packIndex);
@@ -499,6 +500,13 @@ export default function EnhancedOnlineDraft3DScreen({
     shownPackOverlayForRound,
     STAGE_CLICK_POS,
   ]);
+
+  // Hide pack choice overlay when server enters picking phase (packs are assigned)
+  useEffect(() => {
+    if (draftState.phase === "picking") {
+      if (packChoiceOverlay) setPackChoiceOverlay(false);
+    }
+  }, [draftState.phase, packChoiceOverlay]);
 
   // Enhanced Pick & Pass with staging mechanics (from single-player)
   const commitPickAndPass = useCallback(
@@ -786,6 +794,24 @@ export default function EnhancedOnlineDraft3DScreen({
     !staged &&
     shownPackOverlayForRound !== draftState.packIndex;
 
+  // Debug: trace UI gating for pack visibility
+  useEffect(() => {
+    try {
+      console.log(
+        "[EnhancedOnlineDraft3D] gate",
+        {
+          phase: draftState.phase,
+          packIndex: draftState.packIndex,
+          pickNumber: draftState.pickNumber,
+          amPicker,
+          packChoiceOverlay,
+          needsPackChoice,
+          myPackSize: myPack.length,
+        }
+      );
+    } catch {}
+  }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker, packChoiceOverlay, needsPackChoice, myPack.length]);
+
   // UI: Lobby (phase waiting)
   if (draftState.phase === "waiting") {
     return (
@@ -999,7 +1025,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
           {/* Enhanced Draft Pack Hand (from single-player) */}
           {draftState.phase !== "complete" &&
-            !needsPackChoice &&
+            !packChoiceOverlay &&
             packAsBoosterCards.length > 0 && (
               <DraftPackHand3D
                 cards={packAsBoosterCards}
