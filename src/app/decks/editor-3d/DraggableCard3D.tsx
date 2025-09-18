@@ -30,6 +30,7 @@ export default function DraggableCard3D({
   totalInStack = 1,
   cardId,
   interactive = true,
+  preferRaster = false,
 }: {
   slug: string;
   isSite: boolean;
@@ -54,6 +55,7 @@ export default function DraggableCard3D({
   totalInStack?: number;
   cardId?: number;
   interactive?: boolean;
+  preferRaster?: boolean;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -304,6 +306,7 @@ export default function DraggableCard3D({
           interactive={interactive}
           elevation={0.002}
           cardId={cardId}
+          preferRaster={preferRaster}
         />
       </group>
     </group>

@@ -7,6 +7,32 @@ try { require('dotenv').config(); } catch {}
 // -----------------------------
 // Leader-aware Draft helpers (match-level)
 // -----------------------------
+function repairDraftInvariants(match) {
+  if (!match || match.matchType !== 'draft' || !match.draftState) return;
+  const ds = match.draftState;
+  // If server thinks we're in picking for a new pack but hasn't distributed packs yet,
+  // revert to pack_selection and wait for choices.
+  if (ds.phase === 'picking' && Number(ds.pickNumber || 0) === 1) {
+    const hasAnyCards = Array.isArray(ds.currentPacks)
+      ? ds.currentPacks.some((p) => Array.isArray(p) && p.length > 0)
+      : false;
+    if (!hasAnyCards) {
+      ds.phase = 'pack_selection';
+      ds.waitingFor = [...match.playerIds];
+      if (!Array.isArray(ds.packChoice) || ds.packChoice.length !== match.playerIds.length) {
+        ds.packChoice = Array.from({ length: match.playerIds.length }, () => null);
+      } else {
+        ds.packChoice = ds.packChoice.map(() => null);
+      }
+      try { console.warn(`[Draft] Repaired invariant: picking@1 without packs -> reverted to pack_selection (round ${ds.packIndex + 1})`); } catch {}
+    }
+  }
+  // Bound packIndex to configured packCount
+  const maxPacks = (match.draftConfig && Number(match.draftConfig.packCount)) || 3;
+  if (typeof ds.packIndex === 'number' && ds.packIndex >= maxPacks) {
+    ds.packIndex = Math.max(0, maxPacks - 1);
+  }
+}
 async function leaderDraftPlayerReady(matchId, playerId, ready) {
   const match = await getOrLoadMatch(matchId);
   if (!match || match.matchType !== 'draft' || !match.draftState) return;
@@ -136,6 +162,8 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
     match.draftState.currentPacks = [];
     match.draftState.waitingFor = [...match.playerIds];
     try { console.log(`[Draft] Draft start -> enter pack_selection (round 1)`); } catch {}
+    // Safety: repair invariants before broadcasting
+    try { repairDraftInvariants(match); } catch {}
     io.to(room).emit('draftUpdate', match.draftState);
     if (requestingSocketId) { try { io.to(requestingSocketId).emit('draftUpdate', match.draftState); } catch {} }
     // Also emit matchStarted so clients observing only matchStarted get updated draftState
@@ -183,6 +211,8 @@ async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickN
         draftState.packDirection = draftState.packDirection === 'left' ? 'right' : 'left';
         draftState.phase = 'pack_selection';
         draftState.waitingFor = [...match.playerIds];
+        // Clear distributed packs to ensure a clean re-selection each round
+        draftState.currentPacks = [];
         // Reset choices for this round
         if (!Array.isArray(draftState.packChoice) || draftState.packChoice.length !== match.playerIds.length) {
           draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
@@ -209,6 +239,7 @@ async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickN
       draftState.waitingFor = [...match.playerIds];
     }
   }
+  try { repairDraftInvariants(match); } catch {}
   io.to(`match:${match.id}`).emit('draftUpdate', draftState);
   try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
 }
@@ -243,6 +274,7 @@ async function leaderChooseDraftPack(matchId, playerId, { setChoice, packIndex }
     draftState.waitingFor = [...match.playerIds];
     try { console.log(`[Draft] All pack choices resolved for round ${draftState.packIndex + 1}. Enter picking.`); } catch {}
   }
+  try { repairDraftInvariants(match); } catch {}
   io.to(`match:${match.id}`).emit('draftUpdate', draftState);
   try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
 }
@@ -2796,38 +2828,13 @@ io.on("connection", (socket) => {
       match.draftState.allGeneratedPacks = currentPacks; // Store all generated packs
       match.draftState.currentPacks = []; // Don't distribute packs yet
       match.draftState.waitingFor = [...match.playerIds]; // Wait for pack choices
-
-      // Fallback: if not all players choose within 12s, auto-assign first pack for those who didn't
-      setTimeout(() => {
-        try {
-          const m = matches.get(match.id);
-          if (!m || m.matchType !== "draft" || !m.draftState) return;
-          const ds = m.draftState;
-          if (ds.phase !== "pack_selection") return; // choices already resolved
-          const pendingIdx = ds.packChoice.findIndex((c) => c === null);
-          if (pendingIdx === -1) return; // all chosen
-          // Auto-choose for remaining players based on their first generated pack's set
-          ds.packChoice = ds.packChoice.map((c, idx) => {
-            if (c !== null) return c;
-            const packs = Array.isArray(ds.allGeneratedPacks?.[idx]) ? ds.allGeneratedPacks[idx] : [];
-            const first = Array.isArray(packs) && packs[0] && packs[0][0] ? packs[0][0] : null;
-            return (first && (first.setName || first.set)) || "Beta";
-          });
-          ds.currentPacks = ds.allGeneratedPacks.map((packs, playerIdx) => {
-            const choice = ds.packChoice[playerIdx];
-            for (let i = 0; i < packs.length; i++) {
-              const pack = packs[i];
-              if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
-            }
-            return packs[0] || [];
-          });
-          ds.phase = "picking";
-          ds.waitingFor = [...m.playerIds];
-          io.to(`match:${m.id}`).emit("draftUpdate", ds);
-        } catch (e) {
-          console.warn(`[Draft] auto-pack assignment failed for match ${match.id}:`, e);
-        }
-      }, 12000);
+      // Initialize/reset pack choices for all players
+      if (!Array.isArray(match.draftState.packChoice) || match.draftState.packChoice.length !== match.playerIds.length) {
+        match.draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
+      } else {
+        match.draftState.packChoice = match.draftState.packChoice.map(() => null);
+      }
+      try { console.log(`[Draft] (legacy helper) start -> enter pack_selection (round 1)`); } catch {}
 
       const packSizes = match.draftState.currentPacks
         .map((p) => (Array.isArray(p) ? p.length : 0))

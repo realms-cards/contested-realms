@@ -679,6 +679,8 @@ function PackCard3D({
           interactive={false}
           elevation={0.002 + (hoverWeightForRow(scale, isDragging) ? 0.018 : 0)}
           opacity={opacity}
+          // Draft hand churns quickly; prefer raster (WebP) to reduce transcoding cost
+          preferRaster
         />
       </group>
     </group>

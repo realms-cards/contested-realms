@@ -56,7 +56,7 @@ export default function RightPanel(props: RightPanelProps) {
   } = props;
 
   return (
-    <div className="absolute right-6 max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
+    <div className="absolute right-6 top-14 sm:top-16 max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-8" />
         <div className="col-span-12 lg:col-span-4">

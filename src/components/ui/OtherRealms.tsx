@@ -117,9 +117,11 @@ export default function OtherRealms({
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
-              <div className="flex flex-col">
+              <div className="flex items-start flex-col">
                 <h2 className="text-lg md:text-xl font-semibold">{title}</h2>
-                <p className="text-xs text-slate-400">Discover official and community projects</p>
+                <p className="text-xs text-slate-400">
+                  Discover official and community projects
+                </p>
               </div>
               <button
                 type="button"
@@ -163,12 +165,14 @@ export default function OtherRealms({
                     <li key={link.label}>
                       {isDisabled ? (
                         <div
-                          className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-400 cursor-not-allowed"
+                          className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-400 cursor-not-allowed text-center"
                           title={link.disabledReason || "Coming soon"}
                         >
                           <div className="font-medium">{link.label}</div>
                           {link.subtitle && (
-                            <div className="text-xs opacity-80">{link.subtitle}</div>
+                            <div className="text-xs opacity-80">
+                              {link.subtitle}
+                            </div>
                           )}
                         </div>
                       ) : (
@@ -176,25 +180,27 @@ export default function OtherRealms({
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="block w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-700/70 transition-colors group"
+                          className="block w-full pl-4 pr-10 py-3 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-700/70 transition-colors group relative"
                         >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="font-medium group-hover:underline">{link.label}</div>
-                              {link.subtitle && (
-                                <div className="text-xs text-slate-300/80">{link.subtitle}</div>
-                              )}
+                          <div className="text-center">
+                            <div className="font-medium group-hover:underline">
+                              {link.label}
                             </div>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              className="w-5 h-5 text-slate-300 group-hover:text-white"
-                              aria-hidden
-                            >
-                              <path d="M14 3a1 1 0 1 0 0 2h3.586l-9.293 9.293a1 1 0 0 0 1.414 1.414L19 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1h-6ZM5 6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6a1 1 0 1 0-2 0v5H6V8h5a1 1 0 1 0 0-2H5Z" />
-                            </svg>
+                            {link.subtitle && (
+                              <div className="text-xs text-slate-300/80">
+                                {link.subtitle}
+                              </div>
+                            )}
                           </div>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="w-5 h-5 text-slate-300 group-hover:text-white absolute right-3 top-1/2 -translate-y-1/2"
+                            aria-hidden
+                          >
+                            <path d="M14 3a1 1 0 1 0 0 2h3.586l-9.293 9.293a1 1 0 0 0 1.414 1.414L19 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1h-6ZM5 6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6a1 1 0 1 0-2 0v5H6V8h5a1 1 0 1 0 0-2H5Z" />
+                          </svg>
                         </a>
                       )}
                     </li>

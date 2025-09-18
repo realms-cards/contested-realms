@@ -13,11 +13,21 @@ import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 export interface UseCardTextureOptions {
   slug?: string;
   textureUrl?: string;
+  // If true, skip attempting KTX2 and load raster (WebP/PNG) directly.
+  // Useful in draft where network size matters and cards churn quickly.
+  preferRaster?: boolean;
 }
 
 // --- Global caches & helpers ---
 // Cache textures by final loaded URL with refcounts so multiple components share one GPU resource.
-const textureCache = new Map<string, { texture: Texture; refs: number }>();
+// When refs drop to 0, we keep the texture in a soft-cache for a short TTL to avoid thrash on rapid churn.
+type CacheEntry = {
+  texture: Texture;
+  refs: number;
+  lastUsed: number;
+  evictTimer?: number;
+};
+const textureCache = new Map<string, CacheEntry>();
 // Pending loads by URL to dedupe concurrent requests.
 const pendingLoads = new Map<string, Promise<Texture>>();
 // One KTX2Loader per renderer to reuse workers/transcoder and internal caches.
@@ -86,25 +96,65 @@ function normalizeTexture(
   t.needsUpdate = true;
 }
 
+// --- Soft eviction policy (keep-after-release) ---
+const EVICT_MS = (() => {
+  const v = Number(process.env.NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS || "");
+  // Default to 60s if not provided or invalid
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+})();
+
+function cancelEviction(entry: CacheEntry) {
+  if (entry.evictTimer) {
+    try {
+      window.clearTimeout(entry.evictTimer);
+    } catch {}
+    entry.evictTimer = undefined;
+  }
+}
+
+function scheduleEviction(url: string, entry: CacheEntry) {
+  cancelEviction(entry);
+  try {
+    entry.evictTimer = window.setTimeout(() => {
+      // Only evict if still unreferenced
+      const cur = textureCache.get(url);
+      if (!cur) return;
+      if (cur.refs <= 0) {
+        try {
+          cur.texture.dispose();
+        } catch {}
+        textureCache.delete(url);
+      }
+    }, EVICT_MS);
+  } catch {}
+}
+
 async function acquire(
   url: string,
   load: () => Promise<Texture>
 ): Promise<Texture> {
   const cached = textureCache.get(url);
   if (cached) {
+    // Re-activate a soft-cached texture
     cached.refs++;
+    cached.lastUsed = Date.now();
+    cancelEviction(cached);
     return cached.texture;
   }
   const pending = pendingLoads.get(url);
   if (pending) {
     const tex = await pending;
     const entry = textureCache.get(url);
-    if (entry) entry.refs++;
+    if (entry) {
+      entry.refs++;
+      entry.lastUsed = Date.now();
+      cancelEviction(entry);
+    }
     return tex;
   }
   const p = load()
     .then((t) => {
-      textureCache.set(url, { texture: t, refs: 0 });
+      textureCache.set(url, { texture: t, refs: 0, lastUsed: Date.now() });
       return t;
     })
     .finally(() => {
@@ -113,7 +163,11 @@ async function acquire(
   pendingLoads.set(url, p);
   const tex = await p;
   const entry = textureCache.get(url);
-  if (entry) entry.refs++;
+  if (entry) {
+    entry.refs++;
+    entry.lastUsed = Date.now();
+    cancelEviction(entry);
+  }
   return tex;
 }
 
@@ -122,15 +176,14 @@ function release(url: string | null) {
   const entry = textureCache.get(url);
   if (!entry) return;
   entry.refs--;
-  if (entry.refs <= 0) {
-    entry.texture.dispose();
-    textureCache.delete(url);
-  }
+  entry.lastUsed = Date.now();
+  // Keep in soft cache for a short TTL; avoids reloading on rapid churn (e.g., draft hand passes)
+  if (entry.refs <= 0) scheduleEviction(url, entry);
 }
 
 // Attempts to load a KTX2 texture first (when URL is /api/images/*),
 // and falls back to loading the raster image when unsupported or unavailable.
-export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
+export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextureOptions) {
   const { gl } = useThree();
   const [tex, setTex] = useState<Texture | null>(null);
   // Track which cache key (URL) we currently hold a ref for.
@@ -156,6 +209,7 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
 
   const ktx2Url = useMemo(() => {
     if (!baseUrl) return "";
+    if (preferRaster) return ""; // Explicitly skip KTX2 when requested
     try {
       const u = new URL(
         baseUrl,
@@ -207,7 +261,7 @@ export function useCardTexture({ slug, textureUrl }: UseCardTextureOptions) {
     } catch {
       return "";
     }
-  }, [baseUrl]);
+  }, [baseUrl, preferRaster]);
 
   // Acquire and release textures with caching and robust fallback.
   useEffect(() => {

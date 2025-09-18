@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import AsciiBottomArt from "@/components/ui/AsciiBottomArt";
 import AsciiLogo from "@/components/ui/AsciiLogo";
 import AsciiPanel from "@/components/ui/AsciiPanel";
 import OtherRealms from "@/components/ui/OtherRealms";
@@ -13,8 +14,8 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center pt-10 pb-12 px-5">
-      <div className="max-w-5xl w-full text-center space-y-8">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center pt-10 pb-12 px-5 relative">
+      <div className="relative z-10 max-w-5xl w-full text-center space-y-8">
         {/* ASCII Logotype */}
         <AsciiLogo className="max-w-4xl mx-auto" />
 
@@ -93,26 +94,28 @@ export default function Home() {
         </div>
 
         {/* Footer */}
-        <div className="text-xs text-slate-500 space-y-1">
+        <div className="text-xs text-orange-300/80 space-y-1">
           <p>
-            Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa. Visit the
-            official site at{' '}
+            Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa.
+            Visit the official site at{" "}
             <a
               href="https://curiosa.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-slate-300"
+              className="underline text-orange-200/90 hover:text-orange-100"
             >
               curiosa.io
             </a>
             .
           </p>
           <p>
-            This is an unofficial digital client for educational and entertainment
-            purposes.
+            This is an unofficial digital client for educational and friendly
+            tournament purposes.
           </p>
         </div>
       </div>
+      {/* Bottom ASCII art background */}
+      <AsciiBottomArt opacityClass="text-white/12" maxVh={40} />
     </div>
   );
 }

@@ -29,6 +29,7 @@ interface CardPlaneProps {
   textureRotation?: number; // rotation to apply to the texture itself
   forceTextureUrl?: boolean; // if true, ignore slug completely and only use textureUrl
   opacity?: number; // transparency (0.0 to 1.0, default 1.0)
+  preferRaster?: boolean; // if true, skip KTX2 attempt and use raster
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -95,9 +96,9 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     upright = false,
     renderOrder = 0,
     textureUrl,
-    textureRotation,
     forceTextureUrl = false,
     opacity = 1.0,
+    preferRaster = false,
     onContextMenu,
     onPointerDown,
     onPointerOver,
@@ -117,19 +118,16 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
   // Simple texture loading - just use the hook for everything
   const tex = useCardTexture({ 
     slug: forceTextureUrl ? "" : slug, 
-    textureUrl: effectiveTextureUrl 
+    textureUrl: effectiveTextureUrl,
+    preferRaster,
   });
   
   if (!tex) {
     return <CardFallback {...props} />;
   }
 
-  // Apply texture rotation if specified
-  if (textureRotation !== undefined && tex.rotation !== textureRotation) {
-    tex.rotation = textureRotation;
-    tex.center.set(0.5, 0.5); // Rotate around center
-    tex.needsUpdate = true;
-  }
+  // Note: Do not mutate shared Texture rotation here; it is cached and shared across consumers.
+  // Any per-card orientation should be handled by mesh rotation (rotationZ) or UVs in a cloned texture.
 
   return (
     <mesh
