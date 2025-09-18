@@ -551,6 +551,12 @@ export default function OnlineLayout({
                 )}
                 <Link
                   className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
+                  href="/"
+                >
+                  Home
+                </Link>
+                <Link
+                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
                   href="/online/lobby"
                 >
                   Lobby
