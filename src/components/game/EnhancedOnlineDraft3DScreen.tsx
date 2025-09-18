@@ -1724,7 +1724,7 @@ export default function EnhancedOnlineDraft3DScreen({
         {needsPackChoice && (
           <button
             onClick={() => setPackChoiceOverlay(true)}
-            className="absolute top-20 right-4 z-30 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+            className="absolute top-20 right-4 z-30 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors pointer-events-auto"
           >
             Choose Pack {draftState.packIndex + 1}
           </button>
@@ -1733,7 +1733,7 @@ export default function EnhancedOnlineDraft3DScreen({
         {/* Video Overlay */}
         <GlobalVideoOverlay
           position="top-right"
-          showUserAvatar={true}
+          showUserAvatar={false}
           transport={transport}
           myPlayerId={myPlayerId}
           matchId={matchId}

@@ -220,28 +220,7 @@ async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickN
         } else {
           draftState.packChoice = draftState.packChoice.map(() => null);
         }
-        // Auto-assign fallback after 12s for players who don't choose
-        setTimeout(() => {
-          try {
-            const m = matches.get(matchId);
-            if (!m || m.matchType !== 'draft' || !m.draftState) return;
-            const ds = m.draftState;
-            if (ds.phase !== 'pack_selection') return; // already moved on
-            const pendingIdx = ds.packChoice.findIndex((c) => c === null);
-            if (pendingIdx === -1) return; // all chosen
-            // Default to the pack at the current round's index
-            ds.packChoice = ds.packChoice.map((c, idx) => {
-              if (c !== null) return c;
-              const packs = Array.isArray(ds.allGeneratedPacks?.[idx]) ? ds.allGeneratedPacks[idx] : [];
-              const cur = Array.isArray(packs) && packs[ds.packIndex] && packs[ds.packIndex][0] ? packs[ds.packIndex][0] : null;
-              return (cur && (cur.setName || cur.set)) || 'Beta';
-            });
-            ds.currentPacks = ds.allGeneratedPacks.map((packs) => (packs[ds.packIndex] ? [...packs[ds.packIndex]] : []));
-            ds.phase = 'picking';
-            ds.waitingFor = [...m.playerIds];
-            io.to(`match:${m.id}`).emit('draftUpdate', ds);
-          } catch {}
-        }, 12000);
+        try { console.log(`[Draft] Enter pack_selection for round ${draftState.packIndex + 1}`); } catch {}
       }
     } else {
       // Pass packs
@@ -293,6 +272,7 @@ async function leaderChooseDraftPack(matchId, playerId, { setChoice, packIndex }
     draftState.currentPacks = draftState.allGeneratedPacks.map((packs) => (packs[draftState.packIndex] ? [...packs[draftState.packIndex]] : []));
     draftState.phase = 'picking';
     draftState.waitingFor = [...match.playerIds];
+    try { console.log(`[Draft] All pack choices resolved for round ${draftState.packIndex + 1}. Enter picking.`); } catch {}
   }
   io.to(`match:${match.id}`).emit('draftUpdate', draftState);
   try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}

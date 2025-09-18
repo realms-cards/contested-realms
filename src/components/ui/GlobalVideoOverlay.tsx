@@ -72,6 +72,16 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   // Global audio-only flag disables video tiles regardless of screen config
   const shouldShowVideo = FEATURE_AUDIO_ONLY ? false : shouldShowVideoFromScreen;
 
+  // Compute compact status color for the dot-only mode (compute before any early return to satisfy hooks rule)
+  const statusColor = React.useMemo(() => {
+    const s = rtc?.state;
+    if (!s) return 'bg-gray-400';
+    if (s === 'connected') return 'bg-green-400';
+    if (s === 'joining' || s === 'negotiating') return 'bg-yellow-400';
+    if (s === 'failed' || s === 'closed') return 'bg-red-400';
+    return 'bg-gray-400';
+  }, [rtc?.state]);
+
   // Don't render if overlay is disabled for current screen
   if (!shouldShowVideo && !shouldShowControls) {
     return null;
@@ -85,78 +95,49 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
         ${className}
       `}
     >
-      {/* User Avatar Toggle - acts as minimize/maximize control */}
-      <div className="pointer-events-auto">
-        <button
-          onClick={() => setIsMinimized(!isMinimized)}
-          className={`
-            relative flex items-center justify-center
-            w-8 h-8 rounded-full 
-            bg-gradient-to-br from-blue-500 to-purple-600
-            hover:from-blue-600 hover:to-purple-700
-            transition-all duration-200 ease-out
-            focus:outline-none focus:ring-1 focus:ring-blue-400 focus:ring-offset-1
-            shadow-md hover:shadow-lg
-            overflow-hidden
-          `}
-          title={isMinimized ? 'Show video controls' : 'Hide video controls'}
-        >
-          {userAvatarUrl ? (
-            <Image
-              src={userAvatarUrl}
-              alt={userDisplayName || 'User'}
-              fill
-              sizes="32px"
-              className="object-cover"
-              priority
-            />
-          ) : (
-            <span className="text-white text-xs font-semibold">
-              {userDisplayName ? userDisplayName.slice(0, 2).toUpperCase() : 'ME'}
-            </span>
-          )}
-          
-          {/* Media status indicators (camera/mic) */}
-          <div className="absolute -top-0.5 -right-0.5 flex gap-0.5">
-            {/* Camera indicator */}
-            {rtc && !rtc.camOff && !FEATURE_AUDIO_ONLY && (
-              <div className="w-2 h-2 rounded-full bg-green-500 border border-white flex items-center justify-center">
-                <svg className="w-1 h-1 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z"/>
-                </svg>
-              </div>
+      {/* Avatar toggle (optional). When disabled, render a compact status dot only. */}
+      {showUserAvatar ? (
+        <div className="pointer-events-auto">
+          <button
+            onClick={() => setIsMinimized(!isMinimized)}
+            className={`
+              relative flex items-center justify-center
+              w-8 h-8 rounded-full 
+              bg-gradient-to-br from-blue-500 to-purple-600
+              hover:from-blue-600 hover:to-purple-700
+              transition-all duration-200 ease-out
+              focus:outline-none focus:ring-1 focus:ring-blue-400 focus:ring-offset-1
+              shadow-md hover:shadow-lg
+              overflow-hidden
+            `}
+            title={isMinimized ? 'Show video controls' : 'Hide video controls'}
+          >
+            {userAvatarUrl ? (
+              <Image
+                src={userAvatarUrl}
+                alt={userDisplayName || 'User'}
+                fill
+                sizes="32px"
+                className="object-cover"
+                priority
+              />
+            ) : (
+              <span className="text-white text-xs font-semibold">
+                {userDisplayName ? userDisplayName.slice(0, 2).toUpperCase() : 'ME'}
+              </span>
             )}
-            
-            {/* Microphone indicator */}
-            {rtc && !rtc.micMuted && (
-              <div className="w-2 h-2 rounded-full bg-blue-500 border border-white flex items-center justify-center">
-                <svg className="w-1 h-1 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M19,11C19,14.53 16.39,17.44 13,17.93V21H11V17.93C7.61,17.44 5,14.53 5,11H7A5,5 0 0,0 12,16A5,5 0 0,0 17,11H19Z"/>
-                </svg>
-              </div>
-            )}
-          </div>
-          
-          {/* Online indicator badge */}
-          <div className="
-            absolute -bottom-0.5 -right-0.5
-            w-3 h-3 rounded-full
-            bg-green-400 border border-white
-            flex items-center justify-center
-          ">
-            {!isMinimized && (
-              <svg className="w-1.5 h-1.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 13l-7 7-7-7m14-8l-7 7-7-7" />
-              </svg>
-            )}
-            {isMinimized && (
-              <svg className="w-1.5 h-1.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 6C15 6.75 14.79 7.44 14.41 8.03L21 9ZM3 9L9.59 8.03C9.21 7.44 9 6.75 9 6L3 7V9ZM9 10C9 8.34 10.34 7 12 7S15 8.34 15 10V11H9V10Z"/>
-              </svg>
-            )}
-          </div>
-        </button>
-      </div>
+          </button>
+        </div>
+      ) : (
+        <div className="pointer-events-auto">
+          <button
+            onClick={() => setIsMinimized(!isMinimized)}
+            className={`w-3.5 h-3.5 rounded-full border border-white/70 shadow ${statusColor}`}
+            title={isMinimized ? 'Show video controls' : 'Hide video controls'}
+            aria-label="Connection status"
+          />
+        </div>
+      )}
 
       {!isMinimized && (
         <>
