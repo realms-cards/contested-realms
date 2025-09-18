@@ -97,81 +97,96 @@ export async function GET(
         });
       }
 
-      // For card images and other assets
-      // Determine the CDN directory based on format preference
-      let cdnPath = "";
-
-      // Check if this is a subdirectory request (like Dragonlord/cardname.png)
-      const hasSubdir = segments.length > 1;
-      const subdir = hasSubdir ? segments.slice(0, -1).join("/") : "";
-
-      if (segments[0] === "tokens") {
-        // Token images - map into data-* folders on the CDN
-        if (wantKtx2 || requestedExt === "ktx2") {
-          const ktx2Name = baseName + ".ktx2";
-          cdnPath = `data-ktx2/tokens/${ktx2Name}`;
-        } else if (requestedExt === "webp") {
-          cdnPath = `data-webp/tokens/${last}`;
-        } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
-          const webpName = baseName + ".webp";
-          cdnPath = `data-webp/tokens/${webpName}`;
-        } else {
-          cdnPath = `data/tokens/${last}`;
-        }
-      } else if (segments[0] === "Dragonlord") {
-        // Dragonlord assets - special handling since they're webp in both folders
-        // For CDN, they should be in /data-webp/Dragonlord/
-        const webpName = baseName + ".webp";
-        cdnPath = `data-webp/Dragonlord/${webpName}`;
-      } else if (hasSubdir) {
-        // Other subdirectory assets - preserve path structure within data-* folders
-        if (wantKtx2 || requestedExt === "ktx2") {
-          const ktx2Name = baseName + ".ktx2";
-          cdnPath = `data-ktx2/${subdir}/${ktx2Name}`;
-        } else if (requestedExt === "webp") {
-          cdnPath = `data-webp/${subdir}/${last}`;
-        } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
-          const webpName = baseName + ".webp";
-          cdnPath = `data-webp/${subdir}/${webpName}`;
-        } else {
-          cdnPath = `data/${subdir}/${last}`;
-        }
-      } else if (wantKtx2 || requestedExt === "ktx2") {
-        // Prefer ktx2 format for cards at CDN
-        const ktx2Name = baseName + ".ktx2";
-        cdnPath = `data-ktx2/${ktx2Name}`;
-      } else if (requestedExt === "webp") {
-        // Already requesting webp
-        cdnPath = `data-webp/${last}`;
-      } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
-        // For raster images, try webp first
-        const webpName = baseName + ".webp";
-        cdnPath = `data-webp/${webpName}`;
+      // Booster pack images live as PNGs under data/; do not try webp/ktx2
+      const boosterBases = new Set([
+        "alphabeta-booster",
+        "arthurian-booster",
+        // historical/alternate names
+        "alpha-booster",
+        "beta-booster",
+        "arthurian-legends-booster",
+      ]);
+      if (boosterBases.has(baseName)) {
+        // Do not redirect boosters to CDN; serve from local data below to avoid 404s
+        // Fall through to local file resolution
       } else {
-        // Default fallback to data directory
-        cdnPath = `data/${last}`;
+
+        // For card images and other assets
+        // Determine the CDN directory based on format preference
+        let cdnPath = "";
+
+        // Check if this is a subdirectory request (like Dragonlord/cardname.png)
+        const hasSubdir = segments.length > 1;
+        const subdir = hasSubdir ? segments.slice(0, -1).join("/") : "";
+
+        if (segments[0] === "tokens") {
+          // Token images - map into data-* folders on the CDN
+          if (wantKtx2 || requestedExt === "ktx2") {
+            const ktx2Name = baseName + ".ktx2";
+            cdnPath = `data-ktx2/tokens/${ktx2Name}`;
+          } else if (requestedExt === "webp") {
+            cdnPath = `data-webp/tokens/${last}`;
+          } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+            const webpName = baseName + ".webp";
+            cdnPath = `data-webp/tokens/${webpName}`;
+          } else {
+            cdnPath = `data/tokens/${last}`;
+          }
+        } else if (segments[0] === "Dragonlord") {
+          // Dragonlord assets - special handling since they're webp in both folders
+          // For CDN, they should be in /data-webp/Dragonlord/
+          const webpName = baseName + ".webp";
+          cdnPath = `data-webp/Dragonlord/${webpName}`;
+        } else if (hasSubdir) {
+          // Other subdirectory assets - preserve path structure within data-* folders
+          if (wantKtx2 || requestedExt === "ktx2") {
+            const ktx2Name = baseName + ".ktx2";
+            cdnPath = `data-ktx2/${subdir}/${ktx2Name}`;
+          } else if (requestedExt === "webp") {
+            cdnPath = `data-webp/${subdir}/${last}`;
+          } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+            const webpName = baseName + ".webp";
+            cdnPath = `data-webp/${subdir}/${webpName}`;
+          } else {
+            cdnPath = `data/${subdir}/${last}`;
+          }
+        } else if (wantKtx2 || requestedExt === "ktx2") {
+          // Prefer ktx2 format for cards at CDN
+          const ktx2Name = baseName + ".ktx2";
+          cdnPath = `data-ktx2/${ktx2Name}`;
+        } else if (requestedExt === "webp") {
+          // Already requesting webp
+          cdnPath = `data-webp/${last}`;
+        } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+          // For raster images, try webp first
+          const webpName = baseName + ".webp";
+          cdnPath = `data-webp/${webpName}`;
+        } else {
+          // Default fallback to data directory
+          cdnPath = `data/${last}`;
+        }
+
+        const cdnUrl = `${cdn.replace(/\/$/, "")}/${cdnPath}`;
+
+        // Enhanced logging for texture usage tracking
+        const logDetails = {
+          requested: segments.join("/"),
+          redirectTo: cdnUrl,
+          format: requestedExt,
+          wantKtx2,
+          hasSubdir,
+          subdir
+        };
+        console.log(`[API assets] Texture request:`, JSON.stringify(logDetails, null, 2));
+
+        return new Response(null, {
+          status: 308,
+          headers: {
+            Location: cdnUrl,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
       }
-
-      const cdnUrl = `${cdn.replace(/\/$/, "")}/${cdnPath}`;
-
-      // Enhanced logging for texture usage tracking
-      const logDetails = {
-        requested: segments.join("/"),
-        redirectTo: cdnUrl,
-        format: requestedExt,
-        wantKtx2,
-        hasSubdir,
-        subdir
-      };
-      console.log(`[API assets] Texture request:`, JSON.stringify(logDetails, null, 2));
-
-      return new Response(null, {
-        status: 308,
-        headers: {
-          Location: cdnUrl,
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      });
     }
 
     // Force specific assets to only use data directory (not ktx2)
@@ -184,6 +199,9 @@ export async function GET(
       "beta-booster.png",
       "alpha-booster.png",
       "arthurian-legends-booster.png",
+      // Our current filenames used by UI
+      "alphabeta-booster.png",
+      "arthurian-booster.png",
     ]);
 
     const shouldForceDataOnly = segments.some(

@@ -655,19 +655,44 @@ export default function EnhancedOnlineDraft3DScreen({
       try {
         // Derive setChoice from server-generated packs to ensure exact match
         const s = draftState as DraftStateWithGenerated;
-        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as
-          | DraftCard[][]
-          | undefined;
-        const myPacks: DraftCard[][] = Array.isArray(packsMaybe)
-          ? packsMaybe
-          : [];
-        const first = myPacks[packIndex] && myPacks[packIndex][0];
-        const setChoice: string =
-          (first && (first.setName as string)) || "Beta";
+        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+        let setChoice: string | null = null;
+        if (Array.isArray(packsMaybe) && packsMaybe.length > 0) {
+          const first = packsMaybe[packIndex] && packsMaybe[packIndex][0];
+          setChoice = (first && (first.setName as string)) || "Beta";
+        } else {
+          const baseCfg = match?.draftConfig ?? { setMix: ["Beta"], packCount: 3 };
+          const setMix: string[] = Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0 ? baseCfg.setMix : ["Beta"];
+          const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
+          let packCounts: Record<string, number> | undefined = undefined;
+          const bc = baseCfg as unknown as { packCounts?: Record<string, number> };
+          const pc = bc.packCounts;
+          if (pc && typeof pc === "object") {
+            const total = Object.values(pc).reduce((a, b) => a + (Number(b) || 0), 0);
+            if (total === packCount) packCounts = pc;
+          }
+          if (!packCounts) {
+            const counts: Record<string, number> = {};
+            const n = setMix.length;
+            for (const sName of setMix) counts[sName] = 0;
+            const base = Math.floor(packCount / n);
+            const rem = packCount % n;
+            setMix.forEach((sName, i) => {
+              counts[sName] = base + (i < rem ? 1 : 0);
+            });
+            packCounts = counts;
+          }
+          const fallbackSets: string[] = [];
+          for (const sName of Object.keys(packCounts)) {
+            const c = Math.max(0, Number(packCounts[sName]) || 0);
+            for (let i = 0; i < c; i++) fallbackSets.push(sName);
+          }
+          setChoice = fallbackSets[packIndex] || fallbackSets[packIndex % Math.max(1, fallbackSets.length)] || "Beta";
+        }
 
         transport.chooseDraftPack?.({
           matchId: match.id,
-          setChoice,
+          setChoice: setChoice || "Beta",
           packIndex: draftState.packIndex, // server tracks the round internally
         });
       } catch (err) {
@@ -896,16 +921,63 @@ export default function EnhancedOnlineDraft3DScreen({
   // Pack choice overlay (enhanced with better visuals)
   const totalPacks = match?.draftConfig?.packCount ?? 3;
   if (packChoiceOverlay && draftState.packIndex < totalPacks) {
-    // Derive set order directly from server-generated packs to avoid any mismatch
+    // Compute available set names for this round.
     const s = draftState as DraftStateWithGenerated;
-    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as
-      | DraftCard[][]
-      | undefined;
-    const myPacks: DraftCard[][] = Array.isArray(packsMaybe) ? packsMaybe : [];
-    const availableSets: string[] = myPacks.map((pack: DraftCard[]) => {
-      const first = pack && pack[0];
-      return (first && (first.setName as string)) || "Beta";
-    });
+    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+    let availableSets: string[] = [];
+    if (Array.isArray(packsMaybe) && packsMaybe.length > 0) {
+      try {
+        availableSets = packsMaybe.map((pack) => {
+          const first = (pack && pack[0]) as (DraftCard & { set?: string }) | undefined;
+          const sName = first?.setName || first?.set || "Beta";
+          return sName;
+        });
+        console.log("[EnhancedOnlineDraft3D] availableSets (server)", {
+          round: draftState.packIndex + 1,
+          sets: availableSets,
+          count: availableSets.length,
+        });
+      } catch {}
+    }
+    if (availableSets.length === 0) {
+      // Fallback: synthesize from draftConfig
+      const baseCfg = match?.draftConfig ?? { setMix: ["Beta"], packCount: 3 };
+      const setMix: string[] = Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0 ? baseCfg.setMix : ["Beta"];
+      const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
+      let packCounts: Record<string, number> | undefined = undefined;
+      try {
+        const bc = baseCfg as unknown as { packCounts?: Record<string, number> };
+        const pc = bc.packCounts;
+        if (pc && typeof pc === "object") {
+          const total = Object.values(pc).reduce((a, b) => a + (Number(b) || 0), 0);
+          if (total === packCount) packCounts = pc;
+        }
+        if (!packCounts) {
+          const counts: Record<string, number> = {};
+          const n = setMix.length;
+          for (const s of setMix) counts[s] = 0;
+          const base = Math.floor(packCount / n);
+          const rem = packCount % n;
+          setMix.forEach((s, i) => {
+            counts[s] = base + (i < rem ? 1 : 0);
+          });
+          packCounts = counts;
+        }
+      } catch {}
+      const fallbackSets: string[] = [];
+      if (packCounts) {
+        for (const sName of Object.keys(packCounts)) {
+          const c = Math.max(0, Number(packCounts[sName]) || 0);
+          for (let i = 0; i < c; i++) fallbackSets.push(sName);
+        }
+      }
+      console.log("[EnhancedOnlineDraft3D] availableSets (fallback)", {
+        round: draftState.packIndex + 1,
+        sets: fallbackSets,
+        count: fallbackSets.length,
+      });
+      availableSets = fallbackSets;
+    }
     const packs = availableSets.map((_, idx) => idx);
 
     return (
@@ -920,7 +992,7 @@ export default function EnhancedOnlineDraft3DScreen({
               const isUsed = usedPacks.includes(packIdx);
               const setName =
                 availableSets[packIdx] ||
-                availableSets[packIdx % availableSets.length];
+                availableSets[packIdx % Math.max(1, availableSets.length)];
               const assetName = (() => {
                 const s = (setName || "").toLowerCase();
                 if (s.includes("arthur")) return "arthurian-booster.png";
