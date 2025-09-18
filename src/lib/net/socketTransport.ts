@@ -212,6 +212,13 @@ export class SocketTransport implements GameTransport {
         this.dispatch("draft:system:reconnect", payload)
       );
 
+      // Lightweight deck submission acknowledgement
+      socket.on("deckAccepted", (payload) => {
+        const p = payload as { matchId: string; playerId: string; mode: string; counts?: unknown; ts?: number };
+        console.log(`[Transport] deckAccepted <= mode=${p?.mode} match=${p?.matchId} player=${p?.playerId}`);
+        this.dispatch("message", { type: "deckAccepted", ...p } as unknown as TransportEventMap["message"]);
+      });
+
       // Tournament events
       socket.on("tournamentCreated", (payload) =>
         this.dispatch("tournamentCreated", payload)

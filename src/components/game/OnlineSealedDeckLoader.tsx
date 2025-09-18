@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
 import type { MatchInfo } from "@/lib/net/protocol";
+import type { CustomMessage } from "@/lib/net/transport";
 
 interface OnlineSealedDeckLoaderProps {
   match: MatchInfo;
@@ -20,7 +21,7 @@ export default function OnlineSealedDeckLoader({
   onPrepareComplete,
   autoStart,
 }: OnlineSealedDeckLoaderProps) {
-  const { me } = useOnline();
+  const { me, transport } = useOnline();
   const [deckError, setDeckError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [initiated, setInitiated] = useState(false);
@@ -38,7 +39,15 @@ export default function OnlineSealedDeckLoader({
     setCompleted(false);
     
     try {
+      const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const mark = (label: string, tPrev?: number) => {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const dt = typeof tPrev === 'number' ? now - tPrev : now - t0;
+        try { console.debug(`[Sealed][perf] ${label}: +${dt.toFixed(1)}ms`); } catch {}
+        return now;
+      };
       const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+      let tStep = mark('import deckLoader');
       
       // Find my player's deck data and all other players' deck data
       const myDeckData = match.playerDecks?.[me.id];
@@ -71,24 +80,32 @@ export default function OnlineSealedDeckLoader({
       }
       
       // Load my deck
+      tStep = mark('pre my load', tStep);
       const mySuccess = await loadSealedDeckFor(myPlayerKey as "p1" | "p2", myDeckData, setDeckError);
+      tStep = mark('after my load', tStep);
       if (!mySuccess) return;
       
       // Load all other players' decks
-      const loadPromises = otherPlayers.map(async (player, index) => {
+      const loadPromises = otherPlayers.map(async (player) => {
         const playerKey = Object.keys(playerNames).find(key => 
           playerNames[key] === player.displayName
         ) || `p${match.players.findIndex(p => p.id === player.id) + 1}`;
         const playerDeckData = match.playerDecks?.[player.id];
-        return loadSealedDeckFor(playerKey as "p1" | "p2", playerDeckData, setDeckError);
+        const tStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const ok = await loadSealedDeckFor(playerKey as "p1" | "p2", playerDeckData, setDeckError);
+        const tEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        try { console.debug(`[Sealed][perf] load other ${player.displayName}: ${(tEnd - tStart).toFixed(1)}ms`); } catch {}
+        return ok;
       });
       
       const allResults = await Promise.all(loadPromises);
+      tStep = mark('after others load', tStep);
       if (!allResults.every(Boolean)) return; // If any deck failed to load
       
       // All decks loaded successfully
       setCompleted(true);
       onPrepareComplete();
+      mark('onPrepareComplete', tStep);
       
     } catch (error) {
       console.error("Error loading sealed decks:", error);
@@ -96,16 +113,23 @@ export default function OnlineSealedDeckLoader({
     } finally {
       setLoading(false);
     }
-  }, [match, me, myPlayerKey, onPrepareComplete]);
+  }, [match, me, myPlayerKey, onPrepareComplete, playerNames]);
 
   useEffect(() => {
+    // Immediate UI flip upon server ack
+    const off = transport?.on?.("message", (msg: CustomMessage) => {
+      if (!msg || msg.type !== 'deckAccepted') return;
+      try { console.debug('[Sealed] deckAccepted <=', msg); } catch {}
+      setCompleted(true);
+    });
     // Only auto-start if explicitly requested by parent and not already initiated
     if (!autoStart) return;
     if (!match || !me) return;
     if (initiated) return;
     setInitiated(true);
     void loadSealedDecks();
-  }, [autoStart, match, me, initiated, loadSealedDecks]);
+    return () => { try { if (typeof off === 'function') off(); } catch {} };
+  }, [autoStart, match, me, initiated, loadSealedDecks, transport]);
 
   // If we are auto-starting and were waiting for opponent, try again
   useEffect(() => {

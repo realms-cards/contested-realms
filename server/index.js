@@ -2672,6 +2672,17 @@ io.on("connection", (socket) => {
     // Store the player's deck
     match.playerDecks.set(player.id, cards);
 
+    // Lightweight ack so client UI can flip instantly
+    try {
+      socket.emit("deckAccepted", {
+        matchId: match.id,
+        playerId: player.id,
+        mode: "sealed",
+        counts: val.counts || null,
+        ts: Date.now(),
+      });
+    } catch {}
+
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) =>
       match.playerDecks.has(pid)
@@ -2953,6 +2964,17 @@ io.on("connection", (socket) => {
       return;
     }
     match.playerDecks.set(player.id, cards);
+
+    // Lightweight ack so client UI can flip instantly
+    try {
+      socket.emit("deckAccepted", {
+        matchId: match.id,
+        playerId: player.id,
+        mode: "draft",
+        counts: val.counts || null,
+        ts: Date.now(),
+      });
+    } catch {}
 
     console.log(
       `[Match] Deck submitted by ${player.displayName} for match ${match.id}`
