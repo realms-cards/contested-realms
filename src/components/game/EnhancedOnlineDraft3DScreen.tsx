@@ -693,7 +693,8 @@ export default function EnhancedOnlineDraft3DScreen({
         transport.chooseDraftPack?.({
           matchId: match.id,
           setChoice: setChoice || "Beta",
-          packIndex: draftState.packIndex, // server tracks the round internally
+          // Send the chosen pack's index within the overlay; server will swap it into the current round slot
+          packIndex,
         });
       } catch (err) {
         console.error(`[EnhancedOnlineDraft3D] chooseDraftPack error:`, err);

@@ -154,9 +154,10 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
           const choice = ds.packChoice[playerIdx];
           for (let i = 0; i < packs.length; i++) {
             const pack = packs[i];
-            if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
+            if (pack && pack.length > 0 && pack[0].setName === choice) return [...pack];
           }
-          return packs[0] || [];
+          const fallback = packs[0] || [];
+          return fallback ? [...fallback] : [];
         });
         ds.phase = 'picking';
         ds.waitingFor = [...m.playerIds];
@@ -203,25 +204,44 @@ async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickN
     if (draftState.pickNumber >= 15 || currentPack.length === 0) {
       draftState.packIndex++;
       draftState.pickNumber = 1;
-      if (draftState.packIndex >= 3) {
+      const maxPacks = (match.draftConfig && Number(match.draftConfig.packCount)) || 3;
+      if (draftState.packIndex >= maxPacks) {
         draftState.phase = 'complete';
         match.status = 'deck_construction';
       } else {
+        // Next round: re-enter pack selection and wait for choices
         draftState.pickNumber = 1;
         draftState.packDirection = draftState.packDirection === 'left' ? 'right' : 'left';
+        draftState.phase = 'pack_selection';
         draftState.waitingFor = [...match.playerIds];
-        if (draftState.allGeneratedPacks && draftState.packIndex < 3) {
-          draftState.currentPacks = draftState.allGeneratedPacks.map((packs, playerIdx) => {
-            const playerChoice = draftState.packChoice[playerIdx];
-            if (playerChoice && packs.length > draftState.packIndex) {
-              for (let i = 0; i < packs.length; i++) {
-                const pack = packs[i];
-                if (pack && pack.length > 0 && pack[0].setName === playerChoice) return pack;
-              }
-            }
-            return packs[draftState.packIndex] || [];
-          });
+        // Reset choices for this round
+        if (!Array.isArray(draftState.packChoice) || draftState.packChoice.length !== match.playerIds.length) {
+          draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
+        } else {
+          draftState.packChoice = draftState.packChoice.map(() => null);
         }
+        // Auto-assign fallback after 12s for players who don't choose
+        setTimeout(() => {
+          try {
+            const m = matches.get(matchId);
+            if (!m || m.matchType !== 'draft' || !m.draftState) return;
+            const ds = m.draftState;
+            if (ds.phase !== 'pack_selection') return; // already moved on
+            const pendingIdx = ds.packChoice.findIndex((c) => c === null);
+            if (pendingIdx === -1) return; // all chosen
+            // Default to the pack at the current round's index
+            ds.packChoice = ds.packChoice.map((c, idx) => {
+              if (c !== null) return c;
+              const packs = Array.isArray(ds.allGeneratedPacks?.[idx]) ? ds.allGeneratedPacks[idx] : [];
+              const cur = Array.isArray(packs) && packs[ds.packIndex] && packs[ds.packIndex][0] ? packs[ds.packIndex][0] : null;
+              return (cur && (cur.setName || cur.set)) || 'Beta';
+            });
+            ds.currentPacks = ds.allGeneratedPacks.map((packs) => (packs[ds.packIndex] ? [...packs[ds.packIndex]] : []));
+            ds.phase = 'picking';
+            ds.waitingFor = [...m.playerIds];
+            io.to(`match:${m.id}`).emit('draftUpdate', ds);
+          } catch {}
+        }, 12000);
       }
     } else {
       // Pass packs
@@ -253,17 +273,24 @@ async function leaderChooseDraftPack(matchId, playerId, { setChoice, packIndex }
   if (playerIndex === -1) return;
   if (draftState.phase !== 'pack_selection') return;
   if (draftState.packChoice[playerIndex] !== null) return;
+  // Honor chosen pack index by swapping it into the current round position
+  const chosenIdx = Math.max(0, Number(packIndex) || 0);
+  const roundIdx = Math.max(0, Number(draftState.packIndex) || 0);
+  const playerPacks = Array.isArray(draftState.allGeneratedPacks?.[playerIndex])
+    ? draftState.allGeneratedPacks[playerIndex]
+    : [];
+  if (Array.isArray(playerPacks) && chosenIdx >= 0 && chosenIdx < playerPacks.length && roundIdx >= 0 && roundIdx < playerPacks.length) {
+    if (chosenIdx !== roundIdx) {
+      const tmp = playerPacks[roundIdx];
+      playerPacks[roundIdx] = playerPacks[chosenIdx];
+      playerPacks[chosenIdx] = tmp;
+    }
+  }
   draftState.packChoice[playerIndex] = setChoice;
   const allChoicesMade = draftState.packChoice.every((choice) => choice !== null);
   if (allChoicesMade && draftState.phase === 'pack_selection') {
-    draftState.currentPacks = draftState.allGeneratedPacks.map((packs, idx) => {
-      const choice = draftState.packChoice[idx];
-      for (let i = 0; i < packs.length; i++) {
-        const pack = packs[i];
-        if (pack && pack.length > 0 && pack[0].setName === choice) return pack;
-      }
-      return packs[0] || [];
-    });
+    // Distribute packs based on the chosen order for this round (clone arrays)
+    draftState.currentPacks = draftState.allGeneratedPacks.map((packs) => (packs[draftState.packIndex] ? [...packs[draftState.packIndex]] : []));
     draftState.phase = 'picking';
     draftState.waitingFor = [...match.playerIds];
   }
