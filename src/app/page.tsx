@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import AsciiLogo from "@/components/ui/AsciiLogo";
 import AsciiPanel from "@/components/ui/AsciiPanel";
+import OtherRealms from "@/components/ui/OtherRealms";
 
 export default function Home() {
   // Set home page title
@@ -86,12 +87,29 @@ export default function Home() {
           </AsciiPanel>
         </div>
 
+        {/* Other Realms (wide bottom element) */}
+        <div className="max-w-5xl mx-auto">
+          <OtherRealms />
+        </div>
+
         {/* Footer */}
         <div className="text-xs text-slate-500 space-y-1">
-          <p>Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa.</p>
           <p>
-            This is an unofficial digital client for educational and
-            entertainment purposes.
+            Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa. Visit the
+            official site at{' '}
+            <a
+              href="https://curiosa.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-slate-300"
+            >
+              curiosa.io
+            </a>
+            .
+          </p>
+          <p>
+            This is an unofficial digital client for educational and entertainment
+            purposes.
           </p>
         </div>
       </div>
