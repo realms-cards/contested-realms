@@ -6,10 +6,10 @@ import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import ThemeScope from "@/components/ui/ThemeScope";
-import ThemeToggle from "@/components/ui/ThemeToggle";
 import { authOptions } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
+import ConsoleWarningFilter from "@/components/dev/ConsoleWarningFilter";
 
 // Provide empty variables instead of loading Google fonts in network-restricted environments
 const geistSans = { variable: "" } as { variable: string };
@@ -40,13 +40,14 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${fantaisieArtistique.variable} antialiased`}
         suppressHydrationWarning
       >
-        <ThemeProvider defaultMode="grayscale">
+        {/* Dev-only: filter noisy troika/opentype warnings in the browser console */}
+        {process.env.NODE_ENV !== 'production' ? <ConsoleWarningFilter /> : null}
+        <ThemeProvider defaultMode="colorful">
           <AuthProvider session={session}>
             <ThemeScope>
               <VideoOverlayProvider>{children}</VideoOverlayProvider>
             </ThemeScope>
-            {/* Global theme toggle button */}
-            <ThemeToggle />
+            {/* Theme toggle removed per design: muted colorful is the standard */}
           </AuthProvider>
         </ThemeProvider>
         <SpeedInsights />

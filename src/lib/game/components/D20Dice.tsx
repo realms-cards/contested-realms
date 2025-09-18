@@ -97,6 +97,7 @@ export default function D20Dice({
       {/* Show the result number above the dice */}
       {roll !== null && hasCompletedRoll && (
         <Text
+          font="/fantaisie_artistiqu.ttf"
           position={[0, 1.2, 0]}
           fontSize={0.8}
           color={textColor}
@@ -111,6 +112,7 @@ export default function D20Dice({
 
       {/* Player label */}
       <Text
+        font="/fantaisie_artistiqu.ttf"
         position={[0, -1.2, 0]}
         fontSize={0.5}
         color={diceColor}

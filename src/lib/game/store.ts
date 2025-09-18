@@ -1156,10 +1156,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       } else if (newRolls.p2 > newRolls.p1) {
         winner = "p2";
       }
-      // If tie, re-roll automatically
+      // If tie, notify server with the tie rolls; server will broadcast a reset
       if (newRolls.p1 === newRolls.p2) {
         get().log(`Both players rolled ${newRolls.p1}! Rolling again...`);
-        set({ d20Rolls: { p1: null, p2: null } });
+        const tiePatch: ServerPatchT = {
+          d20Rolls: newRolls,
+          // setupWinner intentionally omitted for server-side tie handling
+        };
+        get().trySendPatch(tiePatch);
+        // Optimistically reflect both rolls locally; server will immediately reset to nulls
+        set({ d20Rolls: newRolls, setupWinner: null });
         return;
       }
       

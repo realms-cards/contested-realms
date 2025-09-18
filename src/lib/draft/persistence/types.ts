@@ -27,6 +27,13 @@ export interface DeckSubmission {
   routePersisted: boolean;
 }
 
+// Read-only summary type for undo/redo to discourage mutation by consumers
+export type UndoRedoSummary = Readonly<{
+  canUndo: boolean;
+  canRedo: boolean;
+  historyLength: number;
+}>;
+
 // Core deck structure that must be preserved
 export interface DeckComposition {
   // NEVER CLEAR THESE - core requirement
@@ -34,6 +41,7 @@ export interface DeckComposition {
   
   // Can be added/modified safely
   standardCards: string[]; // Cards added from Standard pool
+  // Deprecated: prefer sideboardCards
   sideboard: string[]; // Alias for backwards compatibility
   sideboardCards: string[]; // New preferred name
   
@@ -61,11 +69,7 @@ export interface DeckComposition {
   isValidating: boolean;
   hasErrors: boolean;
   metrics?: PersistenceMetrics;
-  undoRedo?: {
-    canUndo: boolean;
-    canRedo: boolean;
-    historyLength: number;
-  };
+  undoRedo?: UndoRedoSummary;
 }
 
 // Individual deck composition entry for history tracking
@@ -145,6 +149,8 @@ export interface PersistenceState {
   currentRoute: string;
   lastRoute: string;
   routeTransitionTime: number;
+  // Timestamp when route state was last persisted (for diagnostics)
+  lastRoutePersistedAt?: number;
   
   // State recovery
   lastSuccessfulPersist: number;

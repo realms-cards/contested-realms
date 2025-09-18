@@ -55,7 +55,7 @@ export default function Hud3D({ owner }: Hud3DProps) {
         {/* DOM-based controls to avoid interfering with 3D raycasting */}
         <Html
           position={[0, 0.003, 0]}
-          zIndexRange={[10, 0]}
+          zIndexRange={[0, 0]}
           transform
           rotation-x={-Math.PI / 2}
           rotation-z={ownerRot}

@@ -112,6 +112,14 @@ export default function OnlineMatchPage() {
   const joinAttemptedForRef = useRef<string | null>(null);
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
+  // Track if this page initiated a tournament bootstrap for the current route id
+  const hasBootstrapRef = useRef<boolean>(false);
+  // Guard to ensure we only reset local game state once per match in this page session,
+  // even if the socket briefly disconnects/reconnects or status changes.
+  const resetDoneForRef = useRef<string | null>(null);
+  // Local submission flags to reflect immediate client-side submission before server ack
+  const [localSealedSubmitted, setLocalSealedSubmitted] = useState(false);
+  const [localDraftSubmitted, setLocalDraftSubmitted] = useState(false);
 
   // Get player nicknames (constrained to 2 players for game engine compatibility)
   const playerNames = useMemo(() => {
@@ -175,6 +183,8 @@ export default function OnlineMatchPage() {
             sealedConfig: payload?.sealedConfig || null,
             draftConfig: payload?.draftConfig || null,
           });
+          // Mark bootstrap so we allow joining the route id immediately below
+          hasBootstrapRef.current = true;
           // Clear bootstrap to avoid duplicates on refresh/reconnect
           localStorage.removeItem(key);
         }
@@ -183,19 +193,21 @@ export default function OnlineMatchPage() {
 
     if (!connected || !matchId) return;
 
-    // If store still holds a different match, force a one-time hard reload to clear stale state
+    // If server reports a different match, force a one-time hard redirect to the server-authoritative id
     try {
       if (match?.id && match?.id !== matchId) {
-        const key = `force_reload_match_${matchId}`;
+        const serverMatchId = match.id;
+        const key = `force_reload_match_${serverMatchId}`;
         if (!sessionStorage.getItem(key)) {
           console.log(
             "[game] Switching to different match - forcing page reload for clean state"
           );
           sessionStorage.setItem(key, "1");
-          // Clear the old match key to prevent stale data
-          const oldKey = `force_reload_match_${match.id}`;
+          // Clear the old param-based key to prevent stale data
+          const oldKey = `force_reload_match_${matchId}`;
           sessionStorage.removeItem(oldKey);
-          window.location.replace(`/online/play/${matchId}`);
+          // Redirect to the server-authoritative match id
+          window.location.replace(`/online/play/${serverMatchId}`);
           return;
         } else {
           // If we've already forced a reload but still have wrong match, reset game state
@@ -215,7 +227,7 @@ export default function OnlineMatchPage() {
     }
     if (joinAttemptedForRef.current === matchId) return;
     try {
-      console.debug("[online] joinMatch ->", { matchId });
+      console.debug("[online] joinMatch ->", { matchId, because: hasBootstrapRef.current ? "bootstrap" : "direct" });
     } catch {}
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
@@ -235,10 +247,13 @@ export default function OnlineMatchPage() {
   // Also reset one-shot guards if we are no longer in this match (e.g., user left)
   useEffect(() => {
     if (!matchId) return;
-    if (match?.id !== matchId) {
+    // Important: only clear when server reports a concrete different match id.
+    // During initial join/resync, match?.id can be undefined; do NOT clear in that transient state.
+    if (match?.id && match.id !== matchId) {
       if (resyncSentForRef.current === matchId) resyncSentForRef.current = null;
       if (rejoinChatSentForRef.current === matchId)
         rejoinChatSentForRef.current = null;
+      if (resetDoneForRef.current === matchId) resetDoneForRef.current = null;
     }
   }, [match?.id, matchId]);
 
@@ -246,13 +261,10 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (!connected || match?.id !== matchId) return;
 
-    // One-shot resync per connection for this match id
-    if (resyncSentForRef.current !== matchId) {
-      // Reset game state before resyncing to ensure clean slate
+    // Perform local reset/resync only once per match for this page session.
+    if (resetDoneForRef.current !== matchId) {
       console.log("[game] Joining match - resetting game state before resync");
       useGameStore.getState().resetGameState();
-
-      // Debug: track resync emission
       try {
         console.debug("[online] resync ->", {
           matchId,
@@ -260,6 +272,8 @@ export default function OnlineMatchPage() {
         });
       } catch {}
       resync();
+      resetDoneForRef.current = matchId;
+      // Also set the per-connection guard so we don't double-send within the same connection.
       resyncSentForRef.current = matchId;
     }
 
@@ -317,11 +331,14 @@ export default function OnlineMatchPage() {
     }
     // Fallback to localStorage flag set by editor
     try {
-      return localStorage.getItem(`sealed_submitted_${matchId}`) === "true";
+      return (
+        localSealedSubmitted ||
+        localStorage.getItem(`sealed_submitted_${matchId}`) === "true"
+      );
     } catch {
       return false;
     }
-  }, [matchId, match?.playerDecks, me?.id]);
+  }, [matchId, match?.playerDecks, me?.id, localSealedSubmitted]);
 
   // Track draft submission flag similar to sealed
   const hasSubmittedDraftDeck = useMemo(() => {
@@ -335,11 +352,14 @@ export default function OnlineMatchPage() {
       return true;
     }
     try {
-      return localStorage.getItem(`draft_submitted_${matchId}`) === "true";
+      return (
+        localDraftSubmitted ||
+        localStorage.getItem(`draft_submitted_${matchId}`) === "true"
+      );
     } catch {
       return false;
     }
-  }, [matchId, match?.playerDecks, me?.id]);
+  }, [matchId, match?.playerDecks, me?.id, localDraftSubmitted]);
 
   // Track draft state and completion
   const [draftCompleted, setDraftCompleted] = useState(false);
@@ -458,6 +478,7 @@ export default function OnlineMatchPage() {
           localStorage.setItem(`sealed_submitted_${matchId}`, "true");
           localStorage.removeItem(`sealedDeck_${matchId}`);
         } catch {}
+        setLocalSealedSubmitted(true);
       } else if (data.type === "draftDeckSubmission") {
         if (draftSubmissionSentForRef.current === matchId) return;
         draftSubmissionSentForRef.current = matchId;
@@ -465,6 +486,7 @@ export default function OnlineMatchPage() {
           localStorage.setItem(`draft_submitted_${matchId}`, "true");
           localStorage.removeItem(`draftDeck_${matchId}`);
         } catch {}
+        setLocalDraftSubmitted(true);
       }
 
       // Forward to server
@@ -493,6 +515,7 @@ export default function OnlineMatchPage() {
       sealedSubmissionSentForRef.current = matchId;
       localStorage.setItem(`sealed_submitted_${matchId}`, "true");
       localStorage.removeItem(`sealedDeck_${matchId}`);
+      setLocalSealedSubmitted(true);
     } catch {}
   }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 
@@ -514,6 +537,7 @@ export default function OnlineMatchPage() {
       draftSubmissionSentForRef.current = matchId;
       localStorage.setItem(`draft_submitted_${matchId}`, "true");
       localStorage.removeItem(`draftDeck_${matchId}`);
+      setLocalDraftSubmitted(true);
     } catch {}
   }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 
@@ -553,6 +577,9 @@ export default function OnlineMatchPage() {
         localStorage.removeItem(submittedKey);
       }
     }
+    // Also reset local submission flags for safety when navigating to a different match
+    setLocalSealedSubmitted(false);
+    setLocalDraftSubmitted(false);
   }, [match?.id, matchId]);
 
   // Clear submission flag when match ends (avoid lingering state for next sessions)
@@ -1076,6 +1103,14 @@ export default function OnlineMatchPage() {
 
       {inThisMatch && (
         <>
+          {/* Enhanced Online Draft 3D Screen: shown full-screen while draft is active (waiting to start/picking) */}
+          {shouldShowDraft && myPlayerKey && (
+            <EnhancedOnlineDraft3DScreen
+              myPlayerKey={myPlayerKey}
+              playerNames={playerNames}
+              onDraftComplete={() => setDraftCompleted(true)}
+            />
+          )}
           {/* Online Status Bar with turn restrictions */}
           {myPlayerNumber && (
             <OnlineStatusBar
@@ -1191,32 +1226,35 @@ export default function OnlineMatchPage() {
             }}
             onLeave={() => {
               leaveMatch();
+            }}
+            onLeaveLobby={() => {
+              leaveLobby();
               router.push("/online/lobby");
             }}
-            onLeaveLobby={leaveLobby}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}
-          <div className="absolute inset-0 w-full h-full">
-            <Canvas
-              camera={cameraOptions}
-              shadows
-              gl={glOptions}
-              onPointerMissed={() => {
-                if (!dragFromHand && !dragFromPile) {
-                  clearSelection();
-                  closeContextMenu();
-                  setPreviewCard(null);
-                }
-              }}
-            >
-              <color attach="background" args={["#0b0b0c"]} />
-              <ambientLight intensity={0.6} />
-              <directionalLight
-                position={[10, 12, 8]}
-                intensity={1}
-                castShadow
-              />
+          {!setupOpen && (
+            <div className="absolute inset-0 w-full h-full">
+              <Canvas
+                camera={cameraOptions}
+                shadows
+                gl={glOptions}
+                onPointerMissed={() => {
+                  if (!dragFromHand && !dragFromPile) {
+                    clearSelection();
+                    closeContextMenu();
+                    setPreviewCard(null);
+                  }
+                }}
+              >
+                <color attach="background" args={["#0b0b0c"]} />
+                <ambientLight intensity={0.6} />
+                <directionalLight
+                  position={[10, 12, 8]}
+                  intensity={1}
+                  castShadow
+                />
 
               {/* Interactive board (physics-enabled) */}
               <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
@@ -1293,62 +1331,63 @@ export default function OnlineMatchPage() {
               {/* Invisible texture cache for smooth loading */}
               <TextureCache />
 
-              <OrbitControls
-                ref={controlsRef}
-                makeDefault
-                target={[0, 0, 0]}
-                mouseButtons={
-                  cameraMode === "topdown"
-                    ? {
-                        LEFT: THREE.MOUSE.PAN,
-                        MIDDLE: THREE.MOUSE.DOLLY,
-                        RIGHT: THREE.MOUSE.PAN,
-                      }
-                    : {
-                        LEFT: THREE.MOUSE.PAN,
-                        MIDDLE: THREE.MOUSE.DOLLY,
-                        RIGHT: THREE.MOUSE.ROTATE,
-                      }
-                }
-                enabled={
-                  !resyncing &&
-                  !dragFromHand &&
-                  !dragFromPile &&
-                  !selected &&
-                  !selectedPermanent &&
-                  !selectedAvatar
-                }
-                enablePan={
-                  !resyncing &&
-                  !dragFromHand &&
-                  !dragFromPile &&
-                  !selected &&
-                  !selectedPermanent &&
-                  !selectedAvatar
-                }
-                enableRotate={
-                  !resyncing &&
-                  !dragFromHand &&
-                  !dragFromPile &&
-                  !selected &&
-                  !selectedPermanent &&
-                  !selectedAvatar &&
-                  cameraMode !== "topdown"
-                }
-                enableZoom={!resyncing && !dragFromHand && !dragFromPile}
-                enableDamping={false}
-                onChange={clampControls}
-                minDistance={minDist}
-                maxDistance={maxDist}
-                minPolarAngle={cameraMode === "topdown" ? naturalTiltAngle : 0}
-                maxPolarAngle={cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4}
-                // Adjust rotation constraints based on player position
-                // Default to P1 constraints if player number not determined yet
-                minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
-                maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
-              />
-            </Canvas>
-          </div>
+                <OrbitControls
+                  ref={controlsRef}
+                  makeDefault
+                  target={[0, 0, 0]}
+                  mouseButtons={
+                    cameraMode === "topdown"
+                      ? {
+                          LEFT: THREE.MOUSE.PAN,
+                          MIDDLE: THREE.MOUSE.DOLLY,
+                          RIGHT: THREE.MOUSE.PAN,
+                        }
+                      : {
+                          LEFT: THREE.MOUSE.PAN,
+                          MIDDLE: THREE.MOUSE.DOLLY,
+                          RIGHT: THREE.MOUSE.ROTATE,
+                        }
+                  }
+                  enabled={
+                    !resyncing &&
+                    !dragFromHand &&
+                    !dragFromPile &&
+                    !selected &&
+                    !selectedPermanent &&
+                    !selectedAvatar
+                  }
+                  enablePan={
+                    !resyncing &&
+                    !dragFromHand &&
+                    !dragFromPile &&
+                    !selected &&
+                    !selectedPermanent &&
+                    !selectedAvatar
+                  }
+                  enableRotate={
+                    !resyncing &&
+                    !dragFromHand &&
+                    !dragFromPile &&
+                    !selected &&
+                    !selectedPermanent &&
+                    !selectedAvatar &&
+                    cameraMode !== "topdown"
+                  }
+                  enableZoom={!resyncing && !dragFromHand && !dragFromPile}
+                  enableDamping={false}
+                  onChange={clampControls}
+                  minDistance={minDist}
+                  maxDistance={maxDist}
+                  minPolarAngle={cameraMode === "topdown" ? naturalTiltAngle : 0}
+                  maxPolarAngle={cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4}
+                  // Adjust rotation constraints based on player position
+                  // Default to P1 constraints if player number not determined yet
+                  minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
+                  maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
+                />
+              </Canvas>
+            </div>
+          )}
         </>
       )}
 

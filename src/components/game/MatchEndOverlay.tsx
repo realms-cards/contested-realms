@@ -31,11 +31,9 @@ export default function MatchEndOverlay({
   const handleLeaveMatch = () => {
     if (onLeave) {
       onLeave();
-      
-      // Ask if they also want to leave the lobby
-      if (onLeaveLobby && confirm("Would you also like to leave the lobby? You can always join another lobby or create a new one.")) {
-        onLeaveLobby();
-      }
+    }
+    if (onLeaveLobby) {
+      onLeaveLobby();
     }
   };
 

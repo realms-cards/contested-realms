@@ -17,6 +17,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode; defaultMode?: 
   const [mode, setMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return defaultMode;
     const saved = window.localStorage.getItem("sorcery:themeMode") as ThemeMode | null;
+    // Grayscale is disabled; coerce to colorful
+    if (saved === "grayscale") return "colorful";
     return saved ?? defaultMode;
   });
 
@@ -35,8 +37,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode; defaultMode?: 
 
   const value = useMemo<ThemeContextValue>(() => ({
     mode,
-    setMode,
-    toggle: () => setMode((prev) => (prev === "grayscale" ? "colorful" : "grayscale")),
+    setMode: (m: ThemeMode) => setMode(m === "grayscale" ? "colorful" : m),
+    // Theme toggle button removed; ensure any programmatic toggle keeps colorful
+    toggle: () => setMode("colorful"),
   }), [mode]);
 
   return (

@@ -50,13 +50,24 @@ export default function OnlineSealedDeckLoader({
       const allOthersSubmitted = otherPlayers.every(p => match.deckSubmissions?.includes(p.id));
 
       // Reflect accurate waiting state for multi-player scenario
-      if (!myDeckData || !allPlayerDecksReady) {
+      // But if match status is no longer deck_construction, all decks should be ready
+      if ((!myDeckData || !allPlayerDecksReady) && match.status === "deck_construction") {
         setWaitingForMe(!myDeckData && !meSubmitted);
         setWaitingForOpponent(!allPlayerDecksReady && !allOthersSubmitted);
         try { console.debug('[Sealed] Waiting for decks -> meSubmitted:', meSubmitted, 'othersSubmitted:', allOthersSubmitted); } catch {}
         // Do not keep spinner running while waiting
         setLoading(false);
         return;
+      }
+
+      // If match status has moved beyond deck_construction but we don't have deck data,
+      // this means the server has all decks but client hasn't received them yet
+      if (!myDeckData || !allPlayerDecksReady) {
+        if (match.status !== "deck_construction") {
+          try { console.debug('[Sealed] Match status is', match.status, 'but still missing deck data, waiting for sync...'); } catch {}
+          setLoading(false);
+          return;
+        }
       }
       
       // Load my deck

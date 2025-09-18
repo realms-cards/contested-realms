@@ -41,6 +41,11 @@ export default function OnlineD20Screen({
 
   const bothRolled = myRoll !== null && opponentRoll !== null;
   const canChoose = setupWinner === myPlayerKey;
+  const isTie =
+    bothRolled &&
+    d20Rolls.p1 !== null &&
+    d20Rolls.p2 !== null &&
+    Number(d20Rolls.p1) === Number(d20Rolls.p2);
 
   // Track when both dice have completed their roll animations
   const [myDiceComplete, setMyDiceComplete] = useState(false);
@@ -107,7 +112,6 @@ export default function OnlineD20Screen({
       // chosenSeat "p1" means go first (true), "p2" means go second (false)
       const wantsToGoFirst = chosenSeat === "p1";
       choosePlayerOrder(myPlayerKey, wantsToGoFirst);
-      // TODO: Add actual seat reassignment logic
 
       // Don't call onRollingComplete here - let the useEffect handle it when phase changes
     }
@@ -206,9 +210,15 @@ export default function OnlineD20Screen({
           </div>
         )}
 
-        {bothRolled && bothDiceComplete && !setupWinner && (
+        {bothRolled && bothDiceComplete && isTie && (
           <div className="text-center text-sm opacity-70 font-fantaisie text-xl">
             Tied! Rolling again...
+          </div>
+        )}
+
+        {bothRolled && bothDiceComplete && !setupWinner && !isTie && (
+          <div className="text-center text-sm opacity-70 font-fantaisie text-xl">
+            Waiting for server to confirm winner…
           </div>
         )}
 

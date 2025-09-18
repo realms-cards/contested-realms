@@ -58,7 +58,8 @@ input, textarea, select, button,
 
 /* In colorful mode, still tone down color intensity a touch for cohesion */
 .color-dim {
-  filter: saturate(0.88) contrast(0.98);
+  /* Stronger mute: slightly lower saturation and contrast with a small brightness dip */
+  filter: saturate(0.75) contrast(0.95) brightness(0.98);
 }
 
 /* Chat toast animations */

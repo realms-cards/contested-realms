@@ -180,6 +180,7 @@ export default function OnlineDraftScreen({
               card: boosterCard,
               x: Math.random() * 4 - 2,
               z: Math.random() * 4 - 2,
+              zone: "Deck" as const,
             };
             setPick3D(prev => [...prev, newPick]);
             setNextPickId(prev => prev + 1);
@@ -286,6 +287,7 @@ export default function OnlineDraftScreen({
       card: boosterCard,
       x: Math.random() * 4 - 2, // Random position for now
       z: Math.random() * 4 - 2,
+      zone: "Deck" as const,
     };
     setPick3D(prev => [...prev, newPick]);
     setNextPickId(prev => prev + 1);
@@ -649,6 +651,7 @@ export default function OnlineDraftScreen({
             
             {/* Labels */}
             <Text
+              font="/fantaisie_artistiqu.ttf"
               position={[0, 2, 4]}
               fontSize={0.8}
               color="white"
@@ -659,6 +662,7 @@ export default function OnlineDraftScreen({
             </Text>
             
             <Text
+              font="/fantaisie_artistiqu.ttf"
               position={[8, 2, 0]}
               fontSize={0.6}
               color="white"

@@ -28,7 +28,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
           Mulligan (one round only)
         </div>
         <div className="text-sm opacity-80">
-          Select cards to put back. You&apos;ll draw the same number from the appropriate pile.
+          Select up to 3 cards to put back. You&apos;ll draw the same number from the appropriate pile.
         </div>
       </div>
       
@@ -42,7 +42,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
           </div>
           
           <div className="text-xs opacity-80 mb-2">
-            {!doneP1 && mulligans.p1 > 0 ? "Click cards to select for mulligan." : mulligans.p1 === 0 ? "Mulligan used." : "Mulligan complete."}
+            {!doneP1 && mulligans.p1 > 0 ? "Click cards to select for mulligan (max 3)." : mulligans.p1 === 0 ? "Mulligan used." : "Mulligan complete."}
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
@@ -63,6 +63,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     setSelP1((arr) =>
                       arr.includes(i)
                         ? arr.filter((x) => x !== i)
+                        : arr.length >= 3 ? arr // Maximum 3 cards can be mulliganed
                         : [...arr, i]
                     )
                   }}
@@ -173,7 +174,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
           </div>
           
           <div className="text-xs opacity-80 mb-2">
-            {!doneP2 && mulligans.p2 > 0 ? "Click cards to select for mulligan." : mulligans.p2 === 0 ? "Mulligan used." : "Mulligan complete."}
+            {!doneP2 && mulligans.p2 > 0 ? "Click cards to select for mulligan (max 3)." : mulligans.p2 === 0 ? "Mulligan used." : "Mulligan complete."}
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
@@ -194,6 +195,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     setSelP2((arr) =>
                       arr.includes(i)
                         ? arr.filter((x) => x !== i)
+                        : arr.length >= 3 ? arr // Maximum 3 cards can be mulliganed
                         : [...arr, i]
                     )
                   }}
