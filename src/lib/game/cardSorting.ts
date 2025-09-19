@@ -195,11 +195,9 @@ export function computeStackPositions(
   const positions = new Map<number, StackPosition>();
   const cardSpacing = 0.15; // Vertical spacing between cards (increased for easier hover)
 
-  // Separate cards by zone first (or treat all as deck for draft-3d)
-  const deckCards = treatAllAsDeck ? picks : picks.filter((pick) => pick.z < 0);
-  const sideboardCards = treatAllAsDeck
-    ? []
-    : picks.filter((pick) => pick.z >= 0);
+  // Separate cards by explicit zone (no longer infer from Z)
+  const deckCards = treatAllAsDeck ? picks : picks.filter((pick) => pick.zone === "Deck");
+  const sideboardCards = treatAllAsDeck ? [] : picks.filter((pick) => pick.zone === "Sideboard");
 
   // Categorize deck cards by mana cost and sites by element
   const deckCategories = deckCards.reduce((acc, pick) => {
