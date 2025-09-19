@@ -134,7 +134,8 @@ export default function BottomBar(props: BottomBarProps) {
                   </div>
                 ) : (
                   <div className="flex-1 flex justify-center items-center gap-2">
-                    <button
+                    {!isDraftMode && (
+                      <button
                       onClick={() => setSearchExpanded(true)}
                       className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 transition-all duration-200 shadow-lg"
                     >
@@ -142,7 +143,8 @@ export default function BottomBar(props: BottomBarProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
                       Add Cards
-                    </button>
+                      </button>
+                    )}
                     {pick3DLength > 0 && (
                       <button
                         onClick={toggleTournamentControls}
@@ -157,7 +159,7 @@ export default function BottomBar(props: BottomBarProps) {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : (!isDraftMode ? (
               <div className="w-full flex justify-center">
                 <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-gray-800/50 to-gray-700/50 rounded-lg backdrop-blur-sm border border-white/10 shadow-xl max-w-3xl w-full">
                   {!isDraftMode ? (
@@ -227,7 +229,7 @@ export default function BottomBar(props: BottomBarProps) {
                   )}
                 </div>
               </div>
-            )}
+            ) : null)}
             {searchExpanded && (
               <div className="ml-auto flex items-center gap-2">
                 <button
@@ -243,7 +245,7 @@ export default function BottomBar(props: BottomBarProps) {
           </div>
 
           {/* Search results grid */}
-          {searchExpanded && (
+          {searchExpanded && !isDraftMode && (
             <div className="mt-4 pointer-events-auto max-h-[60vh] overflow-y-auto pr-2">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {results.map((r) => {

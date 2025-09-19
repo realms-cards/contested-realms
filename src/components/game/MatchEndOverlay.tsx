@@ -27,6 +27,7 @@ export default function MatchEndOverlay({
   const isDraw = winner === null;
   const didIWin = winner === myPlayerKey;
   const winnerName = winner ? playerNames[winner] : null;
+  const isSpectator = !myPlayerKey; // When seat isn't resolved or viewer is a spectator
 
   const handleLeaveMatch = () => {
     if (onLeave) {
@@ -50,6 +51,8 @@ export default function MatchEndOverlay({
         <div className="mb-6 flex justify-center">
           {isDraw ? (
             <Users className="w-16 h-16 text-yellow-400" />
+          ) : isSpectator ? (
+            <Trophy className="w-16 h-16 text-yellow-400" />
           ) : didIWin ? (
             <Trophy className="w-16 h-16 text-yellow-400" />
           ) : (
@@ -59,7 +62,15 @@ export default function MatchEndOverlay({
 
         {/* Title */}
         <h1 className="text-3xl font-bold mb-4">
-          {isDraw ? "Draw!" : didIWin ? "Victory!" : "Defeat"}
+          {isDraw
+            ? "Draw!"
+            : isSpectator
+            ? winnerName
+              ? `${winnerName} wins!`
+              : "Match Over"
+            : didIWin
+            ? "Victory!"
+            : "Defeat"}
         </h1>
 
         {/* Result Description */}
@@ -82,11 +93,15 @@ export default function MatchEndOverlay({
           <div className="space-y-1">
             <div className={`flex justify-between ${winner === 'p1' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
               <span>{playerNames.p1} {myPlayerKey === 'p1' && '(You)'}</span>
-              <span>{winner === 'p1' ? 'Winner' : 'Dead'}</span>
+              <span>
+                {winner === null ? 'Draw' : winner === 'p1' ? 'Winner' : 'Loser'}
+              </span>
             </div>
             <div className={`flex justify-between ${winner === 'p2' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
               <span>{playerNames.p2} {myPlayerKey === 'p2' && '(You)'}</span>
-              <span>{winner === 'p2' ? 'Winner' : 'Dead'}</span>
+              <span>
+                {winner === null ? 'Draw' : winner === 'p2' ? 'Winner' : 'Loser'}
+              </span>
             </div>
           </div>
         </div>
