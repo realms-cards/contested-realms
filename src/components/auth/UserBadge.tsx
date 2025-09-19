@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 
@@ -26,6 +26,16 @@ export default function UserBadge({
   const connected: boolean = onlineCtx ? !!onlineCtx.connected : false;
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
 
   // Loading shimmer similar to AuthButton
   if (status === "loading") {
@@ -59,50 +69,52 @@ export default function UserBadge({
     </span>
   );
 
+  const avatar = session.user.image ? (
+    <Image
+      src={session.user.image}
+      alt={session.user.name || "User avatar"}
+      width={32}
+      height={32}
+      className="rounded-full w-8 h-8"
+      priority={false}
+    />
+  ) : (
+    <div className="w-8 h-8 rounded-full bg-slate-700 text-white grid place-items-center text-[12px]">
+      {(session.user.name || "?").slice(0, 1).toUpperCase()}
+    </div>
+  );
+
   return (
     <div
+      ref={rootRef}
       className={
         variant === "floating"
           ? `pointer-events-auto fixed top-3 right-4 z-[70] ${className}`
-          : `pointer-events-auto ${className}`
+          : `pointer-events-auto relative ${className}`
       }
     >
-      <div className="flex items-center gap-2 bg-slate-900/60 ring-1 ring-slate-800 px-2.5 py-1.5 rounded-lg shadow-sm">
-        {presence}
-        {session.user.image ? (
-          <Image
-            src={session.user.image}
-            alt={session.user.name || "User avatar"}
-            width={24}
-            height={24}
-            className="rounded-full"
-          />
-        ) : (
-          <div className="w-6 h-6 rounded-full bg-slate-700 text-white grid place-items-center text-[11px]">
-            {(session.user.name || "?").slice(0, 1).toUpperCase()}
-          </div>
-        )}
-        <span className="text-xs font-medium text-slate-200 max-w-[14ch] truncate">
-          {session.user.name || "User"}
-        </span>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="h-7 w-7 grid place-items-center rounded hover:bg-white/10 text-slate-300"
-          aria-label="User menu"
-          title="User menu"
-        >
-          ⋮
-        </button>
-      </div>
+      {/* Collapsed trigger: avatar only */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/30"
+        title={session.user.name || "User"}
+      >
+        {avatar}
+      </button>
 
       {open && (
-        <div className="mt-2 right-0 absolute z-[75]">
-          <div className="min-w-[200px] rounded-lg bg-slate-900 ring-1 ring-slate-800 shadow-xl p-2 text-sm">
-            <div className="px-2 py-1.5 text-xs text-slate-400">Account</div>
-            <div className="px-2 py-1.5 flex items-center justify-between">
-              <span className="text-slate-200">Status</span>
-              {presence}
+        <div className="absolute right-0 mt-2 z-[75] min-w-[220px]">
+          <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 shadow-xl p-2 text-sm">
+            <div className="px-2 py-1.5 flex items-center gap-2">
+              {avatar}
+              <div className="min-w-0 flex-1">
+                <div className="text-slate-200 text-sm truncate">{session.user.name || "User"}</div>
+                <div className="mt-1">{presence}</div>
+              </div>
             </div>
+            <div className="my-2 h-px bg-white/10" />
             <div className="px-2 py-1.5">
               <button
                 onClick={() => {
