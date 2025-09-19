@@ -576,8 +576,8 @@ export default function EnhancedOnlineDraft3DScreen({
         return;
       }
 
-      // Auto-pick if only one card left
-      if (myPack.length === 1 && !staged && !ready) {
+      // Auto-pick if only one card left and it's actually my turn
+      if (amPicker && myPack.length === 1 && !staged && !ready) {
         const lastCard = myPack[0];
         setStaged({ idx: 0, x: STAGE_CLICK_POS.x, z: STAGE_CLICK_POS.z });
 
@@ -605,6 +605,7 @@ export default function EnhancedOnlineDraft3DScreen({
     packChoiceOverlay,
     shownPackOverlayForRound,
     STAGE_CLICK_POS,
+    amPicker,
   ]);
 
   // Hide pack choice overlay only when we're past the first pick of the round and a pack is present
