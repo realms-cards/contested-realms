@@ -277,7 +277,13 @@ export default function Draft3DPage() {
       setYourPicks((prev) => [...prev, picked]);
       setPick3D((prev) => [
         ...prev,
-        { id: nextPickId, card: picked, x: wx, z: wz, zone: wz < 0 ? "Deck" : "Sideboard" },
+        {
+          id: nextPickId,
+          card: picked,
+          x: wx,
+          z: wz,
+          zone: wz < 0 ? "Deck" : "Sideboard",
+        },
       ]);
       setNextPickId((n) => n + 1);
 
@@ -397,18 +403,19 @@ export default function Draft3DPage() {
           ae.tagName === "TEXTAREA" ||
           ae.isContentEditable);
       if (isTyping) return;
-      
+
       // Stop the event from being processed by other handlers (like OrbitControls)
       e.preventDefault();
       e.stopPropagation();
-      
+
       if (staged) {
         commitPickAndPass(staged.idx, staged.x, staged.z);
       }
     };
     // Use capture phase to get the event before other handlers
     window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", onKey, { capture: true });
   }, [inProgress, staged, commitPickAndPass]);
 
   // Map cardId -> { slug, type } for quick lookup (for previews in picks panel)
@@ -606,7 +613,6 @@ export default function Draft3DPage() {
     return sizeMap;
   }, [stackPositions]);
 
-
   async function saveDeck() {
     try {
       setSaving(true);
@@ -662,9 +668,11 @@ export default function Draft3DPage() {
       }
       setSaveMsg(`Saved deck ${data.name} (id: ${data.id})${botMsg}`);
       // Navigate to 3D deck editor with new deck loaded in draft completion mode
-      console.log('Navigating to editor-3d with deck:', data.id);
-      const editorUrl = `/decks/editor-3d?id=${encodeURIComponent(data.id)}&from=draft`;
-      console.log('Editor URL:', editorUrl);
+      console.log("Navigating to editor-3d with deck:", data.id);
+      const editorUrl = `/decks/editor-3d?id=${encodeURIComponent(
+        data.id
+      )}&from=draft`;
+      console.log("Editor URL:", editorUrl);
 
       // Use window.location.href as a fallback if router.push fails
       try {
@@ -672,7 +680,10 @@ export default function Draft3DPage() {
         // If navigation succeeds, don't reset saving state - let the next page handle it
         return;
       } catch (navError) {
-        console.error('Router navigation failed, using window.location:', navError);
+        console.error(
+          "Router navigation failed, using window.location:",
+          navError
+        );
         window.location.href = editorUrl;
         return; // Don't reset saving state on redirect
       }
@@ -816,7 +827,7 @@ export default function Draft3DPage() {
             currentPacks[0]?.[staged.idx] && (
               <DraggableCard3D
                 key={`staged-${packIndex}-${pickNumber}-${staged.idx}`}
-                slug={currentPacks[0]?.[staged.idx]?.slug ?? ''}
+                slug={currentPacks[0]?.[staged.idx]?.slug ?? ""}
                 isSite={(currentPacks[0]?.[staged.idx]?.type || "")
                   .toLowerCase()
                   .includes("site")}
@@ -836,8 +847,8 @@ export default function Draft3DPage() {
                   if (hover && !orbitLocked) {
                     const c = currentPacks[0]?.[staged.idx];
                     showCardPreview({
-                      slug: c?.slug || '',
-                      name: c?.cardName || '',
+                      slug: c?.slug || "",
+                      name: c?.cardName || "",
                       type: c?.type || null,
                     });
                   }
@@ -1346,9 +1357,9 @@ export default function Draft3DPage() {
               </div>
             </div>
           ) : (
-            <div className="text-sm text-white">
-              Click <i>Start Draft</i> to begin. You will draft 3 packs, passing
-              Left-Right-Left. Seat 1 is you; other seats are bots.
+            <div className="flex justify-center text-sm text-white">
+              Click <i> Start Draft </i> to begin. You will draft 3 packs,
+              passing Left-Right-Left. Seat 1 is you; other seats are bots.
             </div>
           )}
         </div>

@@ -9,6 +9,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { preferRasterOnThisDevice } from "@/lib/device";
 
 export interface UseCardTextureOptions {
   slug?: string;
@@ -48,6 +49,16 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
       (loader as unknown as { setCrossOrigin?: (v: string) => void }).setCrossOrigin?.(
         "anonymous"
       );
+    } catch {}
+    // Optionally limit KTX2 worker count to reduce CPU spikes on constrained devices
+    try {
+      const raw = (process.env.NEXT_PUBLIC_KTX2_WORKER_LIMIT || "").trim();
+      const n = Number(raw);
+      if (Number.isFinite(n) && n > 0) {
+        (loader as unknown as { setWorkerLimit?: (n: number) => void }).setWorkerLimit?.(
+          Math.floor(n)
+        );
+      }
     } catch {}
     try {
       loader.detectSupport(gl);
@@ -189,6 +200,15 @@ export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextur
   // Track which cache key (URL) we currently hold a ref for.
   const heldKeyRef = useRef<string | null>(null);
 
+  // Heuristic: prefer raster on Nintendo Switch (and similar) to reduce CPU/energy
+  const devicePrefersRaster = useMemo(() => {
+    try {
+      return preferRasterOnThisDevice();
+    } catch {
+      return false;
+    }
+  }, []);
+
   const baseUrl = useMemo(() => {
     // ALWAYS prioritize textureUrl when provided, even if empty string
     if (textureUrl !== undefined) {
@@ -209,7 +229,12 @@ export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextur
 
   const ktx2Url = useMemo(() => {
     if (!baseUrl) return "";
-    if (preferRaster) return ""; // Explicitly skip KTX2 when requested
+    if (preferRaster || devicePrefersRaster) return ""; // Explicitly skip KTX2 when requested or on constrained devices
+    // Global override to force raster/WebP for all textures
+    try {
+      const rasterOnly = (process.env.NEXT_PUBLIC_TEXTURE_RASTER_ONLY || "").toLowerCase() === "true";
+      if (rasterOnly) return "";
+    } catch {}
     try {
       const u = new URL(
         baseUrl,
@@ -218,50 +243,24 @@ export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextur
           : "http://localhost"
       );
 
-      // Force specific assets to only use regular images (not ktx2)
-      const dataOnlyAssets = new Set([
-        "fire.png",
-        "air.png",
-        "water.png",
-        "earth.png",
-        "cardback_atlas.png",
-        "cardback_spellbook.png",
-        // Booster pack images
-        "beta-booster.png",
-        "alpha-booster.png",
-        "arthurian-legends-booster.png",
-      ]);
-
-      const shouldForceDataOnly = u.pathname
-        .split("/")
-        .some(
-          (segment) =>
-            dataOnlyAssets.has(segment) ||
-            dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
-        );
-
-      if (shouldForceDataOnly) {
-        return ""; // Skip KTX2 for these assets
+      // For static assets served under /api/assets/, always prefer raster/WebP.
+      // The API layer already redirects PNG/JPEG to WebP where available, and handles CDN mapping.
+      // Skipping KTX2 here avoids client-side transcoding costs on constrained devices.
+      if (u.pathname.startsWith("/api/assets/")) {
+        return ""; // No KTX2 attempt for /api/assets/*
       }
 
-      // Try API images with explicit ktx2 flag
+      // Card faces under /api/images/ can try KTX2 via explicit flag; server will fall back appropriately.
       if (u.pathname.startsWith("/api/images/")) {
         u.searchParams.set("ktx2", "1");
         return u.toString();
       }
-      // Try assets by swapping extension to .ktx2 if applicable
-      if (u.pathname.startsWith("/api/assets/")) {
-        const ext = u.pathname.split(".").pop()?.toLowerCase();
-        if (ext && ["png", "jpg", "jpeg", "webp"].includes(ext)) {
-          u.pathname = u.pathname.replace(/\.[^.]+$/, ".ktx2");
-          return u.toString();
-        }
-      }
+
       return "";
     } catch {
       return "";
     }
-  }, [baseUrl, preferRaster]);
+  }, [baseUrl, preferRaster, devicePrefersRaster]);
 
   // Acquire and release textures with caching and robust fallback.
   useEffect(() => {

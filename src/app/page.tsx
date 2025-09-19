@@ -115,7 +115,7 @@ export default function Home() {
         </div>
       </div>
       {/* Bottom ASCII art background */}
-      <AsciiBottomArt opacityClass="text-white/12" maxVh={40} />
+      <AsciiBottomArt opacityClass="text-white/12" maxVh={null} bottomOffsetPx={16} />
     </div>
   );
 }
