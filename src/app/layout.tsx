@@ -5,11 +5,12 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
+import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
+import ConsoleWarningFilter from "@/components/dev/ConsoleWarningFilter";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { authOptions } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
-import ConsoleWarningFilter from "@/components/dev/ConsoleWarningFilter";
 
 // Provide empty variables instead of loading Google fonts in network-restricted environments
 const geistSans = { variable: "" } as { variable: string };
@@ -47,6 +48,8 @@ export default async function RootLayout({
             <ThemeScope>
               <VideoOverlayProvider>{children}</VideoOverlayProvider>
             </ThemeScope>
+            {/* Floating user badge on all non-online pages */}
+            <GlobalUserBadge />
             {/* Theme toggle removed per design: muted colorful is the standard */}
           </AuthProvider>
         </ThemeProvider>
