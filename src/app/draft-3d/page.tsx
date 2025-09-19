@@ -1120,7 +1120,7 @@ export default function Draft3DPage() {
 
         {/* Pack status + Picks summary (no 2D pack grid; cards are on the mat) */}
         <div className="w-full pl-4 pr-0 pb-6 pt-2 pointer-events-none select-none">
-          {inProgress ? (
+          {inProgress && (
             <div className="grid grid-cols-12 gap-3 lg:gap-4">
               <div className="col-span-12 lg:col-span-8" />
               <div className="col-span-12 lg:col-span-4 justify-self-end pr-0">
@@ -1359,11 +1359,6 @@ export default function Draft3DPage() {
                   )}
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex justify-center text-sm text-white">
-              Click <i> Start Draft </i> to begin. You will draft 3 packs,
-              passing Left-Right-Left. Seat 1 is you; other seats are bots.
             </div>
           )}
         </div>

@@ -77,8 +77,8 @@ export default function YourDeckList(props: YourDeckListProps) {
     const typeText = (pickInfo?.type || "").toLowerCase();
     const isSite = typeText.includes("site");
 
-    const cardInDeck = pick3D.filter((p) => p.card.cardId === it.cardId && p.z < 0).length;
-    const cardInSideboard = pick3D.filter((p) => p.card.cardId === it.cardId && p.z >= 0).length;
+    const cardInDeck = pick3D.filter((p) => p.card.cardId === it.cardId && p.zone === "Deck").length;
+    const cardInSideboard = pick3D.filter((p) => p.card.cardId === it.cardId && p.zone === "Sideboard").length;
 
     const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault();

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MOUSE } from "three";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
+import UserBadge from "@/components/auth/UserBadge";
 import CardPreview from "@/components/game/CardPreview";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
@@ -16,7 +17,7 @@ import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY } from "@/lib/flags";
 import Board from "@/lib/game/Board";
-import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
+import { toCardMetaMap, mergeCardMetaMaps, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 import {
   type BoosterCard,
   type CardMeta,
@@ -26,7 +27,6 @@ import {
 } from "@/lib/game/cardSorting";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
-import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG } from "@/lib/game/constants";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
@@ -123,9 +123,15 @@ export default function EnhancedOnlineDraft3DScreen({
   const [readyIdx, setReadyIdx] = useState<number | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
+  const [sortMode, setSortMode] = useState<"mana" | "element">("mana");
   const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
     {}
   );
+  // Freeze layout metadata per card to avoid reflow jitter when meta updates later
+  const [layoutMetaByCardId, setLayoutMetaByCardId] = useState<
+    Record<number, CardMeta>
+  >({});
+  const [slugToCardId, setSlugToCardId] = useState<Record<string, number>>({});
 
   // Extend DraftState with optional server-provided packs shape for precise set derivation
   type DraftStateWithGenerated = DraftState & {
@@ -140,6 +146,10 @@ export default function EnhancedOnlineDraft3DScreen({
   } | null>(null);
   const clearHoverTimerRef = useRef<number | null>(null);
   const currentHoverCardRef = useRef<string | null>(null);
+  // Throttle hover preview network sends
+  const lastSentHoverSlugRef = useRef<string | null>(null);
+  const lastHoverSentAtRef = useRef<number>(0);
+  const hoverSendTimerRef = useRef<number | null>(null);
 
   // Picks panel state (from single-player)
   const [picksOpen, setPicksOpen] = useState(true);
@@ -147,6 +157,17 @@ export default function EnhancedOnlineDraft3DScreen({
   const [helpOpen, setHelpOpen] = useState(false);
   // Once we've seen any non-waiting draft phase, never allow a later 'waiting' snapshot to regress UI
   const everOutOfWaitingRef = useRef(false);
+  // Keep a ref of the current draftState to avoid stale captures and effect loops
+  const draftStateRef = useRef(draftState);
+  useEffect(() => {
+    draftStateRef.current = draftState;
+  }, [draftState]);
+  // Bootstrap from match snapshot once; subsequent updates come via transport draftUpdate
+  const bootstrappedRef = useRef(false);
+  const pick3DRef = useRef<Pick3D[]>(pick3D);
+  useEffect(() => {
+    pick3DRef.current = pick3D;
+  }, [pick3D]);
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -161,7 +182,7 @@ export default function EnhancedOnlineDraft3DScreen({
     return roCounterRef.current;
   }, []);
 
-  // Enhanced Draft-3D Online Integration
+  // Enhanced Draft-3D Online Integration (declare before effects that reference it)
   const { sendCardPreview, sendStackInteraction, isConnected } =
     useDraft3DTransport({
       transport,
@@ -172,6 +193,76 @@ export default function EnhancedOnlineDraft3DScreen({
         setError(String(error));
       },
     });
+
+  // Centralize network sending of hover preview: send once after a short debounce and only on true state changes
+  useEffect(() => {
+    if (!isConnected) return;
+    if (!hoverPreview?.slug) return;
+    if (hoverSendTimerRef.current) {
+      window.clearTimeout(hoverSendTimerRef.current);
+      hoverSendTimerRef.current = null;
+    }
+    const slug = hoverPreview.slug;
+    hoverSendTimerRef.current = window.setTimeout(() => {
+      const now = performance.now();
+      const lastSlug = lastSentHoverSlugRef.current;
+      const lastAt = lastHoverSentAtRef.current;
+      if (lastSlug !== slug || now - lastAt > 800) {
+        sendCardPreview(slug, "hover", { x: 0, y: 0.1, z: -0.5 }, "low");
+        lastSentHoverSlugRef.current = slug;
+        lastHoverSentAtRef.current = now;
+      }
+    }, 120);
+    return () => {
+      if (hoverSendTimerRef.current) {
+        window.clearTimeout(hoverSendTimerRef.current);
+        hoverSendTimerRef.current = null;
+      }
+    };
+  }, [hoverPreview, isConnected, sendCardPreview]);
+
+  // Keep a stable snapshot of metadata for layout to avoid jitter when meta arrives later
+  useEffect(() => {
+    if (!isSortingEnabled) return;
+    if (pick3D.length === 0) {
+      setLayoutMetaByCardId({});
+      return;
+    }
+    setLayoutMetaByCardId((prev) => {
+      // Build in one pass to avoid multiple state updates
+      const next: Record<number, CardMeta> = { ...prev };
+      let changed = false;
+      for (const p of pick3D) {
+        const id = p.card.cardId;
+        if (id && !next[id]) {
+          next[id] = metaByCardId[id] ?? {
+            cost: 0,
+            attack: null,
+            defence: null,
+            thresholds: null,
+          };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pick3D, metaByCardId, isSortingEnabled]);
+
+  // When user toggles sort mode, allow reflow using the best available metadata
+  useEffect(() => {
+    if (!isSortingEnabled) return;
+    if (pick3D.length === 0) return;
+    setLayoutMetaByCardId((prev) => {
+      const next: Record<number, CardMeta> = { ...prev };
+      for (const p of pick3D) {
+        const id = p.card.cardId;
+        const m = metaByCardId[id];
+        if (m) next[id] = m;
+      }
+      return next;
+    });
+  }, [sortMode, isSortingEnabled, pick3D, metaByCardId]);
+
 
   const { joinSession, leaveSession } = useDraft3DSession();
 
@@ -194,13 +285,8 @@ export default function EnhancedOnlineDraft3DScreen({
       }
       currentHoverCardRef.current = card.slug;
       setHoverPreview(card);
-
-      // Send preview to other players
-      if (isConnected) {
-        sendCardPreview(card.slug, "hover", { x: 0, y: 0.1, z: -0.5 }, "low");
-      }
     },
-    [isConnected, sendCardPreview]
+    []
   );
 
   const hideCardPreview = useCallback(() => {
@@ -216,20 +302,33 @@ export default function EnhancedOnlineDraft3DScreen({
 
   // Convert DraftCard to BoosterCard format for Pick3D
   const draftCardToBoosterCard = useCallback(
-    (card: DraftCard): BoosterCard => ({
-      variantId: 0,
-      slug: card.slug,
-      finish: "Standard" as const,
-      product: "Draft",
-      rarity:
-        (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") ||
-        "Ordinary",
-      type: card.type || null,
-      cardId: parseInt(card.id) || 0,
-      cardName: card.cardName || card.name,
-      setName: card.setName || "Beta",
-    }),
-    []
+    (card: DraftCard): BoosterCard => {
+      let resolvedId: number = 0;
+      if (card && typeof card.slug === "string") {
+        const mapped = slugToCardId[card.slug];
+        if (typeof mapped === "number" && Number.isFinite(mapped) && mapped > 0) {
+          resolvedId = mapped;
+        }
+      }
+      if (!resolvedId) {
+        const n = Number(card?.id);
+        if (Number.isFinite(n) && n > 0) resolvedId = n;
+      }
+      return {
+        variantId: 0,
+        slug: card.slug,
+        finish: "Standard" as const,
+        product: "Draft",
+        rarity:
+          (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") ||
+          "Ordinary",
+        type: card.type || null,
+        cardId: resolvedId,
+        cardName: card.cardName || card.name,
+        setName: card.setName || "Beta",
+      };
+    },
+    [slugToCardId]
   );
 
   const PICK_CENTER = { x: 0, z: 0 };
@@ -249,20 +348,20 @@ export default function EnhancedOnlineDraft3DScreen({
     () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
     [draftState.currentPacks, myPlayerIndex]
   );
-  const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
-  const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
+  // Removed small header counters for picks; keep only the detailed "Your Picks" panel below
 
   // Convert pack to BoosterCard format for DraftPackHand3D
   const packAsBoosterCards = useMemo(() => {
     return myPack.map(draftCardToBoosterCard);
   }, [myPack, draftCardToBoosterCard]);
 
-  // Initialize/sync draft state from match, but never regress to an older phase/index
+  // Initialize/sync draft state from match ONCE (bootstrap), but never regress to an older phase/index
   useEffect(() => {
     if (!match?.draftState) return;
+    if (bootstrappedRef.current) return;
 
     const incoming = match.draftState as DraftState;
-    const cur = draftState;
+    const cur = draftStateRef.current;
 
     if (everOutOfWaitingRef.current && incoming.phase === "waiting") {
       // We already progressed; ignore spurious regressions from stale snapshots
@@ -277,19 +376,19 @@ export default function EnhancedOnlineDraft3DScreen({
       complete: 4,
     };
 
-    const isNewerOrEqual = (() => {
-      const poCur = phaseOrder[cur?.phase ?? "waiting"] ?? 0;
-      const poInc = phaseOrder[incoming?.phase ?? "waiting"] ?? 0;
-      if (poInc > poCur) return true;
-      if (poInc < poCur) return false;
-      // Same phase: compare packIndex then pickNumber
-      if ((incoming.packIndex ?? 0) > (cur.packIndex ?? 0)) return true;
-      if ((incoming.packIndex ?? 0) < (cur.packIndex ?? 0)) return false;
-      if ((incoming.pickNumber ?? 0) >= (cur.pickNumber ?? 0)) return true;
-      return false;
-    })();
+    // Recompute with correct logic (not a loop)
+    const curPhaseKey = (cur?.phase ?? "waiting") as keyof typeof phaseOrder;
+    const incPhaseKey = (incoming?.phase ?? "waiting") as keyof typeof phaseOrder;
+    const poCur = phaseOrder[curPhaseKey] ?? 0;
+    const poInc = phaseOrder[incPhaseKey] ?? 0;
+    const newer =
+      poInc > poCur ||
+      (poInc === poCur &&
+        ((incoming.packIndex ?? 0) > (cur.packIndex ?? 0) ||
+          ((incoming.packIndex ?? 0) === (cur.packIndex ?? 0) &&
+            (incoming.pickNumber ?? 0) >= (cur.pickNumber ?? 0))));
 
-    if (!isNewerOrEqual) {
+    if (!newer) {
       // Guard: ignore stale snapshot (prevents reverting from picking -> waiting)
       return;
     }
@@ -297,6 +396,9 @@ export default function EnhancedOnlineDraft3DScreen({
     console.log(
       `[EnhancedOnlineDraft3D] Initializing from match draft state: phase=${incoming.phase}`
     );
+    if (incoming.phase !== "waiting") {
+      everOutOfWaitingRef.current = true;
+    }
     setDraftState(incoming);
 
     if (incoming.phase === "picking") {
@@ -306,7 +408,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
     // Rebuild pick3D array from existing picks
     const existingPicks = (incoming.picks[myPlayerIndex] || []) as DraftCard[];
-    if (existingPicks.length > 0) {
+    if (existingPicks.length > 0 && pick3DRef.current.length === 0) {
       const rebuiltPick3D: Pick3D[] = existingPicks.map((card, idx) => ({
         id: idx + 1,
         card: draftCardToBoosterCard(card),
@@ -317,7 +419,11 @@ export default function EnhancedOnlineDraft3DScreen({
       setPick3D(rebuiltPick3D);
       setNextPickId(existingPicks.length + 1);
     }
-  }, [match?.draftState, draftState, myPlayerIndex, draftCardToBoosterCard]);
+    // Mark bootstrap complete once we pass waiting
+    if (incoming.phase !== "waiting") {
+      bootstrappedRef.current = true;
+    }
+  }, [match?.draftState, myPlayerIndex, draftCardToBoosterCard]);
 
   // Client-side fallback: if both players are ready and we remain in 'waiting', auto-request start after ~1.1s
   useEffect(() => {
@@ -454,7 +560,7 @@ export default function EnhancedOnlineDraft3DScreen({
       return;
     }
 
-    if (draftState.phase === "picking" && amPicker) {
+    if (draftState.phase === "picking") {
       setReady(false);
 
       // Also show overlay at start of picking if it wasn't shown yet (rejoin case)
@@ -465,6 +571,7 @@ export default function EnhancedOnlineDraft3DScreen({
         myPack.length === 0
       ) {
         setPackChoiceOverlay(true);
+        setUsedPacks([]);
         setShownPackOverlayForRound(draftState.packIndex);
         return;
       }
@@ -490,7 +597,6 @@ export default function EnhancedOnlineDraft3DScreen({
     }
   }, [
     draftState,
-    amPicker,
     staged,
     ready,
     myPack,
@@ -501,12 +607,159 @@ export default function EnhancedOnlineDraft3DScreen({
     STAGE_CLICK_POS,
   ]);
 
-  // Hide pack choice overlay when server enters picking phase (packs are assigned)
+  // Hide pack choice overlay only when we're past the first pick of the round and a pack is present
   useEffect(() => {
-    if (draftState.phase === "picking") {
-      if (packChoiceOverlay) setPackChoiceOverlay(false);
+    const myPackSize = (draftState.currentPacks?.[myPlayerIndex]?.length ?? 0);
+    if (
+      packChoiceOverlay &&
+      draftState.phase === "picking" &&
+      draftState.pickNumber > 1 &&
+      myPackSize > 0
+    ) {
+      setPackChoiceOverlay(false);
     }
-  }, [draftState.phase, packChoiceOverlay]);
+  }, [draftState.phase, draftState.pickNumber, draftState.currentPacks, myPlayerIndex, packChoiceOverlay]);
+
+  // Resolve cardIds and metadata by variant slug; request only missing data and dedupe/abort inflight queries
+  const inflightMetaAbortRef = useRef<AbortController | null>(null);
+  const lastMetaReqKeyRef = useRef<string>("");
+  useEffect(() => {
+    try {
+      const neededBySet = new Map<string | null, Set<string>>();
+      const ensureGroup = (setName: string | null) => {
+        let group = neededBySet.get(setName);
+        if (!group) {
+          group = new Set<string>();
+          neededBySet.set(setName, group);
+        }
+        return group;
+      };
+      const needsMeta = (slug: string): boolean => {
+        const mappedId = slugToCardId[slug];
+        if (!mappedId || mappedId === 0) return true;
+        const m = metaByCardId[mappedId];
+        return !m; // fetch only when we truly lack meta
+      };
+
+      // Slugs from current pack (my seat) – high priority
+      const curPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+      for (const c of curPack) {
+        if (!c?.slug) continue;
+        if (!needsMeta(c.slug)) continue;
+        const setName = c.setName || null;
+        ensureGroup(setName).add(c.slug);
+      }
+      // Slugs from already picked cards – only if meta is still missing
+      for (const p of pick3D) {
+        const s = p.card.slug;
+        if (!s) continue;
+        if (!needsMeta(s)) continue;
+        const setName = (p.card.setName as string | undefined) || null;
+        ensureGroup(setName).add(s);
+      }
+
+      type MetaByVariantRow = {
+        slug: string;
+        cardId: number;
+        cost: number | null;
+        thresholds: Record<string, number> | null;
+        attack: number | null;
+        defence: number | null;
+      };
+      // Build request key for dedupe
+      const reqEntries: Array<[string | null, string[]]> = [];
+      for (const [setName, slugs] of neededBySet.entries()) {
+        if (!slugs || slugs.size === 0) continue;
+        reqEntries.push([setName, Array.from(slugs).sort()]);
+      }
+      if (reqEntries.length === 0) return;
+      const reqKey = JSON.stringify(reqEntries);
+      if (reqKey === lastMetaReqKeyRef.current) return;
+      lastMetaReqKeyRef.current = reqKey;
+
+      // Abort inflight request, if any
+      if (inflightMetaAbortRef.current) {
+        inflightMetaAbortRef.current.abort();
+      }
+      const ac = new AbortController();
+      inflightMetaAbortRef.current = ac;
+
+      const requests: Promise<MetaByVariantRow[]>[] = [];
+      for (const [setName, slugs] of neededBySet.entries()) {
+        if (!slugs || slugs.size === 0) continue;
+        const params = new URLSearchParams();
+        params.set("slugs", Array.from(slugs).join(","));
+        if (setName) params.set("set", setName);
+        requests.push(
+          fetch(`/api/cards/meta-by-variant?${params.toString()}`, { signal: ac.signal })
+            .then((r) => r.json() as Promise<MetaByVariantRow[]>)
+            .catch(() => [] as MetaByVariantRow[])
+        );
+      }
+
+      Promise.all(requests)
+        .then((chunks) => {
+          if (ac.signal.aborted) return;
+          const rows = chunks.flat();
+          if (!rows || rows.length === 0) return;
+          const newSlugMap: Record<string, number> = {};
+          const metaRows: ApiCardMetaRow[] = rows.map((r: MetaByVariantRow) => {
+            newSlugMap[r.slug] = Number(r.cardId) || 0;
+            return {
+              cardId: Number(r.cardId) || 0,
+              cost: r.cost ?? null,
+              thresholds: (r.thresholds as Record<string, number> | null) ?? null,
+              attack: r.attack ?? null,
+              defence: r.defence ?? null,
+            } satisfies ApiCardMetaRow;
+          });
+
+          // Update slug->cardId map
+          setSlugToCardId((prev) => ({ ...prev, ...newSlugMap }));
+
+          // Merge metadata
+          const incoming = toCardMetaMap(metaRows);
+          setMetaByCardId((prev) => mergeCardMetaMaps(prev, incoming));
+
+          // Patch existing picks with resolved cardIds if needed and collect id changes
+          const idChanges: Array<{ oldId: number; newId: number }> = [];
+          setPick3D((prev) =>
+            prev.map((p) => {
+              const mapped = newSlugMap[p.card.slug];
+              if (mapped && p.card.cardId !== mapped) {
+                idChanges.push({ oldId: p.card.cardId, newId: mapped });
+                return { ...p, card: { ...p.card, cardId: mapped } };
+              }
+              return p;
+            })
+          );
+
+          // Re-key layout metadata to follow new cardIds to avoid jitter
+          if (idChanges.length > 0) {
+            setLayoutMetaByCardId((prev) => {
+              const next = { ...prev } as Record<number, CardMeta>;
+              for (const { oldId, newId } of idChanges) {
+                if (oldId && newId && next[oldId] && !next[newId]) {
+                  next[newId] = next[oldId];
+                }
+                delete next[oldId];
+              }
+              // Also apply freshest incoming meta when available
+              for (const { newId } of idChanges) {
+                if (incoming[newId]) next[newId] = incoming[newId];
+              }
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    } catch {}
+    return () => {
+      if (inflightMetaAbortRef.current) {
+        inflightMetaAbortRef.current.abort();
+      }
+    };
+  }, [draftState.currentPacks, myPlayerIndex, pick3D, slugToCardId, metaByCardId]);
 
   // Enhanced Pick & Pass with staging mechanics (from single-player)
   const commitPickAndPass = useCallback(
@@ -651,6 +904,13 @@ export default function EnhancedOnlineDraft3DScreen({
   const handlePackChoice = useCallback(
     async (packIndex: number) => {
       if (!transport || !match) return;
+      // Allow choosing during explicit pack selection phase,
+      // or at the start of a picking round before any pack is received (fallback)
+      const canOpenInPickingFallback =
+        draftState.phase === "picking" &&
+        draftState.pickNumber === 1 &&
+        myPack.length === 0;
+      if (!(draftState.phase === "pack_selection" || canOpenInPickingFallback)) return;
 
       try {
         // Derive setChoice from server-generated packs to ensure exact match
@@ -703,7 +963,7 @@ export default function EnhancedOnlineDraft3DScreen({
       setUsedPacks((prev) => [...prev, packIndex]);
       setPackChoiceOverlay(false);
     },
-    [draftState, myPlayerIndex, transport, match]
+    [draftState, myPlayerIndex, transport, match, myPack]
   );
 
   // Enhanced stats calculations (from single-player)
@@ -760,10 +1020,76 @@ export default function EnhancedOnlineDraft3DScreen({
     return counts;
   }, [pick3D, metaByCardId]);
 
-  // Create sorted stack positions (from single-player)
+  // Create sorted stack positions (supports mana-cost or threshold element grouping)
   const stackPositions = useMemo(() => {
-    return computeStackPositions(pick3D, metaByCardId, isSortingEnabled, true);
-  }, [pick3D, isSortingEnabled, metaByCardId]);
+    if (!isSortingEnabled) return null;
+    if (sortMode === "mana") {
+      return computeStackPositions(pick3D, layoutMetaByCardId, true, true);
+    }
+    // Element grouping: columns per element, creatures above spells within each column, sort by cost asc
+    const positions = new Map<number, { x: number; z: number; stackIndex: number; isVisible: boolean }>();
+    const cardSpacing = 0.15;
+    const zStart = -2.0;
+    let xStart = -4;
+    const xSpacing = 0.8;
+    const elementOrder = ["air", "water", "earth", "fire", "colorless"] as const;
+
+    type GroupKey = typeof elementOrder[number];
+    const groups: Record<GroupKey, Pick3D[]> = {
+      air: [], water: [], earth: [], fire: [], colorless: [],
+    };
+
+    const primaryElementOf = (cardId: number): GroupKey => {
+      const thresholds = layoutMetaByCardId[cardId]?.thresholds || null;
+      if (!thresholds) return "colorless";
+      let best: GroupKey = "colorless";
+      let bestVal = 0;
+      for (const el of elementOrder) {
+        const v = thresholds[el] || 0;
+        if (v > bestVal) {
+          bestVal = v;
+          best = el;
+        }
+      }
+      return bestVal > 0 ? best : "colorless";
+    };
+
+    for (const p of pick3D) {
+      const el = primaryElementOf(p.card.cardId);
+      groups[el].push(p);
+    }
+
+    for (const el of elementOrder) {
+      const arr = groups[el];
+      if (!arr.length) continue;
+      // creatures on top, then spells; each sorted by cost asc
+      const byCreature = (pp: Pick3D) => {
+        const m = layoutMetaByCardId[pp.card.cardId];
+        return m && (m.attack !== null || m.defence !== null);
+      };
+      const creatures = arr
+        .filter(byCreature)
+        .sort(
+          (a, b) => (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) - (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
+        );
+      const spells = arr
+        .filter((pp) => !byCreature(pp))
+        .sort(
+          (a, b) => (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) - (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
+        );
+
+      creatures.forEach((card, index) => {
+        positions.set(card.id, { x: xStart, z: zStart + index * cardSpacing, stackIndex: index, isVisible: true });
+      });
+      const creatureCount = creatures.length;
+      spells.forEach((card, index) => {
+        positions.set(card.id, { x: xStart, z: zStart + (creatureCount + index + 0.5) * cardSpacing, stackIndex: creatureCount + index, isVisible: true });
+      });
+      xStart += xSpacing;
+    }
+
+    return positions;
+  }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
   // Calculate stack sizes for hitbox optimization (from single-player)
   const stackSizes = useMemo(() => {
@@ -841,7 +1167,8 @@ export default function EnhancedOnlineDraft3DScreen({
   // UI: Lobby (phase waiting)
   if (draftState.phase === "waiting") {
     return (
-      <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8">
+      <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8 relative">
+        <UserBadge variant="floating" />
         <div className="text-center">
           <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
 
@@ -933,11 +1260,6 @@ export default function EnhancedOnlineDraft3DScreen({
           const sName = first?.setName || first?.set || "Beta";
           return sName;
         });
-        console.log("[EnhancedOnlineDraft3D] availableSets (server)", {
-          round: draftState.packIndex + 1,
-          sets: availableSets,
-          count: availableSets.length,
-        });
       } catch {}
     }
     if (availableSets.length === 0) {
@@ -972,14 +1294,13 @@ export default function EnhancedOnlineDraft3DScreen({
           for (let i = 0; i < c; i++) fallbackSets.push(sName);
         }
       }
-      console.log("[EnhancedOnlineDraft3D] availableSets (fallback)", {
-        round: draftState.packIndex + 1,
-        sets: fallbackSets,
-        count: fallbackSets.length,
-      });
       availableSets = fallbackSets;
     }
-    const packs = availableSets.map((_, idx) => idx);
+    const roundIdx = draftState.packIndex;
+    // Only show packs that are not already used in earlier rounds
+    const packs = availableSets
+      .map((_, idx) => idx)
+      .filter((idx) => idx >= roundIdx);
 
     return (
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
@@ -990,7 +1311,14 @@ export default function EnhancedOnlineDraft3DScreen({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
-              const isUsed = usedPacks.includes(packIdx);
+              const alreadyUsedInEarlierRound = packIdx < draftState.packIndex;
+              const isUsed = usedPacks.includes(packIdx) || alreadyUsedInEarlierRound;
+              const canOpenInPickingFallback =
+                draftState.phase === "picking" &&
+                draftState.pickNumber === 1 &&
+                myPack.length === 0;
+              const allowedToOpen =
+                draftState.phase === "pack_selection" || canOpenInPickingFallback;
               const setName =
                 availableSets[packIdx] ||
                 availableSets[packIdx % Math.max(1, availableSets.length)];
@@ -1005,8 +1333,12 @@ export default function EnhancedOnlineDraft3DScreen({
               return (
                 <button
                   key={`pack-opt-${packIdx}`}
-                  onClick={() => !isUsed && handlePackChoice(packIdx)}
-                  disabled={isUsed}
+                  onClick={() => {
+                    if (isUsed) return;
+                    if (!allowedToOpen) return; // wait for server phase or allow fallback
+                    handlePackChoice(packIdx);
+                  }}
+                  disabled={isUsed || !allowedToOpen}
                   className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left ${
                     isUsed
                       ? "opacity-40 cursor-not-allowed"
@@ -1038,7 +1370,11 @@ export default function EnhancedOnlineDraft3DScreen({
                     </div>
                   </div>
                   <div className="mt-2 text-xs opacity-70 text-center">
-                    {isUsed ? "Already used" : "Click to open"}
+                    {isUsed
+                      ? "Already used"
+                      : !allowedToOpen
+                      ? "Waiting for server..."
+                      : "Click to open"}
                   </div>
                 </button>
               );
@@ -1056,7 +1392,7 @@ export default function EnhancedOnlineDraft3DScreen({
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
-          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+          gl={{ preserveDrawingBuffer: false, antialias: true, alpha: false }}
         >
           <color attach="background" args={["#0b0b0c"]} />
           <ambientLight intensity={0.8} />
@@ -1078,7 +1414,7 @@ export default function EnhancedOnlineDraft3DScreen({
             </>
           )}
 
-          <TextureCache />
+          {/* Removed global TextureCache for draft to avoid preloading entire match textures */}
 
           {/* Enhanced Mouse tracking for precise card hover detection */}
           <MouseTracker
@@ -1230,6 +1566,8 @@ export default function EnhancedOnlineDraft3DScreen({
                   setStaged(null);
                 }
               }}
+              // Prefer raster textures in draft for better churn performance
+              preferRaster
             />
           )}
 
@@ -1285,6 +1623,8 @@ export default function EnhancedOnlineDraft3DScreen({
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
                     disabled={isSortingEnabled && !isVisible}
+                    // Prefer raster textures in draft for better churn performance
+                    preferRaster
                   />
                 );
               })}
@@ -1318,6 +1658,8 @@ export default function EnhancedOnlineDraft3DScreen({
 
       {/* Enhanced Overlays */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
+        {/* Collapsed user avatar badge (floating) */}
+        <UserBadge variant="floating" />
         {/* Enhanced Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
@@ -1358,6 +1700,20 @@ export default function EnhancedOnlineDraft3DScreen({
                   <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z" />
                 </svg>
               </button>
+              {/* Sort mode toggle: Mana vs Element */}
+              {isSortingEnabled && (
+                <button
+                  onClick={() => setSortMode((m) => (m === "mana" ? "element" : "mana"))}
+                  title={sortMode === "mana" ? "Group by element thresholds" : "Group by mana cost"}
+                  className={`h-9 px-3 rounded-full ring-1 transition ${
+                    sortMode === "mana"
+                      ? "bg-white/15 text-white ring-white/30 hover:bg-white/25"
+                      : "bg-indigo-500 text-black ring-indigo-400 hover:bg-indigo-400"
+                  }`}
+                >
+                  {sortMode === "mana" ? "Sort: Mana" : "Sort: Element"}
+                </button>
+              )}
             </div>
           )}
 
@@ -1393,12 +1749,7 @@ export default function EnhancedOnlineDraft3DScreen({
             </div>
           )}
 
-          <div className="ml-auto flex items-center gap-4 text-slate-300">
-            <div>Your picks: {myPicks.length}</div>
-            <div>
-              {playerNames[opponentKey]} picks: {oppPicks.length}
-            </div>
-          </div>
+          {/* Removed small header counters for own and opponent picks; kept full Your Picks panel below */}
         </div>
 
         {/* Enhanced Pick status panel */}
@@ -1720,15 +2071,7 @@ export default function EnhancedOnlineDraft3DScreen({
           </div>
         )}
 
-        {/* Enhanced pack choice quick button */}
-        {needsPackChoice && (
-          <button
-            onClick={() => setPackChoiceOverlay(true)}
-            className="absolute top-20 right-4 z-30 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors pointer-events-auto"
-          >
-            Choose Pack {draftState.packIndex + 1}
-          </button>
-        )}
+        {/* Removed quick pack choice button to avoid accidental auto-open and focus issues */}
 
         {/* Video Overlay */}
         <GlobalVideoOverlay
