@@ -1689,6 +1689,18 @@ function AuthenticatedDeckEditor() {
         if (isStandardSite(card.card.cardName)) {
           // Remove the card entirely
           updated.splice(cardIndex, 1);
+          // Also decrement picks for this card from Deck zone
+          const variantId = card.card.variantId || undefined;
+          setPicks((prevPicks) => {
+            const next = { ...prevPicks } as Record<PickKey, PickItem>;
+            const deckKey = `${card.card.cardId}:Deck:${variantId ?? 'x'}` as PickKey;
+            const deckItem = next[deckKey];
+            if (deckItem) {
+              if (deckItem.count > 1) next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+              else delete next[deckKey];
+            }
+            return next;
+          });
           return updated;
         }
 
@@ -1703,6 +1715,33 @@ function AuthenticatedDeckEditor() {
           y: undefined,
           zone: "Sideboard",
         };
+
+        // Sync picks: move one copy from Deck to Sideboard
+        const variantId = card.card.variantId || undefined;
+        setPicks((prevPicks) => {
+          const next = { ...prevPicks } as Record<PickKey, PickItem>;
+          const deckKey = `${card.card.cardId}:Deck:${variantId ?? 'x'}` as PickKey;
+          const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+          const deckItem = next[deckKey];
+          if (deckItem) {
+            if (deckItem.count > 1) next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+            else delete next[deckKey];
+            const sbItem = next[sideboardKey];
+            next[sideboardKey] = sbItem
+              ? { ...sbItem, count: sbItem.count + 1 }
+              : {
+                  cardId: card.card.cardId,
+                  variantId: variantId ?? null,
+                  name: card.card.cardName,
+                  type: card.card.type,
+                  slug: card.card.slug || '',
+                  zone: 'Sideboard' as Zone,
+                  count: 1,
+                  set: card.card.setName || '',
+                };
+          }
+          return next;
+        });
 
         return updated;
       });
@@ -1727,6 +1766,34 @@ function AuthenticatedDeckEditor() {
         y: undefined,
         zone: "Deck",
       };
+
+      // Sync picks: move one copy from Sideboard to Deck
+      const card = updated[cardIndex];
+      const variantId = card.card.variantId || undefined;
+      setPicks((prevPicks) => {
+        const next = { ...prevPicks } as Record<PickKey, PickItem>;
+        const deckKey = `${card.card.cardId}:Deck:${variantId ?? 'x'}` as PickKey;
+        const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+        const sbItem = next[sideboardKey];
+        if (sbItem) {
+          if (sbItem.count > 1) next[sideboardKey] = { ...sbItem, count: sbItem.count - 1 };
+          else delete next[sideboardKey];
+          const dItem = next[deckKey];
+          next[deckKey] = dItem
+            ? { ...dItem, count: dItem.count + 1 }
+            : {
+                cardId: card.card.cardId,
+                variantId: variantId ?? null,
+                name: card.card.cardName,
+                type: card.card.type,
+                slug: card.card.slug || '',
+                zone: 'Deck' as Zone,
+                count: 1,
+                set: card.card.setName || '',
+              };
+        }
+        return next;
+      });
 
       return updated;
     });
