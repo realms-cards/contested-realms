@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import AsciiSvg from "@/components/ui/AsciiSvg";
 
 /**
  * AsciiBottomArt
@@ -13,18 +14,18 @@ export default function AsciiBottomArt({
   className = "",
   maxVh = 38,
   opacityClass = "text-white/10",
+  bottomOffsetPx = 8,
 }: {
   className?: string;
   /** Max height as percentage of viewport height */
-  maxVh?: number;
+  maxVh?: number | null;
   /** Tailwind color utility for the ASCII characters */
   opacityClass?: string;
+  /** Raise the art slightly above the viewport bottom to avoid clipping */
+  bottomOffsetPx?: number;
 }) {
   const [art, setArt] = React.useState<string>("");
   const [error, setError] = React.useState<string | null>(null);
-  const preRef = React.useRef<HTMLPreElement | null>(null);
-  const [scale, setScale] = React.useState<number>(1);
-  const [height, setHeight] = React.useState<number | undefined>(undefined);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -50,56 +51,33 @@ export default function AsciiBottomArt({
     };
   }, []);
 
-  const recomputeScale = React.useCallback(() => {
-    const pre = preRef.current;
-    if (!pre) return;
-    pre.style.transform = "scale(2)";
-    pre.style.transformOrigin = "bottom center";
-    const vw = typeof window !== "undefined" ? window.innerWidth : 0;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 0;
-    const availH =
-      vh > 0
-        ? (vh * Math.max(0, Math.min(100, maxVh))) / 100
-        : Number.POSITIVE_INFINITY;
-    const sw = pre.scrollWidth;
-    const sh = pre.scrollHeight;
-    const widthScale = sw > 0 ? vw / sw : 1;
-    const heightScale = sh > 0 ? availH / sh : 1;
-    const s = Math.min(1, widthScale, heightScale);
-    setScale(s);
-    setHeight(Math.ceil(sh * s));
-  }, [maxVh]);
-
-  React.useEffect(() => {
-    recomputeScale();
-  }, [art, recomputeScale]);
-
-  React.useEffect(() => {
-    const onResize = () => recomputeScale();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [recomputeScale]);
-
   if (error || !art) {
     return null;
   }
 
+  const containerStyle: React.CSSProperties = {
+    overflow: "visible",
+    paddingBottom: "env(safe-area-inset-bottom)",
+    bottom: `calc(env(safe-area-inset-bottom) + ${bottomOffsetPx}px)`,
+  };
+  if (typeof maxVh === "number" && maxVh > 0) {
+    containerStyle.maxHeight = `${maxVh}vh`;
+  }
+
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-0 pointer-events-none select-none flex items-end justify-center ${className}`}
+      className={`fixed inset-x-0 bottom-0 z-0 pointer-events-none select-none ${className}`}
       aria-hidden
+      style={containerStyle}
     >
-      <div style={height ? { height } : undefined}>
-        <pre
-          ref={preRef}
-          style={{
-            transform: `scale(${scale})`,
-            transformOrigin: "bottom center",
-          }}
-          className={`whitespace-pre inline-block leading-[1.0] text-[10px] sm:text-[10.5px] md:text-[11px] font-mono ${opacityClass}`}
-        >
-          {art}
-        </pre>
+      <div className="relative w-full overflow-hidden">
+        <AsciiSvg
+          text={art}
+          className={`h-auto ${opacityClass}`}
+          padBottomLines={4}
+          preserveAspectRatio="xMidYMax meet"
+          style={{ width: 'calc(100% + 2px)', transform: 'translateX(-1px)' } as React.CSSProperties}
+        />
       </div>
     </div>
   );
