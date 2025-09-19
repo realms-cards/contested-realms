@@ -56,13 +56,6 @@ function CardFallback({
   onPointerOut,
   onClick,
 }: Omit<CardPlaneProps, "slug" | "textureUrl">) {
-  // Show the spellbook card back instead of a gray placeholder while loading
-  // Prefer raster to avoid KTX2 transcode cost in quick churn scenarios
-  const backTex = useCardTexture({
-    textureUrl: "/api/assets/cardback_spellbook.png",
-    preferRaster: true,
-  });
-
   return (
     <mesh
       rotation-x={upright ? 0 : -Math.PI / 2}
@@ -78,25 +71,14 @@ function CardFallback({
       castShadow
     >
       <planeGeometry args={[width, height]} />
-      {backTex ? (
-        <meshBasicMaterial
-          map={backTex}
-          toneMapped={false}
-          depthWrite={depthWrite}
-          depthTest={depthTest}
-          transparent={opacity < 1.0}
-          opacity={opacity}
-        />
-      ) : (
-        <meshBasicMaterial
-          color="#4a5568"
-          toneMapped={false}
-          depthWrite={depthWrite}
-          depthTest={depthTest}
-          transparent={opacity < 1.0}
-          opacity={opacity}
-        />
-      )}
+      <meshBasicMaterial
+        color="#4a5568"
+        toneMapped={false}
+        depthWrite={depthWrite}
+        depthTest={depthTest}
+        transparent={opacity < 1.0}
+        opacity={opacity}
+      />
     </mesh>
   );
 }

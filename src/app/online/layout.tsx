@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import type { OnlineContextValue } from "@/app/online/online-context";
-import AuthButton from "@/components/auth/AuthButton";
+import UserBadge from "@/components/auth/UserBadge";
 import { useGameStore } from "@/lib/game/store";
 import type {
   LobbyInfo,
@@ -532,15 +532,6 @@ export default function OnlineLayout({
                 <h1 className="text-xl font-semibold font-fantaisie">
                   Online Play
                 </h1>
-                <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    connected
-                      ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
-                      : "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"
-                  }`}
-                >
-                  {connected ? "Connected" : "Disconnected"}
-                </span>
                 {match?.id && (
                   <Link
                     className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
@@ -568,7 +559,7 @@ export default function OnlineLayout({
                   Replays
                 </Link>
               </div>
-              <AuthButton />
+              <UserBadge />
               {!isLobbyPage && (
                 <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
                   <div className="text-sm font-semibold opacity-90">

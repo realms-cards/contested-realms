@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
+import AuthButton from "@/components/auth/AuthButton";
 import DeckImportCuriosa from "./DeckImportCuriosa";
 import DeckImportText from "./DeckImportText";
 import DeckItem from "./DeckItem";
@@ -61,7 +62,12 @@ export default function DecksPage() {
   if (!session) {
     return (
       <div className="p-6 max-w-5xl mx-auto">
-        <div className="text-center">Please sign in to view your decks.</div>
+        <div className="text-center space-y-4">
+          <div>Please sign in to view your decks.</div>
+          <div className="flex justify-center">
+            <AuthButton />
+          </div>
+        </div>
       </div>
     );
   }
