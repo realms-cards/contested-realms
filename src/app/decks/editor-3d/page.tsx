@@ -567,7 +567,7 @@ function AuthenticatedDeckEditor() {
         setDraftInitDone(true);
       }
     })();
-  }, [searchParams, draftInitDone]);
+  }, [searchParams]);
 
   // (moved) Load deck from URL parameter after loadDeck is declared
 
@@ -788,7 +788,7 @@ function AuthenticatedDeckEditor() {
       let atlas = 0;
       let spellbookNonAvatar = 0;
       for (const p of pick3D) {
-        if (p.z >= 0) continue; // only deck zone
+        if (p.zone !== "Deck") continue; // only deck zone
         const t = (p.card.type || "").toLowerCase();
         if (t.includes("avatar")) avatar += 1;
         else if (t.includes("site")) atlas += 1;
@@ -918,7 +918,7 @@ function AuthenticatedDeckEditor() {
       let atlas = 0;
       let spellbookNonAvatar = 0;
       for (const p of pick3D) {
-        if (p.z >= 0) continue; // only deck zone
+        if (p.zone !== "Deck") continue; // only deck zone
         const t = (p.card.type || "").toLowerCase();
         if (t.includes("avatar")) avatar += 1;
         else if (t.includes("site")) atlas += 1;
@@ -1440,16 +1440,9 @@ function AuthenticatedDeckEditor() {
     const remainingDeckByCard = new Map<number, number>();
     for (const [cardId] of totalByCard.entries()) {
       const initialDeck = initialDeckByCard.get(cardId) || 0;
-      // In draft/sealed mode, derive current deck target from cached zone counts
-      // to avoid depending on pick3D (which is set in this effect) and prevent loops.
-      let deckTarget = initialDeck;
-      if (isDraftMode || isSealed) {
-        const key = `${cardId}:Deck`;
-        const cardsInDeckArea = zoneCountsRef.current.get(key) || 0;
-        deckTarget = Math.max(initialDeck, cardsInDeckArea);
-      }
-
-      remainingDeckByCard.set(cardId, deckTarget);
+      // In draft/sealed mode, use picks state as the single source of truth for zones
+      // Don't rely on cached zone counts as this can create circular dependencies
+      remainingDeckByCard.set(cardId, initialDeck);
     }
 
     // 3) Emit copies in the computed zones, preserving per-zone positions
@@ -1459,11 +1452,6 @@ function AuthenticatedDeckEditor() {
 
         // Always use the zone from picks as the source of truth
         const zoneKey: "Deck" | "Sideboard" = item.zone;
-
-        // For draft/sealed mode, still update the remaining counter
-        if (isDraftMode || isSealed) {
-          if (rem > 0) remainingDeckByCard.set(item.cardId, rem - 1);
-        }
 
         // Use existing position if available (sealed only) and per-zone cached positions
         const existingPos = positionsRef.current.get(
