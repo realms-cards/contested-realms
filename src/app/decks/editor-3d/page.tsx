@@ -185,6 +185,12 @@ function AuthenticatedDeckEditor() {
     }>
   >([]);
 
+  // Track which packs are opened so we can preserve UI state across server/local updates
+  const openedByIdRef = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    openedByIdRef.current = new Map(packs.map((p) => [p.id, p.opened]));
+  }, [packs]);
+
   // Prefetch standard sites and Spellslinger for current set or all sets in sealed/draft
   useEffect(() => {
     let cancelled = false;
@@ -310,7 +316,8 @@ function AuthenticatedDeckEditor() {
     }
   }, [searchParams, isSealed]); // Only initialize if not already sealed
 
-  // If server-provided sealed packs were persisted, resolve them to cards and pre-seed sideboard picks
+  // If server-provided sealed packs were persisted, load them as the authoritative packs to open.
+  // We do NOT pre-seed sideboard; players add cards to their pool by opening packs here.
   useEffect(() => {
     if (!isSealed || sealedInitDone) return;
     const matchId = searchParams?.get("matchId");
@@ -327,15 +334,21 @@ function AuthenticatedDeckEditor() {
       return;
     }
 
-    type SealedCardLike = {
+    type StoredCard = {
+      id?: string;
       slug?: string;
       cardName?: string;
       name?: string;
       type?: string | null;
       set?: string;
       setName?: string;
+      cardId?: number;
+      variantId?: number;
+      finish?: string;
+      product?: string;
+      rarity?: string | null;
     };
-    type StoredPack = { id: string; set: string; cards: SealedCardLike[] };
+    type StoredPack = { id: string; set: string; cards: StoredCard[] };
 
     let stored: StoredPack[] = [];
     try {
@@ -349,80 +362,17 @@ function AuthenticatedDeckEditor() {
       return;
     }
 
-    (async () => {
-      try {
-        // Flatten all cards from all packs
-        const cards: SealedCardLike[] = stored.flatMap((p) =>
-          Array.isArray(p.cards) ? p.cards.map((c) => ({ ...c, set: c.set || p.set })) : []
-        );
-
-        // Resolve each sealed card to a concrete SearchResult via slug first, fallback to name
-        const resolved: SearchResult[] = [];
-        for (const c of cards) {
-          const slug = (c.slug || "").toString().trim();
-          const name = (c.name || c.cardName || "").toString().trim();
-          const cardSetName = (c.setName || c.set || setName).toString();
-
-          let hit: SearchResult | null = null;
-          if (slug) {
-            try {
-              const list = await searchCards({ q: slug, setName: cardSetName, type: "all" });
-              hit = list[0] || null;
-            } catch {}
-          }
-          if (!hit && name) {
-            try {
-              const list = await searchCards({ q: name, setName: cardSetName, type: "all" });
-              hit = list[0] || null;
-            } catch {}
-          }
-          if (hit) resolved.push(hit);
-        }
-
-        if (resolved.length > 0) {
-          // Add all resolved sealed cards to Sideboard, preserving any existing picks
-          setPicks((prev) => {
-            const next = { ...prev } as Record<PickKey, PickItem>;
-            for (const r of resolved) {
-              const zone: Zone = "Sideboard";
-              const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
-              const exists = next[key];
-              next[key] = exists
-                ? { ...exists, count: exists.count + 1 }
-                : {
-                    cardId: r.cardId,
-                    variantId: r.variantId ?? null,
-                    name: r.cardName,
-                    type: r.type,
-                    slug: r.slug,
-                    zone,
-                    count: 1,
-                    set: r.set,
-                  };
-            }
-            return next;
-          });
-
-          // Infer deck set from majority of resolved hits for better defaults
-          const counts = new Map<string, number>();
-          for (const r of resolved) counts.set(r.set, (counts.get(r.set) || 0) + 1);
-          if (counts.size) {
-            let best = setName;
-            let bestN = -1;
-            for (const [nm, n] of counts.entries()) {
-              if (n > bestN) {
-                best = nm;
-                bestN = n;
-              }
-            }
-            setSetName(best);
-          }
-        }
-      } finally {
-        setSealedInitDone(true);
-      }
-    })();
-  }, [isSealed, sealedInitDone, searchParams, setName]);
+    // Load exact packs (preserving opened flags from ref)
+    const openedById = openedByIdRef.current;
+    const serverPacks = stored.map((p) => ({
+      id: p.id,
+      set: p.set,
+      cards: Array.isArray(p.cards) ? (p.cards as unknown[]) : ([] as unknown[]),
+      opened: openedById.get(p.id) ?? false,
+    }));
+    setPacks(serverPacks);
+    setSealedInitDone(true);
+  }, [isSealed, sealedInitDone, searchParams]);
 
   // Initialize draft completion mode from URL and localStorage
   useEffect(() => {
@@ -1297,63 +1247,61 @@ function AuthenticatedDeckEditor() {
       try {
         console.log(`Opening pack: ${packId}, set: ${pack.set}`);
 
-        // Generate a real booster pack from the API (same as draft-3d)
-        const avatarParam = sealedConfig?.replaceAvatars
-          ? "&replaceAvatars=true"
-          : "";
-        const res = await fetch(
-          `/api/booster?set=${encodeURIComponent(
-            pack.set
-          )}&count=1${avatarParam}`
-        );
-        const data = await res.json();
-
-        console.log("Booster API response:", { status: res.status, data });
-
-        if (!res.ok) {
-          throw new Error(
-            data?.error ||
-              `Failed to generate ${pack.set} pack (status: ${res.status})`
-          );
+        // Prefer server-provided cards when available (resolve each to SearchResult by slug/name)
+        const providedCards = Array.isArray(pack.cards)
+          ? (pack.cards as Array<Record<string, unknown>>)
+          : [];
+        if (providedCards.length > 0) {
+          for (const c of providedCards) {
+            try {
+              const slug = typeof c.slug === "string" ? c.slug : "";
+              const name = typeof c.cardName === "string" ? c.cardName : (typeof c.name === "string" ? c.name : "");
+              let hit: SearchResult | null = null;
+              if (slug) {
+                const res = await fetch(`/api/cards/search?q=${encodeURIComponent(slug)}&set=${encodeURIComponent(pack.set)}&type=all`);
+                const data = (await res.json()) as SearchResult[];
+                hit = res.ok ? data[0] || null : null;
+              }
+              if (!hit && name) {
+                const res = await fetch(`/api/cards/search?q=${encodeURIComponent(name)}&set=${encodeURIComponent(pack.set)}&type=all`);
+                const data = (await res.json()) as SearchResult[];
+                hit = res.ok ? data[0] || null : null;
+              }
+              if (hit) addToSideboardFromSearch(hit);
+            } catch {}
+          }
+        } else {
+          // Fallback to API-based generation only if no cards are present (offline/local flow)
+          const avatarParam = sealedConfig?.replaceAvatars ? "&replaceAvatars=true" : "";
+          const res = await fetch(`/api/booster?set=${encodeURIComponent(pack.set)}&count=1${avatarParam}`);
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data?.error || `Failed to generate ${pack.set} pack (status: ${res.status})`);
+          }
+          const arr = data.packs?.[0] || [];
+          if (!Array.isArray(arr)) throw new Error("Invalid pack data received from server");
+          for (const c of arr) {
+            try {
+              const slug = (c.slug || "").toString();
+              const name = (c.cardName || "").toString();
+              let hit: SearchResult | null = null;
+              if (slug) {
+                const res2 = await fetch(`/api/cards/search?q=${encodeURIComponent(slug)}&set=${encodeURIComponent(pack.set)}&type=all`);
+                const data2 = (await res2.json()) as SearchResult[];
+                hit = res2.ok ? data2[0] || null : null;
+              }
+              if (!hit && name) {
+                const res3 = await fetch(`/api/cards/search?q=${encodeURIComponent(name)}&set=${encodeURIComponent(pack.set)}&type=all`);
+                const data3 = (await res3.json()) as SearchResult[];
+                hit = res3.ok ? data3[0] || null : null;
+              }
+              if (hit) addToSideboardFromSearch(hit);
+            } catch {}
+          }
         }
 
-        const boosterCards = data.packs?.[0] || [];
-        if (!Array.isArray(boosterCards)) {
-          throw new Error("Invalid pack data received from server");
-        }
-
-        // Convert booster cards to SearchResult format and add to sideboard (sealed mode)
-        for (const boosterCard of boosterCards) {
-          const searchCard: SearchResult = {
-            variantId: boosterCard.variantId,
-            slug: boosterCard.slug || "",
-            finish: boosterCard.finish || "Standard",
-            product: boosterCard.product || "",
-            cardId: boosterCard.cardId,
-            cardName: boosterCard.cardName || `Card ${boosterCard.cardId}`,
-            set: pack.set, // This is the set the pack came from
-            type: boosterCard.type || "Unknown",
-            rarity: boosterCard.rarity || null,
-          };
-          console.log(
-            `Adding card from ${pack.set} pack:`,
-            searchCard.cardName,
-            `(${searchCard.cardId})`
-          );
-          // In sealed mode, all pack cards go to sideboard first
-          addToSideboardFromSearch(searchCard);
-        }
-
-        // Mark pack as opened
-        setPacks((prev) =>
-          prev.map((p) =>
-            p.id === packId ? { ...p, opened: true, cards: boosterCards } : p
-          )
-        );
-
-        console.log(
-          `Successfully opened pack with ${boosterCards.length} cards`
-        );
+        // Mark pack as opened; keep existing cards array
+        setPacks((prev) => prev.map((p) => (p.id === packId ? { ...p, opened: true } : p)));
       } catch (e) {
         console.error("Pack opening error:", e);
         setError(e instanceof Error ? e.message : String(e));
