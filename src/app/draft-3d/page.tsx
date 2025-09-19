@@ -6,6 +6,7 @@ import { Physics } from "@react-three/rapier";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { MOUSE } from "three";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
@@ -33,6 +34,7 @@ import { createStackHoverState } from "@/lib/game/stackHover";
 
 export default function Draft3DPage() {
   const router = useRouter();
+  const { status } = useSession();
   // --- Draft state (mirrors /draft 2D page) ---
   // Multi-set support: choose a set per pack column
   const [setNames, setSetNames] = useState<string[]>([
@@ -960,17 +962,19 @@ export default function Draft3DPage() {
       {/* Overlays */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
         {/* Minimal Navigation (top-right) */}
-        <div className="absolute top-3 right-4 z-[60] pointer-events-auto text-xs flex items-center gap-3">
-          <Link href="/" className="underline text-white/80 hover:text-white">
-            Home
-          </Link>
-          <Link
-            href="/online/lobby"
-            className="underline text-white/80 hover:text-white"
-          >
-            Lobby
-          </Link>
-        </div>
+        {status !== "authenticated" && (
+          <div className="absolute top-3 right-4 z-[60] pointer-events-auto text-xs flex items-center gap-3">
+            <Link href="/" className="underline text-white/80 hover:text-white">
+              Home
+            </Link>
+            <Link
+              href="/online/lobby"
+              className="underline text-white/80 hover:text-white"
+            >
+              Lobby
+            </Link>
+          </div>
+        )}
         {/* Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
