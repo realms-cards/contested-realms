@@ -44,7 +44,7 @@ export function NumberBadge({
         cx={50}
         cy={50}
         r={radius}
-        fill="#9CA3AF"
+        fill="#000"
         stroke="#6B7280"
         strokeWidth={strokeWidth}
       />
@@ -53,11 +53,11 @@ export function NumberBadge({
         y={50}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="#6B7280"
+        fill="#fff"
         fontWeight={800}
         fontSize={fontScale * 100}
         className="font-fantaisie select-none"
-dy="0.1em"
+        dy="0.1em"
         style={{ userSelect: "none" }}
       >
         {value}
