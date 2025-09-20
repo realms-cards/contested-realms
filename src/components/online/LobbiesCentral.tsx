@@ -365,7 +365,6 @@ export default function LobbiesCentral({
   const isEngaged = isInLobby || isInTournament;
   const [cfgName, setCfgName] = useState<string>("");
   const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">("open");
-  const [cfgMaxPlayers, setCfgMaxPlayers] = useState<number>(2);
   
   // Tournament creation state
   const [tournamentName, setTournamentName] = useState<string>("");
@@ -977,11 +976,11 @@ export default function LobbiesCentral({
                 <label className="block text-xs font-medium mb-2">Max Players</label>
                 <input
                   type="number"
-                  min={2}
-                  max={8}
-                  value={cfgMaxPlayers}
-                  onChange={(e) => setCfgMaxPlayers(Math.max(2, Math.min(8, parseInt(e.target.value) || 2)))}
-                  className="w-24 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                  value={2}
+                  disabled
+                  aria-disabled
+                  title="Currently limited to two players"
+                  className="w-24 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm opacity-60 cursor-not-allowed"
                 />
               </div>
               <div className="flex justify-end gap-2">
@@ -992,7 +991,7 @@ export default function LobbiesCentral({
                   onClick={() => {
                     const trimmedName = cfgName.trim();
                     if (trimmedName) {
-                      onCreate({ name: trimmedName, visibility: cfgVisibility, maxPlayers: cfgMaxPlayers });
+                      onCreate({ name: trimmedName, visibility: cfgVisibility, maxPlayers: 2 });
                       setOverlayOpen(false);
                     }
                   }}
