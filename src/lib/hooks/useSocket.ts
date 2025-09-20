@@ -36,7 +36,8 @@ const DEFAULT_OPTIONS: UseSocketOptions = (() => {
     reconnectionAttempts: 5,
     timeout: 20000,
     path,
-    transports: transportsEnv.length ? transportsEnv : ['websocket'],
+    // Allow polling fallback by default to ensure server bootstraps via HTTP before WS upgrade
+    transports: transportsEnv.length ? transportsEnv : ['websocket', 'polling'],
   } as UseSocketOptions;
 })();
 
@@ -68,6 +69,11 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
         }
       } catch {}
       if (cancelled) return;
+
+      // Warm up the Socket.IO server (ensures Next.js attaches io to HTTP server in dev)
+      try {
+        await fetch('/api/socket');
+      } catch {}
 
       const socketInstance = io(opts.url as string, {
         autoConnect: opts.autoConnect,

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
-import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
+import { updateStandingsAfterMatch, generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
 
@@ -126,47 +126,111 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
         }
       });
 
-      if (pendingMatches === 0) {
-        // Round is complete
-        await prisma.tournamentRound.update({
-          where: { id: match.roundId },
-          data: {
-            status: 'completed',
-            completedAt: new Date()
+    if (pendingMatches === 0) {
+      // Round is complete
+      await prisma.tournamentRound.update({
+        where: { id: match.roundId },
+        data: {
+          status: 'completed',
+          completedAt: new Date()
+        }
+      });
+
+      // Check if tournament is complete
+      if (match.tournament && match.round) {
+        const settings = (match.tournament.settings as Record<string, unknown>) || {};
+        const pairingFormat = (settings.pairingFormat as 'swiss' | 'elimination' | 'round_robin' | undefined) || 'swiss';
+        let totalRounds = (settings.totalRounds as number) || 0;
+
+        // If totalRounds not set, derive sensible defaults from format and player count
+        if (!totalRounds) {
+          const playerCount = await prisma.playerStanding.count({ where: { tournamentId: match.tournament.id } });
+          if (pairingFormat === 'round_robin') {
+            totalRounds = Math.max(0, playerCount - 1);
+          } else if (pairingFormat === 'elimination') {
+            totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(playerCount, 1))));
+          } else {
+            totalRounds = 3; // Default swiss rounds if not configured
           }
-        });
-
-        // Check if tournament is complete
-        if (match.tournament && match.round) {
-          const settings = match.tournament.settings as Record<string, unknown> || {};
-          const totalRounds = (settings.totalRounds as number) || 3;
-          if (match.round.roundNumber >= totalRounds) {
-            await prisma.tournament.update({
-              where: { id: match.tournament.id },
-              data: {
-                status: 'completed',
-                completedAt: new Date()
-              }
-            });
-
-            // Broadcast tournament completion
-            try {
-              await tournamentSocketService.broadcastPhaseChanged(
-                match.tournament.id,
-                'completed',
-                {
-                  previousStatus: 'active',
-                  completedAt: new Date().toISOString(),
-                  finalRound: match.round.roundNumber,
-                  message: 'Tournament completed!'
-                }
-              );
-            } catch (socketError) {
-              console.warn('Failed to broadcast tournament completion:', socketError);
+        }
+        if (match.round.roundNumber >= totalRounds) {
+          await prisma.tournament.update({
+            where: { id: match.tournament.id },
+            data: {
+              status: 'completed',
+              completedAt: new Date()
             }
+          });
+
+          // Broadcast tournament completion
+          try {
+            await tournamentSocketService.broadcastPhaseChanged(
+              match.tournament.id,
+              'completed',
+              {
+                previousStatus: 'active',
+                completedAt: new Date().toISOString(),
+                finalRound: match.round.roundNumber,
+                message: 'Tournament completed!'
+              }
+            );
+          } catch (socketError) {
+            console.warn('Failed to broadcast tournament completion:', socketError);
+          }
+        } else {
+          // Start the next round automatically
+          const nextRoundNumber = (match.round?.roundNumber || 0) + 1;
+          const newRound = await prisma.tournamentRound.create({
+            data: {
+              tournamentId: match.tournament.id,
+              roundNumber: nextRoundNumber,
+              status: 'pending'
+            }
+          });
+          const pairings = await generatePairings(match.tournament.id, nextRoundNumber);
+          const matchIds = await createRoundMatches(match.tournament.id, newRound.id, pairings);
+          await prisma.tournamentRound.update({ where: { id: newRound.id }, data: { status: 'active', startedAt: new Date() } });
+
+          try {
+            const createdMatches = await prisma.match.findMany({ where: { id: { in: matchIds } }, select: { id: true, players: true } });
+            const broadcastMatches = createdMatches.map((m) => {
+              const players = (m.players as Array<{ id: string; displayName?: string; name?: string }>);
+              const p1 = players?.[0];
+              const p2 = players?.[1];
+              return {
+                id: m.id,
+                player1Id: p1?.id || '',
+                player1Name: (p1?.displayName || p1?.name || 'Player 1'),
+                player2Id: p2?.id || null,
+                player2Name: (p2?.displayName || p2?.name || null)
+              };
+            });
+            await tournamentSocketService.broadcastRoundStarted(match.tournament.id, nextRoundNumber, broadcastMatches);
+            const t = await prisma.tournament.findUnique({ where: { id: match.tournament.id }, select: { name: true } });
+            const tName = t?.name || 'Tournament Match';
+            for (const m of broadcastMatches) {
+              await tournamentSocketService.broadcastMatchAssigned(match.tournament.id, m.player1Id, {
+                matchId: m.id,
+                opponentId: m.player2Id,
+                opponentName: m.player2Name,
+                lobbyName: tName,
+              });
+              if (m.player2Id) {
+                await tournamentSocketService.broadcastMatchAssigned(match.tournament.id, m.player2Id, {
+                  matchId: m.id,
+                  opponentId: m.player1Id,
+                  opponentName: m.player1Name,
+                  lobbyName: tName,
+                });
+              }
+            }
+            await tournamentSocketService.broadcastTournamentUpdateById(match.tournament.id);
+          } catch (socketErr2) {
+            console.warn('Failed to broadcast next round start:', socketErr2);
           }
         }
       }
+    }
     }
 
     return new Response(JSON.stringify({

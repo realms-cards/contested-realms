@@ -73,10 +73,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Create draft session if it doesn't exist
     if (!draftSession) {
       const settings = registration.tournament.settings as Record<string, unknown> || {};
-      const draftConfig = settings.draft as Record<string, unknown> || {};
-      const packConfiguration = draftConfig.packConfiguration as Array<{ setId: string; packCount: number }> || [
-        { setId: 'beta', packCount: 3 }
-      ];
+      const draftConfig = (settings.draftConfig as Record<string, unknown>)
+        || (settings.draft as Record<string, unknown>)
+        || {};
+      // Build pack configuration from packCounts when provided
+      const packCounts = (draftConfig.packCounts as Record<string, number>) || {};
+      let packConfiguration = (draftConfig.packConfiguration as Array<{ setId: string; packCount: number }>) || [];
+      if (!Array.isArray(packConfiguration) || packConfiguration.length === 0) {
+        const entries = Object.entries(packCounts).filter(([, n]) => (n || 0) > 0);
+        if (entries.length) {
+          packConfiguration = entries.map(([setName, n]) => ({ setId: setName, packCount: Number(n) || 0 }));
+        } else {
+          packConfiguration = [{ setId: 'Beta', packCount: 3 }];
+        }
+      }
 
       draftSession = await prisma.draftSession.create({
         data: {
@@ -84,8 +94,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           status: 'waiting',
           packConfiguration: JSON.parse(JSON.stringify(packConfiguration)),
           settings: JSON.parse(JSON.stringify({
-            timePerPick: draftConfig.draftTimeLimit || 90,
-            deckBuildingTime: draftConfig.deckBuildingTimeLimit || 30
+            timePerPick: (draftConfig.draftTimeLimit as number) || 90,
+            deckBuildingTime: (draftConfig.deckBuildingTimeLimit as number) || 30
           }))
         },
         include: {

@@ -31,10 +31,16 @@ function mapToProtocolTournament(tournament: {
     creatorId: tournament.creatorId,
     // Pairing format (swiss/elimination/round_robin) is stored in settings.pairingFormat when available, default to 'swiss'
     format: (tournament.settings?.pairingFormat as 'swiss' | 'elimination' | 'round_robin' | undefined) || 'swiss',
-    // Treat 'preparing' as active/playing so it doesn't appear as completed
-    status: tournament.status === 'registering' ? 'registering'
-          : (tournament.status === 'active' || tournament.status === 'preparing') ? 'playing'
-          : 'completed',
+    // Map DB status into richer client-visible states for lobby UX
+    status: (() => {
+      if (tournament.status === 'registering') return 'registering';
+      if (tournament.status === 'preparing') {
+        const mt = (tournament.format as 'sealed' | 'draft' | 'constructed');
+        return mt === 'draft' ? 'draft_phase' : mt === 'sealed' ? 'sealed_phase' : 'playing';
+      }
+      if (tournament.status === 'active') return 'playing';
+      return 'completed';
+    })(),
     maxPlayers: tournament.maxPlayers,
     registeredPlayers: tournament.registeredPlayers || [],
     standings: [], // TODO: map when available
@@ -61,6 +67,7 @@ interface TournamentsAPI {
   toggleTournamentReady: (tournamentId: string, ready: boolean) => Promise<void>;
   startTournament: (tournamentId: string) => Promise<void>;
   endTournament: (tournamentId: string) => Promise<void>;
+  refreshTournaments: () => Promise<void>;
   tournaments: Array<{
     id: string; name: string; creatorId: string; format: string; status: string; maxPlayers: number;
     registeredPlayers?: Array<{ id: string; displayName: string; ready: boolean }>;
@@ -111,6 +118,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     toggleTournamentReady,
     startTournament,
     endTournament,
+    refreshTournaments,
     tournaments: tournamentsFromApi,
   } = tournamentsApi ?? {
     // Provide no-op placeholders; these should never be called when disabled as handlers won't be passed further down
@@ -121,8 +129,26 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     toggleTournamentReady: async () => { throw new Error("Tournaments are disabled"); },
     startTournament: async () => { throw new Error("Tournaments are disabled"); },
     endTournament: async () => { throw new Error("Tournaments are disabled"); },
+    refreshTournaments: async () => {},
     tournaments: [] as TournamentsAPI['tournaments'],
   };
+
+  // After a tournament first transitions to preparing/active, push the player once
+  useEffect(() => {
+    if (!tournamentsEnabled || !me?.id) return;
+    const started = (tournamentsFromApi || []).find(t =>
+      t.registeredPlayers?.some(p => p.id === me.id) && (t.status === 'preparing' || t.status === 'active')
+    );
+    if (!started) return;
+    try {
+      const key = `sorcery:tournamentRedirected:${started.id}`;
+      const already = localStorage.getItem(key) === '1';
+      if (!already) {
+        localStorage.setItem(key, '1');
+        router.push(`/tournaments/${started.id}`);
+      }
+    } catch {}
+  }, [tournamentsEnabled, tournamentsFromApi, me?.id, router]);
 
   // Tabs removed: we show all sections in the main view
   const [chatInput, setChatInput] = useState("");
@@ -401,15 +427,15 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
             const settings: Record<string, unknown> = {
               pairingFormat: cfg.format,
             };
-            // Provide sensible defaults per match type so tournament rounds carry correct configs
+            // Apply provided pack settings or sensible defaults
             if (cfg.matchType === 'sealed') {
-              settings.sealedConfig = {
+              settings.sealedConfig = cfg.sealedConfig ?? {
                 packCounts: { Beta: 6, "Arthurian Legends": 0 },
                 timeLimit: 40,
                 replaceAvatars: false,
               };
             } else if (cfg.matchType === 'draft') {
-              settings.draftConfig = {
+              settings.draftConfig = cfg.draftConfig ?? {
                 setMix: ['Beta'],
                 packCount: 3,
                 packSize: 15,
@@ -477,7 +503,12 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           }
         } : undefined}
         tournamentsEnabled={tournamentsEnabled}
-        onRefresh={() => requestLobbies()}
+        onRefresh={async () => {
+          try { await requestLobbies(); } catch {}
+          if (tournamentsEnabled) {
+            try { await refreshTournaments(); } catch {}
+          }
+        }}
       />
 
       {/* Leave Match confirmation dialog */}

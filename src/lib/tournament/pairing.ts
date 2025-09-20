@@ -57,15 +57,28 @@ export async function generatePairings(
     isEliminated: standing.isEliminated
   }));
 
-  switch (tournament.format) {
-    case 'sealed':
-    case 'draft':
-    case 'constructed':
-      // All these formats use Swiss pairing by default
-      return generateSwissPairings(activePlayers, tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>, roundNumber);
-    default:
-      throw new Error(`Unsupported tournament format: ${tournament.format}`);
+  // Determine pairing structure from settings (default: swiss)
+  const settings = (tournament as unknown as { settings?: Record<string, unknown> }).settings || {};
+  const pairingFormat = (settings.pairingFormat as 'swiss' | 'elimination' | 'round_robin' | undefined) || 'swiss';
+
+  if (pairingFormat === 'elimination') {
+    return generateEliminationPairings(activePlayers, roundNumber);
   }
+
+  if (pairingFormat === 'round_robin') {
+    return generateRoundRobinPairings(
+      activePlayers,
+      tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>,
+      roundNumber
+    );
+  }
+
+  // swiss (default)
+  return generateSwissPairings(
+    activePlayers,
+    tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>,
+    roundNumber
+  );
 }
 
 /**

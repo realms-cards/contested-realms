@@ -2,6 +2,7 @@ import { TournamentFormat, TournamentStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +65,8 @@ export async function GET() {
         return {
           id: reg.playerId,
           displayName: reg.player.name || 'Anonymous',
-          ready: Boolean(prepData?.ready)
+          ready: Boolean(prepData?.ready),
+          deckSubmitted: Boolean(reg.deckSubmitted)
         };
       }),
       standings: tournament.standings.map(standing => ({
@@ -115,8 +117,14 @@ export async function POST(req: NextRequest) {
     const format = body?.format as TournamentFormat;
     const matchType = String(body?.matchType || 'sealed');
     const maxPlayers = Number(body?.maxPlayers || 8);
-    const sealedConfig = body?.sealedConfig || null;
-    const draftConfig = body?.draftConfig || null;
+    // Accept sealed/draft config from either top-level or nested in `settings`
+    const incomingSettings = (body?.settings as Record<string, unknown> | undefined) || {};
+    const sealedConfig = (body?.sealedConfig as unknown)
+      ?? (incomingSettings?.sealedConfig as unknown)
+      ?? null;
+    const draftConfig = (body?.draftConfig as unknown)
+      ?? (incomingSettings?.draftConfig as unknown)
+      ?? null;
 
     console.log("Creating tournament:", { name, format, matchType, maxPlayers, creatorId: session.user.id });
 
@@ -154,6 +162,16 @@ export async function POST(req: NextRequest) {
     const optimalRounds = Math.ceil(Math.log2(maxPlayers));
     const totalRounds = Math.max(3, optimalRounds); // Minimum 3 rounds
 
+    // Merge provided arbitrary settings (e.g., pairingFormat) while enforcing server-calculated fields
+    const settingsOut: Record<string, unknown> = {
+      ...incomingSettings,
+      totalRounds,
+      roundTimeLimit: 50,
+      matchTimeLimit: 60,
+      sealedConfig,
+      draftConfig,
+    };
+
     const tournament = await prisma.tournament.create({
       data: {
         name,
@@ -161,13 +179,8 @@ export async function POST(req: NextRequest) {
         format,
         status: 'registering',
         maxPlayers,
-        settings: {
-          totalRounds,
-          roundTimeLimit: 50,
-          matchTimeLimit: 60,
-          sealedConfig,
-          draftConfig
-        }
+        // Ensure a Prisma-compatible JSON shape
+        settings: JSON.parse(JSON.stringify(settingsOut))
       }
     });
 
@@ -206,6 +219,13 @@ export async function POST(req: NextRequest) {
     } catch (autoRegError) {
       console.error("Error during auto-registration:", autoRegError);
       // Don't fail tournament creation if auto-registration fails
+    }
+
+    // Broadcast new tournament so lobby/tournaments lists auto-update
+    try {
+      await tournamentSocketService.broadcastTournamentUpdateById(tournament.id);
+    } catch (socketErr) {
+      console.warn('Failed to broadcast tournament creation:', socketErr);
     }
 
     return new Response(JSON.stringify({
