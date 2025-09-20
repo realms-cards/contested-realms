@@ -307,7 +307,7 @@ export default function PlayPage() {
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full">
       {/* Camera mode toggle */}
-      <div className="absolute top-2 right-2 z-30">
+      <div className="absolute top-2 left-2 z-30">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
           <button
             className={`px-2 py-1 text-xs rounded ${cameraMode === 'topdown' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
