@@ -55,6 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           message: `Tournament "${tournament.name}" has been ended by the creator`
         }
       );
+      await tournamentSocketService.broadcastTournamentUpdateById(id);
     } catch (socketError) {
       console.warn('Failed to broadcast tournament ended event:', socketError);
       // Don't fail the request if socket broadcast fails

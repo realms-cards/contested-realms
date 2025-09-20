@@ -353,13 +353,16 @@ export class TournamentSocketService {
     newPhase: TournamentStatus,
     additionalData?: Record<string, unknown>
   ): Promise<void> {
-    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, {
+    const payload = {
       tournamentId,
       newPhase,
       newStatus: newPhase,
       timestamp: new Date().toISOString(),
       ...additionalData
-    });
+    };
+    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, payload);
+    // Also emit globally so non-joined clients (lists) update
+    if (this.io) this.io.emit(TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, payload);
   }
 
   /**
@@ -459,15 +462,24 @@ export class TournamentSocketService {
     playerId: string,
     preparationStatus: string,
     readyPlayerCount: number,
-    totalPlayerCount: number
+    totalPlayerCount: number,
+    deckSubmitted: boolean = false
   ): Promise<void> {
-    this.broadcastToTournament(tournamentId, TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, {
+    const payload = {
       tournamentId,
       playerId,
       preparationStatus,
       readyPlayerCount,
-      totalPlayerCount
-    });
+      totalPlayerCount,
+      deckSubmitted
+    } as const;
+    this.broadcastToTournament(
+      tournamentId,
+      TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION,
+      payload as unknown as Record<string, unknown>
+    );
+    // Also emit globally so lobby/tournament lists can reflect ready states
+    if (this.io) this.io.emit(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, payload as unknown as Record<string, unknown>);
   }
 
   /**

@@ -52,10 +52,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     switch (tournament.format) {
       case 'sealed':
         // Generate sealed packs for the player
-        const sealedConfig = settings.sealed as Record<string, unknown> || {};
-        const packConfiguration = sealedConfig.packConfiguration as Array<{ setId: string; packCount: number }> || [
-          { setId: 'beta', packCount: 6 }
-        ];
+        const sealedConfig = (settings.sealedConfig as Record<string, unknown>)
+          || (settings.sealed as Record<string, unknown>)
+          || {};
+        // Prefer packCounts map { 'Beta': 6, ... } -> packConfiguration[]; fallback to existing packConfiguration
+        const packCounts = (sealedConfig.packCounts as Record<string, number>) || {};
+        let packConfiguration = (sealedConfig.packConfiguration as Array<{ setId: string; packCount: number }>) || [];
+        if (!Array.isArray(packConfiguration) || packConfiguration.length === 0) {
+          const entries = Object.entries(packCounts).filter(([, n]) => (n || 0) > 0);
+          if (entries.length) {
+            packConfiguration = entries.map(([setName, n]) => ({ setId: setName, packCount: Number(n) || 0 }));
+          } else {
+            packConfiguration = [{ setId: 'Beta', packCount: 6 }];
+          }
+        }
         
         initialPreparationData = {
           sealed: {

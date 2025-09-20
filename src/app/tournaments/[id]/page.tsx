@@ -37,18 +37,22 @@ export default function TournamentDetailsPage() {
   const {
     tournaments,
     currentTournament,
+    setCurrentTournament,
     setCurrentTournamentById,
     joinTournament: rtJoinTournament,
     leaveTournament: rtLeaveTournament,
     startTournament: rtStartTournament,
+    endTournament: rtEndTournament,
     statistics: rtStatistics,
     loading: rtLoading,
-    error: rtError
+    error: rtError,
+    lastUpdated
   } = useRealtimeTournaments();
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   
   const [activeTab, setActiveTab] = useState<'overview' | 'standings' | 'rounds'>('overview');
 
@@ -58,6 +62,28 @@ export default function TournamentDetailsPage() {
       router.push(`/auth/signin?callbackUrl=/tournaments/${tournamentId}`);
     }
   }, [status, tournamentId, router]);
+
+  // Lightweight toast listener (used by deck submission + phase changes)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { message?: string } | undefined;
+      if (detail?.message) {
+        setToast(detail.message);
+        setTimeout(() => setToast(null), 3500);
+      }
+    };
+    window.addEventListener('app:toast', handler as EventListener);
+    // Pick up pending toast from localStorage on mount
+    try {
+      const pending = localStorage.getItem('app:toast');
+      if (pending) {
+        setToast(pending);
+        localStorage.removeItem('app:toast');
+        setTimeout(() => setToast(null), 3500);
+      }
+    } catch {}
+    return () => window.removeEventListener('app:toast', handler as EventListener);
+  }, []);
 
   // Derive tournament from realtime context and ensure we set it as current
   const derivedTournament: Tournament | null = (currentTournament && currentTournament.id === tournamentId)
@@ -75,6 +101,28 @@ export default function TournamentDetailsPage() {
 
   // Choose tournament reference for below sections
   const tournament = derivedTournament;
+  const [viewerDeckCards, setViewerDeckCards] = useState<Array<{ cardId: number; name: string; slug: string; setName: string; quantity: number }>>([]);
+  const [viewerDeckLoaded, setViewerDeckLoaded] = useState(false);
+  const [checkedDirect, setCheckedDirect] = useState(false);
+  const [showDeckDetails, setShowDeckDetails] = useState(false);
+
+  // Fallback: if list hasn't provided the tournament yet, attempt fetching by id directly once
+  useEffect(() => {
+    (async () => {
+      try {
+        if (tournament || rtLoading || checkedDirect || !lastUpdated) return;
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}`);
+        if (res.ok) {
+          const detail = await res.json();
+          setCurrentTournament(detail as unknown as typeof currentTournament);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setCheckedDirect(true);
+      }
+    })();
+  }, [tournament, rtLoading, lastUpdated, checkedDirect, tournamentId, setCurrentTournament]);
 
   // Helpers: safe currentPlayers count
   function getCurrentPlayersCount(t: Tournament | null): number {
@@ -93,6 +141,45 @@ export default function TournamentDetailsPage() {
   
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
+
+  // Load viewer deck card metadata when available (from socket detail or by fetching detail endpoint)
+  useEffect(() => {
+    (async () => {
+      try {
+        if (viewerDeckLoaded) return;
+        let deck: Array<{ cardId: string; quantity: number }> | null = null;
+        const fromContext = (tournament as unknown as { viewerDeck?: Array<{ cardId: string; quantity: number }> }).viewerDeck || null;
+        if (fromContext && fromContext.length) {
+          deck = fromContext;
+        } else if (tournament?.id) {
+          const resDetail = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}`);
+          if (resDetail.ok) {
+            const detail = await resDetail.json();
+            if (Array.isArray(detail?.viewerDeck)) deck = detail.viewerDeck as Array<{ cardId: string; quantity: number }>;
+          }
+        }
+        if (!deck || deck.length === 0) { setViewerDeckCards([]); return; }
+        const ids = Array.from(new Set(deck.map(it => Number(it.cardId)).filter(n => Number.isFinite(n) && n > 0)));
+        if (!ids.length) { setViewerDeckCards([]); return; }
+        const res = await fetch(`/api/cards/by-id?ids=${encodeURIComponent(ids.join(','))}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Failed to load deck cards');
+        const byId = new Map<number, { name: string; slug: string; setName: string }>();
+        for (const c of (data as Array<{ cardId: number; name: string; slug: string; setName: string }>)) {
+          byId.set(c.cardId, { name: c.name, slug: c.slug, setName: c.setName });
+        }
+        const merged = deck.map(it => {
+          const id = Number(it.cardId);
+          const meta = byId.get(id);
+          return { cardId: id, name: meta?.name || `Card ${id}`, slug: meta?.slug || '', setName: meta?.setName || '', quantity: Number(it.quantity) || 0 };
+        }).sort((a, b) => a.name.localeCompare(b.name));
+        setViewerDeckCards(merged);
+        setViewerDeckLoaded(true);
+      } catch {
+        setViewerDeckCards([]);
+      }
+    })();
+  }, [tournament?.id, viewerDeckLoaded]);
 
   const handleJoinTournament = async () => {
     if (!session || !tournament) return;
@@ -139,6 +226,25 @@ export default function TournamentDetailsPage() {
       setError(err instanceof Error ? err.message : 'Failed to start tournament');
     } finally {
       setStarting(false);
+    }
+  };
+
+  const handleEndTournament = async () => {
+    if (!session || !tournament || !isCreator) return;
+
+    const ok = window.confirm('End this tournament now? This cannot be undone.');
+    if (!ok) return;
+
+    setError(null);
+    try {
+      await rtEndTournament(tournamentId);
+      try {
+        localStorage.setItem('app:toast', 'Tournament ended');
+        window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Tournament ended' } }));
+      } catch {}
+    } catch (err) {
+      console.error('Failed to end tournament:', err);
+      setError(err instanceof Error ? err.message : 'Failed to end tournament');
     }
   };
 
@@ -200,6 +306,15 @@ export default function TournamentDetailsPage() {
     );
   }
 
+  // Avoid flashing "not found" before the realtime context hydrates and direct check completes
+  if (!derivedTournament && (!lastUpdated || !checkedDirect || rtLoading)) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading tournament...</div>
+      </div>
+    );
+  }
+
   if (!tournament) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -210,6 +325,12 @@ export default function TournamentDetailsPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      {/* Toast overlay */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded bg-black/70 border border-white/20 text-sm shadow-lg">
+          {toast}
+        </div>
+      )}
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
@@ -268,8 +389,163 @@ export default function TournamentDetailsPage() {
                 {starting ? 'Starting...' : 'Start Tournament'}
               </button>
             )}
+
+            {/* End/Forfeit controls moved to bottom of page */}
           </div>
         </div>
+
+        {/* Prominent Submitted Deck (collapsed by default) */}
+        {isRegistered && (() => {
+          // Determine if the player has a submitted deck (server + optimistic flags)
+          const meId = session?.user?.id;
+          const rp = (tournament as unknown as { registeredPlayers?: Array<{ id: string; deckSubmitted?: boolean }> }).registeredPlayers || [];
+          const mine = rp.find(p => p.id === meId);
+          const serverSubmitted = Boolean((mine as { deckSubmitted?: boolean })?.deckSubmitted);
+          let optimistic = false;
+          try {
+            optimistic =
+              localStorage.getItem(`sealed_submitted_tournament_${tournament.id}`) === 'true' ||
+              localStorage.getItem(`draft_submitted_tournament_${tournament.id}`) === 'true';
+          } catch {}
+          const hasDeck = viewerDeckCards.length > 0;
+          const submittedDeck = serverSubmitted || optimistic || hasDeck;
+          if (!submittedDeck) return null;
+
+          const totalCards = viewerDeckCards.reduce((sum, c) => sum + (Number(c.quantity) || 0), 0);
+
+          return (
+            <div className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20">
+              <div className="p-4 flex items-center justify-between">
+                <div className="text-emerald-200">
+                  <div className="font-semibold">Your Submitted Deck</div>
+                  <div className="text-sm opacity-80">
+                    {viewerDeckCards.length > 0 ? `${totalCards} cards` : 'Deck submitted — syncing list…'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDeckDetails(v => !v)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                >
+                  {showDeckDetails ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showDeckDetails && (
+                <div className="px-4 pb-4">
+                  {viewerDeckCards.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {viewerDeckCards.map((c) => (
+                        <div key={`${c.cardId}`} className="bg-black/20 rounded p-2 ring-1 ring-emerald-700/40">
+                          <div className="text-xs text-slate-200 truncate" title={c.name}>{c.name}</div>
+                          <div className="text-[11px] text-slate-400">x{c.quantity} • {c.setName}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-emerald-200/80">Loading deck list…</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Phase Actions */}
+        {tournament.status === 'preparing' && (
+          <div className="mb-6 rounded-lg border border-blue-700 bg-blue-900/20 p-4 flex items-center justify-between">
+            <div className="text-slate-200">
+              {tournament.format === 'draft' && 'Draft phase in progress. Join the draft to begin selecting cards.'}
+              {tournament.format === 'sealed' && 'Sealed preparation in progress. Open packs and build your deck.'}
+              {tournament.format === 'constructed' && 'Constructed preparation. Select and validate your deck.'}
+            </div>
+            {isRegistered && (
+              <div className="flex items-center gap-2">
+                {tournament.format === 'draft' && (
+                  <button
+                    onClick={() => { try { window.location.href = `/tournaments/${tournament.id}/draft`; } catch {} }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    Enter Draft
+                  </button>
+                )}
+                {tournament.format === 'sealed' && (() => {
+                  const meId = session?.user?.id;
+                  const rp = (tournament as unknown as { registeredPlayers?: Array<{ id: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers || [];
+                  const mine = rp.find(p => p.id === meId);
+                  // Only treat a deck as submitted when the server marks deckSubmitted.
+                  // Also allow an optimistic local flag to avoid flicker on redirect.
+                  let optimisticSubmitted = false;
+                  try { optimisticSubmitted = localStorage.getItem(`sealed_submitted_tournament_${tournament.id}`) === 'true'; } catch {}
+                  const submitted = Boolean((mine as { deckSubmitted?: boolean })?.deckSubmitted) || optimisticSubmitted || (viewerDeckCards.length > 0);
+                  if (submitted) {
+                    return (
+                      <div className="flex items-center gap-3">
+                        <span className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm" title="Deck submitted">
+                          Sealed Deck submitted!
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data?.error || 'Failed to start preparation');
+                        const packs = data?.preparationData?.sealed?.generatedPacks as Array<{ packId: string; setId: string; cards: unknown[] }> | undefined;
+                        if (Array.isArray(packs)) {
+                          const storePacks = packs.map(p => ({ id: p.packId, set: p.setId, cards: Array.isArray(p.cards) ? p.cards : [], opened: false }));
+                          try { localStorage.setItem(`sealedPacks_tournament_${tournament.id}`, JSON.stringify(storePacks)); } catch {}
+                        }
+                      } catch (e) {
+                        console.warn('Failed to start preparation:', e);
+                      }
+                      try {
+                        const cfg = (tournament as unknown as { settings?: { sealedConfig?: { packCounts?: Record<string, number>; timeLimit?: number; replaceAvatars?: boolean }}}).settings?.sealedConfig || {};
+                        const packCount = Object.values(cfg.packCounts || { Beta: 6 }).reduce((a, b) => a + (b || 0), 0) || 6;
+                        const setMix = Object.entries(cfg.packCounts || { Beta: 6 }).filter(([, c]) => (c || 0) > 0).map(([s]) => s);
+                        const timeLimit = cfg.timeLimit ?? 40;
+                        const replaceAvatars = cfg.replaceAvatars ?? false;
+                        const params = new URLSearchParams({
+                          sealed: 'true',
+                          tournament: tournament.id,
+                          packCount: String(packCount),
+                          setMix: setMix.join(','),
+                          timeLimit: String(timeLimit),
+                          constructionStartTime: String(Date.now()),
+                          replaceAvatars: String(replaceAvatars),
+                          matchName: tournament.name,
+                        });
+                        window.location.href = `/decks/editor-3d?${params.toString()}`;
+                      } catch {}
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    Build Deck
+                  </button>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tournament.status === 'active' && isRegistered && (() => {
+          const myStanding = statistics?.standings.find(s => s.playerId === session?.user?.id);
+          const myMatchId = myStanding?.currentMatchId;
+          if (!myMatchId) return null;
+          return (
+            <div className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20 p-4 flex items-center justify-between">
+              <div className="text-slate-200">Your match is ready. Join when you are set.</div>
+              <button
+                onClick={() => { try { window.location.href = `/online/play/${encodeURIComponent(String(myMatchId))}`; } catch {} }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md text-sm"
+              >
+                Join Match
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Error Display */}
         {error && (
@@ -485,6 +761,47 @@ export default function TournamentDetailsPage() {
             )}
           </div>
         )}
+      </div>
+      {/* Bottom actions: Forfeit/End */}
+      <div className="container mx-auto px-4 pb-10">
+        <div className="mt-10 border-t border-slate-800 pt-6 flex items-center justify-between">
+          <div className="text-xs text-slate-400">Tournament actions</div>
+          <div className="flex gap-3">
+            {isRegistered && tournament.status !== 'completed' && !isCreator && (
+              <button
+                onClick={async () => {
+                  const ok = window.confirm('Forfeit this tournament now?');
+                  if (!ok) return;
+                  try {
+                    const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/forfeit`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data?.error || 'Failed to forfeit');
+                    try {
+                      localStorage.setItem('app:toast', 'You forfeited the tournament');
+                      window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'You forfeited the tournament' } }));
+                    } catch {}
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to forfeit');
+                  }
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-md text-sm"
+                title="Forfeit this tournament"
+              >
+                Forfeit Tournament
+              </button>
+            )}
+
+            {isCreator && tournament.status !== 'completed' && (
+              <button
+                onClick={handleEndTournament}
+                className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-md text-sm"
+                title="End this tournament now"
+              >
+                End Tournament
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

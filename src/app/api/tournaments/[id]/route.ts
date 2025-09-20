@@ -38,6 +38,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return new Response(JSON.stringify({ error: 'Tournament not found' }), { status: 404 });
     }
 
+    // Build viewer deck if available
+    const viewerId: string | null = session.user?.id ?? null;
+    const viewerReg = viewerId
+      ? (tournament.registrations.find(r => r.playerId === viewerId) || null)
+      : null;
+    let viewerDeck: Array<{ cardId: string; quantity: number }> | null = null;
+    if (viewerReg && viewerReg.preparationData) {
+      try {
+        const prep = viewerReg.preparationData as unknown as Record<string, unknown>;
+        const sealed = (prep?.sealed as { deckList?: Array<{ cardId: string; quantity: number }> } | undefined);
+        const draft = (prep?.draft as { deckList?: Array<{ cardId: string; quantity: number }> } | undefined);
+        const list = sealed?.deckList || draft?.deckList || null;
+        if (Array.isArray(list)) viewerDeck = list.map(it => ({ cardId: String(it.cardId), quantity: Number(it.quantity) || 0 }));
+      } catch {}
+    }
+
     // Transform to match protocol format
     const tournamentInfo = {
       id: tournament.id,
@@ -45,10 +61,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
-      registeredPlayers: tournament.registrations.map(reg => ({
-        id: reg.playerId,
-        displayName: reg.player.name || 'Anonymous'
-      })),
+      registeredPlayers: tournament.registrations.map(reg => {
+        const prep = (reg.preparationData as Record<string, unknown> | null) || {};
+        return {
+          id: reg.playerId,
+          displayName: reg.player.name || 'Anonymous',
+          ready: Boolean((prep as { ready?: boolean }).ready),
+          deckSubmitted: Boolean(reg.deckSubmitted)
+        };
+      }),
       standings: tournament.standings.map(standing => ({
         playerId: standing.playerId,
         displayName: standing.displayName,
@@ -69,6 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         matches: round.matches.map(match => match.id)
       })),
       settings: tournament.settings,
+      viewerDeck,
       createdAt: tournament.createdAt.getTime()
     };
 
