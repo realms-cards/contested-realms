@@ -48,11 +48,6 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
     href: "https://www.thepaintedrealm.com/",
     subtitle: "Celebrating the Art Behind Sorcery",
   },
-  {
-    label: "Spells.bar — Open Source Deck Builder",
-    href: "https://spells.bar",
-    subtitle: "Build and share Sorcery decks",
-  },
 ];
 
 export default function OtherRealms({
