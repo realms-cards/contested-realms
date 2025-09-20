@@ -76,6 +76,8 @@ export type PermanentItem = EntityBase<CardRef> & {
   tilt?: number;
   // Optional attachment to a permanent at the same tile
   attachedTo?: { at: CellKey; index: number } | null;
+  // Generic numeric counter displayed on the card (e.g., +1 counters)
+  counters?: number; // absent/0 => no counter badge
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -179,6 +181,11 @@ export type GameState = {
     offset: [number, number]
   ) => void;
   toggleTapPermanent: (at: CellKey, index: number) => void;
+  // Generic counters on permanents
+  addCounterOnPermanent: (at: CellKey, index: number) => void; // creates or increments (1 if missing)
+  incrementPermanentCounter: (at: CellKey, index: number) => void;
+  decrementPermanentCounter: (at: CellKey, index: number) => void; // destroys when reaching 0
+  clearPermanentCounter: (at: CellKey, index: number) => void; // remove badge entirely
   // Move cards from board back to zones
   movePermanentToZone: (
     at: CellKey,
@@ -853,6 +860,112 @@ export const useGameStore = create<GameState>((set, get) => ({
       list[index] = { ...token, attachedTo: { at, index: targetIdx } };
       per[at] = list;
       get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  // --- Generic counters on permanents --------------------------------------
+  addCounterOnPermanent: (at, index) =>
+    set((s) => {
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      const cur = arr[index];
+      if (!cur) return s;
+      const nextCount = Math.max(1, Number(cur.counters || 0) + 1);
+      const next = { ...cur, counters: nextCount } as PermanentItem;
+      arr[index] = next;
+      per[at] = arr;
+      // Log first-time add vs increment
+      const cell = at.split(",");
+      const x = Number(cell[0] || 0);
+      const y = Number(cell[1] || 0);
+      const cellNo = y * s.board.size.w + x + 1;
+      get().log(`${cur.counters ? "Incremented" : "Added"} counter on '${cur.card.name}' at #${cellNo} (now ${nextCount})`);
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  incrementPermanentCounter: (at, index) =>
+    set((s) => {
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      const cur = arr[index];
+      if (!cur) return s;
+      const nextCount = Math.max(1, Number(cur.counters || 0) + 1);
+      arr[index] = { ...cur, counters: nextCount } as PermanentItem;
+      per[at] = arr;
+      // Log increment
+      {
+        const cell = at.split(",");
+        const x = Number(cell[0] || 0);
+        const y = Number(cell[1] || 0);
+        const cellNo = y * s.board.size.w + x + 1;
+        get().log(`Incremented counter on '${cur.card.name}' at #${cellNo} (now ${nextCount})`);
+      }
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  decrementPermanentCounter: (at, index) =>
+    set((s) => {
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      const cur = arr[index];
+      if (!cur) return s;
+      const curCount = Number(cur.counters || 0);
+      if (curCount <= 1) {
+        // Destroy the counter
+        const next = { ...cur } as PermanentItem;
+        delete (next as { counters?: number }).counters;
+        arr[index] = next;
+        per[at] = arr;
+        const cell = at.split(",");
+        const x = Number(cell[0] || 0);
+        const y = Number(cell[1] || 0);
+        const cellNo = y * s.board.size.w + x + 1;
+        get().log(`Removed counter from '${cur.card.name}' at #${cellNo}`);
+      } else {
+        const nextCount = curCount - 1;
+        arr[index] = { ...cur, counters: nextCount } as PermanentItem;
+        per[at] = arr;
+        // Log decrement
+        const cell = at.split(",");
+        const x = Number(cell[0] || 0);
+        const y = Number(cell[1] || 0);
+        const cellNo = y * s.board.size.w + x + 1;
+        get().log(`Decremented counter on '${cur.card.name}' at #${cellNo} (now ${nextCount})`);
+      }
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  clearPermanentCounter: (at, index) =>
+    set((s) => {
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      const cur = arr[index];
+      if (!cur || cur.counters == null) return s;
+      const next = { ...cur } as PermanentItem;
+      delete (next as { counters?: number }).counters;
+      arr[index] = next;
+      per[at] = arr;
+      const cell = at.split(",");
+      const x = Number(cell[0] || 0);
+      const y = Number(cell[1] || 0);
+      const cellNo = y * s.board.size.w + x + 1;
+      get().log(`Removed counter from '${cur.card.name}' at #${cellNo}`);
       {
         const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
         get().trySendPatch(patch);

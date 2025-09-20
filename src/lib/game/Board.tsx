@@ -1,6 +1,6 @@
 "use client";
 
-import { Text, useTexture } from "@react-three/drei";
+import { Text, useTexture, Html } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   RigidBody,
@@ -15,6 +15,7 @@ import {
   type Intersection,
   type Group,
 } from "three";
+import { NumberBadge, type Digit } from "@/components/game/manacost";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
@@ -116,6 +117,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
+  // Counter actions
+  const incrementPermanentCounter = useGameStore((s) => s.incrementPermanentCounter);
+  const decrementPermanentCounter = useGameStore((s) => s.decrementPermanentCounter);
 
   // Site edge placement functions
   const calculateEdgePosition = useGameStore((s) => s.calculateEdgePosition);
@@ -1105,6 +1109,70 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               textureUrl={!p.card?.slug ? "/api/assets/air.png" : undefined}
                             />
                           )}
+                          {/* Counter overlay (follows card) */}
+                          {(() => {
+                            const count = Math.max(0, Number(p.counters || 0));
+                            if (count <= 0) return null;
+                            const digits = Math.floor(count)
+                              .toString()
+                              .split("")
+                              .map((d) => Number(d) as Digit);
+                            // Left side center: place the badge center on the left edge so it sits half-in/half-out
+                            const leftEdgeX = -CARD_SHORT * 0.5; // center on left edge
+                            const centerZ = 0;
+                            return (
+                              <Html
+                                position={[leftEdgeX, 0.004, centerZ]}
+                                transform
+                                rotation-x={-Math.PI / 2}
+                                rotation-z={rotZ}
+                                zIndexRange={[0, 0]}
+                              >
+                                <div className="pointer-events-auto select-none">
+                                  <div className="relative inline-flex group">
+                                    <div className="flex items-center gap-0.5">
+                                      {digits.map((d, i) => (
+                                        <NumberBadge
+                                          key={i}
+                                          value={d}
+                                          size={8}
+                                          strokeWidth={2}
+                                          backgroundOpacity={0.5}
+                                        />
+                                      ))}
+                                    </div>
+                                    {/* Overlay click zones: top half increment, bottom half decrement */}
+                                    <div className="absolute inset-0 flex flex-col opacity-80">
+                                      <button
+                                        type="button"
+                                        aria-label="Increment counter"
+                                        title="Increment counter"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          incrementPermanentCounter(key, idx);
+                                        }}
+                                        className="flex-1 transition-opacity rounded-t-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30"
+                                      >
+                                        <span className="sr-only">+</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        aria-label="Decrement counter"
+                                        title="Decrement counter"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          decrementPermanentCounter(key, idx);
+                                        }}
+                                        className="flex-1 transition-opacity rounded-b-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30"
+                                      >
+                                        <span className="sr-only">-</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </Html>
+                            );
+                          })()}
                         </group>
                       </group>
                     </RigidBody>
