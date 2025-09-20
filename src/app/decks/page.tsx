@@ -94,10 +94,7 @@ export default function DecksPage() {
         </div>
       </div>
 
-      {/* Curiosa import panel */}
-      <DeckImportCuriosa />
-      {/* Plain text import panel */}
-      <DeckImportText />
+      {/* Import panels appear inline in the empty-state below to emphasize onboarding */}
 
       {loading ? (
         <div className="text-sm opacity-80">Loading decks...</div>
@@ -107,12 +104,20 @@ export default function DecksPage() {
         <>
           {/* My Decks Section */}
           {myDecks.length === 0 ? (
-            <div className="text-sm opacity-80">
-              No decks yet. Create one from the{" "}
-              <Link href="/decks/editor-3d" className="underline">
-                editor
-              </Link>{" "}
-              or save from Draft.
+            <div className="space-y-4">
+              <div className="text-sm opacity-80">
+                No decks yet. Create one from the {" "}
+                <Link href="/decks/editor-3d" className="underline">
+                  editor
+                </Link>{" "}
+                , import an existing deck below, or save from Draft.
+              </div>
+              <div className="grid gap-4">
+                {/* Curiosa import panel */}
+                <DeckImportCuriosa />
+                {/* Plain text import panel */}
+                <DeckImportText />
+              </div>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
