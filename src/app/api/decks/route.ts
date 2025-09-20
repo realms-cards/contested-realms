@@ -5,7 +5,10 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // GET /api/decks
-// Returns: { myDecks: [{ id, name, format, isPublic }], publicDecks: [{ id, name, format, userName }] }
+// Returns: {
+//   myDecks: [{ id, name, format, isPublic, imported, avatarName? }],
+//   publicDecks: [{ id, name, format, imported, userName, avatarName? }]
+// }
 export async function GET() {
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -36,15 +39,54 @@ export async function GET() {
       },
     });
 
+    // Compute avatar names for all decks in a single pass
+    const allIds = [...myDecks.map(d => d.id), ...publicDecks.map(d => d.id)];
+    const avatarNameByDeckId = new Map<string, string>();
+    if (allIds.length) {
+      // Fetch candidate cards for avatar detection (main deck zones only)
+      const deckCards = await prisma.deckCard.findMany({
+        where: { deckId: { in: allIds }, zone: { in: ['Spellbook', 'Atlas'] } },
+        select: {
+          deckId: true,
+          cardId: true,
+          setId: true,
+          variant: { select: { typeText: true } },
+          card: { select: { name: true } },
+        },
+      });
+
+      // If some rows lack variant.typeText, fall back to CardSetMetadata.type via (cardId, setId)
+      const pairs = deckCards
+        .filter((dc) => dc.setId != null)
+        .map((dc) => ({ cardId: dc.cardId, setId: dc.setId as number }));
+      const metaMap = new Map<string, string>(); // key: `${cardId}:${setId}` -> type
+      if (pairs.length) {
+        const metas = await prisma.cardSetMetadata.findMany({
+          where: { OR: pairs },
+          select: { cardId: true, setId: true, type: true },
+        });
+        for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
+      }
+
+      for (const dc of deckCards) {
+        const type = dc.variant?.typeText || (dc.setId != null ? metaMap.get(`${dc.cardId}:${dc.setId}`) : undefined) || null;
+        const isAvatar = typeof type === 'string' && type.toLowerCase().includes('avatar');
+        if (isAvatar && !avatarNameByDeckId.has(dc.deckId)) {
+          avatarNameByDeckId.set(dc.deckId, dc.card.name);
+        }
+      }
+    }
+
     const response = {
-      myDecks,
-      publicDecks: publicDecks.map(deck => ({
+      myDecks: myDecks.map((d) => ({ ...d, avatarName: avatarNameByDeckId.get(d.id) || null })),
+      publicDecks: publicDecks.map((deck) => ({
         id: deck.id,
         name: deck.name,
         format: deck.format,
         imported: deck.imported,
-        userName: deck.user.name || 'Unknown Player'
-      }))
+        userName: deck.user.name || 'Unknown Player',
+        avatarName: avatarNameByDeckId.get(deck.id) || null,
+      })),
     };
 
     return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json' } });

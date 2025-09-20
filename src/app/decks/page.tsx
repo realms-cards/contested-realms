@@ -14,6 +14,7 @@ type MyDeck = {
   format: string;
   isPublic: boolean;
   imported?: boolean;
+  avatarName?: string | null;
 };
 
 type PublicDeck = {
@@ -22,6 +23,7 @@ type PublicDeck = {
   format: string;
   imported?: boolean;
   userName: string;
+  avatarName?: string | null;
 };
 
 export default function DecksPage() {
@@ -123,6 +125,7 @@ export default function DecksPage() {
                     format: d.format,
                     isPublic: d.isPublic,
                     imported: d.imported,
+                    avatarName: d.avatarName ?? undefined,
                     updatedAt: new Date().toISOString(), // API doesn't return updatedAt in new structure
                     isOwner: true,
                   }}
@@ -145,6 +148,7 @@ export default function DecksPage() {
                       format: d.format,
                       imported: d.imported,
                       userName: d.userName,
+                      avatarName: d.avatarName ?? undefined,
                       updatedAt: new Date().toISOString(),
                       isOwner: false,
                     }}
