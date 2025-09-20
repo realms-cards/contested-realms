@@ -18,6 +18,8 @@ export interface NumberBadgeProps {
   fontScale?: number;
   /** Optional className passthrough */
   className?: string;
+  /** Background circle opacity (0–1). Default 1. */
+  backgroundOpacity?: number;
 }
 
 export function NumberBadge({
@@ -26,6 +28,7 @@ export function NumberBadge({
   strokeWidth = 8,
   fontScale = 0.62,
   className,
+  backgroundOpacity = 1,
 }: NumberBadgeProps) {
   // viewBox is 100x100; compute a radius that leaves room for the stroke
   const radius = 50 - strokeWidth / 2 - 1; // 1 unit of breathing room inside
@@ -47,6 +50,7 @@ export function NumberBadge({
         fill="#000"
         stroke="#6B7280"
         strokeWidth={strokeWidth}
+        fillOpacity={backgroundOpacity}
       />
       <text
         x={50}

@@ -19,6 +19,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const toggleTapSite = useGameStore((s) => s.toggleTapSite);
   const toggleTapPermanent = useGameStore((s) => s.toggleTapPermanent);
+  const addCounterOnPermanent = useGameStore((s) => s.addCounterOnPermanent);
+  const clearPermanentCounter = useGameStore((s) => s.clearPermanentCounter);
   const toggleTapAvatar = useGameStore((s) => s.toggleTapAvatar);
   const moveSiteToZone = useGameStore((s) => s.moveSiteToZone);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
@@ -198,6 +200,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doSearchPile: (() => void) | null = null;
   let doAttachToken: (() => void) | null = null;
   let doDetachToken: (() => void) | null = null;
+  let doToggleCounter: (() => void) | null = null;
+  let hasCounter = false;
 
   if (t.kind === "site") {
     const key = `${t.x},${t.y}`;
@@ -263,6 +267,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     const isToken = (item?.card?.type || "").toLowerCase().includes("token");
+    // Counter toggle for non-site tokens and regular permanents
+    if (item) {
+      hasCounter = (Number(item.counters || 0) > 0);
+      doToggleCounter = () => {
+        if (hasCounter) {
+          clearPermanentCounter(t.at, t.index);
+        } else {
+          addCounterOnPermanent(t.at, t.index);
+        }
+        onClose();
+      };
+    }
+
     if (isToken) {
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
@@ -446,6 +463,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   </button>
                 )}
               </div>
+            )}
+
+            {/* Counter toggle */}
+            {doToggleCounter && (
+              <button
+                className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                onClick={doToggleCounter}
+              >
+                {hasCounter ? "Remove counter" : "Add counter"}
+              </button>
             )}
 
             {/* Burrow/Submerge Actions */}
