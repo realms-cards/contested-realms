@@ -9,6 +9,8 @@ jobs:
   deploy:
     name: Deploy to DigitalOcean
     runs-on: ubuntu-latest
+    environment:
+      name: Production
     env:
       DO_HOST: ${{ secrets.DO_PROD_HOST }}
       DO_USER: ${{ secrets.DO_PROD_USER }}
