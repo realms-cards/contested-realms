@@ -1330,13 +1330,14 @@ function getMatchInfo(match) {
     id: match.id,
     lobbyId: match.lobbyId || undefined,
     lobbyName: match.lobbyName || undefined,
+    tournamentId: match.tournamentId || undefined,
     players: match.playerIds.map(getPlayerInfo).filter(Boolean),
     status: match.status,
     seed: match.seed,
     turn: match.turn,
     winnerId: match.winnerId ?? null,
     matchType: match.matchType || "constructed",
-    sealedConfig: match.sealedConfig,
+    sealedConfig: match.sealedConfig ? normalizeSealedConfig(match.sealedConfig) : null,
     draftConfig: match.draftConfig,
     deckSubmissions: match.playerDecks
       ? Array.from(match.playerDecks.keys())
@@ -2188,6 +2189,7 @@ io.on("connection", (socket) => {
     const playerIds = Array.isArray(payload && payload.playerIds) ? payload.playerIds.filter(Boolean).map(String) : [];
     const matchType = (payload && payload.matchType) || 'constructed';
     const lobbyName = (payload && payload.lobbyName) || null;
+    const tournamentId = payload && payload.tournamentId ? String(payload.tournamentId) : null;
     const sealedConfig = payload && payload.sealedConfig ? payload.sealedConfig : null;
     const draftConfig = payload && payload.draftConfig ? payload.draftConfig : null;
     if (!matchId || playerIds.length < 1) return;
@@ -2199,6 +2201,7 @@ io.on("connection", (socket) => {
         id: matchId,
         lobbyId: null,
         lobbyName,
+        tournamentId,
         playerIds: [...new Set(playerIds)],
         status:
           matchType === 'sealed' ? 'deck_construction' :
@@ -2225,6 +2228,10 @@ io.on("connection", (socket) => {
       // Ensure provided players are present
       for (const pid of playerIds) {
         if (!match.playerIds.includes(pid)) match.playerIds.push(pid);
+      }
+      // Adopt tournament context if provided and not already set
+      if (!match.tournamentId && tournamentId) {
+        match.tournamentId = tournamentId;
       }
     }
 

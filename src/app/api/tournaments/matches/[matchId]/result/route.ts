@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
-import { updateStandingsAfterMatch, generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
+import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
 
@@ -178,55 +178,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
             console.warn('Failed to broadcast tournament completion:', socketError);
           }
         } else {
-          // Start the next round automatically
-          const nextRoundNumber = (match.round?.roundNumber || 0) + 1;
-          const newRound = await prisma.tournamentRound.create({
-            data: {
-              tournamentId: match.tournament.id,
-              roundNumber: nextRoundNumber,
-              status: 'pending'
-            }
-          });
-          const pairings = await generatePairings(match.tournament.id, nextRoundNumber);
-          const matchIds = await createRoundMatches(match.tournament.id, newRound.id, pairings);
-          await prisma.tournamentRound.update({ where: { id: newRound.id }, data: { status: 'active', startedAt: new Date() } });
-
+          // Manual next round: do not auto-create a new round. Host will trigger /next-round.
           try {
-            const createdMatches = await prisma.match.findMany({ where: { id: { in: matchIds } }, select: { id: true, players: true } });
-            const broadcastMatches = createdMatches.map((m) => {
-              const players = (m.players as Array<{ id: string; displayName?: string; name?: string }>);
-              const p1 = players?.[0];
-              const p2 = players?.[1];
-              return {
-                id: m.id,
-                player1Id: p1?.id || '',
-                player1Name: (p1?.displayName || p1?.name || 'Player 1'),
-                player2Id: p2?.id || null,
-                player2Name: (p2?.displayName || p2?.name || null)
-              };
-            });
-            await tournamentSocketService.broadcastRoundStarted(match.tournament.id, nextRoundNumber, broadcastMatches);
-            const t = await prisma.tournament.findUnique({ where: { id: match.tournament.id }, select: { name: true } });
-            const tName = t?.name || 'Tournament Match';
-            for (const m of broadcastMatches) {
-              await tournamentSocketService.broadcastMatchAssigned(match.tournament.id, m.player1Id, {
-                matchId: m.id,
-                opponentId: m.player2Id,
-                opponentName: m.player2Name,
-                lobbyName: tName,
-              });
-              if (m.player2Id) {
-                await tournamentSocketService.broadcastMatchAssigned(match.tournament.id, m.player2Id, {
-                  matchId: m.id,
-                  opponentId: m.player1Id,
-                  opponentName: m.player1Name,
-                  lobbyName: tName,
-                });
-              }
-            }
             await tournamentSocketService.broadcastTournamentUpdateById(match.tournament.id);
           } catch (socketErr2) {
-            console.warn('Failed to broadcast next round start:', socketErr2);
+            console.warn('Failed to broadcast tournament update after round completion:', socketErr2);
           }
         }
       }

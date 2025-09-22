@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRealtimeTournaments } from '@/contexts/RealtimeTournamentContext';
 
 interface Tournament {
@@ -53,8 +53,13 @@ export default function TournamentDetailsPage() {
   const [leaving, setLeaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
   
   const [activeTab, setActiveTab] = useState<'overview' | 'standings' | 'rounds'>('overview');
+  // Round/match flow helpers
+  const [startingRound, setStartingRound] = useState(false);
+  const [joinPrompt, setJoinPrompt] = useState<{ open: boolean; matchId: string | null }>({ open: false, matchId: null });
+  const prevMyMatchIdRef = useRef<string | null>(null);
 
   // Redirect unauthenticated users to signin
   useEffect(() => {
@@ -101,10 +106,34 @@ export default function TournamentDetailsPage() {
 
   // Choose tournament reference for below sections
   const tournament = derivedTournament;
+  // Derived helpers: my standing and match id
+  const myStanding = useMemo(() => statistics?.standings?.find(s => s.playerId === session?.user?.id), [statistics?.standings, session?.user?.id]);
+  const myMatchId = useMemo(() => (myStanding?.currentMatchId ? String(myStanding.currentMatchId) : null), [myStanding?.currentMatchId]);
+  // Round helpers
+  const rounds = useMemo(() => statistics?.rounds || [], [statistics?.rounds]);
+  const activeRound = rounds.find(r => r.status === 'active') || null;
+  const maxRoundNumber = rounds.length ? Math.max(...rounds.map(r => (typeof r.roundNumber === 'number' ? r.roundNumber : 0))) : 0;
+  const lastCompletedRoundNumber = useMemo(() => {
+    const list = (rounds || [])
+      .map((r) => r as unknown as { roundNumber?: number; status?: string })
+      .filter((r) => r.status === 'completed' && typeof r.roundNumber === 'number')
+      .map((r) => r.roundNumber as number);
+    return list.length ? Math.max(...list) : 0;
+  }, [rounds]);
   const [viewerDeckCards, setViewerDeckCards] = useState<Array<{ cardId: number; name: string; slug: string; setName: string; quantity: number }>>([]);
   const [viewerDeckLoaded, setViewerDeckLoaded] = useState(false);
   const [checkedDirect, setCheckedDirect] = useState(false);
   const [showDeckDetails, setShowDeckDetails] = useState(false);
+  // Constructed preparation state
+  const [constructedLoading, setConstructedLoading] = useState(false);
+  const [constructedError, setConstructedError] = useState<string | null>(null);
+  const [constructedDecks, setConstructedDecks] = useState<Array<{ id: string; name: string; format?: string }>>([]);
+  const [constructedPublicDecks, setConstructedPublicDecks] = useState<Array<{ id: string; name: string; format?: string }>>([]);
+  const [constructedSelectedDeckId, setConstructedSelectedDeckId] = useState<string | null>(null);
+  const [constructedAllowedFormats, setConstructedAllowedFormats] = useState<string[]>([]);
+  const constructedPanelRef = useRef<HTMLDivElement | null>(null);
+  const [constructedModalOpen, setConstructedModalOpen] = useState(false);
+  const [includePublicDecks, setIncludePublicDecks] = useState(false);
 
   // Fallback: if list hasn't provided the tournament yet, attempt fetching by id directly once
   useEffect(() => {
@@ -133,11 +162,15 @@ export default function TournamentDetailsPage() {
     return Array.isArray(rp) ? rp.length : 0;
   }
 
-  // Check if current user is registered
-  const isRegistered = Boolean(
-    tournament && session?.user?.id &&
-    statistics?.standings.some(s => s.playerId === session.user?.id)
-  );
+  // Check if current user is registered (prefer explicit registrations over standings)
+  const isRegistered = useMemo(() => {
+    const userId = session?.user?.id;
+    if (!tournament || !userId) return false;
+    const rp = (tournament as unknown as { registeredPlayers?: Array<{ id: string }> }).registeredPlayers || [];
+    if (Array.isArray(rp) && rp.some(p => p.id === userId)) return true;
+    // Fallback for active phase when registrations may not be present
+    return Boolean(statistics?.standings?.some(s => s.playerId === userId));
+  }, [tournament, statistics?.standings, session?.user?.id]);
   
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
@@ -179,7 +212,182 @@ export default function TournamentDetailsPage() {
         setViewerDeckCards([]);
       }
     })();
-  }, [tournament?.id, viewerDeckLoaded]);
+  }, [tournament, tournament?.id, viewerDeckLoaded]);
+
+  // Ping players when a new match assignment appears for them
+  useEffect(() => {
+    if (!tournament) return;
+    if (tournament.status !== 'active') return;
+    const curr = myMatchId ?? null;
+    const prev = prevMyMatchIdRef.current;
+    if (curr && curr !== prev) {
+      setJoinPrompt({ open: true, matchId: curr });
+      try {
+        localStorage.setItem('app:toast', 'Your tournament match is ready');
+        window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Your tournament match is ready' } }));
+      } catch {}
+    }
+    prevMyMatchIdRef.current = curr;
+  }, [tournament, tournament?.status, myMatchId]);
+
+  // Load constructed deck choices when in preparing + constructed
+  useEffect(() => {
+    (async () => {
+      try {
+        setConstructedError(null);
+        if (!tournament || tournament.status !== 'preparing' || tournament.format !== 'constructed') return;
+        if (!isRegistered) return;
+        setConstructedLoading(true);
+        // Ensure preparation has started (ignore errors if already started)
+        try {
+          await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/start`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+          });
+        } catch {}
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/constructed/decks?includePublic=${includePublicDecks ? 'true' : 'false'}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Failed to load constructed decks');
+        const decks = Array.isArray(data?.myDecks) ? data.myDecks as Array<{ id: string; name: string; format?: string }> : (Array.isArray(data?.availableDecks) ? data.availableDecks as Array<{ id: string; name: string; format?: string }> : []);
+        const pubDecks = Array.isArray(data?.publicDecks) ? data.publicDecks as Array<{ id: string; name: string; format?: string }> : [];
+        const selected = (data?.selectedDeckId ? String(data.selectedDeckId) : null);
+        const allowed = Array.isArray(data?.allowedFormats) ? data.allowedFormats as string[] : [];
+        setConstructedDecks(decks);
+        setConstructedPublicDecks(pubDecks);
+        setConstructedSelectedDeckId(selected);
+        setConstructedAllowedFormats(allowed);
+      } catch (e) {
+        setConstructedError(e instanceof Error ? e.message : 'Failed to load constructed decks');
+        setConstructedDecks([]);
+        setConstructedPublicDecks([]);
+      } finally {
+        setConstructedLoading(false);
+      }
+    })();
+  }, [tournament, tournament?.id, tournament?.status, tournament?.format, isRegistered, includePublicDecks]);
+
+  const handleSubmitConstructedDeck = async (deckId: string, isPublic: boolean = false) => {
+    if (!tournament) return;
+    setConstructedError(null);
+    setConstructedLoading(true);
+    try {
+      // Ensure prep is started (ignore if already)
+      try {
+        await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      } catch {}
+      let finalDeckId = deckId;
+      if (isPublic) {
+        // Clone and select via constructed/decks POST (handles cloning and updating preparation data)
+        const selectRes = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/constructed/decks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deckId })
+        });
+        const selData = await selectRes.json();
+        if (!selectRes.ok) throw new Error(selData?.error || 'Failed to select public deck');
+        finalDeckId = (selData?.selectedDeck?.id as string) || finalDeckId;
+        // Optionally broadcast readiness via submit route for consistent events
+        try {
+          await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/submit`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preparationData: { constructed: { deckSelected: true, deckValidated: true, deckId: finalDeckId } } })
+          });
+        } catch {}
+      } else {
+        // Owned deck: submit constructed selection so server can transition when all submitted
+        const submitRes = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preparationData: { constructed: { deckSelected: true, deckValidated: true, deckId } } })
+        });
+        const submitData = await submitRes.json();
+        if (!submitRes.ok) throw new Error(submitData?.error || 'Failed to submit deck');
+      }
+      setConstructedSelectedDeckId(finalDeckId);
+      try {
+        localStorage.setItem(`constructed_submitted_tournament_${tournament.id}`, 'true');
+        window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Constructed deck submitted!' } }));
+      } catch {}
+      // Ask stats to refresh
+      try { statistics?.actions?.refreshAll?.(); } catch {}
+    } catch (e) {
+      setConstructedError(e instanceof Error ? e.message : 'Failed to submit deck');
+    } finally {
+      setConstructedLoading(false);
+    }
+  };
+
+  // Helper: start/join a specific match id (bootstrap online match with tournament context)
+  const startJoinMatch = async (matchId: string) => {
+    if (!tournament) return;
+    try {
+      // Load matches to find roster for this match
+      const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/matches`);
+      if (res.ok) {
+        const data = await res.json();
+        const match = Array.isArray(data?.matches) ? data.matches.find((m: { id: string }) => m.id === matchId) : null;
+        if (match && Array.isArray(match.players)) {
+          // Determine match type from tournament settings/format
+          const tSettings = (tournament as unknown as { settings?: Record<string, unknown> }).settings || {};
+          const matchType = (tournament.format as 'constructed'|'sealed'|'draft') || 'constructed';
+          // Try to include sealed/draft configs
+          let sealedConfig = (tSettings as { sealedConfig?: unknown }).sealedConfig || null;
+          let draftConfig = (tSettings as { draftConfig?: unknown }).draftConfig || null;
+          if (!sealedConfig && !draftConfig) {
+            try {
+              const detailRes = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}`);
+              if (detailRes.ok) {
+                const detail = await detailRes.json();
+                sealedConfig = detail?.settings?.sealedConfig || null;
+                draftConfig = detail?.settings?.draftConfig || null;
+              }
+            } catch {}
+          }
+          if (matchType === 'sealed' && !sealedConfig) {
+            sealedConfig = { packCounts: { Beta: 6 }, timeLimit: 40, replaceAvatars: false };
+          }
+          if (matchType === 'draft' && !draftConfig) {
+            draftConfig = { setMix: ['Beta'], packCount: 3, packSize: 15, packCounts: { Beta: 3 } };
+          }
+          const payload = {
+            players: match.players.map((p: { id: string }) => p.id),
+            matchType,
+            lobbyName: tournament.name,
+            sealedConfig,
+            draftConfig,
+            tournamentId: String(tournament.id),
+          };
+          try { localStorage.setItem(`tournamentMatchBootstrap_${matchId}`, JSON.stringify(payload)); } catch {}
+        }
+      }
+    } catch {}
+    try { window.location.href = `/online/play/${encodeURIComponent(matchId)}`; } catch {}
+  };
+
+  // Creator-only: start next round and pair players
+  const handleStartNextRound = async () => {
+    if (!tournament || !isCreator) return;
+    setStartingRound(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/next-round`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to start next round');
+      try {
+        const msg = `Round ${data?.roundNumber ?? ''} started`;
+        localStorage.setItem('app:toast', msg);
+        window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
+      } catch {}
+      try { statistics?.actions?.refreshAll?.(); } catch {}
+    } catch (err) {
+      console.error('Failed to start next round:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start next round');
+    } finally {
+      setStartingRound(false);
+    }
+  };
 
   const handleJoinTournament = async () => {
     if (!session || !tournament) return;
@@ -329,6 +537,31 @@ export default function TournamentDetailsPage() {
       {toast && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded bg-black/70 border border-white/20 text-sm shadow-lg">
           {toast}
+        </div>
+      )}
+      {/* Creator Sticky: Start next round banner */}
+      {tournament.status === 'active' && isCreator && !activeRound && (
+        <div className="fixed inset-x-0 bottom-0 z-40">
+          <div className="container mx-auto px-4 pb-4">
+            <div className="rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
+              <div className="text-indigo-100 text-sm">
+                {rounds.length > 0 ? (
+                  <span>
+                    Round {lastCompletedRoundNumber} completed. Start next round when ready.
+                  </span>
+                ) : (
+                  <span>Tournament is active. Start Round 1 when you&apos;re ready.</span>
+                )}
+              </div>
+              <button
+                onClick={handleStartNextRound}
+                disabled={startingRound}
+                className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {startingRound ? 'Starting…' : `Start Round ${Math.max(1, maxRoundNumber + 1)}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <div className="container mx-auto px-4 py-8">
@@ -525,20 +758,153 @@ export default function TournamentDetailsPage() {
                   </button>
                   );
                 })()}
+                {tournament.format === 'constructed' && (
+                  <button
+                    onClick={async () => {
+                      // Emphasize the deck panel and scroll into view
+                      try {
+                        localStorage.setItem('app:toast', 'Load and select your constructed deck below');
+                        window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Load and select your constructed deck below' } }));
+                      } catch {}
+                      try { constructedPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
+                      // Additionally open a modal to avoid confusion if the inline panel is off-screen or not visible yet
+                      setConstructedModalOpen(true);
+                      // Ensure preparation is started (idempotent) and refresh deck list
+                      try {
+                        await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                      } catch {}
+                      try {
+                        setConstructedLoading(true);
+                        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/constructed/decks?includePublic=${includePublicDecks ? 'true' : 'false'}`);
+                        const data = await res.json();
+                        if (res.ok) {
+                          const decks = Array.isArray(data?.availableDecks) ? data.availableDecks as Array<{ id: string; name: string; format?: string }> : [];
+                          const selected = (data?.selectedDeckId ? String(data.selectedDeckId) : null);
+                          const allowed = Array.isArray(data?.allowedFormats) ? data.allowedFormats as string[] : [];
+                          setConstructedDecks(decks);
+                          const pubDecks = Array.isArray(data?.publicDecks) ? data.publicDecks as Array<{ id: string; name: string; format?: string }> : [];
+                          setConstructedPublicDecks(pubDecks);
+                          setConstructedSelectedDeckId(selected);
+                          setConstructedAllowedFormats(allowed);
+                        } else {
+                          setConstructedError(data?.error || 'Failed to load constructed decks');
+                        }
+                      } catch (err) {
+                        setConstructedError(err instanceof Error ? err.message : 'Failed to load constructed decks');
+                      } finally {
+                        setConstructedLoading(false);
+                      }
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    Load Decks
+                  </button>
+                )}
               </div>
             )}
           </div>
         )}
 
+        {/* Constructed deck loader (only when preparing + constructed) */}
+        {tournament.status === 'preparing' && tournament.format === 'constructed' && isRegistered && (
+          <div ref={constructedPanelRef} className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20">
+            <div className="p-4 flex items-center justify-between">
+              <div className="text-emerald-200">
+                <div className="font-semibold">Select Your Constructed Deck</div>
+                <div className="text-sm opacity-80">This deck will be used for all matches in this tournament.</div>
+              </div>
+              {constructedSelectedDeckId ? (
+                <span className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm" title="Deck submitted">
+                  Deck submitted
+                </span>
+              ) : null}
+            </div>
+            <div className="px-4 pb-4">
+              {constructedError && (
+                <div className="mb-3 text-sm text-red-300">{constructedError}</div>
+              )}
+              <div className="text-xs text-emerald-200/80 mb-2">
+                Allowed formats: {constructedAllowedFormats.length ? constructedAllowedFormats.join(', ') : 'standard'}
+              </div>
+              <label className="flex items-center gap-2 text-xs text-emerald-200/80 mb-3">
+                <input type="checkbox" className="accent-emerald-600" checked={includePublicDecks} onChange={(e) => setIncludePublicDecks(e.target.checked)} />
+                Include public decks
+              </label>
+              {constructedLoading ? (
+                <div className="text-emerald-200/80 text-sm">Loading your decks…</div>
+              ) : (constructedDecks.length || constructedPublicDecks.length) ? (
+                <div className="space-y-4">
+                  {constructedDecks.length > 0 && (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">My Decks</div>
+                      <div className="space-y-2">
+                        {constructedDecks.map((d) => (
+                          <div key={`my-${d.id}`} className={`flex items-center justify-between px-3 py-2 rounded ${constructedSelectedDeckId === d.id ? 'bg-emerald-600/20 ring-1 ring-emerald-500/30' : 'bg-slate-800/40'}`}>
+                            <div className="text-sm text-slate-200">
+                              <div className="font-medium">{d.name}</div>
+                              <div className="text-xs text-slate-400">{d.format || 'constructed'}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {constructedSelectedDeckId === d.id ? (
+                                <span className="text-emerald-300 text-xs">Selected</span>
+                              ) : (
+                                <button
+                                  onClick={() => handleSubmitConstructedDeck(d.id, false)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                  disabled={constructedLoading}
+                                >
+                                  Select
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {includePublicDecks && constructedPublicDecks.length > 0 && (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">Public Decks</div>
+                      <div className="space-y-2">
+                        {constructedPublicDecks.map((d) => (
+                          <div key={`pub-${d.id}`} className={`flex items-center justify-between px-3 py-2 rounded ${constructedSelectedDeckId === d.id ? 'bg-emerald-600/20 ring-1 ring-emerald-500/30' : 'bg-slate-800/40'}`}>
+                            <div className="text-sm text-slate-200">
+                              <div className="font-medium">{d.name}</div>
+                              <div className="text-xs text-slate-400">{d.format || 'constructed'}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {constructedSelectedDeckId === d.id ? (
+                                <span className="text-emerald-300 text-xs">Selected</span>
+                              ) : (
+                                <button
+                                  onClick={() => handleSubmitConstructedDeck(d.id, true)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                  disabled={constructedLoading}
+                                >
+                                  Select
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-emerald-200/80 text-sm">No decks found. Create a constructed deck in the Decks section first.</div>
+              )}
+            </div>
+          </div>
+        )}
+
         {tournament.status === 'active' && isRegistered && (() => {
-          const myStanding = statistics?.standings.find(s => s.playerId === session?.user?.id);
-          const myMatchId = myStanding?.currentMatchId;
           if (!myMatchId) return null;
           return (
             <div className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20 p-4 flex items-center justify-between">
               <div className="text-slate-200">Your match is ready. Join when you are set.</div>
               <button
-                onClick={() => { try { window.location.href = `/online/play/${encodeURIComponent(String(myMatchId))}`; } catch {} }}
+                onClick={async () => { await startJoinMatch(String(myMatchId)); }}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md text-sm"
               >
                 Join Match
@@ -546,6 +912,63 @@ export default function TournamentDetailsPage() {
             </div>
           );
         })()}
+
+        {/* Round Controls and Current Matches */}
+        {tournament.status === 'active' && (
+          <div className="mb-6">
+            <div className="rounded-lg border border-indigo-700 bg-indigo-900/20 p-4 flex items-center justify-between">
+              <div className="text-slate-200">
+                {activeRound ? (
+                  <span>Round {activeRound.roundNumber} in progress.</span>
+                ) : (
+                  <span>No active round yet.</span>
+                )}
+              </div>
+              {isCreator && !activeRound && (
+                <button
+                  onClick={handleStartNextRound}
+                  disabled={startingRound}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {startingRound ? 'Starting…' : `Start Round ${Math.max(1, maxRoundNumber + 1)}`}
+                </button>
+              )}
+            </div>
+
+            {activeRound && (
+              <div className="mt-4 bg-slate-800 border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Round {activeRound.roundNumber} Matches</h3>
+                {Array.isArray((activeRound as unknown as { matches?: Array<{ id: string; players?: Array<{ id: string; name: string }> }> }).matches) && (activeRound as unknown as { matches: Array<{ id: string; players?: Array<{ id: string; name: string }> }> }).matches.length > 0 ? (
+                  <div className="space-y-2">
+                    {(activeRound as unknown as { matches: Array<{ id: string; players?: Array<{ id: string; name: string }> }> }).matches.map((m) => {
+                      const isMine = myMatchId && String(m.id) === String(myMatchId);
+                      const players = Array.isArray(m.players) ? m.players : [];
+                      const names = players.map(p => p.name).join(' vs ');
+                      return (
+                        <div key={m.id} className={`flex items-center justify-between px-3 py-2 rounded ${isMine ? 'bg-emerald-600/20 ring-1 ring-emerald-500/30' : 'bg-slate-800/40'}`}>
+                          <div className="text-sm text-slate-200">
+                            {names || m.id}
+                            {isMine && <span className="text-emerald-400 text-xs ml-2">(Your match)</span>}
+                          </div>
+                          {isMine && (
+                            <button
+                              onClick={() => startJoinMatch(String(m.id))}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                            >
+                              Join
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-slate-400">No matches in this round.</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -657,6 +1080,56 @@ export default function TournamentDetailsPage() {
                 )}
               </div>
             </div>
+
+            {/* Completed Tournament Summary */}
+            {tournament.status === 'completed' && (
+              <div className="bg-emerald-900/20 border border-emerald-700 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-emerald-200 mb-4">Tournament Completed</h3>
+                {statistics && statistics.standings && statistics.standings.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Winner */}
+                    <div className="flex items-center justify-between bg-emerald-800/30 rounded-md p-4 border border-emerald-700/50">
+                      <div className="text-emerald-200 text-base">Winner</div>
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-emerald-300">
+                          {statistics.standings[0]?.playerName}
+                        </div>
+                        <div className="text-sm text-emerald-200/80">
+                          {statistics.standings[0]?.matchPoints} pts · {statistics.standings[0]?.wins}-{statistics.standings[0]?.losses}-{statistics.standings[0]?.draws}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Placements (Top 3) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {statistics.standings.slice(0, 3).map((s, idx) => (
+                        <div key={s.playerId} className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
+                          <div className="text-slate-400 text-sm">#{idx + 1}</div>
+                          <div className="text-white font-semibold">{s.playerName}</div>
+                          <div className="text-slate-300 text-sm">{s.matchPoints} pts · {s.wins}-{s.losses}-{s.draws}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Key statistics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
+                        <div className="text-slate-400 text-sm">Players</div>
+                        <div className="text-white text-lg font-semibold">{statistics.overview.totalPlayers}</div>
+                      </div>
+                      <div className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
+                        <div className="text-slate-400 text-sm">Rounds</div>
+                        <div className="text-white text-lg font-semibold">{statistics.overview.totalRounds}</div>
+                      </div>
+                      <div className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
+                        <div className="text-slate-400 text-sm">Matches</div>
+                        <div className="text-white text-lg font-semibold">{statistics.overview.completedMatches}/{statistics.overview.totalMatches}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-emerald-200/80">Final standings will appear here.</div>
+                )}
+              </div>
+            )}
 
             {tournament.status === 'registering' && (
               <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-6">
@@ -803,6 +1276,127 @@ export default function TournamentDetailsPage() {
           </div>
         </div>
       </div>
+      {/* Join Prompt Overlay */}
+      {/* Constructed Decks Modal */}
+      {constructedModalOpen && tournament.status === 'preparing' && tournament.format === 'constructed' && isRegistered && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-lg shadow-xl">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-white text-lg font-semibold">Select Your Constructed Deck</div>
+              <button onClick={() => setConstructedModalOpen(false)} className="text-slate-300 hover:text-white">✕</button>
+            </div>
+            {constructedError && (
+              <div className="mb-3 text-sm text-red-300">{constructedError}</div>
+            )}
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs text-emerald-200/80">
+                Allowed formats: {constructedAllowedFormats.length ? constructedAllowedFormats.join(', ') : 'standard'}
+              </div>
+              <label className="flex items-center gap-2 text-xs text-emerald-200/80">
+                <input type="checkbox" className="accent-emerald-600" checked={includePublicDecks} onChange={async (e) => {
+                  setIncludePublicDecks(e.target.checked);
+                  try {
+                    setConstructedLoading(true);
+                    const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/constructed/decks?includePublic=${e.target.checked ? 'true' : 'false'}`);
+                    const data = await res.json();
+                    if (res.ok) {
+                      const decks = Array.isArray(data?.myDecks) ? data.myDecks as Array<{ id: string; name: string; format?: string }> : (Array.isArray(data?.availableDecks) ? data.availableDecks as Array<{ id: string; name: string; format?: string }> : []);
+                      const pubDecks = Array.isArray(data?.publicDecks) ? data.publicDecks as Array<{ id: string; name: string; format?: string }> : [];
+                      setConstructedDecks(decks);
+                      setConstructedPublicDecks(pubDecks);
+                    }
+                  } catch {}
+                  finally { setConstructedLoading(false); }
+                }} />
+                Include public decks
+              </label>
+            </div>
+            {constructedLoading ? (
+              <div className="text-emerald-200/80 text-sm">Loading your decks…</div>
+            ) : (constructedDecks.length || constructedPublicDecks.length) ? (
+              <div className="space-y-4 max-h-80 overflow-auto pr-1">
+                {constructedDecks.length > 0 && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">My Decks</div>
+                    <div className="space-y-2">
+                      {constructedDecks.map((d) => (
+                        <div key={`my-modal-${d.id}`} className={`flex items-center justify-between px-3 py-2 rounded ${constructedSelectedDeckId === d.id ? 'bg-emerald-600/20 ring-1 ring-emerald-500/30' : 'bg-slate-800/40'}`}>
+                          <div className="text-sm text-slate-200">
+                            <div className="font-medium">{d.name}</div>
+                            <div className="text-xs text-slate-400">{d.format || 'constructed'}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {constructedSelectedDeckId === d.id ? (
+                              <span className="text-emerald-300 text-xs">Selected</span>
+                            ) : (
+                              <button
+                                onClick={async () => { await handleSubmitConstructedDeck(d.id, false); setConstructedModalOpen(false); }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                disabled={constructedLoading}
+                              >
+                                Select
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {includePublicDecks && constructedPublicDecks.length > 0 && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">Public Decks</div>
+                    <div className="space-y-2">
+                      {constructedPublicDecks.map((d) => (
+                        <div key={`pub-modal-${d.id}`} className={`flex items-center justify-between px-3 py-2 rounded ${constructedSelectedDeckId === d.id ? 'bg-emerald-600/20 ring-1 ring-emerald-500/30' : 'bg-slate-800/40'}`}>
+                          <div className="text-sm text-slate-200">
+                            <div className="font-medium">{d.name}</div>
+                            <div className="text-xs text-slate-400">{d.format || 'constructed'}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {constructedSelectedDeckId === d.id ? (
+                              <span className="text-emerald-300 text-xs">Selected</span>
+                            ) : (
+                              <button
+                                onClick={async () => { await handleSubmitConstructedDeck(d.id, true); setConstructedModalOpen(false); }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                disabled={constructedLoading}
+                              >
+                                Select
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-emerald-200/80 text-sm">
+                No decks found. Create a constructed deck in the <a className="underline" href="/decks">Decks</a> section first.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Join Prompt Overlay */}
+      {joinPrompt.open && joinPrompt.matchId && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-md shadow-xl">
+            <div className="text-white text-lg font-semibold mb-2">Your match is ready</div>
+            <div className="text-slate-300 mb-4">Round {activeRound?.roundNumber ?? ''} has been paired. Join your match when ready.</div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setJoinPrompt({ open: false, matchId: null })} className="px-4 py-2 rounded-md bg-slate-700 text-white">
+                Later
+              </button>
+              <button onClick={() => { void startJoinMatch(String(joinPrompt.matchId)); setJoinPrompt({ open: false, matchId: null }); }} className="px-4 py-2 rounded-md bg-emerald-600 text-white">
+                Join Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

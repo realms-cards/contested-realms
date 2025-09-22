@@ -34,6 +34,13 @@ const SubmitPreparationRequestSchema = z.object({
 
 export const dynamic = 'force-dynamic';
 
+// Minimum total cards required for a limited deck (Avatar + 24 Spells + 12 Sites = 37)
+const MIN_DECK_CARDS = 37;
+
+function getTotalCards(deckList: Array<{ cardId: string; quantity: number }>) {
+  return deckList.reduce((sum, card) => sum + (Number(card.quantity) || 0), 0);
+}
+
 // POST /api/tournaments/[id]/preparation/submit
 // Submit preparation data (deck, draft picks, etc.)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -90,7 +97,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
         
         const sealedData = preparationData.sealed;
-        isComplete = sealedData.packsOpened && sealedData.deckBuilt && sealedData.deckList.length >= 40;
+        {
+          const total = getTotalCards(sealedData.deckList);
+          isComplete = sealedData.packsOpened && sealedData.deckBuilt && total >= MIN_DECK_CARDS;
+        }
         deckSubmitted = isComplete;
         
         if (isComplete && !validateDeckList(sealedData.deckList)) {
@@ -104,7 +114,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
         
         const draftData = preparationData.draft;
-        isComplete = draftData.draftCompleted && draftData.deckBuilt && draftData.deckList.length >= 40;
+        {
+          const total = getTotalCards(draftData.deckList);
+          isComplete = draftData.draftCompleted && draftData.deckBuilt && total >= MIN_DECK_CARDS;
+        }
         deckSubmitted = isComplete;
         
         if (isComplete && !validateDeckList(draftData.deckList)) {
@@ -244,25 +257,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Helper function to validate deck list
 function validateDeckList(deckList: Array<{ cardId: string; quantity: number }>) {
-  if (deckList.length < 40) return false;
-  
-  const totalCards = deckList.reduce((sum, card) => sum + card.quantity, 0);
-  if (totalCards < 40) return false;
-  
-  // Check for invalid quantities (max 4 of any card except basic lands)
+  const totalCards = getTotalCards(deckList);
+  if (totalCards < MIN_DECK_CARDS) return false;
+  // Basic sanity checks: positive integer quantities
   for (const card of deckList) {
-    if (card.quantity > 4 && !isBasicLand(card.cardId)) {
-      return false;
-    }
+    if (!Number.isInteger(card.quantity) || card.quantity <= 0) return false;
   }
-  
+  // Detailed legality (copy limits, composition) is enforced by the deck editor and match server.
   return true;
-}
-
-// Helper function to check if a card is a basic land
-function isBasicLand(cardId: string) {
-  const basicLands = ['mountain', 'island', 'forest', 'plains', 'swamp'];
-  return basicLands.includes(cardId.toLowerCase());
 }
 
 // Helper function to check if tournament should transition to active phase

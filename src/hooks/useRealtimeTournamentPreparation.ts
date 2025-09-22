@@ -55,7 +55,7 @@ interface RealtimePreparationState {
   error: string | null;
 }
 
-export function useRealtimeTournamentPreparation(tournamentId: string) {
+export function useRealtimeTournamentPreparation(tournamentId: string, opts?: { isConnected?: boolean; pollIntervalMs?: number }) {
   const [state, setState] = useState<RealtimePreparationState>({
     status: 'notStarted',
     playersReady: 0,
@@ -387,10 +387,23 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
   // Auto-refresh preparation status periodically (backup to real-time)
   useEffect(() => {
     refreshStatus();
-    
-    const interval = setInterval(refreshStatus, 10000); // Poll every 10 seconds as backup
-    return () => clearInterval(interval);
-  }, [refreshStatus]);
+    const pollMs = opts?.pollIntervalMs ?? 20000;
+    let id: number | null = null;
+    const start = () => {
+      if (opts?.isConnected) return; // don't poll when socket is connected
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (id != null) return;
+      id = window.setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        void refreshStatus();
+      }, pollMs);
+    };
+    const stop = () => { if (id != null) { clearInterval(id); id = null; } };
+    start();
+    const onVis = () => { stop(); start(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+    return () => { stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis); };
+  }, [refreshStatus, opts?.isConnected, opts?.pollIntervalMs]);
 
   return {
     ...state,

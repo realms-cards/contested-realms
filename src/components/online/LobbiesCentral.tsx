@@ -248,6 +248,7 @@ function TournamentMatchesModal({
                                             lobbyName: (tObj?.name as string | undefined) || undefined,
                                             sealedConfig,
                                             draftConfig,
+                                            tournamentId: String(tObj?.id || ''),
                                           };
                                           localStorage.setItem(`tournamentMatchBootstrap_${m.id}`, JSON.stringify(payload));
                                           window.location.href = `/online/play/${encodeURIComponent(m.id)}`;
