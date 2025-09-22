@@ -26,6 +26,10 @@ body {
   color: var(--foreground);
   /* Console monospace feel by default; accent font via .font-fantaisie */
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  margin: 0;
+  /* Ensure all views can occupy the full available viewport height */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Global: disable text selection by default; allow opt-in where needed */
