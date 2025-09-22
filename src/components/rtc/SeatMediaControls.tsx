@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, CameraOff, Mic, MicOff, RefreshCw, Settings, Video, PhoneOff, Volume2, VolumeX } from "lucide-react";
+import { Camera, CameraOff, Mic, MicOff, RefreshCw, Settings, Video, PhoneOff, Volume2, VolumeX, Phone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 
@@ -36,6 +36,7 @@ export default function SeatMediaControls({
   onTogglePlayback,
   renderAudioElement = true,
   showSpeakerToggle,
+  menuAlignment = 'left',
 }: {
   rtc: SeatRtcLike;
   className?: string;
@@ -43,6 +44,7 @@ export default function SeatMediaControls({
   onTogglePlayback?: (next: boolean) => void;
   renderAudioElement?: boolean;
   showSpeakerToggle?: boolean;
+  menuAlignment?: 'left' | 'right';
 }) {
   const [showDevices, setShowDevices] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -101,7 +103,7 @@ export default function SeatMediaControls({
     } catch {
       // ignore
     }
-  }, [rtc.featureEnabled, rtc.remoteStream, playbackEnabled]);
+  }, [rtc.featureEnabled, rtc.remoteStream, playbackEnabled, renderAudioElement]);
 
   useEffect(() => {
     if (!renderAudioElement) return;
@@ -116,6 +118,34 @@ export default function SeatMediaControls({
     }
   }, [rtc.audioOutputDeviceId, renderAudioElement]);
 
+  useEffect(() => {
+    if (!needsAudioUnlock) return;
+    const attemptPlayback = () => {
+      const el = audioRef.current;
+      if (!el) return;
+      el
+        .play()
+        .then(() => {
+          setNeedsAudioUnlock(false);
+          setPlaybackEnabled(true);
+        })
+        .catch(() => {
+          // Keep waiting for another gesture
+        });
+    };
+    const handler = () => {
+      attemptPlayback();
+      document.removeEventListener('pointerdown', handler);
+      document.removeEventListener('keydown', handler);
+    };
+    document.addEventListener('pointerdown', handler);
+    document.addEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('pointerdown', handler);
+      document.removeEventListener('keydown', handler);
+    };
+  }, [needsAudioUnlock, setPlaybackEnabled]);
+
   const isIdle = rtc.state === "idle" || rtc.state === "failed" || rtc.state === "closed";
 
   if (!rtc.featureEnabled) return null;
@@ -128,7 +158,7 @@ export default function SeatMediaControls({
           className="h-7 w-7 grid place-items-center rounded bg-green-600 hover:bg-green-700 text-white"
           title={FEATURE_AUDIO_ONLY ? "Join audio" : "Join video"}
         >
-          {FEATURE_AUDIO_ONLY ? <Mic className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+          {FEATURE_AUDIO_ONLY ? <Phone className="h-4 w-4" /> : <Video className="h-4 w-4" />}
         </button>
       ) : (
         <button
@@ -178,7 +208,9 @@ export default function SeatMediaControls({
           <Settings className="h-4 w-4" />
         </button>
         {showDevices && (
-          <div className="absolute left-0 top-full mt-1 z-50 bg-black/85 ring-1 ring-white/15 rounded-md p-2 backdrop-blur-sm min-w-[200px]">
+          <div
+            className={`absolute ${menuAlignment === 'right' ? 'right-0' : 'left-0'} top-full mt-1 z-50 bg-black/85 ring-1 ring-white/15 rounded-md p-2 backdrop-blur-sm min-w-[200px]`}
+          >
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[10px] uppercase tracking-wide text-white/60">Mic</span>
               <select

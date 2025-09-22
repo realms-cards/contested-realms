@@ -342,6 +342,7 @@ export default function LobbiesCentral({
     outgoingRequest: VoiceOutgoingRequest | null;
     incomingFrom: string | null;
     onRequest: (playerId: string) => void;
+    connectedPeerIds?: string[];
   } | null;
 }) {
   const [query, setQuery] = useState("");
@@ -661,14 +662,23 @@ export default function LobbiesCentral({
                       ? activeVoiceSupport.outgoingRequest
                       : null;
                     const incomingFromThisPlayer = voiceActive && activeVoiceSupport?.incomingFrom === p.id;
+                    const isAlreadyConnected = voiceActive && (activeVoiceSupport?.connectedPeerIds ?? []).includes(p.id);
                     const buttonDisabled = !voiceActive
                       || isYou
+                      || isAlreadyConnected
                       || (outgoingForPlayer
                         ? ["sending", "pending"].includes(outgoingForPlayer.status)
                         : hasPendingVoiceRequest);
 
                     let statusLabel: ReactNode = null;
-                    if (outgoingForPlayer) {
+                    if (isAlreadyConnected) {
+                      statusLabel = (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
+                          <Phone className="h-3 w-3" />
+                          Connected
+                        </span>
+                      );
+                    } else if (outgoingForPlayer) {
                       switch (outgoingForPlayer.status) {
                         case "sending":
                           statusLabel = (
@@ -753,6 +763,8 @@ export default function LobbiesCentral({
                               buttonDisabled
                                 ? outgoingForPlayer
                                   ? "Voice request pending"
+                                  : isAlreadyConnected
+                                  ? `${p.displayName} is already connected`
                                   : "Complete or cancel your current voice request first"
                                 : `Request voice chat with ${p.displayName}`
                             }
