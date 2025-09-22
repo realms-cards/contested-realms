@@ -2509,6 +2509,14 @@ io.on("connection", (socket) => {
 
     const playerId = player.id;
 
+    console.log('[RTC][join] join request', {
+      playerId,
+      socket: socket.id,
+      roomId,
+      lobbyId: player.lobbyId || null,
+      matchId: player.matchId || null,
+    });
+
     if (!rtcParticipants.has(roomId)) {
       rtcParticipants.set(roomId, new Set());
     }
@@ -2564,6 +2572,13 @@ io.on("connection", (socket) => {
     const playerId = player.id;
     const data = payload && typeof payload === "object" ? payload.data : null;
     if (!data) return;
+
+    console.log('[RTC][signal] forwarding signal', {
+      from: playerId,
+      roomId,
+      hasSdp: !!data.sdp,
+      hasCandidate: !!data.candidate,
+    });
 
     const roomParticipants = rtcParticipants.get(roomId);
     if (!roomParticipants || !roomParticipants.has(playerId)) return;
@@ -2673,10 +2688,24 @@ io.on("connection", (socket) => {
     const targetId = payload && typeof payload.targetId === 'string' ? payload.targetId : null;
     const requestedLobbyId = payload && typeof payload.lobbyId === 'string' ? payload.lobbyId : null;
     const requestedMatchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
-    if (!targetId || targetId === player.id) return;
+    if (!targetId || targetId === player.id) {
+      console.warn('[RTC][request] invalid target', {
+        from: player.id,
+        targetId,
+        requestedLobbyId,
+        requestedMatchId,
+      });
+      return;
+    }
 
     const targetPlayer = players.get(targetId);
-    if (!targetPlayer || !targetPlayer.socketId) return;
+    if (!targetPlayer || !targetPlayer.socketId) {
+      console.warn('[RTC][request] target not connected', {
+        from: player.id,
+        targetId,
+      });
+      return;
+    }
 
     const shareLobby = player.lobbyId && targetPlayer.lobbyId && player.lobbyId === targetPlayer.lobbyId;
     const shareMatch = player.matchId && targetPlayer.matchId && player.matchId === targetPlayer.matchId;
@@ -2704,6 +2733,14 @@ io.on("connection", (socket) => {
     }
 
     if (!lobbyId && !matchId) {
+      console.warn('[RTC][request] rejected - no shared scope', {
+        from: player.id,
+        targetId,
+        requestedLobbyId,
+        requestedMatchId,
+        shareLobby,
+        shareMatch,
+      });
       return;
     }
 
@@ -2716,6 +2753,14 @@ io.on("connection", (socket) => {
       lobbyId,
       matchId,
       createdAt: Date.now(),
+    });
+
+    console.log('[RTC][request] forwarding request', {
+      requestId,
+      from: player.id,
+      to: targetId,
+      lobbyId,
+      matchId,
     });
 
     io.to(targetPlayer.socketId).emit("rtc:request", {
@@ -2744,15 +2789,42 @@ io.on("connection", (socket) => {
     const requesterId = payload && typeof payload.requesterId === 'string' ? payload.requesterId : null;
     const accepted = payload && typeof payload.accepted === 'boolean' ? payload.accepted : false;
 
-    if (!requestId || !requesterId) return;
+    if (!requestId || !requesterId) {
+      console.warn('[RTC][request:respond] missing identifiers', {
+        player: player.id,
+        requestId,
+        requesterId,
+        accepted,
+      });
+      return;
+    }
 
     const request = pendingVoiceRequests.get(requestId);
-    if (!request) return;
-    if (request.to !== player.id || request.from !== requesterId) return;
+    if (!request) {
+      console.warn('[RTC][request:respond] unknown request', {
+        player: player.id,
+        requestId,
+        requesterId,
+        accepted,
+      });
+      return;
+    }
+    if (request.to !== player.id || request.from !== requesterId) {
+      console.warn('[RTC][request:respond] mismatched request ownership', {
+        player: player.id,
+        request,
+        requesterId,
+      });
+      return;
+    }
 
     const requesterPlayer = players.get(requesterId);
     if (!requesterPlayer || !requesterPlayer.socketId) {
       pendingVoiceRequests.delete(requestId);
+      console.warn('[RTC][request:respond] requester offline', {
+        requestId,
+        requesterId,
+      });
       return;
     }
 
@@ -2773,6 +2845,15 @@ io.on("connection", (socket) => {
       accepted,
       timestamp: Date.now(),
     };
+
+    console.log('[RTC][request:respond]', {
+      requestId,
+      requesterId,
+      responder: player.id,
+      accepted,
+      lobbyId: request.lobbyId,
+      matchId: request.matchId,
+    });
 
     io.to(requesterPlayer.socketId).emit(
       accepted ? "rtc:request:accepted" : "rtc:request:declined",
@@ -3154,6 +3235,11 @@ io.on("connection", (socket) => {
         const otherId = request.from === pid ? request.to : request.from;
         const otherPlayer = players.get(otherId);
         if (otherPlayer && otherPlayer.socketId) {
+          console.log('[RTC][request:cancelled] disconnect cleanup', {
+            requestId,
+            cancelledBy: pid,
+            other: otherId,
+          });
           io.to(otherPlayer.socketId).emit("rtc:request:cancelled", {
             requestId,
             cancelledBy: pid,

@@ -83,6 +83,9 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     pcRef.current = pc;
 
     pc.ontrack = (ev) => {
+      console.debug('[RTC][client] ontrack received', {
+        trackCount: ev.streams?.[0]?.getTracks?.().length ?? 0,
+      });
       if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
       const stream = remoteStreamRef.current;
       for (const track of ev.streams?.[0]?.getTracks?.() || []) {
@@ -95,6 +98,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
     pc.onicecandidate = (ev) => {
       if (!ev.candidate || !transport) return;
+      console.debug('[RTC][client] local ICE candidate', ev.candidate);
       transport.emit?.('rtc:signal', { data: { candidate: ev.candidate } });
     };
 
@@ -170,7 +174,15 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     }
     const stream = localStreamRef.current;
     if (!stream) return;
+    console.debug('[RTC][client] adding local tracks', {
+      audioTracks: stream.getAudioTracks().length,
+      videoTracks: stream.getVideoTracks().length,
+    });
+    const existingTracks = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
     for (const track of stream.getTracks()) {
+      if (existingTracks.has(track.id)) {
+        continue;
+      }
       pc.addTrack(track, stream);
     }
   }, [ensurePc, openLocalStream, refreshDevices]);
@@ -178,8 +190,10 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const makeOffer = useCallback(async () => {
     const pc = ensurePc();
     setState('negotiating');
+    console.debug('[RTC][client] creating offer');
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    console.debug('[RTC][client] sending offer');
     transport?.emit?.('rtc:signal', { data: { sdp: pc.localDescription } });
   }, [ensurePc, transport]);
 
@@ -196,17 +210,26 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (from) remotePeerIdRef.current = from;
 
     const d = data as { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+    console.debug('[RTC][client] received signal', {
+      from,
+      hasSdp: !!d.sdp,
+      sdpType: d.sdp?.type,
+      hasCandidate: !!d.candidate,
+    });
     try {
       if (d.sdp) {
         await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
         if (d.sdp.type === 'offer') {
           // Answer offer
           await addLocalTracks();
+          console.debug('[RTC][client] creating answer');
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          console.debug('[RTC][client] sending answer');
           transport?.emit?.('rtc:signal', { data: { sdp: pc.localDescription } });
         }
       } else if (d.candidate) {
+        console.debug('[RTC][client] adding remote ICE candidate');
         await pc.addIceCandidate(new RTCIceCandidate(d.candidate));
       }
     } catch {
@@ -221,14 +244,17 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const obj = payload as { from?: { id?: string } };
     const pid = obj.from?.id ? String(obj.from.id) : null;
     if (!pid || !myPlayerId) return;
+    const willCall = String(myPlayerId) < String(pid);
+    console.debug('[RTC][client] peer joined handler', { pid, myPlayerId, willCall });
     remotePeerIdRef.current = pid;
 
     // Decide caller deterministically: lower id starts offer
-    if (String(myPlayerId) < String(pid)) {
+    if (willCall) {
       try {
         await addLocalTracks();
         await makeOffer();
-      } catch {
+      } catch (err) {
+        console.warn('[RTC][client] failed to make offer after peer joined', err);
         setState('failed');
       }
     }
@@ -245,12 +271,15 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (others.length === 0 || !myPlayerId) return;
     // Pick a deterministic remote to compare (lowest id).
     const remote = others.sort()[0];
+    const willCall = String(myPlayerId) < String(remote);
+    console.debug('[RTC][client] participants handler', { others, myPlayerId, remote, willCall });
     remotePeerIdRef.current = remote;
-    if (String(myPlayerId) < String(remote)) {
+    if (willCall) {
       try {
         await addLocalTracks();
         await makeOffer();
-      } catch {
+      } catch (err) {
+        console.warn('[RTC][client] failed to make offer after participants update', err);
         setState('failed');
       }
     }
@@ -267,9 +296,11 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
     try {
       setState('joining');
+      console.debug('[RTC][client] join start', { myPlayerId, activeScopeId });
       await addLocalTracks();
       // Announce presence to room; other peer will respond with offer or we will, based on id ordering
       transport.emit?.('rtc:join');
+      console.debug('[RTC][client] join signal sent', { myPlayerId, activeScopeId });
       setState('negotiating');
     } catch {
       setState('failed');
@@ -278,6 +309,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
   const leave = useCallback(() => {
     if (!transport) return;
+    console.debug('[RTC][client] leaving voice room');
     try { transport.emit?.('rtc:leave'); } catch {}
     reset();
   }, [transport, reset]);
