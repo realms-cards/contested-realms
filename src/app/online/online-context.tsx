@@ -79,6 +79,8 @@ export type OnlineContextValue = {
     clearIncomingRequest: () => void;
     incomingRequest: VoiceIncomingRequest | null;
     outgoingRequest: VoiceOutgoingRequest | null;
+    connectedPeerIds: string[];
+    connectedPeers: VoiceRequestPeer[];
   } | null;
 };
 

@@ -38,6 +38,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const remotePeerIdRef = useRef<string | null>(null);
   const previousScopeIdRef = useRef<string | null>(activeScopeId);
   const [state, setState] = useState<RtcState>('idle');
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [micMuted, setMicMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   // Device selection state
@@ -247,6 +248,10 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const willCall = String(myPlayerId) < String(pid);
     console.debug('[RTC][client] peer joined handler', { pid, myPlayerId, willCall });
     remotePeerIdRef.current = pid;
+    setParticipantIds((prev) => {
+      if (pid === myPlayerId || prev.includes(pid)) return prev;
+      return [...prev, pid];
+    });
 
     // Decide caller deterministically: lower id starts offer
     if (willCall) {
@@ -274,6 +279,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const willCall = String(myPlayerId) < String(remote);
     console.debug('[RTC][client] participants handler', { others, myPlayerId, remote, willCall });
     remotePeerIdRef.current = remote;
+    setParticipantIds(others);
     if (willCall) {
       try {
         await addLocalTracks();
@@ -285,12 +291,22 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     }
   }, [addLocalTracks, makeOffer, myPlayerId]);
 
-  const handlePeerLeft = useCallback(() => {
+  const handlePeerLeft = useCallback((payload: unknown) => {
+    if (payload && typeof payload === 'object') {
+      const obj = payload as { participants?: Array<{ id?: string }> };
+      if (Array.isArray(obj.participants)) {
+        setParticipantIds(
+          obj.participants
+            .map((p) => (p && p.id ? String(p.id) : null))
+            .filter((id): id is string => !!id && id !== myPlayerId)
+        );
+      }
+    }
     // Remote left; keep local stream so user can rejoin quickly
     cleanupPc();
     remoteStreamRef.current = null;
     setState('idle');
-  }, [cleanupPc]);
+  }, [cleanupPc, myPlayerId]);
 
   const join = useCallback(async () => {
     if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
@@ -312,6 +328,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     console.debug('[RTC][client] leaving voice room');
     try { transport.emit?.('rtc:leave'); } catch {}
     reset();
+    setParticipantIds([]);
   }, [transport, reset]);
 
   useEffect(() => {
@@ -327,6 +344,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
         leave();
       }
       previousScopeIdRef.current = null;
+      setParticipantIds([]);
       return;
     }
 
@@ -338,6 +356,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       if (wasActive) {
         void join();
       }
+      setParticipantIds([]);
       return;
     }
 
@@ -418,7 +437,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
     const onSignal = (p: unknown) => void handleSignal(p);
     const onJoined = (p: unknown) => void handlePeerJoined(p);
-    const onLeft = () => void handlePeerLeft();
+    const onLeft = (p: unknown) => void handlePeerLeft(p);
     const onParticipants = (p: unknown) => void handleParticipants(p);
 
     transport.onGeneric?.('rtc:signal', onSignal);
@@ -435,7 +454,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   }, [enabled, transport, handlePeerJoined, handleSignal, handlePeerLeft, handleParticipants]);
 
   // Auto-cleanup on unmount
-  useEffect(() => () => { reset(); }, [reset]);
+  useEffect(() => () => { reset(); setParticipantIds([]); }, [reset]);
 
   return {
     // Enable RTC feature when either seat video or audio-only is enabled
@@ -445,6 +464,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     remoteStream,
     join,
     leave,
+    participantIds,
     micMuted,
     camOff,
     toggleMic,

@@ -510,6 +510,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                 outgoingRequest: voice.outgoingRequest,
                 incomingFrom: voice.incomingRequest?.from.id ?? null,
                 onRequest: voice.requestConnection,
+                connectedPeerIds: voice.connectedPeerIds,
               }
             : null
         }

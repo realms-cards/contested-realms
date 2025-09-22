@@ -145,8 +145,17 @@ export default function UserBadge({
                     className="w-full flex-wrap justify-start gap-2 bg-slate-900/70 ring-1 ring-white/5"
                     playbackEnabled={voice.playbackEnabled}
                     onTogglePlayback={voice.setPlaybackEnabled}
+                    menuAlignment="right"
                   />
                 </div>
+                {voice.connectedPeers.length > 0 && (
+                  <div className="mt-2 text-[11px] text-slate-300">
+                    <span className="uppercase tracking-wide text-slate-400 mr-1">Connected:</span>
+                    <span className="text-slate-100">
+                      {voice.connectedPeers.map((peer) => peer.displayName || `Player ${peer.id.slice(-4)}`).join(", ")}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
             <div className="px-2 py-1.5">

@@ -9,6 +9,7 @@ import type {
   OnlineContextValue,
   VoiceIncomingRequest,
   VoiceOutgoingRequest,
+  VoiceRequestPeer,
 } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
@@ -89,6 +90,22 @@ export default function OnlineLayout({
     voiceRoomId: voiceScopeId,
   });
 
+  const voiceParticipantKey = useMemo(() => {
+    const ids = voiceRtc.participantIds ?? [];
+    return ids.length > 0 ? ids.join('|') : '';
+  }, [voiceRtc.participantIds]);
+
+  const voiceParticipantIds = useMemo(() => {
+    if (!voiceParticipantKey) return [] as string[];
+    return voiceParticipantKey.split('|').filter(Boolean);
+  }, [voiceParticipantKey]);
+
+  const voiceParticipantIdSet = useMemo(() => {
+    return new Set(voiceParticipantIds);
+  }, [voiceParticipantIds]);
+
+  const previousVoiceParticipantCountRef = useRef<number>(voiceParticipantIds.length);
+
   const voiceFeatureEnabled = voiceRtc.featureEnabled;
   const voiceState = voiceRtc.state;
   const voiceJoin = voiceRtc.join;
@@ -109,6 +126,10 @@ export default function OnlineLayout({
     (targetId: string) => {
       if (!transport || !voiceFeatureEnabled || !targetId) return;
       if (me?.id && targetId === me.id) return;
+      if (voiceParticipantIdSet.has(targetId)) {
+        console.debug('[RTC][client] skipping request (already connected)', { targetId });
+        return;
+      }
       if (
         outgoingVoiceRequest &&
         ["sending", "pending"].includes(outgoingVoiceRequest.status) &&
@@ -127,6 +148,7 @@ export default function OnlineLayout({
       };
 
       setOutgoingVoiceRequest(base);
+      setVoicePlaybackEnabled(true);
 
       try {
         console.debug('[RTC][client] sending request', {
@@ -148,7 +170,15 @@ export default function OnlineLayout({
         });
       }
     },
-    [transport, voiceFeatureEnabled, me?.id, outgoingVoiceRequest, lobby?.id, match?.id]
+    [
+      transport,
+      voiceFeatureEnabled,
+      me?.id,
+      outgoingVoiceRequest,
+      lobby?.id,
+      match?.id,
+      voiceParticipantIdSet,
+    ]
   );
 
   const respondToVoiceRequest = useCallback(
@@ -175,6 +205,9 @@ export default function OnlineLayout({
           requesterId,
           accepted,
         });
+        if (accepted) {
+          setVoicePlaybackEnabled(true);
+        }
       } catch (error) {
         console.warn("rtc:request:respond emit failed", error);
         if (snapshot) {
@@ -183,9 +216,9 @@ export default function OnlineLayout({
         return;
       }
 
-      if (accepted) attemptVoiceJoin();
+      if (accepted && voiceRtc.state !== "connected") attemptVoiceJoin();
     },
-    [transport, attemptVoiceJoin]
+    [transport, attemptVoiceJoin, setVoicePlaybackEnabled, voiceRtc.state]
   );
 
   const dismissOutgoingRequest = useCallback(() => {
@@ -202,6 +235,45 @@ export default function OnlineLayout({
     setIncomingVoiceRequest(null);
   }, []);
 
+  useEffect(() => {
+    const previousCount = previousVoiceParticipantCountRef.current;
+    const currentCount = voiceParticipantIds.length;
+
+    if (currentCount > 0 && previousCount === 0 && !voicePlaybackEnabled) {
+      setVoicePlaybackEnabled(true);
+    }
+
+    previousVoiceParticipantCountRef.current = currentCount;
+  }, [voiceParticipantIds, voicePlaybackEnabled, setVoicePlaybackEnabled]);
+
+  const knownVoicePeers = useMemo(() => {
+    const map = new Map<string, VoiceRequestPeer>();
+    if (Array.isArray(lobby?.players)) {
+      lobby?.players.forEach((p) => {
+        map.set(p.id, { id: p.id, displayName: p.displayName });
+      });
+    }
+    players.forEach((p) => {
+      if (!map.has(p.id)) {
+        map.set(p.id, { id: p.id, displayName: p.displayName });
+      }
+    });
+    if (me) {
+      map.set(me.id, { id: me.id, displayName: me.displayName ?? me.id });
+    }
+    return map;
+  }, [lobby?.players, players, me]);
+
+  const voiceConnectedPeers = useMemo(() => {
+    return voiceParticipantIds
+      .map((id) => {
+        const existing = knownVoicePeers.get(id);
+        if (existing) return existing;
+        return { id, displayName: `Player ${id.slice(-4)}` };
+      })
+      .filter((peer, index, self) => peer.id && self.findIndex((p) => p.id === peer.id) === index);
+  }, [voiceParticipantIds, knownVoicePeers]);
+
   const voice = useMemo(
     () => ({
       enabled: FEATURE_AUDIO_ONLY && voiceFeatureEnabled,
@@ -215,6 +287,8 @@ export default function OnlineLayout({
       clearIncomingRequest,
       incomingRequest: incomingVoiceRequest,
       outgoingRequest: outgoingVoiceRequest,
+      connectedPeerIds: voiceParticipantIds,
+      connectedPeers: voiceConnectedPeers,
     }),
     [
       voiceRtc,
@@ -227,6 +301,8 @@ export default function OnlineLayout({
       clearIncomingRequest,
       incomingVoiceRequest,
       outgoingVoiceRequest,
+      voiceParticipantIds,
+      voiceConnectedPeers,
     ]
   );
 
@@ -318,6 +394,7 @@ export default function OnlineLayout({
           timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
         };
       });
+      setVoicePlaybackEnabled(true);
       attemptVoiceJoin();
     };
 
@@ -421,6 +498,7 @@ export default function OnlineLayout({
   useEffect(() => {
     if (voiceState === "connected") {
       setOutgoingVoiceRequest(null);
+      setVoicePlaybackEnabled(true);
     }
   }, [voiceState]);
 
