@@ -1400,10 +1400,16 @@ export default function EnhancedOnlineDraft3DScreen({
           </Physics>
 
           {/* Seat Video planes at player positions (fixed orientation toward board) */}
-          {rtc.featureEnabled && (
+          {rtc?.featureEnabled && (
             <>
-              <LegacySeatVideo3D who={myPlayerKey} stream={rtc.localStream} />
-              <LegacySeatVideo3D who={opponentKey} stream={rtc.remoteStream} />
+              <LegacySeatVideo3D
+                who={myPlayerKey}
+                stream={rtc?.localStream ?? null}
+              />
+              <LegacySeatVideo3D
+                who={opponentKey}
+                stream={rtc?.remoteStream ?? null}
+              />
             </>
           )}
 
