@@ -20,6 +20,7 @@ import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { VideoStreamOverlay } from './VideoStreamOverlay';
 import type { GlobalVideoOverlayProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import { OnlineContext } from '@/app/online/online-context';
 
 /**
  * Global Video Overlay Component
@@ -45,11 +46,15 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   autoConnectOnExpand = false,
 }) => {
   const { shouldShowVideo: shouldShowVideoFromScreen, shouldShowControls } = useVideoOverlay();
+  const onlineCtx = React.useContext(OnlineContext);
   const [isMinimized, setIsMinimized] = React.useState(true); // Start collapsed by default
 
   // Prefer the RTC instance provided by the page (match-level). If none is provided,
   // render the shell only (no separate connection is created here to avoid signaling clashes).
-  const rtc = rtcProp ?? null;
+  const rtc = rtcProp ?? onlineCtx?.voice?.rtc ?? null;
+  const playbackEnabled = onlineCtx?.voice?.playbackEnabled;
+  const setPlaybackEnabled = onlineCtx?.voice?.setPlaybackEnabled;
+  const voiceFeatureEnabled = onlineCtx?.voice?.enabled ?? false;
 
   // Auto-connect when the panel is expanded and RTC is idle/failed/closed
   useEffect(() => {
@@ -144,7 +149,14 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
           {/* Seat-level compact media controls (join/leave/mic/cam/devices) */}
           {shouldShowControls && rtc && (
             <div className="pointer-events-auto">
-              <SeatMediaControls rtc={rtc} className="shadow-lg" />
+              <SeatMediaControls
+                rtc={rtc}
+                className="shadow-lg"
+                playbackEnabled={playbackEnabled}
+                onTogglePlayback={setPlaybackEnabled}
+                renderAudioElement={!voiceFeatureEnabled}
+                showSpeakerToggle={!voiceFeatureEnabled}
+              />
             </div>
           )}
 

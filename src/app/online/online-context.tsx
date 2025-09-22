@@ -10,6 +10,7 @@ import type {
   LobbyVisibility,
   ChatScope,
 } from "@/lib/net/protocol";
+import type { UseMatchWebRTCReturn } from "@/lib/rtc/useMatchWebRTC";
 import type { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 
@@ -47,6 +48,13 @@ export type OnlineContextValue = {
   // Server-managed CPU bot (host-only)
   addCpuBot?: (displayName?: string) => void;
   removeCpuBot?: (playerId?: string) => void;
+  voice: {
+    enabled: boolean;
+    playbackEnabled: boolean;
+    setPlaybackEnabled: (enabled: boolean) => void;
+    togglePlayback: () => void;
+    rtc: UseMatchWebRTCReturn;
+  } | null;
 };
 
 export const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);

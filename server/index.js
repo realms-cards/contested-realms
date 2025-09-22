@@ -698,10 +698,17 @@ const matches = new Map();
 const matchRecordings = new Map();
 /** @type {Map<string, Set<string>>} lobbyId -> set of invited playerIds */
 const lobbyInvites = new Map();
-/** @type {Map<string, Set<string>>} matchId -> set of playerIds participating in WebRTC */
+/** @type {Map<string, Set<string>>} voiceRoomId -> set of playerIds participating in WebRTC */
 const rtcParticipants = new Map();
-/** @type {Map<string, { id: string, displayName: string, matchId: string, joinedAt: number }>} playerId -> participant details */
+/** @type {Map<string, { id: string, displayName: string, lobbyId: string|null, matchId: string|null, roomId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
+
+function getVoiceRoomIdForPlayer(player) {
+  if (!player) return null;
+  if (player.lobbyId) return `lobby:${player.lobbyId}`;
+  if (player.matchId) return `match:${player.matchId}`;
+  return null;
+}
 /** @type {Map<string, NodeJS.Timeout>} */
 const draftStartWatchdogs = new Map();
 clusterStateReady = true;
@@ -2493,80 +2500,80 @@ io.on("connection", (socket) => {
   socket.on("rtc:join", () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
-    
-    const matchId = player.matchId;
+    if (!player) return;
+
+    const roomId = getVoiceRoomIdForPlayer(player);
+    if (!roomId) return;
+
     const playerId = player.id;
-    
-    // Initialize match participants set if needed
-    if (!rtcParticipants.has(matchId)) {
-      rtcParticipants.set(matchId, new Set());
+
+    if (!rtcParticipants.has(roomId)) {
+      rtcParticipants.set(roomId, new Set());
     }
-    
-    // Add participant to tracking
-    const matchParticipants = rtcParticipants.get(matchId);
-    matchParticipants.add(playerId);
-    
-    // Store participant details
+
+    const roomParticipants = rtcParticipants.get(roomId);
+    roomParticipants.add(playerId);
+
     participantDetails.set(playerId, {
       id: playerId,
       displayName: player.displayName,
-      matchId: matchId,
+      lobbyId: player.lobbyId || null,
+      matchId: player.matchId || null,
+      roomId,
       joinedAt: Date.now()
     });
-    
-    // Get current participant list for enhanced peer discovery
-    const participants = Array.from(matchParticipants).map(pid => {
+
+    const participants = Array.from(roomParticipants).map((pid) => {
       const details = participantDetails.get(pid);
-      return details ? {
-        id: details.id,
-        displayName: details.displayName,
-        matchId: details.matchId,
-        joinedAt: details.joinedAt
-      } : null;
+      return details
+        ? {
+            id: details.id,
+            displayName: details.displayName,
+            lobbyId: details.lobbyId,
+            matchId: details.matchId,
+            roomId: details.roomId,
+            joinedAt: details.joinedAt,
+          }
+        : null;
     }).filter(Boolean);
-    
-    // Notify existing WebRTC participants about new joiner
-    matchParticipants.forEach(pid => {
-      if (pid !== playerId) {
-        const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
-        if (participantPlayer && participantPlayer.socketId) {
-          io.to(participantPlayer.socketId).emit("rtc:peer-joined", {
-            from: getPlayerInfo(playerId),
-            participants: participants
-          });
-        }
+
+    roomParticipants.forEach((pid) => {
+      if (pid === playerId) return;
+      const participantPlayer = players.get(pid);
+      if (participantPlayer && participantPlayer.socketId) {
+        io.to(participantPlayer.socketId).emit("rtc:peer-joined", {
+          from: getPlayerInfo(playerId),
+          participants,
+        });
       }
     });
-    
-    // Send current participants list to newly joined participant
+
     socket.emit("rtc:participants", { participants });
   });
 
   socket.on("rtc:signal", (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
-    
-    const matchId = player.matchId;
+    if (!player) return;
+
+    const roomId = getVoiceRoomIdForPlayer(player);
+    if (!roomId) return;
+
     const playerId = player.id;
     const data = payload && typeof payload === "object" ? payload.data : null;
     if (!data) return;
-    
-    // Only send signals to WebRTC participants (not entire match room)
-    const matchParticipants = rtcParticipants.get(matchId);
-    if (!matchParticipants || !matchParticipants.has(playerId)) return;
-    
-    // Send signal to other WebRTC participants only
-    matchParticipants.forEach(pid => {
-      if (pid !== playerId) {
-        const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
-        if (participantPlayer && participantPlayer.socketId) {
-          io.to(participantPlayer.socketId).emit("rtc:signal", { 
-            from: playerId, 
-            data: data 
-          });
-        }
+
+    const roomParticipants = rtcParticipants.get(roomId);
+    if (!roomParticipants || !roomParticipants.has(playerId)) return;
+
+    roomParticipants.forEach((pid) => {
+      if (pid === playerId) return;
+      const participantPlayer = players.get(pid);
+      if (participantPlayer && participantPlayer.socketId) {
+        io.to(participantPlayer.socketId).emit("rtc:signal", {
+          from: playerId,
+          data,
+        });
       }
     });
   });
@@ -2574,44 +2581,46 @@ io.on("connection", (socket) => {
   socket.on("rtc:leave", () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
-    
-    const matchId = player.matchId;
+    if (!player) return;
+
+    const roomId = getVoiceRoomIdForPlayer(player);
+    if (!roomId) return;
+
     const playerId = player.id;
-    
-    // Remove from WebRTC participants
-    const matchParticipants = rtcParticipants.get(matchId);
-    if (matchParticipants) {
-      matchParticipants.delete(playerId);
-      
-      // Clean up empty match participant sets
-      if (matchParticipants.size === 0) {
-        rtcParticipants.delete(matchId);
+
+    const roomParticipants = rtcParticipants.get(roomId);
+    if (roomParticipants) {
+      roomParticipants.delete(playerId);
+
+      if (roomParticipants.size === 0) {
+        rtcParticipants.delete(roomId);
       }
-      
-      // Notify remaining WebRTC participants
-      const remainingParticipants = Array.from(matchParticipants).map(pid => {
+
+      const remainingParticipants = Array.from(roomParticipants).map((pid) => {
         const details = participantDetails.get(pid);
-        return details ? {
-          id: details.id,
-          displayName: details.displayName,
-          matchId: details.matchId,
-          joinedAt: details.joinedAt
-        } : null;
+        return details
+          ? {
+              id: details.id,
+              displayName: details.displayName,
+              lobbyId: details.lobbyId,
+              matchId: details.matchId,
+              roomId: details.roomId,
+              joinedAt: details.joinedAt,
+            }
+          : null;
       }).filter(Boolean);
-      
-      matchParticipants.forEach(pid => {
-        const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
+
+      roomParticipants.forEach((pid) => {
+        const participantPlayer = players.get(pid);
         if (participantPlayer && participantPlayer.socketId) {
           io.to(participantPlayer.socketId).emit("rtc:peer-left", {
             from: playerId,
-            participants: remainingParticipants
+            participants: remainingParticipants,
           });
         }
       });
     }
-    
-    // Remove participant details
+
     participantDetails.delete(playerId);
   });
 
@@ -2619,38 +2628,38 @@ io.on("connection", (socket) => {
   socket.on("rtc:connection-failed", (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
-    
-    const matchId = player.matchId;
+    if (!player) return;
+
+    const roomId = getVoiceRoomIdForPlayer(player);
+    if (!roomId) return;
+
     const playerId = player.id;
     const reason = payload.reason || "unknown";
     const code = payload.code || "CONNECTION_ERROR";
-    
-    console.warn(`WebRTC connection failed for player ${playerId} in match ${matchId}: ${reason} (${code})`);
-    
-    // Notify other WebRTC participants about the connection failure
-    const matchParticipants = rtcParticipants.get(matchId);
-    if (matchParticipants && matchParticipants.has(playerId)) {
-      matchParticipants.forEach(pid => {
-        if (pid !== playerId) {
-          const participantPlayer = Array.from(players.values()).find(p => p.id === pid);
-          if (participantPlayer && participantPlayer.socketId) {
-            io.to(participantPlayer.socketId).emit("rtc:peer-connection-failed", {
-              from: playerId,
-              reason: reason,
-              code: code,
-              timestamp: Date.now()
-            });
-          }
+
+    console.warn(`WebRTC connection failed for player ${playerId} in ${roomId}: ${reason} (${code})`);
+
+    const roomParticipants = rtcParticipants.get(roomId);
+    if (roomParticipants && roomParticipants.has(playerId)) {
+      roomParticipants.forEach((pid) => {
+        if (pid === playerId) return;
+        const participantPlayer = players.get(pid);
+        if (participantPlayer && participantPlayer.socketId) {
+          io.to(participantPlayer.socketId).emit("rtc:peer-connection-failed", {
+            from: playerId,
+            reason,
+            code,
+            timestamp: Date.now(),
+          });
         }
       });
     }
-    
-    // Send acknowledgment back to the failing client
+
     socket.emit("rtc:connection-failed-ack", {
-      playerId: playerId,
-      matchId: matchId,
-      timestamp: Date.now()
+      playerId,
+      matchId: player.matchId || null,
+      roomId,
+      timestamp: Date.now(),
     });
   });
 
@@ -3015,41 +3024,44 @@ io.on("connection", (socket) => {
     playerIdBySocket.delete(socket.id);
     
     // Clean up WebRTC participant state on disconnect
-    if (player && player.matchId) {
-      const matchParticipants = rtcParticipants.get(player.matchId);
-      if (matchParticipants && matchParticipants.has(pid)) {
-        matchParticipants.delete(pid);
-        
-        // Clean up empty match participant sets
-        if (matchParticipants.size === 0) {
-          rtcParticipants.delete(player.matchId);
+    const participantInfo = participantDetails.get(pid);
+    const roomId = participantInfo?.roomId || (player ? getVoiceRoomIdForPlayer(player) : null);
+    if (roomId) {
+      const roomParticipants = rtcParticipants.get(roomId);
+      if (roomParticipants && roomParticipants.has(pid)) {
+        roomParticipants.delete(pid);
+
+        if (roomParticipants.size === 0) {
+          rtcParticipants.delete(roomId);
         }
-        
-        // Notify remaining WebRTC participants about disconnection
-        const remainingParticipants = Array.from(matchParticipants).map(participantId => {
+
+        const remainingParticipants = Array.from(roomParticipants).map((participantId) => {
           const details = participantDetails.get(participantId);
-          return details ? {
-            id: details.id,
-            displayName: details.displayName,
-            matchId: details.matchId,
-            joinedAt: details.joinedAt
-          } : null;
+          return details
+            ? {
+                id: details.id,
+                displayName: details.displayName,
+                lobbyId: details.lobbyId,
+                matchId: details.matchId,
+                roomId: details.roomId,
+                joinedAt: details.joinedAt,
+              }
+            : null;
         }).filter(Boolean);
-        
-        matchParticipants.forEach(participantId => {
-          const participantPlayer = Array.from(players.values()).find(p => p.id === participantId);
+
+        roomParticipants.forEach((participantId) => {
+          const participantPlayer = players.get(participantId);
           if (participantPlayer && participantPlayer.socketId) {
             io.to(participantPlayer.socketId).emit("rtc:peer-left", {
               from: pid,
-              participants: remainingParticipants
+              participants: remainingParticipants,
             });
           }
         });
-        
-        // Remove participant details
-        participantDetails.delete(pid);
       }
     }
+
+    participantDetails.delete(pid);
     
     if (player) {
       // If the player was in a lobby, remove them immediately to prevent ghost lobbies

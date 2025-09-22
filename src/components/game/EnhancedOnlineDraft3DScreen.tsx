@@ -15,7 +15,6 @@ import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
-import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY } from "@/lib/flags";
 import Board from "@/lib/game/Board";
 import { toCardMetaMap, mergeCardMetaMaps, type ApiCardMetaRow } from "@/lib/game/cardMeta";
 import {
@@ -31,7 +30,6 @@ import { CARD_LONG } from "@/lib/game/constants";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
-import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 
 // Card shape used by OnlineDraftScreen; keep compatible
@@ -65,7 +63,7 @@ export default function EnhancedOnlineDraft3DScreen({
   playerNames,
   onDraftComplete,
 }: EnhancedOnlineDraft3DScreenProps) {
-  const { transport, match, me } = useOnline();
+  const { transport, match, me, voice } = useOnline();
   const matchId = match?.id ?? null;
   const router = useRouter();
   const { updateScreenType } = useVideoOverlay();
@@ -89,13 +87,7 @@ export default function EnhancedOnlineDraft3DScreen({
     [me?.id, match?.players, myPlayerIndex]
   );
 
-  // Seat Video (WebRTC) prototype state (always call hook; gated by enabled flag)
-  const rtc = useMatchWebRTC({
-    enabled: FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY,
-    transport,
-    myPlayerId: myPlayerId ?? null,
-    matchId: matchId ?? null,
-  });
+  const rtc = voice?.rtc ?? null;
 
   // Enhanced 3D Draft UI state (ported from single-player)
   const [orbitLocked, setOrbitLocked] = useState(false);
