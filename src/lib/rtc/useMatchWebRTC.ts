@@ -36,6 +36,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remotePeerIdRef = useRef<string | null>(null);
+  const previousScopeIdRef = useRef<string | null>(activeScopeId);
   const [state, setState] = useState<RtcState>('idle');
   const [micMuted, setMicMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
@@ -282,10 +283,34 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   }, [transport, reset]);
 
   useEffect(() => {
-    if (!activeScopeId && state !== 'idle') {
-      leave();
+    const prevScopeId = previousScopeIdRef.current;
+    if (prevScopeId === activeScopeId) {
+      return;
     }
-  }, [activeScopeId, state, leave]);
+
+    const wasActive = state === 'joining' || state === 'negotiating' || state === 'connected';
+
+    if (!activeScopeId) {
+      if (state !== 'idle') {
+        leave();
+      }
+      previousScopeIdRef.current = null;
+      return;
+    }
+
+    if (prevScopeId && prevScopeId !== activeScopeId) {
+      if (state !== 'idle') {
+        leave();
+      }
+      previousScopeIdRef.current = activeScopeId;
+      if (wasActive) {
+        void join();
+      }
+      return;
+    }
+
+    previousScopeIdRef.current = activeScopeId;
+  }, [activeScopeId, state, leave, join]);
 
   // Dynamic device switching via replaceTrack
   const switchTrack = useCallback(async (kind: 'audio' | 'video', deviceId: string | null) => {

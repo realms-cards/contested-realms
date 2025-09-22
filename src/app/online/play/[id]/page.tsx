@@ -1256,17 +1256,17 @@ export default function OnlineMatchPage() {
               </Physics>
 
               {/* Seat Video planes at player positions (fixed orientation toward board) */}
-              {rtc.featureEnabled && myPlayerKey && (
+              {rtc?.featureEnabled && myPlayerKey && (
                 <>
                   {/* Local preview at my seat (muted via video texture; audio handled separately) */}
                   <LegacySeatVideo3D
                     who={myPlayerKey}
-                    stream={rtc.localStream}
+                    stream={rtc?.localStream ?? null}
                   />
                   {/* Remote video at opponent seat */}
                   <LegacySeatVideo3D
                     who={myPlayerKey === "p1" ? "p2" : "p1"}
-                    stream={rtc.remoteStream}
+                    stream={rtc?.remoteStream ?? null}
                   />
                 </>
               )}
