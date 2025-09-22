@@ -18,6 +18,69 @@ import type {
   UIUpdateEvent 
 } from "@/types/draft-3d-events";
 
+// --- Helper normalization: tolerate older servers or partial sealed config ---
+function normalizeSealedConfigClient(sc: unknown): unknown {
+  if (!sc || typeof sc !== 'object') return null;
+  const obj = sc as Record<string, unknown>;
+  const n = (v: unknown): number => {
+    const x = typeof v === 'string' ? Number(v) : (v as number);
+    return Number.isFinite(x) ? Number(x) : NaN;
+  };
+  const packCounts = obj.packCounts && typeof obj.packCounts === 'object' ? (obj.packCounts as Record<string, unknown>) : {};
+  let sum = 0;
+  const entries = Object.entries(packCounts);
+  for (const [, v] of entries) sum += Number(n(v)) || 0;
+  const rawPackCount = n(obj.packCount);
+  const packCount = Number.isFinite(rawPackCount) && rawPackCount > 0 ? Math.floor(rawPackCount) : (sum > 0 ? sum : 6);
+  let setMix: string[] = Array.isArray(obj.setMix) ? (obj.setMix as unknown[]).filter((s) => typeof s === 'string') as string[] : [];
+  if (setMix.length === 0) {
+    setMix = entries.filter(([, v]) => (Number(n(v)) || 0) > 0).map(([k]) => String(k));
+  }
+  if (setMix.length === 0) setMix = ['Beta'];
+  const rawTimeLimit = n(obj.timeLimit);
+  const timeLimit = Number.isFinite(rawTimeLimit) && rawTimeLimit > 0 ? Math.floor(rawTimeLimit) : 40;
+  const cstRaw = n(obj.constructionStartTime);
+  const constructionStartTime = Number.isFinite(cstRaw) && cstRaw > 0 ? Math.floor(cstRaw) : Date.now();
+  const replaceAvatars = !!obj.replaceAvatars;
+  // Keep original packCounts if it was an object; otherwise omit
+  const pcOut = Object.keys(packCounts).length ? Object.fromEntries(entries.map(([k, v]) => [String(k), Number(n(v)) || 0])) : undefined;
+  return { packCount, setMix, timeLimit, constructionStartTime, ...(pcOut ? { packCounts: pcOut } : {}), replaceAvatars };
+}
+
+function normalizeMatchStartedPayload(payload: unknown): unknown {
+  try {
+    if (!payload || typeof payload !== 'object') return payload;
+    const p = payload as { match?: Record<string, unknown> };
+    if (!p.match) return payload;
+    const m = p.match;
+    const sc = m.sealedConfig as unknown;
+    if (sc !== undefined) {
+      const fixed = normalizeSealedConfigClient(sc);
+      return { ...p, match: { ...m, sealedConfig: fixed } };
+    }
+    return payload;
+  } catch {
+    return payload;
+  }
+}
+
+function normalizeResyncResponsePayload(payload: unknown): unknown {
+  try {
+    if (!payload || typeof payload !== 'object') return payload;
+    const p = payload as { snapshot?: { match?: Record<string, unknown> } };
+    if (!p.snapshot || !p.snapshot.match) return payload;
+    const m = p.snapshot.match;
+    const sc = m.sealedConfig as unknown;
+    if (sc !== undefined) {
+      const fixed = normalizeSealedConfigClient(sc);
+      return { ...p, snapshot: { ...p.snapshot, match: { ...m, sealedConfig: fixed } } };
+    }
+    return payload;
+  } catch {
+    return payload;
+  }
+}
+
 export class SocketTransport implements GameTransport {
   private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
   private socket?: Socket;
@@ -136,12 +199,10 @@ export class SocketTransport implements GameTransport {
           Protocol.LobbyInvitePayload.parse(payload)
         )
       );
-      socket.on("matchStarted", (payload) =>
-        this.dispatch(
-          "matchStarted",
-          Protocol.MatchStartedPayload.parse(payload)
-        )
-      );
+      socket.on("matchStarted", (payload) => {
+        const fixed = normalizeMatchStartedPayload(payload);
+        this.dispatch("matchStarted", Protocol.MatchStartedPayload.parse(fixed));
+      });
       socket.on("statePatch", (payload) =>
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
       );
@@ -162,9 +223,10 @@ export class SocketTransport implements GameTransport {
         console.log(`[Transport] message <= type=${t}`);
         this.dispatch("message", m);
       });
-      socket.on("resyncResponse", (payload) =>
-        this.dispatch("resync", Protocol.ResyncResponsePayload.parse(payload))
-      );
+      socket.on("resyncResponse", (payload) => {
+        const fixed = normalizeResyncResponsePayload(payload);
+        this.dispatch("resync", Protocol.ResyncResponsePayload.parse(fixed));
+      });
       socket.on("error", (payload) =>
         this.dispatch("error", Protocol.ErrorPayload.parse(payload))
       );

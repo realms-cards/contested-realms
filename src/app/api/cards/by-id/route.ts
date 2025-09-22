@@ -5,7 +5,7 @@ import { Finish } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
 // GET /api/cards/by-id?ids=1,2,3
-// Returns: [{ cardId, name, slug, setName }]
+// Returns: [{ cardId, name, slug, setName, type }]
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -24,13 +24,14 @@ export async function GET(req: NextRequest) {
       select: {
         cardId: true,
         slug: true,
+        typeText: true,
         set: { select: { name: true } },
         card: { select: { name: true } },
       },
     });
-    const byCard = new Map<number, { cardId: number; name: string; slug: string; setName: string }>();
+    const byCard = new Map<number, { cardId: number; name: string; slug: string; setName: string; type: string | null }>();
     for (const v of variants) {
-      if (!byCard.has(v.cardId)) byCard.set(v.cardId, { cardId: v.cardId, name: v.card.name, slug: v.slug, setName: v.set.name });
+      if (!byCard.has(v.cardId)) byCard.set(v.cardId, { cardId: v.cardId, name: v.card.name, slug: v.slug, setName: v.set.name, type: v.typeText || null });
     }
     // Fill missing with any variant
     const missing = ids.filter(id => !byCard.has(id));
@@ -40,13 +41,14 @@ export async function GET(req: NextRequest) {
         select: {
           cardId: true,
           slug: true,
+          typeText: true,
           set: { select: { name: true } },
           card: { select: { name: true } },
         },
         orderBy: { id: 'asc' },
       });
       for (const v of anyVariants) {
-        if (!byCard.has(v.cardId)) byCard.set(v.cardId, { cardId: v.cardId, name: v.card.name, slug: v.slug, setName: v.set.name });
+        if (!byCard.has(v.cardId)) byCard.set(v.cardId, { cardId: v.cardId, name: v.card.name, slug: v.slug, setName: v.set.name, type: v.typeText || null });
       }
     }
 

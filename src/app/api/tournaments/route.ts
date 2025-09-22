@@ -8,20 +8,44 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/tournaments
 // Returns all active tournaments
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
   try {
-    console.log('Fetching tournaments...');
+    const url = new URL(req.url);
+    const sp = url.searchParams;
+    const statusParam = sp.get('status'); // e.g. 'completed', 'active', 'all', or 'registering,preparing,active,completed'
+    const q = (sp.get('q') || '').trim();
+    const includeCompleted = sp.get('includeCompleted') === 'true';
+    const limit = Math.max(1, Math.min(100, Number(sp.get('limit') || 50) || 50));
+    const offset = Math.max(0, Number(sp.get('offset') || 0) || 0);
+
+    // Default statuses: only active/open tournaments
+    let statuses: TournamentStatus[] | null = ['registering', 'preparing', 'active'] as TournamentStatus[];
+    if (statusParam) {
+      if (statusParam === 'all') {
+        statuses = null; // no status filter
+      } else {
+        const parts = statusParam.split(',').map(s => s.trim()).filter(Boolean);
+        const allowed = new Set(['registering','preparing','active','completed','cancelled']);
+        const parsed = parts.filter(p => allowed.has(p)) as TournamentStatus[];
+        statuses = parsed.length ? parsed : statuses;
+      }
+    } else if (includeCompleted) {
+      statuses = ['registering', 'preparing', 'active', 'completed'] as TournamentStatus[];
+    }
+
+    console.log('Fetching tournaments...', { statuses: statuses ?? 'ALL', limit, offset });
+
+    const where = {
+      ...(statuses ? { status: { in: statuses } } : {}),
+      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+    };
     const tournaments = await prisma.tournament.findMany({
-      where: {
-        status: {
-          in: ['registering', 'preparing', 'active'] as TournamentStatus[]
-        }
-      },
+      where,
       include: {
         registrations: {
           include: {
@@ -37,7 +61,9 @@ export async function GET() {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     });
 
     console.log('Found tournaments:', tournaments.length);
@@ -89,7 +115,9 @@ export async function GET() {
         matches: round.matches.map(match => match.id)
       })),
       settings: tournament.settings,
-      createdAt: tournament.createdAt.getTime()
+      createdAt: tournament.createdAt.getTime(),
+      startedAt: tournament.startedAt ? tournament.startedAt.getTime() : undefined,
+      completedAt: tournament.completedAt ? tournament.completedAt.getTime() : undefined,
     }));
 
     return new Response(JSON.stringify(tournamentInfos), {
