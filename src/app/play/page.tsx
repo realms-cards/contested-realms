@@ -305,7 +305,7 @@ export default function PlayPage() {
   }, [matW, matH]);
 
   return (
-    <div className="relative h-[calc(100vh-4rem)] w-full">
+    <div className="relative h-screen [height:100dvh] w-full">
       {/* Camera mode toggle */}
       <div className="absolute top-2 left-2 z-30">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
