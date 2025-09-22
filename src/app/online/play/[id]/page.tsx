@@ -24,7 +24,6 @@ import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
-import { FEATURE_SEAT_VIDEO, FEATURE_AUDIO_ONLY } from "@/lib/flags";
 import Board from "@/lib/game/Board";
 import Hand3D from "@/lib/game/components/Hand3D";
 import Hud3D from "@/lib/game/components/Hud3D";
@@ -40,7 +39,6 @@ import {
 import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
-import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -75,6 +73,7 @@ export default function OnlineMatchPage() {
     resync,
     me,
     resyncing,
+    voice,
   } = useOnline();
 
   // Determine which player this client is (support for 2-8 players)
@@ -89,13 +88,7 @@ export default function OnlineMatchPage() {
       ? ((myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey)
       : null;
 
-  // Seat Video (WebRTC) prototype state (always call hook; gated by enabled flag)
-  const rtc = useMatchWebRTC({
-    enabled: FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY,
-    transport,
-    myPlayerId: me?.id ?? null,
-    matchId: match?.id ?? null,
-  });
+  const rtc = voice?.rtc ?? null;
 
   // Do not auto-join WebRTC. Users must click the Join control to request mic access and connect.
 
@@ -1263,17 +1256,17 @@ export default function OnlineMatchPage() {
               </Physics>
 
               {/* Seat Video planes at player positions (fixed orientation toward board) */}
-              {rtc.featureEnabled && myPlayerKey && (
+              {rtc?.featureEnabled && myPlayerKey && (
                 <>
                   {/* Local preview at my seat (muted via video texture; audio handled separately) */}
                   <LegacySeatVideo3D
                     who={myPlayerKey}
-                    stream={rtc.localStream}
+                    stream={rtc?.localStream ?? null}
                   />
                   {/* Remote video at opponent seat */}
                   <LegacySeatVideo3D
                     who={myPlayerKey === "p1" ? "p2" : "p1"}
-                    stream={rtc.remoteStream}
+                    stream={rtc?.remoteStream ?? null}
                   />
                 </>
               )}

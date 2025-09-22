@@ -12,6 +12,26 @@ import type {
 } from "@/lib/net/protocol";
 import type { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
+import type { UseMatchWebRTCReturn } from "@/lib/rtc/useMatchWebRTC";
+
+export type VoiceRequestPeer = Pick<PlayerInfo, "id" | "displayName">;
+
+export type VoiceIncomingRequest = {
+  requestId: string;
+  from: VoiceRequestPeer;
+  lobbyId: string | null;
+  matchId: string | null;
+  timestamp: number;
+};
+
+export type VoiceOutgoingRequest = {
+  requestId: string | null;
+  targetId: string;
+  lobbyId: string | null;
+  matchId: string | null;
+  status: "sending" | "pending" | "accepted" | "declined" | "cancelled";
+  timestamp: number;
+};
 
 export type OnlineContextValue = {
   transport: SocketTransport | null;
@@ -47,6 +67,21 @@ export type OnlineContextValue = {
   // Server-managed CPU bot (host-only)
   addCpuBot?: (displayName?: string) => void;
   removeCpuBot?: (playerId?: string) => void;
+  voice: {
+    enabled: boolean;
+    playbackEnabled: boolean;
+    setPlaybackEnabled: (enabled: boolean) => void;
+    togglePlayback: () => void;
+    rtc: UseMatchWebRTCReturn;
+    requestConnection: (targetId: string) => void;
+    respondToRequest: (requestId: string, requesterId: string, accepted: boolean) => void;
+    dismissOutgoingRequest: () => void;
+    clearIncomingRequest: () => void;
+    incomingRequest: VoiceIncomingRequest | null;
+    outgoingRequest: VoiceOutgoingRequest | null;
+    connectedPeerIds: string[];
+    connectedPeers: VoiceRequestPeer[];
+  } | null;
 };
 
 export const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);

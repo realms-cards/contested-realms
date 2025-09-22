@@ -3,8 +3,9 @@
 */
 "use client";
 
-import { RefreshCw, Eye, EyeOff } from "lucide-react";
-import { useMemo, useState } from "react";
+import { RefreshCw, Eye, EyeOff, Phone, Loader2, Check, X } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 
 // Check if CPU bots are enabled via environment variable
@@ -307,6 +308,7 @@ export default function LobbiesCentral({
   onEndTournament,
   onRefresh,
   tournamentsEnabled = true,
+  voiceSupport,
 }: {
   lobbies: LobbyInfo[];
   tournaments: TournamentInfo[];
@@ -335,6 +337,13 @@ export default function LobbiesCentral({
   onEndTournament?: (tournamentId: string) => void;
   onRefresh: () => void;
   tournamentsEnabled?: boolean;
+  voiceSupport?: {
+    enabled: boolean;
+    outgoingRequest: VoiceOutgoingRequest | null;
+    incomingFrom: string | null;
+    onRequest: (playerId: string) => void;
+    connectedPeerIds?: string[];
+  } | null;
 }) {
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
@@ -363,6 +372,10 @@ export default function LobbiesCentral({
   const joinedTournament = tournaments.find(t => t.registeredPlayers.some(p => p.id === myId) && t.status !== "completed");
   const isInTournament = joinedTournament !== undefined;
   const isEngaged = isInLobby || isInTournament;
+  const activeVoiceSupport = voiceSupport && voiceSupport.enabled ? voiceSupport : null;
+  const hasPendingVoiceRequest = activeVoiceSupport?.outgoingRequest
+    ? ["sending", "pending"].includes(activeVoiceSupport.outgoingRequest.status)
+    : false;
   const [cfgName, setCfgName] = useState<string>("");
   const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">("open");
   
@@ -644,10 +657,85 @@ export default function LobbiesCentral({
                     const isReady = (l.readyPlayerIds || []).includes(p.id);
                     const isHostP = p.id === l.hostId;
                     const isYou = !!myId && p.id === myId;
+                    const voiceActive = !!activeVoiceSupport && isMine;
+                    const outgoingForPlayer = voiceActive && activeVoiceSupport?.outgoingRequest?.targetId === p.id
+                      ? activeVoiceSupport.outgoingRequest
+                      : null;
+                    const incomingFromThisPlayer = voiceActive && activeVoiceSupport?.incomingFrom === p.id;
+                    const isAlreadyConnected = voiceActive && (activeVoiceSupport?.connectedPeerIds ?? []).includes(p.id);
+                    const buttonDisabled = !voiceActive
+                      || isYou
+                      || isAlreadyConnected
+                      || (outgoingForPlayer
+                        ? ["sending", "pending"].includes(outgoingForPlayer.status)
+                        : hasPendingVoiceRequest);
+
+                    let statusLabel: ReactNode = null;
+                    if (isAlreadyConnected) {
+                      statusLabel = (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
+                          <Phone className="h-3 w-3" />
+                          Connected
+                        </span>
+                      );
+                    } else if (outgoingForPlayer) {
+                      switch (outgoingForPlayer.status) {
+                        case "sending":
+                          statusLabel = (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-sky-300">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Sending
+                            </span>
+                          );
+                          break;
+                        case "pending":
+                          statusLabel = (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-sky-300">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Pending
+                            </span>
+                          );
+                          break;
+                        case "accepted":
+                          statusLabel = (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
+                              <Check className="h-3 w-3" />
+                              Accepted
+                            </span>
+                          );
+                          break;
+                        case "declined":
+                          statusLabel = (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-300">
+                              <X className="h-3 w-3" />
+                              Declined
+                            </span>
+                          );
+                          break;
+                        case "cancelled":
+                          statusLabel = (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                              <X className="h-3 w-3" />
+                              Cancelled
+                            </span>
+                          );
+                          break;
+                        default:
+                          break;
+                      }
+                    } else if (incomingFromThisPlayer) {
+                      statusLabel = (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-200">
+                          <Phone className="h-3 w-3" />
+                          Incoming
+                        </span>
+                      );
+                    }
+
                     return (
-                      <span
+                      <div
                         key={p.id}
-                        className={`text-[11px] px-1.5 py-0.5 rounded ring-1 ${
+                        className={`flex items-center gap-2 text-[11px] px-1.5 py-0.5 rounded ring-1 ${
                           isReady
                             ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
                             : "bg-slate-800/60 text-slate-300 ring-slate-700/60"
@@ -656,11 +744,36 @@ export default function LobbiesCentral({
                           isReady ? " • Ready" : " • Not ready"
                         }`}
                       >
-                        {p.displayName}
-                        {isYou && <span className="opacity-70"> • You</span>}
-                        {isHostP && <span className="opacity-70"> • Host</span>}
-                        <span className="opacity-80"> {isReady ? " • ✓" : " • …"}</span>
-                      </span>
+                        <span>{p.displayName}</span>
+                        {isYou && (
+                          <span className="text-[10px] uppercase tracking-wide text-slate-300">You</span>
+                        )}
+                        {isHostP && (
+                          <span className="text-[10px] uppercase tracking-wide text-indigo-300">Host</span>
+                        )}
+                        {voiceActive && !isYou && (
+                          <button
+                            type="button"
+                            className={`inline-flex items-center justify-center rounded bg-blue-600/70 px-1.5 py-0.5 text-[10px] text-white transition ${
+                              buttonDisabled ? "opacity-40 cursor-not-allowed" : "hover:bg-blue-600"
+                            }`}
+                            onClick={() => activeVoiceSupport?.onRequest(p.id)}
+                            disabled={buttonDisabled}
+                            title={
+                              buttonDisabled
+                                ? outgoingForPlayer
+                                  ? "Voice request pending"
+                                  : isAlreadyConnected
+                                  ? `${p.displayName} is already connected`
+                                  : "Complete or cancel your current voice request first"
+                                : `Request voice chat with ${p.displayName}`
+                            }
+                          >
+                            <Phone className="h-3 w-3" />
+                          </button>
+                        )}
+                        {statusLabel}
+                      </div>
                     );
                   })}
                 </div>
