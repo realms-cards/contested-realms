@@ -5,8 +5,13 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OnlineContext } from "@/app/online/online-context";
-import type { OnlineContextValue } from "@/app/online/online-context";
+import type {
+  OnlineContextValue,
+  VoiceIncomingRequest,
+  VoiceOutgoingRequest,
+} from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
+import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { useGameStore } from "@/lib/game/store";
 import type {
   LobbyInfo,
@@ -20,7 +25,6 @@ import type {
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
-import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 
 
 
@@ -49,6 +53,8 @@ export default function OnlineLayout({
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
   }, []);
+  const [incomingVoiceRequest, setIncomingVoiceRequest] = useState<VoiceIncomingRequest | null>(null);
+  const [outgoingVoiceRequest, setOutgoingVoiceRequest] = useState<VoiceOutgoingRequest | null>(null);
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
   // Track latest lobby across event handlers
@@ -83,16 +89,315 @@ export default function OnlineLayout({
     voiceRoomId: voiceScopeId,
   });
 
+  const voiceFeatureEnabled = voiceRtc.featureEnabled;
+  const voiceState = voiceRtc.state;
+  const voiceJoin = voiceRtc.join;
+
+  const attemptVoiceJoin = useCallback(() => {
+    if (!voiceFeatureEnabled) return;
+    if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
+      void voiceJoin();
+    }
+  }, [voiceFeatureEnabled, voiceJoin, voiceState]);
+
+  const requestVoiceConnection = useCallback(
+    (targetId: string) => {
+      if (!transport || !voiceFeatureEnabled || !targetId) return;
+      if (me?.id && targetId === me.id) return;
+      if (
+        outgoingVoiceRequest &&
+        ["sending", "pending"].includes(outgoingVoiceRequest.status) &&
+        outgoingVoiceRequest.targetId === targetId
+      ) {
+        return;
+      }
+
+      const base: VoiceOutgoingRequest = {
+        requestId: null,
+        targetId,
+        lobbyId: lobby?.id ?? null,
+        matchId: match?.id ?? null,
+        status: "sending",
+        timestamp: Date.now(),
+      };
+
+      setOutgoingVoiceRequest(base);
+
+      try {
+        transport.emit("rtc:request", {
+          targetId,
+          lobbyId: lobby?.id ?? null,
+          matchId: match?.id ?? null,
+        });
+      } catch (error) {
+        console.warn("rtc:request emit failed", error);
+        setOutgoingVoiceRequest({
+          ...base,
+          status: "cancelled",
+          timestamp: Date.now(),
+        });
+      }
+    },
+    [transport, voiceFeatureEnabled, me?.id, outgoingVoiceRequest, lobby?.id, match?.id]
+  );
+
+  const respondToVoiceRequest = useCallback(
+    (requestId: string, requesterId: string, accepted: boolean) => {
+      if (!transport) return;
+      let snapshot: VoiceIncomingRequest | null = null;
+
+      setIncomingVoiceRequest((current) => {
+        if (current && current.requestId === requestId) {
+          snapshot = current;
+          return null;
+        }
+        return current;
+      });
+
+      try {
+        transport.emit("rtc:request:respond", {
+          requestId,
+          requesterId,
+          accepted,
+        });
+      } catch (error) {
+        console.warn("rtc:request:respond emit failed", error);
+        if (snapshot) {
+          setIncomingVoiceRequest(snapshot);
+        }
+        return;
+      }
+
+      if (accepted) attemptVoiceJoin();
+    },
+    [transport, attemptVoiceJoin]
+  );
+
+  const dismissOutgoingRequest = useCallback(() => {
+    setOutgoingVoiceRequest((prev) => {
+      if (!prev) return prev;
+      if (["declined", "cancelled", "accepted"].includes(prev.status)) {
+        return null;
+      }
+      return prev;
+    });
+  }, []);
+
+  const clearIncomingRequest = useCallback(() => {
+    setIncomingVoiceRequest(null);
+  }, []);
+
   const voice = useMemo(
     () => ({
-      enabled: FEATURE_AUDIO_ONLY && voiceRtc.featureEnabled,
+      enabled: FEATURE_AUDIO_ONLY && voiceFeatureEnabled,
       playbackEnabled: voicePlaybackEnabled,
       setPlaybackEnabled: setVoicePlaybackEnabled,
       togglePlayback: toggleVoicePlayback,
       rtc: voiceRtc,
+      requestConnection: requestVoiceConnection,
+      respondToRequest: respondToVoiceRequest,
+      dismissOutgoingRequest,
+      clearIncomingRequest,
+      incomingRequest: incomingVoiceRequest,
+      outgoingRequest: outgoingVoiceRequest,
     }),
-    [voiceRtc, voicePlaybackEnabled, toggleVoicePlayback]
+    [
+      voiceRtc,
+      voiceFeatureEnabled,
+      voicePlaybackEnabled,
+      toggleVoicePlayback,
+      requestVoiceConnection,
+      respondToVoiceRequest,
+      dismissOutgoingRequest,
+      clearIncomingRequest,
+      incomingVoiceRequest,
+      outgoingVoiceRequest,
+    ]
   );
+
+  useEffect(() => {
+    if (!transport) return;
+
+    const handleVoiceRequest = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        from?: { id?: string; displayName?: string | null };
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.requestId || !data.from || !data.from.id) return;
+      const fallbackName =
+        typeof data.from.displayName === "string" && data.from.displayName.trim().length > 0
+          ? data.from.displayName
+          : `Player ${String(data.from.id).slice(-4)}`;
+
+      setIncomingVoiceRequest({
+        requestId: data.requestId,
+        from: {
+          id: String(data.from.id),
+          displayName: fallbackName,
+        },
+        lobbyId: data.lobbyId ?? null,
+        matchId: data.matchId ?? null,
+        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+      });
+    };
+
+    const handleVoiceRequestSent = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        targetId?: string;
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      const requestId = data.requestId;
+      if (!requestId) return;
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        const resolvedTarget = data.targetId ? String(data.targetId) : prev.targetId;
+        if (prev.targetId !== resolvedTarget) return prev;
+        return {
+          requestId,
+          targetId: resolvedTarget,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "pending",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+    };
+
+    const handleVoiceAccepted = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        from?: { id?: string };
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.from || !data.from.id) return;
+      const responderId = String(data.from.id);
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        const matchesId = prev.targetId === responderId;
+        const matchesRequest = data.requestId ? prev.requestId === data.requestId : matchesId;
+        if (!matchesId && !matchesRequest) return prev;
+        return {
+          requestId: data.requestId ?? prev.requestId ?? null,
+          targetId: prev.targetId,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "accepted",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+      attemptVoiceJoin();
+    };
+
+    const handleVoiceDeclined = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        from?: { id?: string };
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.from || !data.from.id) return;
+      const responderId = String(data.from.id);
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        const matchesId = prev.targetId === responderId;
+        const matchesRequest = data.requestId ? prev.requestId === data.requestId : matchesId;
+        if (!matchesId && !matchesRequest) return prev;
+        return {
+          requestId: data.requestId ?? prev.requestId ?? null,
+          targetId: prev.targetId,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "declined",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+    };
+
+    const handleVoiceAck = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        accepted?: boolean;
+      };
+      if (!data.requestId) return;
+      setIncomingVoiceRequest((prev) => {
+        if (!prev || prev.requestId !== data.requestId) return prev;
+        return null;
+      });
+      if (data.accepted) {
+        attemptVoiceJoin();
+      }
+    };
+
+    const handleVoiceCancelled = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.requestId) return;
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        if (prev.requestId && prev.requestId !== data.requestId) return prev;
+        return {
+          requestId: data.requestId ?? prev.requestId ?? null,
+          targetId: prev.targetId,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "cancelled",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+      setIncomingVoiceRequest((prev) => {
+        if (prev && prev.requestId === data.requestId) {
+          return null;
+        }
+        return prev;
+      });
+    };
+
+    transport.onGeneric("rtc:request", handleVoiceRequest);
+    transport.onGeneric("rtc:request:sent", handleVoiceRequestSent);
+    transport.onGeneric("rtc:request:accepted", handleVoiceAccepted);
+    transport.onGeneric("rtc:request:declined", handleVoiceDeclined);
+    transport.onGeneric("rtc:request:ack", handleVoiceAck);
+    transport.onGeneric("rtc:request:cancelled", handleVoiceCancelled);
+
+    return () => {
+      transport.offGeneric("rtc:request", handleVoiceRequest);
+      transport.offGeneric("rtc:request:sent", handleVoiceRequestSent);
+      transport.offGeneric("rtc:request:accepted", handleVoiceAccepted);
+      transport.offGeneric("rtc:request:declined", handleVoiceDeclined);
+      transport.offGeneric("rtc:request:ack", handleVoiceAck);
+      transport.offGeneric("rtc:request:cancelled", handleVoiceCancelled);
+    };
+  }, [transport, attemptVoiceJoin]);
+
+  useEffect(() => {
+    setIncomingVoiceRequest(null);
+    setOutgoingVoiceRequest(null);
+  }, [lobby?.id, match?.id]);
+
+  useEffect(() => {
+    if (voiceState === "connected") {
+      setOutgoingVoiceRequest(null);
+    }
+  }, [voiceState]);
 
   // Monotonic token to guard resync state across overlapping attempts
   const resyncGenRef = useRef<number>(0);

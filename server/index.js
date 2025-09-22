@@ -702,6 +702,8 @@ const lobbyInvites = new Map();
 const rtcParticipants = new Map();
 /** @type {Map<string, { id: string, displayName: string, lobbyId: string|null, matchId: string|null, roomId: string, joinedAt: number }>} playerId -> participant details */
 const participantDetails = new Map();
+/** @type {Map<string, { id: string, from: string, to: string, lobbyId: string|null, matchId: string|null, createdAt: number }>} */
+const pendingVoiceRequests = new Map();
 
 function getVoiceRoomIdForPlayer(player) {
   if (!player) return null;
@@ -2663,6 +2665,129 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("rtc:request", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player) return;
+
+    const targetId = payload && typeof payload.targetId === 'string' ? payload.targetId : null;
+    const requestedLobbyId = payload && typeof payload.lobbyId === 'string' ? payload.lobbyId : null;
+    const requestedMatchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
+    if (!targetId || targetId === player.id) return;
+
+    const targetPlayer = players.get(targetId);
+    if (!targetPlayer || !targetPlayer.socketId) return;
+
+    const shareLobby = player.lobbyId && targetPlayer.lobbyId && player.lobbyId === targetPlayer.lobbyId;
+    const shareMatch = player.matchId && targetPlayer.matchId && player.matchId === targetPlayer.matchId;
+
+    let lobbyId = null;
+    if (requestedLobbyId) {
+      const lobby = lobbies.get(requestedLobbyId);
+      if (lobby && lobby.playerIds.has(player.id) && lobby.playerIds.has(targetId)) {
+        lobbyId = requestedLobbyId;
+      }
+    }
+    if (!lobbyId && shareLobby) {
+      lobbyId = player.lobbyId;
+    }
+
+    let matchId = null;
+    if (requestedMatchId) {
+      const match = matches.get(requestedMatchId);
+      if (match && Array.isArray(match.playerIds) && match.playerIds.includes(player.id) && match.playerIds.includes(targetId)) {
+        matchId = requestedMatchId;
+      }
+    }
+    if (!matchId && shareMatch) {
+      matchId = player.matchId;
+    }
+
+    if (!lobbyId && !matchId) {
+      return;
+    }
+
+    const requestId = rid('rtc_req');
+
+    pendingVoiceRequests.set(requestId, {
+      id: requestId,
+      from: player.id,
+      to: targetId,
+      lobbyId,
+      matchId,
+      createdAt: Date.now(),
+    });
+
+    io.to(targetPlayer.socketId).emit("rtc:request", {
+      requestId,
+      from: getPlayerInfo(player.id),
+      lobbyId,
+      matchId,
+      timestamp: Date.now(),
+    });
+
+    socket.emit("rtc:request:sent", {
+      requestId,
+      targetId,
+      lobbyId,
+      matchId,
+      timestamp: Date.now(),
+    });
+  });
+
+  socket.on("rtc:request:respond", (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player) return;
+
+    const requestId = payload && typeof payload.requestId === 'string' ? payload.requestId : null;
+    const requesterId = payload && typeof payload.requesterId === 'string' ? payload.requesterId : null;
+    const accepted = payload && typeof payload.accepted === 'boolean' ? payload.accepted : false;
+
+    if (!requestId || !requesterId) return;
+
+    const request = pendingVoiceRequests.get(requestId);
+    if (!request) return;
+    if (request.to !== player.id || request.from !== requesterId) return;
+
+    const requesterPlayer = players.get(requesterId);
+    if (!requesterPlayer || !requesterPlayer.socketId) {
+      pendingVoiceRequests.delete(requestId);
+      return;
+    }
+
+    const sameLobby = request.lobbyId && player.lobbyId === request.lobbyId && requesterPlayer.lobbyId === request.lobbyId;
+    const sameMatch = request.matchId && player.matchId === request.matchId && requesterPlayer.matchId === request.matchId;
+    if (!sameLobby && !sameMatch) {
+      pendingVoiceRequests.delete(requestId);
+      return;
+    }
+
+    pendingVoiceRequests.delete(requestId);
+
+    const responsePayload = {
+      requestId,
+      from: getPlayerInfo(player.id),
+      lobbyId: request.lobbyId,
+      matchId: request.matchId,
+      accepted,
+      timestamp: Date.now(),
+    };
+
+    io.to(requesterPlayer.socketId).emit(
+      accepted ? "rtc:request:accepted" : "rtc:request:declined",
+      responsePayload,
+    );
+
+    // Confirm to responder so UI can clear state
+    socket.emit("rtc:request:ack", responsePayload);
+
+    if (accepted) {
+      // Also let responder's client handle unified acceptance flow
+      socket.emit("rtc:request:accepted", responsePayload);
+    }
+  });
+
   // Submit sealed deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
     if (!authed) return;
@@ -3022,7 +3147,24 @@ io.on("connection", (socket) => {
     if (!pid) return;
     const player = players.get(pid);
     playerIdBySocket.delete(socket.id);
-    
+
+    for (const [requestId, request] of Array.from(pendingVoiceRequests.entries())) {
+      if (request.from === pid || request.to === pid) {
+        pendingVoiceRequests.delete(requestId);
+        const otherId = request.from === pid ? request.to : request.from;
+        const otherPlayer = players.get(otherId);
+        if (otherPlayer && otherPlayer.socketId) {
+          io.to(otherPlayer.socketId).emit("rtc:request:cancelled", {
+            requestId,
+            cancelledBy: pid,
+            lobbyId: request.lobbyId,
+            matchId: request.matchId,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
     // Clean up WebRTC participant state on disconnect
     const participantInfo = participantDetails.get(pid);
     const roomId = participantInfo?.roomId || (player ? getVoiceRoomIdForPlayer(player) : null);
