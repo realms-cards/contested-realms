@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import type { OnlineContextValue } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
@@ -19,6 +19,8 @@ import type {
 } from "@/lib/net/protocol";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
+import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
+import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 
 
 
@@ -43,6 +45,10 @@ export default function OnlineLayout({
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
   const [resyncing, setResyncing] = useState<boolean>(false);
+  const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
+  const toggleVoicePlayback = useCallback(() => {
+    setVoicePlaybackEnabled((prev) => !prev);
+  }, []);
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
   // Track latest lobby across event handlers
@@ -61,6 +67,32 @@ export default function OnlineLayout({
     if (!transportRef.current) transportRef.current = new SocketTransport();
     return transportRef.current;
   }, []);
+
+  const voiceScopeId = useMemo(() => {
+    if (lobby?.id) return lobby.id;
+    if (match?.id) return match.id;
+    return null;
+  }, [lobby?.id, match?.id]);
+
+  const voiceRtc = useMatchWebRTC({
+    enabled: FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY,
+    transport,
+    myPlayerId: me?.id ?? null,
+    matchId: match?.id ?? null,
+    lobbyId: lobby?.id ?? null,
+    voiceRoomId: voiceScopeId,
+  });
+
+  const voice = useMemo(
+    () => ({
+      enabled: FEATURE_AUDIO_ONLY && voiceRtc.featureEnabled,
+      playbackEnabled: voicePlaybackEnabled,
+      setPlaybackEnabled: setVoicePlaybackEnabled,
+      togglePlayback: toggleVoicePlayback,
+      rtc: voiceRtc,
+    }),
+    [voiceRtc, voicePlaybackEnabled, toggleVoicePlayback]
+  );
 
   // Monotonic token to guard resync state across overlapping attempts
   const resyncGenRef = useRef<number>(0);
@@ -516,6 +548,7 @@ export default function OnlineLayout({
         if (transport.removeCpuBot) transport.removeCpuBot(playerId);
       } catch {}
     },
+    voice,
   };
 
   return (

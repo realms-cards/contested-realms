@@ -17,12 +17,20 @@ export type UseMatchWebRTCOptions = {
   transport: SocketTransport | null;
   myPlayerId: string | null;
   matchId: string | null;
+  lobbyId?: string | null;
+  /**
+   * Explicit voice room identifier. When provided, takes precedence over match/lobby ids
+   * for determining whether the client is eligible to join voice chat.
+   */
+  voiceRoomId?: string | null;
   iceServers?: RTCIceServer[];
 };
 
 export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
-  const { enabled, transport, myPlayerId, matchId } = opts;
+  const { enabled, transport, myPlayerId, matchId, lobbyId, voiceRoomId } = opts;
   const iceServers = opts.iceServers ?? RTC_STUN_SERVERS;
+
+  const activeScopeId = voiceRoomId ?? matchId ?? lobbyId ?? null;
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -34,8 +42,10 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   // Device selection state
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [audioDeviceId, setAudioDeviceId] = useState<string | null>(null);
   const [videoDeviceId, setVideoDeviceId] = useState<string | null>(null);
+  const [audioOutputDeviceId, setAudioOutputDeviceId] = useState<string | null>(null);
 
   const localStream = localStreamRef.current;
   const remoteStream = remoteStreamRef.current;
@@ -104,12 +114,19 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const refreshDevices = useCallback(async () => {
     try {
       const list = await navigator.mediaDevices.enumerateDevices();
-      setAudioDevices(list.filter((d) => d.kind === 'audioinput'));
-      setVideoDevices(list.filter((d) => d.kind === 'videoinput'));
+      const audioInputs = list.filter((d) => d.kind === 'audioinput');
+      const videoInputs = list.filter((d) => d.kind === 'videoinput');
+      const audioOutputs = list.filter((d) => d.kind === 'audiooutput');
+      setAudioDevices(audioInputs);
+      setVideoDevices(videoInputs);
+      setAudioOutputDevices(audioOutputs);
+      if (audioOutputDeviceId && !audioOutputs.some((d) => d.deviceId === audioOutputDeviceId)) {
+        setAudioOutputDeviceId(null);
+      }
     } catch {
       // ignore
     }
-  }, []);
+  }, [audioOutputDeviceId]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -246,7 +263,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   }, [cleanupPc]);
 
   const join = useCallback(async () => {
-    if (!enabled || !transport || !myPlayerId || !matchId) return;
+    if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
     try {
       setState('joining');
       await addLocalTracks();
@@ -256,13 +273,19 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     } catch {
       setState('failed');
     }
-  }, [enabled, transport, myPlayerId, matchId, addLocalTracks]);
+  }, [enabled, transport, myPlayerId, activeScopeId, addLocalTracks]);
 
   const leave = useCallback(() => {
     if (!transport) return;
     try { transport.emit?.('rtc:leave'); } catch {}
     reset();
   }, [transport, reset]);
+
+  useEffect(() => {
+    if (!activeScopeId && state !== 'idle') {
+      leave();
+    }
+  }, [activeScopeId, state, leave]);
 
   // Dynamic device switching via replaceTrack
   const switchTrack = useCallback(async (kind: 'audio' | 'video', deviceId: string | null) => {
@@ -308,6 +331,10 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     setVideoDeviceId(id);
     void switchTrack('video', id);
   }, [switchTrack]);
+
+  const chooseAudioOutputDevice = useCallback((id: string | null) => {
+    setAudioOutputDeviceId(id);
+  }, []);
 
   const toggleMic = useCallback(() => {
     const tracks = localStreamRef.current?.getAudioTracks() || [];
@@ -368,10 +395,15 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     // Devices
     audioDevices,
     videoDevices,
+    audioOutputDevices,
     audioDeviceId,
     videoDeviceId,
+    audioOutputDeviceId,
     setAudioDeviceId: chooseAudioDevice,
     setVideoDeviceId: chooseVideoDevice,
+    setAudioOutputDeviceId: chooseAudioOutputDevice,
     refreshDevices,
   } as const;
 }
+
+export type UseMatchWebRTCReturn = ReturnType<typeof useMatchWebRTC>;

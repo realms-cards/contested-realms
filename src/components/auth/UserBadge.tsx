@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
+import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 
 /**
  * UserBadge
@@ -24,6 +25,8 @@ export default function UserBadge({
   const { data: session, status } = useSession();
   const onlineCtx = useContext(OnlineContext);
   const connected: boolean = onlineCtx ? !!onlineCtx.connected : false;
+  const voice = onlineCtx?.voice;
+  const hasVoiceContext = !!(onlineCtx?.lobby?.id || onlineCtx?.match?.id);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -115,6 +118,37 @@ export default function UserBadge({
               </div>
             </div>
             <div className="my-2 h-px bg-white/10" />
+            {voice && voice.enabled && voice.rtc.featureEnabled && (
+              <div className="px-2 py-2 mb-2 rounded-md bg-slate-800/70 ring-1 ring-slate-700/50">
+                <div className="flex items-center justify-between text-xs text-slate-200">
+                  <span className="font-semibold tracking-wide uppercase">Voice Chat</span>
+                  <span
+                    className={`text-[10px] uppercase ${
+                      voice.rtc.state === "connected"
+                        ? "text-emerald-300"
+                        : voice.rtc.state === "joining" || voice.rtc.state === "negotiating"
+                        ? "text-amber-300"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {voice.rtc.state}
+                  </span>
+                </div>
+                {!hasVoiceContext && (
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    Join a lobby or match to start a voice call.
+                  </p>
+                )}
+                <div className="mt-2">
+                  <SeatMediaControls
+                    rtc={voice.rtc}
+                    className="w-full flex-wrap justify-start gap-2 bg-slate-900/70 ring-1 ring-white/5"
+                    playbackEnabled={voice.playbackEnabled}
+                    onTogglePlayback={voice.setPlaybackEnabled}
+                  />
+                </div>
+              </div>
+            )}
             <div className="px-2 py-1.5">
               <button
                 onClick={() => {
