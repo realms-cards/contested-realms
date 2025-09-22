@@ -3090,9 +3090,8 @@ io.on("connection", (socket) => {
   });
 });
 
-// Periodic cleanup: close idle open lobbies with no connected players after 3 minutes
+// Periodic cleanup: trim CPU-only lobbies; keep human lobbies alive even when idle
 setInterval(() => {
-  const now = Date.now();
   for (const lobby of lobbies.values()) {
     if (lobby.status !== "open") continue;
     // Close CPU-only lobbies immediately
@@ -3102,19 +3101,6 @@ setInterval(() => {
       lobbies.delete(lobby.id);
       broadcastLobbies();
       continue;
-    }
-    const connectedCount = Array.from(lobby.playerIds).reduce(
-      (acc, pid) => acc + (isPlayerConnected(pid) ? 1 : 0),
-      0
-    );
-    if (
-      connectedCount === 0 &&
-      now - (lobby.lastActive || now) > 3 * 60 * 1000
-    ) {
-      lobby.status = "closed";
-      try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
-      lobbies.delete(lobby.id);
-      broadcastLobbies();
     }
   }
 }, 30 * 1000);
