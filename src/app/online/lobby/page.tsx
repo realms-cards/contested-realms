@@ -99,6 +99,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     dismissInvite,
     addCpuBot,
     removeCpuBot,
+    voice,
   } = useOnline();
 
   // Tournaments API is provided by parent when the feature is enabled; otherwise undefined
@@ -131,6 +132,53 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   
   const [topTab, setTopTab] = useState<"invites" | "friends">("invites");
   
+  const voiceEnabled = voice?.enabled ?? false;
+  const incomingVoiceRequest = voice?.incomingRequest ?? null;
+  const outgoingVoiceRequest = voice?.outgoingRequest ?? null;
+  const outgoingVoiceTargetName = useMemo(() => {
+    if (!outgoingVoiceRequest || !lobby) return null;
+    const matchPlayer = lobby.players.find((p) => p.id === outgoingVoiceRequest.targetId);
+    return matchPlayer?.displayName || null;
+  }, [outgoingVoiceRequest, lobby]);
+  const incomingVoiceDisplayName = useMemo(() => {
+    if (!incomingVoiceRequest) return null;
+    return incomingVoiceRequest.from.displayName || null;
+  }, [incomingVoiceRequest]);
+  const outgoingVoiceStatus = useMemo(() => {
+    if (!outgoingVoiceRequest) return null;
+    switch (outgoingVoiceRequest.status) {
+      case "sending":
+        return "Sending request…";
+      case "pending":
+        return "Waiting for response…";
+      case "accepted":
+        return voice?.rtc.state === "connected" ? "Connected" : "Accepted, connecting…";
+      case "declined":
+        return "Declined";
+      case "cancelled":
+        return "Request cancelled";
+      default:
+        return null;
+    }
+  }, [outgoingVoiceRequest, voice?.rtc.state]);
+
+  const outgoingVoiceTone = useMemo(() => {
+    if (!outgoingVoiceRequest) return "text-slate-200";
+    switch (outgoingVoiceRequest.status) {
+      case "sending":
+      case "pending":
+        return "text-sky-300";
+      case "accepted":
+        return "text-emerald-300";
+      case "declined":
+        return "text-amber-300";
+      case "cancelled":
+        return "text-slate-400";
+      default:
+        return "text-slate-200";
+    }
+  }, [outgoingVoiceRequest]);
+
   // Match type and sealed/draft configuration
   const [matchType, setMatchType] = useState<"constructed" | "sealed" | "draft">("constructed");
   const [sealedConfig, setSealedConfig] = useState({
@@ -371,6 +419,68 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           </div>
         </div>
       )}
+      {voiceEnabled && (incomingVoiceRequest || outgoingVoiceRequest) && (
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
+          {incomingVoiceRequest && voice && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm">
+              <div>
+                <span className="font-semibold">
+                  {incomingVoiceDisplayName || incomingVoiceRequest.from.id}
+                </span>{" "}
+                wants to start a voice chat.
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="rounded bg-emerald-600/80 hover:bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white"
+                  onClick={() =>
+                    voice.respondToRequest(
+                      incomingVoiceRequest.requestId,
+                      incomingVoiceRequest.from.id,
+                      true
+                    )
+                  }
+                >
+                  Accept
+                </button>
+                <button
+                  className="rounded bg-rose-600/80 hover:bg-rose-600 px-4 py-1.5 text-xs font-semibold text-white"
+                  onClick={() =>
+                    voice.respondToRequest(
+                      incomingVoiceRequest.requestId,
+                      incomingVoiceRequest.from.id,
+                      false
+                    )
+                  }
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          )}
+          {outgoingVoiceRequest && outgoingVoiceStatus && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm">
+              <div>
+                Voice request to{" "}
+                <span className="font-semibold">
+                  {outgoingVoiceTargetName || outgoingVoiceRequest.targetId}
+                </span>
+                :{" "}
+                <span className={`${outgoingVoiceTone} font-medium`}>
+                  {outgoingVoiceStatus}
+                </span>
+              </div>
+              {voice && ["declined", "cancelled"].includes(outgoingVoiceRequest.status) && (
+                <button
+                  className="self-start rounded bg-slate-700/80 hover:bg-slate-700 px-3 py-1 text-xs text-slate-200"
+                  onClick={voice.dismissOutgoingRequest}
+                >
+                  Dismiss
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {/* Lobbies (central, full width) */}
       <LobbiesCentral
         lobbies={lobbies}
@@ -393,6 +503,16 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         onResync={() => resync()}
         onAddCpuBot={addCpuBot}
         onRemoveCpuBot={removeCpuBot}
+        voiceSupport={
+          voice?.enabled && lobby
+            ? {
+                enabled: true,
+                outgoingRequest: voice.outgoingRequest,
+                incomingFrom: voice.incomingRequest?.from.id ?? null,
+                onRequest: voice.requestConnection,
+              }
+            : null
+        }
         onCreateTournament={tournamentsEnabled ? async (cfg: CreateTournamentConfig) => {
           console.log(`Creating tournament: "${cfg.name}"`);
           try {

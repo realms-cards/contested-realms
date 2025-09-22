@@ -26,6 +26,7 @@ export class SocketTransport implements GameTransport {
   private reconnectionDelay = 1000; // Start with 1 second
   private connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
   private isIntentionalDisconnect = false;
+  private genericHandlers: Map<string, Set<(payload: unknown) => void>> = new Map();
 
   private static getMessageType(m: unknown): string {
     if (m && typeof m === "object" && "type" in (m as Record<string, unknown>)) {
@@ -71,8 +72,13 @@ export class SocketTransport implements GameTransport {
       auth: token ? { token } : undefined,
     }) as Socket;
 
+    if (this.socket) {
+      this.detachGenericHandlers(this.socket);
+    }
+
     this.socket = socket;
     this.setupReconnectionHandlers(socket, opts);
+    this.attachGenericHandlers(socket);
 
     await new Promise<void>((resolve, reject) => {
       let resolved = false;
@@ -647,12 +653,44 @@ export class SocketTransport implements GameTransport {
   // Generic on/off methods for arbitrary events (used by replay functionality)  
   // Note: This overloads the typed 'on' method for specific events
   onGeneric(event: string, handler: (payload: unknown) => void): void {
-    if (!this.socket) return; // safely ignore if not connected
-    this.socket.on(event, handler);
+    let set = this.genericHandlers.get(event);
+    if (!set) {
+      set = new Set();
+      this.genericHandlers.set(event, set);
+    }
+    if (set.has(handler)) return;
+    set.add(handler);
+    if (this.socket) {
+      this.socket.on(event, handler);
+    }
   }
 
   offGeneric(event: string, handler: (payload: unknown) => void): void {
-    if (!this.socket) return; // safely ignore if not connected
-    this.socket.off(event, handler);
+    const set = this.genericHandlers.get(event);
+    if (set) {
+      set.delete(handler);
+      if (set.size === 0) {
+        this.genericHandlers.delete(event);
+      }
+    }
+    if (this.socket) {
+      this.socket.off(event, handler);
+    }
+  }
+
+  private attachGenericHandlers(socket: Socket): void {
+    for (const [event, handlers] of this.genericHandlers.entries()) {
+      for (const handler of handlers) {
+        socket.on(event, handler);
+      }
+    }
+  }
+
+  private detachGenericHandlers(socket: Socket): void {
+    for (const [event, handlers] of this.genericHandlers.entries()) {
+      for (const handler of handlers) {
+        socket.off(event, handler);
+      }
+    }
   }
 }
