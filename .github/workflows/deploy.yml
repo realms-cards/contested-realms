@@ -1,0 +1,42 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to DigitalOcean
+    runs-on: ubuntu-latest
+    env:
+      DO_HOST: ${{ secrets.DO_PROD_HOST }}
+      DO_USER: ${{ secrets.DO_PROD_USER }}
+      DO_SSH_KEY: ${{ secrets.DO_PROD_SSH_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          if [ -z "$DO_HOST" ] || [ -z "$DO_USER" ] || [ -z "$DO_SSH_KEY" ]; then
+            echo "DigitalOcean secrets are not fully configured."
+            exit 1
+          fi
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DO_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$DO_HOST" >> ~/.ssh/known_hosts
+
+      - name: Validate connection details
+        run: |
+          echo "Target host: $DO_HOST"
+          echo "SSH user: $DO_USER"
+          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" "echo 'Connection successful'" || echo "Connection attempt failed"
+
+      - name: Placeholder deploy step
+        run: |
+          echo "Add deployment commands here, e.g. rsync or docker compose"
