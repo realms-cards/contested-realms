@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OnlineContext } from "@/app/online/online-context";
-import type { OnlineContextValue } from "@/app/online/online-context";
+import type {
+  OnlineContextValue,
+  VoiceIncomingRequest,
+  VoiceOutgoingRequest,
+  VoiceRequestPeer,
+} from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
+import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { useGameStore } from "@/lib/game/store";
 import type {
   LobbyInfo,
@@ -19,6 +25,7 @@ import type {
 } from "@/lib/net/protocol";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
+import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
 
 
@@ -43,6 +50,12 @@ export default function OnlineLayout({
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
   const [resyncing, setResyncing] = useState<boolean>(false);
+  const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
+  const toggleVoicePlayback = useCallback(() => {
+    setVoicePlaybackEnabled((prev) => !prev);
+  }, []);
+  const [incomingVoiceRequest, setIncomingVoiceRequest] = useState<VoiceIncomingRequest | null>(null);
+  const [outgoingVoiceRequest, setOutgoingVoiceRequest] = useState<VoiceOutgoingRequest | null>(null);
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
   // Track latest lobby across event handlers
@@ -61,6 +74,433 @@ export default function OnlineLayout({
     if (!transportRef.current) transportRef.current = new SocketTransport();
     return transportRef.current;
   }, []);
+
+  const voiceScopeId = useMemo(() => {
+    if (lobby?.id) return lobby.id;
+    if (match?.id) return match.id;
+    return null;
+  }, [lobby?.id, match?.id]);
+
+  const voiceRtc = useMatchWebRTC({
+    enabled: FEATURE_SEAT_VIDEO || FEATURE_AUDIO_ONLY,
+    transport,
+    myPlayerId: me?.id ?? null,
+    matchId: match?.id ?? null,
+    lobbyId: lobby?.id ?? null,
+    voiceRoomId: voiceScopeId,
+  });
+
+  const voiceParticipantKey = useMemo(() => {
+    const ids = voiceRtc.participantIds ?? [];
+    return ids.length > 0 ? ids.join('|') : '';
+  }, [voiceRtc.participantIds]);
+
+  const voiceParticipantIds = useMemo(() => {
+    if (!voiceParticipantKey) return [] as string[];
+    return voiceParticipantKey.split('|').filter(Boolean);
+  }, [voiceParticipantKey]);
+
+  const voiceParticipantIdSet = useMemo(() => {
+    return new Set(voiceParticipantIds);
+  }, [voiceParticipantIds]);
+
+  const previousVoiceParticipantCountRef = useRef<number>(voiceParticipantIds.length);
+
+  const voiceFeatureEnabled = voiceRtc.featureEnabled;
+  const voiceState = voiceRtc.state;
+  const voiceJoin = voiceRtc.join;
+
+  const attemptVoiceJoin = useCallback(() => {
+    if (!voiceFeatureEnabled) return;
+    if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
+      console.debug('[RTC][client] attempting join', {
+        state: voiceState,
+        lobbyId: lobby?.id ?? null,
+        matchId: match?.id ?? null,
+      });
+      void voiceJoin();
+    }
+  }, [voiceFeatureEnabled, voiceJoin, voiceState, lobby?.id, match?.id]);
+
+  const requestVoiceConnection = useCallback(
+    (targetId: string) => {
+      if (!transport || !voiceFeatureEnabled || !targetId) return;
+      if (me?.id && targetId === me.id) return;
+      if (voiceParticipantIdSet.has(targetId)) {
+        console.debug('[RTC][client] skipping request (already connected)', { targetId });
+        return;
+      }
+      if (
+        outgoingVoiceRequest &&
+        ["sending", "pending"].includes(outgoingVoiceRequest.status) &&
+        outgoingVoiceRequest.targetId === targetId
+      ) {
+        return;
+      }
+
+      const base: VoiceOutgoingRequest = {
+        requestId: null,
+        targetId,
+        lobbyId: lobby?.id ?? null,
+        matchId: match?.id ?? null,
+        status: "sending",
+        timestamp: Date.now(),
+      };
+
+      setOutgoingVoiceRequest(base);
+      setVoicePlaybackEnabled(true);
+
+      try {
+        console.debug('[RTC][client] sending request', {
+          targetId,
+          lobbyId: base.lobbyId,
+          matchId: base.matchId,
+        });
+        transport.emit("rtc:request", {
+          targetId,
+          lobbyId: lobby?.id ?? null,
+          matchId: match?.id ?? null,
+        });
+      } catch (error) {
+        console.warn("rtc:request emit failed", error);
+        setOutgoingVoiceRequest({
+          ...base,
+          status: "cancelled",
+          timestamp: Date.now(),
+        });
+      }
+    },
+    [
+      transport,
+      voiceFeatureEnabled,
+      me?.id,
+      outgoingVoiceRequest,
+      lobby?.id,
+      match?.id,
+      voiceParticipantIdSet,
+    ]
+  );
+
+  const respondToVoiceRequest = useCallback(
+    (requestId: string, requesterId: string, accepted: boolean) => {
+      if (!transport) return;
+      let snapshot: VoiceIncomingRequest | null = null;
+
+      setIncomingVoiceRequest((current) => {
+        if (current && current.requestId === requestId) {
+          snapshot = current;
+          return null;
+        }
+        return current;
+      });
+
+      try {
+        console.debug('[RTC][client] responding to request', {
+          requestId,
+          requesterId,
+          accepted,
+        });
+        transport.emit("rtc:request:respond", {
+          requestId,
+          requesterId,
+          accepted,
+        });
+        if (accepted) {
+          setVoicePlaybackEnabled(true);
+        }
+      } catch (error) {
+        console.warn("rtc:request:respond emit failed", error);
+        if (snapshot) {
+          setIncomingVoiceRequest(snapshot);
+        }
+        return;
+      }
+
+      if (accepted && voiceRtc.state !== "connected") attemptVoiceJoin();
+    },
+    [transport, attemptVoiceJoin, setVoicePlaybackEnabled, voiceRtc.state]
+  );
+
+  const dismissOutgoingRequest = useCallback(() => {
+    setOutgoingVoiceRequest((prev) => {
+      if (!prev) return prev;
+      if (["declined", "cancelled", "accepted"].includes(prev.status)) {
+        return null;
+      }
+      return prev;
+    });
+  }, []);
+
+  const clearIncomingRequest = useCallback(() => {
+    setIncomingVoiceRequest(null);
+  }, []);
+
+  useEffect(() => {
+    const previousCount = previousVoiceParticipantCountRef.current;
+    const currentCount = voiceParticipantIds.length;
+
+    if (currentCount > 0 && previousCount === 0 && !voicePlaybackEnabled) {
+      setVoicePlaybackEnabled(true);
+    }
+
+    previousVoiceParticipantCountRef.current = currentCount;
+  }, [voiceParticipantIds, voicePlaybackEnabled, setVoicePlaybackEnabled]);
+
+  const knownVoicePeers = useMemo(() => {
+    const map = new Map<string, VoiceRequestPeer>();
+    if (Array.isArray(lobby?.players)) {
+      lobby?.players.forEach((p) => {
+        map.set(p.id, { id: p.id, displayName: p.displayName });
+      });
+    }
+    players.forEach((p) => {
+      if (!map.has(p.id)) {
+        map.set(p.id, { id: p.id, displayName: p.displayName });
+      }
+    });
+    if (me) {
+      map.set(me.id, { id: me.id, displayName: me.displayName ?? me.id });
+    }
+    return map;
+  }, [lobby?.players, players, me]);
+
+  const voiceConnectedPeers = useMemo(() => {
+    return voiceParticipantIds
+      .map((id) => {
+        const existing = knownVoicePeers.get(id);
+        if (existing) return existing;
+        return { id, displayName: `Player ${id.slice(-4)}` };
+      })
+      .filter((peer, index, self) => peer.id && self.findIndex((p) => p.id === peer.id) === index);
+  }, [voiceParticipantIds, knownVoicePeers]);
+
+  const voice = useMemo(
+    () => ({
+      enabled: FEATURE_AUDIO_ONLY && voiceFeatureEnabled,
+      playbackEnabled: voicePlaybackEnabled,
+      setPlaybackEnabled: setVoicePlaybackEnabled,
+      togglePlayback: toggleVoicePlayback,
+      rtc: voiceRtc,
+      requestConnection: requestVoiceConnection,
+      respondToRequest: respondToVoiceRequest,
+      dismissOutgoingRequest,
+      clearIncomingRequest,
+      incomingRequest: incomingVoiceRequest,
+      outgoingRequest: outgoingVoiceRequest,
+      connectedPeerIds: voiceParticipantIds,
+      connectedPeers: voiceConnectedPeers,
+    }),
+    [
+      voiceRtc,
+      voiceFeatureEnabled,
+      voicePlaybackEnabled,
+      toggleVoicePlayback,
+      requestVoiceConnection,
+      respondToVoiceRequest,
+      dismissOutgoingRequest,
+      clearIncomingRequest,
+      incomingVoiceRequest,
+      outgoingVoiceRequest,
+      voiceParticipantIds,
+      voiceConnectedPeers,
+    ]
+  );
+
+  useEffect(() => {
+    if (!transport) return;
+
+    const handleVoiceRequest = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        from?: { id?: string; displayName?: string | null };
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.requestId || !data.from || !data.from.id) return;
+      const fallbackName =
+        typeof data.from.displayName === "string" && data.from.displayName.trim().length > 0
+          ? data.from.displayName
+          : `Player ${String(data.from.id).slice(-4)}`;
+
+      console.debug('[RTC][client] incoming request', {
+        ...data,
+        from: data.from?.id,
+      });
+
+      setIncomingVoiceRequest({
+        requestId: data.requestId,
+        from: {
+          id: String(data.from.id),
+          displayName: fallbackName,
+        },
+        lobbyId: data.lobbyId ?? null,
+        matchId: data.matchId ?? null,
+        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+      });
+    };
+
+    const handleVoiceRequestSent = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        targetId?: string;
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      const requestId = data.requestId;
+      if (!requestId) return;
+      console.debug('[RTC][client] request acknowledged', data);
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        const resolvedTarget = data.targetId ? String(data.targetId) : prev.targetId;
+        if (prev.targetId !== resolvedTarget) return prev;
+        return {
+          requestId,
+          targetId: resolvedTarget,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "pending",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+    };
+
+    const handleVoiceAccepted = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        from?: { id?: string };
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.from || !data.from.id) return;
+      console.debug('[RTC][client] request accepted', data);
+      const responderId = String(data.from.id);
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        const matchesId = prev.targetId === responderId;
+        const matchesRequest = data.requestId ? prev.requestId === data.requestId : matchesId;
+        if (!matchesId && !matchesRequest) return prev;
+        return {
+          requestId: data.requestId ?? prev.requestId ?? null,
+          targetId: prev.targetId,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "accepted",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+      setVoicePlaybackEnabled(true);
+      attemptVoiceJoin();
+    };
+
+    const handleVoiceDeclined = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        from?: { id?: string };
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.from || !data.from.id) return;
+      console.debug('[RTC][client] request declined', data);
+      const responderId = String(data.from.id);
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        const matchesId = prev.targetId === responderId;
+        const matchesRequest = data.requestId ? prev.requestId === data.requestId : matchesId;
+        if (!matchesId && !matchesRequest) return prev;
+        return {
+          requestId: data.requestId ?? prev.requestId ?? null,
+          targetId: prev.targetId,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "declined",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+    };
+
+    const handleVoiceAck = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        accepted?: boolean;
+      };
+      if (!data.requestId) return;
+      console.debug('[RTC][client] acknowledgement from responder', data);
+      setIncomingVoiceRequest((prev) => {
+        if (!prev || prev.requestId !== data.requestId) return prev;
+        return null;
+      });
+      if (data.accepted) {
+        attemptVoiceJoin();
+      }
+    };
+
+    const handleVoiceCancelled = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as {
+        requestId?: string;
+        lobbyId?: string | null;
+        matchId?: string | null;
+        timestamp?: number;
+      };
+      if (!data.requestId) return;
+      console.debug('[RTC][client] request cancelled', data);
+      setOutgoingVoiceRequest((prev) => {
+        if (!prev) return prev;
+        if (prev.requestId && prev.requestId !== data.requestId) return prev;
+        return {
+          requestId: data.requestId ?? prev.requestId ?? null,
+          targetId: prev.targetId,
+          lobbyId: data.lobbyId ?? prev.lobbyId,
+          matchId: data.matchId ?? prev.matchId,
+          status: "cancelled",
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+      });
+      setIncomingVoiceRequest((prev) => {
+        if (prev && prev.requestId === data.requestId) {
+          return null;
+        }
+        return prev;
+      });
+    };
+
+    transport.onGeneric("rtc:request", handleVoiceRequest);
+    transport.onGeneric("rtc:request:sent", handleVoiceRequestSent);
+    transport.onGeneric("rtc:request:accepted", handleVoiceAccepted);
+    transport.onGeneric("rtc:request:declined", handleVoiceDeclined);
+    transport.onGeneric("rtc:request:ack", handleVoiceAck);
+    transport.onGeneric("rtc:request:cancelled", handleVoiceCancelled);
+
+    return () => {
+      transport.offGeneric("rtc:request", handleVoiceRequest);
+      transport.offGeneric("rtc:request:sent", handleVoiceRequestSent);
+      transport.offGeneric("rtc:request:accepted", handleVoiceAccepted);
+      transport.offGeneric("rtc:request:declined", handleVoiceDeclined);
+      transport.offGeneric("rtc:request:ack", handleVoiceAck);
+      transport.offGeneric("rtc:request:cancelled", handleVoiceCancelled);
+    };
+  }, [transport, attemptVoiceJoin]);
+
+  useEffect(() => {
+    setIncomingVoiceRequest(null);
+    setOutgoingVoiceRequest(null);
+  }, [lobby?.id, match?.id]);
+
+  useEffect(() => {
+    if (voiceState === "connected") {
+      setOutgoingVoiceRequest(null);
+      setVoicePlaybackEnabled(true);
+    }
+  }, [voiceState]);
 
   // Monotonic token to guard resync state across overlapping attempts
   const resyncGenRef = useRef<number>(0);
@@ -516,6 +956,7 @@ export default function OnlineLayout({
         if (transport.removeCpuBot) transport.removeCpuBot(playerId);
       } catch {}
     },
+    voice,
   };
 
   return (
