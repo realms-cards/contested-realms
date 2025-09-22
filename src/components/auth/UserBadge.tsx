@@ -39,12 +39,26 @@ export default function UserBadge({
 
   // Loading shimmer similar to AuthButton
   if (status === "loading") {
+    if (variant === "floating") {
+      return (
+        <div className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}>
+          <div className="h-9 w-[7.5rem] rounded-full bg-slate-800/80 animate-pulse" />
+        </div>
+      );
+    }
     return <div className={`w-24 h-9 bg-slate-800 rounded animate-pulse ${className}`} />;
   }
 
   // Not authenticated: reuse AuthButton
   if (!session?.user?.id) {
-    return <AuthButton />;
+    if (variant === "floating") {
+      return (
+        <div className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}>
+          <AuthButton variant="floating" />
+        </div>
+      );
+    }
+    return <AuthButton className={className} />;
   }
 
   const presence = (
