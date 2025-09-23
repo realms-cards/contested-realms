@@ -47,12 +47,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "Starting deploy to $DO_HOST in $APP_DIR (branch: ${BRANCH:-main})"
-          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" bash -s <<EOF
+          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" APP_DIR="$APP_DIR" BRANCH="${BRANCH:-main}" WS_HEALTH_URL="${WS_HEALTH_URL:-}" bash -s <<'EOF'
           set -euo pipefail
-
-          APP_DIR="${APP_DIR}"
-          BRANCH="${BRANCH:-main}"
-          WS_HEALTH_URL="${WS_HEALTH_URL}"
 
           echo "Deploying to $APP_DIR on branch $BRANCH"
 
@@ -133,7 +129,7 @@ jobs:
 
           # Basic health check
           sleep 5 || true
-          if [ -n "$WS_HEALTH_URL" ]; then
+          if [ -n "${WS_HEALTH_URL:-}" ]; then
             curl -fsS "$WS_HEALTH_URL" || true
           else
             curl -fsS https://ws.realms.cards/healthz || curl -fsS http://localhost:3010/healthz || true
