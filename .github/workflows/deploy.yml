@@ -15,14 +15,18 @@ jobs:
       DO_HOST: ${{ secrets.DO_PROD_HOST }}
       DO_USER: ${{ secrets.DO_PROD_USER }}
       DO_SSH_KEY: ${{ secrets.DO_PROD_SSH_KEY }}
+      APP_DIR: ${{ secrets.DO_PROD_APP_DIR }}
+      BRANCH: main
+      # Optional: set an environment variable WS_HEALTH_URL at the environment/repo level to override
+      WS_HEALTH_URL: ${{ vars.WS_HEALTH_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Validate secrets
         run: |
-          if [ -z "$DO_HOST" ] || [ -z "$DO_USER" ] || [ -z "$DO_SSH_KEY" ]; then
-            echo "DigitalOcean secrets are not fully configured."
+          if [ -z "$DO_HOST" ] || [ -z "$DO_USER" ] || [ -z "$DO_SSH_KEY" ] || [ -z "$APP_DIR" ]; then
+            echo "DigitalOcean secrets are not fully configured (need DO_PROD_HOST, DO_PROD_USER, DO_PROD_SSH_KEY, DO_PROD_APP_DIR)."
             exit 1
           fi
 
@@ -37,8 +41,106 @@ jobs:
         run: |
           echo "Target host: $DO_HOST"
           echo "SSH user: $DO_USER"
-          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" "echo 'Connection successful'" || echo "Connection attempt failed"
+          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" "echo 'Connection successful'; docker --version; (docker compose version || docker-compose --version) 2>/dev/null || echo 'Docker Compose not found'" || echo "Connection attempt failed"
 
-      - name: Placeholder deploy step
+      - name: Deploy to Droplet (git pull, compose build, migrate, start)
         run: |
-          echo "Add deployment commands here, e.g. rsync or docker compose"
+          set -euo pipefail
+          echo "Starting deploy to $DO_HOST in $APP_DIR (branch: ${BRANCH:-main})"
+          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" bash -s <<EOF
+          set -euo pipefail
+
+          APP_DIR="${APP_DIR}"
+          BRANCH="${BRANCH:-main}"
+          WS_HEALTH_URL="${WS_HEALTH_URL}"
+
+          echo "Deploying to $APP_DIR on branch $BRANCH"
+
+          # Detect Docker Compose
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE="docker compose"
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE="docker-compose"
+          else
+            echo "Docker Compose is not installed on the server."
+            exit 1
+          fi
+
+          # Ensure app directory exists and is a git repo
+          if [ ! -d "$APP_DIR/.git" ]; then
+            echo "App directory $APP_DIR missing or not a git repo."
+            exit 1
+          fi
+
+          cd "$APP_DIR"
+
+          # Ensure env is present for prod compose
+          if [ ! -f ".env.production" ]; then
+            echo ".env.production is missing in $APP_DIR"
+            exit 1
+          fi
+
+          # Pull latest code
+          git fetch origin "$BRANCH" --prune
+          git checkout -f "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+
+          # Minimize downtime: keep services running during build; we'll roll servers individually below
+
+          # Build images with latest base layers
+          $COMPOSE -f docker-compose.prod.yml build --pull
+
+          # Run database migrations (one-off job) and wait for completion
+          $COMPOSE -f docker-compose.prod.yml up -d migrate
+          MIG_EXIT=$(docker wait sorcery-migrate || echo 1)
+          # Always show migrate logs
+          $COMPOSE -f docker-compose.prod.yml logs --no-color migrate || true
+          if [ "${MIG_EXIT}" != "0" ]; then
+            echo "Prisma migrations failed with exit code ${MIG_EXIT}"
+            exit ${MIG_EXIT}
+          fi
+
+          # Helper: wait for a container to be healthy (requires healthcheck)
+          wait_healthy() {
+            local name="$1"
+            echo "Waiting for $name to become healthy..."
+            for i in $(seq 1 60); do
+              status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null || echo "missing")
+              if [ "$status" = "healthy" ]; then
+                echo "$name is healthy"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "Timeout waiting for $name to become healthy (last status: $status)"
+            docker logs --tail 100 "$name" || true
+            return 1
+          }
+
+          # Ensure infra services exist and are running without forcing a restart
+          if ! docker inspect sorcery-redis >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' sorcery-redis 2>/dev/null || echo false)" != "true" ]; then
+            $COMPOSE -f docker-compose.prod.yml up -d redis
+          fi
+          if ! docker inspect sorcery-caddy >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' sorcery-caddy 2>/dev/null || echo false)" != "true" ]; then
+            $COMPOSE -f docker-compose.prod.yml up -d caddy
+          fi
+
+          # Rolling restart servers to avoid downtime (do not restart caddy)
+          $COMPOSE -f docker-compose.prod.yml up -d --no-deps --force-recreate server1
+          wait_healthy sorcery-server-1
+          $COMPOSE -f docker-compose.prod.yml up -d --no-deps --force-recreate server2
+          wait_healthy sorcery-server-2
+
+          # Basic health check
+          sleep 5 || true
+          if [ -n "$WS_HEALTH_URL" ]; then
+            curl -fsS "$WS_HEALTH_URL" || true
+          else
+            curl -fsS https://ws.realms.cards/healthz || curl -fsS http://localhost:3010/healthz || true
+          fi
+
+          # Cleanup migrate container to allow re-run on next deploy
+          $COMPOSE -f docker-compose.prod.yml rm -f migrate || true
+
+          echo "Deployment complete."
+          EOF
