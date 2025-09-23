@@ -12,7 +12,7 @@ interface ContextMenuProps {
 }
 
 export default function ContextMenu({ onClose }: ContextMenuProps) {
-  const { playCardFlip, playCardShuffle } = useSound();
+  const { playCardFlip, playCardShuffle, playCardSelect } = useSound();
   const contextMenu = useGameStore((s) => s.contextMenu);
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
@@ -227,14 +227,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     doToHand = () => {
       moveSiteToZone(t.x, t.y, "hand");
+      try { playCardFlip(); } catch {}
       onClose();
     };
     doToGY = () => {
       moveSiteToZone(t.x, t.y, "graveyard");
+      try { playCardFlip(); } catch {}
       onClose();
     };
     doBanish = () => {
       moveSiteToZone(t.x, t.y, "banished");
+      try { playCardFlip(); } catch {}
       onClose();
     };
 
@@ -246,6 +249,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         const cardName = site.card?.name || 'Card';
         openPlacementDialog(cardName, "Atlas", (position) => {
           moveSiteToZone(t.x, t.y, "atlas", position);
+          try { playCardFlip(); } catch {}
         });
         onClose();
       };
@@ -301,15 +305,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
+        try { playCardFlip(); } catch {}
         onClose();
       };
     } else {
       doToHand = () => {
         movePermanentToZone(t.at, t.index, "hand");
+        try { playCardFlip(); } catch {}
         onClose();
       };
       doToGY = () => {
         movePermanentToZone(t.at, t.index, "graveyard");
+        try { playCardFlip(); } catch {}
         onClose();
       };
       if (item?.card?.name) {
@@ -317,12 +324,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           const cardName = item.card?.name || 'Card';
           openPlacementDialog(cardName, "Spellbook", (position) => {
             movePermanentToZone(t.at, t.index, "spellbook", position);
+            try { playCardFlip(); } catch {}
           });
           onClose();
         };
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
+        try { playCardFlip(); } catch {}
         onClose();
       };
     }
@@ -354,6 +363,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         if (!top) return;
         setDragFromPile({ who: t.who, from: t.from, card: top });
         drawFromPileToHand();
+        try { playCardSelect(); } catch {}
         onClose();
       };
     }
