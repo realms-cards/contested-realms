@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { useGameStore } from "@/lib/game/store";
 
 interface HandPanelProps {
@@ -11,10 +12,10 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
   const selectHandCard = useGameStore((s) => s.selectHandCard);
-  const clearSelection = useGameStore((s) => s.clearSelection);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
+  const { playCardSelect } = useSound();
 
   return (
     <div className="absolute inset-x-0 bottom-20 z-10 pointer-events-none overflow-visible">
@@ -59,6 +60,7 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                     useGameStore.setState({ selectedCard: null, selectedPermanent: null });
                   } else {
                     selectHandCard("p1", i);
+                    playCardSelect();
                   }
                 }}
                 onMouseDown={(e) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
@@ -11,6 +12,7 @@ interface ContextMenuProps {
 }
 
 export default function ContextMenu({ onClose }: ContextMenuProps) {
+  const { playCardFlip, playCardShuffle } = useSound();
   const contextMenu = useGameStore((s) => s.contextMenu);
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
@@ -211,6 +213,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     hasToggle = true;
     doToggle = () => {
       toggleTapSite(t.x, t.y);
+      try { playCardFlip(); } catch {}
       onClose();
     };
 
@@ -255,6 +258,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     hasToggle = true;
     doToggle = () => {
       toggleTapPermanent(t.at, t.index);
+      try { playCardFlip(); } catch {}
       onClose();
     };
 
@@ -330,6 +334,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     hasToggle = true;
     doToggle = () => {
       toggleTapAvatar(t.who);
+      try { playCardFlip(); } catch {}
       onClose();
     };
   } else if (t.kind === "pile") {
@@ -356,6 +361,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       doShufflePile = () => {
         if (t.from === "spellbook") shuffleSpellbook(t.who);
         else shuffleAtlas(t.who);
+        try { playCardShuffle(); } catch {}
         onClose();
       };
     }
