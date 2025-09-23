@@ -16,6 +16,7 @@ import {
   type Group,
 } from "three";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
+import { useSound } from "@/lib/contexts/SoundContext";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
@@ -120,6 +121,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   // Counter actions
   const incrementPermanentCounter = useGameStore((s) => s.incrementPermanentCounter);
   const decrementPermanentCounter = useGameStore((s) => s.decrementPermanentCounter);
+  const { playCardPlay } = useSound();
 
   // Site edge placement functions
   const calculateEdgePosition = useGameStore((s) => s.calculateEdgePosition);
@@ -608,6 +610,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
 
                     if (selected) {
                       playSelectedTo(x, y);
+                      try { playCardPlay(); } catch {}
                       setDragFromHand(false); // Explicitly clear drag state after hand drop
                       setGhost(null); // Clear ghost
                       const type = (
@@ -628,6 +631,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                         (dragFromPile.card.type || "") as string
                       ).toLowerCase();
                       playFromPileTo(x, y);
+                      try { playCardPlay(); } catch {}
                       setDragFromPile(null);
                       setDragFromHand(false); // Also clear dragFromHand for pile drops
                       setGhost(null); // Also clear ghost immediately
@@ -946,7 +950,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                             // Compute nearest tile from world position and preserve exact world drop
                             const wx = e.point.x;
                             const wz = e.point.z;
-                            const draggedId = p.card.cardId;
                             let tx = Math.round((wx - offsetX) / TILE_SIZE);
                             let ty = Math.round((wz - offsetY) / TILE_SIZE);
                             tx = Math.max(0, Math.min(board.size.w - 1, tx));
@@ -954,7 +957,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                             const dropKey = `${tx},${ty}`;
                             const tileX = offsetX + tx * TILE_SIZE;
                             const tileZ = offsetY + ty * TILE_SIZE;
-                            const spacing = TILE_SIZE * 0.28;
                             const marginZ = TILE_SIZE * 0.1;
                             const owner = permanents[key]?.[idx]?.owner ?? 1;
                             const zBase =

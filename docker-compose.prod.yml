@@ -43,6 +43,12 @@ services:
         condition: service_started
     expose:
       - "3010"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'http=require(\"http\");http.get(\"http://127.0.0.1:3010/healthz\",res=>{process.exit(res.statusCode===200?0:1)}).on(\"error\",()=>process.exit(1))'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   server2:
     build:
@@ -62,6 +68,12 @@ services:
         condition: service_started
     expose:
       - "3010"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'http=require(\"http\");http.get(\"http://127.0.0.1:3010/healthz\",res=>{process.exit(res.statusCode===200?0:1)}).on(\"error\",()=>process.exit(1))'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   # Public entrypoint: TLS + reverse-proxy/load-balancer
   caddy:
