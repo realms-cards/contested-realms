@@ -3,6 +3,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
+import { useSound } from "@/lib/contexts/SoundContext";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
   CARD_LONG,
@@ -48,6 +49,7 @@ export default function Hand3D({
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
+  const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones[owner].hand ?? [], [zones, owner]);
   
@@ -703,6 +705,7 @@ export default function Hand3D({
                   if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
                     // Select the card only when drag actually starts
                     selectHandCard(owner, originalIndex);
+                    try { playCardSelect(); } catch {}
                     setDragFromHand(true);
                     // Clear preview when drag starts
                     clearHoverPreview();

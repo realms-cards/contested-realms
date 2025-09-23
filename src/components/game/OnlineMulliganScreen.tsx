@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
@@ -32,6 +33,7 @@ export default function OnlineMulliganScreen({
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const { playCardSelect } = useSound();
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function OnlineMulliganScreen({
   };
 
   const handleMulligan = () => {
+    try { playCardSelect(); } catch {}
     if (selected.length === 0) {
       // Keep current hand
       setDone(true);

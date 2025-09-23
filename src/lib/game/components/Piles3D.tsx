@@ -2,6 +2,7 @@
 
 import type { ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useEffect } from "react";
+import { useSound } from "@/lib/contexts/SoundContext";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
   CARD_LONG,
@@ -50,6 +51,7 @@ export default function Piles3D({
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
+  const { playCardFlip } = useSound();
   // Intentionally unused in this component after layout refactor
   void _matW;
   void _matH;
@@ -279,8 +281,6 @@ export default function Piles3D({
                       if (dragFromHand && store.selectedCard) {
                         const card = store.selectedCard;
                         const cardType = card.card?.type;
-
-                        // Only allow appropriate cards to appropriate piles
                         if (key === "spellbook" && cardType === "Spell") {
                           const pileName = "Spellbook";
                           openPlacementDialog(
@@ -292,6 +292,7 @@ export default function Piles3D({
                                 "spellbook",
                                 position
                               );
+                              try { playCardFlip(); } catch {}
                               setDragFromHand(false);
                               store.clearSelection();
                               store.closePlacementDialog();
@@ -308,6 +309,7 @@ export default function Piles3D({
                                 "atlas",
                                 position
                               );
+                              try { playCardFlip(); } catch {}
                               setDragFromHand(false);
                               store.clearSelection();
                               store.closePlacementDialog();
@@ -319,14 +321,12 @@ export default function Piles3D({
                           store.clearSelection();
                         }
                       } else if (dragFromPile) {
-                        // Handle pile-to-pile moves if needed
-                        // For now, just cancel the drag
+                        // Handle pile-to-pile moves if needed; for now, cancel
                         setDragFromPile(null);
                         setDragFromHand(false);
                         store.clearSelection();
                       }
                     }}
-                    // Drag gating removed to prevent dragging from piles
                   >
                     <planeGeometry args={[w, h]} />
                     <meshBasicMaterial transparent opacity={0} />
@@ -385,6 +385,7 @@ export default function Piles3D({
                       const pileName = "Spellbook";
                       openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
                         store.moveCardFromHandToPile(owner, "spellbook", position);
+                        try { playCardFlip(); } catch {}
                         setDragFromHand(false);
                         store.clearSelection();
                         store.closePlacementDialog();
@@ -393,6 +394,7 @@ export default function Piles3D({
                       const pileName = "Atlas";
                       openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
                         store.moveCardFromHandToPile(owner, "atlas", position);
+                        try { playCardFlip(); } catch {}
                         setDragFromHand(false);
                         store.clearSelection();
                         store.closePlacementDialog();

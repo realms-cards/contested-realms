@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
 
@@ -27,6 +28,7 @@ export default function OfflineMulliganScreen({
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const { playCardSelect } = useSound();
 
   // Set screen type for video overlay (no RTC in offline)
   useEffect(() => {
@@ -48,6 +50,7 @@ export default function OfflineMulliganScreen({
   };
 
   const handleMulligan = () => {
+    try { playCardSelect(); } catch {}
     if (selected.length === 0) {
       // Keep current hand
       setDone(true);

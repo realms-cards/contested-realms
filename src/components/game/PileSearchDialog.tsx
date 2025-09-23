@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import CardPreview from "@/components/game/CardPreview";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import type { CardRef } from "@/lib/game/store";
 
@@ -20,6 +21,7 @@ export default function PileSearchDialog({
 }: PileSearchDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const { playCardSelect } = useSound();
   
   // Enhanced card preview state using the draft-3d/editor-3d pattern
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(null);
@@ -102,7 +104,10 @@ export default function PileSearchDialog({
               {filteredCards.map((card, index) => (
                 <button
                   key={`${card.slug}-${index}`}
-                  onClick={() => onSelectCard(card)}
+                  onClick={() => {
+                    try { playCardSelect(); } catch {}
+                    onSelectCard(card);
+                  }}
                   onMouseEnter={() => {
                     if (card.slug) {
                       showCardPreview({

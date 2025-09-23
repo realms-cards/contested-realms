@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
@@ -11,6 +12,7 @@ interface ContextMenuProps {
 }
 
 export default function ContextMenu({ onClose }: ContextMenuProps) {
+  const { playCardFlip, playCardShuffle, playCardSelect } = useSound();
   const contextMenu = useGameStore((s) => s.contextMenu);
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
@@ -211,6 +213,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     hasToggle = true;
     doToggle = () => {
       toggleTapSite(t.x, t.y);
+      try { playCardFlip(); } catch {}
       onClose();
     };
 
@@ -224,14 +227,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     doToHand = () => {
       moveSiteToZone(t.x, t.y, "hand");
+      try { playCardFlip(); } catch {}
       onClose();
     };
     doToGY = () => {
       moveSiteToZone(t.x, t.y, "graveyard");
+      try { playCardFlip(); } catch {}
       onClose();
     };
     doBanish = () => {
       moveSiteToZone(t.x, t.y, "banished");
+      try { playCardFlip(); } catch {}
       onClose();
     };
 
@@ -243,6 +249,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         const cardName = site.card?.name || 'Card';
         openPlacementDialog(cardName, "Atlas", (position) => {
           moveSiteToZone(t.x, t.y, "atlas", position);
+          try { playCardFlip(); } catch {}
         });
         onClose();
       };
@@ -255,6 +262,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     hasToggle = true;
     doToggle = () => {
       toggleTapPermanent(t.at, t.index);
+      try { playCardFlip(); } catch {}
       onClose();
     };
 
@@ -297,15 +305,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
+        try { playCardFlip(); } catch {}
         onClose();
       };
     } else {
       doToHand = () => {
         movePermanentToZone(t.at, t.index, "hand");
+        try { playCardFlip(); } catch {}
         onClose();
       };
       doToGY = () => {
         movePermanentToZone(t.at, t.index, "graveyard");
+        try { playCardFlip(); } catch {}
         onClose();
       };
       if (item?.card?.name) {
@@ -313,12 +324,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           const cardName = item.card?.name || 'Card';
           openPlacementDialog(cardName, "Spellbook", (position) => {
             movePermanentToZone(t.at, t.index, "spellbook", position);
+            try { playCardFlip(); } catch {}
           });
           onClose();
         };
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
+        try { playCardFlip(); } catch {}
         onClose();
       };
     }
@@ -330,6 +343,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     hasToggle = true;
     doToggle = () => {
       toggleTapAvatar(t.who);
+      try { playCardFlip(); } catch {}
       onClose();
     };
   } else if (t.kind === "pile") {
@@ -349,6 +363,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         if (!top) return;
         setDragFromPile({ who: t.who, from: t.from, card: top });
         drawFromPileToHand();
+        try { playCardSelect(); } catch {}
         onClose();
       };
     }
@@ -356,6 +371,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       doShufflePile = () => {
         if (t.from === "spellbook") shuffleSpellbook(t.who);
         else shuffleAtlas(t.who);
+        try { playCardShuffle(); } catch {}
         onClose();
       };
     }
