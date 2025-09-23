@@ -438,3 +438,26 @@ Notes and considerations
 - Because we bind-mount `/var/log/caddy`, Fail2ban runs on the host and can ban source IPs at the network layer, protecting Caddy and the Socket.IO servers behind it.
 
 This slots neatly into our Droplet + Caddy plan from earlier memories and keeps your Realms stack resilient against noisy bots and brute force. If you want me to update README with a “Security (Fail2ban)” section, I can add a concise ops guide there as well.
+
+---
+
+Here are the commands to reset the database, apply migrations,
+  and seed it:
+
+  # 1. Reset the database (removes all data and re-applies 
+  migrations)
+  npm run prisma:migrate:reset
+
+  # 2. Seed the database with cards and packs
+  npm run db:seed
+
+  Or as individual steps:
+
+  # 1. Reset database
+  npm run prisma:migrate:reset
+
+  # 2. Ingest cards
+  node scripts/ingest-cards.js
+
+  # 3. Seed packs
+  npm run seed:packs

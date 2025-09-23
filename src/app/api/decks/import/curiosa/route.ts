@@ -19,6 +19,18 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
   }
   try {
+    // Ensure the authenticated user exists in the database (useful after local DB resets)
+    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    if (!user) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Your account could not be found in the database. If you already have a user account, please sign out, clear your browser cookies and sign back in",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } },
+      );
+    }
+
     // Feature toggle: disable Curiosa import globally unless explicitly enabled
     if (process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT !== "true") {
       return new Response(
