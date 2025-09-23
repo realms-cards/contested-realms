@@ -10,6 +10,7 @@ import ConsoleWarningFilter from "@/components/dev/ConsoleWarningFilter";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { authOptions } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
+import { SoundProvider } from "@/lib/contexts/SoundContext";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
 
 // Provide empty variables instead of loading Google fonts in network-restricted environments
@@ -44,14 +45,16 @@ export default async function RootLayout({
         {/* Dev-only: filter noisy troika/opentype warnings in the browser console */}
         {process.env.NODE_ENV !== 'production' ? <ConsoleWarningFilter /> : null}
         <ThemeProvider defaultMode="colorful">
-          <AuthProvider session={session}>
-            <ThemeScope>
-              <VideoOverlayProvider>{children}</VideoOverlayProvider>
-            </ThemeScope>
-            {/* Floating user badge on all non-online pages */}
-            <GlobalUserBadge />
-            {/* Theme toggle removed per design: muted colorful is the standard */}
-          </AuthProvider>
+          <SoundProvider>
+            <AuthProvider session={session}>
+              <ThemeScope>
+                <VideoOverlayProvider>{children}</VideoOverlayProvider>
+              </ThemeScope>
+              {/* Floating user badge on all non-online pages */}
+              <GlobalUserBadge />
+              {/* Theme toggle removed per design: muted colorful is the standard */}
+            </AuthProvider>
+          </SoundProvider>
         </ThemeProvider>
         <SpeedInsights />
       </body>

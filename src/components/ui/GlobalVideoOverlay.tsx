@@ -15,6 +15,7 @@
 import Image from 'next/image';
 import React, { useEffect } from 'react';
 import SeatMediaControls, { SeatRtcLike } from '@/components/rtc/SeatMediaControls';
+import { useSound } from '@/lib/contexts/SoundContext';
 import { useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
 import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
@@ -48,6 +49,9 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   const { shouldShowVideo: shouldShowVideoFromScreen, shouldShowControls } = useVideoOverlay();
   const onlineCtx = React.useContext(OnlineContext);
   const [isMinimized, setIsMinimized] = React.useState(true); // Start collapsed by default
+  const { volume, setVolume, playCardShuffle } = useSound();
+  const volumeSliderId = React.useId();
+  const sliderValue = Math.round(volume * 100);
 
   // Prefer the RTC instance provided by the page (match-level). If none is provided,
   // render the shell only (no separate connection is created here to avoid signaling clashes).
@@ -179,11 +183,37 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
                 bg-gray-900/80 backdrop-blur-sm rounded-lg p-3
                 shadow-lg border border-gray-700/50
               ">
-                <div className="flex items-center gap-2 text-white text-sm">
-                  <div className="
-                    w-2 h-2 rounded-full bg-green-400
-                  " />
-                  <span>You are online</span>
+                <div className="flex flex-col gap-3 text-white text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="
+                      w-2 h-2 rounded-full bg-green-400
+                    " />
+                    <span>You are online</span>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center justify-between text-xs uppercase tracking-wide text-white/60" htmlFor={volumeSliderId}>
+                      <span>Sound Volume</span>
+                      <span>{sliderValue}%</span>
+                    </label>
+                    <input
+                      id={volumeSliderId}
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={sliderValue}
+                      onChange={(event) => {
+                        setVolume(event.currentTarget.valueAsNumber / 100);
+                      }}
+                      onPointerUp={(event) => {
+                        const nextVolume = event.currentTarget.valueAsNumber / 100;
+                        if (nextVolume > 0) {
+                          playCardShuffle();
+                        }
+                      }}
+                      className="w-44 accent-purple-400"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
