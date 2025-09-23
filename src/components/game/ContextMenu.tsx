@@ -204,6 +204,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doDetachToken: (() => void) | null = null;
   let doToggleCounter: (() => void) | null = null;
   let hasCounter = false;
+  let attachedTokens: Array<{ name: string; index: number }> = [];
 
   if (t.kind === "site") {
     const key = `${t.x},${t.y}`;
@@ -288,16 +289,32 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
+    // Check for attached tokens on this permanent (only if it's not a token itself)
+    if (!isToken) {
+      attachedTokens = arr
+        .map((perm, idx) => ({ perm, idx }))
+        .filter(({ perm }) =>
+          perm.attachedTo &&
+          perm.attachedTo.at === t.at &&
+          perm.attachedTo.index === t.index
+        )
+        .map(({ perm, idx }) => ({ name: perm.card.name, index: idx }));
+    }
+
     if (isToken) {
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => !((it.card.type || "").toLowerCase().includes("token")));
+      const tokenName = (item?.card?.name || "").toLowerCase();
+      const isAttachableToken = tokenName === "lance" || tokenName === "stealth" || tokenName === "disabled";
+
       if (item?.attachedTo) {
         doDetachToken = () => {
           detachToken(t.at, t.index);
           onClose();
         };
-      } else if (nonTokenIndices.length > 0) {
+      } else if (nonTokenIndices.length > 0 && isAttachableToken) {
+        // Allow re-attachment for attachable tokens
         doAttachToken = () => {
           attachTokenToTopPermanent(t.at, t.index);
           onClose();
@@ -478,6 +495,92 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     Detach token
                   </button>
                 )}
+              </div>
+            )}
+            {/* Attached tokens section - show only for non-token permanents */}
+            {attachedTokens && attachedTokens.length > 0 && t.kind === "permanent" && (
+              <div className="space-y-2">
+                <div className="text-xs text-white/70 px-3 py-1">Attached Tokens:</div>
+                {attachedTokens.map((token) => {
+                  const tokenName = token.name.toLowerCase();
+                  const isLance = tokenName === "lance";
+                  const isStealth = tokenName === "stealth";
+                  const isDisabled = tokenName === "disabled";
+
+                  if (isLance) {
+                    // Lance: offer Drop or Destroy options
+                    return (
+                      <div key={token.index} className="space-y-1">
+                        <button
+                          className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
+                          onClick={() => {
+                            detachToken(t.at, token.index);
+                            onClose();
+                          }}
+                        >
+                          Drop {token.name}
+                        </button>
+                        <button
+                          className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                          onClick={() => {
+                            movePermanentToZone(t.at, token.index, "banished");
+                            try { playCardFlip(); } catch {}
+                            onClose();
+                          }}
+                        >
+                          Destroy {token.name}
+                        </button>
+                      </div>
+                    );
+                  } else if (isStealth || isDisabled) {
+                    // Stealth/Disabled: banish when detached
+                    return (
+                      <button
+                        key={token.index}
+                        className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                        onClick={() => {
+                          // First detach, then immediately banish
+                          detachToken(t.at, token.index);
+                          // Use setTimeout to ensure detach completes first
+                          setTimeout(() => {
+                            const permanents = useGameStore.getState().permanents;
+                            const items = permanents[t.at] || [];
+                            // Find the token that was just detached
+                            const detachedToken = items.find(
+                              (item, idx) =>
+                                !item.attachedTo &&
+                                item.card.name.toLowerCase() === tokenName
+                            );
+                            if (detachedToken) {
+                              const tokenIndex = items.indexOf(detachedToken);
+                              if (tokenIndex >= 0) {
+                                movePermanentToZone(t.at, tokenIndex, "banished");
+                                try { playCardFlip(); } catch {}
+                              }
+                            }
+                          }, 50);
+                          onClose();
+                        }}
+                      >
+                        Remove {token.name}
+                      </button>
+                    );
+                  } else {
+                    // Other tokens: simple detach
+                    return (
+                      <button
+                        key={token.index}
+                        className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                        onClick={() => {
+                          detachToken(t.at, token.index);
+                          onClose();
+                        }}
+                      >
+                        Detach {token.name}
+                      </button>
+                    );
+                  }
+                })}
               </div>
             )}
 

@@ -19,6 +19,7 @@ import { NumberBadge, type Digit } from "@/components/game/manacost";
 import { useSound } from "@/lib/contexts/SoundContext";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
+import TokenAttachmentDialog from "@/lib/game/components/TokenAttachmentDialog";
 import {
   BASE_TILE_SIZE,
   TILE_SIZE,
@@ -119,9 +120,28 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
   // Counter actions
-  const incrementPermanentCounter = useGameStore((s) => s.incrementPermanentCounter);
-  const decrementPermanentCounter = useGameStore((s) => s.decrementPermanentCounter);
+  const incrementPermanentCounter = useGameStore(
+    (s) => s.incrementPermanentCounter
+  );
+  const decrementPermanentCounter = useGameStore(
+    (s) => s.decrementPermanentCounter
+  );
   const { playCardPlay } = useSound();
+
+  // Token attachment dialog state
+  const [attachmentDialog, setAttachmentDialog] = useState<{
+    token: CardRef;
+    targetPermanent: { at: string; index: number; card: CardRef };
+    dropCoords: { x: number; y: number };
+    fromPile?: boolean;
+    pileInfo?: { who: "p1" | "p2"; from: "tokens" | "spellbook" | "atlas" | "graveyard"; card: CardRef } | null;
+  } | null>(null);
+
+  // Helper to check if a token can be attached
+  const isAttachableToken = (tokenName: string): boolean => {
+    const name = tokenName.toLowerCase();
+    return name === "lance" || name === "stealth" || name === "disabled";
+  };
 
   // Site edge placement functions
   const calculateEdgePosition = useGameStore((s) => s.calculateEdgePosition);
@@ -380,7 +400,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
     if (!card?.slug) return;
     hoverTimer.current = window.setTimeout(() => {
       setPreviewCard(card || null);
-    }, 1000);
+    }, 10);
   }
   function clearHoverPreview() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
@@ -592,6 +612,72 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                     const wx = e.point.x;
                     const wz = e.point.z;
                     const toItems = permanents[dropKey] || [];
+
+                    // Check if we're dropping an attachable token on a tile with permanents
+                    const draggedCard = selected || dragFromPile?.card;
+                    if (draggedCard) {
+                      const cardType = ((draggedCard as CardRef).type || "").toLowerCase();
+                      const isToken = cardType.includes("token");
+                      const tokenName = ((draggedCard as CardRef).name || "").toLowerCase();
+
+                      // Check if this is an attachable token and there are non-token permanents at this location
+                      if (isToken && isAttachableToken(tokenName)) {
+                        const nonTokenPermanents = toItems.filter(
+                          item => !((item.card.type || "").toLowerCase().includes("token"))
+                        );
+
+                        if (nonTokenPermanents.length > 0) {
+                          // Find the closest permanent based on world position
+                          const spacing = TILE_SIZE * 0.28;
+                          const marginZ = TILE_SIZE * 0.1;
+                          let closestPermanent = null;
+                          let closestDistance = Infinity;
+
+                          nonTokenPermanents.forEach((perm) => {
+                            const realIdx = toItems.indexOf(perm);
+                            const startX = -((Math.max(toItems.length, 1) - 1) * spacing) / 2;
+                            const owner = perm.owner;
+                            const zBase = owner === 1
+                              ? -TILE_SIZE * 0.5 + marginZ
+                              : TILE_SIZE * 0.5 - marginZ;
+                            const xPos = startX + realIdx * spacing;
+                            const permX = pos[0] + xPos + (perm.offset?.[0] ?? 0);
+                            const permZ = pos[2] + zBase + (perm.offset?.[1] ?? 0);
+
+                            const distance = Math.sqrt(
+                              Math.pow(wx - permX, 2) + Math.pow(wz - permZ, 2)
+                            );
+
+                            if (distance < closestDistance) {
+                              closestDistance = distance;
+                              closestPermanent = { at: dropKey, index: realIdx, card: perm.card };
+                            }
+                          });
+
+                          // If we found a close permanent (within reasonable distance), show dialog
+                          if (closestPermanent && closestDistance < TILE_SIZE * 0.5) {
+                            // Store whether this was from hand or pile before clearing state
+                            const wasFromPile = !!dragFromPile?.card;
+                            const pileInfo = dragFromPile?.card ? dragFromPile as { who: "p1" | "p2"; from: "tokens" | "spellbook" | "atlas" | "graveyard"; card: CardRef } : null;
+
+                            setAttachmentDialog({
+                              token: draggedCard as CardRef,
+                              targetPermanent: closestPermanent,
+                              dropCoords: { x, y },
+                              fromPile: wasFromPile,
+                              pileInfo: pileInfo
+                            });
+                            setDragFromHand(false);
+                            setGhost(null);
+                            setDragFromPile(null);
+                            lastDropAt.current = Date.now();
+                            return; // Don't play the card yet, wait for dialog response
+                          }
+                        }
+                      }
+                    }
+
+                    // Normal drop logic (no attachment)
                     const newIndex = toItems.length; // will be appended
                     const newCount = toItems.length + 1;
                     const spacing = TILE_SIZE * 0.28;
@@ -610,7 +696,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
 
                     if (selected) {
                       playSelectedTo(x, y);
-                      try { playCardPlay(); } catch {}
+                      try {
+                        playCardPlay();
+                      } catch {}
                       setDragFromHand(false); // Explicitly clear drag state after hand drop
                       setGhost(null); // Clear ghost
                       const type = (
@@ -631,7 +719,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                         (dragFromPile.card.type || "") as string
                       ).toLowerCase();
                       playFromPileTo(x, y);
-                      try { playCardPlay(); } catch {}
+                      try {
+                        playCardPlay();
+                      } catch {}
                       setDragFromPile(null);
                       setDragFromHand(false); // Also clear dragFromHand for pile drops
                       setGhost(null); // Also clear ghost immediately
@@ -716,7 +806,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                             }}
                           >
                             <CardPlane
-                              slug={site.card?.slug || ''}
+                              slug={site.card?.slug || ""}
                               width={CARD_SHORT}
                               height={CARD_LONG}
                               depthWrite={true}
@@ -724,7 +814,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               rotationZ={rotZ}
                               elevation={0.001}
                               renderOrder={10}
-                              textureUrl={!site.card?.slug ? "/api/assets/earth.png" : undefined}
+                              textureUrl={
+                                !site.card?.slug
+                                  ? "/api/assets/earth.png"
+                                  : undefined
+                              }
                               onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                                 e.stopPropagation();
                                 e.nativeEvent.preventDefault();
@@ -768,6 +862,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                 const items = permanents[key] || [];
                 const marginZ = TILE_SIZE * 0.1; // distance from bottom/top edge
                 return items.map((p, idx) => {
+                  // Skip rendering if this token is attached to another permanent
+                  if (p.attachedTo) {
+                    return null;
+                  }
+
                   const owner = p.owner; // 1 or 2
                   const isSel =
                     selectedPermanent &&
@@ -1090,7 +1189,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                                   />
                                 )}
                               <CardPlane
-                                slug={p.card?.slug || ''}
+                                slug={p.card?.slug || ""}
                                 width={CARD_SHORT}
                                 height={CARD_LONG}
                                 rotationZ={rotZ}
@@ -1101,14 +1200,18 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                             </>
                           ) : (
                             <CardPlane
-                              slug={p.card?.slug || ''}
+                              slug={p.card?.slug || ""}
                               width={CARD_SHORT}
                               height={CARD_LONG}
                               rotationZ={rotZ}
                               renderOrder={isBurrowed ? -10 : 0}
                               depthWrite={!isBurrowed}
                               depthTest={true}
-                              textureUrl={!p.card?.slug ? "/api/assets/air.png" : undefined}
+                              textureUrl={
+                                !p.card?.slug
+                                  ? "/api/assets/air.png"
+                                  : undefined
+                              }
                             />
                           )}
                           {/* Counter overlay (follows card) */}
@@ -1174,6 +1277,47 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                                 </div>
                               </Html>
                             );
+                          })()}
+
+                          {/* Render attached tokens on top of this permanent */}
+                          {(() => {
+                            const attachedTokens = items.filter(
+                              (item) =>
+                                item.attachedTo &&
+                                item.attachedTo.at === key &&
+                                item.attachedTo.index === idx
+                            );
+
+                            return attachedTokens.map((token, attachIdx) => {
+                              const tokenName = (token.card.name || "").toLowerCase();
+                              const attachTokenDef = TOKEN_BY_NAME[tokenName];
+
+                              // Position attached tokens slightly offset on the card
+                              const offsetX = CARD_SHORT * 0.3 * (attachIdx - (attachedTokens.length - 1) / 2);
+                              const offsetZ = -CARD_LONG * 0.3;
+
+                              if (attachTokenDef) {
+                                const texUrl = tokenTextureUrl(attachTokenDef);
+                                const tokenW = attachTokenDef.size === "small" ? CARD_SHORT * 0.4 : CARD_SHORT * 0.6;
+                                const tokenH = attachTokenDef.size === "small" ? CARD_LONG * 0.4 : CARD_LONG * 0.6;
+
+                                return (
+                                  <group key={`attached-${attachIdx}`} position={[offsetX, 0.05, offsetZ]}>
+                                    <CardPlane
+                                      slug=""
+                                      textureUrl={texUrl}
+                                      forceTextureUrl
+                                      width={tokenW}
+                                      height={tokenH}
+                                      rotationZ={0}
+                                      elevation={0.02}
+                                      renderOrder={700 + attachIdx}
+                                    />
+                                  </group>
+                                );
+                              }
+                              return null;
+                            });
                           })()}
                         </group>
                       </group>
@@ -1390,23 +1534,25 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       }}
                     >
                       {(selectedAvatar === who || dragAvatar === who) &&
-                          !isHandVisible && (
-                            <CardGlow
-                              width={CARD_SHORT}
-                              height={CARD_LONG}
-                              rotationZ={rotZ}
-                              elevation={0.001}
-                              color="#60a5fa"
-                              renderOrder={600}
-                            />
-                          )}
-                        <CardPlane
-                          slug={a.card?.slug || ''}
-                          width={CARD_SHORT}
-                          height={CARD_LONG}
-                          rotationZ={rotZ}
-                          textureUrl={!a.card?.slug ? "/api/assets/air.png" : undefined}
-                        />
+                        !isHandVisible && (
+                          <CardGlow
+                            width={CARD_SHORT}
+                            height={CARD_LONG}
+                            rotationZ={rotZ}
+                            elevation={0.001}
+                            color="#60a5fa"
+                            renderOrder={600}
+                          />
+                        )}
+                      <CardPlane
+                        slug={a.card?.slug || ""}
+                        width={CARD_SHORT}
+                        height={CARD_LONG}
+                        rotationZ={rotZ}
+                        textureUrl={
+                          !a.card?.slug ? "/api/assets/air.png" : undefined
+                        }
+                      />
                     </group>
                   </group>
                 </RigidBody>
@@ -1499,6 +1645,75 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
             })()}
           </group>
         )}
+
+      {/* Token attachment dialog */}
+      {attachmentDialog && (
+        <Html center>
+          <TokenAttachmentDialog
+            token={attachmentDialog.token as CardRef}
+            targetPermanent={attachmentDialog.targetPermanent}
+            onConfirm={() => {
+              const { token, targetPermanent, dropCoords, fromPile, pileInfo } = attachmentDialog;
+
+              // Play the token at the target location
+              if (!fromPile && selected) {
+                playSelectedTo(dropCoords.x, dropCoords.y);
+              } else if (fromPile && pileInfo) {
+                // We need to use the store directly to play from pile
+                const store = useGameStore.getState();
+                // Temporarily set dragFromPile in the store directly
+                store.dragFromPile = pileInfo;
+                store.playFromPileTo(dropCoords.x, dropCoords.y);
+                store.dragFromPile = null;
+              }
+
+              // Wait a bit for the token to be added to permanents, then attach it
+              setTimeout(() => {
+                const dropKey = `${dropCoords.x},${dropCoords.y}`;
+                const items = useGameStore.getState().permanents[dropKey] || [];
+                // Find the token that was just added (should be the last one added)
+                let tokenIndex = -1;
+                for (let i = items.length - 1; i >= 0; i--) {
+                  const item = items[i];
+                  if ((item.card.type || "").toLowerCase().includes("token") &&
+                      (item.card.name || "").toLowerCase() === ((token as CardRef).name || "").toLowerCase() &&
+                      !item.attachedTo) {
+                    tokenIndex = i;
+                    break;
+                  }
+                }
+
+                if (tokenIndex >= 0) {
+                  // Use the store's attach action
+                  const store = useGameStore.getState();
+                  if (store.attachTokenToPermanent) {
+                    store.attachTokenToPermanent(dropKey, tokenIndex, targetPermanent.index);
+                  }
+                }
+              }, 200); // Increase timeout slightly for better reliability
+
+              setAttachmentDialog(null);
+              try { playCardPlay(); } catch {}
+            }}
+            onCancel={() => {
+              const { dropCoords, fromPile, pileInfo } = attachmentDialog;
+              // Play the token normally without attachment
+              if (!fromPile && selected) {
+                playSelectedTo(dropCoords.x, dropCoords.y);
+              } else if (fromPile && pileInfo) {
+                // We need to use the store directly to play from pile
+                const store = useGameStore.getState();
+                // Temporarily set dragFromPile in the store directly
+                store.dragFromPile = pileInfo;
+                store.playFromPileTo(dropCoords.x, dropCoords.y);
+                store.dragFromPile = null;
+              }
+              setAttachmentDialog(null);
+              try { playCardPlay(); } catch {}
+            }}
+          />
+        </Html>
+      )}
     </group>
   );
 }

@@ -32,6 +32,7 @@ export default function DecksPage() {
   const [publicDecks, setPublicDecks] = useState<PublicDeck[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchDecks = useCallback(async () => {
     try {
@@ -56,7 +57,10 @@ export default function DecksPage() {
 
   // Listen for import components signaling a refresh
   useEffect(() => {
-    const onRefresh = () => { void fetchDecks(); };
+    const onRefresh = () => {
+      void fetchDecks();
+      setShowImport(false); // Close import panel on successful import
+    };
     window.addEventListener("decks:refresh", onRefresh);
     return () => window.removeEventListener("decks:refresh", onRefresh);
   }, [fetchDecks]);
@@ -79,12 +83,24 @@ export default function DecksPage() {
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold font-fantaisie">Your Decks</h1>
         <div className="ml-auto flex items-center gap-3">
-          <Link href="/" className="text-xs underline text-foreground/70 hover:text-foreground">
+          <Link
+            href="/"
+            className="text-xs underline text-foreground/70 hover:text-foreground"
+          >
             Home
           </Link>
-          <Link href="/online/lobby" className="text-xs underline text-foreground/70 hover:text-foreground">
+          <Link
+            href="/online/lobby"
+            className="text-xs underline text-foreground/70 hover:text-foreground"
+          >
             Lobby
           </Link>
+          <button
+            onClick={() => setShowImport(!showImport)}
+            className="px-3 py-2 rounded bg-foreground/10 hover:bg-foreground/20 text-foreground border border-foreground/20"
+          >
+            Import Deck
+          </button>
           <Link
             href="/decks/editor-3d"
             className="px-3 py-2 rounded bg-foreground text-background"
@@ -93,6 +109,14 @@ export default function DecksPage() {
           </Link>
         </div>
       </div>
+
+      {/* Import panels - shown when Import Deck is clicked */}
+      {showImport && (
+        <div className="grid gap-4 p-4 bg-zinc-900/30 rounded-lg">
+          <DeckImportCuriosa />
+          <DeckImportText />
+        </div>
+      )}
 
       {/* Import panels appear inline in the empty-state below to emphasize onboarding */}
 
@@ -104,45 +128,41 @@ export default function DecksPage() {
         <>
           {/* My Decks Section */}
           {myDecks.length === 0 ? (
-            <div className="space-y-4">
-              <div className="text-sm opacity-80">
-                No decks yet. Create one from the {" "}
-                <Link href="/decks/editor-3d" className="underline">
-                  editor
-                </Link>{" "}
-                , import an existing deck below, or save from Draft.
-              </div>
-              <div className="grid gap-4">
-                {/* Curiosa import panel */}
-                <DeckImportCuriosa />
-                {/* Plain text import panel */}
-                <DeckImportText />
-              </div>
+            <div className="text-sm opacity-80">
+              No decks yet. Create one from the{" "}
+              <Link href="/decks/editor-3d" className="underline">
+                editor
+              </Link>{" "}
+              , import an existing deck, or save from Draft.
             </div>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-              {myDecks.map((d) => (
-                <DeckItem
-                  key={d.id}
-                  deck={{
-                    id: d.id,
-                    name: d.name,
-                    format: d.format,
-                    isPublic: d.isPublic,
-                    imported: d.imported,
-                    avatarName: d.avatarName ?? undefined,
-                    updatedAt: new Date().toISOString(), // API doesn't return updatedAt in new structure
-                    isOwner: true,
-                  }}
-                />
-              ))}
+            <div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                {myDecks.map((d) => (
+                  <DeckItem
+                    key={d.id}
+                    deck={{
+                      id: d.id,
+                      name: d.name,
+                      format: d.format,
+                      isPublic: d.isPublic,
+                      imported: d.imported,
+                      avatarName: d.avatarName ?? undefined,
+                      updatedAt: new Date().toISOString(), // API doesn't return updatedAt in new structure
+                      isOwner: true,
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
           {/* Public Decks Section */}
           {publicDecks.length > 0 && (
             <>
-              <h2 className="text-xl font-semibold font-fantaisie mt-8">Public Decks</h2>
+              <h2 className="text-xl font-semibold font-fantaisie mt-8">
+                Public Decks
+              </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                 {publicDecks.map((d) => (
                   <DeckItem

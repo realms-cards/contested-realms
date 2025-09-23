@@ -285,6 +285,7 @@ export type GameState = {
   // Tokens
   addTokenToHand: (who: PlayerKey, name: string) => void;
   attachTokenToTopPermanent: (at: CellKey, index: number) => void;
+  attachTokenToPermanent: (at: CellKey, tokenIndex: number, targetIndex: number) => void;
   detachToken: (at: CellKey, index: number) => void;
   // Derived selectors (pure getters)
   getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
@@ -384,7 +385,47 @@ function movePermanentCore(
     // Nothing to move; return original state
     return { per: perIn, movedName: '' };
   }
+
+  // Find any tokens attached to this permanent
+  const attachedTokenIndices: number[] = [];
+  fromArr.forEach((perm, idx) => {
+    if (perm.attachedTo &&
+        perm.attachedTo.at === fromKey &&
+        perm.attachedTo.index === index) {
+      attachedTokenIndices.push(idx);
+    }
+  });
+
+  // Remove attached tokens (from highest index to lowest to maintain indices)
+  const attachedTokens: PermanentItem[] = [];
+  attachedTokenIndices.sort((a, b) => b - a).forEach(tokenIdx => {
+    const removed = fromArr.splice(tokenIdx, 1)[0];
+    if (removed) {
+      attachedTokens.unshift(removed); // Add to front to maintain order
+    }
+  });
+
+  // Update indices for any remaining attachments in fromArr
+  // (since we removed items, indices may have shifted)
+  fromArr.forEach((perm) => {
+    if (perm.attachedTo && perm.attachedTo.at === fromKey) {
+      let newIndex = perm.attachedTo.index;
+      // Count how many items were removed before this attachment's target
+      for (const removedIdx of attachedTokenIndices) {
+        if (removedIdx < perm.attachedTo.index) {
+          newIndex--;
+        }
+      }
+      if (index < perm.attachedTo.index) {
+        newIndex--; // Also account for the main permanent being moved
+      }
+      perm.attachedTo.index = newIndex;
+    }
+  });
+
   const toArr = [...(per[toKey] || [])];
+  const newIndex = toArr.length; // The index where the permanent will be placed
+
   // When newOffset is null, keep existing offset; when provided, set it.
   // For tilt: if item has none, assign a random one on move; otherwise keep.
   const toPush: PermanentItem =
@@ -394,6 +435,15 @@ function movePermanentCore(
         : item
       : { ...item, offset: newOffset, tilt: item.tilt ?? randomTilt() };
   toArr.push(toPush);
+
+  // Add attached tokens with updated attachment references
+  attachedTokens.forEach(token => {
+    toArr.push({
+      ...token,
+      attachedTo: { at: toKey, index: newIndex }
+    });
+  });
+
   per[fromKey] = fromArr;
   per[toKey] = toArr;
   return { per, movedName: item.card.name };
@@ -860,6 +910,31 @@ export const useGameStore = create<GameState>((set, get) => ({
       list[index] = { ...token, attachedTo: { at, index: targetIdx } };
       per[at] = list;
       get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
+      {
+        const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
+        get().trySendPatch(patch);
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  attachTokenToPermanent: (at, tokenIndex, targetIndex) =>
+    set((s) => {
+      const arr = s.permanents[at] || [];
+      const token = arr[tokenIndex];
+      const target = arr[targetIndex];
+      if (!token || !target) return s;
+
+      // Verify token is actually a token
+      if (!((token.card.type || "").toLowerCase().includes("token"))) return s;
+
+      // Verify target is not a token
+      if (((target.card.type || "").toLowerCase().includes("token"))) return s;
+
+      const per: Permanents = { ...s.permanents };
+      const list = [...(per[at] || [])];
+      list[tokenIndex] = { ...token, attachedTo: { at, index: targetIndex } };
+      per[at] = list;
+      get().log(`Attached token '${token.card.name}' to permanent '${target.card.name}' at ${at}`);
       {
         const patch: ServerPatchT = { permanents: per as GameState["permanents"] };
         get().trySendPatch(patch);
