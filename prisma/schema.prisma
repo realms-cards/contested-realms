@@ -186,6 +186,8 @@ model User {
   image         String? // From Discord
   isPro         Boolean   @default(false)
   stats         String? // Stored as a stringified JSON object
+  shortId       String?   @unique
+  presenceHidden Boolean  @default(false)
 
   accounts              Account[]
   sessions              Session[]
@@ -199,6 +201,8 @@ model User {
   lostMatches           MatchResult[] @relation("MatchLoser")
   draftParticipations   DraftParticipant[]
   passkeys              PasskeyCredential[]
+  friendshipsOwned      Friendship[] @relation("FriendshipOwner")
+  friendshipsTargeted   Friendship[] @relation("FriendshipTarget")
 }
 
 model VerificationToken {
@@ -537,4 +541,18 @@ model PasskeyCredential {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Friendship {
+  id           String   @id @default(cuid())
+  ownerUserId  String
+  targetUserId String
+  createdAt    DateTime @default(now())
+
+  owner  User @relation("FriendshipOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  target User @relation("FriendshipTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerUserId, targetUserId])
+  @@index([ownerUserId])
+  @@index([targetUserId])
 }

@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { OnlineContext } from "@/app/online/online-context";
 import type {
   OnlineContextValue,
+  AvailablePlayer,
   VoiceIncomingRequest,
   VoiceOutgoingRequest,
   VoiceRequestPeer,
@@ -48,7 +49,15 @@ export default function OnlineLayout({
   const [me, setMe] = useState<PlayerInfo | null>(null);
   const [lobbies, setLobbies] = useState<LobbyInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
+  // HTTP-available players list (rich data)
+  const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
+  const [availablePlayersNextCursor, setAvailablePlayersNextCursor] = useState<string | null>(null);
+  const [availablePlayersLoading, setAvailablePlayersLoading] = useState<boolean>(false);
+  const availableQueryRef = useRef<{ q?: string; sort?: "recent" | "alphabetical" } | null>(null);
+  // Cache a short-lived auth token for prioritization (JWT signed by NextAuth)
+  const availableAuthRef = useRef<{ token: string; ts: number } | null>(null);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
+  const [availablePlayersError, setAvailablePlayersError] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
@@ -73,6 +82,16 @@ export default function OnlineLayout({
   const transport = useMemo(() => {
     if (!transportRef.current) transportRef.current = new SocketTransport();
     return transportRef.current;
+  }, []);
+
+  // Resolve the HTTP origin for the Socket server (for REST-like endpoints)
+  const getSocketHttpOrigin = useCallback((): string => {
+    const exp = (process.env.NEXT_PUBLIC_WS_HTTP_ORIGIN || '').trim();
+    if (exp) return exp;
+    const ws = (process.env.NEXT_PUBLIC_WS_URL || '').trim();
+    if (ws.startsWith('ws://')) return ws.replace(/^ws:\/\//, 'http://');
+    if (ws.startsWith('wss://')) return ws.replace(/^wss:\/\//, 'https://');
+    return 'http://localhost:3010';
   }, []);
 
   const voiceScopeId = useMemo(() => {
@@ -580,6 +599,8 @@ export default function OnlineLayout({
         try {
           transport.requestLobbies();
           transport.requestPlayers();
+          // Also fetch HTTP available players list (rich data) initial page
+          requestAvailablePlayersRef.current?.({ reset: true });
         } catch {}
       }),
       transport.on("lobbyUpdated", (p) => {
@@ -795,6 +816,76 @@ export default function OnlineLayout({
   }, [transport, session, sessionStatus]);
 
 
+  // HTTP available players fetcher
+  const requestAvailablePlayers = useCallback((opts?: { q?: string; sort?: "recent" | "alphabetical"; cursor?: string | null; reset?: boolean }) => {
+    const origin = getSocketHttpOrigin();
+    const q = opts?.q ?? availableQueryRef.current?.q ?? '';
+    const sort: 'recent' | 'alphabetical' = (opts?.sort ?? availableQueryRef.current?.sort ?? 'recent') as 'recent' | 'alphabetical';
+    const cursor = opts?.reset ? null : (opts?.cursor ?? availablePlayersNextCursor ?? null);
+    availableQueryRef.current = { q, sort };
+
+    (async () => {
+      try {
+        setAvailablePlayersLoading(true);
+        setAvailablePlayersError(null);
+        const url = new URL('/players/available', origin);
+        if (q) url.searchParams.set('q', q);
+        if (sort) url.searchParams.set('sort', sort);
+        if (cursor) url.searchParams.set('cursor', cursor);
+        url.searchParams.set('limit', '100');
+        // Build headers including Authorization Bearer from /api/socket-token (cached ~60s)
+        const headers: HeadersInit = { accept: 'application/json' };
+        try {
+          const now = Date.now();
+          if (!availableAuthRef.current || (now - availableAuthRef.current.ts) > 60_000) {
+            const tokRes = await fetch('/api/socket-token');
+            if (tokRes.ok) {
+              const tokJson = await tokRes.json();
+              if (tokJson && typeof tokJson.token === 'string') {
+                availableAuthRef.current = { token: tokJson.token, ts: now };
+              }
+            }
+          }
+          if (availableAuthRef.current?.token) {
+            (headers as Record<string, string>).Authorization = `Bearer ${availableAuthRef.current.token}`;
+          }
+        } catch {}
+        const res = await fetch(url.toString(), { method: 'GET', headers });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch players (${res.status})`);
+        }
+        const data = await res.json();
+        const items: AvailablePlayer[] = Array.isArray(data?.items) ? data.items : [];
+        const next: string | null = data?.nextCursor ?? null;
+        setAvailablePlayers((prev) => {
+          const base = opts?.reset ? [] as AvailablePlayer[] : prev;
+          const seen = new Set(base.map((p) => p.userId));
+          const merged: AvailablePlayer[] = [...base];
+          for (const it of items) {
+            if (!seen.has(it.userId)) {
+              seen.add(it.userId);
+              merged.push(it);
+            }
+          }
+          return merged;
+        });
+        setAvailablePlayersNextCursor(next);
+      } catch (e) {
+        console.warn('[online] requestPlayers failed', e);
+        const msg = e instanceof Error ? e.message : 'Failed to fetch players';
+        setAvailablePlayersError(msg);
+      } finally {
+        setAvailablePlayersLoading(false);
+      }
+    })();
+  }, [availablePlayersNextCursor, getSocketHttpOrigin]);
+
+  // Stable ref to avoid re-subscribing socket handlers when pagination state changes
+  const requestAvailablePlayersRef = useRef<typeof requestAvailablePlayers | null>(null);
+  useEffect(() => {
+    requestAvailablePlayersRef.current = requestAvailablePlayers;
+  }, [requestAvailablePlayers]);
+
   const ctxValue: OnlineContextValue = {
     transport,
     connected,
@@ -915,17 +1006,17 @@ export default function OnlineLayout({
     chatLog,
     lobbies,
     players,
+    availablePlayers,
+    availablePlayersNextCursor,
+    availablePlayersLoading,
+    playersError: availablePlayersError,
     invites,
     requestLobbies: () => {
       try {
         transport.requestLobbies();
       } catch {}
     },
-    requestPlayers: () => {
-      try {
-        transport.requestPlayers();
-      } catch {}
-    },
+    requestPlayers: requestAvailablePlayers,
     setLobbyVisibility: (visibility: LobbyVisibility) => {
       try {
         transport.setLobbyVisibility(visibility);

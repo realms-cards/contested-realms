@@ -667,21 +667,205 @@ if (storeSub) {
   } catch {}
 }
 
-// Basic health endpoints (liveness/readiness)
+// Basic health endpoints (liveness/readiness) and lightweight HTTP API
 server.on("request", async (req, res) => {
-  const url = (req && req.url) || "/";
-  if (url === "/healthz" || url === "/readyz" || url === "/status") {
-    const dbOk = !!isReady;
-    const redisOk = pubClient ? (pubClient.status === "ready" || pubClient.status === "connect") : false;
-    const storeOk = storeRedis ? (storeRedis.status === 'ready' || storeRedis.status === 'connect') : false;
-    const body = JSON.stringify({ ok: true, db: dbOk, redis: redisOk, store: storeOk, shuttingDown: isShuttingDown, matches: typeof matches !== 'undefined' && matches ? matches.size : 0, uptimeSec: Math.floor(process.uptime()) });
-    res.statusCode = 200;
-    res.setHeader("Content-Type", "application/json");
-    res.end(body);
+  try {
+    // Helper: dynamic CORS based on SOCKET_CORS_ORIGIN
+    const reqOrigin = (req && req.headers && req.headers.origin) || null;
+    const allowCors = () => {
+      if (reqOrigin && CORS_ORIGINS.includes(reqOrigin)) {
+        res.setHeader("Access-Control-Allow-Origin", reqOrigin);
+        res.setHeader("Vary", "Origin");
+      }
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    };
+    const allowCorsForOptions = () => {
+      allowCors();
+      res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    };
+
+    const method = (req && req.method) || "GET";
+    const u = new URL((req && req.url) || "/", "http://localhost");
+    const pathname = u.pathname;
+
+    // Health endpoints
+    if (pathname === "/healthz" || pathname === "/readyz" || pathname === "/status") {
+      const dbOk = !!isReady;
+      const redisOk = pubClient ? (pubClient.status === "ready" || pubClient.status === "connect") : false;
+      const storeOk = storeRedis ? (storeRedis.status === 'ready' || storeRedis.status === 'connect') : false;
+      const body = JSON.stringify({ ok: true, db: dbOk, redis: redisOk, store: storeOk, shuttingDown: isShuttingDown, matches: typeof matches !== 'undefined' && matches ? matches.size : 0, uptimeSec: Math.floor(process.uptime()) });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(body);
+      return;
+    }
+
+    // Preflight for HTTP API
+    if (method === "OPTIONS") {
+      allowCorsForOptions();
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+
+    // Lightweight HTTP API: list available players (MVP)
+    if (pathname === "/players/available" && method === "GET") {
+      allowCors();
+
+      // Parse query
+      const q = (u.searchParams.get("q") || "").trim().toLowerCase();
+      const sortParam = (u.searchParams.get("sort") || "recent").toLowerCase();
+      const sort = sortParam === "alphabetical" ? "alphabetical" : "recent";
+      const limit = Math.max(1, Math.min(100, Number(u.searchParams.get("limit") || 100)));
+      let offset = Number(u.searchParams.get("cursor") || 0);
+      if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+      // Optional: identify requesting user from Authorization: Bearer <token>
+      let requesterId = null;
+      try {
+        const auth = (req.headers && req.headers.authorization) || "";
+        const m = auth.match(/^Bearer\s+(.+)$/i);
+        if (m && process.env.NEXTAUTH_SECRET) {
+          const payload = jwt.verify(m[1], process.env.NEXTAUTH_SECRET);
+          requesterId = String((payload && (payload.uid || payload.sub)) || "");
+        }
+      } catch {}
+
+      // Build candidate list: online and not in a match
+      const candidates = [];
+      for (const [pid, p] of players.entries()) {
+        if (!p) continue;
+        const online = !!p.socketId;
+        const inMatch = !!p.matchId;
+        if (online && !inMatch) {
+          if (!q || (p.displayName || "").toLowerCase().includes(q)) {
+            candidates.push({ id: pid, displayName: p.displayName || "Player" });
+          }
+        }
+      }
+
+      // Filter out hidden presence via DB, and fetch shortId/avatar
+      const ids = candidates.map((c) => c.id);
+      let publicUsers = [];
+      if (ids.length > 0) {
+        publicUsers = await prisma.user.findMany({
+          where: { id: { in: ids }, presenceHidden: false },
+          select: { id: true, shortId: true, image: true },
+        });
+      }
+      const publicMap = new Map(publicUsers.map((u) => [u.id, u]));
+      const visible = candidates.filter((c) => publicMap.has(c.id));
+
+      // Friendship flags (relative to requester)
+      let friendSet = new Set();
+      if (requesterId && visible.length > 0) {
+        const fr = await prisma.friendship.findMany({
+          where: { ownerUserId: requesterId, targetUserId: { in: visible.map((v) => v.id) } },
+          select: { targetUserId: true },
+        });
+        friendSet = new Set(fr.map((r) => r.targetUserId));
+      }
+
+      // Recent opponents (last 10 results) for prioritization when applicable
+      const freq = new Map();
+      const lastAt = new Map();
+      if (requesterId && sort === "recent") {
+        const recent = await prisma.matchResult.findMany({
+          where: { OR: [{ winnerId: requesterId }, { loserId: requesterId }] },
+          orderBy: { completedAt: 'desc' },
+          take: 10,
+        });
+        for (const r of recent) {
+          let oppIds = [];
+          try {
+            const arr = Array.isArray(r.players) ? r.players : (typeof r.players === 'string' ? JSON.parse(r.players) : []);
+            if (Array.isArray(arr)) {
+              for (const info of arr) {
+                const oid = info && (info.id || info.playerId || info.uid);
+                if (oid && String(oid) !== String(requesterId)) oppIds.push(String(oid));
+              }
+            }
+          } catch {}
+          // Fallback: if players JSON not helpful, try winner/loser IDs
+          if (oppIds.length === 0) {
+            if (r.winnerId && r.winnerId !== requesterId) oppIds.push(r.winnerId);
+            if (r.loserId && r.loserId !== requesterId) oppIds.push(r.loserId);
+          }
+          const ts = r.completedAt ? new Date(r.completedAt).getTime() : Date.now();
+          for (const oid of oppIds) {
+            const prev = freq.get(oid) || 0;
+            freq.set(oid, prev + 1);
+            const prevTs = lastAt.get(oid) || 0;
+            if (ts > prevTs) lastAt.set(oid, ts);
+          }
+        }
+      }
+
+      // Compose items
+      const items = visible.map((c) => {
+        const u = publicMap.get(c.id) || {};
+        const mcount = freq.has(c.id) ? freq.get(c.id) : null;
+        const lpa = lastAt.has(c.id) ? new Date(lastAt.get(c.id)).toISOString() : null;
+        return {
+          userId: c.id,
+          shortUserId: u.shortId || String(c.id).slice(-8),
+          displayName: c.displayName,
+          avatarUrl: u.image || null,
+          presence: { online: true, inMatch: false },
+          isFriend: requesterId ? friendSet.has(c.id) : false,
+          lastPlayedAt: lpa,
+          matchCountInLast10: mcount,
+        };
+      });
+
+      // Sort
+      const alphaSort = (a, b) => {
+        const an = (a.displayName || '').toLowerCase();
+        const bn = (b.displayName || '').toLowerCase();
+        if (an < bn) return -1;
+        if (an > bn) return 1;
+        return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
+      };
+      let ordered = items;
+      if (sort === "recent" && requesterId) {
+        const groupA = items.filter((it) => typeof it.matchCountInLast10 === 'number' && it.matchCountInLast10 > 0);
+        const groupB = items.filter((it) => !groupA.includes(it));
+        groupA.sort((x, y) => {
+          const c = (y.matchCountInLast10 || 0) - (x.matchCountInLast10 || 0);
+          if (c !== 0) return c;
+          const tx = x.lastPlayedAt ? Date.parse(x.lastPlayedAt) : 0;
+          const ty = y.lastPlayedAt ? Date.parse(y.lastPlayedAt) : 0;
+          if (ty !== tx) return ty - tx;
+          return alphaSort(x, y);
+        });
+        groupB.sort(alphaSort);
+        ordered = groupA.concat(groupB);
+      } else {
+        ordered = items.sort(alphaSort);
+      }
+
+      // Pagination via cursor as offset
+      const total = ordered.length;
+      const page = ordered.slice(offset, offset + limit);
+      const nextCursor = offset + limit < total ? String(offset + limit) : null;
+
+      const body = JSON.stringify({ items: page, nextCursor });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(body);
+      return;
+    }
+
+    // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
     return;
+  } catch (e) {
+    try {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: 'internal_error', message: e && e.message ? e.message : String(e) }));
+    } catch {}
   }
-  // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
-  return;
 });
 
 // In-memory state

@@ -159,6 +159,11 @@ NEXT_PUBLIC_WS_URL="http://localhost:3010"
 # NEXT_PUBLIC_WS_PATH=
 # Recommended behind proxies/load balancers: force websocket transport
 NEXT_PUBLIC_WS_TRANSPORTS=websocket
+
+# HTTP origin for REST-like endpoints served by the Socket.IO server (e.g., /players/available)
+# If omitted, the client may derive it from NEXT_PUBLIC_WS_URL (ws/wss → http/https).
+# Set explicitly if your WS domain differs from the HTTP origin.
+NEXT_PUBLIC_WS_HTTP_ORIGIN="http://localhost:3010"
 ```
 
 On the server side (when running `npm run server` locally), allow your web origin:
