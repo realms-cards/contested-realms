@@ -268,7 +268,17 @@ export default function OnlineConsole({
                 {events.slice(-100).map((ev, index) => {
                   const t = ev.text || "";
                   const low = t.toLowerCase();
-                  const isWarn = low.startsWith("warning") || low.startsWith("cannot");
+                  // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
+                  const isWarn = low.startsWith("[warning]") ||
+                                 low.startsWith("warning") ||
+                                 low.startsWith("cannot") ||
+                                 low.includes("cannot") ||
+                                 low.startsWith("insufficient") ||
+                                 low.startsWith("first site must") ||
+                                 low.startsWith("new sites must") ||
+                                 low.startsWith("sites cannot") ||
+                                 low.startsWith("permanents can only") ||
+                                 low.startsWith("avatar must");
                   const isSearch = low.startsWith("search:");
                   return (
                     <div

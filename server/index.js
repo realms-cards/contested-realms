@@ -1373,9 +1373,9 @@ async function leaderHandleMulliganDone(matchId, playerId) {
     cp = sw === 'p2' ? 2 : 1; // default to P1 if undefined
   }
   // Ensure avatar positions exist so first-site placement rule can be applied client/server
-  const sz = (match.game && match.game.board && match.game.board.size) || { w: 5, h: 5 };
+  const sz = (match.game && match.game.board && match.game.board.size) || { w: 5, h: 4 };
   const cx = Math.floor(Math.max(1, Number(sz.w) || 5) / 2);
-  const topY = (Number(sz.h) || 5) - 1;
+  const topY = (Number(sz.h) || 4) - 1;
   const botY = 0;
   const avPrev = (match.game && match.game.avatars) || { p1: {}, p2: {} };
   const p1Prev = avPrev.p1 || {};
