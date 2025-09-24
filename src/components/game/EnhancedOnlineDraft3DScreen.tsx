@@ -16,7 +16,11 @@ import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import Board from "@/lib/game/Board";
-import { toCardMetaMap, mergeCardMetaMaps, type ApiCardMetaRow } from "@/lib/game/cardMeta";
+import {
+  toCardMetaMap,
+  mergeCardMetaMaps,
+  type ApiCardMetaRow,
+} from "@/lib/game/cardMeta";
 import {
   type BoosterCard,
   type CardMeta,
@@ -160,6 +164,52 @@ export default function EnhancedOnlineDraft3DScreen({
   useEffect(() => {
     pick3DRef.current = pick3D;
   }, [pick3D]);
+  const lastSavedPickCountRef = useRef(0);
+
+  useEffect(() => {
+    lastSavedPickCountRef.current = 0;
+  }, [matchId]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    const key = `draftedCards_${matchId}`;
+    const picksArray = (draftState.picks?.[myPlayerIndex] || []) as DraftCard[];
+    const pickCount = picksArray.length;
+
+    if (pickCount === 0) {
+      if (
+        draftState.phase === "waiting" ||
+        draftState.phase === "pack_selection"
+      ) {
+        if (lastSavedPickCountRef.current !== 0) {
+          lastSavedPickCountRef.current = 0;
+        }
+        try {
+          localStorage.removeItem(key);
+        } catch (err) {
+          console.warn(
+            "[EnhancedOnlineDraft3D] Failed to clear draft autosave:",
+            err
+          );
+        }
+      } else {
+        lastSavedPickCountRef.current = 0;
+      }
+      return;
+    }
+
+    if (pickCount === lastSavedPickCountRef.current) return;
+
+    try {
+      localStorage.setItem(key, JSON.stringify(picksArray));
+      lastSavedPickCountRef.current = pickCount;
+    } catch (err) {
+      console.error(
+        "[EnhancedOnlineDraft3D] Failed to persist draft picks:",
+        err
+      );
+    }
+  }, [draftState.picks, draftState.phase, matchId, myPlayerIndex]);
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -255,7 +305,6 @@ export default function EnhancedOnlineDraft3DScreen({
     });
   }, [sortMode, isSortingEnabled, pick3D, metaByCardId]);
 
-
   const { joinSession, leaveSession } = useDraft3DSession();
 
   // Initialize Draft-3D session
@@ -298,7 +347,11 @@ export default function EnhancedOnlineDraft3DScreen({
       let resolvedId: number = 0;
       if (card && typeof card.slug === "string") {
         const mapped = slugToCardId[card.slug];
-        if (typeof mapped === "number" && Number.isFinite(mapped) && mapped > 0) {
+        if (
+          typeof mapped === "number" &&
+          Number.isFinite(mapped) &&
+          mapped > 0
+        ) {
           resolvedId = mapped;
         }
       }
@@ -370,7 +423,8 @@ export default function EnhancedOnlineDraft3DScreen({
 
     // Recompute with correct logic (not a loop)
     const curPhaseKey = (cur?.phase ?? "waiting") as keyof typeof phaseOrder;
-    const incPhaseKey = (incoming?.phase ?? "waiting") as keyof typeof phaseOrder;
+    const incPhaseKey = (incoming?.phase ??
+      "waiting") as keyof typeof phaseOrder;
     const poCur = phaseOrder[curPhaseKey] ?? 0;
     const poInc = phaseOrder[incPhaseKey] ?? 0;
     const newer =
@@ -424,12 +478,22 @@ export default function EnhancedOnlineDraft3DScreen({
     if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
     const t = window.setTimeout(() => {
       try {
-        const baseCfg = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
+        const baseCfg = match.draftConfig ?? {
+          setMix: ["Beta"],
+          packCount: 3,
+          packSize: 15,
+        };
         transport.startDraft?.({ matchId: match.id, draftConfig: baseCfg });
       } catch {}
     }, 1100);
     return () => window.clearTimeout(t);
-  }, [transport, match, draftState.phase, playerReadyStates.p1, playerReadyStates.p2]);
+  }, [
+    transport,
+    match,
+    draftState.phase,
+    playerReadyStates.p1,
+    playerReadyStates.p2,
+  ]);
 
   // Listen for server draft updates
   useEffect(() => {
@@ -602,7 +666,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
   // Hide pack choice overlay only when we're past the first pick of the round and a pack is present
   useEffect(() => {
-    const myPackSize = (draftState.currentPacks?.[myPlayerIndex]?.length ?? 0);
+    const myPackSize = draftState.currentPacks?.[myPlayerIndex]?.length ?? 0;
     if (
       packChoiceOverlay &&
       draftState.phase === "picking" &&
@@ -611,7 +675,13 @@ export default function EnhancedOnlineDraft3DScreen({
     ) {
       setPackChoiceOverlay(false);
     }
-  }, [draftState.phase, draftState.pickNumber, draftState.currentPacks, myPlayerIndex, packChoiceOverlay]);
+  }, [
+    draftState.phase,
+    draftState.pickNumber,
+    draftState.currentPacks,
+    myPlayerIndex,
+    packChoiceOverlay,
+  ]);
 
   // Resolve cardIds and metadata by variant slug; request only missing data and dedupe/abort inflight queries
   const inflightMetaAbortRef = useRef<AbortController | null>(null);
@@ -635,7 +705,8 @@ export default function EnhancedOnlineDraft3DScreen({
       };
 
       // Slugs from current pack (my seat) – high priority
-      const curPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+      const curPack = (draftState.currentPacks?.[myPlayerIndex] ||
+        []) as DraftCard[];
       for (const c of curPack) {
         if (!c?.slug) continue;
         if (!needsMeta(c.slug)) continue;
@@ -684,7 +755,9 @@ export default function EnhancedOnlineDraft3DScreen({
         params.set("slugs", Array.from(slugs).join(","));
         if (setName) params.set("set", setName);
         requests.push(
-          fetch(`/api/cards/meta-by-variant?${params.toString()}`, { signal: ac.signal })
+          fetch(`/api/cards/meta-by-variant?${params.toString()}`, {
+            signal: ac.signal,
+          })
             .then((r) => r.json() as Promise<MetaByVariantRow[]>)
             .catch(() => [] as MetaByVariantRow[])
         );
@@ -701,7 +774,8 @@ export default function EnhancedOnlineDraft3DScreen({
             return {
               cardId: Number(r.cardId) || 0,
               cost: r.cost ?? null,
-              thresholds: (r.thresholds as Record<string, number> | null) ?? null,
+              thresholds:
+                (r.thresholds as Record<string, number> | null) ?? null,
               attack: r.attack ?? null,
               defence: r.defence ?? null,
             } satisfies ApiCardMetaRow;
@@ -752,7 +826,13 @@ export default function EnhancedOnlineDraft3DScreen({
         inflightMetaAbortRef.current.abort();
       }
     };
-  }, [draftState.currentPacks, myPlayerIndex, pick3D, slugToCardId, metaByCardId]);
+  }, [
+    draftState.currentPacks,
+    myPlayerIndex,
+    pick3D,
+    slugToCardId,
+    metaByCardId,
+  ]);
 
   // Enhanced Pick & Pass with staging mechanics (from single-player)
   const commitPickAndPass = useCallback(
@@ -903,25 +983,39 @@ export default function EnhancedOnlineDraft3DScreen({
         draftState.phase === "picking" &&
         draftState.pickNumber === 1 &&
         myPack.length === 0;
-      if (!(draftState.phase === "pack_selection" || canOpenInPickingFallback)) return;
+      if (!(draftState.phase === "pack_selection" || canOpenInPickingFallback))
+        return;
 
       try {
         // Derive setChoice from server-generated packs to ensure exact match
         const s = draftState as DraftStateWithGenerated;
-        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+        const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as
+          | DraftCard[][]
+          | undefined;
         let setChoice: string | null = null;
         if (Array.isArray(packsMaybe) && packsMaybe.length > 0) {
           const first = packsMaybe[packIndex] && packsMaybe[packIndex][0];
           setChoice = (first && (first.setName as string)) || "Beta";
         } else {
-          const baseCfg = match?.draftConfig ?? { setMix: ["Beta"], packCount: 3 };
-          const setMix: string[] = Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0 ? baseCfg.setMix : ["Beta"];
+          const baseCfg = match?.draftConfig ?? {
+            setMix: ["Beta"],
+            packCount: 3,
+          };
+          const setMix: string[] =
+            Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0
+              ? baseCfg.setMix
+              : ["Beta"];
           const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
           let packCounts: Record<string, number> | undefined = undefined;
-          const bc = baseCfg as unknown as { packCounts?: Record<string, number> };
+          const bc = baseCfg as unknown as {
+            packCounts?: Record<string, number>;
+          };
           const pc = bc.packCounts;
           if (pc && typeof pc === "object") {
-            const total = Object.values(pc).reduce((a, b) => a + (Number(b) || 0), 0);
+            const total = Object.values(pc).reduce(
+              (a, b) => a + (Number(b) || 0),
+              0
+            );
             if (total === packCount) packCounts = pc;
           }
           if (!packCounts) {
@@ -940,7 +1034,10 @@ export default function EnhancedOnlineDraft3DScreen({
             const c = Math.max(0, Number(packCounts[sName]) || 0);
             for (let i = 0; i < c; i++) fallbackSets.push(sName);
           }
-          setChoice = fallbackSets[packIndex] || fallbackSets[packIndex % Math.max(1, fallbackSets.length)] || "Beta";
+          setChoice =
+            fallbackSets[packIndex] ||
+            fallbackSets[packIndex % Math.max(1, fallbackSets.length)] ||
+            "Beta";
         }
 
         transport.chooseDraftPack?.({
@@ -1020,16 +1117,29 @@ export default function EnhancedOnlineDraft3DScreen({
       return computeStackPositions(pick3D, layoutMetaByCardId, true, true);
     }
     // Element grouping: columns per element, creatures above spells within each column, sort by cost asc
-    const positions = new Map<number, { x: number; z: number; stackIndex: number; isVisible: boolean }>();
+    const positions = new Map<
+      number,
+      { x: number; z: number; stackIndex: number; isVisible: boolean }
+    >();
     const cardSpacing = 0.15;
     const zStart = -2.0;
     let xStart = -4;
     const xSpacing = 0.8;
-    const elementOrder = ["air", "water", "earth", "fire", "colorless"] as const;
+    const elementOrder = [
+      "air",
+      "water",
+      "earth",
+      "fire",
+      "colorless",
+    ] as const;
 
-    type GroupKey = typeof elementOrder[number];
+    type GroupKey = (typeof elementOrder)[number];
     const groups: Record<GroupKey, Pick3D[]> = {
-      air: [], water: [], earth: [], fire: [], colorless: [],
+      air: [],
+      water: [],
+      earth: [],
+      fire: [],
+      colorless: [],
     };
 
     const primaryElementOf = (cardId: number): GroupKey => {
@@ -1063,20 +1173,34 @@ export default function EnhancedOnlineDraft3DScreen({
       const creatures = arr
         .filter(byCreature)
         .sort(
-          (a, b) => (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) - (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
+          (a, b) =>
+            (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) -
+            (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
         );
       const spells = arr
         .filter((pp) => !byCreature(pp))
         .sort(
-          (a, b) => (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) - (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
+          (a, b) =>
+            (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) -
+            (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
         );
 
       creatures.forEach((card, index) => {
-        positions.set(card.id, { x: xStart, z: zStart + index * cardSpacing, stackIndex: index, isVisible: true });
+        positions.set(card.id, {
+          x: xStart,
+          z: zStart + index * cardSpacing,
+          stackIndex: index,
+          isVisible: true,
+        });
       });
       const creatureCount = creatures.length;
       spells.forEach((card, index) => {
-        positions.set(card.id, { x: xStart, z: zStart + (creatureCount + index + 0.5) * cardSpacing, stackIndex: creatureCount + index, isVisible: true });
+        positions.set(card.id, {
+          x: xStart,
+          z: zStart + (creatureCount + index + 0.5) * cardSpacing,
+          stackIndex: creatureCount + index,
+          isVisible: true,
+        });
       });
       xStart += xSpacing;
     }
@@ -1142,114 +1266,56 @@ export default function EnhancedOnlineDraft3DScreen({
   // Debug: trace UI gating for pack visibility
   useEffect(() => {
     try {
-      console.log(
-        "[EnhancedOnlineDraft3D] gate",
-        {
-          phase: draftState.phase,
-          packIndex: draftState.packIndex,
-          pickNumber: draftState.pickNumber,
-          amPicker,
-          packChoiceOverlay,
-          needsPackChoice,
-          myPackSize: myPack.length,
-        }
-      );
+      console.log("[EnhancedOnlineDraft3D] gate", {
+        phase: draftState.phase,
+        packIndex: draftState.packIndex,
+        pickNumber: draftState.pickNumber,
+        amPicker,
+        packChoiceOverlay,
+        needsPackChoice,
+        myPackSize: myPack.length,
+      });
     } catch {}
-  }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker, packChoiceOverlay, needsPackChoice, myPack.length]);
+  }, [
+    draftState.phase,
+    draftState.packIndex,
+    draftState.pickNumber,
+    amPicker,
+    packChoiceOverlay,
+    needsPackChoice,
+    myPack.length,
+  ]);
 
-  // UI: Lobby (phase waiting)
-  if (draftState.phase === "waiting") {
-    return (
-      <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8 relative">
-        <UserBadge variant="floating" />
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
-
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Players</h3>
-              <div className="space-y-3">
-                {Object.entries(playerNames).map(([key, name]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-slate-300">{name}</span>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={
-                          playerReadyStates[
-                            key as keyof typeof playerReadyStates
-                          ]
-                            ? "text-green-400"
-                            : "text-slate-400"
-                        }
-                      >
-                        {playerReadyStates[
-                          key as keyof typeof playerReadyStates
-                        ]
-                          ? "Ready"
-                          : "Not Ready"}
-                      </span>
-                      {myPlayerKey === key && !playerReadyStates[key as keyof typeof playerReadyStates] && (
-                        <button
-                          onClick={handleToggleReady}
-                          className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          Ready
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">
-                Enhanced Draft Settings
-              </h3>
-              <div className="space-y-2 text-slate-300">
-                <div>
-                  Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}
-                </div>
-                <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
-                <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
-                <div>Players: 2</div>
-              </div>
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
-              {error}
-            </div>
-          )}
-
-          <button
-            onClick={handleStartDraft}
-            disabled={loading || !playerReadyStates.p1 || !playerReadyStates.p2}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            {loading
-              ? "Starting Enhanced Draft..."
-              : !playerReadyStates.p1 || !playerReadyStates.p2
-              ? "Waiting for both players to be ready..."
-              : "Start Enhanced Draft"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Pack choice overlay (enhanced with better visuals)
-  const totalPacks = match?.draftConfig?.packCount ?? 3;
+  const totalPacks = useMemo(() => {
+    const withGenerated = draftState as DraftStateWithGenerated;
+    const generatedAll = withGenerated.allGeneratedPacks;
+    if (Array.isArray(generatedAll)) {
+      const mine = generatedAll[myPlayerIndex];
+      if (Array.isArray(mine) && mine.length > 0) {
+        return mine.length;
+      }
+      for (const seat of generatedAll) {
+        if (Array.isArray(seat) && seat.length > 0) {
+          return seat.length;
+        }
+      }
+    }
+    const configCount = Number(match?.draftConfig?.packCount);
+    return Number.isFinite(configCount) && configCount > 0 ? configCount : 3;
+  }, [draftState, myPlayerIndex, match?.draftConfig?.packCount]);
   if (packChoiceOverlay && draftState.packIndex < totalPacks) {
     // Compute available set names for this round.
     const s = draftState as DraftStateWithGenerated;
-    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as DraftCard[][] | undefined;
+    const packsMaybe = s.allGeneratedPacks?.[myPlayerIndex] as
+      | DraftCard[][]
+      | undefined;
     let availableSets: string[] = [];
     if (Array.isArray(packsMaybe) && packsMaybe.length > 0) {
       try {
         availableSets = packsMaybe.map((pack) => {
-          const first = (pack && pack[0]) as (DraftCard & { set?: string }) | undefined;
+          const first = (pack && pack[0]) as
+            | (DraftCard & { set?: string })
+            | undefined;
           const sName = first?.setName || first?.set || "Beta";
           return sName;
         });
@@ -1258,14 +1324,22 @@ export default function EnhancedOnlineDraft3DScreen({
     if (availableSets.length === 0) {
       // Fallback: synthesize from draftConfig
       const baseCfg = match?.draftConfig ?? { setMix: ["Beta"], packCount: 3 };
-      const setMix: string[] = Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0 ? baseCfg.setMix : ["Beta"];
+      const setMix: string[] =
+        Array.isArray(baseCfg.setMix) && baseCfg.setMix.length > 0
+          ? baseCfg.setMix
+          : ["Beta"];
       const packCount = Math.max(1, Number(baseCfg.packCount) || 3);
       let packCounts: Record<string, number> | undefined = undefined;
       try {
-        const bc = baseCfg as unknown as { packCounts?: Record<string, number> };
+        const bc = baseCfg as unknown as {
+          packCounts?: Record<string, number>;
+        };
         const pc = bc.packCounts;
         if (pc && typeof pc === "object") {
-          const total = Object.values(pc).reduce((a, b) => a + (Number(b) || 0), 0);
+          const total = Object.values(pc).reduce(
+            (a, b) => a + (Number(b) || 0),
+            0
+          );
           if (total === packCount) packCounts = pc;
         }
         if (!packCounts) {
@@ -1295,23 +1369,34 @@ export default function EnhancedOnlineDraft3DScreen({
       .map((_, idx) => idx)
       .filter((idx) => idx >= roundIdx);
 
+    const gridColsClass =
+      packs.length >= 4
+        ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+        : packs.length === 3
+        ? "grid-cols-1 sm:grid-cols-3"
+        : packs.length === 2
+        ? "grid-cols-1 sm:grid-cols-2"
+        : "grid-cols-1";
+
     return (
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-        <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
+        <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-full max-w-5xl shadow-2xl">
           <div className="text-lg font-semibold mb-3">
             Choose a pack to crack (Round {draftState.packIndex + 1}/
             {totalPacks})
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className={`grid ${gridColsClass} gap-3`}>
             {packs.map((packIdx) => {
               const alreadyUsedInEarlierRound = packIdx < draftState.packIndex;
-              const isUsed = usedPacks.includes(packIdx) || alreadyUsedInEarlierRound;
+              const isUsed =
+                usedPacks.includes(packIdx) || alreadyUsedInEarlierRound;
               const canOpenInPickingFallback =
                 draftState.phase === "picking" &&
                 draftState.pickNumber === 1 &&
                 myPack.length === 0;
               const allowedToOpen =
-                draftState.phase === "pack_selection" || canOpenInPickingFallback;
+                draftState.phase === "pack_selection" ||
+                canOpenInPickingFallback;
               const setName =
                 availableSets[packIdx] ||
                 availableSets[packIdx % Math.max(1, availableSets.length)];
@@ -1373,6 +1458,90 @@ export default function EnhancedOnlineDraft3DScreen({
               );
             })}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (draftState.phase === "waiting") {
+    return (
+      <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8 relative">
+        <UserBadge variant="floating" />
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
+
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-slate-800 rounded-lg p-6">
+              <h3 className="text-xl font-semibold text-white mb-4">Players</h3>
+              <div className="space-y-3">
+                {Object.entries(playerNames).map(([key, name]) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-slate-300">{name}</span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={
+                          playerReadyStates[
+                            key as keyof typeof playerReadyStates
+                          ]
+                            ? "text-green-400"
+                            : "text-slate-400"
+                        }
+                      >
+                        {playerReadyStates[
+                          key as keyof typeof playerReadyStates
+                        ]
+                          ? "Ready"
+                          : "Not Ready"}
+                      </span>
+                      {myPlayerKey === key &&
+                        !playerReadyStates[
+                          key as keyof typeof playerReadyStates
+                        ] && (
+                          <button
+                            onClick={handleToggleReady}
+                            className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            Ready
+                          </button>
+                        )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-800 rounded-lg p-6">
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Enhanced Draft Settings
+              </h3>
+              <div className="space-y-2 text-slate-300">
+                <div>
+                  Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}
+                </div>
+                <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
+                <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
+                <div>Players: 2</div>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleStartDraft}
+            disabled={loading || !playerReadyStates.p1 || !playerReadyStates.p2}
+            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            {loading
+              ? "Starting Enhanced Draft..."
+              : !playerReadyStates.p1 || !playerReadyStates.p2
+              ? "Waiting for both players to be ready..."
+              : "Start Enhanced Draft"}
+          </button>
         </div>
       </div>
     );
@@ -1702,8 +1871,14 @@ export default function EnhancedOnlineDraft3DScreen({
               {/* Sort mode toggle: Mana vs Element */}
               {isSortingEnabled && (
                 <button
-                  onClick={() => setSortMode((m) => (m === "mana" ? "element" : "mana"))}
-                  title={sortMode === "mana" ? "Group by element thresholds" : "Group by mana cost"}
+                  onClick={() =>
+                    setSortMode((m) => (m === "mana" ? "element" : "mana"))
+                  }
+                  title={
+                    sortMode === "mana"
+                      ? "Group by element thresholds"
+                      : "Group by mana cost"
+                  }
                   className={`h-9 px-3 rounded-full ring-1 transition ${
                     sortMode === "mana"
                       ? "bg-white/15 text-white ring-white/30 hover:bg-white/25"
