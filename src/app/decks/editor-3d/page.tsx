@@ -1864,7 +1864,6 @@ function AuthenticatedDeckEditor() {
                       stackIndex={stackPos ? stackPos.stackIndex : 0}
                       totalInStack={1}
                       interactive={true}
-                      preferRaster={true}
                       onContextMenu={(cx, cy) =>
                         openContextMenuForCard(
                           p.card.cardId,
@@ -2174,7 +2173,7 @@ function AuthenticatedDeckEditor() {
                   }`}
                 >
                   <Image
-                    src={`/api/images/${hoverPreview.slug}?format=webp`}
+                    src={`/api/images/${hoverPreview.slug}`}
                     alt={hoverPreview.name}
                     fill
                     sizes="(max-width:640px) 50vw, (max-width:1024px) 30vw, 25vw"
