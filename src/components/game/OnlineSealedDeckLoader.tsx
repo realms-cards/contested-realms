@@ -117,20 +117,47 @@ export default function OnlineSealedDeckLoader({
   }, [match, me, myPlayerKey, onPrepareComplete, playerNames]);
 
   useEffect(() => {
-    // Immediate UI flip upon server ack
-    const off = transport?.on?.("message", (msg: CustomMessage) => {
-      if (!msg || msg.type !== 'deckAccepted') return;
-      try { console.debug('[Sealed] deckAccepted <=', msg); } catch {}
-      setCompleted(true);
-    });
-    // Only auto-start if explicitly requested by parent and not already initiated
-    if (!autoStart) return;
-    if (!match || !me) return;
-    if (initiated) return;
-    setInitiated(true);
-    void loadSealedDecks();
-    return () => { try { if (typeof off === 'function') off(); } catch {} };
-  }, [autoStart, match, me, initiated, loadSealedDecks, transport]);
+    const handler = (msg: CustomMessage) => {
+      if (!msg || msg.type !== "deckAccepted") return;
+      const msgMatchId =
+        typeof (msg as { matchId?: unknown }).matchId === "string"
+          ? ((msg as { matchId?: string }).matchId as string)
+          : typeof (msg as { match?: unknown }).match === "string"
+            ? ((msg as { match?: string }).match as string)
+            : null;
+      if (match?.id && msgMatchId && msgMatchId !== match.id) return;
+      try {
+        console.debug("[Sealed] deckAccepted <=", msg);
+      } catch {}
+      if (completed || loading) return;
+      void loadSealedDecks();
+    };
+
+    let off: (() => void) | undefined;
+    try {
+      off = transport?.on?.("message", handler) as (() => void) | undefined;
+    } catch {}
+
+    if (autoStart && match && me && !initiated) {
+      setInitiated(true);
+      void loadSealedDecks();
+    }
+
+    return () => {
+      try {
+        if (typeof off === "function") off();
+      } catch {}
+    };
+  }, [
+    autoStart,
+    match,
+    me,
+    initiated,
+    loadSealedDecks,
+    transport,
+    loading,
+    completed,
+  ]);
 
   // If we are auto-starting and were waiting for opponent, try again
   useEffect(() => {
