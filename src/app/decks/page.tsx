@@ -34,10 +34,20 @@ export default function DecksPage() {
   const [error, setError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
 
-  const fetchDecks = useCallback(async () => {
+  const fetchDecks = useCallback(async (force = false) => {
     try {
       setLoading(true);
-      const res = await fetch("/api/decks");
+      // Add cache-busting for production
+      const url = force
+        ? `/api/decks?_t=${Date.now()}`
+        : "/api/decks";
+
+      const res = await fetch(url, {
+        // Force fresh data in production
+        cache: force ? 'no-cache' : 'default',
+        headers: force ? { 'Cache-Control': 'no-cache' } : {}
+      });
+
       if (!res.ok) throw new Error("Failed to load decks");
       const data = await res.json();
       setMyDecks(data.myDecks || []);
@@ -58,7 +68,7 @@ export default function DecksPage() {
   // Listen for import components signaling a refresh
   useEffect(() => {
     const onRefresh = () => {
-      void fetchDecks();
+      void fetchDecks(true); // Force fresh data after import
       setShowImport(false); // Close import panel on successful import
     };
     window.addEventListener("decks:refresh", onRefresh);

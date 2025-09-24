@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: "Spellbook needs at least 24 cards (excluding Avatar)" }), { status: 400 });
     }
 
-    // 2) Map names to variants/cards
+    // 2) Map names to variants/cards - BATCH LOOKUP for better performance
     const preferredSets = ["Alpha", "Beta", "Arthurian Legends"]; // preference order
 
     type Mapped = {
@@ -86,8 +86,12 @@ export async function POST(req: NextRequest) {
     const mapped: Mapped[] = [];
     const unresolved: { name: string; count: number }[] = [];
 
+    // Batch lookup all unique card names at once
+    const uniqueNames = Array.from(new Set(zoneEntries.map(e => e.name)));
+    const nameToVariant = await batchFindVariants(uniqueNames, preferredSets);
+
     for (const e of zoneEntries) {
-      const found = await findBestVariantForName(e.name, preferredSets);
+      const found = nameToVariant.get(e.name);
       if (!found) {
         unresolved.push({ name: e.name, count: e.count });
         continue;
@@ -148,62 +152,112 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function findBestVariantForName(name: string, setPreference: string[]) {
-  // First pass: find candidate cards containing the name
+// Batch version for much better performance
+async function batchFindVariants(names: string[], setPreference: string[]) {
+  const result = new Map<string, {
+    cardId: number;
+    variantId: number | null;
+    setId: number | null;
+    typeText: string | null;
+  }>();
+
+  if (!names.length) return result;
+
+  // Single query to get all candidates for all names
   const candidates = await prisma.card.findMany({
-    where: { name: { contains: name } },
+    where: {
+      name: {
+        in: names.flatMap(name => {
+          const canon = canonicalize(name);
+          // Include both exact matches and partial matches
+          return [name, canon];
+        })
+      }
+    },
     select: {
       id: true,
       name: true,
-      variants: { select: { id: true, setId: true, typeText: true, set: { select: { name: true } } } },
+      variants: {
+        select: { id: true, setId: true, typeText: true, set: { select: { name: true } } }
+      },
     },
-    take: 50,
   });
 
-  if (!candidates.length) return null;
-
-  const canon = canonicalize(name);
-  const exact = candidates.filter((c) => canonicalize(c.name) === canon);
-  const pool = exact.length ? exact : candidates;
-
-  // Flatten variants, score by set preference
-  type Flat = { cardId: number; variantId: number | null; setId: number | null; typeText: string | null; setName: string | null };
-  const flats: Flat[] = [];
-  for (const c of pool) {
-    if (!c.variants.length) {
-      flats.push({ cardId: c.id, variantId: null, setId: null, typeText: null, setName: null });
-      continue;
-    }
-    for (const v of c.variants) {
-      flats.push({ cardId: c.id, variantId: v.id, setId: v.setId, typeText: v.typeText, setName: v.set?.name ?? null });
-    }
+  // Group candidates by canonicalized name
+  const candidatesByName = new Map<string, typeof candidates>();
+  for (const name of names) {
+    const canon = canonicalize(name);
+    const matches = candidates.filter(c =>
+      canonicalize(c.name) === canon || c.name === name
+    );
+    candidatesByName.set(name, matches);
   }
 
-  if (!flats.length) return null;
+  // Process each name
+  for (const [originalName, cardCandidates] of candidatesByName) {
+    if (!cardCandidates.length) continue;
 
-  const score = (setName: string | null) => {
-    if (!setName) return -1;
-    const idx = setPreference.indexOf(setName);
-    return idx < 0 ? 0 : setPreference.length - idx; // higher is better
-  };
+    const canon = canonicalize(originalName);
+    const exact = cardCandidates.filter((c) => canonicalize(c.name) === canon);
+    const pool = exact.length ? exact : cardCandidates;
 
-  flats.sort((a, b) => score(b.setName) - score(a.setName));
-  let top = flats[0];
-
-  // Fallback: if typeText is missing, try CardSetMetadata to infer type
-  if ((top.typeText == null || top.typeText === "") && top.setId != null) {
-    try {
-      const meta = await prisma.cardSetMetadata.findFirst({
-        where: { cardId: top.cardId, setId: top.setId },
-        select: { type: true },
-      });
-      if (meta && meta.type) {
-        top = { ...top, typeText: meta.type };
+    // Flatten variants, score by set preference
+    type Flat = { cardId: number; variantId: number | null; setId: number | null; typeText: string | null; setName: string | null };
+    const flats: Flat[] = [];
+    for (const c of pool) {
+      if (!c.variants.length) {
+        flats.push({ cardId: c.id, variantId: null, setId: null, typeText: null, setName: null });
+        continue;
       }
-    } catch {}
+      for (const v of c.variants) {
+        flats.push({ cardId: c.id, variantId: v.id, setId: v.setId, typeText: v.typeText, setName: v.set?.name ?? null });
+      }
+    }
+
+    if (!flats.length) continue;
+
+    const score = (setName: string | null) => {
+      if (!setName) return -1;
+      const idx = setPreference.indexOf(setName);
+      return idx < 0 ? 0 : setPreference.length - idx; // higher is better
+    };
+
+    flats.sort((a, b) => score(b.setName) - score(a.setName));
+    const top = flats[0];
+
+    result.set(originalName, {
+      cardId: top.cardId,
+      variantId: top.variantId,
+      setId: top.setId,
+      typeText: top.typeText,
+    });
   }
 
-  return top;
+  // Batch metadata lookup for cards missing typeText
+  const needsMetadata = Array.from(result.entries())
+    .filter(([, variant]) => !variant.typeText && variant.setId)
+    .map(([, variant]) => ({ cardId: variant.cardId, setId: variant.setId as number }));
+
+  if (needsMetadata.length > 0) {
+    const metaMap = new Map<string, string>();
+    const metas = await prisma.cardSetMetadata.findMany({
+      where: { OR: needsMetadata },
+      select: { cardId: true, setId: true, type: true },
+    });
+    for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
+
+    // Update variants with metadata
+    for (const [name, variant] of result.entries()) {
+      if (!variant.typeText && variant.setId) {
+        const type = metaMap.get(`${variant.cardId}:${variant.setId}`);
+        if (type) {
+          result.set(name, { ...variant, typeText: type });
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 function canonicalize(s: string): string {

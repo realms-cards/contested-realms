@@ -4,6 +4,10 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// Cache avatar names for a short time to improve performance
+const avatarCache = new Map<string, { avatarName: string | null; timestamp: number }>();
+const AVATAR_CACHE_TTL = 60 * 1000; // 1 minute
+
 // GET /api/decks
 // Returns: {
 //   myDecks: [{ id, name, format, isPublic, imported, avatarName? }],
@@ -39,40 +43,58 @@ export async function GET() {
       },
     });
 
-    // Compute avatar names for all decks in a single pass
+    // Compute avatar names with caching to improve performance
     const allIds = [...myDecks.map(d => d.id), ...publicDecks.map(d => d.id)];
     const avatarNameByDeckId = new Map<string, string>();
-    if (allIds.length) {
-      // Fetch candidate cards for avatar detection (main deck zones only)
-      const deckCards = await prisma.deckCard.findMany({
-        where: { deckId: { in: allIds }, zone: { in: ['Spellbook', 'Atlas'] } },
+    const now = Date.now();
+
+    // Check cache first
+    const uncachedIds: string[] = [];
+    for (const id of allIds) {
+      const cached = avatarCache.get(id);
+      if (cached && (now - cached.timestamp) < AVATAR_CACHE_TTL) {
+        if (cached.avatarName) {
+          avatarNameByDeckId.set(id, cached.avatarName);
+        }
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+
+    // Only fetch avatar info for uncached decks
+    if (uncachedIds.length > 0) {
+      // Use more efficient query - only get avatars directly
+      const avatarCards = await prisma.deckCard.findMany({
+        where: {
+          deckId: { in: uncachedIds },
+          zone: { in: ['Spellbook', 'Atlas'] },
+          OR: [
+            { variant: { typeText: { contains: 'Avatar', mode: 'insensitive' } } },
+            {
+              AND: [
+                { setId: { not: null } },
+                { card: { meta: { some: { type: { contains: 'Avatar', mode: 'insensitive' } } } } }
+              ]
+            }
+          ]
+        },
         select: {
           deckId: true,
-          cardId: true,
-          setId: true,
-          variant: { select: { typeText: true } },
           card: { select: { name: true } },
         },
+        distinct: ['deckId'], // Only get one avatar per deck
       });
 
-      // If some rows lack variant.typeText, fall back to CardSetMetadata.type via (cardId, setId)
-      const pairs = deckCards
-        .filter((dc) => dc.setId != null)
-        .map((dc) => ({ cardId: dc.cardId, setId: dc.setId as number }));
-      const metaMap = new Map<string, string>(); // key: `${cardId}:${setId}` -> type
-      if (pairs.length) {
-        const metas = await prisma.cardSetMetadata.findMany({
-          where: { OR: pairs },
-          select: { cardId: true, setId: true, type: true },
-        });
-        for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
-      }
+      // Update cache and results
+      for (const deckId of uncachedIds) {
+        const avatarCard = avatarCards.find(ac => ac.deckId === deckId);
+        const avatarName = avatarCard?.card.name || null;
 
-      for (const dc of deckCards) {
-        const type = dc.variant?.typeText || (dc.setId != null ? metaMap.get(`${dc.cardId}:${dc.setId}`) : undefined) || null;
-        const isAvatar = typeof type === 'string' && type.toLowerCase().includes('avatar');
-        if (isAvatar && !avatarNameByDeckId.has(dc.deckId)) {
-          avatarNameByDeckId.set(dc.deckId, dc.card.name);
+        // Cache the result
+        avatarCache.set(deckId, { avatarName, timestamp: now });
+
+        if (avatarName) {
+          avatarNameByDeckId.set(deckId, avatarName);
         }
       }
     }

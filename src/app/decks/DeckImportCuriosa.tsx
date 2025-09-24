@@ -85,8 +85,11 @@ export default function DeckImportCuriosa() {
         <button
           type="submit"
           disabled={loading || (!url.trim() && !tts.trim())}
-          className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+          className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
         >
+          {loading && (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          )}
           {loading ? "Importing..." : "Import"}
         </button>
       </div>
