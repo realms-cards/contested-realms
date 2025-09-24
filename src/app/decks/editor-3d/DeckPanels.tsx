@@ -37,6 +37,8 @@ type DeckPanelsProps = {
   onSaveDeck: () => void;
   onSubmitSealed: () => void;
   onSubmitDraft: () => void;
+  onToggleTournamentControls: () => void;
+  tournamentControlsVisible: boolean;
 };
 
 export default function DeckPanels(props: DeckPanelsProps) {
@@ -69,6 +71,8 @@ export default function DeckPanels(props: DeckPanelsProps) {
     onSaveDeck,
     onSubmitSealed,
     onSubmitDraft,
+    onToggleTournamentControls,
+    tournamentControlsVisible,
   } = props;
 
   return (
@@ -165,21 +169,34 @@ export default function DeckPanels(props: DeckPanelsProps) {
             validation={validation}
           />
           {isSealed && (
-            <button
-              onClick={onSubmitSealed}
-              disabled={
-                saving || status !== "authenticated" ||
-                (isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook))
-              }
-              className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
-              title={
-                isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook)
-                  ? "Cannot save invalid deck in draft mode"
-                  : "Submit sealed deck to match"
-              }
-            >
-              {saving ? "Submitting..." : "Submit Sealed Deck"}
-            </button>
+            <>
+              <button
+                onClick={onToggleTournamentControls}
+                className={`h-10 px-4 rounded font-medium transition-colors ${
+                  tournamentControlsVisible
+                    ? "bg-yellow-600 text-white hover:bg-yellow-500"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+                title="Show tournament legal cards"
+              >
+                Add Standard Cards
+              </button>
+              <button
+                onClick={onSubmitSealed}
+                disabled={
+                  saving || status !== "authenticated" ||
+                  (isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook))
+                }
+                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+                title={
+                  isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook)
+                    ? "Cannot save invalid deck in draft mode"
+                    : "Submit sealed deck to match"
+                }
+              >
+                {saving ? "Submitting..." : "Submit Sealed Deck"}
+              </button>
+            </>
           )}
           {isDraftMode && (
             <button
