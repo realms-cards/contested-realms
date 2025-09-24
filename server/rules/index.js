@@ -41,6 +41,19 @@ function parseCellKey(key) {
   return null;
 }
 
+function getCellNumber(key, boardWidth = 5) {
+  const pos = parseCellKey(key);
+  if (!pos) return null;
+  // Sorcery board is 5x4 (5 columns, 4 rows)
+  // Cell numbering: 1-20, from top-left to bottom-right
+  return pos.y * boardWidth + pos.x + 1;
+}
+
+function getBoardWidth(game) {
+  // Sorcery board is always 5 columns wide
+  return (game && game.board && game.board.size && game.board.size.w) || 5;
+}
+
 function isAdjacentToOwnedSite(game, playerNum, key) {
   const pos = parseCellKey(key);
   if (!pos) return false;
@@ -201,7 +214,9 @@ function validateAction(game, action, playerId, context) {
         }
         // If both have a card, then it's an overwrite attempt
         if (nextTile && nextTile.card && prevTile && prevTile.card) {
-          return { ok: false, error: `Cannot place site on occupied tile ${key}` };
+          const cellNum = getCellNumber(key, getBoardWidth(game));
+          const cellRef = cellNum ? `cell ${cellNum}` : `tile ${key}`;
+          return { ok: false, error: `Cannot place site on occupied ${cellRef}` };
         }
         // If adding a new site, enforce owner equals actor (when resolvable)
         if (nextTile && nextTile.card && meNum && Number(nextTile.owner) !== meNum) {
@@ -217,7 +232,9 @@ function validateAction(game, action, playerId, context) {
             if (pos) {
               const atKey = `${pos[0]},${pos[1]}`;
               if (key !== atKey) {
-                return { ok: false, error: `First site must be played at your avatar's position (${atKey})` };
+                const cellNum = getCellNumber(atKey, getBoardWidth(game));
+                const cellRef = cellNum ? `cell ${cellNum}` : `position ${atKey}`;
+                return { ok: false, error: `First site must be played at your avatar's ${cellRef}` };
               }
             }
           }
@@ -233,7 +250,9 @@ function validateAction(game, action, playerId, context) {
       const currentSites = (game && game.board && game.board.sites) || {};
       for (const key of Object.keys(action.permanents)) {
         if (!currentSites[key] || !currentSites[key].card) {
-          return { ok: false, error: `Cannot place permanent on unsited cell ${key}` };
+          const cellNum = getCellNumber(key, getBoardWidth(game));
+          const cellRef = cellNum ? `cell ${cellNum}` : `cell ${key}`;
+          return { ok: false, error: `Cannot place permanent on unsited ${cellRef}` };
         }
       }
       // Ownership guard for tapping opponent permanents: reject if patch toggles tapped on a non-owned permanent
