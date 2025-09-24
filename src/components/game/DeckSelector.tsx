@@ -30,6 +30,7 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
   const [deckIdP2, setDeckIdP2] = useState<string>("");
   const [deckErrP1, setDeckErrP1] = useState<string | null>(null);
   const [deckErrP2, setDeckErrP2] = useState<string | null>(null);
+  const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +47,9 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
           setPublicDecks(Array.isArray(data?.publicDecks) ? data.publicDecks : []);
         }
       } catch {}
+      finally {
+        setDecksLoaded(true);
+      }
     })();
   }, []);
 
@@ -86,31 +90,37 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
 
       <div>
         <div className="text-lg font-semibold mb-2">Player 1 Deck</div>
-        <select
-          className="w-full bg-black/40 rounded px-3 py-2 outline-none"
-          value={deckIdP1}
-          onChange={(e) => setDeckIdP1(e.target.value)}
-        >
-          <option value="">Select…</option>
-          {myDecks.length > 0 && (
-            <optgroup label="My Decks">
-              {myDecks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.format})
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {includePublic && publicDecks.length > 0 && (
-            <optgroup label="Public Decks">
-              {publicDecks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.format}) — {d.userName}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+        {!decksLoaded ? (
+          <div className="w-full bg-black/40 rounded px-3 py-2 text-gray-400">
+            Loading decks...
+          </div>
+        ) : (
+          <select
+            className="w-full bg-black/40 rounded px-3 py-2 outline-none"
+            value={deckIdP1}
+            onChange={(e) => setDeckIdP1(e.target.value)}
+          >
+            <option value="">Select…</option>
+            {myDecks.length > 0 && (
+              <optgroup label="My Decks">
+                {myDecks.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.format})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {includePublic && publicDecks.length > 0 && (
+              <optgroup label="Public Decks">
+                {publicDecks.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.format}) — {d.userName}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        )}
         {deckErrP1 && (
           <div className="text-red-300 text-xs mt-2">{deckErrP1}</div>
         )}
@@ -118,31 +128,37 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
       
       <div>
         <div className="text-lg font-semibold mb-2">Player 2 Deck</div>
-        <select
-          className="w-full bg-black/40 rounded px-3 py-2 outline-none"
-          value={deckIdP2}
-          onChange={(e) => setDeckIdP2(e.target.value)}
-        >
-          <option value="">Select…</option>
-          {myDecks.length > 0 && (
-            <optgroup label="My Decks">
-              {myDecks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.format})
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {includePublic && publicDecks.length > 0 && (
-            <optgroup label="Public Decks">
-              {publicDecks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.format}) — {d.userName}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+        {!decksLoaded ? (
+          <div className="w-full bg-black/40 rounded px-3 py-2 text-gray-400">
+            Loading decks...
+          </div>
+        ) : (
+          <select
+            className="w-full bg-black/40 rounded px-3 py-2 outline-none"
+            value={deckIdP2}
+            onChange={(e) => setDeckIdP2(e.target.value)}
+          >
+            <option value="">Select…</option>
+            {myDecks.length > 0 && (
+              <optgroup label="My Decks">
+                {myDecks.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.format})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {includePublic && publicDecks.length > 0 && (
+              <optgroup label="Public Decks">
+                {publicDecks.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.format}) — {d.userName}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        )}
         {deckErrP2 && (
           <div className="text-red-300 text-xs mt-2">{deckErrP2}</div>
         )}
