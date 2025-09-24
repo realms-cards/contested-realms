@@ -25,6 +25,9 @@ type BottomBarProps = {
   toggleTournamentControls: () => void;
   packs: Pack[];
   openPack: (packId: string) => void;
+  openAllPacks: () => Promise<void>;
+  packCardCache: Record<string, SearchResult[]>;
+  packLoadProgress: { processed: number; total: number; inProgress: boolean };
   timeRemaining: number;
   formatTime: (ms: number) => string;
 };
@@ -50,9 +53,21 @@ export default function BottomBar(props: BottomBarProps) {
     toggleTournamentControls,
     packs,
     openPack,
+    openAllPacks,
+    packCardCache,
+    packLoadProgress,
     timeRemaining,
     formatTime,
   } = props;
+
+  const unopenedPacks = packs.filter((p) => !p.opened);
+  const allUnopenedReady = unopenedPacks.every((pack) => Boolean(packCardCache[pack.id]));
+  const showOpenAll = unopenedPacks.length > 0;
+  const showLoadingBar =
+    unopenedPacks.length > 0 &&
+    packLoadProgress.total > 0 &&
+    (packLoadProgress.inProgress || packLoadProgress.processed < packLoadProgress.total);
+  const openAllDisabled = packLoadProgress.inProgress || !allUnopenedReady;
 
   return (
     <div className={`absolute bottom-0 left-0 right-0 ${searchExpanded ? "p-4" : "p-2"} pointer-events-none`}>
@@ -73,7 +88,7 @@ export default function BottomBar(props: BottomBarProps) {
                       </svg>
                       {formatTime(timeRemaining)}
                     </div>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-col gap-3 w-full">
                       {Object.entries(
                         packs
                           .filter((p) => !p.opened)
@@ -87,6 +102,7 @@ export default function BottomBar(props: BottomBarProps) {
                           <div className="text-white text-sm font-medium">{setName}</div>
                           <div className="flex gap-1">
                             {setPacks.map((pack) => {
+                              const ready = Boolean(packCardCache[pack.id]);
                               const assetName = (() => {
                                 const s = (pack.set || "").toLowerCase();
                                 if (s.includes("arthur")) return "arthurian-booster.png";
@@ -97,9 +113,14 @@ export default function BottomBar(props: BottomBarProps) {
                               return (
                                 <button
                                   key={pack.id}
-                                  onClick={() => openPack(pack.id)}
-                                  className="w-16 h-24 rounded-lg overflow-hidden ring-1 ring-white/20 hover:ring-white/40 transition-all duration-200 shadow-lg relative group"
-                                  title={`Open ${pack.set} pack`}
+                                  onClick={() => ready && openPack(pack.id)}
+                                  className={`w-16 h-24 rounded-lg overflow-hidden ring-1 transition-all duration-200 shadow-lg relative group ${
+                                    ready
+                                      ? "ring-white/20 hover:ring-white/40"
+                                      : "ring-white/10 opacity-60 cursor-wait"
+                                  }`}
+                                  title={ready ? `Open ${pack.set} pack` : "Loading pack…"}
+                                  disabled={!ready}
                                 >
                                   {assetName ? (
                                     <Image src={`/api/assets/${assetName}`} alt={`${pack.set} booster pack`} width={64} height={96} className="object-cover w-full h-full group-hover:scale-105 transition-transform" />
@@ -113,12 +134,75 @@ export default function BottomBar(props: BottomBarProps) {
                                       <span className="text-white text-xs font-bold">OPENED</span>
                                     </div>
                                   )}
+                                  {!ready && !pack.opened && (
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                      <span className="text-white text-[10px] font-semibold tracking-wide">
+                                        Loading…
+                                      </span>
+                                    </div>
+                                  )}
                                 </button>
                               );
                             })}
                           </div>
                         </div>
                       ))}
+                      {(showLoadingBar || showOpenAll) && (
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {showLoadingBar && (
+                            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white text-sm">
+                              <div className="flex flex-col leading-tight">
+                                <span className="font-semibold">Loading packs…</span>
+                                <span className="text-xs text-white/80">
+                                  {packLoadProgress.processed} / {packLoadProgress.total} ready
+                                </span>
+                              </div>
+                              <div className="w-32 h-2 rounded bg-white/10 overflow-hidden">
+                                <div
+                                  className="h-full bg-emerald-400 transition-all duration-300"
+                                  style={{
+                                    width: `${Math.min(
+                                      100,
+                                      packLoadProgress.total === 0
+                                        ? 0
+                                        : (packLoadProgress.processed / packLoadProgress.total) * 100
+                                    ).toFixed(2)}%`,
+                                  }}
+                                />
+                              </div>
+                              {packLoadProgress.inProgress && (
+                                <svg
+                                  className="w-5 h-5 animate-spin text-white/80"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M4 12a8 8 0 018-8"
+                                  />
+                                </svg>
+                              )}
+                            </div>
+                          )}
+                          {showOpenAll && (
+                            <button
+                              onClick={openAllPacks}
+                              disabled={openAllDisabled}
+                              className={`h-10 px-4 rounded-lg font-semibold transition-colors ${
+                                openAllDisabled
+                                  ? "bg-white/10 text-white/50 cursor-not-allowed"
+                                  : "bg-emerald-600 text-white hover:bg-emerald-500"
+                              }`}
+                              title="Open all remaining packs"
+                            >
+                              Open All Packs
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="ml-auto">
                       <button
