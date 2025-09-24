@@ -658,7 +658,7 @@ export default function Hand3D({
             scale={[scale, scale, scale]}
           >
             {/* Invisible larger interaction box to ensure cards are always clickable */}
-            {!showCardBacks && (
+            {!showCardBacks && !isDraggedCard && (
               <mesh
                 position={[0, 0, 0.01]}
                 onPointerOver={(e) => {

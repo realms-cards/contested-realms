@@ -695,23 +695,6 @@ export default function OnlineMatchPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null);
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
-  const [magnifierDelay, setMagnifierDelay] = useState(false);
-  const selectedHandCard = (() => {
-    if (!selected || selected.who !== currentPlayerKey) return null;
-    const hand = zones[currentPlayerKey].hand || [];
-    return hand[selected.index] ?? null;
-  })();
-  // Delay showing the magnifier to prevent it competing with preview
-  useEffect(() => {
-    if (selectedHandCard) {
-      setMagnifierDelay(false);
-      const timer = setTimeout(() => setMagnifierDelay(true), 100);
-      return () => clearTimeout(timer);
-    } else {
-      setMagnifierDelay(false);
-    }
-    return undefined;
-  }, [selectedHandCard]);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
 
@@ -1133,7 +1116,7 @@ export default function OnlineMatchPage() {
           />
 
           {/* Enhanced Hover Preview Overlay - uses new CardPreview component */}
-          {hoverPreview && !contextMenu && !selectedHandCard && (
+          {hoverPreview && !contextMenu && (
             <CardPreview
               card={hoverPreview}
               anchor="top-right"
@@ -1142,7 +1125,7 @@ export default function OnlineMatchPage() {
           )}
           
           {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) */}
-          {previewCard?.slug && !hoverPreview && !contextMenu && !selectedHandCard && (
+          {previewCard?.slug && !hoverPreview && !contextMenu && (
             <CardPreview
               card={previewCard}
               anchor="top-right"
@@ -1187,15 +1170,6 @@ export default function OnlineMatchPage() {
             />
           )}
 
-          {/* Hand Card Magnifier (selected hand card) */}
-          {selectedHandCard?.slug && !dragFromHand && !contextMenu && magnifierDelay && (
-            <CardPreview
-              card={selectedHandCard}
-              anchor="top-right"
-              zIndexClass="z-30"
-              onClose={() => clearSelection()}
-            />
-          )}
 
           {/* Match Info Popup */}
           <MatchInfoPopup

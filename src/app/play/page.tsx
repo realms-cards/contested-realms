@@ -50,26 +50,8 @@ export default function PlayPage() {
   const boardSize = useGameStore((s) => s.board.size);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
-  // Selected hand card (for magnifier) - show for current player
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
-  const [magnifierDelay, setMagnifierDelay] = useState(false);
-  const selectedHandCard = (() => {
-    if (!selected || selected.who !== currentPlayerKey) return null;
-    const hand = zones[currentPlayerKey].hand || [];
-    return hand[selected.index] ?? null;
-  })();
 
-  // Delay showing the magnifier to prevent it from competing with preview
-  useEffect(() => {
-    if (selectedHandCard) {
-      setMagnifierDelay(false);
-      const timer = setTimeout(() => setMagnifierDelay(true), 100);
-      return () => clearTimeout(timer);
-    } else {
-      setMagnifierDelay(false);
-    }
-    return undefined;
-  }, [selectedHandCard]);
 
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
@@ -417,8 +399,8 @@ export default function PlayPage() {
         </div>
       </div>
 
-      {/* Hover Preview Overlay (hidden if context menu or magnifier visible) */}
-      {previewCard?.slug && !contextMenu && !selectedHandCard && (
+      {/* Hover Preview Overlay (hidden if context menu visible) */}
+      {previewCard?.slug && !contextMenu && (
         <CardPreview card={previewCard} anchor="top-right" onClose={() => setPreviewCard(null)} />
       )}
 
@@ -459,53 +441,6 @@ export default function PlayPage() {
 
       {/* Replaced 2D overlays with 3D piles and hand inside Canvas */}
 
-      {/* Hand Card Magnifier (selected hand card) - moved to right side */}
-      {(() => {
-        const c = selectedHandCard;
-        if (!c?.slug || dragFromHand || contextMenu || !magnifierDelay)
-          return null;
-        const slug = c.slug || "";
-        const isSite = (c.type || "").toLowerCase().includes("site");
-        const isToken = slug.startsWith("token:");
-        let imgSrc = `/api/images/${slug}`;
-        let siteLike = isSite;
-        if (isToken) {
-          const key = slug.split(":")[1]?.toLowerCase() || "";
-          const def = TOKEN_BY_KEY[key];
-          if (def) {
-            imgSrc = `/api/assets/tokens/${def.fileBase}.png`;
-            siteLike = !!def.siteReplacement;
-          }
-        }
-        return (
-          <div className="absolute right-3 top-20 z-30 pointer-events-none">
-            <div className="relative">
-              <div
-                className={`relative ${
-                  siteLike ? "aspect-[4/3]" : "aspect-[3/4]"
-                } h-[420px] md:h-[500px] lg:h-[560px] rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
-              >
-                <Image
-                  src={imgSrc}
-                  alt={c.name}
-                  fill
-                  sizes="(max-width:640px) 85vw, (max-width:1024px) 60vw, 40vw"
-                  className={`${
-                    siteLike ? "object-contain rotate-90" : "object-contain"
-                  }`}
-                />
-              </div>
-              <button
-                className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
-                onClick={() => clearSelection()}
-                title="Close magnifier"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Board */}
       <Canvas
