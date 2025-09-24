@@ -36,7 +36,6 @@ export async function PATCH(req: NextRequest) {
     if (typeof hiddenRaw !== 'boolean') {
       return new Response(JSON.stringify({ error: 'Missing or invalid "hidden" boolean' }), { status: 400, headers: { 'content-type': 'application/json' } });
     }
-    // @ts-expect-error Prisma Client types may be stale; presenceHidden exists in schema
     const me = await prisma.user.update({ where: { id: session.user.id }, data: { presenceHidden: hiddenRaw } });
     const hidden = (me as unknown as { presenceHidden?: boolean }).presenceHidden ?? hiddenRaw;
     return new Response(JSON.stringify({ ok: true, hidden: !!hidden }), { status: 200, headers: { 'content-type': 'application/json' } });

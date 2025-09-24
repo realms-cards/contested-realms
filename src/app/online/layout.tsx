@@ -58,6 +58,8 @@ export default function OnlineLayout({
   const availableAuthRef = useRef<{ token: string; ts: number } | null>(null);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
   const [availablePlayersError, setAvailablePlayersError] = useState<string | null>(null);
+  const [socialError, setSocialError] = useState<string | null>(null);
+  const socialErrorTimer = useRef<number | null>(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
@@ -802,7 +804,24 @@ export default function OnlineLayout({
           }
         }
       }),
-      transport.on("error", (p) => console.warn("server error", p))
+      transport.on("error", (p) => {
+        console.warn("server error", p);
+        try {
+          const code = (p as { code?: string })?.code || '';
+          const msg = (p as { message?: string })?.message || '';
+          if (code === 'not_host') {
+            setSocialError('Only the host can invite');
+          } else if (code === 'private_lobby') {
+            setSocialError('Lobby is private. You need an invite.');
+          } else if (code === 'target_in_match') {
+            setSocialError('Target is currently in a match');
+          } else if (msg && (msg.toLowerCase().includes('invite') || msg.toLowerCase().includes('host'))) {
+            setSocialError(msg);
+          }
+          if (socialErrorTimer.current) window.clearTimeout(socialErrorTimer.current);
+          socialErrorTimer.current = window.setTimeout(() => setSocialError(null), 3000);
+        } catch {}
+      })
     );
 
     return () => {
@@ -1009,7 +1028,7 @@ export default function OnlineLayout({
     availablePlayers,
     availablePlayersNextCursor,
     availablePlayersLoading,
-    playersError: availablePlayersError,
+    playersError: availablePlayersError ?? socialError,
     invites,
     requestLobbies: () => {
       try {
@@ -1086,6 +1105,12 @@ export default function OnlineLayout({
                 </Link>
                 <Link
                   className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
+                  href="/decks"
+                >
+                  Decks
+                </Link>
+                <Link
+                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
                   href="/replay"
                 >
                   Replays
@@ -1127,7 +1152,19 @@ export default function OnlineLayout({
                 </div>
               )}
             </div>
-            {children}
+            {/* Disable browser context menu on lobby pages for the content area (not the top nav above) */}
+            {isLobbyPage ? (
+              <div
+                onContextMenu={(e) => {
+                  // Prevent default right-click menu across the lobby content area
+                  e.preventDefault();
+                }}
+              >
+                {children}
+              </div>
+            ) : (
+              children
+            )}
           </div>
         </div>
       )}

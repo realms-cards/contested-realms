@@ -93,6 +93,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     availablePlayers,
     availablePlayersNextCursor,
     availablePlayersLoading,
+    playersError,
     invites,
     requestLobbies,
     requestPlayers,
@@ -133,7 +134,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
   const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
   
-  const [topTab, setTopTab] = useState<"invites" | "friends">("invites");
+  // Top tabs removed: invites are shown inline above the friends list
   // Discoverability (presence) first-run prompt
   const [presencePromptOpen, setPresencePromptOpen] = useState<boolean>(false);
   const [presenceHidden, setPresenceHidden] = useState<boolean>(false);
@@ -156,7 +157,6 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
       } catch {}
       setPresencePromptOpen(true);
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function updatePresence(hidden: boolean) {
@@ -680,23 +680,102 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         </div>
       )}
 
-      {/* Social (invites/friends) */}
-      <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
-          <div className="flex items-center gap-1">
-            <button
-              className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "invites" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
-              onClick={() => setTopTab("invites")}
-            >
-              Invites
-            </button>
-            <button
-            className={`text-sm font-semibold px-2 py-1 rounded ${topTab === "friends" ? "bg-white/10" : "opacity-70 hover:opacity-90"}`}
-            onClick={() => { setTopTab("friends"); requestPlayers({ reset: true }); }}
-          >
-            Friends
-          </button>
+      {/* Social and Chat row */}
+      {/* We present Chat and Friends containers side-by-side on wide screens */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Chat Panel */}
+        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
+          <div className="flex items-center justify-between mb-2">
+            {/* tabs for Lobby/Global chat scopes */}
+            <div className="flex items-center gap-1">
+              <button
+                className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                  chatTab === "lobby"
+                    ? "bg-white/15"
+                    : "hover:bg-white/10 opacity-80"
+                }`}
+                onClick={() => setChatTab("lobby")}
+              >
+                Lobby
+                {lobbyMessages.length > 0 && (
+                  <span className="ml-1 bg-emerald-500/70 text-white text-[10px] px-1 rounded-full">
+                    {lobbyMessages.length}
+                  </span>
+                )}
+              </button>
+              <button
+                className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                  chatTab === "global"
+                    ? "bg-white/15"
+                    : "hover:bg-white/10 opacity-80"
+                }`}
+                onClick={() => setChatTab("global")}
+              >
+                Global
+                {globalMessages.length > 0 && (
+                  <span className="ml-1 bg-sky-500/70 text-white text-[10px] px-1 rounded-full">
+                    {globalMessages.length}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
-          {topTab === "invites" ? (
+
+          <div
+            ref={chatRef}
+            className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1"
+          >
+            {activeMessages.length === 0 && (
+              <div className="opacity-60">No messages</div>
+            )}
+            {activeMessages.map((m, i) => (
+              <div key={i} className="opacity-90">
+                <span className="font-medium">
+                  {m.from?.displayName ?? "System"}
+                </span>
+                : {m.content}
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder={
+                chatTab === "global"
+                  ? "Type a global message"
+                  : "Type a message"
+              }
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && connected) {
+                  const msg = chatInput.trim();
+                  if (!msg) return;
+                  sendChat(msg, chatTab);
+                  setChatInput("");
+                }
+              }}
+              disabled={!connected}
+            />
+            <button
+              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => {
+                const msg = chatInput.trim();
+                if (!msg) return;
+                sendChat(msg, chatTab);
+                setChatInput("");
+              }}
+              disabled={!connected || !chatInput.trim()}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+
+        {/* Friends + Invites Panel */}
+        <div className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}>
+          {/* Inline invites (if any) */}
+          {invites && invites.length > 0 && (
             <InvitesPanel
               invites={invites}
               onAccept={async (inv) => {
@@ -705,19 +784,22 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
               }}
               onDecline={(inv) => dismissInvite(inv.lobbyId, inv.from.id)}
             />
-          ) : (
-            <PlayersInvitePanel
-              players={players}
-              available={availablePlayers}
-              loading={availablePlayersLoading}
-              nextCursor={availablePlayersNextCursor}
-              requestPlayers={requestPlayers}
-              me={me}
-              lobby={lobby}
-              onInvite={(pid, lid) => inviteToLobby(pid, lid)}
-            />
           )}
+
+          {/* Friends browser */}
+          <PlayersInvitePanel
+            players={players}
+            available={availablePlayers}
+            loading={availablePlayersLoading}
+            nextCursor={availablePlayersNextCursor}
+            requestPlayers={requestPlayers}
+            error={playersError}
+            me={me}
+            lobby={lobby}
+            onInvite={(pid, lid) => inviteToLobby(pid, lid)}
+          />
         </div>
+      </div>
 
       {/* Discoverability Prompt */}
       {presencePromptOpen && (
@@ -1070,97 +1152,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         </div>
         )}
 
-      {/* Removed legacy controls + details sections; all lobby actions now live in Active Games */}
-      {/* Chat */}
-      <div className="grid grid-cols-1 gap-4">
-        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-          <div className="flex items-center justify-between mb-2">
-            {/* tabs for Lobby/Global chat scopes */}
-            <div className="flex items-center gap-1">
-              <button
-                className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                  chatTab === "lobby"
-                    ? "bg-white/15"
-                    : "hover:bg-white/10 opacity-80"
-                }`}
-                onClick={() => setChatTab("lobby")}
-              >
-                Lobby
-                {lobbyMessages.length > 0 && (
-                  <span className="ml-1 bg-emerald-500/70 text-white text-[10px] px-1 rounded-full">
-                    {lobbyMessages.length}
-                  </span>
-                )}
-              </button>
-              <button
-                className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                  chatTab === "global"
-                    ? "bg-white/15"
-                    : "hover:bg-white/10 opacity-80"
-                }`}
-                onClick={() => setChatTab("global")}
-              >
-                Global
-                {globalMessages.length > 0 && (
-                  <span className="ml-1 bg-sky-500/70 text-white text-[10px] px-1 rounded-full">
-                    {globalMessages.length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div
-            ref={chatRef}
-            className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1"
-          >
-            {activeMessages.length === 0 && (
-              <div className="opacity-60">No messages</div>
-            )}
-            {activeMessages.map((m, i) => (
-              <div key={i} className="opacity-90">
-                <span className="font-medium">
-                  {m.from?.displayName ?? "System"}
-                </span>
-                : {m.content}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <input
-              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder={
-                chatTab === "global"
-                  ? "Type a global message"
-                  : "Type a message"
-              }
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && connected) {
-                  const msg = chatInput.trim();
-                  if (!msg) return;
-                  sendChat(msg, chatTab);
-                  setChatInput("");
-                }
-              }}
-              disabled={!connected}
-            />
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={() => {
-                const msg = chatInput.trim();
-                if (!msg) return;
-                sendChat(msg, chatTab);
-                setChatInput("");
-              }}
-              disabled={!connected || !chatInput.trim()}
-            >
-              Send
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* end Social and Chat row */}
     </div>
   );
 }

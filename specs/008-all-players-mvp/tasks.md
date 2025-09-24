@@ -102,11 +102,11 @@
   - Derive last 10 matches per requesting user from Prisma `MatchResult`; build frequency + lastPlayedAt map
 
 ## Phase 3.4: Integration
-- [ ] T024 Env/plumbing: expose `NEXT_PUBLIC_WS_HTTP_ORIGIN`; derive fallback from `NEXT_PUBLIC_WS_URL` (ws→http)
+- [x] T024 Env/plumbing: expose `NEXT_PUBLIC_WS_HTTP_ORIGIN`; derive fallback from `NEXT_PUBLIC_WS_URL` (ws→http)
   - Files: `/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/online/online-context.tsx`, `.env*`
-- [ ] T025 Error handling and user feedback for invite/add-friend edge cases
+- [x] T025 Error handling and user feedback for invite/add-friend edge cases
   - Files: `online-context.tsx`, `PlayersInvitePanel.tsx`
-- [ ] T026 Logging: server info logs for `/players/available` queries (q, sort, limit) and invite/friend actions
+- [x] T026 Logging: server info logs for `/players/available` queries (q, sort, limit) and invite/friend actions
   - File: `/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js`
 
 ## Phase 3.5: Polish
