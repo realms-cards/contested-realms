@@ -1,8 +1,10 @@
 "use client";
 
+import clsx from "clsx";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 
 type DeckItemProps = {
   deck: {
@@ -14,15 +16,60 @@ type DeckItemProps = {
     imported?: boolean;
     userName?: string; // For public decks from other users
     isOwner?: boolean; // Whether current user owns this deck
-    avatarName?: string; // Optional avatar name to display
+    avatarState: "none" | "single" | "multiple";
+    avatarCard?: { name: string; slug: string | null } | null;
   };
 };
+
+type TagTone =
+  | "default"
+  | "public"
+  | "private"
+  | "info"
+  | "warning"
+  | "error";
+
+const TAG_TONE_STYLES: Record<TagTone, string> = {
+  default: "bg-foreground/10 text-foreground/80 border-white/10",
+  public: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+  private: "bg-zinc-800/70 text-zinc-300 border-zinc-600/60",
+  info: "bg-blue-500/15 text-blue-200 border-blue-400/20",
+  warning: "bg-amber-500/15 text-amber-200 border-amber-400/20",
+  error: "bg-rose-500/15 text-rose-200 border-rose-400/20",
+};
+
+function Tag({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: TagTone;
+}) {
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center text-xs px-2 py-0.5 rounded border leading-tight max-w-full overflow-hidden text-ellipsis whitespace-nowrap",
+        TAG_TONE_STYLES[tone]
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function normalizeFormatLabel(format: string | undefined) {
+  if (!format) return "";
+  const lower = format.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
 
 export default function DeckItem({ deck }: DeckItemProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [updatingPublic, setUpdatingPublic] = useState(false);
-  const [isPublic, setIsPublic] = useState<boolean>(Boolean(deck.isPublic));
+  const [isPublicState, setIsPublicState] = useState<boolean>(
+    Boolean(deck.isPublic)
+  );
   const [exportingText, setExportingText] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
 
@@ -51,41 +98,104 @@ export default function DeckItem({ deck }: DeckItemProps) {
     }
   }
 
-  const updatedStr = new Date(deck.updatedAt).toLocaleString();
+  const isOwner = deck.isOwner !== false;
+  const effectiveIsPublic = isOwner ? isPublicState : Boolean(deck.isPublic);
+  const formatLabel = useMemo(
+    () => normalizeFormatLabel(deck.format),
+    [deck.format]
+  );
+  const updatedStr = useMemo(
+    () => new Date(deck.updatedAt).toLocaleString(),
+    [deck.updatedAt]
+  );
+
+  const tags = useMemo(() => {
+    const items: ReactNode[] = [];
+    if (formatLabel) {
+      items.push(
+        <Tag key="format" tone="default">
+          {formatLabel}
+        </Tag>
+      );
+    }
+    if (isOwner || typeof deck.isPublic === "boolean") {
+      items.push(
+        <Tag key="visibility" tone={effectiveIsPublic ? "public" : "private"}>
+          {effectiveIsPublic ? "Public" : "Private"}
+        </Tag>
+      );
+    }
+    if (deck.imported) {
+      items.push(
+        <Tag key="imported" tone="info">
+          Imported
+        </Tag>
+      );
+    }
+    if (deck.avatarState === "multiple") {
+      items.push(
+        <Tag key="avatar-wip" tone="warning">
+          WIP (Multiple Avatars)
+        </Tag>
+      );
+    } else if (deck.avatarState === "none") {
+      items.push(
+        <Tag key="avatar-missing" tone="error">
+          Avatar Missing
+        </Tag>
+      );
+    }
+    return items;
+  }, [deck.avatarState, deck.imported, deck.isPublic, effectiveIsPublic, formatLabel, isOwner]);
+
+  const avatarPreview = useMemo(() => {
+    if (deck.avatarState !== "single" || !deck.avatarCard) return null;
+    const { name, slug } = deck.avatarCard;
+    if (slug) {
+      return (
+        <div className="flex-shrink-0 pointer-events-none">
+          <div className="relative w-16 h-24 overflow-hidden rounded-sm shadow-lg shadow-black/40 ring-1 ring-white/15 bg-black/30">
+            <Image
+              src={`/api/images/${slug}`}
+              alt={name ? `${name} avatar` : "Avatar card"}
+              fill
+              sizes="64px"
+              className="object-cover"
+              priority={false}
+            />
+          </div>
+        </div>
+      );
+    }
+    if (name) {
+      return (
+        <div className="flex-shrink-0 pointer-events-none">
+          <div className="px-2 py-1 rounded bg-purple-500/15 border border-purple-400/20 text-xs text-purple-200 text-center max-w-[5rem]">
+            {name}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }, [deck.avatarCard, deck.avatarState]);
 
   return (
     <Link
       href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
       className="border rounded p-3 hover:bg-muted/60 relative group block"
     >
-      <div className="font-medium line-clamp-1 pr-8">{deck.name}</div>
-      <div className="flex items-center gap-2 opacity-80">
-        <span>{deck.format}</span>
-        {isPublic !== undefined && (
-          <span
-            className={`text-xs px-1.5 py-0.5 rounded ${
-              isPublic
-                ? "bg-green-500/20 text-green-400"
-                : "bg-gray-500/20 text-gray-400"
-            }`}
-          >
-            {isPublic ? "Public" : "Private"}
-          </span>
-        )}
-        {deck.imported && (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">
-            Imported
-          </span>
-        )}
-        {deck.avatarName && (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300">
-            {deck.avatarName}
-          </span>
-        )}
-      </div>
-      <div className="opacity-70 text-xs mt-1">
-        {deck.userName && <span>by {deck.userName} • </span>}
-        Updated {updatedStr}
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="font-medium line-clamp-1 pr-8">{deck.name}</div>
+          {tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">{tags}</div>
+          )}
+          <div className="opacity-70 text-xs mt-2">
+            {deck.userName && <span>by {deck.userName} • </span>}
+            Updated {updatedStr}
+          </div>
+        </div>
+        {avatarPreview}
       </div>
 
       {copiedMsg && (
@@ -184,10 +294,10 @@ export default function DeckItem({ deck }: DeckItemProps) {
         </svg>
       </button>
 
-      {deck.isOwner !== false && (
+      {isOwner && (
         <button
           aria-label="Toggle public/private"
-          title={isPublic ? "Make Private" : "Make Public"}
+          title={effectiveIsPublic ? "Make Private" : "Make Public"}
           onClick={async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -199,7 +309,7 @@ export default function DeckItem({ deck }: DeckItemProps) {
                 {
                   method: "PUT",
                   headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ isPublic: !isPublic }),
+                  body: JSON.stringify({ isPublic: !effectiveIsPublic }),
                 }
               );
               if (!res.ok) {
@@ -212,7 +322,7 @@ export default function DeckItem({ deck }: DeckItemProps) {
                     : "Failed to update deck visibility"
                 );
               }
-              setIsPublic((prev) => !prev);
+              setIsPublicState((prev) => !prev);
               try {
                 window.dispatchEvent(new Event("decks:refresh"));
               } catch {}
@@ -225,13 +335,13 @@ export default function DeckItem({ deck }: DeckItemProps) {
           }}
           disabled={updatingPublic}
           className={`absolute top-2 right-12 inline-flex items-center justify-center h-8 w-8 rounded ring-1 transition-opacity ${
-            isPublic
+            effectiveIsPublic
               ? "text-green-400 ring-green-500/30 hover:bg-green-500/20"
               : "text-gray-400 ring-zinc-600 hover:bg-zinc-700/40"
           } opacity-0 group-hover:opacity-100`}
         >
           {/* Lock/Open icon */}
-          {isPublic ? (
+          {effectiveIsPublic ? (
             // Unlocked icon
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -259,7 +369,7 @@ export default function DeckItem({ deck }: DeckItemProps) {
         </button>
       )}
 
-      {deck.isOwner !== false && (
+      {isOwner && (
         <button
           aria-label="Delete deck"
           title="Delete deck"

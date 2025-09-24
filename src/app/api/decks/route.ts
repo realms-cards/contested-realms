@@ -4,14 +4,19 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-// Cache avatar names for a short time to improve performance
-const avatarCache = new Map<string, { avatarName: string | null; timestamp: number }>();
+// Cache avatar metadata for a short time to improve performance
+type AvatarCacheValue = {
+  state: "none" | "single" | "multiple";
+  avatarCard?: { name: string; slug: string | null };
+};
+
+const avatarCache = new Map<string, { summary: AvatarCacheValue; timestamp: number }>();
 const AVATAR_CACHE_TTL = 60 * 1000; // 1 minute
 
 // GET /api/decks
 // Returns: {
-//   myDecks: [{ id, name, format, isPublic, imported, avatarName? }],
-//   publicDecks: [{ id, name, format, imported, userName, avatarName? }]
+//   myDecks: [{ id, name, format, isPublic, imported, updatedAt, avatarState, avatarCard }],
+//   publicDecks: [{ id, name, format, imported, isPublic, updatedAt, userName, avatarState, avatarCard }]
 // }
 export async function GET() {
   const session = await getServerAuthSession();
@@ -23,7 +28,7 @@ export async function GET() {
     const myDecks = await prisma.deck.findMany({
       where: { userId: session.user.id },
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, name: true, format: true, isPublic: true, imported: true },
+      select: { id: true, name: true, format: true, isPublic: true, imported: true, updatedAt: true },
     });
 
     // Get public decks from other users
@@ -39,13 +44,14 @@ export async function GET() {
         name: true,
         format: true,
         imported: true,
+        updatedAt: true,
         user: { select: { name: true } }
       },
     });
 
-    // Compute avatar names with caching to improve performance
+    // Compute avatar metadata with caching to improve performance
     const allIds = [...myDecks.map(d => d.id), ...publicDecks.map(d => d.id)];
-    const avatarNameByDeckId = new Map<string, string>();
+    const avatarSummaryByDeckId = new Map<string, AvatarCacheValue>();
     const now = Date.now();
 
     // Check cache first
@@ -53,9 +59,7 @@ export async function GET() {
     for (const id of allIds) {
       const cached = avatarCache.get(id);
       if (cached && (now - cached.timestamp) < AVATAR_CACHE_TTL) {
-        if (cached.avatarName) {
-          avatarNameByDeckId.set(id, cached.avatarName);
-        }
+        avatarSummaryByDeckId.set(id, cached.summary);
       } else {
         uncachedIds.push(id);
       }
@@ -67,7 +71,7 @@ export async function GET() {
       const avatarCards = await prisma.deckCard.findMany({
         where: {
           deckId: { in: uncachedIds },
-          zone: { in: ['Spellbook', 'Atlas'] },
+          zone: { in: ['Spellbook', 'Atlas', 'Sideboard'] },
           OR: [
             { variant: { typeText: { contains: 'Avatar', mode: 'insensitive' } } },
             {
@@ -80,34 +84,88 @@ export async function GET() {
         },
         select: {
           deckId: true,
+          count: true,
           card: { select: { name: true } },
+          variant: { select: { slug: true } },
         },
-        distinct: ['deckId'], // Only get one avatar per deck
       });
 
-      // Update cache and results
-      for (const deckId of uncachedIds) {
-        const avatarCard = avatarCards.find(ac => ac.deckId === deckId);
-        const avatarName = avatarCard?.card.name || null;
-
-        // Cache the result
-        avatarCache.set(deckId, { avatarName, timestamp: now });
-
-        if (avatarName) {
-          avatarNameByDeckId.set(deckId, avatarName);
+      type AvatarCardRow = (typeof avatarCards)[number];
+      const avatarCardsByDeck = new Map<string, AvatarCardRow[]>();
+      for (const entry of avatarCards) {
+        const arr = avatarCardsByDeck.get(entry.deckId);
+        if (arr) {
+          arr.push(entry);
+        } else {
+          avatarCardsByDeck.set(entry.deckId, [entry]);
         }
+      }
+
+      for (const deckId of uncachedIds) {
+        const entries = avatarCardsByDeck.get(deckId) ?? [];
+        const totalCount = entries.reduce((sum, item) => sum + item.count, 0);
+
+        let summary: AvatarCacheValue;
+        if (totalCount === 1) {
+          const avatarEntry = entries.find(item => item.count > 0) ?? entries[0];
+          if (avatarEntry && avatarEntry.card?.name) {
+            const slug = avatarEntry.variant?.slug
+              ? avatarEntry.variant.slug.toLowerCase()
+              : null;
+            summary = {
+              state: 'single',
+              avatarCard: {
+                name: avatarEntry.card.name,
+                slug,
+              },
+            };
+          } else {
+            summary = { state: 'single' };
+          }
+        } else if (totalCount > 1) {
+          summary = { state: 'multiple' };
+        } else {
+          summary = { state: 'none' };
+        }
+
+        avatarCache.set(deckId, { summary, timestamp: now });
+        avatarSummaryByDeckId.set(deckId, summary);
+      }
+    }
+
+    // Ensure every deck has an entry, even if cached summary was absent
+    for (const id of allIds) {
+      if (!avatarSummaryByDeckId.has(id)) {
+        const cached = avatarCache.get(id);
+        const summary = cached?.summary ?? { state: 'none' as const };
+        avatarSummaryByDeckId.set(id, summary);
       }
     }
 
     const response = {
-      myDecks: myDecks.map((d) => ({ ...d, avatarName: avatarNameByDeckId.get(d.id) || null })),
+      myDecks: myDecks.map((d) => {
+        const avatarSummary = avatarSummaryByDeckId.get(d.id) ?? { state: 'none' as const };
+        return {
+          id: d.id,
+          name: d.name,
+          format: d.format,
+          isPublic: d.isPublic,
+          imported: d.imported,
+          updatedAt: d.updatedAt.toISOString(),
+          avatarState: avatarSummary.state,
+          avatarCard: avatarSummary.avatarCard ?? null,
+        };
+      }),
       publicDecks: publicDecks.map((deck) => ({
         id: deck.id,
         name: deck.name,
         format: deck.format,
         imported: deck.imported,
+        isPublic: true,
+        updatedAt: deck.updatedAt.toISOString(),
         userName: deck.user.name || 'Unknown Player',
-        avatarName: avatarNameByDeckId.get(deck.id) || null,
+        avatarState: (avatarSummaryByDeckId.get(deck.id) ?? { state: 'none' as const }).state,
+        avatarCard: (avatarSummaryByDeckId.get(deck.id)?.avatarCard) ?? null,
       })),
     };
 
