@@ -42,6 +42,7 @@ export default function OnlineDeckSelector({
   const [impTts, setImpTts] = useState("");
   const [impLoading, setImpLoading] = useState(false);
   const [impError, setImpError] = useState<string | null>(null);
+  const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -58,6 +59,9 @@ export default function OnlineDeckSelector({
           setPublicDecks(Array.isArray(data?.publicDecks) ? data.publicDecks : []);
         }
       } catch {}
+      finally {
+        setDecksLoaded(true);
+      }
     })();
   }, []);
 
@@ -184,32 +188,38 @@ export default function OnlineDeckSelector({
               Include public decks
             </label>
           </div>
-          <select
-            className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-            value={selectedDeck}
-            onChange={(e) => setSelectedDeck(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="">Select a deck...</option>
-            {myDecks.length > 0 && (
-              <optgroup label="My Decks">
-                {myDecks.map((deck) => (
-                  <option key={deck.id} value={deck.id}>
-                    {deck.name} ({deck.format})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {includePublic && publicDecks.length > 0 && (
-              <optgroup label="Public Decks">
-                {publicDecks.map((deck) => (
-                  <option key={deck.id} value={deck.id}>
-                    {deck.name} ({deck.format}) — {deck.userName}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+          {!decksLoaded ? (
+            <div className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-gray-400">
+              Loading decks...
+            </div>
+          ) : (
+            <select
+              className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+              value={selectedDeck}
+              onChange={(e) => setSelectedDeck(e.target.value)}
+              disabled={isLoading}
+            >
+              <option value="">Select a deck...</option>
+              {myDecks.length > 0 && (
+                <optgroup label="My Decks">
+                  {myDecks.map((deck) => (
+                    <option key={deck.id} value={deck.id}>
+                      {deck.name} ({deck.format})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {includePublic && publicDecks.length > 0 && (
+                <optgroup label="Public Decks">
+                  {publicDecks.map((deck) => (
+                    <option key={deck.id} value={deck.id}>
+                      {deck.name} ({deck.format}) — {deck.userName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          )}
         </div>
 
         {deckError && (
