@@ -19,7 +19,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const avatars = useGameStore((s) => s.avatars);
   const zones = useGameStore((s) => s.zones);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const toggleTapSite = useGameStore((s) => s.toggleTapSite);
+  const actorKey = useGameStore((s) => s.actorKey);
   const toggleTapPermanent = useGameStore((s) => s.toggleTapPermanent);
   const addCounterOnPermanent = useGameStore((s) => s.addCounterOnPermanent);
   const clearPermanentCounter = useGameStore((s) => s.clearPermanentCounter);
@@ -211,14 +211,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const site = board.sites[key];
     header = site?.card?.name || `Site #${t.y * board.size.w + t.x + 1}`;
     tapped = !!site?.tapped;
-    hasToggle = true;
-    doToggle = () => {
-      toggleTapSite(t.x, t.y);
-      try { playCardFlip(); } catch {}
-      onClose();
-    };
+    // Sites do not tap in Sorcery: never show a toggle for sites
+    hasToggle = false;
+    doToggle = null;
 
-    if (site) {
+    const ownerKey = site ? (site.owner === 1 ? "p1" : "p2") : null;
+    const isMine = !actorKey || (ownerKey && actorKey === ownerKey);
+
+    if (site && isMine) {
       transferTo = site.owner === 1 ? 2 : 1;
       doTransfer = () => {
         transferSiteControl(t.x, t.y);
@@ -226,24 +226,26 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
-    doToHand = () => {
-      moveSiteToZone(t.x, t.y, "hand");
-      try { playCardFlip(); } catch {}
-      onClose();
-    };
-    doToGY = () => {
-      moveSiteToZone(t.x, t.y, "graveyard");
-      try { playCardFlip(); } catch {}
-      onClose();
-    };
-    doBanish = () => {
-      moveSiteToZone(t.x, t.y, "banished");
-      try { playCardFlip(); } catch {}
-      onClose();
-    };
+    if (isMine) {
+      doToHand = () => {
+        moveSiteToZone(t.x, t.y, "hand");
+        try { playCardFlip(); } catch {}
+        onClose();
+      };
+      doToGY = () => {
+        moveSiteToZone(t.x, t.y, "graveyard");
+        try { playCardFlip(); } catch {}
+        onClose();
+      };
+      doBanish = () => {
+        moveSiteToZone(t.x, t.y, "banished");
+        try { playCardFlip(); } catch {}
+        onClose();
+      };
+    }
 
     if (
-      site?.card?.name &&
+      isMine && site?.card?.name &&
       (site.card?.type || "").toLowerCase().includes("site")
     ) {
       doAddToAtlas = () => {
@@ -260,14 +262,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const item = arr[t.index];
     header = item?.card?.name || "Permanent";
     tapped = !!item?.tapped;
-    hasToggle = true;
-    doToggle = () => {
-      toggleTapPermanent(t.at, t.index);
-      try { playCardFlip(); } catch {}
-      onClose();
-    };
+    const ownerKey = item ? (item.owner === 1 ? "p1" : "p2") : null;
+    const canToggle = !actorKey || (ownerKey && actorKey === ownerKey);
+    hasToggle = !!canToggle;
+    if (canToggle) {
+      doToggle = () => {
+        toggleTapPermanent(t.at, t.index);
+        try { playCardFlip(); } catch {}
+        onClose();
+      };
+    }
 
-    if (item) {
+    const isMine = !actorKey || (ownerKey && actorKey === ownerKey);
+    if (item && isMine) {
       transferTo = item.owner === 1 ? 2 : 1;
       doTransfer = () => {
         transferPermanentControl(t.at, t.index);
@@ -301,7 +308,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         .map(({ perm, idx }) => ({ name: perm.card.name, index: idx }));
     }
 
-    if (isToken) {
+    if (isToken && isMine) {
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => !((it.card.type || "").toLowerCase().includes("token")));
@@ -325,7 +332,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         try { playCardFlip(); } catch {}
         onClose();
       };
-    } else {
+    } else if (isMine) {
       doToHand = () => {
         movePermanentToZone(t.at, t.index, "hand");
         try { playCardFlip(); } catch {}
@@ -357,12 +364,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const a = avatars[t.who];
     header = a?.card?.name || `${t.who.toUpperCase()} Avatar`;
     tapped = !!a?.tapped;
-    hasToggle = true;
-    doToggle = () => {
-      toggleTapAvatar(t.who);
-      try { playCardFlip(); } catch {}
-      onClose();
-    };
+    const canToggle = !actorKey || actorKey === t.who;
+    hasToggle = !!canToggle;
+    if (canToggle) {
+      doToggle = () => {
+        toggleTapAvatar(t.who);
+        try { playCardFlip(); } catch {}
+        onClose();
+      };
+    }
   } else if (t.kind === "pile") {
     const pile: CardRef[] = zones[t.who][t.from];
     const count = pile.length;
@@ -373,8 +383,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         ? "Atlas"
         : "Cemetery";
     header = `${name} (${count} cards)`;
+    const isMine = !actorKey || actorKey === t.who;
     const isCurrent = (t.who === "p1" ? 1 : 2) === currentPlayer;
-    if (isCurrent && count > 0) {
+    if (isMine && isCurrent && count > 0) {
       doDrawFromPile = () => {
         const top = pile[0];
         if (!top) return;
@@ -384,7 +395,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
-    if (isCurrent && t.from !== "graveyard") {
+    if (isMine && isCurrent && t.from !== "graveyard") {
       doShufflePile = () => {
         if (t.from === "spellbook") shuffleSpellbook(t.who);
         else shuffleAtlas(t.who);
@@ -392,7 +403,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
-    if (isCurrent && count > 0) {
+    if (isMine && count > 0) {
       doSearchPile = () => {
         const displayName =
           t.from === "spellbook"
@@ -547,7 +558,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             const items = permanents[t.at] || [];
                             // Find the token that was just detached
                             const detachedToken = items.find(
-                              (item, idx) =>
+                              (item) =>
                                 !item.attachedTo &&
                                 item.card.name.toLowerCase() === tokenName
                             );

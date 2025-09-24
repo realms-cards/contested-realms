@@ -36,7 +36,7 @@ import {
   DRAG_HOLD_MS,
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store";
+import type { CardRef, BoardState } from "@/lib/game/store";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
@@ -59,6 +59,8 @@ interface PlaymatProps {
 interface BoardProps {
   noRaycast?: boolean;
 }
+
+const DEFAULT_BOARD_STATE: BoardState = { size: { w: 5, h: 4 }, sites: {} };
 
 // No-op raycast handler to make a mesh ignore pointer events (lets objects above receive them)
 function noopRaycast(
@@ -91,7 +93,8 @@ function Playmat({ matW, matH }: PlaymatProps) {
 }
 
 export default function Board({ noRaycast = false }: BoardProps = {}) {
-  const board = useGameStore((s) => s.board);
+  const boardState = useGameStore((s) => s.board);
+  const board = boardState ?? DEFAULT_BOARD_STATE;
   const showGrid = useGameStore((s) => s.showGridOverlay);
   const showPlaymat = useGameStore((s) => s.showPlaymat);
   const playSelectedTo = useGameStore((s) => s.playSelectedTo);
