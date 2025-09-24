@@ -1252,10 +1252,31 @@ function AuthenticatedDeckEditor() {
           ? (pack.cards as Array<Record<string, unknown>>)
           : [];
         if (providedCards.length > 0) {
+          // If server included identifiers, avoid N requests by constructing SearchResult directly.
+          const toAdd: SearchResult[] = [];
           for (const c of providedCards) {
             try {
+              const hasIds = typeof c.cardId === "number" || typeof c.variantId === "number";
               const slug = typeof c.slug === "string" ? c.slug : "";
               const name = typeof c.cardName === "string" ? c.cardName : (typeof c.name === "string" ? c.name : "");
+              const typeVal = typeof c.type === "string" ? c.type : null;
+              const rarityVal = typeof c.rarity === "string" ? c.rarity : null;
+              if (hasIds && slug && name) {
+                const sr: SearchResult = {
+                  variantId: (c.variantId as number) ?? -1,
+                  slug,
+                  finish: (c.finish === "Foil" ? "Foil" : "Standard"),
+                  product: typeof c.product === "string" ? (c.product as string) : "Booster",
+                  cardId: (c.cardId as number) ?? 0,
+                  cardName: name,
+                  set: typeof c.set === "string" ? (c.set as string) : pack.set,
+                  type: typeVal,
+                  rarity: rarityVal,
+                };
+                toAdd.push(sr);
+                continue;
+              }
+              // Fallback: lookup via search API when identifiers are missing
               let hit: SearchResult | null = null;
               if (slug) {
                 const res = await fetch(`/api/cards/search?q=${encodeURIComponent(slug)}&set=${encodeURIComponent(pack.set)}&type=all`);
@@ -1267,8 +1288,32 @@ function AuthenticatedDeckEditor() {
                 const data = (await res.json()) as SearchResult[];
                 hit = res.ok ? data[0] || null : null;
               }
-              if (hit) addToSideboardFromSearch(hit);
+              if (hit) toAdd.push(hit);
             } catch {}
+          }
+          // Batch add to minimize rerenders
+          if (toAdd.length) {
+            setPicks((prev) => {
+              const next = { ...prev } as typeof prev;
+              for (const r of toAdd) {
+                const zone: Zone = "Sideboard";
+                const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+                const exists = (next as Record<PickKey, PickItem>)[key];
+                (next as Record<PickKey, PickItem>)[key] = exists
+                  ? { ...exists, count: exists.count + 1 }
+                  : {
+                      cardId: r.cardId,
+                      variantId: r.variantId ?? null,
+                      name: r.cardName,
+                      type: r.type,
+                      slug: r.slug,
+                      zone,
+                      count: 1,
+                      set: r.set,
+                    } as PickItem;
+              }
+              return next;
+            });
           }
         } else {
           // Fallback to API-based generation only if no cards are present (offline/local flow)
@@ -1307,7 +1352,7 @@ function AuthenticatedDeckEditor() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [packs, addToSideboardFromSearch, sealedConfig?.replaceAvatars]
+    [packs, addToSideboardFromSearch, sealedConfig?.replaceAvatars, setPicks]
   );
 
   // Removed auto-save sealed deck function - use manual save only

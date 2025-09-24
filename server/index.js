@@ -1793,7 +1793,7 @@ async function startMatchFromLobby(
             ", "
           )}`
         );
-        /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>} */
+        /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string, cardId?: number, variantId?: number, finish?: string, product?: string }> }>} */
         const packs = [];
         for (let i = 0; i < sets.length; i++) {
           const setName = sets[i];
@@ -1810,6 +1810,11 @@ async function startMatchFromLobby(
             type: p.type ?? null,
             cost: p.cost ?? null,
             rarity: String(p.rarity || "Ordinary"),
+            // Include identifiers so clients can avoid per-card lookups
+            cardId: typeof p.cardId === 'number' ? p.cardId : undefined,
+            variantId: typeof p.variantId === 'number' ? p.variantId : undefined,
+            finish: typeof p.finish === 'string' ? p.finish : undefined,
+            product: typeof p.product === 'string' ? p.product : undefined,
           }));
           packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
         }
@@ -2377,7 +2382,7 @@ io.on("connection", (socket) => {
               continue;
             }
 
-            /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>} */
+            /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string, cardId?: number, variantId?: number, finish?: string, product?: string }> }>} */
             const packs = [];
             for (let i = 0; i < sets.length; i++) {
               const setName = sets[i];
@@ -2390,6 +2395,11 @@ io.on("connection", (socket) => {
                 type: p.type ?? null,
                 cost: p.cost ?? null,
                 rarity: String(p.rarity || "Ordinary"),
+                // Include identifiers so clients can avoid per-card lookups
+                cardId: typeof p.cardId === 'number' ? p.cardId : undefined,
+                variantId: typeof p.variantId === 'number' ? p.variantId : undefined,
+                finish: typeof p.finish === 'string' ? p.finish : undefined,
+                product: typeof p.product === 'string' ? p.product : undefined,
               }));
               packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
             }
