@@ -4,6 +4,55 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// Cache heavy booster metadata since sealed generation may call this repeatedly per match.
+// Each cache entry stores Promises so concurrent calls share in-flight work.
+const boosterMetaCache = new Map();
+
+async function getBoosterMetadata(setName) {
+  if (!boosterMetaCache.has(setName)) {
+    boosterMetaCache.set(
+      setName,
+      (async () => {
+        const set = await prisma.set.findUnique({
+          where: { name: setName },
+          include: { packConfig: true },
+        });
+        if (!set || !set.packConfig) {
+          throw new Error(`Set or PackConfig not found for set=${setName}`);
+        }
+
+        const [metas, variantsStd, variantsFoil] = await Promise.all([
+          prisma.cardSetMetadata.findMany({
+            where: { setId: set.id },
+            select: { cardId: true, rarity: true, type: true, cost: true },
+          }),
+          prisma.variant.findMany({
+            where: { setId: set.id, product: 'Booster', finish: 'Standard' },
+            select: { id: true, cardId: true, slug: true, finish: true, product: true },
+          }),
+          prisma.variant.findMany({
+            where: { setId: set.id, product: 'Booster', finish: 'Foil' },
+            select: { id: true, cardId: true, slug: true, finish: true, product: true },
+          })
+        ]);
+
+        const metaByCardId = new Map();
+        for (const m of metas) metaByCardId.set(m.cardId, { rarity: m.rarity, type: m.type, cost: m.cost });
+
+        const cardIds = Array.from(metaByCardId.keys());
+        const cardNames = await prisma.card.findMany({
+          where: { id: { in: cardIds } },
+          select: { id: true, name: true },
+        });
+        const nameByCardId = new Map(cardNames.map((c) => [c.id, c.name]));
+
+        return { set, variantsStd, variantsFoil, metaByCardId, nameByCardId };
+      })()
+    );
+  }
+  return boosterMetaCache.get(setName);
+}
+
 // Seed helpers (xmur3 + sfc32)
 function xmur3(str) {
   let h = 1779033703 ^ str.length;
@@ -64,29 +113,8 @@ function pickUniqueFrom(pool, used, rng) {
 }
 
 async function generateBoosterDeterministic(setName, rng, replaceAvatars = false) {
-  const set = await prisma.set.findUnique({ where: { name: setName }, include: { packConfig: true } });
-  if (!set || !set.packConfig) throw new Error(`Set or PackConfig not found for set=${setName}`);
+  const { set, variantsStd, variantsFoil, metaByCardId, nameByCardId } = await getBoosterMetadata(setName);
   const cfg = set.packConfig;
-
-  // Build meta map: cardId -> { rarity, type }
-  const metas = await prisma.cardSetMetadata.findMany({
-    where: { setId: set.id },
-    select: { cardId: true, rarity: true, type: true, cost: true },
-  });
-  const metaByCardId = new Map();
-  for (const m of metas) metaByCardId.set(m.cardId, { rarity: m.rarity, type: m.type, cost: m.cost });
-
-  // Fetch all booster variants by finish
-  const [variantsStd, variantsFoil] = await Promise.all([
-    prisma.variant.findMany({
-      where: { setId: set.id, product: 'Booster', finish: 'Standard' },
-      select: { id: true, cardId: true, slug: true, finish: true, product: true },
-    }),
-    prisma.variant.findMany({
-      where: { setId: set.id, product: 'Booster', finish: 'Foil' },
-      select: { id: true, cardId: true, slug: true, finish: true, product: true },
-    }),
-  ]);
 
   // Group by rarity using meta map
   const rarities = ['Ordinary', 'Exceptional', 'Elite', 'Unique'];
@@ -105,9 +133,9 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
 
   // Site/Avatar pool (standard only)
   const siteAvatarCardIds = [];
-  for (const m of metas) {
-    const t = (m.type || '').toLowerCase();
-    if (t.includes('site') || t.includes('avatar')) siteAvatarCardIds.push(m.cardId);
+  for (const [cardId, meta] of metaByCardId.entries()) {
+    const t = (meta.type || '').toLowerCase();
+    if (t.includes('site') || t.includes('avatar')) siteAvatarCardIds.push(cardId);
   }
   const siteAvatarStd = variantsStd.filter((v) => siteAvatarCardIds.includes(v.cardId));
 
@@ -226,14 +254,8 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
     }
   }
 
-  // Fill card names in one query
-  const ids = Array.from(new Set(picks.map((p) => p.cardId)));
-  const cards = await prisma.card.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, name: true },
-  });
-  const nameById = new Map(cards.map((c) => [c.id, c.name]));
-  for (const p of picks) p.cardName = nameById.get(p.cardId) || '';
+  // Fill card names from cached map
+  for (const p of picks) p.cardName = nameByCardId.get(p.cardId) || '';
 
   // Avatar replacement for Alpha/Beta
   if (replaceAvatars && (setName === 'Alpha' || setName === 'Beta')) {
