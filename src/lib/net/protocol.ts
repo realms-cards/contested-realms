@@ -67,6 +67,11 @@ export const PackCardSchema = z.object({
   type: z.string().optional().nullable(),
   cost: z.number().int().min(0).optional().nullable(),
   rarity: z.string(),
+  // Optional identifiers/metadata included by the server to avoid per-card lookups on the client
+  cardId: z.number().int().optional(),
+  variantId: z.number().int().optional(),
+  finish: z.enum(["Standard", "Foil"]).optional(),
+  product: z.string().optional(),
 });
 export type PackCard = z.infer<typeof PackCardSchema>;
 
