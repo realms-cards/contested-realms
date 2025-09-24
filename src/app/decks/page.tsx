@@ -8,14 +8,19 @@ import DeckImportCuriosa from "./DeckImportCuriosa";
 import DeckImportText from "./DeckImportText";
 import DeckItem from "./DeckItem";
 
+type AvatarSummary = {
+  avatarState: "none" | "single" | "multiple";
+  avatarCard?: { name: string; slug: string | null } | null;
+};
+
 type MyDeck = {
   id: string;
   name: string;
   format: string;
   isPublic: boolean;
   imported?: boolean;
-  avatarName?: string | null;
-};
+  updatedAt: string;
+} & AvatarSummary;
 
 type PublicDeck = {
   id: string;
@@ -23,8 +28,81 @@ type PublicDeck = {
   format: string;
   imported?: boolean;
   userName: string;
-  avatarName?: string | null;
-};
+  updatedAt: string;
+  isPublic: boolean;
+} & AvatarSummary;
+
+function normalizeAvatarState(value: unknown): AvatarSummary["avatarState"] {
+  if (value === "single" || value === "multiple" || value === "none") {
+    return value;
+  }
+  return "none";
+}
+
+function normalizeAvatarCard(card: unknown): AvatarSummary["avatarCard"] {
+  if (!card || typeof card !== "object") return null;
+  const maybeCard = card as { name?: unknown; slug?: unknown };
+  const name = typeof maybeCard.name === "string" ? maybeCard.name : "";
+  const slugValue = maybeCard.slug;
+  const slug =
+    typeof slugValue === "string"
+      ? slugValue
+      : slugValue === null
+      ? null
+      : null;
+  if (!name && slug == null) {
+    return null;
+  }
+  return { name, slug };
+}
+
+function normalizeUpdatedAt(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const fromNumber = new Date(value);
+    if (!Number.isNaN(fromNumber.getTime())) return fromNumber.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+type RawDeck = Record<string, unknown>;
+
+function mapAvatarSummary(deck: RawDeck): AvatarSummary {
+  return {
+    avatarState: normalizeAvatarState(deck["avatarState"]),
+    avatarCard: normalizeAvatarCard(deck["avatarCard"]),
+  };
+}
+
+function mapMyDeckFromApi(deck: RawDeck): MyDeck {
+  const summary = mapAvatarSummary(deck);
+  return {
+    id: String(deck["id"] ?? ""),
+    name: typeof deck["name"] === "string" ? (deck["name"] as string) : "Untitled Deck",
+    format: typeof deck["format"] === "string" ? (deck["format"] as string) : "Unknown",
+    isPublic: Boolean(deck["isPublic"]),
+    imported: Boolean(deck["imported"]),
+    updatedAt: normalizeUpdatedAt(deck["updatedAt"]),
+    ...summary,
+  };
+}
+
+function mapPublicDeckFromApi(deck: RawDeck): PublicDeck {
+  const summary = mapAvatarSummary(deck);
+  return {
+    id: String(deck["id"] ?? ""),
+    name: typeof deck["name"] === "string" ? (deck["name"] as string) : "Untitled Deck",
+    format: typeof deck["format"] === "string" ? (deck["format"] as string) : "Unknown",
+    imported: Boolean(deck["imported"]),
+    userName: typeof deck["userName"] === "string" && deck["userName"]
+      ? (deck["userName"] as string)
+      : "Unknown Player",
+    updatedAt: normalizeUpdatedAt(deck["updatedAt"]),
+    isPublic: true,
+    ...summary,
+  };
+}
 
 export default function DecksPage() {
   const { data: session } = useSession();
@@ -50,8 +128,14 @@ export default function DecksPage() {
 
       if (!res.ok) throw new Error("Failed to load decks");
       const data = await res.json();
-      setMyDecks(data.myDecks || []);
-      setPublicDecks(data.publicDecks || []);
+      const normalizedMyDecks: MyDeck[] = Array.isArray(data?.myDecks)
+        ? data.myDecks.map(mapMyDeckFromApi)
+        : [];
+      const normalizedPublicDecks: PublicDeck[] = Array.isArray(data?.publicDecks)
+        ? data.publicDecks.map(mapPublicDeckFromApi)
+        : [];
+      setMyDecks(normalizedMyDecks);
+      setPublicDecks(normalizedPublicDecks);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load decks");
     } finally {
@@ -146,7 +230,10 @@ export default function DecksPage() {
               , import an existing deck, or save from Draft.
             </div>
           ) : (
-            <div>
+            <div className="space-y-3">
+              <h2 className="text-xl font-semibold font-fantaisie">
+                Your Decks
+              </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                 {myDecks.map((d) => (
                   <DeckItem
@@ -157,8 +244,9 @@ export default function DecksPage() {
                       format: d.format,
                       isPublic: d.isPublic,
                       imported: d.imported,
-                      avatarName: d.avatarName ?? undefined,
-                      updatedAt: new Date().toISOString(), // API doesn't return updatedAt in new structure
+                      avatarState: d.avatarState,
+                      avatarCard: d.avatarCard,
+                      updatedAt: d.updatedAt,
                       isOwner: true,
                     }}
                   />
@@ -167,9 +255,8 @@ export default function DecksPage() {
             </div>
           )}
 
-          {/* Public Decks Section */}
           {publicDecks.length > 0 && (
-            <>
+            <div className="space-y-3">
               <h2 className="text-xl font-semibold font-fantaisie mt-8">
                 Public Decks
               </h2>
@@ -183,14 +270,16 @@ export default function DecksPage() {
                       format: d.format,
                       imported: d.imported,
                       userName: d.userName,
-                      avatarName: d.avatarName ?? undefined,
-                      updatedAt: new Date().toISOString(),
+                      avatarState: d.avatarState,
+                      avatarCard: d.avatarCard,
+                      updatedAt: d.updatedAt,
+                      isPublic: Boolean(d.isPublic),
                       isOwner: false,
                     }}
                   />
                 ))}
               </div>
-            </>
+            </div>
           )}
         </>
       )}

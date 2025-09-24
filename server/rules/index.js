@@ -109,28 +109,115 @@ function getThresholdsForCard(card) {
   return null;
 }
 
-// Map standard site names to element keywords used in thresholds
-const SITE_ELEMENT_BY_NAME = {
-  Spire: 'air',
-  Stream: 'water',
-  Valley: 'earth',
-  Wasteland: 'fire',
+// Curated metadata (mirrors client `src/lib/game/mana-providers.ts`)
+const MANA_PROVIDER_BY_NAME = new Set([
+  'abundance',
+  'amethyst core',
+  'aquamarine core',
+  'atlantean fate',
+  'avalon',
+  'blacksmith family',
+  'caerleon-upon-usk',
+  'castle servants',
+  'common cottagers',
+  'drought',
+  'finwife',
+  "fisherman's family",
+  'glastonbury tor',
+  'joyous garde',
+  'onyx core',
+  'pristine paradise',
+  'ruby core',
+  'shrine of the dragonlord',
+  'the colour out of space',
+  'tintagel',
+  'valley of delight',
+  'wedding hall',
+  'älvalinne dryads',
+]);
+
+const THRESHOLD_GRANT_BY_NAME = {
+  'amethyst core': { air: 1 },
+  'aquamarine core': { water: 1 },
+  'onyx core': { earth: 1 },
+  'ruby core': { fire: 1 },
 };
 
+// Sites that do NOT provide 1 mana (keep empty until cataloged)
+const NON_MANA_SITE_IDENTIFIERS = new Set([]);
+
+const THRESHOLD_KEYS = ['air', 'water', 'earth', 'fire'];
+
+function accumulateThresholds(acc, src) {
+  if (!src || typeof src !== 'object') return;
+  for (const k of THRESHOLD_KEYS) {
+    const v = Number(src[k] || 0);
+    if (Number.isFinite(v) && v !== 0) acc[k] = (acc[k] || 0) + v;
+  }
+}
+
+function siteProvidesMana(card) {
+  if (!card) return false;
+  const name = (card.name || '').toString().toLowerCase();
+  const slug = (card.slug || '').toString().toLowerCase();
+  if (NON_MANA_SITE_IDENTIFIERS.has(name)) return false;
+  if (slug && NON_MANA_SITE_IDENTIFIERS.has(slug)) return false;
+  return true;
+}
+
 function countThresholdsForPlayer(game, playerNum) {
-  const board = (game && game.board) || { sites: {} };
-  const sites = (board && board.sites) || {};
-  const tally = { air: 0, water: 0, earth: 0, fire: 0 };
+  const out = { air: 0, water: 0, earth: 0, fire: 0 };
+  const sites = (game && game.board && game.board.sites) || {};
   for (const key of Object.keys(sites)) {
     try {
       const tile = sites[key];
       if (!tile || Number(tile.owner) !== playerNum) continue;
-      const nm = tile.card && tile.card.name ? String(tile.card.name) : '';
-      const el = SITE_ELEMENT_BY_NAME[nm];
-      if (el) tally[el]++;
+      const th = tile.card && tile.card.thresholds ? tile.card.thresholds : null;
+      accumulateThresholds(out, th);
     } catch {}
   }
-  return tally;
+  const per = (game && game.permanents) || {};
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      try {
+        if (!p || Number(p.owner) !== playerNum) continue;
+        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        const grant = THRESHOLD_GRANT_BY_NAME[nm];
+        if (grant) accumulateThresholds(out, grant);
+      } catch {}
+    }
+  }
+  return out;
+}
+
+function countOwnedManaSites(game, playerNum) {
+  let n = 0;
+  const sites = (game && game.board && game.board.sites) || {};
+  for (const key of Object.keys(sites)) {
+    try {
+      const tile = sites[key];
+      if (!tile || Number(tile.owner) !== playerNum) continue;
+      if (siteProvidesMana(tile.card)) n++;
+    } catch {}
+  }
+  return n;
+}
+
+function countManaProvidersFromPermanents(game, playerNum) {
+  let n = 0;
+  const per = (game && game.permanents) || {};
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      try {
+        if (!p || Number(p.owner) !== playerNum) continue;
+        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        if (MANA_PROVIDER_BY_NAME.has(nm)) n++;
+      } catch {}
+    }
+  }
+  return n;
 }
 
 /**
@@ -368,10 +455,10 @@ function ensureCosts(game, action, playerId, context) {
 
     // Mana spend check (per-turn spend model)
     if (totalCost > 0) {
-      const currentSites = (game && game.board && game.board.sites) || {};
-      const ownedSiteCount = Object.values(currentSites).filter((t) => t && t.card && Number(t.owner) === meNum).length;
+      const ownedSiteCount = countOwnedManaSites(game, meNum);
+      const manaProviders = countManaProvidersFromPermanents(game, meNum);
       const spentPrev = (game && game.resources && game.resources[meKey] && Number(game.resources[meKey].spentThisTurn)) || 0;
-      const available = Math.max(0, ownedSiteCount - spentPrev);
+      const available = Math.max(0, ownedSiteCount + manaProviders - spentPrev);
       if (totalCost > available) return { ok: false, error: 'Insufficient resources to pay costs' };
       const newSpent = spentPrev + totalCost;
       auto.resources[meKey] = { spentThisTurn: newSpent };

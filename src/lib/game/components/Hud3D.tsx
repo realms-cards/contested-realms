@@ -14,10 +14,8 @@ export interface Hud3DProps {
 
 export default function Hud3D({ owner }: Hud3DProps) {
   const boardSize = useGameStore((s) => s.board.size);
-  // Track available mana directly on player.mana
-  const avail = useGameStore((s) => s.players[owner].mana);
-  const siteMana = useGameStore((s) => s.getAvailableMana(owner));
-  const addMana = useGameStore((s) => s.addMana);
+  // Derived available mana from sites + permanent providers
+  const mana = useGameStore((s) => s.getAvailableMana(owner));
 
   // Seat mapping for HUD: p1 bottom, p2 top
   const isBottom = owner === "p1";
@@ -62,11 +60,9 @@ export default function Hud3D({ owner }: Hud3DProps) {
         >
           <div className="pointer-events-auto select-none">
             <ManaCounterHUD
-              value={avail}
-              onIncrement={() => (avail < siteMana + 99 ? addMana(owner, +1) : undefined)}
-              onDecrement={() => (avail > 0 ? addMana(owner, -1) : undefined)}
-              disableInc={avail >= siteMana + 99}
-              disableDec={avail <= 0}
+              value={mana}
+              disableInc={true}
+              disableDec={true}
               size={18}
             />
           </div>
