@@ -26,18 +26,14 @@ export default function OnlineSealedDeckLoader({
   const [loading, setLoading] = useState(false);
   const [initiated, setInitiated] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
-  const [waitingForMe, setWaitingForMe] = useState(false);
 
   const loadSealedDecks = useCallback(async () => {
     if (!match?.playerDecks || !me) return;
-    
+
     setLoading(true);
     setDeckError("");
-    setWaitingForOpponent(false);
-    setWaitingForMe(false);
     setCompleted(false);
-    
+
     try {
       const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
       const mark = (label: string, tPrev?: number) => {
@@ -47,65 +43,70 @@ export default function OnlineSealedDeckLoader({
         return now;
       };
       const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
-      let tStep = mark('import deckLoader');
-      
+      let tStep = mark("import deckLoader");
+
       // Find my player's deck data and all other players' deck data
       const myDeckData = match.playerDecks?.[me.id];
       const otherPlayers = match.players.filter(p => p.id !== me.id);
       const allPlayerDecksReady = otherPlayers.every(p => match.playerDecks?.[p.id]);
-      
-      // Determine submission states as reported by server
-      const meSubmitted = !!match.deckSubmissions?.includes(me.id);
-      const allOthersSubmitted = otherPlayers.every(p => match.deckSubmissions?.includes(p.id));
 
-      // Reflect accurate waiting state for multi-player scenario
-      // But if match status is no longer deck_construction, all decks should be ready
-      if ((!myDeckData || !allPlayerDecksReady) && match.status === "deck_construction") {
-        setWaitingForMe(!myDeckData && !meSubmitted);
-        setWaitingForOpponent(!allPlayerDecksReady && !allOthersSubmitted);
-        try { console.debug('[Sealed] Waiting for decks -> meSubmitted:', meSubmitted, 'othersSubmitted:', allOthersSubmitted); } catch {}
-        // Do not keep spinner running while waiting
+      if (!myDeckData || !allPlayerDecksReady) {
         setLoading(false);
         return;
       }
 
-      // If match status has moved beyond deck_construction but we don't have deck data,
-      // this means the server has all decks but client hasn't received them yet
-      if (!myDeckData || !allPlayerDecksReady) {
-        if (match.status !== "deck_construction") {
-          try { console.debug('[Sealed] Match status is', match.status, 'but still missing deck data, waiting for sync...'); } catch {}
-          setLoading(false);
-          return;
-        }
-      }
-      
       // Load my deck
-      tStep = mark('pre my load', tStep);
-      const mySuccess = await loadSealedDeckFor(myPlayerKey as "p1" | "p2", myDeckData, setDeckError);
-      tStep = mark('after my load', tStep);
-      if (!mySuccess) return;
+      tStep = mark("pre my load", tStep);
+      const mySuccess = await loadSealedDeckFor(
+        myPlayerKey as "p1" | "p2",
+        myDeckData,
+        setDeckError
+      );
+      tStep = mark("after my load", tStep);
+      if (!mySuccess) {
+        setLoading(false);
+        return;
+      }
       
       // Load all other players' decks
       const loadPromises = otherPlayers.map(async (player) => {
-        const playerKey = Object.keys(playerNames).find(key => 
-          playerNames[key] === player.displayName
-        ) || `p${match.players.findIndex(p => p.id === player.id) + 1}`;
+        const playerKey =
+          Object.keys(playerNames).find(
+            (key) => playerNames[key] === player.displayName
+          ) || `p${match.players.findIndex((p) => p.id === player.id) + 1}`;
         const playerDeckData = match.playerDecks?.[player.id];
-        const tStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        const ok = await loadSealedDeckFor(playerKey as "p1" | "p2", playerDeckData, setDeckError);
-        const tEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        try { console.debug(`[Sealed][perf] load other ${player.displayName}: ${(tEnd - tStart).toFixed(1)}ms`); } catch {}
+        const tStart =
+          typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now();
+        const ok = await loadSealedDeckFor(
+          playerKey as "p1" | "p2",
+          playerDeckData,
+          setDeckError
+        );
+        const tEnd =
+          typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now();
+        try {
+          console.debug(
+            `[Sealed][perf] load other ${player.displayName}: ${(tEnd - tStart).toFixed(1)}ms`
+          );
+        } catch {}
         return ok;
       });
-      
+
       const allResults = await Promise.all(loadPromises);
-      tStep = mark('after others load', tStep);
-      if (!allResults.every(Boolean)) return; // If any deck failed to load
+      tStep = mark("after others load", tStep);
+      if (!allResults.every(Boolean)) {
+        setLoading(false);
+        return;
+      }
       
       // All decks loaded successfully
       setCompleted(true);
       onPrepareComplete();
-      mark('onPrepareComplete', tStep);
+      mark("onPrepareComplete", tStep);
       
     } catch (error) {
       console.error("Error loading sealed decks:", error);
@@ -176,20 +177,6 @@ export default function OnlineSealedDeckLoader({
               >
                 Retry
               </button>
-            </div>
-          )}
-
-          {!loading && !deckError && waitingForMe && (
-            <div className="flex items-center justify-center gap-2 text-slate-300">
-              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
-              Waiting for your sealed deck submission to be registered...
-            </div>
-          )}
-
-          {!loading && !deckError && waitingForOpponent && (
-            <div className="flex items-center justify-center gap-2 text-slate-300">
-              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
-              Waiting for other players to submit their sealed decks...
             </div>
           )}
 
