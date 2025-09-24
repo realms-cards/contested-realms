@@ -564,6 +564,13 @@ export default function OnlineMatchPage() {
     // Do not auto-close on "in_progress"; we'll close when serverPhase reaches Main
   }, [matchId, match, match?.id, match?.status, setupOpen, shouldShowDraft]);
 
+  useEffect(() => {
+    if (!match) return;
+    if (prepared && match.status === "in_progress") {
+      if (setupOpen) setSetupOpen(false);
+    }
+  }, [match, prepared, setupOpen]);
+
   // Reset setup wizard when entering a different match (fresh waiting match)
   useEffect(() => {
     // When match id changes, restart the setup steps so we don't skip phases
