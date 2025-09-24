@@ -376,17 +376,27 @@ export default function PlayPage() {
               {events.slice(-100).map((ev) => {
                 const t = ev.text || "";
                 const low = t.toLowerCase();
+                // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
                 const isWarn =
-                  low.startsWith("warning") || low.startsWith("cannot");
+                  low.startsWith("[warning]") ||
+                  low.startsWith("warning") ||
+                  low.startsWith("cannot") ||
+                  low.includes("cannot") ||
+                  low.startsWith("insufficient") ||
+                  low.startsWith("first site must") ||
+                  low.startsWith("new sites must") ||
+                  low.startsWith("sites cannot") ||
+                  low.startsWith("permanents can only") ||
+                  low.startsWith("avatar must");
                 const isSearch = low.startsWith("search:");
                 return (
                   <div
                     key={ev.id}
                     className={`opacity-85 ${
                       isWarn
-                        ? "text-red-400"
-                        : isSearch
                         ? "text-yellow-400"
+                        : isSearch
+                        ? "text-blue-400"
                         : ""
                     }`}
                   >

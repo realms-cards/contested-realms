@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import {
+  TOKEN_BY_NAME,
+  newTokenInstanceId,
+  tokenSlug,
+} from "@/lib/game/tokens";
 import type { GameTransport } from "@/lib/net/transport";
 import type {
   PermanentPosition,
@@ -1194,11 +1198,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             ],
           } as ServerPatchT;
           try {
-            console.debug("[undo] Broadcasting authoritative snapshot to server", {
-              keys: patch.__replaceKeys,
-              eventSeq: patch.eventSeq,
-              permanentsCount: perCount,
-            });
+            console.debug(
+              "[undo] Broadcasting authoritative snapshot to server",
+              {
+                keys: patch.__replaceKeys,
+                eventSeq: patch.eventSeq,
+                permanentsCount: perCount,
+              }
+            );
           } catch {}
           get().trySendPatch(patch);
         } catch {}
@@ -1258,12 +1265,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   // --- Tokens ---------------------------------------------------------------
   addTokenToHand: (who, name) =>
     set((s) => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const {
-        TOKEN_BY_NAME,
-        newTokenInstanceId,
-        tokenSlug,
-      } = require("@/lib/game/tokens");
       const def = TOKEN_BY_NAME[(name || "").toLowerCase()];
       if (!def) return s as GameState;
       const hand = [...s.zones[who].hand];
@@ -2024,7 +2025,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         if (miss.length)
           get().log(
-            `Warning: '${card.name}' missing thresholds (${miss.join(", ")})`
+            `[Warning] '${card.name}' missing thresholds (${miss.join(", ")})`
           );
       }
 

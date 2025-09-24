@@ -416,7 +416,7 @@ class BotClient {
       if (this._actedTurn.has(turnKey)) return;
 
       let zones = (this._game.zones && this._game.zones[meKey]) || null;
-      const board = this._game.board || { size: { w: 5, h: 5 }, sites: {} };
+      const board = this._game.board || { size: { w: 5, h: 4 }, sites: {} };
       const avatars = this._game.avatars || { p1: { card: null, pos: null }, p2: { card: null, pos: null } };
       if (!zones) {
         // Minimal stub so we can still act (draw will no-op, plays may no-op)
@@ -452,7 +452,7 @@ class BotClient {
       // Helper: find a first empty board cell
       const findEmptyCell = () => {
         const w = (board.size && board.size.w) || 5;
-        const h = (board.size && board.size.h) || 5;
+        const h = (board.size && board.size.h) || 4;
         for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
             const key = `${x},${y}`;
