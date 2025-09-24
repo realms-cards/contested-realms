@@ -124,18 +124,9 @@ export default function Hand3D({
       const h = window.innerHeight || 1;
       const inBottomZone = e.clientY >= h * HAND_ZONE_TOP_FRAC;
 
-      // For drag returns, use a more generous zone detection
-      // If dragging from hand, consider both bottom zone AND cards area OR wider bottom zone
-      let inHandZone = inBottomZone;
-      if (dragFromHand && selected && selected.who === owner) {
-        // During hand drag, use more generous zone (top 40% of screen) or cards area
-        const dragZoneTop = 0.6; // Top 40% of screen
-        const inDragZone = e.clientY >= h * dragZoneTop;
-        inHandZone = inDragZone || overCardsArea;
-      } else {
-        // Normal case: bottom zone or cards area
-        inHandZone = inBottomZone || overCardsArea;
-      }
+      // Use original restrictive zone for hand visibility
+      // Only use overCardsArea or bottom zone for hand showing
+      const inHandZone = inBottomZone || overCardsArea;
 
       // Update last known mouse position
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -158,15 +149,24 @@ export default function Hand3D({
         window.clearTimeout(hoverCleanupTimeoutRef.current);
       }
     };
-  }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount, dragFromHand, overCardsArea, selected, owner]);
+  }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount, overCardsArea]);
   // Clear local hand drag start when mouse is released anywhere
   useEffect(() => {
     const onUp = () => {
       handDragStart.current = null;
+
+      // Emergency cleanup for sticky drags - give Board a chance to handle the drop first
+      setTimeout(() => {
+        // If drag is still active after Board has had time to process, force clear it
+        if (dragFromHand && selected && selected.who === owner) {
+          console.debug('[Hand3D] Emergency drag cleanup - clearing sticky drag state');
+          setDragFromHand(false);
+        }
+      }, 50); // Short delay to let Board handle legitimate drops first
     };
     window.addEventListener("mouseup", onUp);
     return () => window.removeEventListener("mouseup", onUp);
-  }, []);
+  }, [dragFromHand, selected, owner, setDragFromHand]);
   // Keep the hand anchored to the camera with less frequent updates
   useFrame(() => {
     const cam = camera as PerspectiveCamera;
@@ -182,8 +182,6 @@ export default function Hand3D({
       ? worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE  // Top of screen for opponent
       : -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE; // Bottom of screen for player
 
-    // Smart visibility logic - distinguish between hand drags and pile drags
-    const isHandDrag = dragFromHand && selected && selected.who === owner; // Hand card being dragged
     // Use mouseInZone as trigger to initially show cards, then rely on overCardsArea to keep them visible
     // Allow hand to show during drags for card returns
     const targetShown = showCardBacks
@@ -443,7 +441,7 @@ export default function Hand3D({
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
       if (!HAND_PREVIEW_ENABLED) return; // Preview disabled
       if (!card?.slug) return;
-      
+
       // Use enhanced preview if available, otherwise fall back to legacy
       if (showCardPreview) {
         showCardPreview({
@@ -452,6 +450,7 @@ export default function Hand3D({
           type: card.type || null,
         });
       } else {
+        // Fallback to legacy preview system
         hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400);
       }
     },
@@ -460,7 +459,7 @@ export default function Hand3D({
   const clearHoverPreview = useCallback(() => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
-    
+
     // Use enhanced preview if available, otherwise fall back to legacy
     if (hideCardPreview) {
       hideCardPreview();
@@ -541,13 +540,21 @@ export default function Hand3D({
   }, []); // No dependencies - just cleanup drag start ref
 
 
-  // Emergency keyboard shortcut to force hand hiding
+  // Emergency keyboard shortcut to force hand hiding and clear sticky drags
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && (hoveredCardCount > 0 || mouseInZone)) {
-        console.debug("[Hand] Emergency cleanup via Escape key");
-        setHandHoverCount(0);
-        setHoveredCard(null);
+      if (e.key === "Escape") {
+        if (hoveredCardCount > 0 || mouseInZone) {
+          console.debug("[Hand] Emergency cleanup via Escape key");
+          setHandHoverCount(0);
+          setHoveredCard(null);
+        }
+
+        // Also clear sticky drags with Escape key
+        if (dragFromHand && selected && selected.who === owner) {
+          console.debug("[Hand] Emergency drag cleanup via Escape key");
+          setDragFromHand(false);
+        }
         setMouseInHandZone(false);
         setOverCardsArea(false);
         if (hoverCleanupTimeoutRef.current) {
@@ -559,7 +566,7 @@ export default function Hand3D({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hoveredCardCount, mouseInZone, setHandHoverCount, setMouseInHandZone]);
+  }, [hoveredCardCount, mouseInZone, setHandHoverCount, setMouseInHandZone, dragFromHand, selected, owner, setDragFromHand]);
 
   // Reset aggregated over-cards-area when drags start to avoid stale 'true'
   useEffect(() => {
@@ -622,8 +629,13 @@ export default function Hand3D({
         // Handle dragged card visibility for hand returns
         const isDraggedCard = selected && selected.card.cardId === c.cardId && dragFromHand && selected.who === owner;
         if (isDraggedCard) {
-          // Show the card again when mouse is in hand zone (indicating potential return)
-          if (!mouseInZone && !overCardsArea) {
+          // Use a slightly more generous zone for dragged card reappearance than for hand visibility
+          const h = window.innerHeight || 1;
+          const dragReturnZone = 0.7; // More generous than HAND_ZONE_TOP_FRAC (0.75) but not too much
+          const inDragReturnZone = lastMousePosRef.current.y >= h * dragReturnZone;
+
+          // Show the dragged card when mouse is in return zone or over cards area
+          if (!inDragReturnZone && !overCardsArea) {
             return null;
           }
         }
