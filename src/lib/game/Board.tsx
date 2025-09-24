@@ -816,8 +816,14 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                           <group
                             position={[edgeOffset.x, 0, edgeOffset.z]}
                             onPointerOver={(e) => {
+                              if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
                               if (site.card) beginHoverPreview(site.card);
+                            }}
+                            onPointerOut={(e) => {
+                              if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                              e.stopPropagation();
+                              clearHoverPreview();
                             }}
                           >
                             <CardPlane
