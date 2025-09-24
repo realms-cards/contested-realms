@@ -12,11 +12,10 @@ export default function ResourceBar({ dragFromHand }: ResourceBarProps) {
   const [die, setDie] = useState<number | null>(null);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const phase = useGameStore((s) => s.phase);
-  const p1 = useGameStore((s) => s.players.p1);
-  const p2 = useGameStore((s) => s.players.p2);
-  const addMana = useGameStore((s) => s.addMana);
+  const p1Mana = useGameStore((s) => s.getAvailableMana("p1"));
+  const p2Mana = useGameStore((s) => s.getAvailableMana("p2"));
   
-  const cur = currentPlayer === 1 ? p1 : p2;
+  const curMana = currentPlayer === 1 ? p1Mana : p2Mana;
 
   return (
     <div className="absolute inset-x-0 bottom-3 z-10 pointer-events-none">
@@ -28,19 +27,7 @@ export default function ResourceBar({ dragFromHand }: ResourceBarProps) {
         <div className="flex items-center gap-4">
           <span className="opacity-80">P{currentPlayer} Mana</span>
           <div className="flex items-center gap-2">
-            <button
-              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25"
-              onClick={() => addMana(currentPlayer === 1 ? "p1" : "p2", -1)}
-            >
-              -
-            </button>
-            <span className="w-6 text-center font-semibold">{cur.mana}</span>
-            <button
-              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25"
-              onClick={() => addMana(currentPlayer === 1 ? "p1" : "p2", +1)}
-            >
-              +
-            </button>
+            <span className="w-6 text-center font-semibold">{curMana}</span>
           </div>
         </div>
 

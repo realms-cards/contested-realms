@@ -36,11 +36,14 @@ const BottomBar = dynamic(() => import("@/app/decks/editor-3d/BottomBar"), {
 });
 
 // Lazy load the Canvas/three stack to trim initial JS and avoid SSR
-const EditorCanvas = dynamic(() => import("@/app/decks/editor-3d/EditorCanvas"), {
-  ssr: false,
-  // Keep simple to avoid heavy loaders on first paint
-  loading: () => null,
-});
+const EditorCanvas = dynamic(
+  () => import("@/app/decks/editor-3d/EditorCanvas"),
+  {
+    ssr: false,
+    // Keep simple to avoid heavy loaders on first paint
+    loading: () => null,
+  }
+);
 
 // Stable constant for standard site names (tournament legal)
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
@@ -99,7 +102,7 @@ function AuthenticatedDeckEditor() {
 
   // Debug: Track picks changes
   // Runs once on initial picks change logging; intentionally omits deckName/setName
-   
+
   useEffect(() => {
     const pickCount = Object.keys(picks).length;
     const totalCards = Object.values(picks).reduce(
@@ -128,7 +131,7 @@ function AuthenticatedDeckEditor() {
 
   // Clear transient errors when auth status changes to authenticated
   // Intentionally running once per pick3D change; server batching relies on prior state
-   
+
   useEffect(() => {
     if (status === "authenticated") setError(null);
   }, [status]);
@@ -255,18 +258,18 @@ function AuthenticatedDeckEditor() {
       try {
         if (trimmedSlug) {
           const res = await fetch(
-            `/api/cards/search?q=${encodeURIComponent(trimmedSlug)}&set=${encodeURIComponent(
-              set
-            )}&type=all`
+            `/api/cards/search?q=${encodeURIComponent(
+              trimmedSlug
+            )}&set=${encodeURIComponent(set)}&type=all`
           );
           const data = (await res.json()) as SearchResult[];
           hit = res.ok ? data[0] || null : null;
         }
         if (!hit && trimmedName) {
           const res = await fetch(
-            `/api/cards/search?q=${encodeURIComponent(trimmedName)}&set=${encodeURIComponent(
-              set
-            )}&type=all`
+            `/api/cards/search?q=${encodeURIComponent(
+              trimmedName
+            )}&set=${encodeURIComponent(set)}&type=all`
           );
           const data = (await res.json()) as SearchResult[];
           hit = res.ok ? data[0] || null : null;
@@ -288,7 +291,10 @@ function AuthenticatedDeckEditor() {
   );
 
   const convertCardDataToSearchResult = useCallback(
-    (card: Record<string, unknown>, fallbackSet: string): SearchResult | null => {
+    (
+      card: Record<string, unknown>,
+      fallbackSet: string
+    ): SearchResult | null => {
       const slugRaw = card.slug;
       const nameRaw = (card.cardName ?? card.name) as unknown;
       if (typeof slugRaw !== "string" || typeof nameRaw !== "string") {
@@ -297,12 +303,13 @@ function AuthenticatedDeckEditor() {
       const setName = typeof card.set === "string" ? card.set : fallbackSet;
       const cardId = typeof card.cardId === "number" ? card.cardId : 0;
       const variantId =
-        typeof card.variantId === "number"
-          ? card.variantId
-          : cardId;
+        typeof card.variantId === "number" ? card.variantId : cardId;
       const finishRaw =
-        typeof card.finish === "string" ? card.finish.toLowerCase() : "standard";
-      const finish: "Standard" | "Foil" = finishRaw === "foil" ? "Foil" : "Standard";
+        typeof card.finish === "string"
+          ? card.finish.toLowerCase()
+          : "standard";
+      const finish: "Standard" | "Foil" =
+        finishRaw === "foil" ? "Foil" : "Standard";
       const rarity = typeof card.rarity === "string" ? card.rarity : null;
       const type = typeof card.type === "string" ? card.type : null;
       const product =
@@ -330,13 +337,11 @@ function AuthenticatedDeckEditor() {
   );
 
   const resolveCardsForPack = useCallback(
-    async (
-      pack: {
-        id: string;
-        set: string;
-        cards: unknown[];
-      }
-    ): Promise<SearchResult[]> => {
+    async (pack: {
+      id: string;
+      set: string;
+      cards: unknown[];
+    }): Promise<SearchResult[]> => {
       const cached = packCardCacheRef.current[pack.id];
       if (cached) return cached;
 
@@ -371,7 +376,9 @@ function AuthenticatedDeckEditor() {
         const avatarParam = sealedReplaceAvatars ? "&replaceAvatars=true" : "";
         try {
           const res = await fetch(
-            `/api/booster?set=${encodeURIComponent(pack.set)}&count=1${avatarParam}`
+            `/api/booster?set=${encodeURIComponent(
+              pack.set
+            )}&count=1${avatarParam}`
           );
           const data = await res.json();
           if (res.ok) {
@@ -401,7 +408,10 @@ function AuthenticatedDeckEditor() {
             }
           }
         } catch (err) {
-          console.error("Booster fallback failed while resolving sealed pack", err);
+          console.error(
+            "Booster fallback failed while resolving sealed pack",
+            err
+          );
         }
       }
 
@@ -482,7 +492,9 @@ function AuthenticatedDeckEditor() {
         const siteEntries = await Promise.all(
           STANDARD_SITE_NAMES.map(async (name) => {
             const res = await fetch(
-              `/api/cards/search?q=${encodeURIComponent(name)}${setParam}&type=site`
+              `/api/cards/search?q=${encodeURIComponent(
+                name
+              )}${setParam}&type=site`
             );
             const data = (await res.json()) as SearchResult[];
             return [name, res.ok && data[0] ? data[0] : null] as const;
@@ -513,7 +525,12 @@ function AuthenticatedDeckEditor() {
         }
       } catch {
         if (!cancelled) {
-          setStdSites({ Spire: null, Stream: null, Valley: null, Wasteland: null });
+          setStdSites({
+            Spire: null,
+            Stream: null,
+            Valley: null,
+            Wasteland: null,
+          });
           setSpellslingerCard(null);
         }
       }
@@ -533,7 +550,10 @@ function AuthenticatedDeckEditor() {
     (async () => {
       try {
         setLoadingDecks(true);
-        const res = await fetch("/api/decks", { credentials: "include", cache: "no-store" });
+        const res = await fetch("/api/decks", {
+          credentials: "include",
+          cache: "no-store",
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to load decks");
         if (mounted) setDecks(data.myDecks || []);
@@ -648,7 +668,9 @@ function AuthenticatedDeckEditor() {
     const serverPacks = stored.map((p) => ({
       id: p.id,
       set: p.set,
-      cards: Array.isArray(p.cards) ? (p.cards as unknown[]) : ([] as unknown[]),
+      cards: Array.isArray(p.cards)
+        ? (p.cards as unknown[])
+        : ([] as unknown[]),
       opened: openedById.get(p.id) ?? false,
     }));
     setPacks(serverPacks);
@@ -746,8 +768,10 @@ function AuthenticatedDeckEditor() {
         // IMPORTANT: Preserve any existing picks (like Standard Cards) that may have been added
         setPicks((prev) => {
           const next = { ...prev } as Record<PickKey, PickItem>;
-          console.log(`[Draft Init] Preserving ${Object.keys(prev).length} existing picks`);
-          
+          console.log(
+            `[Draft Init] Preserving ${Object.keys(prev).length} existing picks`
+          );
+
           for (const r of resolved) {
             // All draft picks should start in sideboard, not directly in deck zones
             const zone: Zone = "Sideboard";
@@ -766,7 +790,11 @@ function AuthenticatedDeckEditor() {
                   set: r.set,
                 };
           }
-          console.log(`[Draft Init] After adding drafted cards: ${Object.keys(next).length} total picks`);
+          console.log(
+            `[Draft Init] After adding drafted cards: ${
+              Object.keys(next).length
+            } total picks`
+          );
           return next;
         });
 
@@ -822,7 +850,9 @@ function AuthenticatedDeckEditor() {
     sideboardCards: Pick3D[];
   } | null>(null);
 
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
+    {}
+  );
 
   // Convert picks to Pick3D format (exact same structure as draft-3d)
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
@@ -1049,7 +1079,13 @@ function AuthenticatedDeckEditor() {
         const key = `${p.card.cardId}:${apiZone}:${variantId ?? "x"}`;
         const prev = agg.get(key);
         if (prev) prev.count += 1;
-        else agg.set(key, { cardId: p.card.cardId, zone: apiZone, count: 1, variantId });
+        else
+          agg.set(key, {
+            cardId: p.card.cardId,
+            zone: apiZone,
+            count: 1,
+            variantId,
+          });
       }
       const cards = Array.from(agg.values());
 
@@ -1073,12 +1109,18 @@ function AuthenticatedDeckEditor() {
         const matchName = searchParams?.get("matchName");
         const lobbyName = searchParams?.get("lobbyName");
         const gameName = matchName || lobbyName;
-        
+
         const finalDeckName = isSealed
-          ? (gameName ? `${gameName} (Sealed)` : `Sealed Deck ${new Date().toLocaleDateString()}`)
+          ? gameName
+            ? `${gameName} (Sealed)`
+            : `Sealed Deck ${new Date().toLocaleDateString()}`
           : isDraftMode
-          ? (gameName ? `${gameName} (Draft)` : `Draft Deck ${new Date().toLocaleDateString()}`)
-          : (gameName ? `${gameName} (Constructed)` : deckName || "New Deck");
+          ? gameName
+            ? `${gameName} (Draft)`
+            : `Draft Deck ${new Date().toLocaleDateString()}`
+          : gameName
+          ? `${gameName} (Constructed)`
+          : deckName || "New Deck";
 
         const res = await fetch("/api/decks", {
           method: "POST",
@@ -1099,7 +1141,10 @@ function AuthenticatedDeckEditor() {
         setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
         // Refresh deck list
         try {
-          const res2 = await fetch("/api/decks", { credentials: "include", cache: "no-store" });
+          const res2 = await fetch("/api/decks", {
+            credentials: "include",
+            cache: "no-store",
+          });
           const list = await res2.json();
           if (res2.ok) setDecks(list.myDecks || []);
         } catch {}
@@ -1113,26 +1158,28 @@ function AuthenticatedDeckEditor() {
     }
   }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed, status]);
 
-
   // Toggle deck public/private status
-  const togglePublic = useCallback(async (isPublic: boolean) => {
-    if (status !== "authenticated" || !deckId) return;
-    try {
-      setSaving(true);
-      const res = await fetch(`/api/decks/${encodeURIComponent(deckId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ isPublic }),
-      });
-      if (!res.ok) throw new Error("Failed to update deck visibility");
-      setDeckIsPublic(isPublic);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  }, [deckId, status]);
+  const togglePublic = useCallback(
+    async (isPublic: boolean) => {
+      if (status !== "authenticated" || !deckId) return;
+      try {
+        setSaving(true);
+        const res = await fetch(`/api/decks/${encodeURIComponent(deckId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ isPublic }),
+        });
+        if (!res.ok) throw new Error("Failed to update deck visibility");
+        setDeckIsPublic(isPublic);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [deckId, status]
+  );
 
   // Submit sealed deck to match server
   const submitSealedDeck = useCallback(async () => {
@@ -1188,7 +1235,9 @@ function AuthenticatedDeckEditor() {
       // Auto-save the deck with sealed naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
       const matchName = searchParams?.get("matchName");
-      const sealedDeckName = matchName ? `${matchName} (Sealed)` : `sealed_opponent_${today}`;
+      const sealedDeckName = matchName
+        ? `${matchName} (Sealed)`
+        : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
       await saveDeck();
 
@@ -1265,7 +1314,9 @@ function AuthenticatedDeckEditor() {
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
       const matchName = searchParams?.get("matchName");
       // Prefer lobby/match name when available
-      const draftDeckName = matchName ? `${matchName} (Draft)` : `Draft Deck (${today})`;
+      const draftDeckName = matchName
+        ? `${matchName} (Draft)`
+        : `Draft Deck (${today})`;
       setDeckName(draftDeckName);
       await saveDeck();
 
@@ -1287,10 +1338,7 @@ function AuthenticatedDeckEditor() {
         );
       } else {
         // Fallback: save to localStorage for the match page to pick up
-        localStorage.setItem(
-          `draftDeck_${matchId}`,
-          JSON.stringify(deckCards)
-        );
+        localStorage.setItem(`draftDeck_${matchId}`, JSON.stringify(deckCards));
       }
 
       setSaveMsg("Draft deck submitted successfully!");
@@ -1316,7 +1364,10 @@ function AuthenticatedDeckEditor() {
       if (status !== "authenticated") return;
       setDeckId(id);
       try {
-        const res = await fetch(`/api/decks/${id}`, { credentials: "include", cache: "no-store" });
+        const res = await fetch(`/api/decks/${id}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to load deck");
 
@@ -1324,7 +1375,8 @@ function AuthenticatedDeckEditor() {
         if (typeof data?.name === "string") setDeckName(data.name);
         if (typeof data?.isPublic === "boolean") setDeckIsPublic(data.isPublic);
         if (typeof data?.isOwner === "boolean") setDeckIsOwner(data.isOwner);
-        if (typeof data?.userName === "string") setDeckCreatorName(data.userName);
+        if (typeof data?.userName === "string")
+          setDeckCreatorName(data.userName);
 
         // Build picks from zones
         const next: Record<PickKey, PickItem> = {};
@@ -1457,7 +1509,9 @@ function AuthenticatedDeckEditor() {
     const fromDraft = searchParams?.get("from") === "draft";
 
     if (deckIdParam && status === "authenticated" && !deckId) {
-      console.log("Loading deck from URL parameter:", deckIdParam, { fromDraft });
+      console.log("Loading deck from URL parameter:", deckIdParam, {
+        fromDraft,
+      });
       loadDeck(deckIdParam);
     }
   }, [searchParams, status, deckId, loadDeck]);
@@ -1537,7 +1591,9 @@ function AuthenticatedDeckEditor() {
         }
         addSearchResultsToSideboard(resolved);
         // Mark pack as opened; keep existing cards array
-        setPacks((prev) => prev.map((p) => (p.id === packId ? { ...p, opened: true } : p)));
+        setPacks((prev) =>
+          prev.map((p) => (p.id === packId ? { ...p, opened: true } : p))
+        );
       } catch (e) {
         console.error("Pack opening error:", e);
         setError(e instanceof Error ? e.message : String(e));
@@ -1636,7 +1692,6 @@ function AuthenticatedDeckEditor() {
     return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
   }, [pick3D, isSortingEnabled, metaByCardId]);
 
-
   // Convert deck picks to Pick3D format - preserve existing positions when possible
   const positionsRef = useRef<Map<string, { z: number; x: number }>>(new Map());
   const zoneCountsRef = useRef<Map<string, number>>(new Map());
@@ -1678,7 +1733,8 @@ function AuthenticatedDeckEditor() {
         const existingPos = positionsRef.current.get(
           `${item.cardId}:${zoneKey}`
         );
-        const shouldPreservePosition = !!existingPos && (isSealed || isDraftMode);
+        const shouldPreservePosition =
+          !!existingPos && (isSealed || isDraftMode);
 
         const x = shouldPreservePosition
           ? existingPos.x
@@ -1732,7 +1788,10 @@ function AuthenticatedDeckEditor() {
 
   // Quick lookup for card slug/type by cardId (for right panel thumbnails)
   const pickInfoById = useMemo(() => {
-    const map: Record<number, { slug: string | null; type: string | null; name: string }> = {};
+    const map: Record<
+      number,
+      { slug: string | null; type: string | null; name: string }
+    > = {};
     for (const it of Object.values(picks)) {
       map[it.cardId] = { slug: it.slug, type: it.type, name: it.name };
     }
@@ -1858,15 +1917,23 @@ function AuthenticatedDeckEditor() {
         // Normal behavior: move to sideboard
         const newZ = 1.5 + Math.random() * 0.5;
         const newX = 0.5 + Math.random() * 3;
-        updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined, zone: "Sideboard" };
+        updated[idx] = {
+          ...updated[idx],
+          x: newX,
+          z: newZ,
+          y: undefined,
+          zone: "Sideboard",
+        };
 
         // Sync picks state for all modes (draft, sealed, and normal editor)
         const variantId = card.card.variantId || undefined;
         setPicks((prevPicks) => {
           const next = { ...prevPicks } as Record<PickKey, PickItem>;
-          const deckKey = `${cardId}:Deck:${variantId ?? 'x'}` as PickKey;
-          const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
-          
+          const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
+          const sideboardKey = `${cardId}:Sideboard:${
+            variantId ?? "x"
+          }` as PickKey;
+
           const deckItem = next[deckKey];
           if (deckItem && deckItem.count > 0) {
             // Move one from deck zone to sideboard
@@ -1875,7 +1942,7 @@ function AuthenticatedDeckEditor() {
             } else {
               delete next[deckKey];
             }
-            
+
             const sideboardItem = next[sideboardKey];
             next[sideboardKey] = sideboardItem
               ? { ...sideboardItem, count: sideboardItem.count + 1 }
@@ -1884,10 +1951,10 @@ function AuthenticatedDeckEditor() {
                   variantId: variantId ?? null,
                   name: card.card.cardName,
                   type: card.card.type,
-                  slug: card.card.slug || '',
+                  slug: card.card.slug || "",
                   zone: "Sideboard" as Zone,
                   count: 1,
-                  set: card.card.setName || '',
+                  set: card.card.setName || "",
                 };
           }
           return next;
@@ -1909,24 +1976,35 @@ function AuthenticatedDeckEditor() {
       const card = updated[idx];
       const newZ = -1.5 - Math.random() * 0.5;
       const newX = -2 + Math.random() * 4;
-      updated[idx] = { ...updated[idx], x: newX, z: newZ, y: undefined, zone: "Deck" };
+      updated[idx] = {
+        ...updated[idx],
+        x: newX,
+        z: newZ,
+        y: undefined,
+        zone: "Deck",
+      };
 
       // Sync picks state for all modes (draft, sealed, and normal editor)
       const variantId = card.card.variantId || undefined;
       setPicks((prevPicks) => {
         const next = { ...prevPicks } as Record<PickKey, PickItem>;
-        const deckKey = `${cardId}:Deck:${variantId ?? 'x'}` as PickKey;
-        const sideboardKey = `${cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
-        
+        const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
+        const sideboardKey = `${cardId}:Sideboard:${
+          variantId ?? "x"
+        }` as PickKey;
+
         const sideboardItem = next[sideboardKey];
         if (sideboardItem && sideboardItem.count > 0) {
           // Move one from sideboard to deck zone
           if (sideboardItem.count > 1) {
-            next[sideboardKey] = { ...sideboardItem, count: sideboardItem.count - 1 };
+            next[sideboardKey] = {
+              ...sideboardItem,
+              count: sideboardItem.count - 1,
+            };
           } else {
             delete next[sideboardKey];
           }
-          
+
           const deckItem = next[deckKey];
           next[deckKey] = deckItem
             ? { ...deckItem, count: deckItem.count + 1 }
@@ -1935,10 +2013,10 @@ function AuthenticatedDeckEditor() {
                 variantId: variantId ?? null,
                 name: card.card.cardName,
                 type: card.card.type,
-                slug: card.card.slug || '',
+                slug: card.card.slug || "",
                 zone: "Deck" as Zone,
                 count: 1,
-                set: card.card.setName || '',
+                set: card.card.setName || "",
               };
         }
         return next;
@@ -1966,10 +2044,13 @@ function AuthenticatedDeckEditor() {
           const variantId = card.card.variantId || undefined;
           setPicks((prevPicks) => {
             const next = { ...prevPicks } as Record<PickKey, PickItem>;
-            const deckKey = `${card.card.cardId}:Deck:${variantId ?? 'x'}` as PickKey;
+            const deckKey = `${card.card.cardId}:Deck:${
+              variantId ?? "x"
+            }` as PickKey;
             const deckItem = next[deckKey];
             if (deckItem) {
-              if (deckItem.count > 1) next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+              if (deckItem.count > 1)
+                next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
               else delete next[deckKey];
             }
             return next;
@@ -1993,11 +2074,16 @@ function AuthenticatedDeckEditor() {
         const variantId = card.card.variantId || undefined;
         setPicks((prevPicks) => {
           const next = { ...prevPicks } as Record<PickKey, PickItem>;
-          const deckKey = `${card.card.cardId}:Deck:${variantId ?? 'x'}` as PickKey;
-          const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+          const deckKey = `${card.card.cardId}:Deck:${
+            variantId ?? "x"
+          }` as PickKey;
+          const sideboardKey = `${card.card.cardId}:Sideboard:${
+            variantId ?? "x"
+          }` as PickKey;
           const deckItem = next[deckKey];
           if (deckItem) {
-            if (deckItem.count > 1) next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+            if (deckItem.count > 1)
+              next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
             else delete next[deckKey];
             const sbItem = next[sideboardKey];
             next[sideboardKey] = sbItem
@@ -2007,10 +2093,10 @@ function AuthenticatedDeckEditor() {
                   variantId: variantId ?? null,
                   name: card.card.cardName,
                   type: card.card.type,
-                  slug: card.card.slug || '',
-                  zone: 'Sideboard' as Zone,
+                  slug: card.card.slug || "",
+                  zone: "Sideboard" as Zone,
                   count: 1,
-                  set: card.card.setName || '',
+                  set: card.card.setName || "",
                 };
           }
           return next;
@@ -2045,11 +2131,16 @@ function AuthenticatedDeckEditor() {
       const variantId = card.card.variantId || undefined;
       setPicks((prevPicks) => {
         const next = { ...prevPicks } as Record<PickKey, PickItem>;
-        const deckKey = `${card.card.cardId}:Deck:${variantId ?? 'x'}` as PickKey;
-        const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? 'x'}` as PickKey;
+        const deckKey = `${card.card.cardId}:Deck:${
+          variantId ?? "x"
+        }` as PickKey;
+        const sideboardKey = `${card.card.cardId}:Sideboard:${
+          variantId ?? "x"
+        }` as PickKey;
         const sbItem = next[sideboardKey];
         if (sbItem) {
-          if (sbItem.count > 1) next[sideboardKey] = { ...sbItem, count: sbItem.count - 1 };
+          if (sbItem.count > 1)
+            next[sideboardKey] = { ...sbItem, count: sbItem.count - 1 };
           else delete next[sideboardKey];
           const dItem = next[deckKey];
           next[deckKey] = dItem
@@ -2059,10 +2150,10 @@ function AuthenticatedDeckEditor() {
                 variantId: variantId ?? null,
                 name: card.card.cardName,
                 type: card.card.type,
-                slug: card.card.slug || '',
-                zone: 'Deck' as Zone,
+                slug: card.card.slug || "",
+                zone: "Deck" as Zone,
                 count: 1,
-                set: card.card.setName || '',
+                set: card.card.setName || "",
               };
         }
         return next;
@@ -2078,170 +2169,175 @@ function AuthenticatedDeckEditor() {
       <div className="absolute inset-0 w-full h-full">
         <EditorCanvas orbitLocked={orbitLocked}>
           {/* Mouse tracking for hover detection on arranged cards */}
-          <MouseTracker 
+          <MouseTracker
             cards={pick3D}
             onHover={(card) => {
               if (card) {
                 showCardPreview({
                   slug: card.slug,
                   name: card.name,
-                  type: card.type
+                  type: card.type,
                 });
               } else {
                 hideCardPreview();
               }
             }}
           />
-          
+
           {/* 3D Cards with proper stacking order */}
           <group>
-              {(() => {
-                const sortedCards = pick3D.sort((a, b) => {
-                  // Sort by Y position so cards with lower Y render first (appear behind)
-                  const aY = isSortingEnabled ? a.y || 0.002 : 0.002;
-                  const bY = isSortingEnabled ? b.y || 0.002 : 0.002;
-                  return aY - bY; // Lower Y values render first (behind higher Y values)
-                });
+            {(() => {
+              const sortedCards = pick3D.sort((a, b) => {
+                // Sort by Y position so cards with lower Y render first (appear behind)
+                const aY = isSortingEnabled ? a.y || 0.002 : 0.002;
+                const bY = isSortingEnabled ? b.y || 0.002 : 0.002;
+                return aY - bY; // Lower Y values render first (behind higher Y values)
+              });
 
-                return sortedCards.map((p) => {
-                  const isSite = (p.card.type || "")
-                    .toLowerCase()
-                    .includes("site");
+              return sortedCards.map((p) => {
+                const isSite = (p.card.type || "")
+                  .toLowerCase()
+                  .includes("site");
 
-                  // Use sorted position if sorting is enabled, otherwise use card's position
-                  const stackPos = stackPositions?.get(p.id);
-                  const x = stackPos ? stackPos.x : p.x;
-                  const z = stackPos ? stackPos.z : p.z;
-                  
-                  // Calculate base render order like draft-3d
-                  // Higher stack index = higher render order = rendered on top
-                  const baseRenderOrder = stackPos
-                    ? 1600 + stackPos.stackIndex * 10
-                    : 1500;
+                // Use sorted position if sorting is enabled, otherwise use card's position
+                const stackPos = stackPositions?.get(p.id);
+                const x = stackPos ? stackPos.x : p.x;
+                const z = stackPos ? stackPos.z : p.z;
 
-                  // Calculate Y position with proper stack height like draft-3d
-                  // Use stackPos.stackIndex * 0.05 for proper visual stacking height
-                  const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
+                // Calculate base render order like draft-3d
+                // Higher stack index = higher render order = rendered on top
+                const baseRenderOrder = stackPos
+                  ? 1600 + stackPos.stackIndex * 10
+                  : 1500;
 
-                  // Determine if this card should be interactive (topmost card in its area)
-                  return (
-                    <DraggableCard3D
-                      key={p.id}
-                      slug={p.card.slug}
-                      isSite={isSite}
-                      x={x}
-                      z={z}
-                      y={y}
-                      baseRenderOrder={baseRenderOrder}
-                      cardId={p.id}
-                      stackIndex={stackPos ? stackPos.stackIndex : 0}
-                      totalInStack={1}
-                      interactive={true}
-                      onContextMenu={(cx, cy) =>
-                        openContextMenuForCard(
-                          p.card.cardId,
-                          p.card.cardName,
-                          cx,
-                          cy
-                        )
-                      }
-                      onDrop={(wx, wz) => {
-                        // Move card to drop position - only sort if sorting is enabled and this is a manual drag
-                        const newZone = wz < 0 ? "Deck" : "Sideboard";
-                        const oldZone = p.zone; // Use explicit zone field
-                        const zoneChanged = oldZone !== newZone;
+                // Calculate Y position with proper stack height like draft-3d
+                // Use stackPos.stackIndex * 0.05 for proper visual stacking height
+                const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
 
-                        setPick3D((prev) => {
-                          const updated = [...prev];
-                          const cardIndex = updated.findIndex(
-                            (it) => it.id === p.id
-                          );
-                          if (cardIndex === -1) return prev;
+                // Determine if this card should be interactive (topmost card in its area)
+                return (
+                  <DraggableCard3D
+                    key={p.id}
+                    slug={p.card.slug}
+                    isSite={isSite}
+                    x={x}
+                    z={z}
+                    y={y}
+                    baseRenderOrder={baseRenderOrder}
+                    cardId={p.id}
+                    stackIndex={stackPos ? stackPos.stackIndex : 0}
+                    totalInStack={1}
+                    interactive={true}
+                    onContextMenu={(cx, cy) =>
+                      openContextMenuForCard(
+                        p.card.cardId,
+                        p.card.cardName,
+                        cx,
+                        cy
+                      )
+                    }
+                    onDrop={(wx, wz) => {
+                      // Move card to drop position - only sort if sorting is enabled and this is a manual drag
+                      const newZone = wz < 0 ? "Deck" : "Sideboard";
+                      const oldZone = p.zone; // Use explicit zone field
+                      const zoneChanged = oldZone !== newZone;
 
-                          // Move the card to the drop position and update zone
-                          updated[cardIndex] = {
-                            ...updated[cardIndex],
-                            x: wx,
-                            z: wz,
-                            y: undefined,
-                            zone: newZone,
-                          };
+                      setPick3D((prev) => {
+                        const updated = [...prev];
+                        const cardIndex = updated.findIndex(
+                          (it) => it.id === p.id
+                        );
+                        if (cardIndex === -1) return prev;
 
-                          // Don't auto-apply sorting on manual drags - let user control positioning
-                          return updated;
-                        });
+                        // Move the card to the drop position and update zone
+                        updated[cardIndex] = {
+                          ...updated[cardIndex],
+                          x: wx,
+                          z: wz,
+                          y: undefined,
+                          zone: newZone,
+                        };
 
-                        // Keep picks in sync with zone changes so future updates don't revert layout
-                        if (zoneChanged) {
-                          const variantId = p.card.variantId || undefined;
-                          setPicks((prev) => {
-                            const next = { ...prev } as Record<PickKey, PickItem>;
-                            const decKey = `${p.card.cardId}:${oldZone}:${variantId ?? 'x'}` as PickKey;
-                            const incKey = `${p.card.cardId}:${newZone}:${variantId ?? 'x'}` as PickKey;
-                            const dec = next[decKey];
-                            if (dec) {
-                              if (dec.count > 1) next[decKey] = { ...dec, count: dec.count - 1 };
-                              else delete next[decKey];
-                            }
-                            const inc = next[incKey];
-                            next[incKey] = inc ? { ...inc, count: inc.count + 1 } : {
-                              cardId: p.card.cardId,
-                              variantId: variantId ?? null,
-                              name: p.card.cardName,
-                              type: p.card.type,
-                              slug: p.card.slug || '',
-                              zone: newZone,
-                              count: 1,
-                              set: p.card.setName || '',
-                            } as PickItem;
-                            return next;
-                          });
-                        }
+                        // Don't auto-apply sorting on manual drags - let user control positioning
+                        return updated;
+                      });
 
-                        // Show feedback message for zone changes
-                        if (zoneChanged) {
-                          setFeedbackMessage(
-                            `Moved "${p.card.cardName}" to ${newZone}`
-                          );
-                          setTimeout(() => setFeedbackMessage(null), 2000);
-                        }
-                      }}
-                      getTopRenderOrder={getTopRenderOrder}
-                      lockUpright={false}
-                      disabled={
-                        isSortingEnabled && stackPos
-                          ? !stackPos.isVisible
-                          : false
-                      } // Disable dragging for hidden stacked cards
-                      onDragChange={(dragging) => {
-                        setOrbitLocked(dragging);
-                      }}
-                      onRelease={(wx, wz, wasDragging) => {
-                        // Click to move between deck/sideboard using the same functions as sidebar
-                        if (!wasDragging) {
-                          const currentZone = p.zone; // Use explicit zone field
-
-                          if (currentZone === "Deck") {
-                            // Move from deck to sideboard
-                            moveSpecificCardToSideboard(p.id);
-                            setFeedbackMessage(
-                              `Moved "${p.card.cardName}" to Sideboard`
-                            );
-                          } else {
-                            // Move from sideboard to deck
-                            moveSpecificCardToDeck(p.id);
-                            setFeedbackMessage(
-                              `Moved "${p.card.cardName}" to Deck`
-                            );
+                      // Keep picks in sync with zone changes so future updates don't revert layout
+                      if (zoneChanged) {
+                        const variantId = p.card.variantId || undefined;
+                        setPicks((prev) => {
+                          const next = { ...prev } as Record<PickKey, PickItem>;
+                          const decKey = `${p.card.cardId}:${oldZone}:${
+                            variantId ?? "x"
+                          }` as PickKey;
+                          const incKey = `${p.card.cardId}:${newZone}:${
+                            variantId ?? "x"
+                          }` as PickKey;
+                          const dec = next[decKey];
+                          if (dec) {
+                            if (dec.count > 1)
+                              next[decKey] = { ...dec, count: dec.count - 1 };
+                            else delete next[decKey];
                           }
+                          const inc = next[incKey];
+                          next[incKey] = inc
+                            ? { ...inc, count: inc.count + 1 }
+                            : ({
+                                cardId: p.card.cardId,
+                                variantId: variantId ?? null,
+                                name: p.card.cardName,
+                                type: p.card.type,
+                                slug: p.card.slug || "",
+                                zone: newZone,
+                                count: 1,
+                                set: p.card.setName || "",
+                              } as PickItem);
+                          return next;
+                        });
+                      }
 
-                          setTimeout(() => setFeedbackMessage(null), 2000);
+                      // Show feedback message for zone changes
+                      if (zoneChanged) {
+                        setFeedbackMessage(
+                          `Moved "${p.card.cardName}" to ${newZone}`
+                        );
+                        setTimeout(() => setFeedbackMessage(null), 2000);
+                      }
+                    }}
+                    getTopRenderOrder={getTopRenderOrder}
+                    lockUpright={false}
+                    disabled={
+                      isSortingEnabled && stackPos ? !stackPos.isVisible : false
+                    } // Disable dragging for hidden stacked cards
+                    onDragChange={(dragging) => {
+                      setOrbitLocked(dragging);
+                    }}
+                    onRelease={(wx, wz, wasDragging) => {
+                      // Click to move between deck/sideboard using the same functions as sidebar
+                      if (!wasDragging) {
+                        const currentZone = p.zone; // Use explicit zone field
+
+                        if (currentZone === "Deck") {
+                          // Move from deck to sideboard
+                          moveSpecificCardToSideboard(p.id);
+                          setFeedbackMessage(
+                            `Moved "${p.card.cardName}" to Sideboard`
+                          );
+                        } else {
+                          // Move from sideboard to deck
+                          moveSpecificCardToDeck(p.id);
+                          setFeedbackMessage(
+                            `Moved "${p.card.cardName}" to Deck`
+                          );
                         }
-                      }}
-                    />
-                  );
-                });
-              })()}
+
+                        setTimeout(() => setFeedbackMessage(null), 2000);
+                      }
+                    }}
+                  />
+                );
+              });
+            })()}
           </group>
           <TextureCache />
         </EditorCanvas>
@@ -2290,8 +2386,6 @@ function AuthenticatedDeckEditor() {
           onSaveDeck={saveDeck}
           onSubmitSealed={submitSealedDeck}
           onSubmitDraft={submitDraftDeck}
-          onToggleTournamentControls={toggleTournamentControls}
-          tournamentControlsVisible={tournamentControlsVisible}
         />
         {/* (Removed background usage text in favor of Help overlay) */}
         <Suspense fallback={null}>
@@ -2305,7 +2399,9 @@ function AuthenticatedDeckEditor() {
             pick3D={pick3D}
             metaByCardId={metaByCardId}
             pickInfoById={pickInfoById}
-            onHoverPreview={(slug, name, type) => setHoverPreview({ slug, name, type })}
+            onHoverPreview={(slug, name, type) =>
+              setHoverPreview({ slug, name, type })
+            }
             onHoverClear={() => setHoverPreview(null)}
             moveOneToSideboard={moveOneToSideboard}
             moveOneFromSideboardToDeck={moveOneFromSideboardToDeck}
@@ -2333,12 +2429,22 @@ function AuthenticatedDeckEditor() {
                 aria-label={statsCollapsed ? "Show details" : "Hide details"}
               >
                 {statsCollapsed ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                    <path d="M12 5C7 5 2.73 8.11 1 12c1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M12 5C7 5 2.73 8.11 1 12c1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
                   </svg>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                    <path d="M12 5c-2.5 0-4.78.73-6.68 1.95L3.7 5.34 2.29 6.75l16.97 16.97 1.41-1.41-3.03-3.03C20.04 16.83 22 12 22 12S18.27 5 12 5z"/>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M12 5c-2.5 0-4.78.73-6.68 1.95L3.7 5.34 2.29 6.75l16.97 16.97 1.41-1.41-3.03-3.03C20.04 16.83 22 12 22 12S18.27 5 12 5z" />
                   </svg>
                 )}
               </button>
@@ -2352,13 +2458,20 @@ function AuthenticatedDeckEditor() {
                       const height = (count / maxCount) * 100;
                       const label = cost === 7 ? "7+" : String(cost);
                       return (
-                        <div key={cost} className="flex flex-col items-center justify-end gap-0.5 flex-1 h-full">
+                        <div
+                          key={cost}
+                          className="flex flex-col items-center justify-end gap-0.5 flex-1 h-full"
+                        >
                           <div
                             className="bg-blue-400 rounded-t min-h-[2px] w-full"
-                            style={{ height: `${Math.max(height, count > 0 ? 8 : 0)}%` }}
+                            style={{
+                              height: `${Math.max(height, count > 0 ? 8 : 0)}%`,
+                            }}
                             title={`${label} mana: ${count} cards`}
                           />
-                          <span className="text-[10px] opacity-60">{label}</span>
+                          <span className="text-[10px] opacity-60">
+                            {label}
+                          </span>
                         </div>
                       );
                     })}
@@ -2366,10 +2479,22 @@ function AuthenticatedDeckEditor() {
                   {thresholdSummary.elements.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {thresholdSummary.elements.map((element) => (
-                        <div key={element} className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded">
-                          <Image src={`/api/assets/${element}.png`} alt={element} width={12} height={12} />
+                        <div
+                          key={element}
+                          className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded"
+                        >
+                          <Image
+                            src={`/api/assets/${element}.png`}
+                            alt={element}
+                            width={12}
+                            height={12}
+                          />
                           <span className="text-[10px]">
-                            {thresholdSummary.summary[element as keyof typeof thresholdSummary.summary]}
+                            {
+                              thresholdSummary.summary[
+                                element as keyof typeof thresholdSummary.summary
+                              ]
+                            }
                           </span>
                         </div>
                       ))}
@@ -2390,14 +2515,25 @@ function AuthenticatedDeckEditor() {
                     <div className="flex items-end gap-1 h-20 bg-black/40 rounded p-1">
                       {Array.from({ length: 8 }, (_, cost) => {
                         const count = manaCurve[cost] || 0;
-                        const maxCount = Math.max(...Object.values(manaCurve), 1);
+                        const maxCount = Math.max(
+                          ...Object.values(manaCurve),
+                          1
+                        );
                         const height = (count / maxCount) * 100;
                         const label = cost === 7 ? "7+" : String(cost);
                         return (
-                          <div key={cost} className="flex flex-col items-center justify-end gap-1 flex-1 h-full">
+                          <div
+                            key={cost}
+                            className="flex flex-col items-center justify-end gap-1 flex-1 h-full"
+                          >
                             <div
                               className="bg-blue-400 rounded-t min-h-[2px] w-full relative"
-                              style={{ height: `${Math.max(height, count > 0 ? 8 : 0)}%` }}
+                              style={{
+                                height: `${Math.max(
+                                  height,
+                                  count > 0 ? 8 : 0
+                                )}%`,
+                              }}
                               title={`${label} mana: ${count} cards`}
                             >
                               {count > 0 && (
@@ -2415,10 +2551,22 @@ function AuthenticatedDeckEditor() {
                   {thresholdSummary.elements.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {thresholdSummary.elements.map((element) => (
-                        <div key={element} className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded">
-                          <Image src={`/api/assets/${element}.png`} alt={element} width={14} height={14} />
+                        <div
+                          key={element}
+                          className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded"
+                        >
+                          <Image
+                            src={`/api/assets/${element}.png`}
+                            alt={element}
+                            width={14}
+                            height={14}
+                          />
                           <span className="text-xs">
-                            {thresholdSummary.summary[element as keyof typeof thresholdSummary.summary]}
+                            {
+                              thresholdSummary.summary[
+                                element as keyof typeof thresholdSummary.summary
+                              ]
+                            }
                           </span>
                         </div>
                       ))}
@@ -2551,6 +2699,10 @@ function AuthenticatedDeckEditor() {
             addCardAuto={addCardAuto}
             addToSideboardFromSearch={addToSideboardFromSearch}
             pick3DLength={pick3D.length}
+            tournamentControlsVisible={tournamentControlsVisible}
+            toggleTournamentControls={() =>
+              setTournamentControlsVisible(!tournamentControlsVisible)
+            }
             packs={packs}
             openPack={openPack}
             openAllPacks={openAllPacks}
@@ -2574,7 +2726,7 @@ function AuthenticatedDeckEditor() {
             {saveMsg}
           </div>
         )}
-        
+
         {/* Waiting overlay for deck submission */}
         {waitingForOtherPlayers && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
@@ -2595,7 +2747,7 @@ function AuthenticatedDeckEditor() {
           </div>
         )}
       </div>
-      
+
       <Suspense fallback={null}>
         <TournamentControls
           isVisible={tournamentControlsVisible}

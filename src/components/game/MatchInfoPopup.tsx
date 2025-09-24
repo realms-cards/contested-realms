@@ -23,6 +23,8 @@ export default function MatchInfoPopup({
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const phase = useGameStore((s) => s.phase);
   const players = useGameStore((s) => s.players);
+  const p1Mana = useGameStore((s) => s.getAvailableMana("p1"));
+  const p2Mana = useGameStore((s) => s.getAvailableMana("p2"));
   const eventSeq = useGameStore((s) => s.eventSeq);
   const lastServerTs = useGameStore((s) => s.lastServerTs);
   const pendingCount = useGameStore((s) => s.pendingPatches.length);
@@ -67,7 +69,7 @@ export default function MatchInfoPopup({
                 <span className="opacity-50">•</span>
                 <span className="opacity-70">Life: {players.p1?.life || 20}</span>
                 <span className="opacity-50">•</span>
-                <span className="opacity-70">Mana: {players.p1?.mana || 0}</span>
+                <span className="opacity-70">Mana: {p1Mana}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-red-400">{playerNames.p2}</span>
@@ -75,7 +77,7 @@ export default function MatchInfoPopup({
                 <span className="opacity-50">•</span>
                 <span className="opacity-70">Life: {players.p2?.life || 20}</span>
                 <span className="opacity-50">•</span>
-                <span className="opacity-70">Mana: {players.p2?.mana || 0}</span>
+                <span className="opacity-70">Mana: {p2Mana}</span>
               </div>
             </div>
           </div>

@@ -24,7 +24,7 @@ export default function Threshold3D({
   rotationZ = 0,
   direction = "row",
 }: Threshold3DProps) {
-  const thresholds = useGameStore((s) => s.players[owner].thresholds);
+  const thresholds = useGameStore((s) => s.getThresholdTotals(owner));
 
   // Layout
   const size = CARD_SHORT * 0.55; // square icon size

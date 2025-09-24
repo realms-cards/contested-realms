@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import {
+  MANA_PROVIDER_BY_NAME,
+  THRESHOLD_GRANT_BY_NAME,
+  NON_MANA_SITE_IDENTIFIERS,
+} from "@/lib/game/mana-providers";
+import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
   tokenSlug,
@@ -308,6 +313,7 @@ export type GameState = {
   getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
   getUntappedSitesCount: (who: PlayerKey) => number;
   getAvailableMana: (who: PlayerKey) => number; // default: 1 per untapped site
+  getThresholdTotals: (who: PlayerKey) => Thresholds;
   // History / Undo
   history: SerializedGame[];
   historyByPlayer: Record<PlayerKey, SerializedGame[]>;
@@ -353,6 +359,124 @@ export type GameState = {
 };
 
 const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "Combat", "End"];
+
+const THRESHOLD_KEYS: (keyof Thresholds)[] = ["air", "water", "earth", "fire"];
+
+function emptyThresholds(): Thresholds {
+  return { air: 0, water: 0, earth: 0, fire: 0 };
+}
+
+function accumulateThresholds(
+  acc: Thresholds,
+  amount: Partial<Thresholds> | null | undefined
+) {
+  if (!amount || typeof amount !== "object") return;
+  for (const key of THRESHOLD_KEYS) {
+    const value = Number((amount as Record<string, unknown>)[key] ?? 0);
+    if (Number.isFinite(value) && value !== 0) {
+      acc[key] += value;
+    }
+  }
+}
+
+function playerKeyToOwner(who: PlayerKey): 1 | 2 {
+  return who === "p1" ? 1 : 2;
+}
+
+function computeThresholdTotals(
+  board: BoardState,
+  permanents: Permanents,
+  who: PlayerKey
+): Thresholds {
+  const owner = playerKeyToOwner(who);
+  const totals = emptyThresholds();
+
+  for (const tile of Object.values(board?.sites ?? {})) {
+    if (!tile || tile.owner !== owner) continue;
+    accumulateThresholds(totals, tile.card?.thresholds ?? null);
+  }
+
+  // Include non-site permanents that contribute thresholds (e.g., cores)
+  for (const arr of Object.values(permanents ?? {})) {
+    const list = Array.isArray(arr) ? arr : [];
+    for (const p of list) {
+      try {
+        if (!p || p.owner !== owner) continue;
+        const nm = String(p.card?.name || "").toLowerCase();
+        const grant = THRESHOLD_GRANT_BY_NAME[nm];
+        if (grant) accumulateThresholds(totals, grant as Partial<Thresholds>);
+      } catch {}
+    }
+  }
+
+  return totals;
+}
+
+type ThresholdCacheEntry = {
+  sitesRef: BoardState["sites"] | null;
+  permanentsRef: Permanents | null;
+  totals: Thresholds;
+};
+
+const thresholdCache: Record<PlayerKey, ThresholdCacheEntry> = {
+  p1: { sitesRef: null, permanentsRef: null, totals: emptyThresholds() },
+  p2: { sitesRef: null, permanentsRef: null, totals: emptyThresholds() },
+};
+
+function getCachedThresholdTotals(state: GameState, who: PlayerKey): Thresholds {
+  const cache = thresholdCache[who];
+  const sitesRef = state.board.sites;
+  const permanentsRef = state.permanents;
+
+  if (cache.sitesRef === sitesRef && cache.permanentsRef === permanentsRef) {
+    return cache.totals;
+  }
+
+  const totals = computeThresholdTotals(state.board, state.permanents, who);
+  cache.sitesRef = sitesRef;
+  cache.permanentsRef = permanentsRef;
+  cache.totals = totals;
+  return totals;
+}
+
+function siteProvidesMana(card: CardRef | null | undefined): boolean {
+  if (!card) return false;
+  const slug = typeof card.slug === "string" ? card.slug.toLowerCase() : null;
+  if (slug && NON_MANA_SITE_IDENTIFIERS.has(slug)) return false;
+  const name = typeof card.name === "string" ? card.name.toLowerCase() : null;
+  if (name && NON_MANA_SITE_IDENTIFIERS.has(name)) return false;
+  return true;
+}
+
+function computeAvailableMana(
+  board: BoardState,
+  permanents: Permanents,
+  who: PlayerKey
+): number {
+  const owner = playerKeyToOwner(who);
+  let mana = 0;
+
+  for (const tile of Object.values(board?.sites ?? {})) {
+    if (!tile || tile.owner !== owner) continue;
+    if (tile.tapped) continue;
+    if (!siteProvidesMana(tile.card ?? null)) continue;
+    mana += 1;
+  }
+
+  // Include mana-providing permanents from curated metadata
+  for (const arr of Object.values(permanents ?? {})) {
+    const list = Array.isArray(arr) ? arr : [];
+    for (const p of list) {
+      try {
+        if (!p || p.owner !== owner) continue;
+        const nm = String(p.card?.name || "").toLowerCase();
+        if (MANA_PROVIDER_BY_NAME.has(nm)) mana += 1;
+      } catch {}
+    }
+  }
+
+  return mana;
+}
 
 export type GameEvent = { id: number; ts: number; text: string };
 const MAX_EVENTS = 200;
@@ -1507,11 +1631,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   getAvailableMana: (who) => {
     const s = get();
-    const owner = who === "p1" ? 1 : 2;
-    // Default rule: each untapped site provides 1 mana
-    return Object.values(s.board.sites).filter(
-      (st) => st.owner === owner && !st.tapped
-    ).length;
+    return computeAvailableMana(s.board, s.permanents, who);
+  },
+  getThresholdTotals: (who) => {
+    const s = get();
+    return getCachedThresholdTotals(s, who);
   },
 
   addLife: (who, delta) =>
@@ -2014,7 +2138,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const req = (card.thresholds || {}) as Partial<
           Record<keyof Thresholds, number>
         >;
-        const have = s.players[who].thresholds;
+        const have = computeThresholdTotals(s.board, s.permanents, who);
         const miss: string[] = [];
         for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
           const need = Number(req[kk] ?? 0);
@@ -2060,43 +2184,17 @@ export const useGameStore = create<GameState>((set, get) => ({
           );
           return s; // occupied
         }
-        // Auto-add thresholds provided by this site
-        const add: Partial<Thresholds> = {};
-        const req = (card.thresholds || {}) as Partial<
-          Record<keyof Thresholds, number>
-        >;
-        for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
-          if (s.players[who].thresholds[kk] != null) {
-            add[kk] = Number(req[kk] ?? 0);
-          }
-        }
-        const curP = s.players[who];
-        const nextP: PlayerState = {
-          ...curP,
-          // Auto-increase available mana by 1 when a site is played
-          mana: (curP.mana || 0) + 1,
-          thresholds: {
-            ...curP.thresholds,
-            air: (curP.thresholds.air || 0) + (add.air || 0),
-            water: (curP.thresholds.water || 0) + (add.water || 0),
-            earth: (curP.thresholds.earth || 0) + (add.earth || 0),
-            fire: (curP.thresholds.fire || 0) + (add.fire || 0),
-          },
-        };
         const sites = {
           ...s.board.sites,
           [key]: { owner: s.currentPlayer as 1 | 2, tapped: false, card },
         };
         get().log(
-          `${who.toUpperCase()} plays site '${card.name}' at #${cellNo}${
-            Object.keys(add).length ? " (thresholds updated)" : ""
-          }`
+          `${who.toUpperCase()} plays site '${card.name}' at #${cellNo}`
         );
         {
           const tr = get().transport;
           if (tr) {
             const patch: ServerPatchT = {
-              players: { ...s.players, [who]: nextP } as GameState["players"],
               zones: {
                 ...s.zones,
                 [who]: { ...s.zones[who], hand },
@@ -2107,7 +2205,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         }
         return {
-          players: { ...s.players, [who]: nextP },
           zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
           board: { ...s.board, sites },
           selectedCard: null,
@@ -2261,39 +2358,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             dragFromHand: false,
           } as Partial<GameState> as GameState;
         }
-        // Auto-add thresholds provided by this site
-        const add: Partial<Thresholds> = {};
-        const req = (card.thresholds || {}) as Partial<
-          Record<keyof Thresholds, number>
-        >;
-        for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
-          if (s.players[who].thresholds[kk] != null) {
-            add[kk] = Number(req[kk] ?? 0);
-          }
-        }
-        const curP = s.players[who];
-        const nextP: PlayerState = {
-          ...curP,
-          // Auto-increase available mana by 1 when a site is played
-          mana: (curP.mana || 0) + 1,
-          thresholds: {
-            ...curP.thresholds,
-            air: (curP.thresholds.air || 0) + (add.air || 0),
-            water: (curP.thresholds.water || 0) + (add.water || 0),
-            earth: (curP.thresholds.earth || 0) + (add.earth || 0),
-            fire: (curP.thresholds.fire || 0) + (add.fire || 0),
-          },
-        };
         const sites = {
           ...s.board.sites,
           [key]: { owner: s.currentPlayer as 1 | 2, tapped: false, card },
         };
         get().log(
-          `${who.toUpperCase()} plays site '${
-            card.name
-          }' from ${from} at #${cellNo}${
-            Object.keys(add).length ? " (thresholds updated)" : ""
-          }`
+          `${who.toUpperCase()} plays site '${card.name}' from ${from} at #${cellNo}`
         );
         {
           const tr = get().transport;
@@ -2305,7 +2375,6 @@ export const useGameStore = create<GameState>((set, get) => ({
                 } as GameState["zones"])
               : s.zones;
             const patch: ServerPatchT = {
-              players: { ...s.players, [who]: nextP } as GameState["players"],
               zones: zonesNext,
               board: { ...s.board, sites } as GameState["board"],
             };
@@ -2313,7 +2382,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         }
         return {
-          players: { ...s.players, [who]: nextP },
           zones: pileName
             ? { ...s.zones, [who]: { ...z, [pileName]: pile } }
             : s.zones,
@@ -2694,28 +2762,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
       const owner: PlayerKey = site.owner === 1 ? "p1" : "p2";
-      // Compute thresholds to subtract based on the site's provided thresholds
-      const req = (site.card.thresholds || {}) as Partial<
-        Record<keyof Thresholds, number>
-      >;
-      const sub: Partial<Thresholds> = {};
-      for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
-        if (s.players[owner].thresholds[kk] != null) {
-          sub[kk] = Number(req[kk] ?? 0);
-        }
-      }
-      const curP = s.players[owner];
-      const nextP: PlayerState = {
-        ...curP,
-        mana: Math.max(0, (curP.mana || 0) - 1),
-        thresholds: {
-          ...curP.thresholds,
-          air: Math.max(0, (curP.thresholds.air || 0) - (sub.air || 0)),
-          water: Math.max(0, (curP.thresholds.water || 0) - (sub.water || 0)),
-          earth: Math.max(0, (curP.thresholds.earth || 0) - (sub.earth || 0)),
-          fire: Math.max(0, (curP.thresholds.fire || 0) - (sub.fire || 0)),
-        },
-      };
       // Remove the site from the board
       const sites = { ...s.board.sites };
       delete sites[key];
@@ -2741,27 +2787,17 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? "atlas"
           : "banished";
       get().log(
-        `Moved site '${
-          site.card.name
-        }' from #${cellNo} to ${owner.toUpperCase()} ${label}${
-          Object.keys(sub).length ? " (thresholds updated)" : ""
-        }`
+        `Moved site '${site.card.name}' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
       {
         const boardNext = { ...s.board, sites } as GameState["board"];
-        const playersNext = {
-          ...s.players,
-          [owner]: nextP,
-        } as GameState["players"];
         const patch: ServerPatchT = {
-          players: playersNext,
           board: boardNext,
           zones: zones as GameState["zones"],
         };
         get().trySendPatch(patch);
       }
       return {
-        players: { ...s.players, [owner]: nextP },
         board: { ...s.board, sites },
         zones,
       } as Partial<GameState> as GameState;
