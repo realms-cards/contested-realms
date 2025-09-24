@@ -732,6 +732,8 @@ server.on("request", async (req, res) => {
         }
       } catch {}
 
+      try { console.info(`[http] GET /players/available q="${q}" sort=${sort} limit=${limit} cursor=${offset} requester=${requesterId ? String(requesterId).slice(-6) : 'anon'}`); } catch {}
+
       // Build candidate list: online and not in a match
       const candidates = [];
       for (const [pid, p] of players.entries()) {
@@ -1654,6 +1656,7 @@ function joinLobby(socket, player, suppliedLobbyId) {
         message: "Lobby is private. You need an invite.",
         code: "private_lobby",
       });
+      try { console.info(`[invite] denied (not_invited) inviter=${String(lobby.hostId).slice(-6)} target=${String(player.id).slice(-6)} lobby=${lobby.id}`); } catch {}
       return;
     }
   }
@@ -2229,6 +2232,7 @@ io.on("connection", (socket) => {
         message: "Only host can invite",
         code: "not_host",
       });
+      try { console.info(`[invite] denied (not_host) inviter=${String(inviter.id).slice(-6)} target=${String(targetId).slice(-6)} lobby=${lobbyId}`); } catch {}
       return;
     }
     if (!lobbyInvites.has(lobbyId)) lobbyInvites.set(lobbyId, new Set());
@@ -2243,6 +2247,7 @@ io.on("connection", (socket) => {
           from: getPlayerInfo(inviter.id),
           visibility: lobby.visibility,
         });
+        try { console.info(`[invite] sent inviter=${String(inviter.id).slice(-6)} target=${String(targetId).slice(-6)} lobby=${lobbyId} visibility=${lobby.visibility}`); } catch {}
       }
     }
   });
