@@ -56,6 +56,8 @@ export default function OnlineMatchPage() {
     },
   });
 
+  const setActorKey = useGameStore((s) => s.setActorKey);
+
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
     return Array.isArray(idParam) ? idParam[0] : idParam;
@@ -87,6 +89,12 @@ export default function OnlineMatchPage() {
     myPlayerIndex >= 0 && myPlayerIndex < 2
       ? ((myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey)
       : null;
+
+  // Initialize actor seat in store for ownership guards in online play
+  useEffect(() => {
+    setActorKey(myPlayerKey);
+    return () => setActorKey(null);
+  }, [setActorKey, myPlayerKey]);
 
   const rtc = voice?.rtc ?? null;
 
@@ -665,17 +673,16 @@ export default function OnlineMatchPage() {
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const clearSelection = useGameStore((s) => s.clearSelection);
   const selected = useGameStore((s) => s.selectedCard);
-  const zones = useGameStore((s) => s.zones);
   const placementDialog = useGameStore((s) => s.placementDialog);
   const closePlacementDialog = useGameStore((s) => s.closePlacementDialog);
   const searchDialog = useGameStore((s) => s.searchDialog);
   const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
   const matchEnded = useGameStore((s) => s.matchEnded);
   const winner = useGameStore((s) => s.winner);
-  const boardSize = useGameStore((s) => s.board.size);
+  const DEFAULT_BOARD_SIZE = useMemo(() => ({ w: 5, h: 4 }), []);
+  const boardSize = useGameStore((s) => s.board?.size) ?? DEFAULT_BOARD_SIZE;
   // Compute playmat extents for camera baselines and clamps
   const baseGridW = boardSize.w * BASE_TILE_SIZE;
   const baseGridH = boardSize.h * BASE_TILE_SIZE;
@@ -694,7 +701,6 @@ export default function OnlineMatchPage() {
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null);
-  const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
 

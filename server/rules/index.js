@@ -131,17 +131,6 @@ function applyTurnStart(game) {
     const cp = Number(game && game.currentPlayer);
     if (!(cp === 1 || cp === 2)) return null;
 
-    // Untap sites owned by current player
-    const board = (game && game.board) || { sites: {} };
-    const sitesPrev = (board && board.sites) || {};
-    const sites = { ...sitesPrev };
-    for (const key of Object.keys(sites)) {
-      try {
-        const st = sites[key] || {};
-        if (st && Number(st.owner) === cp) sites[key] = { ...st, tapped: false };
-      } catch {}
-    }
-
     // Untap permanents owned by current player
     const permsPrev = (game && game.permanents) || {};
     const permanents = {};
@@ -158,8 +147,6 @@ function applyTurnStart(game) {
     const nextKey = cp === 1 ? 'p1' : 'p2';
     avatars[nextKey] = { ...(avatars[nextKey] || {}), tapped: false };
 
-    const boardNext = { ...board, sites };
-
     // Reset per-turn spend for current player (sites do not tap in Sorcery)
     const resPrev = (game && game.resources) || {};
     const meKey = cp === 1 ? 'p1' : 'p2';
@@ -167,7 +154,8 @@ function applyTurnStart(game) {
     const meRes = { ...meResPrev, spentThisTurn: 0 };
     const resources = { ...resPrev, [meKey]: meRes };
 
-    return { board: boardNext, permanents, avatars, resources };
+    // Do not modify board.sites at turn start (sites do not tap)
+    return { permanents, avatars, resources };
   } catch {
     return null;
   }
@@ -204,6 +192,13 @@ function validateAction(game, action, playerId, context) {
       for (const key of Object.keys(action.board.sites)) {
         const nextTile = action.board.sites[key];
         const prevTile = currentSites[key];
+        // Sites cannot be tapped at all: reject any attempt to set tapped on an existing site
+        if (nextTile && Object.prototype.hasOwnProperty.call(nextTile, 'tapped')) {
+          // If site exists already and tapped value is being changed or explicitly set, reject
+          if (prevTile) {
+            return { ok: false, error: `Sites cannot be tapped` };
+          }
+        }
         // If both have a card, then it's an overwrite attempt
         if (nextTile && nextTile.card && prevTile && prevTile.card) {
           return { ok: false, error: `Cannot place site on occupied tile ${key}` };
@@ -241,6 +236,27 @@ function validateAction(game, action, playerId, context) {
           return { ok: false, error: `Cannot place permanent on unsited cell ${key}` };
         }
       }
+      // Ownership guard for tapping opponent permanents: reject if patch toggles tapped on a non-owned permanent
+      if (meNum) {
+        const prevPer = (game && game.permanents) || {};
+        for (const key of Object.keys(action.permanents)) {
+          const nextArr = Array.isArray(action.permanents[key]) ? action.permanents[key] : [];
+          const prevArr = Array.isArray(prevPer[key]) ? prevPer[key] : [];
+          const len = Math.min(prevArr.length, nextArr.length);
+          for (let i = 0; i < len; i++) {
+            const prevItem = prevArr[i] || {};
+            const nextItem = nextArr[i] || {};
+            try {
+              const owner = Number(prevItem.owner);
+              const prevTapped = !!prevItem.tapped;
+              const nextTapped = Object.prototype.hasOwnProperty.call(nextItem, 'tapped') ? !!nextItem.tapped : prevTapped;
+              if (prevTapped !== nextTapped && owner !== meNum) {
+                return { ok: false, error: 'Cannot tap or untap opponent permanent' };
+              }
+            } catch {}
+          }
+        }
+      }
     }
 
     // Zones scoping: do not allow modifying opponent's zones
@@ -248,6 +264,17 @@ function validateAction(game, action, playerId, context) {
       for (const zk of Object.keys(action.zones)) {
         if (zk !== meKey) {
           return { ok: false, error: `Cannot modify opponent zones (${zk})` };
+        }
+      }
+    }
+
+    // Avatar tap ownership: only actor may change their own avatar tapped state
+    if (action.avatars && typeof action.avatars === 'object' && meKey) {
+      for (const k of Object.keys(action.avatars)) {
+        if (k !== 'p1' && k !== 'p2') continue;
+        const patch = action.avatars[k] || {};
+        if (Object.prototype.hasOwnProperty.call(patch, 'tapped') && k !== meKey) {
+          return { ok: false, error: 'Cannot tap or untap opponent avatar' };
         }
       }
     }

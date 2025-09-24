@@ -1110,6 +1110,21 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
     }
     if (match && patch && typeof patch === 'object') {
       let patchToApply = patch;
+      const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && isCpuPlayerId(playerId));
+      const isSnapshot = Array.isArray(patchToApply && patchToApply.__replaceKeys) && patchToApply.__replaceKeys.length > 0;
+      if (isSnapshot) {
+        try {
+          console.debug('[match] apply snapshot', {
+            matchId,
+            playerId,
+            keys: Array.isArray(patchToApply.__replaceKeys) ? patchToApply.__replaceKeys : [],
+            hasEvents: Array.isArray(patchToApply.events),
+            phase: patchToApply.phase,
+            eventSeq: patchToApply.eventSeq,
+            t: now,
+          });
+        } catch {}
+      }
       if (patch && typeof patch === 'object' && patch.d20Rolls) {
         const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
         const incRaw = patch.d20Rolls || {};
@@ -1179,59 +1194,79 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
         try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
       }
-      try {
-        const prevCP = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
-        const nextCP = (patchToApply && typeof patchToApply.currentPlayer === 'number') ? patchToApply.currentPlayer : null;
-        const phaseIsMain = patchToApply && patchToApply.phase === 'Main';
-        if ((nextCP === 1 || nextCP === 2) && (nextCP !== prevCP || phaseIsMain)) {
-          const tsPatch = applyTurnStart({ ...(match.game || {}), currentPlayer: nextCP });
-          if (tsPatch && typeof tsPatch === 'object') {
-            patchToApply = { ...patchToApply, ...tsPatch };
+      if (!isSnapshot) {
+        try {
+          const costRes = ensureCosts(match.game || {}, patchToApply, playerId, { match });
+          if (costRes && costRes.autoPatch && RULES_HELPERS_ENABLED) {
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
+            try {
+              console.debug('[rules] ensureCosts autoPatch applied', {
+                matchId,
+                playerId,
+                keys: Object.keys(costRes.autoPatch || {}),
+                isSnapshot,
+              });
+            } catch {}
           }
-        }
-      } catch {}
-      const actorIsCpu = isCpuPlayerId(playerId);
-      const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && actorIsCpu);
-      try {
-        const costRes = ensureCosts(match.game || {}, patchToApply, playerId, { match });
-        if (costRes && costRes.autoPatch && RULES_HELPERS_ENABLED) {
-          patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
-        }
-        if (costRes && costRes.ok === false) {
-          if (enforce) {
-            if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
-            return;
-          } else {
-            const warn = [{ id: 0, ts: Date.now(), text: `[Warning] ${costRes.error || 'Insufficient resources'}` }];
-            const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
-            patchToApply = { ...patchToApply, events: [...existing, ...warn] };
+          if (costRes && costRes.ok === false) {
+            if (enforce) {
+              if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
+              try {
+                console.warn('[rules] ensureCosts rejected action', {
+                  matchId,
+                  playerId,
+                  error: costRes.error,
+                  isSnapshot,
+                });
+              } catch {}
+              return;
+            } else {
+              const warn = [{ id: 0, ts: Date.now(), text: `[Warning] ${costRes.error || 'Insufficient resources'}` }];
+              const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
+              patchToApply = { ...patchToApply, events: [...existing, ...warn] };
+            }
           }
-        }
-      } catch {}
-      try {
-        const v = validateAction(match.game || {}, patchToApply, playerId, { match });
-        if (!v.ok && enforce) {
-          if (actorSocketId) io.to(actorSocketId).emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
-          return;
-        }
-        if (!v.ok && !enforce) {
-          const warnEvent = [{ id: 0, ts: Date.now(), text: `[Warning] ${v.error || 'Potential rules issue'}` }];
-          const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
-          patchToApply = { ...patchToApply, events: [...existing, ...warnEvent] };
-        }
-      } catch {}
-      try {
-        const trig = applyGenesis(match.game || {}, patchToApply, playerId, { match });
-        if (trig && typeof trig === 'object') {
-          patchToApply = deepMergeReplaceArrays(patchToApply || {}, trig);
-        }
-      } catch {}
-      try {
-        const kw = applyKeywordAnnotations(match.game || {}, patchToApply, playerId, { match });
-        if (kw && typeof kw === 'object') {
-          patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
-        }
-      } catch {}
+        } catch {}
+        try {
+          const v = validateAction(match.game || {}, patchToApply, playerId, { match });
+          if (!v.ok) {
+            const msg = (v && v.error) ? String(v.error) : '';
+            try {
+              console.warn('[rules] validateAction rejected action', {
+                matchId,
+                playerId,
+                error: msg,
+                isSnapshot,
+              });
+            } catch {}
+            const mustReject = /Cannot tap or untap opponent|Sites cannot be tapped/i.test(msg);
+            if (mustReject) {
+              if (actorSocketId) io.to(actorSocketId).emit('error', { message: msg || 'Illegal tap action', code: 'rules_violation' });
+              return;
+            }
+            if (enforce) {
+              if (actorSocketId) io.to(actorSocketId).emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
+              return;
+            } else {
+              const warnEvent = [{ id: 0, ts: Date.now(), text: `[Warning] ${v.error || 'Potential rules issue'}` }];
+              const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
+              patchToApply = { ...patchToApply, events: [...existing, ...warnEvent] };
+            }
+          }
+        } catch {}
+        try {
+          const trig = applyGenesis(match.game || {}, patchToApply, playerId, { match });
+          if (trig && typeof trig === 'object') {
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, trig);
+          }
+        } catch {}
+        try {
+          const kw = applyKeywordAnnotations(match.game || {}, patchToApply, playerId, { match });
+          if (kw && typeof kw === 'object') {
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
+          }
+        } catch {}
+      }
       const eventsAdded = [];
       if (Array.isArray(patch && patch.events)) eventsAdded.push(...patch.events);
       if (Array.isArray(patchToApply && patchToApply.events)) eventsAdded.push(...patchToApply.events);
@@ -1242,10 +1277,50 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
         const seq = Math.max(mergedMaxId, Number(patch && patch.eventSeq || 0) || 0);
         patchToApply = { ...patchToApply, events: mergedEvents, eventSeq: seq };
       }
-      match.game = deepMergeReplaceArrays(match.game || {}, patchToApply);
+      // If patch specifies __replaceKeys (authoritative snapshot like Undo),
+      // prime the base so those keys become exact replacements
+      let baseForMerge = match.game || {};
+      try {
+        if (patchToApply && Array.isArray(patchToApply.__replaceKeys)) {
+          const keys = patchToApply.__replaceKeys;
+          baseForMerge = { ...(match.game || {}) };
+          for (const k of keys) {
+            if (Object.prototype.hasOwnProperty.call(patchToApply, k)) {
+              baseForMerge[k] = patchToApply[k];
+            }
+          }
+        }
+      } catch {}
+      match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
+      try {
+        if (match.game && match.game.permanents) {
+          match.game.permanents = dedupePermanents(match.game.permanents);
+        }
+        if (isSnapshot) {
+          const perCount = match.game && match.game.permanents && typeof match.game.permanents === 'object'
+            ? Object.values(match.game.permanents).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0)
+            : null;
+          const zones = match.game && match.game.zones ? match.game.zones : null;
+          console.debug('[match] snapshot merge result', {
+            matchId,
+            permanentsCount: perCount,
+            handP1: zones && zones.p1 && Array.isArray(zones.p1.hand) ? zones.p1.hand.length : null,
+            handP2: zones && zones.p2 && Array.isArray(zones.p2.hand) ? zones.p2.hand.length : null,
+          });
+        }
+      } catch {}
       match.lastTs = now;
       recordMatchAction(matchId, patchToApply, playerId);
       io.to(matchRoom).emit('statePatch', { patch: patchToApply, t: now });
+      if (isSnapshot) {
+        try {
+          const sites = match.game && match.game.board && match.game.board.sites ? Object.keys(match.game.board.sites).length : null;
+          const per = match.game && match.game.permanents && typeof match.game.permanents === 'object'
+            ? Object.values(match.game.permanents).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0)
+            : null;
+          console.debug('[match] snapshot applied and broadcast', { matchId, sites, permanentsCount: per, t: now });
+        } catch {}
+      }
       try { await persistMatchUpdate(match, patchToApply, playerId, now); } catch {}
     } else {
       io.to(matchRoom).emit('statePatch', { patch, t: now });
@@ -1374,6 +1449,34 @@ function deepMergeReplaceArrays(base, patch) {
     out[k] = deepMergeReplaceArrays(cur, v);
   }
   return out;
+}
+
+// Remove duplicate permanents across the entire board by cardId
+function dedupePermanents(per) {
+  try {
+    if (!per || typeof per !== 'object') return per;
+    const out = {};
+    const seen = new Set();
+    for (const [cell, arrAny] of Object.entries(per)) {
+      const arr = Array.isArray(arrAny) ? arrAny : [];
+      const next = [];
+      for (const item of arr) {
+        const id = Number(item && item.card && item.card.cardId);
+        if (Number.isFinite(id)) {
+          if (seen.has(id)) {
+            try { console.warn('[match] dedupe permanents: drop duplicate', { cell, cardId: id, name: item && item.card && item.card.name }); } catch {}
+            continue;
+          }
+          seen.add(id);
+        }
+        next.push(item);
+      }
+      out[cell] = next;
+    }
+    return out;
+  } catch {
+    return per;
+  }
 }
 
 // Cap for multiplayer console events to avoid unbounded growth
