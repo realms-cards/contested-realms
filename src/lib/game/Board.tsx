@@ -608,6 +608,21 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                     return;
                   }
                   if (dragFromHand) {
+                    // Debug logging for drag cancellation
+                    if (process.env.NODE_ENV !== "production") {
+                      console.debug(`[Board] Drag from hand - mouseInHandZone:`, mouseInHandZone);
+                    }
+
+                    // Check if mouse is in hand zone - if so, cancel the drag instead of playing
+                    if (mouseInHandZone) {
+                      // Cancel the drag - return card to hand
+                      console.debug(`[Board] Cancelling drag - returning to hand`);
+                      setDragFromHand(false);
+                      setGhost(null);
+                      lastDropAt.current = Date.now();
+                      return; // Don't play the card, just cancel the drag
+                    }
+
                     const dropKey = `${x},${y}`;
                     const wx = e.point.x;
                     const wz = e.point.z;
@@ -665,7 +680,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               targetPermanent: closestPermanent,
                               dropCoords: { x, y },
                               fromPile: wasFromPile,
-                              pileInfo: pileInfo
+                              pileInfo
                             });
                             setDragFromHand(false);
                             setGhost(null);

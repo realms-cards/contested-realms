@@ -122,15 +122,28 @@ export default function Hand3D({
   useEffect(() => {
     function onMove(e: MouseEvent) {
       const h = window.innerHeight || 1;
-      const inZone = e.clientY >= h * HAND_ZONE_TOP_FRAC;
+      const inBottomZone = e.clientY >= h * HAND_ZONE_TOP_FRAC;
+
+      // For drag returns, use a more generous zone detection
+      // If dragging from hand, consider both bottom zone AND cards area OR wider bottom zone
+      let inHandZone = inBottomZone;
+      if (dragFromHand && selected && selected.who === owner) {
+        // During hand drag, use more generous zone (top 40% of screen) or cards area
+        const dragZoneTop = 0.6; // Top 40% of screen
+        const inDragZone = e.clientY >= h * dragZoneTop;
+        inHandZone = inDragZone || overCardsArea;
+      } else {
+        // Normal case: bottom zone or cards area
+        inHandZone = inBottomZone || overCardsArea;
+      }
 
       // Update last known mouse position
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
 
-      setMouseInHandZone(inZone);
+      setMouseInHandZone(inHandZone);
 
       // Clear any pending cleanup when mouse re-enters zone
-      if (inZone && hoverCleanupTimeoutRef.current) {
+      if (inHandZone && hoverCleanupTimeoutRef.current) {
         window.clearTimeout(hoverCleanupTimeoutRef.current);
         hoverCleanupTimeoutRef.current = null;
       }
@@ -145,7 +158,7 @@ export default function Hand3D({
         window.clearTimeout(hoverCleanupTimeoutRef.current);
       }
     };
-  }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount]);
+  }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount, dragFromHand, overCardsArea, selected, owner]);
   // Clear local hand drag start when mouse is released anywhere
   useEffect(() => {
     const onUp = () => {
@@ -172,18 +185,16 @@ export default function Hand3D({
     // Smart visibility logic - distinguish between hand drags and pile drags
     const isHandDrag = dragFromHand && selected && selected.who === owner; // Hand card being dragged
     // Use mouseInZone as trigger to initially show cards, then rely on overCardsArea to keep them visible
-    const targetShown = showCardBacks 
+    // Allow hand to show during drags for card returns
+    const targetShown = showCardBacks
       ? 1 // Opponent card backs always shown
-      : !isHandDrag && (overCardsArea || mouseInZone) ? 1 : 0; // Show when over cards or in bottom zone (for initial trigger)
+      : (overCardsArea || mouseInZone) ? 1 : 0; // Show when over cards or in bottom zone (including during drags)
 
-    if (isHandDrag) {
-      revealLerp.current = 0; // Collapse for hand drags
-    } else {
-      const k = 0.35; // Increased from 0.25 for even more responsive hand reveal animation
-      revealLerp.current += (targetShown - revealLerp.current) * k;
-      if (Math.abs(targetShown - revealLerp.current) < 0.005)
-        revealLerp.current = targetShown;
-    }
+    // Always use smooth reveal logic - allow hand to stay visible during drags for card returns
+    const k = 0.35; // Increased from 0.25 for even more responsive hand reveal animation
+    revealLerp.current += (targetShown - revealLerp.current) * k;
+    if (Math.abs(targetShown - revealLerp.current) < 0.005)
+      revealLerp.current = targetShown;
 
     // Smooth hand spread animation
     const handShouldBeSpread = showCardBacks 
@@ -608,6 +619,15 @@ export default function Hand3D({
         const layoutInfo = handLayout[i];
         if (!layoutInfo) return null;
 
+        // Handle dragged card visibility for hand returns
+        const isDraggedCard = selected && selected.card.cardId === c.cardId && dragFromHand && selected.who === owner;
+        if (isDraggedCard) {
+          // Show the card again when mouse is in hand zone (indicating potential return)
+          if (!mouseInZone && !overCardsArea) {
+            return null;
+          }
+        }
+
         const { x, y, rot, scale: layoutScale, originalIndex, hoverWeight } = layoutInfo;
         const isHandDrag = dragFromHand && selected && selected.who === owner;
         const isPileDrag = dragFromHand && dragFromPile && !selected;
@@ -729,7 +749,7 @@ export default function Hand3D({
                 width={CARD_SHORT}
                 height={CARD_LONG}
                 rotationZ={
-                  showCardBacks 
+                  showCardBacks
                     ? 0 // Card backs don't use fan rotation
                     : (isSite ? -rot - Math.PI / 2 : -rot) // Sites need -90° rotation for correct art orientation
                 }
@@ -741,6 +761,7 @@ export default function Hand3D({
                 elevation={0.002 + 0.018 * (hoverWeight || 0)}
                 textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
                 forceTextureUrl={showCardBacks}
+                opacity={isDraggedCard ? 0.6 : 1.0} // Make dragged card semi-transparent when shown for return
               />
             </group>
           </group>
