@@ -61,7 +61,7 @@ export default function OnlineDraftDeckLoader({
       if (!mySuccess) return;
       
       // Load all other players' decks
-      const loadPromises = otherPlayers.map(async (player, index) => {
+      const loadPromises = otherPlayers.map(async (player) => {
         const playerKey = Object.keys(playerNames).find(key => 
           playerNames[key] === player.displayName
         ) || `p${match.players.findIndex(p => p.id === player.id) + 1}`;
@@ -82,7 +82,7 @@ export default function OnlineDraftDeckLoader({
     } finally {
       setLoading(false);
     }
-  }, [match, me, myPlayerKey, onPrepareComplete]);
+  }, [match, me, myPlayerKey, onPrepareComplete, playerNames]);
 
   useEffect(() => {
     // Only auto-start if explicitly requested by parent and not already initiated

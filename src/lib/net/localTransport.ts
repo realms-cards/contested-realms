@@ -1,5 +1,11 @@
 "use client";
 
+import type {
+  InteractionEnvelope,
+  InteractionRequestMessage,
+  InteractionResponseMessage,
+} from "@/lib/net/interactions";
+import { wrapInteractionMessage } from "@/lib/net/interactions";
 import { Protocol } from "@/lib/net/protocol";
 import type { LobbyVisibility, ChatScope } from "@/lib/net/protocol";
 import type {
@@ -134,6 +140,26 @@ export class LocalTransport implements GameTransport {
       scope: scope ?? "match",
     };
     this.dispatch("chat", Protocol.ServerChatPayload.parse(payload));
+  }
+
+  sendInteractionEnvelope(envelope: InteractionEnvelope): void {
+    this.dispatch("interaction", envelope);
+    const message = envelope.message;
+    if (message.type === "interaction:request") {
+      this.dispatch("interaction:request", message);
+    } else {
+      this.dispatch("interaction:response", message);
+    }
+  }
+
+  sendInteractionRequest(message: InteractionRequestMessage): void {
+    const envelope = wrapInteractionMessage(message);
+    this.sendInteractionEnvelope(envelope);
+  }
+
+  sendInteractionResponse(message: InteractionResponseMessage): void {
+    const envelope = wrapInteractionMessage(message);
+    this.sendInteractionEnvelope(envelope);
   }
 
   resync(): void {

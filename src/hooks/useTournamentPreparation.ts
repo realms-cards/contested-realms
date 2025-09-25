@@ -1,14 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 
-interface SealedPreparationData {
+export interface SealedPreparationData {
   packs: Array<{ id: string; contents: unknown[] }>;
   packsOpened: boolean;
   cardPool: unknown[];
   deckBuilt: boolean;
   deckList: Array<{ cardId: string; quantity: number }>;
+  openedPackIds?: string[];
 }
 
-interface DraftPreparationData {
+export interface DraftPreparationData {
   draftSessionId: string | null;
   joinedAt: string | null;
   draftCompleted: boolean;
@@ -17,7 +18,7 @@ interface DraftPreparationData {
   deckList: Array<{ cardId: string; quantity: number }>;
 }
 
-interface ConstructedPreparationData {
+export interface ConstructedPreparationData {
   availableDecks: Array<{
     id: string;
     name: string;
@@ -30,7 +31,7 @@ interface ConstructedPreparationData {
   deckValidated: boolean;
 }
 
-interface PreparationState {
+export interface PreparationState {
   status: 'notStarted' | 'inProgress' | 'completed';
   sealed?: SealedPreparationData;
   draft?: DraftPreparationData;
@@ -39,6 +40,97 @@ interface PreparationState {
   error: string | null;
 }
 
+export type PreparationDataPayload = {
+  sealed?: Partial<SealedPreparationData>;
+  draft?: Partial<DraftPreparationData>;
+  constructed?: Partial<ConstructedPreparationData>;
+};
+
+export type PreparationResponse<T extends Record<string, unknown> = Record<string, never>> = T & {
+  preparationStatus?: PreparationState['status'];
+  preparationData?: PreparationDataPayload;
+};
+
+export const createDefaultSealed = (): SealedPreparationData => ({
+  packs: [],
+  packsOpened: false,
+  cardPool: [],
+  deckBuilt: false,
+  deckList: [],
+  openedPackIds: []
+});
+
+export const createDefaultDraft = (): DraftPreparationData => ({
+  draftSessionId: null,
+  joinedAt: null,
+  draftCompleted: false,
+  pickHistory: [],
+  deckBuilt: false,
+  deckList: []
+});
+
+export const createDefaultConstructed = (): ConstructedPreparationData => ({
+  availableDecks: [],
+  selectedDeckId: null,
+  deckSelected: false,
+  deckValidated: false
+});
+
+export const mergeSealed = (
+  existing: SealedPreparationData | undefined,
+  update?: Partial<SealedPreparationData>,
+  overrides?: Partial<SealedPreparationData>
+): SealedPreparationData => {
+  const base = existing ?? createDefaultSealed();
+  return {
+    ...base,
+    ...update,
+    ...overrides,
+    packs: overrides?.packs ?? update?.packs ?? base.packs,
+    cardPool: overrides?.cardPool ?? update?.cardPool ?? base.cardPool,
+    deckList: overrides?.deckList ?? update?.deckList ?? base.deckList,
+    deckBuilt: overrides?.deckBuilt ?? update?.deckBuilt ?? base.deckBuilt,
+    packsOpened: overrides?.packsOpened ?? update?.packsOpened ?? base.packsOpened,
+    openedPackIds: overrides?.openedPackIds ?? update?.openedPackIds ?? base.openedPackIds
+  };
+};
+
+export const mergeDraft = (
+  existing: DraftPreparationData | undefined,
+  update?: Partial<DraftPreparationData>,
+  overrides?: Partial<DraftPreparationData>
+): DraftPreparationData => {
+  const base = existing ?? createDefaultDraft();
+  return {
+    ...base,
+    ...update,
+    ...overrides,
+    draftSessionId: overrides?.draftSessionId ?? update?.draftSessionId ?? base.draftSessionId,
+    joinedAt: overrides?.joinedAt ?? update?.joinedAt ?? base.joinedAt,
+    draftCompleted: overrides?.draftCompleted ?? update?.draftCompleted ?? base.draftCompleted,
+    pickHistory: overrides?.pickHistory ?? update?.pickHistory ?? base.pickHistory,
+    deckBuilt: overrides?.deckBuilt ?? update?.deckBuilt ?? base.deckBuilt,
+    deckList: overrides?.deckList ?? update?.deckList ?? base.deckList
+  };
+};
+
+export const mergeConstructed = (
+  existing: ConstructedPreparationData | undefined,
+  update?: Partial<ConstructedPreparationData>,
+  overrides?: Partial<ConstructedPreparationData>
+): ConstructedPreparationData => {
+  const base = existing ?? createDefaultConstructed();
+  return {
+    ...base,
+    ...update,
+    ...overrides,
+    availableDecks: overrides?.availableDecks ?? update?.availableDecks ?? base.availableDecks,
+    selectedDeckId: overrides?.selectedDeckId ?? update?.selectedDeckId ?? base.selectedDeckId,
+    deckSelected: overrides?.deckSelected ?? update?.deckSelected ?? base.deckSelected,
+    deckValidated: overrides?.deckValidated ?? update?.deckValidated ?? base.deckValidated
+  };
+};
+
 export function useTournamentPreparation(tournamentId: string | null) {
   const [state, setState] = useState<PreparationState>({
     status: 'notStarted',
@@ -46,10 +138,9 @@ export function useTournamentPreparation(tournamentId: string | null) {
     error: null
   });
 
-  // Start preparation phase
   const startPreparation = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/start`, {
         method: 'POST',
@@ -61,14 +152,20 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to start preparation');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse;
+
       setState(prev => ({
         ...prev,
-        status: 'inProgress',
-        sealed: result.preparationData?.sealed,
-        draft: result.preparationData?.draft,
-        constructed: result.preparationData?.constructed,
+        status: result.preparationStatus ?? 'inProgress',
+        sealed: result.preparationData?.sealed
+          ? mergeSealed(prev.sealed, result.preparationData.sealed)
+          : prev.sealed,
+        draft: result.preparationData?.draft
+          ? mergeDraft(prev.draft, result.preparationData.draft)
+          : prev.draft,
+        constructed: result.preparationData?.constructed
+          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          : prev.constructed,
         loading: false
       }));
     } catch (err) {
@@ -80,15 +177,13 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
-  // Get preparation status
   const refreshStatus = useCallback(async () => {
-    // Skip API calls if no tournament ID
     if (!tournamentId) {
       return;
     }
-    
+
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/status`);
 
@@ -97,14 +192,20 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to get preparation status');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse;
+
       setState(prev => ({
         ...prev,
-        status: result.preparationStatus,
-        sealed: result.preparationData?.sealed,
-        draft: result.preparationData?.draft,
-        constructed: result.preparationData?.constructed,
+        status: result.preparationStatus ?? prev.status,
+        sealed: result.preparationData?.sealed
+          ? mergeSealed(prev.sealed, result.preparationData.sealed)
+          : prev.sealed,
+        draft: result.preparationData?.draft
+          ? mergeDraft(prev.draft, result.preparationData.draft)
+          : prev.draft,
+        constructed: result.preparationData?.constructed
+          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          : prev.constructed,
         loading: false
       }));
     } catch (err) {
@@ -116,10 +217,9 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
-  // Sealed format actions
   const openSealedPacks = useCallback(async (packIds: string[]) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/sealed/packs`, {
         method: 'POST',
@@ -132,16 +232,18 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to open sealed packs');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        cardPool?: unknown[];
+        openedPackIds?: string[];
+      }>;
+
       setState(prev => ({
         ...prev,
-        sealed: {
-          ...prev.sealed!,
+        sealed: mergeSealed(prev.sealed, result.preparationData?.sealed, {
           packsOpened: true,
-          cardPool: result.cardPool,
+          cardPool: result.preparationData?.sealed?.cardPool ?? result.cardPool,
           openedPackIds: result.openedPackIds
-        },
+        }),
         loading: false
       }));
     } catch (err) {
@@ -153,10 +255,9 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
-  // Draft format actions
   const joinDraftSession = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/draft/join`, {
         method: 'POST',
@@ -168,15 +269,19 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to join draft session');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        draftSession?: { id: string | null };
+      }>;
+
+      const overrides: Partial<DraftPreparationData> = {};
+      if (result.draftSession?.id) {
+        overrides.draftSessionId = result.draftSession.id;
+        overrides.joinedAt = new Date().toISOString();
+      }
+
       setState(prev => ({
         ...prev,
-        draft: {
-          ...prev.draft!,
-          draftSessionId: result.draftSession.id,
-          joinedAt: new Date().toISOString()
-        },
+        draft: mergeDraft(prev.draft, result.preparationData?.draft, overrides),
         loading: false
       }));
     } catch (err) {
@@ -188,10 +293,9 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
-  // Constructed format actions
   const getAvailableDecks = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/constructed/decks`);
 
@@ -200,15 +304,17 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to get available decks');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        availableDecks?: ConstructedPreparationData['availableDecks'];
+        selectedDeckId?: string | null;
+      }>;
+
       setState(prev => ({
         ...prev,
-        constructed: {
-          ...prev.constructed!,
+        constructed: mergeConstructed(prev.constructed, result.preparationData?.constructed, {
           availableDecks: result.availableDecks,
           selectedDeckId: result.selectedDeckId
-        },
+        }),
         loading: false
       }));
     } catch (err) {
@@ -222,7 +328,7 @@ export function useTournamentPreparation(tournamentId: string | null) {
 
   const selectDeck = useCallback(async (deckId: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/constructed/decks`, {
         method: 'POST',
@@ -235,17 +341,16 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to select deck');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse;
+
       setState(prev => ({
         ...prev,
-        status: 'completed',
-        constructed: {
-          ...prev.constructed!,
-          selectedDeckId: deckId,
-          deckSelected: true,
-          deckValidated: true
-        },
+        status: result.preparationStatus ?? 'completed',
+        constructed: mergeConstructed(prev.constructed, result.preparationData?.constructed, {
+          selectedDeckId: result.preparationData?.constructed?.selectedDeckId ?? deckId,
+          deckSelected: result.preparationData?.constructed?.deckSelected ?? true,
+          deckValidated: result.preparationData?.constructed?.deckValidated ?? true
+        }),
         loading: false
       }));
     } catch (err) {
@@ -257,14 +362,13 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
-  // Submit preparation data
   const submitPreparation = useCallback(async (preparationData: {
     sealed?: Partial<SealedPreparationData>;
     draft?: Partial<DraftPreparationData>;
     constructed?: Partial<ConstructedPreparationData>;
   }) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/submit`, {
         method: 'POST',
@@ -277,14 +381,20 @@ export function useTournamentPreparation(tournamentId: string | null) {
         throw new Error(error.error || 'Failed to submit preparation');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse;
+
       setState(prev => ({
         ...prev,
-        status: result.preparationStatus,
-        sealed: result.preparationData?.sealed,
-        draft: result.preparationData?.draft,
-        constructed: result.preparationData?.constructed,
+        status: result.preparationStatus ?? prev.status,
+        sealed: result.preparationData?.sealed
+          ? mergeSealed(prev.sealed, result.preparationData.sealed)
+          : prev.sealed,
+        draft: result.preparationData?.draft
+          ? mergeDraft(prev.draft, result.preparationData.draft)
+          : prev.draft,
+        constructed: result.preparationData?.constructed
+          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          : prev.constructed,
         loading: false
       }));
     } catch (err) {
@@ -296,11 +406,10 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
-  // Auto-refresh preparation status
   useEffect(() => {
     refreshStatus();
-    
-    const interval = setInterval(refreshStatus, 5000); // Poll every 5 seconds
+
+    const interval = setInterval(refreshStatus, 5000);
     return () => clearInterval(interval);
   }, [refreshStatus]);
 

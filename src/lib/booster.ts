@@ -12,6 +12,24 @@ type VariantSel = {
   product: string;
 };
 
+type CardMeta = {
+  rarity: Rarity;
+  type: string | null;
+};
+
+function toBoosterCard(variant: VariantSel, meta: CardMeta): BoosterCard {
+  return {
+    variantId: variant.id,
+    slug: variant.slug,
+    finish: variant.finish,
+    product: variant.product,
+    rarity: meta.rarity,
+    type: meta.type,
+    cardId: variant.cardId,
+    cardName: '',
+  };
+}
+
 export type BoosterCard = {
   variantId: number;
   slug: string;
@@ -57,8 +75,8 @@ export async function generateBooster(setName: string, client: PrismaClient = de
     where: { setId: set.id },
     select: { cardId: true, rarity: true, type: true },
   });
-  const metaByCardId = new Map<number, { rarity: Rarity; type: string | null }>();
-  for (const m of metas) metaByCardId.set(m.cardId, { rarity: m.rarity, type: m.type });
+  const metaByCardId = new Map<number, CardMeta>();
+  for (const m of metas) metaByCardId.set(m.cardId, { rarity: m.rarity, type: m.type ?? null });
 
   // Fetch all booster variants by finish
   const [variantsStd, variantsFoil]: [VariantSel[], VariantSel[]] = await Promise.all([
@@ -109,35 +127,20 @@ export async function generateBooster(setName: string, client: PrismaClient = de
     ?? pickUniqueFrom(stdByRarity.Elite, used)
     ?? pickUniqueFrom(stdByRarity.Unique, used);
   if (topVariant) {
-    const meta = metaByCardId.get(topVariant.cardId)!;
-    picks.push({
-      variantId: topVariant.id,
-      slug: topVariant.slug,
-      finish: topVariant.finish as Finish,
-      product: topVariant.product,
-      rarity: meta.rarity,
-      type: meta.type ?? null,
-      cardId: topVariant.cardId,
-      cardName: '', // fill later
-    });
-    used.add(topVariant.cardId);
+    const meta = metaByCardId.get(topVariant.cardId);
+    if (meta) {
+      picks.push(toBoosterCard(topVariant, meta));
+      used.add(topVariant.cardId);
+    }
   }
 
   // Exceptional slots
   for (let i = 0; i < cfg.exceptionalCount; i++) {
     const v = pickUniqueFrom(stdByRarity.Exceptional, used);
     if (!v) break;
-    const meta = metaByCardId.get(v.cardId)!;
-    picks.push({
-      variantId: v.id,
-      slug: v.slug,
-      finish: v.finish as Finish,
-      product: v.product,
-      rarity: meta.rarity,
-      type: meta.type ?? null,
-      cardId: v.cardId,
-      cardName: '',
-    });
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
 
@@ -145,17 +148,9 @@ export async function generateBooster(setName: string, client: PrismaClient = de
   for (let i = 0; i < cfg.ordinaryCount; i++) {
     const v = pickUniqueFrom(stdByRarity.Ordinary, used);
     if (!v) break;
-    const meta = metaByCardId.get(v.cardId)!;
-    picks.push({
-      variantId: v.id,
-      slug: v.slug,
-      finish: v.finish as Finish,
-      product: v.product,
-      rarity: meta.rarity,
-      type: meta.type ?? null,
-      cardId: v.cardId,
-      cardName: '',
-    });
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
 
@@ -163,17 +158,9 @@ export async function generateBooster(setName: string, client: PrismaClient = de
   for (let i = 0; i < cfg.siteOrAvatarCount; i++) {
     const v = pickUniqueFrom(siteAvatarStd, used) || pickUniqueFrom(stdByRarity.Ordinary, used);
     if (!v) break;
-    const meta = metaByCardId.get(v.cardId)!;
-    picks.push({
-      variantId: v.id,
-      slug: v.slug,
-      finish: v.finish as Finish,
-      product: v.product,
-      rarity: meta.rarity,
-      type: meta.type ?? null,
-      cardId: v.cardId,
-      cardName: '',
-    });
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
 
@@ -191,20 +178,13 @@ export async function generateBooster(setName: string, client: PrismaClient = de
       // Find an ordinary index to replace
       const ordIdx = picks.findIndex(p => p.rarity === 'Ordinary');
       if (ordIdx !== -1) {
-        const meta = metaByCardId.get(foil.cardId)!;
-        // update used set: remove the replaced ordinary and add the foil card
-        used.delete(picks[ordIdx].cardId);
-        picks[ordIdx] = {
-          variantId: foil.id,
-          slug: foil.slug,
-          finish: foil.finish as Finish,
-          product: foil.product,
-          rarity: meta.rarity,
-          type: meta.type ?? null,
-          cardId: foil.cardId,
-          cardName: '',
-        };
-        used.add(foil.cardId);
+        const meta = metaByCardId.get(foil.cardId);
+        if (meta) {
+          // update used set: remove the replaced ordinary and add the foil card
+          used.delete(picks[ordIdx].cardId);
+          picks[ordIdx] = toBoosterCard(foil, meta);
+          used.add(foil.cardId);
+        }
       } else {
         // No ordinary to replace; skip foil to maintain pack size and uniqueness
       }

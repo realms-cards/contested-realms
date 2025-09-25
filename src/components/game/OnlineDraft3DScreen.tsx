@@ -69,8 +69,12 @@ function DraggableCard3D({
   onRelease,
   getTopRenderOrder,
   onHoverChange,
+  onHoverStart,
+  onHoverEnd,
   lockUpright,
   onClick,
+  cardName,
+  cardType,
 }: {
   slug: string;
   isSite: boolean;
@@ -84,8 +88,12 @@ function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
+  onHoverStart?: (card: { slug: string; name: string; type: string | null }) => void;
+  onHoverEnd?: () => void;
   lockUpright?: boolean;
   onClick?: () => void;
+  cardName?: string;
+  cardType?: string | null;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -107,7 +115,6 @@ function DraggableCard3D({
   }, []);
 
   const rotZ = (isSite ? -Math.PI / 2 : 0) + (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
-
   return (
     <group ref={ref} position={[x, 0.002, z]}>
       <mesh
@@ -205,9 +212,11 @@ function DraggableCard3D({
         onPointerOver={() => {
           if (disabled) return;
           onHoverChange?.(true);
+          onHoverStart?.({ slug, name: cardName ?? slug, type: cardType ?? null });
         }}
         onPointerOut={() => {
           onHoverChange?.(false);
+          onHoverEnd?.();
         }}
       >
         <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
@@ -922,15 +931,16 @@ export default function OnlineDraft3DScreen({
                     isSite={isSite}
                     x={pos.x}
                     z={pos.z}
+                    cardName={c.cardName ?? c.name ?? c.slug}
+                    cardType={c.type ?? null}
                     disabled={!amPicker}
                     onDragChange={setOrbitLocked}
                     rotationZ={pos.rot}
                     getTopRenderOrder={getTopRenderOrder}
-                    onHoverChange={(hover) => {
-                      if (hover && !orbitLocked)
-                        setHoverPreview({ slug: c.slug, name: c.cardName ?? c.name, type: c.type ?? null });
-                      else setHoverPreview(null);
+                    onHoverStart={(preview) => {
+                      if (!orbitLocked) setHoverPreview(preview ?? null);
                     }}
+                    onHoverEnd={() => setHoverPreview(null)}
                     onClick={() => {
                       if (!amPicker) return;
                       console.log(

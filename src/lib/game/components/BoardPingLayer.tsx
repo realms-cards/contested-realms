@@ -68,7 +68,7 @@ function PingMarker({
 export default function BoardPingLayer() {
   const boardPings = useGameStore((s) => s.boardPings);
   const removeBoardPing = useGameStore((s) => s.removeBoardPing);
-  const { playCardSelect } = useSound();
+  const { playPing } = useSound();
   const lastPingIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -78,11 +78,11 @@ export default function BoardPingLayer() {
 
     lastPingIdRef.current = latest.id;
     try {
-      playCardSelect();
+      playPing();
     } catch {
       // Ignore autoplay failures
     }
-  }, [boardPings, playCardSelect]);
+  }, [boardPings, playPing]);
 
   if (boardPings.length === 0) {
     return null;

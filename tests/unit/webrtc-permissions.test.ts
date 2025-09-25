@@ -1,446 +1,413 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  requestMediaPermissions,
-  checkMediaPermissions,
+  checkPermissionStatus,
+  checkWebRTCSupport,
   getAvailableDevices,
-  isPermissionGranted,
-  type MediaPermissionResult
+  getPermissionErrorMessage,
+  requestMediaPermissions,
+  testDeviceConstraints,
+  type DevicePermissionStatus
 } from '../../src/lib/utils/webrtc-permissions';
 
-// Mock navigator.mediaDevices
-const mockGetUserMedia = vi.fn();
-const mockEnumerateDevices = vi.fn();
+type MutableNavigator = Navigator & Record<string, unknown>;
+type MutableWindow = typeof window & Record<string, unknown>;
 
-Object.defineProperty(navigator, 'mediaDevices', {
-  value: {
+const navigatorRecord = navigator as MutableNavigator;
+const windowRecord = window as MutableWindow;
+
+const originalDescriptors = {
+  mediaDevices: Object.getOwnPropertyDescriptor(navigatorRecord, 'mediaDevices'),
+  permissions: Object.getOwnPropertyDescriptor(navigatorRecord, 'permissions'),
+  RTCPeerConnection: Object.getOwnPropertyDescriptor(windowRecord, 'RTCPeerConnection')
+};
+
+const defineProperty = <T>(target: Record<string, unknown>, key: string, value: T) => {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    writable: true,
+    value
+  });
+};
+
+const restoreProperty = (target: Record<string, unknown>, key: string, descriptor?: PropertyDescriptor) => {
+  if (descriptor) {
+    Object.defineProperty(target, key, descriptor);
+  } else {
+    Reflect.deleteProperty(target, key);
+  }
+};
+
+const removeProperty = (target: unknown, key: string) => {
+  Reflect.deleteProperty((target as Record<string, unknown>) ?? {}, key);
+};
+
+let mockGetUserMedia: ReturnType<typeof vi.fn>;
+let mockEnumerateDevices: ReturnType<typeof vi.fn>;
+let mockPermissionsQuery: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  mockGetUserMedia = vi.fn();
+  mockEnumerateDevices = vi.fn();
+  mockPermissionsQuery = vi.fn();
+
+  const defaultStream = {
+    getTracks: () => [{ stop: vi.fn() }]
+  } as unknown as MediaStream;
+
+  mockGetUserMedia.mockResolvedValue(defaultStream);
+  mockEnumerateDevices.mockResolvedValue([]);
+  mockPermissionsQuery.mockResolvedValue({ state: 'prompt' });
+
+  defineProperty(windowRecord, 'RTCPeerConnection', vi.fn());
+  defineProperty(navigatorRecord, 'mediaDevices', {
     getUserMedia: mockGetUserMedia,
-    enumerateDevices: mockEnumerateDevices,
-  },
-  writable: true,
+    enumerateDevices: mockEnumerateDevices
+  } satisfies Partial<MediaDevices>);
+  defineProperty(navigatorRecord, 'permissions', {
+    query: mockPermissionsQuery
+  });
 });
 
-// Mock permissions API
-const mockPermissionsQuery = vi.fn();
-Object.defineProperty(navigator, 'permissions', {
-  value: {
-    query: mockPermissionsQuery,
-  },
-  writable: true,
+afterEach(() => {
+  vi.restoreAllMocks();
+
+  restoreProperty(navigatorRecord, 'mediaDevices', originalDescriptors.mediaDevices);
+  restoreProperty(navigatorRecord, 'permissions', originalDescriptors.permissions);
+  restoreProperty(windowRecord, 'RTCPeerConnection', originalDescriptors.RTCPeerConnection);
 });
 
-describe('WebRTC Permissions Utilities', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('webrtc permission utilities', () => {
+  describe('checkWebRTCSupport()', () => {
+    it('reports full capabilities when browser APIs are available', () => {
+      const support = checkWebRTCSupport();
+
+      expect(support).toEqual({
+        hasCamera: true,
+        hasMicrophone: true,
+        hasDeviceSelection: true,
+        supportsConstraints: true
+      });
+    });
+
+    it('detects missing APIs and flags them as unsupported', () => {
+      removeProperty(windowRecord, 'RTCPeerConnection');
+      const mediaDevicesRecord = navigatorRecord.mediaDevices as unknown as Record<string, unknown>;
+      removeProperty(mediaDevicesRecord, 'getUserMedia');
+      removeProperty(mediaDevicesRecord, 'enumerateDevices');
+
+      const support = checkWebRTCSupport();
+
+      expect(support).toEqual({
+        hasCamera: false,
+        hasMicrophone: false,
+        hasDeviceSelection: false,
+        supportsConstraints: false
+      });
+    });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe('requestMediaPermissions', () => {
-    it('should request both audio and video permissions by default', async () => {
+  describe('requestMediaPermissions()', () => {
+    it('requests both audio and video by default', async () => {
       const mockStream = {
-        getVideoTracks: () => [{ kind: 'video', label: 'Camera' }],
-        getAudioTracks: () => [{ kind: 'audio', label: 'Microphone' }],
-        getTracks: () => [
-          { kind: 'video', label: 'Camera' },
-          { kind: 'audio', label: 'Microphone' }
-        ]
-      };
-
-      mockGetUserMedia.mockResolvedValue(mockStream);
+        getTracks: () => []
+      } as unknown as MediaStream;
+      mockGetUserMedia.mockResolvedValueOnce(mockStream);
 
       const result = await requestMediaPermissions();
 
-      expect(mockGetUserMedia).toHaveBeenCalledWith({
-        video: true,
-        audio: true,
-      });
-
-      expect(result).toEqual({
-        granted: true,
-        video: true,
-        audio: true,
-        stream: mockStream,
-        error: null,
-      });
+      expect(mockGetUserMedia).toHaveBeenCalledWith({ video: true, audio: true });
+      expect(result).toEqual({ success: true, stream: mockStream });
     });
 
-    it('should request only audio permissions when video is false', async () => {
-      const mockStream = {
-        getVideoTracks: () => [],
-        getAudioTracks: () => [{ kind: 'audio', label: 'Microphone' }],
-        getTracks: () => [{ kind: 'audio', label: 'Microphone' }]
-      };
-
-      mockGetUserMedia.mockResolvedValue(mockStream);
-
-      const result = await requestMediaPermissions({ video: false, audio: true });
-
-      expect(mockGetUserMedia).toHaveBeenCalledWith({
-        video: false,
-        audio: true,
-      });
-
-      expect(result).toEqual({
-        granted: true,
-        video: false,
-        audio: true,
-        stream: mockStream,
-        error: null,
-      });
-    });
-
-    it('should request only video permissions when audio is false', async () => {
-      const mockStream = {
-        getVideoTracks: () => [{ kind: 'video', label: 'Camera' }],
-        getAudioTracks: () => [],
-        getTracks: () => [{ kind: 'video', label: 'Camera' }]
-      };
-
-      mockGetUserMedia.mockResolvedValue(mockStream);
-
-      const result = await requestMediaPermissions({ video: true, audio: false });
-
-      expect(mockGetUserMedia).toHaveBeenCalledWith({
-        video: true,
-        audio: false,
-      });
-
-      expect(result).toEqual({
-        granted: true,
-        video: true,
-        audio: false,
-        stream: mockStream,
-        error: null,
-      });
-    });
-
-    it('should handle permission denial gracefully', async () => {
-      const permissionError = new Error('Permission denied');
+    it('maps permission denial errors to friendly messages', async () => {
+      const permissionError = new Error('permission denied');
       permissionError.name = 'NotAllowedError';
-
-      mockGetUserMedia.mockRejectedValue(permissionError);
+      mockGetUserMedia.mockRejectedValueOnce(permissionError);
 
       const result = await requestMediaPermissions();
 
       expect(result).toEqual({
-        granted: false,
-        video: false,
-        audio: false,
-        stream: null,
-        error: permissionError,
+        success: false,
+        error: 'Permission denied. Please allow camera and microphone access.'
       });
     });
 
-    it('should handle device not found error', async () => {
-      const deviceError = new Error('Device not found');
-      deviceError.name = 'NotFoundError';
-
-      mockGetUserMedia.mockRejectedValue(deviceError);
+    it('reports unsupported browsers without calling getUserMedia', async () => {
+      removeProperty(windowRecord, 'RTCPeerConnection');
+      const mediaDevicesRecord = navigatorRecord.mediaDevices as unknown as Record<string, unknown>;
+      removeProperty(mediaDevicesRecord, 'getUserMedia');
 
       const result = await requestMediaPermissions();
 
+      expect(mockGetUserMedia).not.toHaveBeenCalled();
       expect(result).toEqual({
-        granted: false,
-        video: false,
-        audio: false,
-        stream: null,
-        error: deviceError,
+        success: false,
+        error: 'WebRTC not supported in this browser'
       });
     });
 
-    it('should handle overconstrained error', async () => {
-      const constraintError = new Error('Overconstrained');
-      constraintError.name = 'OverconstrainedError';
-
-      mockGetUserMedia.mockRejectedValue(constraintError);
+    it('wraps generic errors with the original message', async () => {
+      const genericError = new Error('kaput');
+      mockGetUserMedia.mockRejectedValueOnce(genericError);
 
       const result = await requestMediaPermissions();
 
       expect(result).toEqual({
-        granted: false,
-        video: false,
-        audio: false,
-        stream: null,
-        error: constraintError,
+        success: false,
+        error: 'Media access failed: kaput'
       });
     });
   });
 
-  describe('checkMediaPermissions', () => {
-    it('should check permissions using permissions API when available', async () => {
+  describe('checkPermissionStatus()', () => {
+    it('uses Permissions API states when available', async () => {
       mockPermissionsQuery
-        .mockResolvedValueOnce({ state: 'granted' }) // camera
-        .mockResolvedValueOnce({ state: 'granted' }); // microphone
+        .mockResolvedValueOnce({ state: 'granted' })
+        .mockResolvedValueOnce({ state: 'granted' });
 
-      const result = await checkMediaPermissions();
+      const status = await checkPermissionStatus();
 
-      expect(mockPermissionsQuery).toHaveBeenCalledWith({ name: 'camera' });
-      expect(mockPermissionsQuery).toHaveBeenCalledWith({ name: 'microphone' });
-
-      expect(result).toEqual({
-        video: 'granted',
-        audio: 'granted',
+      expect(status).toEqual({
+        camera: 'granted',
+        microphone: 'granted',
+        overall: 'granted'
       });
     });
 
-    it('should handle denied permissions', async () => {
+    it('marks overall state as denied when any permission is denied', async () => {
       mockPermissionsQuery
-        .mockResolvedValueOnce({ state: 'denied' }) // camera
-        .mockResolvedValueOnce({ state: 'granted' }); // microphone
+        .mockResolvedValueOnce({ state: 'denied' })
+        .mockResolvedValueOnce({ state: 'granted' });
 
-      const result = await checkMediaPermissions();
+      const status = await checkPermissionStatus();
 
-      expect(result).toEqual({
-        video: 'denied',
-        audio: 'granted',
+      expect(status).toEqual({
+        camera: 'denied',
+        microphone: 'granted',
+        overall: 'denied'
       });
     });
 
-    it('should handle prompt state', async () => {
-      mockPermissionsQuery
-        .mockResolvedValueOnce({ state: 'prompt' }) // camera
-        .mockResolvedValueOnce({ state: 'prompt' }); // microphone
+    it('falls back to device labels when Permissions API is missing', async () => {
+      removeProperty(navigatorRecord, 'permissions');
 
-      const result = await checkMediaPermissions();
+      mockEnumerateDevices.mockResolvedValueOnce([
+        { deviceId: 'cam', kind: 'videoinput', label: '', groupId: '1' }
+      ] as MediaDeviceInfo[]);
 
-      expect(result).toEqual({
-        video: 'prompt',
-        audio: 'prompt',
+      const promptStatus = await checkPermissionStatus();
+      expect(promptStatus).toEqual({
+        camera: 'prompt',
+        microphone: 'prompt',
+        overall: 'prompt'
+      });
+
+      mockEnumerateDevices.mockResolvedValueOnce([
+        { deviceId: 'cam', kind: 'videoinput', label: 'Camera', groupId: '1' }
+      ] as MediaDeviceInfo[]);
+
+      const grantedStatus = await checkPermissionStatus();
+      expect(grantedStatus).toEqual({
+        camera: 'granted',
+        microphone: 'granted',
+        overall: 'granted'
       });
     });
 
-    it('should fallback to unknown when permissions API fails', async () => {
-      mockPermissionsQuery.mockRejectedValue(new Error('Permissions API not supported'));
+    it('returns unsupported when core WebRTC APIs are absent', async () => {
+      removeProperty(windowRecord, 'RTCPeerConnection');
+      const mediaDevicesRecord = navigatorRecord.mediaDevices as unknown as Record<string, unknown>;
+      removeProperty(mediaDevicesRecord, 'getUserMedia');
 
-      const result = await checkMediaPermissions();
+      const status = await checkPermissionStatus();
 
-      expect(result).toEqual({
-        video: 'unknown',
-        audio: 'unknown',
-      });
-    });
-
-    it('should fallback to unknown when permissions API is not available', async () => {
-      // Temporarily remove permissions API
-      const originalPermissions = navigator.permissions;
-      // @ts-expect-error - Intentionally setting to undefined for test
-      navigator.permissions = undefined;
-
-      const result = await checkMediaPermissions();
-
-      expect(result).toEqual({
-        video: 'unknown',
-        audio: 'unknown',
-      });
-
-      // Restore permissions API
-      Object.defineProperty(navigator, 'permissions', {
-        value: originalPermissions,
-        writable: true,
+      expect(status).toEqual({
+        camera: 'unsupported',
+        microphone: 'unsupported',
+        overall: 'unsupported'
       });
     });
   });
 
-  describe('getAvailableDevices', () => {
-    it('should enumerate available media devices', async () => {
-      const mockDevices = [
-        { deviceId: 'camera1', kind: 'videoinput', label: 'Built-in Camera', groupId: 'group1' },
-        { deviceId: 'mic1', kind: 'audioinput', label: 'Built-in Microphone', groupId: 'group2' },
-        { deviceId: 'speaker1', kind: 'audiooutput', label: 'Built-in Speakers', groupId: 'group3' },
-      ];
+  describe('getAvailableDevices()', () => {
+    it('returns available inputs when permissions are granted', async () => {
+      mockPermissionsQuery.mockResolvedValue({ state: 'granted' });
 
-      mockEnumerateDevices.mockResolvedValue(mockDevices);
+      const devices = [
+        { deviceId: 'cam', kind: 'videoinput', label: 'Camera', groupId: '1' },
+        { deviceId: 'mic', kind: 'audioinput', label: 'Microphone', groupId: '2' },
+        { deviceId: 'spk', kind: 'audiooutput', label: 'Speakers', groupId: '3' }
+      ] as MediaDeviceInfo[];
 
-      const result = await getAvailableDevices();
-
-      expect(mockEnumerateDevices).toHaveBeenCalled();
-      expect(result).toEqual({
-        videoDevices: [mockDevices[0]],
-        audioInputDevices: [mockDevices[1]],
-        audioOutputDevices: [mockDevices[2]],
-        allDevices: mockDevices,
-      });
-    });
-
-    it('should handle empty device list', async () => {
-      mockEnumerateDevices.mockResolvedValue([]);
+      mockEnumerateDevices.mockResolvedValue(devices);
 
       const result = await getAvailableDevices();
 
-      expect(result).toEqual({
-        videoDevices: [],
-        audioInputDevices: [],
-        audioOutputDevices: [],
-        allDevices: [],
-      });
+      expect(result.videoInputs).toEqual([devices[0]]);
+      expect(result.audioInputs).toEqual([devices[1]]);
+      expect(result.hasPermissions).toBe(true);
+      expect(result.error).toBeUndefined();
     });
 
-    it('should handle enumerate devices error', async () => {
+    it('requests permissions and stops test tracks when labels are missing', async () => {
+      const stop = vi.fn();
+      const stream = {
+        getTracks: () => [{ stop }]
+      } as unknown as MediaStream;
+
+      mockGetUserMedia.mockResolvedValueOnce(stream);
+
+      mockEnumerateDevices
+        .mockResolvedValueOnce([
+          { deviceId: 'cam', kind: 'videoinput', label: '', groupId: '1' },
+          { deviceId: 'mic', kind: 'audioinput', label: '', groupId: '2' }
+        ] as MediaDeviceInfo[])
+        .mockResolvedValueOnce([
+          { deviceId: 'cam', kind: 'videoinput', label: 'Camera', groupId: '1' },
+          { deviceId: 'mic', kind: 'audioinput', label: 'Microphone', groupId: '2' }
+        ] as MediaDeviceInfo[]);
+
+      const result = await getAvailableDevices();
+
+      expect(mockGetUserMedia).toHaveBeenCalledTimes(1);
+      expect(stop).toHaveBeenCalled();
+      expect(result.hasPermissions).toBe(true);
+      expect(result.videoInputs[0].label).toBe('Camera');
+      expect(result.audioInputs[0].label).toBe('Microphone');
+    });
+
+    it('returns an error payload when enumeration fails', async () => {
       const enumerateError = new Error('Cannot enumerate devices');
-      mockEnumerateDevices.mockRejectedValue(enumerateError);
-
-      await expect(getAvailableDevices()).rejects.toThrow('Cannot enumerate devices');
-    });
-
-    it('should filter devices by type correctly', async () => {
-      const mockDevices = [
-        { deviceId: 'camera1', kind: 'videoinput', label: 'Camera 1', groupId: 'group1' },
-        { deviceId: 'camera2', kind: 'videoinput', label: 'Camera 2', groupId: 'group2' },
-        { deviceId: 'mic1', kind: 'audioinput', label: 'Microphone 1', groupId: 'group3' },
-        { deviceId: 'mic2', kind: 'audioinput', label: 'Microphone 2', groupId: 'group4' },
-        { deviceId: 'speaker1', kind: 'audiooutput', label: 'Speaker 1', groupId: 'group5' },
-        { deviceId: 'unknown', kind: 'unknown', label: 'Unknown Device', groupId: 'group6' },
-      ];
-
-      mockEnumerateDevices.mockResolvedValue(mockDevices);
+      mockEnumerateDevices.mockRejectedValueOnce(enumerateError);
 
       const result = await getAvailableDevices();
 
-      expect(result.videoDevices).toHaveLength(2);
-      expect(result.audioInputDevices).toHaveLength(2);
-      expect(result.audioOutputDevices).toHaveLength(1);
-      expect(result.allDevices).toHaveLength(6);
-
-      expect(result.videoDevices[0].kind).toBe('videoinput');
-      expect(result.audioInputDevices[0].kind).toBe('audioinput');
-      expect(result.audioOutputDevices[0].kind).toBe('audiooutput');
-    });
-  });
-
-  describe('isPermissionGranted', () => {
-    it('should return true for granted permission', () => {
-      expect(isPermissionGranted('granted')).toBe(true);
-    });
-
-    it('should return false for denied permission', () => {
-      expect(isPermissionGranted('denied')).toBe(false);
-    });
-
-    it('should return false for prompt permission', () => {
-      expect(isPermissionGranted('prompt')).toBe(false);
-    });
-
-    it('should return false for unknown permission', () => {
-      expect(isPermissionGranted('unknown')).toBe(false);
-    });
-
-    it('should return false for undefined permission', () => {
-      expect(isPermissionGranted(undefined)).toBe(false);
-    });
-  });
-
-  describe('Edge cases and error handling', () => {
-    it('should handle getUserMedia not available', async () => {
-      // Temporarily remove getUserMedia
-      const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
-      // @ts-expect-error - Intentionally setting to undefined for test
-      navigator.mediaDevices.getUserMedia = undefined;
-
-      await expect(requestMediaPermissions()).rejects.toThrow();
-
-      // Restore getUserMedia
-      navigator.mediaDevices.getUserMedia = originalGetUserMedia;
-    });
-
-    it('should handle mediaDevices not available', async () => {
-      // Temporarily remove mediaDevices
-      const originalMediaDevices = navigator.mediaDevices;
-      // @ts-expect-error - Intentionally setting to undefined for test
-      navigator.mediaDevices = undefined;
-
-      await expect(requestMediaPermissions()).rejects.toThrow();
-
-      // Restore mediaDevices
-      Object.defineProperty(navigator, 'mediaDevices', {
-        value: originalMediaDevices,
-        writable: true,
+      expect(result).toEqual({
+        audioInputs: [],
+        videoInputs: [],
+        hasPermissions: false,
+        error: 'Cannot enumerate devices'
       });
     });
 
-    it('should handle constraint validation', async () => {
-      const mockStream = {
-        getVideoTracks: () => [{ kind: 'video', label: 'Camera' }],
-        getAudioTracks: () => [{ kind: 'audio', label: 'Microphone' }],
-        getTracks: () => [
-          { kind: 'video', label: 'Camera' },
-          { kind: 'audio', label: 'Microphone' }
-        ]
-      };
+    it('handles browsers without enumerateDevices support', async () => {
+      const mediaDevicesRecord = navigatorRecord.mediaDevices as unknown as Record<string, unknown>;
+      removeProperty(mediaDevicesRecord, 'enumerateDevices');
 
-      mockGetUserMedia.mockResolvedValue(mockStream);
+      const result = await getAvailableDevices();
 
-      const result = await requestMediaPermissions({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: { sampleRate: 44100 }
+      expect(result).toEqual({
+        audioInputs: [],
+        videoInputs: [],
+        hasPermissions: false,
+        error: 'Device enumeration not supported'
       });
-
-      expect(mockGetUserMedia).toHaveBeenCalledWith({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: { sampleRate: 44100 }
-      });
-
-      expect(result.granted).toBe(true);
     });
-  });
 
-  describe('Integration scenarios', () => {
-    it('should handle permission flow for audio-only mode', async () => {
-      // First check current permissions
+    it('does not prompt for permissions when previously denied', async () => {
       mockPermissionsQuery
-        .mockResolvedValueOnce({ state: 'prompt' }) // camera
-        .mockResolvedValueOnce({ state: 'prompt' }); // microphone
+        .mockResolvedValueOnce({ state: 'denied' })
+        .mockResolvedValueOnce({ state: 'denied' });
 
-      const permissionCheck = await checkMediaPermissions();
-      expect(permissionCheck.audio).toBe('prompt');
+      const devices = [
+        { deviceId: 'cam', kind: 'videoinput', label: '', groupId: '1' }
+      ] as MediaDeviceInfo[];
 
-      // Then request only audio
-      const mockStream = {
-        getVideoTracks: () => [],
-        getAudioTracks: () => [{ kind: 'audio', label: 'Microphone' }],
-        getTracks: () => [{ kind: 'audio', label: 'Microphone' }]
-      };
+      mockEnumerateDevices.mockResolvedValueOnce(devices);
 
-      mockGetUserMedia.mockResolvedValue(mockStream);
+      const result = await getAvailableDevices();
 
-      const result = await requestMediaPermissions({ video: false, audio: true });
+      expect(mockGetUserMedia).not.toHaveBeenCalled();
+      expect(result.hasPermissions).toBe(false);
+      expect(result.videoInputs).toEqual(devices);
+    });
+  });
 
-      expect(result.granted).toBe(true);
-      expect(result.audio).toBe(true);
-      expect(result.video).toBe(false);
+  describe('testDeviceConstraints()', () => {
+    it('returns success when constraints can be satisfied', async () => {
+      const stop = vi.fn();
+      mockGetUserMedia.mockResolvedValueOnce({
+        getTracks: () => [{ stop }]
+      } as unknown as MediaStream);
+
+      const result = await testDeviceConstraints({ video: true });
+
+      expect(mockGetUserMedia).toHaveBeenCalledWith({ video: true });
+      expect(stop).toHaveBeenCalled();
+      expect(result).toEqual({ success: true });
     });
 
-    it('should handle device enumeration after permission grant', async () => {
-      // Request permissions first
-      const mockStream = {
-        getVideoTracks: () => [{ kind: 'video', label: 'Camera' }],
-        getAudioTracks: () => [{ kind: 'audio', label: 'Microphone' }],
-        getTracks: () => [
-          { kind: 'video', label: 'Camera' },
-          { kind: 'audio', label: 'Microphone' }
-        ]
+    it('maps overconstrained errors to a helpful message', async () => {
+      const overconstrained = new Error('bad constraints');
+      overconstrained.name = 'OverconstrainedError';
+      mockGetUserMedia.mockRejectedValueOnce(overconstrained);
+
+      const result = await testDeviceConstraints({ video: { deviceId: 'missing' } });
+
+      expect(result).toEqual({
+        success: false,
+        error: 'The specified device or constraints are not available.'
+      });
+    });
+
+    it('includes original messages for generic failures', async () => {
+      const generic = new Error('fail');
+      mockGetUserMedia.mockRejectedValueOnce(generic);
+
+      const result = await testDeviceConstraints({ audio: true });
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Constraint test failed: fail'
+      });
+    });
+  });
+
+  describe('getPermissionErrorMessage()', () => {
+    it('returns null when permissions are granted', () => {
+      const status: DevicePermissionStatus = {
+        camera: 'granted',
+        microphone: 'granted',
+        overall: 'granted'
       };
 
-      mockGetUserMedia.mockResolvedValue(mockStream);
+      expect(getPermissionErrorMessage(status)).toBeNull();
+    });
 
-      const permissionResult = await requestMediaPermissions();
-      expect(permissionResult.granted).toBe(true);
+    it('describes unsupported browsers', () => {
+      const status: DevicePermissionStatus = {
+        camera: 'unsupported',
+        microphone: 'unsupported',
+        overall: 'unsupported'
+      };
 
-      // Then enumerate devices
-      const mockDevices = [
-        { deviceId: 'camera1', kind: 'videoinput', label: 'Built-in Camera', groupId: 'group1' },
-        { deviceId: 'mic1', kind: 'audioinput', label: 'Built-in Microphone', groupId: 'group2' },
-      ];
+      const message = getPermissionErrorMessage(status);
+      expect(message).toContain('does not support');
+    });
 
-      mockEnumerateDevices.mockResolvedValue(mockDevices);
+    it('lists denied devices in the guidance copy', () => {
+      const status: DevicePermissionStatus = {
+        camera: 'denied',
+        microphone: 'prompt',
+        overall: 'denied'
+      };
 
-      const devices = await getAvailableDevices();
-      expect(devices.videoDevices).toHaveLength(1);
-      expect(devices.audioInputDevices).toHaveLength(1);
+      const message = getPermissionErrorMessage(status, { video: true, audio: false });
+      expect(message).toContain('camera');
+    });
+
+    it('prompts the user when permissions are pending', () => {
+      const status: DevicePermissionStatus = {
+        camera: 'prompt',
+        microphone: 'prompt',
+        overall: 'prompt'
+      };
+
+      const message = getPermissionErrorMessage(status, { video: true, audio: true });
+      expect(message).toContain('Please allow access to your');
     });
   });
 });

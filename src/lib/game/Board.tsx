@@ -37,7 +37,7 @@ import {
   DRAG_HOLD_MS,
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef, BoardState, PlayerKey } from "@/lib/game/store";
+import type { CardRef, BoardState } from "@/lib/game/store";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
@@ -59,6 +59,7 @@ interface PlaymatProps {
 
 interface BoardProps {
   noRaycast?: boolean;
+  enableBoardPings?: boolean;
 }
 
 const DEFAULT_BOARD_STATE: BoardState = { size: { w: 5, h: 4 }, sites: {} };
@@ -93,7 +94,10 @@ function Playmat({ matW, matH }: PlaymatProps) {
   );
 }
 
-export default function Board({ noRaycast = false }: BoardProps = {}) {
+export default function Board({
+  noRaycast = false,
+  enableBoardPings = false,
+}: BoardProps = {}) {
   const boardState = useGameStore((s) => s.board);
   const board = boardState ?? DEFAULT_BOARD_STATE;
   const showGrid = useGameStore((s) => s.showGridOverlay);
@@ -104,19 +108,13 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   );
   const setPermanentOffset = useGameStore((s) => s.setPermanentOffset);
   const moveAvatarToWithOffset = useGameStore((s) => s.moveAvatarToWithOffset);
-  const openContextMenu = useGameStore((s) => s.openContextMenu);
   const contextMenu = useGameStore((s) => s.contextMenu);
+  const openContextMenu = useGameStore((s) => s.openContextMenu);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
   const permanentPositions = useGameStore((s) => s.permanentPositions);
-  const avatars = useGameStore((s) => s.avatars);
-  const lastAvatarCardsRef = useRef<Record<PlayerKey, CardRef | null>>({
-    p1: null,
-    p2: null,
-  });
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
-  // hover tracking disabled for tiles
+  const { playCardPlay, playTurnGong } = useSound();
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   // Hand visibility state to disable glows when hand is shown
   const mouseInHandZone = useGameStore((s) => s.mouseInHandZone);
@@ -128,6 +126,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const setLastPointerWorldPos = useGameStore((s) => s.setLastPointerWorldPos);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
   // Counter actions
   const incrementPermanentCounter = useGameStore(
     (s) => s.incrementPermanentCounter
@@ -135,7 +134,6 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const decrementPermanentCounter = useGameStore(
     (s) => s.decrementPermanentCounter
   );
-  const { playCardPlay } = useSound();
 
   // Token attachment dialog state
   const [attachmentDialog, setAttachmentDialog] = useState<{
@@ -249,6 +247,22 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const offsetY = -((board.size.h - 1) * TILE_SIZE) / 2;
 
   // Local drag state for moving permanents across tiles
+  const lastTurnPlayerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const seat = currentPlayer;
+    if (lastTurnPlayerRef.current == null) {
+      lastTurnPlayerRef.current = seat;
+      return;
+    }
+    if (lastTurnPlayerRef.current !== seat) {
+      try {
+        playTurnGong();
+      } catch {}
+      lastTurnPlayerRef.current = seat;
+    }
+  }, [currentPlayer, playTurnGong]);
+
   const [dragging, setDragging] = useState<{
     from: string;
     index: number;
@@ -264,6 +278,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   } | null>(null);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const selectAvatar = useGameStore((s) => s.selectAvatar);
+  const avatars = useGameStore((s) => s.avatars);
+  const lastAvatarCardsRef = useRef<Record<"p1" | "p2", CardRef | null>>({
+    p1: null,
+    p2: null,
+  });
   const lastDropAt = useRef<number>(0);
   const dragStartRef = useRef<{
     at: string;
@@ -1138,12 +1157,10 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                           e.stopPropagation();
                           e.nativeEvent.preventDefault();
                           useGameStore.getState().selectPermanent(key, idx);
-                          useGameStore
-                            .getState()
-                            .openContextMenu(
-                              { kind: "permanent", at: key, index: idx },
-                              { x: e.clientX, y: e.clientY }
-                            );
+                          openContextMenu(
+                            { kind: "permanent", at: key, index: idx },
+                            { x: e.clientX, y: e.clientY }
+                          );
                         }}
                         onPointerUp={(e) => {
                           if (e.button !== 0) return; // ignore non-left button releases
@@ -1247,12 +1264,10 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                             e.nativeEvent.preventDefault();
                             // Ensure the permanent is selected before opening the menu
                             useGameStore.getState().selectPermanent(key, idx);
-                            useGameStore
-                              .getState()
-                              .openContextMenu(
-                                { kind: "permanent", at: key, index: idx },
-                                { x: e.clientX, y: e.clientY }
-                              );
+                            openContextMenu(
+                              { kind: "permanent", at: key, index: idx },
+                              { x: e.clientX, y: e.clientY }
+                            );
                           }}
                         >
                           {isToken ? (
@@ -1459,7 +1474,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
       </group>
 
       {/* Board ping markers */}
-      <BoardPingLayer />
+      {enableBoardPings ? <BoardPingLayer /> : null}
 
       {/* Avatars */}
       {(["p1", "p2"] as const).map((who) => {

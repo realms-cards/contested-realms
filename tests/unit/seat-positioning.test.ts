@@ -16,6 +16,7 @@ import {
   type SeatPosition,
   type PlayerPositions
 } from '../../src/lib/utils/seat-positioning';
+import { TILE_SIZE } from '../../src/lib/game/constants';
 
 describe('Seat Positioning Utilities', () => {
   const standardBoard: BoardDimensions = { width: 7, height: 5 };
@@ -25,23 +26,31 @@ describe('Seat Positioning Utilities', () => {
     it('should calculate transform for player 1 at default position', () => {
       const result = calculateSeatTransform('p1', standardBoard);
 
-      expect(result.position.x).toBe(0); // Centered on X axis
-      expect(result.position.y).toBe(0.02); // Default seat height
-      expect(result.position.z).toBeCloseTo(0.6, 1); // South of center
+      const expectedX = 0;
+      const centerWorldZ = -((standardBoard.height - 1) * TILE_SIZE) / 2 + boardCenter.z * TILE_SIZE;
+      const expectedZ = centerWorldZ + 3 * TILE_SIZE;
+      const expectedRotation = Math.atan2(0 - expectedX, 0 - expectedZ);
 
-      // Should face toward center (0,0,0)
-      expect(result.rotationY).toBeCloseTo(Math.PI, 1);
+      expect(result.position.x).toBeCloseTo(expectedX, 5);
+      expect(result.position.y).toBe(0.02); // Default seat height
+      expect(result.position.z).toBeCloseTo(expectedZ, 5);
+      expect(Math.cos(result.rotationY)).toBeCloseTo(Math.cos(expectedRotation), 5);
+      expect(Math.sin(result.rotationY)).toBeCloseTo(Math.sin(expectedRotation), 5);
     });
 
     it('should calculate transform for player 2 at default position', () => {
       const result = calculateSeatTransform('p2', standardBoard);
 
-      expect(result.position.x).toBe(0); // Centered on X axis
-      expect(result.position.y).toBe(0.02); // Default seat height
-      expect(result.position.z).toBeCloseTo(-0.6, 1); // North of center
+      const expectedX = 0;
+      const centerWorldZ = -((standardBoard.height - 1) * TILE_SIZE) / 2 + boardCenter.z * TILE_SIZE;
+      const expectedZ = centerWorldZ - 3 * TILE_SIZE;
+      const expectedRotation = Math.atan2(0 - expectedX, 0 - expectedZ);
 
-      // Should face toward center (0,0,0)
-      expect(result.rotationY).toBeCloseTo(0, 1);
+      expect(result.position.x).toBeCloseTo(expectedX, 5);
+      expect(result.position.y).toBe(0.02); // Default seat height
+      expect(result.position.z).toBeCloseTo(expectedZ, 5);
+      expect(Math.cos(result.rotationY)).toBeCloseTo(Math.cos(expectedRotation), 5);
+      expect(Math.sin(result.rotationY)).toBeCloseTo(Math.sin(expectedRotation), 5);
     });
 
     it('should use custom player positions when provided', () => {
@@ -81,15 +90,18 @@ describe('Seat Positioning Utilities', () => {
       expect(result.rotationY).toBeCloseTo(-Math.PI / 2, 1);
     });
 
-    it('should handle different board sizes', () => {
+    it('should keep seats three tiles away from board center regardless of size', () => {
       const largeBoard: BoardDimensions = { width: 15, height: 11 };
       const smallBoard: BoardDimensions = { width: 3, height: 3 };
 
       const largeResult = calculateSeatTransform('p1', largeBoard);
       const smallResult = calculateSeatTransform('p1', smallBoard);
 
-      // Large board should have seats further from center
-      expect(Math.abs(largeResult.position.z)).toBeGreaterThan(Math.abs(smallResult.position.z));
+      const largeCenterWorldZ = -((largeBoard.height - 1) * TILE_SIZE) / 2 + ((largeBoard.height - 1) / 2) * TILE_SIZE;
+      const smallCenterWorldZ = -((smallBoard.height - 1) * TILE_SIZE) / 2 + ((smallBoard.height - 1) / 2) * TILE_SIZE;
+
+      expect(Math.abs(largeResult.position.z - largeCenterWorldZ)).toBeCloseTo(3 * TILE_SIZE, 5);
+      expect(Math.abs(smallResult.position.z - smallCenterWorldZ)).toBeCloseTo(3 * TILE_SIZE, 5);
     });
   });
 
@@ -269,8 +281,8 @@ describe('Seat Positioning Utilities', () => {
       const seatPos: SeatPosition = { x: 0, z: 5 }; // South of center
       const angle = calculateOptimalViewingAngle(seatPos, boardCenter, standardBoard);
 
-      // Should be looking roughly north (toward positive Z)
-      expect(angle).toBeCloseTo(0, 1);
+      const expected = Math.atan2(boardCenter.x - seatPos.x, boardCenter.z - seatPos.z);
+      expect(angle).toBeCloseTo(expected, 5);
     });
 
     it('should adjust for wide boards', () => {
@@ -279,10 +291,10 @@ describe('Seat Positioning Utilities', () => {
       const seatPos: SeatPosition = { x: 9.5, z: 6 };
 
       const angle = calculateOptimalViewingAngle(seatPos, wideBoardCenter, wideBoard);
-      
-      // Should have some adjustment for the wide aspect ratio
-      expect(typeof angle).toBe('number');
-      expect(Math.abs(angle)).toBeLessThan(Math.PI);
+
+      const base = Math.atan2(wideBoardCenter.x - seatPos.x, wideBoardCenter.z - seatPos.z);
+      const expected = base + Math.sin(base) * 0.2;
+      expect(angle).toBeCloseTo(expected, 5);
     });
 
     it('should adjust for tall boards', () => {
@@ -291,10 +303,10 @@ describe('Seat Positioning Utilities', () => {
       const seatPos: SeatPosition = { x: 6, z: 9.5 };
 
       const angle = calculateOptimalViewingAngle(seatPos, tallBoardCenter, tallBoard);
-      
-      // Should have adjustment for tall aspect ratio
-      expect(typeof angle).toBe('number');
-      expect(Math.abs(angle)).toBeLessThan(Math.PI);
+
+      const base = Math.atan2(tallBoardCenter.x - seatPos.x, tallBoardCenter.z - seatPos.z);
+      const expected = base + Math.cos(base) * 0.2;
+      expect(angle).toBeCloseTo(expected, 5);
     });
 
     it('should handle square boards normally', () => {
@@ -303,9 +315,9 @@ describe('Seat Positioning Utilities', () => {
       const seatPos: SeatPosition = { x: 3.5, z: 7 };
 
       const angle = calculateOptimalViewingAngle(seatPos, squareBoardCenter, squareBoard);
-      
-      // Should be close to basic angle calculation
-      expect(angle).toBeCloseTo(0, 1);
+
+      const expected = Math.atan2(squareBoardCenter.x - seatPos.x, squareBoardCenter.z - seatPos.z);
+      expect(angle).toBeCloseTo(expected, 5);
     });
   });
 
@@ -389,11 +401,10 @@ describe('Seat Positioning Utilities', () => {
 
     it('should handle different board sizes', () => {
       const largeBoard: BoardDimensions = { width: 30, height: 20 };
-      const position: SeatPosition = { x: 15, z: 10 };
+      const position: SeatPosition = { x: 15, z: 14 };
 
       const result = validateSeatPosition(position, largeBoard);
-      
-      // Position that would be invalid for small board should be valid for large board
+
       expect(result.valid).toBe(true);
     });
   });

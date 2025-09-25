@@ -388,10 +388,16 @@ export function useDeckPersistence(sessionId: string, playerId: string): UseDeck
 /**
  * Hook for managing submission coordination
  */
-export function useSubmissionCoordination(_sessionId: string, _playerId: string): UseSubmissionCoordinationReturn {
+export function useSubmissionCoordination(sessionId: string, playerId: string): UseSubmissionCoordinationReturn {
   const waitingManagerRef = useRef<WaitingStateManager | null>(null);
   const socketHandlerRef = useRef<SubmissionSocketHandler | null>(null);
   const [submissionDeadline, setSubmissionDeadline] = useState<number | null>(null);
+  const sessionInfoRef = useRef({ sessionId, playerId });
+
+  // Keep latest identifiers available for logging/debugging even if callbacks don't re-run
+  useEffect(() => {
+    sessionInfoRef.current = { sessionId, playerId };
+  }, [sessionId, playerId]);
 
   // Initialize waiting manager
   useEffect(() => {
@@ -401,7 +407,14 @@ export function useSubmissionCoordination(_sessionId: string, _playerId: string)
   }, []);
 
   const startSubmissionWaiting = useCallback((players: string[]) => {
-    if (!socketHandlerRef.current) return;
+    if (!socketHandlerRef.current) {
+      const { sessionId: currentSessionId, playerId: currentPlayerId } = sessionInfoRef.current;
+      console.warn(
+        `[useSubmissionCoordination] No SubmissionSocketHandler attached for session ${currentSessionId} (player ${currentPlayerId}). ` +
+          'Skipping startSubmissionWaiting. Attach a handler or route coordination via event bus.'
+      );
+      return;
+    }
 
     console.log(`[useSubmissionCoordination] Starting submission waiting for ${players.length} players`);
     socketHandlerRef.current.startSubmissionWaiting(players);
@@ -411,7 +424,14 @@ export function useSubmissionCoordination(_sessionId: string, _playerId: string)
   }, []);
 
   const updateSubmissionStatus = useCallback((status: PlayerStatus, progress?: Record<string, unknown>) => {
-    if (!socketHandlerRef.current) return;
+    if (!socketHandlerRef.current) {
+      const { sessionId: currentSessionId, playerId: currentPlayerId } = sessionInfoRef.current;
+      console.warn(
+        `[useSubmissionCoordination] No SubmissionSocketHandler attached for session ${currentSessionId} (player ${currentPlayerId}). ` +
+          'Skipping updateSubmissionStatus. Attach a handler or route coordination via event bus.'
+      );
+      return;
+    }
 
     console.log(`[useSubmissionCoordination] Updating submission status: ${status}`);
     socketHandlerRef.current.updateSubmissionStatus(status, progress);

@@ -835,6 +835,13 @@ export default function Draft3DPage() {
                   .includes("site")}
                 x={staged.x}
                 z={staged.z}
+                cardId={currentPacks[0]?.[staged.idx]?.cardId}
+                cardName={
+                  currentPacks[0]?.[staged.idx]?.cardName ??
+                  currentPacks[0]?.[staged.idx]?.slug ??
+                  ""
+                }
+                cardType={currentPacks[0]?.[staged.idx]?.type ?? null}
                 onDrop={(wx, wz) => {
                   setStaged((prev) =>
                     prev && prev.idx === staged.idx
@@ -845,23 +852,19 @@ export default function Draft3DPage() {
                 onDragChange={setOrbitLocked}
                 getTopRenderOrder={getTopRenderOrder}
                 lockUpright
-                onHoverChange={(hover) => {
-                  if (hover && !orbitLocked) {
-                    const c = currentPacks[0]?.[staged.idx];
-                    showCardPreview({
-                      slug: c?.slug || "",
-                      name: c?.cardName || "",
-                      type: c?.type || null,
-                    });
-                  }
-                  // Don't call hideCardPreview on hover end - let natural timeout handle it
-                  // This prevents premature clearing due to pointer event instability in 3D
+                onHoverStart={(preview) => {
+                  if (!preview || orbitLocked) return;
+                  showCardPreview(preview);
+                }}
+                onHoverEnd={() => {
+                  hideCardPreview();
                 }}
                 onRelease={(wx, wz) => {
                   const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
                   if (d <= PICK_RADIUS) {
                     // Move back into radius -> unstage
                     setStaged(null);
+                    hideCardPreview();
                   }
                 }}
                 // For draft session, prefer raster textures for lower cost and faster churn

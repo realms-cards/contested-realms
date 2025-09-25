@@ -72,7 +72,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
 
   // Initialize preparation and statistics hooks for current tournament
   // Use a fallback ID to avoid conditional hook calls
-  const preparationId = currentTournament?.id || 'placeholder';
+  const preparationId = currentTournament?.id ?? null;
   const preparation = useTournamentPreparation(preparationId);
   const statistics = useTournamentStatistics(preparationId);
   
@@ -85,7 +85,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     action: () => Promise<T>,
     optimisticUpdate?: () => void,
     revertUpdate?: () => void
-  ) => {
+  ): (() => Promise<T>) => {
     return async (): Promise<T> => {
       setLoading(true);
       setError(null);
@@ -109,33 +109,6 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         setLoading(false);
       }
     };
-  }, []);
-
-  const createTournament = useCallback(async (config: {
-    name: string;
-    format: 'sealed' | 'draft' | 'constructed';
-    maxPlayers: number;
-    settings?: Record<string, unknown>;
-  }) => {
-    return withOptimisticUpdate(async () => {
-      
-      const response = await fetch('/api/tournaments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create tournament');
-      }
-
-      const tournament = await response.json();
-      
-      // Update tournaments list
-      await refreshTournaments();
-      return tournament;
-    })();
   }, []);
 
   const isRefreshingRef = useRef(false);
@@ -163,6 +136,30 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
     }
   }, [currentTournament, withOptimisticUpdate]);
 
+  const createTournament = useCallback(async (config: {
+    name: string;
+    format: 'sealed' | 'draft' | 'constructed';
+    maxPlayers: number;
+    settings?: Record<string, unknown>;
+  }) => {
+    return withOptimisticUpdate(async () => {
+      const response = await fetch('/api/tournaments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create tournament');
+      }
+
+      const tournament = await response.json();
+      await refreshTournaments();
+      return tournament;
+    })();
+  }, [refreshTournaments, withOptimisticUpdate]);
+
   const getTournament = useCallback(async (tournamentId: string): Promise<TournamentInfo> => {
     return withOptimisticUpdate(async () => {
       const response = await fetch(`/api/tournaments/${tournamentId}`);
@@ -181,7 +178,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
       
       return tournament;
     })();
-  }, []);
+  }, [withOptimisticUpdate]);
 
   const joinTournament = useCallback(async (tournamentId: string) => {
     const originalTournaments = [...tournaments];
@@ -216,7 +213,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         setTournaments(originalTournaments);
       }
     )();
-  }, [tournaments, refreshTournaments]);
+  }, [refreshTournaments, tournaments, withOptimisticUpdate]);
 
   const leaveTournament = useCallback(async (tournamentId: string) => {
     const originalTournaments = [...tournaments];
@@ -251,7 +248,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         setTournaments(originalTournaments);
       }
     )();
-  }, [tournaments, refreshTournaments]);
+  }, [refreshTournaments, tournaments, withOptimisticUpdate]);
 
   const startTournament = useCallback(async (tournamentId: string) => {
     const originalTournaments = [...tournaments];
@@ -286,7 +283,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         setTournaments(originalTournaments);
       }
     )();
-  }, [tournaments, refreshTournaments]);
+  }, [refreshTournaments, tournaments, withOptimisticUpdate]);
 
   const endTournament = useCallback(async (tournamentId: string) => {
     const originalTournaments = [...tournaments];
@@ -321,7 +318,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         setTournaments(originalTournaments);
       }
     )();
-  }, [tournaments, refreshTournaments]);
+  }, [refreshTournaments, tournaments, withOptimisticUpdate]);
 
   const updateTournamentSettings = useCallback(async (
     tournamentId: string, 
@@ -342,7 +339,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
 
       await refreshTournaments();
     })();
-  }, [refreshTournaments]);
+  }, [refreshTournaments, withOptimisticUpdate]);
 
   const toggleTournamentReady = useCallback(async (tournamentId: string, ready: boolean) => {
     const originalTournaments = [...tournaments];
@@ -378,7 +375,7 @@ export function EnhancedTournamentProvider({ children }: { children: ReactNode }
         setTournaments(originalTournaments);
       }
     )();
-  }, [tournaments, refreshTournaments]);
+  }, [refreshTournaments, tournaments, withOptimisticUpdate]);
 
   // Auto-fetch tournaments on mount (single load). Subsequent updates should come via event-driven contexts.
   useEffect(() => {

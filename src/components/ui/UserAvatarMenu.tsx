@@ -244,10 +244,13 @@ export const UserAvatar: React.FC<{
       ${className}
     `}>
       {avatarUrl ? (
-        <img
+        <Image
           src={avatarUrl}
           alt={displayName}
-          className="w-full h-full rounded-full object-cover"
+          fill
+          sizes={size === 'lg' ? '40px' : size === 'sm' ? '24px' : '32px'}
+          className="rounded-full object-cover"
+          unoptimized
         />
       ) : (
         <span className="text-white font-semibold">

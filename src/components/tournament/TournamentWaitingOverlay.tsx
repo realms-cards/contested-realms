@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type { TournamentInfo, PlayerStanding, TournamentRound } from "@/lib/net/protocol";
+import type { TournamentInfo } from "@/lib/net/protocol";
 
 interface TournamentWaitingOverlayProps {
   tournament: TournamentInfo;
@@ -14,7 +13,6 @@ export default function TournamentWaitingOverlay({
   myPlayerId,
   onMatchReady,
 }: TournamentWaitingOverlayProps) {
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
   const myStanding = tournament.standings.find(s => s.playerId === myPlayerId);
   const currentRound = tournament.rounds[tournament.currentRound - 1];
@@ -55,19 +53,14 @@ export default function TournamentWaitingOverlay({
     }
   };
 
-  const getActionButton = () => {
-    if (tournament.status === "playing" && myCurrentMatch) {
-      return (
-        <button
-          className="rounded bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 px-6 py-3 text-lg font-semibold shadow-lg"
-          onClick={() => onMatchReady(myCurrentMatch)}
-        >
-          Join Match
-        </button>
-      );
-    }
-    return null;
-  };
+  const actionButton = tournament.status === "playing" && myCurrentMatch ? (
+    <button
+      className="rounded bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 px-6 py-3 text-lg font-semibold shadow-lg"
+      onClick={() => onMatchReady(myCurrentMatch)}
+    >
+      Join Match
+    </button>
+  ) : null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
@@ -78,9 +71,9 @@ export default function TournamentWaitingOverlay({
             {getStatusMessage()}
           </div>
           
-          {getActionButton() && (
+          {actionButton && (
             <div className="mb-6">
-              {getActionButton()}
+              {actionButton}
             </div>
           )}
 

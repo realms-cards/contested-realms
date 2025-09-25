@@ -83,8 +83,8 @@ async function getImageDimensions(inFile) {
 }
 
 function toMultipleOf4(v) {
-  if (v % 4 === 0) return v;
-  return v - (v % 4);
+  if (v % 4 === 0) return Math.max(v, 4);
+  return Math.max(4, Math.ceil(v / 4) * 4);
 }
 
 async function computeResizeGeometry(inFile) {
@@ -94,7 +94,7 @@ async function computeResizeGeometry(inFile) {
   const w = toMultipleOf4(dim.width);
   const h = toMultipleOf4(dim.height);
   if (w === dim.width && h === dim.height) return null;
-  // Downscale to nearest multiple of 4 to satisfy ETC1S/UASTC block requirements
+  // Resize to nearest multiple of 4 (rounding up) to satisfy block requirements
   return `${w}x${h}`;
 }
 
@@ -104,7 +104,7 @@ const FORMAT = String(getFlag('format', 'uastc')).toLowerCase(); // 'uastc' | 'e
 const GEN_MIPS = String(getFlag('mips', 'true')).toLowerCase() !== 'false';
 const FORCE = Boolean(getFlag('force', false));
 const DRY = Boolean(getFlag('dryRun', false));
-const MIN_KB = Number(getFlag('minKB', 50));
+const MIN_KB = Number(getFlag('minKB', 0));
 const CONCURRENCY = Number(getFlag('jobs', Math.max(1, Math.min(os.cpus().length - 1, 4))));
 const TOOL_PREF = String(getFlag('tool', 'auto')).toLowerCase(); // 'auto' | 'ktx' | 'toktx'
 const ENFORCE_M4 = String(getFlag('enforceM4', 'true')).toLowerCase() !== 'false';

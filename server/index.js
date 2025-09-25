@@ -33,6 +33,201 @@ function repairDraftInvariants(match) {
     ds.packIndex = Math.max(0, maxPacks - 1);
   }
 }
+
+const INTERACTION_VERSION = 1;
+const INTERACTION_ENFORCEMENT_ENABLED =
+  process.env.INTERACTION_ENFORCEMENT_ENABLED === '0' ||
+  process.env.INTERACTION_ENFORCEMENT_ENABLED === 'false'
+    ? false
+    : true;
+const INTERACTION_REQUEST_KINDS = new Set([
+  'instantSpell',
+  'defend',
+  'forcedDraw',
+  'inspectHand',
+  'takeFromPile',
+  'manipulatePermanent',
+]);
+const INTERACTION_DECISIONS = new Set(['approved', 'declined', 'cancelled']);
+
+function getSeatForPlayer(match, playerId) {
+  if (!match || !Array.isArray(match.playerIds)) return null;
+  const idx = match.playerIds.indexOf(playerId);
+  if (idx === 0) return 'p1';
+  if (idx === 1) return 'p2';
+  return null;
+}
+
+function getOpponentSeat(seat) {
+  if (seat === 'p1') return 'p2';
+  if (seat === 'p2') return 'p1';
+  return null;
+}
+
+function ensureInteractionState(match) {
+  if (!match) return;
+  if (!(match.interactionRequests instanceof Map)) {
+    match.interactionRequests = new Map();
+  }
+  if (!(match.interactionGrants instanceof Map)) {
+    match.interactionGrants = new Map();
+  }
+}
+
+function sanitizeGrantOptions(raw, fallbackSeat) {
+  if (!raw || typeof raw !== 'object') {
+    if (!fallbackSeat) return null;
+    return {
+      targetSeat: fallbackSeat,
+    };
+  }
+  const targetSeat = raw.targetSeat === 'p1' || raw.targetSeat === 'p2' ? raw.targetSeat : fallbackSeat || null;
+  const expiresAt = Number.isFinite(Number(raw.expiresAt)) ? Number(raw.expiresAt) : null;
+  const result = {
+    targetSeat,
+  };
+  if (expiresAt !== null) result.expiresAt = expiresAt;
+  if (raw.singleUse === true) result.singleUse = true;
+  if (raw.allowOpponentZoneWrite === true) result.allowOpponentZoneWrite = true;
+  if (raw.allowRevealOpponentHand === true) result.allowRevealOpponentHand = true;
+  return result;
+}
+
+function purgeExpiredGrants(match, now) {
+  ensureInteractionState(match);
+  if (!match || !(match.interactionGrants instanceof Map)) return;
+  for (const [playerId, grants] of match.interactionGrants.entries()) {
+    const filtered = Array.isArray(grants)
+      ? grants.filter((grant) => !grant || !grant.expiresAt || grant.expiresAt > now)
+      : [];
+    if (filtered.length > 0) {
+      match.interactionGrants.set(playerId, filtered);
+    } else {
+      match.interactionGrants.delete(playerId);
+    }
+  }
+}
+
+function detectOpponentZoneMutation(patch, actorSeat) {
+  if (!patch || typeof patch !== 'object') return false;
+  const opponentSeat = getOpponentSeat(actorSeat);
+  if (!opponentSeat) return false;
+  const zones = patch.zones;
+  if (zones && typeof zones === 'object' && zones[opponentSeat] && typeof zones[opponentSeat] === 'object') {
+    const zonePayload = zones[opponentSeat];
+    for (const key of Object.keys(zonePayload)) {
+      if (zonePayload[key] !== undefined) {
+        return true;
+      }
+    }
+  }
+  const avatars = patch.avatars;
+  if (avatars && typeof avatars === 'object' && avatars[opponentSeat] && typeof avatars[opponentSeat] === 'object') {
+    if (Object.keys(avatars[opponentSeat]).length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectInteractionRequirements(patch, actorSeat) {
+  return {
+    needsOpponentZoneWrite: detectOpponentZoneMutation(patch, actorSeat),
+  };
+}
+
+function usePermitForRequirement(match, playerId, actorSeat, requirement, now) {
+  ensureInteractionState(match);
+  const grants = match.interactionGrants.get(playerId);
+  if (!Array.isArray(grants) || grants.length === 0) return null;
+  const opponentSeat = getOpponentSeat(actorSeat);
+  let consumedIndex = -1;
+  const usableGrant = grants.find((grant, idx) => {
+    if (!grant) return false;
+    if (grant.expiresAt && grant.expiresAt <= now) return false;
+    if (grant.targetSeat && grant.targetSeat !== opponentSeat) return false;
+    if (requirement === 'allowOpponentZoneWrite' && grant.allowOpponentZoneWrite !== true) return false;
+    consumedIndex = idx;
+    return true;
+  });
+  if (!usableGrant) return null;
+  if (usableGrant.singleUse === true && consumedIndex > -1) {
+    grants.splice(consumedIndex, 1);
+    if (grants.length > 0) {
+      match.interactionGrants.set(playerId, grants);
+    } else {
+      match.interactionGrants.delete(playerId);
+    }
+  }
+  usableGrant.lastUsed = now;
+  return usableGrant;
+}
+
+function createGrantRecord(request, response, grantOpts, now) {
+  return {
+    __grantId: rid('igr'),
+    requestId: request.requestId,
+    kind: request.kind,
+    grantedBy: response.from,
+    grantedTo: response.to,
+    targetSeat: grantOpts?.targetSeat ?? null,
+    createdAt: now,
+    expiresAt: grantOpts?.expiresAt ?? null,
+    singleUse: grantOpts?.singleUse === true,
+    allowOpponentZoneWrite: grantOpts?.allowOpponentZoneWrite === true,
+    allowRevealOpponentHand: grantOpts?.allowRevealOpponentHand === true,
+  };
+}
+
+function recordInteractionRequest(match, message, proposedGrant) {
+  ensureInteractionState(match);
+  const entry = match.interactionRequests.get(message.requestId) || {};
+  const now = message.createdAt || Date.now();
+  match.interactionRequests.set(message.requestId, {
+    request: message,
+    response: entry.response || null,
+    status: 'pending',
+    proposedGrant: proposedGrant || entry.proposedGrant || null,
+    grant: entry.grant || null,
+    createdAt: entry.createdAt || now,
+    updatedAt: now,
+  });
+}
+
+function recordInteractionResponse(match, response, grantRecord) {
+  ensureInteractionState(match);
+  const entry = match.interactionRequests.get(response.requestId) || {};
+  const now = response.respondedAt || Date.now();
+  const next = {
+    request: entry.request || null,
+    response,
+    status: response.decision,
+    proposedGrant: entry.proposedGrant || null,
+    grant: grantRecord || entry.grant || null,
+    createdAt: entry.createdAt || (entry.request && entry.request.createdAt) || now,
+    updatedAt: now,
+  };
+  if (!next.request) {
+    next.request = {
+      type: 'interaction:request',
+      requestId: response.requestId,
+      matchId: response.matchId,
+      from: response.to,
+      to: response.from,
+      kind: response.kind,
+      createdAt: response.createdAt || now,
+      expiresAt: response.expiresAt,
+    };
+  }
+  match.interactionRequests.set(response.requestId, next);
+}
+
+function emitInteraction(matchId, message) {
+  const envelope = { type: 'interaction', version: INTERACTION_VERSION, message };
+  const room = `match:${matchId}`;
+  io.to(room).emit('interaction', envelope);
+  io.to(room).emit(message.type, message);
+}
 async function leaderDraftPlayerReady(matchId, playerId, ready) {
   const match = await getOrLoadMatch(matchId);
   if (!match || match.matchType !== 'draft' || !match.draftState) return;
@@ -616,6 +811,10 @@ if (storeSub) {
             await leaderJoinMatch(matchId, msg.playerId, msg.socketId);
           } else if (msg.type === 'action' && msg.playerId) {
             await leaderApplyAction(matchId, msg.playerId, msg.patch || null, msg.socketId || null);
+          } else if (msg.type === 'interaction:request' && msg.playerId) {
+            await leaderHandleInteractionRequest(matchId, msg.playerId, msg.payload || null, msg.socketId || null);
+          } else if (msg.type === 'interaction:response' && msg.playerId) {
+            await leaderHandleInteractionResponse(matchId, msg.playerId, msg.payload || null, msg.socketId || null);
           } else if (msg.type === 'draft:playerReady' && typeof msg.ready === 'boolean' && msg.playerId) {
             await leaderDraftPlayerReady(matchId, msg.playerId, !!msg.ready);
           } else if (msg.type === 'draft:start' && msg.playerId) {
@@ -1098,6 +1297,13 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
   if (!match) return;
   const matchRoom = `match:${matchId}`;
   const now = Date.now();
+  ensureInteractionState(match);
+  purgeExpiredGrants(match, now);
+  const actorSeat = getSeatForPlayer(match, playerId);
+  if (!actorSeat) {
+    if (actorSocketId) io.to(actorSocketId).emit("error", { message: "Only seated players may take actions", code: "action_not_authorized" });
+    return;
+  }
   try {
     const patch = incomingPatch;
     if (
@@ -1129,10 +1335,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
         const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
         const incRaw = patch.d20Rolls || {};
         // Determine the seat (p1/p2) for the acting player
-        const seat = (() => {
-          const idx = Array.isArray(match.playerIds) ? match.playerIds.indexOf(playerId) : -1;
-          return idx === 0 ? 'p1' : idx === 1 ? 'p2' : null;
-        })();
+        const seat = actorSeat;
         // Only allow a player to set their own seat, and only if it hasn't been set yet
         /** @type {{ p1?: number, p2?: number }} */
         const inc = {};
@@ -1266,6 +1469,18 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
             patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
           }
         } catch {}
+      }
+      const interactionRequirements = collectInteractionRequirements(patchToApply, actorSeat);
+      const shouldEnforceInteraction =
+        INTERACTION_ENFORCEMENT_ENABLED &&
+        match.status === 'in_progress' &&
+        !isSnapshot;
+      if (shouldEnforceInteraction && interactionRequirements.needsOpponentZoneWrite) {
+        const grant = usePermitForRequirement(match, playerId, actorSeat, 'allowOpponentZoneWrite', now);
+        if (!grant) {
+          if (actorSocketId) io.to(actorSocketId).emit('error', { message: 'Interaction approval is required before modifying the opponent\'s zones.', code: 'interaction_required' });
+          return;
+        }
       }
       const eventsAdded = [];
       if (Array.isArray(patch && patch.events)) eventsAdded.push(...patch.events);
@@ -1555,6 +1770,188 @@ async function leaderHandleMulliganDone(matchId, playerId) {
   try { await persistMatchUpdate(match, mainPatch, playerId, now); } catch {}
   try { console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`); } catch {}
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
+}
+
+async function leaderHandleInteractionRequest(matchId, playerId, payload, actorSocketId) {
+  try {
+    const match = await getOrLoadMatch(matchId);
+    if (!match) return;
+    const now = Date.now();
+    const actorSeat = getSeatForPlayer(match, playerId);
+    if (!actorSeat) {
+      return {
+        ok: false,
+        error: "Interaction requests are only available to seated players",
+        code: "interaction_invalid",
+      };
+    }
+    const opponentSeat = getOpponentSeat(actorSeat);
+    if (!opponentSeat) return;
+    const opponentIndex = actorSeat === "p1" ? 1 : 0;
+    const opponentId = Array.isArray(match.playerIds) ? match.playerIds[opponentIndex] : null;
+    if (!opponentId) {
+      return {
+        ok: false,
+        error: "Opponent unavailable for interaction",
+        code: "interaction_invalid_opponent",
+      };
+    }
+
+    const rawKind = typeof payload?.kind === "string" ? payload.kind : null;
+    if (!rawKind || !INTERACTION_REQUEST_KINDS.has(rawKind)) {
+      return {
+        ok: false,
+        error: "Unsupported interaction kind",
+        code: "interaction_invalid_kind",
+      };
+    }
+
+    const requestId = typeof payload?.requestId === "string" && payload.requestId.length >= 6 ? payload.requestId : rid("intl");
+    const expiresAtRaw = Number(payload?.expiresAt);
+    const expiresAt = Number.isFinite(expiresAtRaw) && expiresAtRaw > now ? expiresAtRaw : null;
+    const note = typeof payload?.note === "string" ? payload.note.slice(0, 280) : undefined;
+
+    const rawPayload = payload && typeof payload.payload === "object" && payload.payload !== null ? payload.payload : {};
+    const sanitizedPayload = {};
+    for (const [key, value] of Object.entries(rawPayload)) {
+      if (key === "grant" || key === "proposedGrant") continue;
+      sanitizedPayload[key] = value;
+    }
+
+    const proposedGrant = sanitizeGrantOptions(
+      payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
+      opponentSeat
+    );
+    if (proposedGrant) {
+      sanitizedPayload.proposedGrant = proposedGrant;
+    }
+
+    const message = {
+      type: "interaction:request",
+      requestId,
+      matchId: match.id,
+      from: playerId,
+      to: opponentId,
+      kind: rawKind,
+      createdAt: now,
+    };
+    if (expiresAt) message.expiresAt = expiresAt;
+    if (note) message.note = note;
+    if (Object.keys(sanitizedPayload).length > 0) message.payload = sanitizedPayload;
+
+    recordInteractionRequest(match, message, proposedGrant || null);
+    match.lastTs = now;
+    emitInteraction(matchId, message);
+    try { await persistMatchUpdate(match, null, playerId, now); } catch {}
+    return { ok: true };
+  } catch (err) {
+    try { console.warn("[interaction] request failed", err?.message || err); } catch {}
+    return { ok: false, error: "Failed to process interaction request", code: "interaction_internal" };
+  }
+}
+
+async function leaderHandleInteractionResponse(matchId, playerId, payload, actorSocketId) {
+  try {
+    const match = await getOrLoadMatch(matchId);
+    if (!match) return;
+    ensureInteractionState(match);
+    const now = Date.now();
+    const actorSeat = getSeatForPlayer(match, playerId);
+    const requestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+    if (!requestId) {
+      return {
+        ok: false,
+        error: "Missing interaction request identifier",
+        code: "interaction_invalid_request",
+      };
+    }
+    const entry = match.interactionRequests instanceof Map ? match.interactionRequests.get(requestId) : null;
+    const request = entry && entry.request ? entry.request : null;
+    if (!request) {
+      return {
+        ok: false,
+        error: "Interaction request not found",
+        code: "interaction_unknown_request",
+      };
+    }
+
+    const rawDecision = typeof payload?.decision === "string" ? payload.decision : null;
+    if (!rawDecision || !INTERACTION_DECISIONS.has(rawDecision)) {
+      return {
+        ok: false,
+        error: "Invalid interaction decision",
+        code: "interaction_invalid_decision",
+      };
+    }
+
+    const responderTargetsOpponent = rawDecision !== "cancelled";
+    if (responderTargetsOpponent && playerId !== request.to) {
+      return {
+        ok: false,
+        error: "Only the targeted opponent may respond",
+        code: "interaction_not_authorized",
+      };
+    }
+    if (!responderTargetsOpponent && playerId !== request.from) {
+      return {
+        ok: false,
+        error: "Only the requester may cancel",
+        code: "interaction_not_authorized",
+      };
+    }
+
+    const reason = typeof payload?.reason === "string" ? payload.reason.slice(0, 280) : undefined;
+    const rawPayload = payload && typeof payload.payload === "object" && payload.payload !== null ? payload.payload : {};
+    const sanitizedPayload = {};
+    for (const [key, value] of Object.entries(rawPayload)) {
+      if (key === "grant" || key === "proposedGrant") continue;
+      sanitizedPayload[key] = value;
+    }
+
+    let grantOpts = null;
+    if (rawDecision === "approved") {
+      grantOpts = sanitizeGrantOptions(
+        payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
+        actorSeat || getOpponentSeat(getSeatForPlayer(match, request.from))
+      );
+      if (grantOpts) {
+        sanitizedPayload.grant = grantOpts;
+      }
+    }
+
+    const recipientId = playerId === request.from ? request.to : request.from;
+    const responseMessage = {
+      type: "interaction:response",
+      requestId: request.requestId,
+      matchId: match.id,
+      from: playerId,
+      to: recipientId,
+      kind: request.kind,
+      decision: rawDecision,
+      createdAt: request.createdAt,
+      expiresAt: request.expiresAt,
+      respondedAt: now,
+    };
+    if (reason) responseMessage.reason = reason;
+    if (Object.keys(sanitizedPayload).length > 0) responseMessage.payload = sanitizedPayload;
+
+    let grantRecord = null;
+    if (rawDecision === "approved" && grantOpts) {
+      grantRecord = createGrantRecord(request, responseMessage, grantOpts, now);
+      const existing = match.interactionGrants.get(grantRecord.grantedTo) || [];
+      existing.push(grantRecord);
+      match.interactionGrants.set(grantRecord.grantedTo, existing);
+    }
+
+    recordInteractionResponse(match, responseMessage, grantRecord);
+    match.lastTs = now;
+    emitInteraction(matchId, responseMessage);
+    try { await persistMatchUpdate(match, null, playerId, now); } catch {}
+    return { ok: true };
+  } catch (err) {
+    try { console.warn("[interaction] response failed", err?.message || err); } catch {}
+    return { ok: false, error: "Failed to process interaction response", code: "interaction_internal" };
+  }
 }
 
 function getLobbyInfo(lobby) {
@@ -1860,6 +2257,8 @@ async function startMatchFromLobby(
     // Server-side aggregated game snapshot and timestamp
     game: {},
     lastTs: 0,
+    interactionRequests: new Map(),
+    interactionGrants: new Map(),
   };
   // Initialize draft state for draft matches
   if (matchType === "draft") {
@@ -2497,6 +2896,8 @@ io.on("connection", (socket) => {
         } : null,
         game: {},
         lastTs: 0,
+        interactionRequests: new Map(),
+        interactionGrants: new Map(),
       };
       matches.set(matchId, match);
       // Begin recording
@@ -2658,6 +3059,58 @@ io.on("connection", (socket) => {
     } catch {}
   });
 
+  socket.on("interaction:request", async (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const matchId = player.matchId;
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) {
+          const msg = {
+            type: 'interaction:request',
+            matchId,
+            playerId: player.id,
+            socketId: socket.id,
+            payload,
+          };
+          await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify(msg));
+        }
+        return;
+      }
+      await leaderHandleInteractionRequest(matchId, player.id, payload, socket.id);
+    } catch (err) {
+      try { console.warn('[interaction] request handler error', err?.message || err); } catch {}
+    }
+  });
+
+  socket.on("interaction:response", async (payload = {}) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const matchId = player.matchId;
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis) {
+          const msg = {
+            type: 'interaction:response',
+            matchId,
+            playerId: player.id,
+            socketId: socket.id,
+            payload,
+          };
+          await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify(msg));
+        }
+        return;
+      }
+      await leaderHandleInteractionResponse(matchId, player.id, payload, socket.id);
+    } catch (err) {
+      try { console.warn('[interaction] response handler error', err?.message || err); } catch {}
+    }
+  });
+
   socket.on("chat", (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
@@ -2749,17 +3202,23 @@ io.on("connection", (socket) => {
           if (!match || !match.game) return false;
           if (match.status === "in_progress") return true;
           if (typeof match.game === "object") {
-            const keys = Object.keys(match.game);
+            const g = match.game;
+            const keys = Object.keys(g);
             if (keys.length === 0) return false;
-            // Heuristic: presence of phase/libraries/zones indicates a real snapshot
-            if ("phase" in match.game) return true;
-            if ("libraries" in match.game) return true;
-            if ("zones" in match.game) return true;
-            // New: include D20 setup state so clients don't lose rolls on resync during Setup
+            // Heuristic: presence of core state indicates a real snapshot (phase alone is not enough)
+            if ("libraries" in g) return true;
+            if ("zones" in g) return true;
+            if ("board" in g) return true;
+            if ("permanents" in g) return true;
+            if ("currentPlayer" in g) return true;
+            // Consider avatars meaningful when at least one seat has a card or position
             try {
-              const d20 = match.game.d20Rolls;
-              if (d20 && (d20.p1 != null || d20.p2 != null)) return true;
+              const a = g.avatars || {};
+              const p1Has = !!(a.p1 && (a.p1.card || (Array.isArray(a.p1.pos) && a.p1.pos.length === 2)));
+              const p2Has = !!(a.p2 && (a.p2.card || (Array.isArray(a.p2.pos) && a.p2.pos.length === 2)));
+              if (p1Has || p2Has) return true;
             } catch {}
+            // Do not include d20 rolls alone; only meaningful with core state (already handled above)
           }
           return false;
         })();
