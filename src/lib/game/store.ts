@@ -1232,7 +1232,27 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? p.d20Rolls
           : deepMergeReplaceArrays(s.d20Rolls, p.d20Rolls);
       }
+      const patchHasSetupWinner =
+        p.setupWinner !== undefined ||
+        Object.prototype.hasOwnProperty.call(p, "setupWinner");
       if (p.setupWinner !== undefined) next.setupWinner = p.setupWinner;
+      if (!patchHasSetupWinner) {
+        const derivedFromD20 = (() => {
+          const source = (next.d20Rolls ?? s.d20Rolls) as
+            | Record<PlayerKey, number | null>
+            | undefined;
+          if (!source) return null;
+          const r1 = source.p1;
+          const r2 = source.p2;
+          if (r1 == null || r2 == null) return null;
+          if (Number(r1) === Number(r2)) return null;
+          return Number(r1) > Number(r2) ? "p1" : "p2";
+        })();
+        if (derivedFromD20 && next.setupWinner === undefined) {
+          next.setupWinner = derivedFromD20;
+        }
+      }
+
       if (p.board !== undefined) {
         next.board = replaceKeys.has("board")
           ? p.board

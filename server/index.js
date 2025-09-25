@@ -1375,79 +1375,66 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
                 : normalizedZones.p2,
           },
         };
-        if (!patchToApply.avatars) {
-          const prevAvatars = (match.game && match.game.avatars) || { p1: {}, p2: {} };
-          patchToApply = {
-            ...patchToApply,
-            avatars: {
-              p1: {
-                card: prevAvatars.p1 && 'card' in prevAvatars.p1 ? prevAvatars.p1.card ?? null : null,
-                pos:
-                  prevAvatars.p1 && Array.isArray(prevAvatars.p1.pos) && prevAvatars.p1.pos.length === 2
-                    ? prevAvatars.p1.pos
-                    : null,
-                tapped:
-                  prevAvatars.p1 && typeof prevAvatars.p1.tapped === 'boolean'
-                    ? prevAvatars.p1.tapped
-                    : false,
-              },
-              p2: {
-                card: prevAvatars.p2 && 'card' in prevAvatars.p2 ? prevAvatars.p2.card ?? null : null,
-                pos:
-                  prevAvatars.p2 && Array.isArray(prevAvatars.p2.pos) && prevAvatars.p2.pos.length === 2
-                    ? prevAvatars.p2.pos
-                    : null,
-                tapped:
-                  prevAvatars.p2 && typeof prevAvatars.p2.tapped === 'boolean'
-                    ? prevAvatars.p2.tapped
-                    : false,
-              },
+        const prevAvatars = (match.game && match.game.avatars) || { p1: {}, p2: {} };
+        const normalizeAvatar = (candidate, fallback) => {
+          const base = fallback || {};
+          const card = candidate && 'card' in candidate ? candidate.card ?? null : base.card ?? null;
+          const pos = candidate && Array.isArray(candidate.pos) && candidate.pos.length === 2
+            ? [candidate.pos[0], candidate.pos[1]]
+            : Array.isArray(base.pos) && base.pos.length === 2
+              ? [base.pos[0], base.pos[1]]
+              : null;
+          const tapped = candidate && typeof candidate.tapped === 'boolean'
+            ? candidate.tapped
+            : typeof base.tapped === 'boolean'
+              ? base.tapped
+              : false;
+          const next = { card, pos, tapped };
+          if (candidate && 'offset' in candidate) {
+            next.offset = candidate.offset ?? null;
+          } else if (base && 'offset' in base) {
+            next.offset = base.offset ?? null;
+          }
+          return next;
+        };
+        const fallbackAvatars = {
+          p1: normalizeAvatar(prevAvatars.p1, { card: null, pos: null, tapped: false }),
+          p2: normalizeAvatar(prevAvatars.p2, { card: null, pos: null, tapped: false }),
+        };
+        const patchAvatars = (patchToApply.avatars && typeof patchToApply.avatars === 'object') ? patchToApply.avatars : {};
+        patchToApply = {
+          ...patchToApply,
+          avatars: {
+            p1: normalizeAvatar(patchAvatars.p1, fallbackAvatars.p1),
+            p2: normalizeAvatar(patchAvatars.p2, fallbackAvatars.p2),
+          },
+        };
+        const prevPos = (match.game && match.game.playerPositions) || {
+          p1: { playerId: 1, position: { x: 0, z: 0 } },
+          p2: { playerId: 2, position: { x: 0, z: 0 } },
+        };
+        const normalizePos = (seat, candidate, fallback) => {
+          const base = fallback || { playerId: seat === 'p1' ? 1 : 2, position: { x: 0, z: 0 } };
+          const id = candidate && typeof candidate.playerId === 'number' ? candidate.playerId : base.playerId;
+          const posObj = candidate && candidate.position && typeof candidate.position === 'object' ? candidate.position : base.position || {};
+          return {
+            playerId: id,
+            position: {
+              x: typeof posObj.x === 'number' ? posObj.x : 0,
+              z: typeof posObj.z === 'number' ? posObj.z : 0,
             },
           };
-        }
-        if (!patchToApply.playerPositions) {
-          const prevPos = (match.game && match.game.playerPositions) || {
-            p1: { playerId: 1, position: { x: 0, z: 0 } },
-            p2: { playerId: 2, position: { x: 0, z: 0 } },
-          };
-          patchToApply = {
-            ...patchToApply,
-            playerPositions: {
-              p1: {
-                playerId:
-                  prevPos && prevPos.p1 && typeof prevPos.p1.playerId === 'number'
-                    ? prevPos.p1.playerId
-                    : 1,
-                position: {
-                  x:
-                    prevPos && prevPos.p1 && prevPos.p1.position && typeof prevPos.p1.position.x === 'number'
-                      ? prevPos.p1.position.x
-                      : 0,
-                  z:
-                    prevPos && prevPos.p1 && prevPos.p1.position && typeof prevPos.p1.position.z === 'number'
-                      ? prevPos.p1.position.z
-                      : 0,
-                },
-              },
-              p2: {
-                playerId:
-                  prevPos && prevPos.p2 && typeof prevPos.p2.playerId === 'number'
-                    ? prevPos.p2.playerId
-                    : 2,
-                position: {
-                  x:
-                    prevPos && prevPos.p2 && prevPos.p2.position && typeof prevPos.p2.position.x === 'number'
-                      ? prevPos.p2.position.x
-                      : 0,
-                  z:
-                    prevPos && prevPos.p2 && prevPos.p2.position && typeof prevPos.p2.position.z === 'number'
-                      ? prevPos.p2.position.z
-                      : 0,
-                },
-              },
-            },
-          };
-        }
+        };
+        const patchPos = (patchToApply.playerPositions && typeof patchToApply.playerPositions === 'object')
+          ? patchToApply.playerPositions
+          : {};
+        patchToApply = {
+          ...patchToApply,
+          playerPositions: {
+            p1: normalizePos('p1', patchPos.p1, prevPos.p1),
+            p2: normalizePos('p2', patchPos.p2, prevPos.p2),
+          },
+        };
       }
       match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
       // Apply start-of-turn effects if phase/currentPlayer indicates a new turn
