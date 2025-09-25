@@ -24,6 +24,7 @@ type DeckTopBarActionsProps = {
   onSaveDeck: () => void;
   onSubmitSealed: () => void;
   onSubmitDraft: () => void;
+  onAddStandardCards?: () => void;
 };
 
 export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
@@ -211,17 +212,28 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
                 {saving ? "Submitting..." : "Submit Sealed Deck"}
               </button>
             ) : isDraftMode ? (
-              <button
-                onClick={onSubmitDraft}
-                disabled={
-                  saving || status !== "authenticated" ||
-                  !validation.avatar || !validation.atlas || !validation.spellbook
-                }
-                className="h-10 px-4 rounded text-white disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
-                title={!validation.avatar || !validation.atlas || !validation.spellbook ? "Cannot submit invalid deck" : "Submit draft deck"}
-              >
-                {saving ? "Submitting..." : "Submit Draft Deck"}
-              </button>
+              <div className="flex items-center gap-2">
+                {props.onAddStandardCards && (
+                  <button
+                    onClick={props.onAddStandardCards}
+                    className="h-9 px-3 rounded text-sm font-medium bg-white/10 hover:bg-white/20 text-white"
+                    type="button"
+                  >
+                    Add Standard Cards
+                  </button>
+                )}
+                <button
+                  onClick={onSubmitDraft}
+                  disabled={
+                    saving || status !== "authenticated" ||
+                    !validation.avatar || !validation.atlas || !validation.spellbook
+                  }
+                  className="h-10 px-4 rounded text-white disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
+                  title={!validation.avatar || !validation.atlas || !validation.spellbook ? "Cannot submit invalid deck" : "Submit draft deck"}
+                >
+                  {saving ? "Submitting..." : "Submit Draft Deck"}
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onSaveDeck}

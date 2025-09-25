@@ -1,4 +1,3 @@
-import { TournamentFormat } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export interface PlayerPairing {
@@ -24,8 +23,7 @@ export interface TournamentPairingResult {
  * Generate pairings for a tournament round based on format
  */
 export async function generatePairings(
-  tournamentId: string,
-  roundNumber: number
+  tournamentId: string
 ): Promise<TournamentPairingResult> {
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
@@ -62,7 +60,7 @@ export async function generatePairings(
     case 'draft':
     case 'constructed':
       // All these formats use Swiss pairing by default
-      return generateSwissPairings(activePlayers, tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>, roundNumber);
+      return generateSwissPairings(activePlayers, tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>);
     default:
       throw new Error(`Unsupported tournament format: ${tournament.format}`);
   }
@@ -73,8 +71,7 @@ export async function generatePairings(
  */
 function generateSwissPairings(
   players: PlayerPairing[],
-  previousMatches: Array<{ players: Array<{ id: string }> }>,
-  roundNumber: number
+  previousMatches: Array<{ players: Array<{ id: string }> }>
 ): TournamentPairingResult {
   const matches: MatchPairing[] = [];
   const byes: PlayerPairing[] = [];
@@ -96,7 +93,8 @@ function generateSwissPairings(
 
   // Pair players with similar scores who haven't played before
   while (availablePlayers.length >= 2) {
-    const player1 = availablePlayers.shift()!;
+    const player1 = availablePlayers.shift();
+    if (!player1) break;
     let player2Index = -1;
 
     // Find best opponent (closest score, hasn't played before)
@@ -115,95 +113,15 @@ function generateSwissPairings(
 
     if (player2Index >= 0) {
       const player2 = availablePlayers.splice(player2Index, 1)[0];
+      if (!player2) {
+        byes.push(player1);
+        continue;
+      }
       matches.push({ player1, player2 });
     }
   }
 
   // Handle odd number of players (bye)
-  if (availablePlayers.length === 1) {
-    byes.push(availablePlayers[0]);
-  }
-
-  return { matches, byes };
-}
-
-/**
- * Single elimination pairing - winners advance, losers are eliminated
- */
-function generateEliminationPairings(
-  players: PlayerPairing[],
-  roundNumber: number
-): TournamentPairingResult {
-  const matches: MatchPairing[] = [];
-  const byes: PlayerPairing[] = [];
-  const availablePlayers = [...players];
-
-  // In elimination, pair players sequentially
-  while (availablePlayers.length >= 2) {
-    const player1 = availablePlayers.shift()!;
-    const player2 = availablePlayers.shift()!;
-    matches.push({ player1, player2 });
-  }
-
-  // Handle odd number of players (bye to next round)
-  if (availablePlayers.length === 1) {
-    byes.push(availablePlayers[0]);
-  }
-
-  return { matches, byes };
-}
-
-/**
- * Round robin pairing - each player plays every other player exactly once
- */
-function generateRoundRobinPairings(
-  players: PlayerPairing[],
-  previousMatches: Array<{ players: Array<{ id: string }> }>,
-  roundNumber: number
-): TournamentPairingResult {
-  const matches: MatchPairing[] = [];
-  const byes: PlayerPairing[] = [];
-
-  // Build map of who has played whom
-  const hasPlayed = new Map<string, Set<string>>();
-  for (const player of players) {
-    hasPlayed.set(player.playerId, new Set());
-  }
-
-  for (const match of previousMatches) {
-    const playerIds = match.players.map(p => p.id);
-    if (playerIds.length === 2) {
-      hasPlayed.get(playerIds[0])?.add(playerIds[1]);
-      hasPlayed.get(playerIds[1])?.add(playerIds[0]);
-    }
-  }
-
-  const availablePlayers = [...players];
-
-  // Find pairings for players who haven't played each other
-  while (availablePlayers.length >= 2) {
-    const player1 = availablePlayers.shift()!;
-    let player2Index = -1;
-
-    // Find an opponent this player hasn't faced
-    for (let i = 0; i < availablePlayers.length; i++) {
-      const candidate = availablePlayers[i];
-      if (!hasPlayed.get(player1.playerId)?.has(candidate.playerId)) {
-        player2Index = i;
-        break;
-      }
-    }
-
-    if (player2Index >= 0) {
-      const player2 = availablePlayers.splice(player2Index, 1)[0];
-      matches.push({ player1, player2 });
-    } else {
-      // No valid opponent found, give bye
-      byes.push(player1);
-    }
-  }
-
-  // Handle remaining player
   if (availablePlayers.length === 1) {
     byes.push(availablePlayers[0]);
   }

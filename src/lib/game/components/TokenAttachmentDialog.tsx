@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import type { CardRef } from "@/lib/game/store";
-import { useGameStore } from "@/lib/game/store";
 
 interface TokenAttachmentDialogProps {
   token: CardRef;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useThree } from "@react-three/fiber";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 interface MouseTrackerProps {
@@ -12,6 +12,22 @@ interface MouseTrackerProps {
 // Component to track mouse position and perform raycasting for card detection
 export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
   const { camera, scene, raycaster, pointer } = useThree();
+  const lastHoveredSlug = useRef<string | null>(null);
+
+  const interactableObjects = useMemo(() => {
+    const objects: THREE.Object3D[] = [];
+    scene.traverse((child) => {
+      if (child.userData?.cardId && child.userData?.slug) {
+        // Skip meshes that explicitly disable raycasting
+        // (Three.js treats `undefined` as enabled, but some assets override to return empty arrays)
+        const prototypeRaycast = (child as { raycast?: unknown }).raycast;
+        if (prototypeRaycast === undefined || typeof prototypeRaycast === "function") {
+          objects.push(child);
+        }
+      }
+    });
+    return objects;
+  }, [scene]);
   
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -25,17 +41,8 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
       // Update raycaster
       raycaster.setFromCamera(pointer, camera);
       
-      // Find all intersectable objects (the visual card meshes)
-      const intersectableObjects: THREE.Object3D[] = [];
-      scene.traverse((child) => {
-        // Look for CardPlane meshes with card data
-        if (child.userData?.cardId && child.userData?.slug) {
-          intersectableObjects.push(child);
-        }
-      });
-      
       // Perform raycasting
-      const intersects = raycaster.intersectObjects(intersectableObjects, true);
+      const intersects = raycaster.intersectObjects(interactableObjects, true);
       
       if (intersects.length > 0) {
         // Find all intersections that have card data, then pick the topmost card (highest Y)
@@ -55,11 +62,14 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
         if (validIntersects.length > 0) {
           // Sort by Y position (highest first) to get the topmost card
           const topmost = validIntersects.sort((a, b) => b.y - a.y)[0];
-          onHover({
-            slug: topmost.card.card.slug,
-            name: topmost.card.card.cardName,
-            type: topmost.card.card.type,
-          });
+          if (lastHoveredSlug.current !== topmost.card.card.slug) {
+            lastHoveredSlug.current = topmost.card.card.slug;
+            onHover({
+              slug: topmost.card.card.slug,
+              name: topmost.card.card.cardName,
+              type: topmost.card.card.type,
+            });
+          }
           return;
         }
       }
@@ -71,7 +81,8 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
         const inHandArea = relativeY > 0.75; // bottom 25% of screen
         
         // Only clear hover if not in hand area
-        if (!inHandArea) {
+        if (!inHandArea && lastHoveredSlug.current !== null) {
+          lastHoveredSlug.current = null;
           onHover(null);
         }
       }
@@ -81,10 +92,13 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
     const canvas = document.querySelector('canvas');
     if (canvas) {
       canvas.addEventListener('mousemove', handleMouseMove);
-      return () => canvas.removeEventListener('mousemove', handleMouseMove);
+      return () => {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        lastHoveredSlug.current = null;
+      };
     }
     return undefined;
-  }, [camera, scene, raycaster, pointer, cards, onHover]);
+  }, [camera, scene, raycaster, pointer, cards, interactableObjects, onHover]);
   
   return null; // This component doesn't render anything
 }

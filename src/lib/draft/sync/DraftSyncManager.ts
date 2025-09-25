@@ -8,7 +8,6 @@ import type {
   PlayerDraftState,
   PickConflict,
   PackRotationEvent,
-  TimerState,
   SyncMetrics,
   StateValidation,
 } from './types';
@@ -402,13 +401,22 @@ export class DraftSyncManager {
   }
 
   private async checkPickConflicts(
-    _sessionId: string,
-    _cardId: string,
-    _playerId: string,
-    _timing: { clientTimestamp: number; serverTimestamp: number; networkLatency: number }
+    sessionId: string,
+    cardId: string,
+    playerId: string,
+    timing: { clientTimestamp: number; serverTimestamp: number; networkLatency: number }
   ): Promise<PickConflict | null> {
-    // Implementation would check for simultaneous picks of the same card
-    // For now, return null (no conflicts)
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[DraftSync] Conflict check', {
+        sessionId,
+        cardId,
+        playerId,
+        latency: timing.networkLatency,
+      });
+    }
+
+    // Implementation would check for simultaneous picks of the same card.
+    // For now, return null (no conflicts encountered).
     return null;
   }
 

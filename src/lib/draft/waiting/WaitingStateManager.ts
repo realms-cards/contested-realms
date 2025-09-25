@@ -147,7 +147,7 @@ export class WaitingStateManager {
     }
 
     // Initialize metrics
-    this.initializeMetrics(sessionId, waitingType, players.length);
+    this.initializeMetrics(sessionId, waitingType);
 
     // Announce to screen readers
     this.announceToScreenReader(
@@ -761,7 +761,7 @@ export class WaitingStateManager {
     console.log(`[WaitingStateManager] Broadcast: ${event.updateType} (${event.updateId})`);
   }
 
-  private initializeMetrics(sessionId: string, waitingType: WaitingType, playerCount: number): void {
+  private initializeMetrics(sessionId: string, waitingType: WaitingType): void {
     this.state.metrics = {
       sessionId,
       waitingType,

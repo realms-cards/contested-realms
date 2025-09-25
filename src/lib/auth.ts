@@ -51,10 +51,17 @@ function parseTransportsCsv(csv: string | null | undefined): AuthenticatorTransp
   return mapped.length ? mapped : undefined;
 }
 
+const discordClientId = process.env.DISCORD_CLIENT_ID;
+const discordClientSecret = process.env.DISCORD_CLIENT_SECRET;
+
+if (!discordClientId || !discordClientSecret) {
+  throw new Error('Discord OAuth credentials are not configured');
+}
+
 const providers = [
   DiscordProvider({
-    clientId: process.env.DISCORD_CLIENT_ID!,
-    clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+    clientId: discordClientId,
+    clientSecret: discordClientSecret,
   }),
   CredentialsProvider({
     id: 'passkey',

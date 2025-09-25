@@ -32,8 +32,17 @@ const textureCache = new Map<string, CacheEntry>();
 const pendingLoads = new Map<string, Promise<Texture>>();
 // One KTX2Loader per renderer to reuse workers/transcoder and internal caches.
 const ktx2LoaderByRenderer = new WeakMap<WebGLRenderer, KTX2Loader>();
-// Remember KTX2 URLs that failed to load to skip retrying repeatedly.
-const ktx2Failures = new Set<string>();
+// Remember KTX2 URLs that failed recently; retry after a cooldown.
+const ktx2FailureTimes = new Map<string, number>();
+const KTX2_RETRY_DELAY_MS = (() => {
+  const raw = process.env.NEXT_PUBLIC_KTX2_RETRY_MS;
+  const parsed = raw ? Number(raw) : NaN;
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  // Default to 60 seconds before re-attempting.
+  return 60_000;
+})();
 
 function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
   let loader = ktx2LoaderByRenderer.get(gl);
@@ -59,9 +68,35 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
   return loader;
 }
 
+type TextureWithDimensions = Texture & {
+  image?: { width?: number; height?: number };
+  source?: { data?: { width?: number; height?: number }; url?: string };
+};
+
+function assertBlockAligned(tex: Texture, url: string) {
+  const candidate = tex as TextureWithDimensions;
+  const iw = candidate.image?.width ?? candidate.source?.data?.width;
+  const ih = candidate.image?.height ?? candidate.source?.data?.height;
+  if (
+    typeof iw === "number" &&
+    typeof ih === "number" &&
+    (iw % 4 !== 0 || ih % 4 !== 0)
+  ) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[KTX2] Non-multiple-of-4 texture rejected", {
+        url,
+        width: iw,
+        height: ih,
+      });
+    }
+    try {
+      tex.dispose();
+    } catch {}
+    throw new Error("KTX2 texture dimensions must be multiples of 4");
+  }
+}
+
 // Ensure a canonical orientation each time we hand a texture to a consumer.
-// This prevents stray mirroring/flips caused by shared cached Texture instances
-// being mutated elsewhere (e.g. repeat/offset/rotation changed by a material).
 function normalizeTexture(
   t: Texture,
   kind: "ktx2" | "raster",
@@ -272,34 +307,19 @@ export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextur
       setTex(null);
 
       // Attempt KTX2 first if a suitable URL is provided
-      if (ktx2Url && gl && !ktx2Failures.has(ktx2Url)) {
+      const lastFailure = ktx2FailureTimes.get(ktx2Url);
+      const canRetryKtx2 =
+        !lastFailure || Date.now() - lastFailure >= KTX2_RETRY_DELAY_MS;
+      if (ktx2Url && gl && canRetryKtx2) {
+        if (lastFailure) {
+          // Allow a retry by clearing the stale timestamp.
+          ktx2FailureTimes.delete(ktx2Url);
+        }
         try {
           const loader = getKTX2Loader(gl);
           const t = await acquire(ktx2Url, async () => {
             const tex = await loader.loadAsync(ktx2Url);
-            // Dev-only sanity check: ETC1S/UASTC textures should be multiples of 4
-            if (process.env.NODE_ENV !== "production") {
-              try {
-                type TexWithDims = {
-                  image?: { width?: number; height?: number };
-                  source?: { data?: { width?: number; height?: number } };
-                };
-                const twd = tex as unknown as TexWithDims;
-                const iw = twd.image?.width ?? twd.source?.data?.width;
-                const ih = twd.image?.height ?? twd.source?.data?.height;
-                if (
-                  typeof iw === "number" &&
-                  typeof ih === "number" &&
-                  (iw % 4 !== 0 || ih % 4 !== 0)
-                ) {
-                  console.warn("[KTX2] Non-multiple-of-4 texture loaded", {
-                    url: ktx2Url,
-                    width: iw,
-                    height: ih,
-                  });
-                }
-              } catch {}
-            }
+            assertBlockAligned(tex as Texture, ktx2Url);
             normalizeTexture(tex as Texture, "ktx2", gl);
             return tex as Texture;
           });
@@ -316,10 +336,16 @@ export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextur
           normalizeTexture(t, "ktx2", gl);
           setTex(t);
           return;
-        } catch {
+        } catch (err) {
           // Fall through to raster
           if (ktx2Url) {
-            ktx2Failures.add(ktx2Url);
+            ktx2FailureTimes.set(ktx2Url, Date.now());
+            if (process.env.NODE_ENV !== "production") {
+              console.warn("[KTX2] Falling back to raster", {
+                url: ktx2Url,
+                error: err instanceof Error ? err.message : err,
+              });
+            }
           }
         }
       }

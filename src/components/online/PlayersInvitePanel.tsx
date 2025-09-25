@@ -24,7 +24,7 @@ export default function PlayersInvitePanel({ players, me, lobby, onInvite, onRef
     });
     if (!q) return list;
     return list.filter((p) => p.displayName.toLowerCase().includes(q));
-  }, [players, me?.id, query]);
+  }, [players, me, query]);
 
   return (
     <div className="space-y-2">

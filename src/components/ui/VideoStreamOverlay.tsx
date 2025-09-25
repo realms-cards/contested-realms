@@ -8,11 +8,12 @@ import type { VideoStreamOverlayProps } from '../../../specs/006-live-video-and/
 
 export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({ 
   stream, 
-  playerId, 
+  playerId,
   displayName, 
   muted = false, 
   className = '' 
 }) => {
+  void playerId;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
@@ -177,13 +178,14 @@ export const CompactVideoStream: React.FC<VideoStreamOverlayProps & {
   showControls?: boolean;
 }> = ({ 
   stream, 
-  playerId, 
+  playerId,
   displayName, 
   muted = false, 
   className = '',
   size = 'sm',
   showControls = false
 }) => {
+  void playerId;
   const sizeClasses = {
     xs: 'w-16 h-12',
     sm: 'w-24 h-18',

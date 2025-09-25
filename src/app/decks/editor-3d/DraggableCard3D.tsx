@@ -1,8 +1,13 @@
 "use client";
 
 import type { ThreeEvent } from "@react-three/fiber";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group } from "three";
+import {
+  createCardMeshUserData,
+  createCardPreviewData,
+  type CardPreviewData,
+} from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 
@@ -29,6 +34,8 @@ export default function DraggableCard3D({
   stackIndex = 0,
   totalInStack = 1,
   cardId,
+  cardName,
+  cardType,
   interactive = true,
   preferRaster = false,
 }: {
@@ -45,8 +52,8 @@ export default function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
-  onHoverStart?: (cardId: number, slug: string, type: string | null) => void;
-  onHoverEnd?: (cardId: number) => void;
+  onHoverStart?: (card: CardPreviewData) => void;
+  onHoverEnd?: () => void;
   lockUpright?: boolean;
   onDoubleClick?: () => void;
   onContextMenu?: (clientX: number, clientY: number) => void;
@@ -54,6 +61,8 @@ export default function DraggableCard3D({
   stackIndex?: number;
   totalInStack?: number;
   cardId?: number;
+  cardName?: string;
+  cardType?: string | null;
   interactive?: boolean;
   preferRaster?: boolean;
 }) {
@@ -73,6 +82,27 @@ export default function DraggableCard3D({
   const hoveringRef = useRef(false);
   const hoverStableRef = useRef<number | null>(null);
   const lastClickTime = useRef<number>(0);
+
+  const previewData = useMemo(
+    () =>
+      createCardPreviewData({
+        slug,
+        name: cardName ?? slug,
+        type: cardType ?? null,
+      }),
+    [slug, cardName, cardType]
+  );
+
+  const meshUserData = useMemo(
+    () =>
+      createCardMeshUserData({
+        cardId,
+        slug,
+        name: cardName,
+        type: cardType ?? null,
+      }),
+    [cardId, slug, cardName, cardType]
+  );
 
   // Cleanup hover timer on unmount
   useEffect(() => {
@@ -140,11 +170,14 @@ export default function DraggableCard3D({
         position={[hitboxOffsetX, 0.005, hitboxOffsetZ]}
         rotation-x={-Math.PI / 2}
         rotation-z={isSite ? -Math.PI / 2 : 0}
-        userData={{
-          cardId: cardId || 0,
-          slug,
-          type: null, // Will be enhanced later with actual card type
-        }}
+        userData={
+          meshUserData ?? {
+            cardId: cardId ?? 0,
+            slug,
+            type: cardType ?? null,
+            name: cardName,
+          }
+        }
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
@@ -263,7 +296,9 @@ export default function DraggableCard3D({
             hoverStableRef.current = null;
           }
           onHoverChange?.(true);
-          onHoverStart?.(cardId || 0, slug, null);
+          if (previewData) {
+            onHoverStart?.(previewData);
+          }
         }}
         onPointerOut={() => {
           hoveringRef.current = false;
@@ -275,7 +310,7 @@ export default function DraggableCard3D({
             // Only call hover false if we're truly not hovering anymore
             if (!hoveringRef.current) {
               onHoverChange?.(false);
-              onHoverEnd?.(cardId || 0);
+              onHoverEnd?.();
             }
             hoverStableRef.current = null;
           }, 50); // Small delay to handle pointer event quirks
