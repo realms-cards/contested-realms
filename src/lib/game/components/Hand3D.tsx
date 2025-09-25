@@ -51,7 +51,7 @@ export default function Hand3D({
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
   const { playCardSelect } = useSound();
 
-  const hand = useMemo(() => zones[owner].hand ?? [], [zones, owner]);
+  const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
   
   // Debug logging for opponent hands
   useEffect(() => {

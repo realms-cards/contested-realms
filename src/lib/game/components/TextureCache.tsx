@@ -26,8 +26,9 @@ export default function TextureCache() {
     
     // Load ALL cards from both players' zones
     for (const player of ["p1", "p2"] as const) {
-      const playerZones = zones[player];
-      
+      const playerZones = zones?.[player];
+      if (!playerZones) continue;
+
       // ALL cards from spellbook
       for (const card of playerZones.spellbook) {
         if (card?.slug) {
