@@ -10,7 +10,7 @@ import OtherRealms from "@/components/ui/OtherRealms";
 export default function Home() {
   // Set home page title
   useEffect(() => {
-    document.title = "Contested Realms";
+    document.title = "Realms.cards";
   }, []);
 
   return (
@@ -115,7 +115,11 @@ export default function Home() {
         </div>
       </div>
       {/* Bottom ASCII art background */}
-      <AsciiBottomArt opacityClass="text-white/12" maxVh={null} bottomOffsetPx={16} />
+      <AsciiBottomArt
+        opacityClass="text-white/12"
+        maxVh={null}
+        bottomOffsetPx={16}
+      />
     </div>
   );
 }
