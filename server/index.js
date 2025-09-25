@@ -900,6 +900,326 @@ function lobbyHasHumanPlayers(lobby) {
   return false;
 }
 
+// -----------------------------
+// Helpers: leaderboard tracking
+// -----------------------------
+const LEADERBOARD_TIME_FRAMES = ['all_time', 'monthly', 'weekly'];
+const LEADERBOARD_DEFAULT_RATING = 1200;
+const LEADERBOARD_K_FACTOR = 32;
+
+function calculateExpectedScoreForLeaderboard(ratingA, ratingB) {
+  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+}
+
+function calculateNewRatingsForLeaderboard(winnerRating, loserRating, isDraw = false) {
+  const expectedWinner = calculateExpectedScoreForLeaderboard(winnerRating, loserRating);
+  const expectedLoser = calculateExpectedScoreForLeaderboard(loserRating, winnerRating);
+
+  const actualWinner = isDraw ? 0.5 : 1;
+  const actualLoser = isDraw ? 0.5 : 0;
+
+  const newWinnerRating = Math.round(
+    winnerRating + LEADERBOARD_K_FACTOR * (actualWinner - expectedWinner)
+  );
+  const newLoserRating = Math.round(
+    loserRating + LEADERBOARD_K_FACTOR * (actualLoser - expectedLoser)
+  );
+
+  return { newWinnerRating, newLoserRating };
+}
+
+async function resolvePlayerDisplayName(playerId) {
+  const cached = players.get(playerId);
+  if (cached && cached.displayName) return cached.displayName;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: playerId },
+      select: { name: true },
+    });
+    if (user && user.name) return user.name;
+  } catch {}
+  return playerId;
+}
+
+async function getOrCreateLeaderboardEntry(playerId, displayName, format, timeFrame) {
+  const existing = await prisma.leaderboardEntry.findUnique({
+    where: {
+      playerId_format_timeFrame: {
+        playerId,
+        format,
+        timeFrame,
+      },
+    },
+  });
+
+  if (existing) {
+    if (displayName && existing.displayName !== displayName) {
+      try {
+        await prisma.leaderboardEntry.update({
+          where: { id: existing.id },
+          data: { displayName },
+        });
+        existing.displayName = displayName;
+      } catch {}
+    }
+    return existing;
+  }
+
+  return prisma.leaderboardEntry.create({
+    data: {
+      playerId,
+      displayName: displayName || playerId,
+      format,
+      timeFrame,
+      rating: LEADERBOARD_DEFAULT_RATING,
+    },
+  });
+}
+
+async function recalculateLeaderboardRanks(format) {
+  for (const timeFrame of LEADERBOARD_TIME_FRAMES) {
+    const entries = await prisma.leaderboardEntry.findMany({
+      where: { format, timeFrame },
+      orderBy: [
+        { rating: 'desc' },
+        { winRate: 'desc' },
+        { wins: 'desc' },
+      ],
+    });
+
+    const updatePromises = entries.map((entry, index) =>
+      prisma.leaderboardEntry.update({
+        where: { id: entry.id },
+        data: { rank: index + 1 },
+      })
+    );
+
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+    }
+  }
+}
+
+async function checkTournamentWin(tournamentId, playerId) {
+  if (!tournamentId || !playerId) return false;
+  try {
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      include: {
+        standings: {
+          where: { playerId },
+          take: 1,
+        },
+      },
+    });
+
+    if (!tournament || tournament.status !== 'completed' || !tournament.standings[0]) {
+      return false;
+    }
+
+    const topStanding = await prisma.playerStanding.findFirst({
+      where: { tournamentId },
+      orderBy: [
+        { matchPoints: 'desc' },
+        { gameWinPercentage: 'desc' },
+        { opponentMatchWinPercentage: 'desc' },
+      ],
+    });
+
+    return topStanding?.playerId === playerId;
+  } catch {
+    return false;
+  }
+}
+
+async function recordLeaderboardMatchResult(match, payload = {}) {
+  try {
+    if (!match || !match.id || match._leaderboardRecorded) return;
+
+    const validFormats = new Set(['constructed', 'sealed', 'draft']);
+    const format = validFormats.has(match.matchType) ? match.matchType : 'constructed';
+    const playerIds = Array.isArray(match.playerIds) ? match.playerIds : [];
+    if (playerIds.length === 0) {
+      match._leaderboardRecorded = true;
+      return;
+    }
+
+    const playerInfos = await Promise.all(
+      playerIds.map(async (pid) => ({
+        id: pid,
+        displayName: await resolvePlayerDisplayName(pid),
+      }))
+    );
+
+    if (playerInfos.length === 0) {
+      match._leaderboardRecorded = true;
+      return;
+    }
+
+    const infoById = new Map(playerInfos.map((info) => [info.id, info.displayName]));
+    const recording = matchRecordings.get(match.id);
+    let durationSeconds = null;
+    if (recording && typeof recording.startTime === 'number') {
+      const endTime = recording.endTime || Date.now();
+      durationSeconds = Math.max(0, Math.round((endTime - recording.startTime) / 1000));
+    }
+
+    const isDraw = Boolean(payload.isDraw);
+    let winnerId = typeof payload.winnerId === 'string' ? payload.winnerId : match.winnerId || null;
+    let loserId = typeof payload.loserId === 'string' ? payload.loserId : null;
+
+    if (isDraw || !winnerId) {
+      winnerId = null;
+      loserId = null;
+    } else if (!loserId) {
+      loserId = playerInfos.find((info) => info.id !== winnerId)?.id || null;
+    }
+
+    const tournamentId = typeof payload.tournamentId === 'string' ? payload.tournamentId : null;
+
+    const existing = await prisma.matchResult.findFirst({ where: { matchId: match.id } });
+    if (!existing) {
+      await prisma.matchResult.create({
+        data: {
+          matchId: match.id,
+          lobbyName: match.lobbyName || null,
+          winnerId: isDraw ? null : winnerId,
+          loserId: isDraw ? null : loserId,
+          isDraw,
+          format,
+          tournamentId,
+          players: playerInfos.map((info) => ({
+            id: info.id,
+            displayName: info.displayName,
+          })),
+          duration: durationSeconds !== null ? durationSeconds : null,
+        },
+      });
+    }
+
+    match._leaderboardRecorded = true;
+
+    if (playerInfos.length < 2) return;
+    if (playerInfos.some((info) => isCpuPlayerId(info.id))) return;
+
+    let leaderboardUpdated = false;
+    const tournamentWin = !isDraw && tournamentId && winnerId
+      ? await checkTournamentWin(tournamentId, winnerId)
+      : false;
+
+    if (isDraw) {
+      const [playerA, playerB] = playerInfos;
+      for (const timeFrame of LEADERBOARD_TIME_FRAMES) {
+        const [entryA, entryB] = await Promise.all([
+          getOrCreateLeaderboardEntry(
+            playerA.id,
+            infoById.get(playerA.id),
+            format,
+            timeFrame
+          ),
+          getOrCreateLeaderboardEntry(
+            playerB.id,
+            infoById.get(playerB.id),
+            format,
+            timeFrame
+          ),
+        ]);
+
+        const { newWinnerRating: ratingA, newLoserRating: ratingB } =
+          calculateNewRatingsForLeaderboard(entryA.rating, entryB.rating, true);
+
+        await Promise.all([
+          prisma.leaderboardEntry.update({
+            where: { id: entryA.id },
+            data: {
+              draws: { increment: 1 },
+              rating: ratingA,
+              winRate:
+                entryA.wins / (entryA.wins + entryA.losses + entryA.draws + 1),
+              lastActive: new Date(),
+              displayName: infoById.get(entryA.playerId) || entryA.displayName,
+            },
+          }),
+          prisma.leaderboardEntry.update({
+            where: { id: entryB.id },
+            data: {
+              draws: { increment: 1 },
+              rating: ratingB,
+              winRate:
+                entryB.wins / (entryB.wins + entryB.losses + entryB.draws + 1),
+              lastActive: new Date(),
+              displayName: infoById.get(entryB.playerId) || entryB.displayName,
+            },
+          }),
+        ]);
+
+        leaderboardUpdated = true;
+      }
+    } else if (winnerId && loserId) {
+      for (const timeFrame of LEADERBOARD_TIME_FRAMES) {
+        const [winnerEntry, loserEntry] = await Promise.all([
+          getOrCreateLeaderboardEntry(
+            winnerId,
+            infoById.get(winnerId),
+            format,
+            timeFrame
+          ),
+          getOrCreateLeaderboardEntry(
+            loserId,
+            infoById.get(loserId),
+            format,
+            timeFrame
+          ),
+        ]);
+
+        const { newWinnerRating, newLoserRating } =
+          calculateNewRatingsForLeaderboard(winnerEntry.rating, loserEntry.rating, false);
+
+        await Promise.all([
+          prisma.leaderboardEntry.update({
+            where: { id: winnerEntry.id },
+            data: {
+              wins: { increment: 1 },
+              rating: newWinnerRating,
+              winRate:
+                (winnerEntry.wins + 1) /
+                (winnerEntry.wins + winnerEntry.losses + winnerEntry.draws + 1),
+              lastActive: new Date(),
+              displayName: infoById.get(winnerId) || winnerEntry.displayName,
+              ...(tournamentWin ? { tournamentWins: { increment: 1 } } : {}),
+            },
+          }),
+          prisma.leaderboardEntry.update({
+            where: { id: loserEntry.id },
+            data: {
+              losses: { increment: 1 },
+              rating: newLoserRating,
+              winRate:
+                loserEntry.wins /
+                (loserEntry.wins + loserEntry.losses + loserEntry.draws + 1),
+              lastActive: new Date(),
+              displayName: infoById.get(loserId) || loserEntry.displayName,
+            },
+          }),
+        ]);
+
+        leaderboardUpdated = true;
+      }
+    }
+
+    if (leaderboardUpdated) {
+      await recalculateLeaderboardRanks(format);
+    }
+  } catch (err) {
+    try {
+      console.warn(
+        `[leaderboard] failed to record result for ${match && match.id ? match.id : 'unknown'}:`,
+        err?.message || err
+      );
+    } catch {}
+  }
+}
+
 // Bot lifecycle helpers moved into BotManager
 
 // -----------------------------
@@ -3509,6 +3829,8 @@ io.on("connection", (socket) => {
     io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
     try { botManager.cleanupBotsAfterMatch(match); } catch {}
     try { persistMatchEnded(match); } catch {}
+    try { finishMatchRecording(match.id); } catch {}
+    recordLeaderboardMatchResult(match, payload).catch(() => {});
     try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
   });
 
