@@ -7,7 +7,7 @@ import {
   CuboidCollider,
   useAfterPhysicsStep,
 } from "@react-three/rapier";
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
   SRGBColorSpace,
   Raycaster,
@@ -17,6 +17,7 @@ import {
 } from "three";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
 import { useSound } from "@/lib/contexts/SoundContext";
+import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import TokenAttachmentDialog from "@/lib/game/components/TokenAttachmentDialog";
@@ -36,7 +37,7 @@ import {
   DRAG_HOLD_MS,
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef, BoardState } from "@/lib/game/store";
+import type { CardRef, BoardState, PlayerKey } from "@/lib/game/store";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
@@ -110,6 +111,10 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const permanents = useGameStore((s) => s.permanents);
   const permanentPositions = useGameStore((s) => s.permanentPositions);
   const avatars = useGameStore((s) => s.avatars);
+  const lastAvatarCardsRef = useRef<Record<PlayerKey, CardRef | null>>({
+    p1: null,
+    p2: null,
+  });
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   // hover tracking disabled for tiles
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -120,6 +125,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
+  const setLastPointerWorldPos = useGameStore((s) => s.setLastPointerWorldPos);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
   // Counter actions
@@ -411,6 +417,68 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
     setPreviewCard(null);
   }
 
+  const handlePointerMove = useCallback(
+    (x: number, z: number) => {
+      setLastPointerWorldPos({ x, z });
+    },
+    [setLastPointerWorldPos]
+  );
+
+  const handlePointerOut = useCallback(() => {
+    setLastPointerWorldPos(null);
+  }, [setLastPointerWorldPos]);
+
+  const emitBoardPing = useCallback((position: { x: number; z: number } | null) => {
+    if (!position) return;
+    const x = Number(position.x);
+    const z = Number(position.z);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const { actorKey, pushBoardPing, transport } = useGameStore.getState();
+    const id = `ping_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+    const ts = Date.now();
+    try {
+      pushBoardPing({
+        id,
+        position: { x, z },
+        playerId: null,
+        playerKey: actorKey,
+        ts,
+      });
+    } catch {}
+    try {
+      transport?.sendMessage?.({
+        type: "boardPing",
+        id,
+        position: { x, z },
+        playerKey: actorKey,
+        ts,
+      });
+    } catch {}
+  }, []);
+
+  // Global keyboard: Space to ping at current pointer position
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.code === "Space" || e.key === " " || e.key === "Spacebar") {
+        const ae = (document.activeElement as HTMLElement | null) || null;
+        if (
+          ae &&
+          (ae.tagName === "INPUT" ||
+            ae.tagName === "TEXTAREA" ||
+            ae.isContentEditable)
+        ) {
+          return; // don't interfere with typing
+        }
+        e.preventDefault();
+        const { lastPointerWorldPos } = useGameStore.getState();
+        emitBoardPing(lastPointerWorldPos);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [emitBoardPing]);
+
   return (
     <group>
       {/* Playmat background */}
@@ -504,6 +572,7 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                 onPointerMove={(e: ThreeEvent<PointerEvent>) => {
                   // Track ghost only for hand/pile drags; still drive bodies for board/avatar drags
                   const world = e.point;
+                  handlePointerMove(world.x, world.z);
                   if (
                     dragFromHand &&
                     !dragAvatar &&
@@ -516,6 +585,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                   if ((dragging || dragAvatar) && draggedBody.current) {
                     moveDraggedBody(world.x, world.z, true);
                   }
+                }}
+                onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
+                  if (dragFromHand || dragFromPile || dragging || dragAvatar) return;
+                  e.stopPropagation();
+                  emitBoardPing({ x: e.point.x, z: e.point.z });
                 }}
                 onPointerUp={(e: ThreeEvent<PointerEvent>) => {
                   if (e.button !== 0) return; // only handle left-button releases for drops
@@ -768,6 +842,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                   useGameStore.getState().closeContextMenu();
                   clearHoverPreview();
                 }}
+                onPointerOut={() => {
+                  handlePointerOut();
+                }}
               >
                 <planeGeometry args={[TILE_SIZE * 0.96, TILE_SIZE * 0.96]} />
                 <meshStandardMaterial
@@ -827,6 +904,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                               if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
                               clearHoverPreview();
+                            }}
+                            onDoubleClick={(e) => {
+                              if (dragFromHand || dragFromPile) return;
+                              e.stopPropagation();
+                              emitBoardPing({ x: e.point.x, z: e.point.z });
                             }}
                           >
                             <CardPlane
@@ -1003,6 +1085,12 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                           ) {
                             dragStartRef.current = null;
                           }
+                        }}
+                        onDoubleClick={(e) => {
+                          if (dragFromHand || dragFromPile) return;
+                          if (tokenSiteReplace) return;
+                          e.stopPropagation();
+                          emitBoardPing({ x: e.point.x, z: e.point.z });
                         }}
                         onPointerMove={(e) => {
                           if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
@@ -1370,6 +1458,9 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
         })}
       </group>
 
+      {/* Board ping markers */}
+      <BoardPingLayer />
+
       {/* Avatars */}
       {(["p1", "p2"] as const).map((who) => {
         const a = avatars[who];
@@ -1385,6 +1476,11 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
         return (
           <group key={`avatar-${who}`}>
             {(() => {
+              const cachedCard = lastAvatarCardsRef.current[who];
+              const activeCard = a.card?.slug ? a.card : cachedCard;
+              if (a.card?.slug) {
+                lastAvatarCardsRef.current[who] = a.card;
+              }
               const rotZ =
                 (who === "p1" ? 0 : Math.PI) + (a.tapped ? Math.PI / 2 : 0);
               const isSel =
@@ -1467,6 +1563,12 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                       ) {
                         avatarDragStartRef.current = null;
                       }
+                    }}
+                    onDoubleClick={(e) => {
+                      if (dragFromHand || dragFromPile) return;
+                      if (dragAvatar) return;
+                      e.stopPropagation();
+                      emitBoardPing({ x: e.point.x, z: e.point.z });
                     }}
                     onPointerMove={(e) => {
                       if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
@@ -1569,12 +1671,14 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
                           />
                         )}
                       <CardPlane
-                        slug={a.card?.slug || ""}
+                        slug={activeCard?.slug || cachedCard?.slug || ""}
                         width={CARD_SHORT}
                         height={CARD_LONG}
                         rotationZ={rotZ}
                         textureUrl={
-                          !a.card?.slug ? "/api/assets/air.png" : undefined
+                          activeCard || cachedCard
+                            ? undefined
+                            : "/api/assets/cardback_spellbook.png"
                         }
                       />
                     </group>

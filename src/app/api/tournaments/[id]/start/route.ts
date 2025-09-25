@@ -1,7 +1,7 @@
+import { TournamentStatus as DBTournamentStatus, TournamentFormat as DBTournamentFormat, RoundStatus as DBRoundStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { TournamentStatus as DBTournamentStatus, TournamentFormat as DBTournamentFormat, RoundStatus as DBRoundStatus } from '@prisma/client';
 import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
 import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
