@@ -3,8 +3,9 @@
   Optimized KTX2 compression for Sorcery card textures
 
   IMPROVEMENTS:
-  - Uses ETC1S format by default (much smaller than UASTC)
-  - Higher compression quality settings for better size/quality ratio
+  - Uses calibrated UASTC presets by default for high fidelity
+  - Automatic format selection based on image content
+  - Adaptive RDO/Zstd targeting card-quality thresholds
   - Automatic format selection based on image content
   - Better sizing for card textures
 
@@ -48,31 +49,31 @@ const DRY = Boolean(getFlag('dryRun', false));
 const MIN_KB = Number(getFlag('minKB', 10)); // Lower threshold for small icons
 const CONCURRENCY = Number(getFlag('jobs', Math.max(1, Math.min(os.cpus().length - 1, 4))));
 
-// Quality presets
+// Quality presets - prioritizing visual quality
 const QUALITY_PRESETS = {
   fast: {
-    format: 'etc1s',
-    qlevel: 255,      // Max compression (0-255, higher = smaller file)
-    uastc_level: 4,   // Fastest UASTC
-    uastc_rdo: 3.0,   // High RDO for smaller files
-    zstd: 22,         // Max zstd compression
-    resize_factor: 0.5 // Resize to 50% for fast loading
+    format: 'uastc',
+    uastc_level: 3,
+    uastc_rdo: 1.25,
+    zstd: 12,
+    resize_factor: 1.0,
+    targetKB: 450
   },
   balanced: {
-    format: 'etc1s',
-    qlevel: 192,      // Good balance (0-255, higher = smaller file)
-    uastc_level: 2,   // Balanced UASTC
-    uastc_rdo: 1.5,   // Moderate RDO
-    zstd: 19,         // High zstd compression
-    resize_factor: 0.75 // Resize to 75% for good quality
+    format: 'uastc',
+    uastc_level: 2,
+    uastc_rdo: 1.0,
+    zstd: 14,
+    resize_factor: 1.0,
+    targetKB: 400
   },
   high: {
-    format: 'uastc',  // Use UASTC for highest quality
-    qlevel: 128,      // Lower compression for quality
-    uastc_level: 1,   // Higher quality UASTC
-    uastc_rdo: 0.5,   // Low RDO for quality
-    zstd: 18,         // Standard zstd
-    resize_factor: 1.0 // Keep original size
+    format: 'uastc',
+    uastc_level: 1,
+    uastc_rdo: 0.75,
+    zstd: 18,
+    resize_factor: 1.0,
+    targetKB: 9999
   }
 };
 
@@ -124,51 +125,42 @@ async function determineOptimalSettings(inFile) {
   const settings = { ...preset };
   const basename = path.basename(inFile).toLowerCase();
 
-  // Card backs and atlases need higher quality
-  if (basename.includes('cardback') || basename.includes('atlas')) {
+  // Card backs, atlases and avatars need highest quality
+  if (basename.includes('cardback') || basename.includes('atlas') || basename.includes('avatar')) {
     settings.format = 'uastc';
-    settings.qlevel = 128;
+    settings.uastc_level = Math.min(settings.uastc_level, 1);
+    settings.uastc_rdo = Math.min(settings.uastc_rdo, 0.75);
+    settings.zstd = Math.max(settings.zstd, 18);
     settings.resize_factor = 1.0;
   }
-  // Small cards (_s suffix) can use more aggressive compression
+  // Small cards (_s suffix) can tolerate higher RDO but keep UASTC for consistency
   else if (basename.includes('_s.') || basename.includes('_s_')) {
-    settings.format = 'etc1s';
-    settings.qlevel = 220; // More compression for small cards
-    settings.resize_factor = Math.min(preset.resize_factor, 0.5);
+    settings.format = 'uastc';
+    settings.uastc_level = Math.max(settings.uastc_level, 3);
+    settings.uastc_rdo = Math.max(settings.uastc_rdo, 1.5);
+    settings.resize_factor = 1.0;
   }
-  // Full size cards (_f suffix) need better quality
+  // Full size cards (_f suffix) need excellent quality
   else if (basename.includes('_f.') || basename.includes('_f_')) {
-    if (preset.format === 'etc1s') {
-      settings.qlevel = Math.max(160, preset.qlevel - 32); // Less compression
-    }
-    settings.resize_factor = Math.min(preset.resize_factor, 0.85);
+    settings.resize_factor = 1.0; // Keep full size
   }
 
   // Get dimensions to optimize further
   const dims = await getPngDimensions(inFile);
-  if (dims) {
-    // Very large images (>2048px) should be resized more aggressively
-    if (dims.width > 2048 || dims.height > 2048) {
-      settings.resize_factor = Math.min(settings.resize_factor, 0.5);
-    }
-    // Small images (<512px) should keep more detail
-    else if (dims.width < 512 && dims.height < 512) {
-      settings.resize_factor = 1.0;
-      if (settings.format === 'etc1s') {
-        settings.qlevel = Math.max(128, settings.qlevel - 64);
-      }
-    }
+  if (dims && (dims.width > 4096 || dims.height > 4096)) {
+    // Safety cap for ultra large sources
+    settings.resize_factor = Math.min(settings.resize_factor, 0.75);
   }
 
   return settings;
 }
 
 function calculateResize(width, height, factor) {
-  // Ensure multiples of 4 for block compression
-  const newW = Math.floor(width * factor);
-  const newH = Math.floor(height * factor);
-  const finalW = newW - (newW % 4) || 4;
-  const finalH = newH - (newH % 4) || 4;
+  // Ensure multiples of 4 for block compression, rounding up to preserve detail.
+  const targetW = Math.max(1, Math.round(width * factor));
+  const targetH = Math.max(1, Math.round(height * factor));
+  const finalW = Math.max(4, Math.ceil(targetW / 4) * 4);
+  const finalH = Math.max(4, Math.ceil(targetH / 4) * 4);
   return `${finalW}x${finalH}`;
 }
 
@@ -182,12 +174,12 @@ async function buildToktxArgs(inFile, outFile, settings) {
   if (settings.format === 'uastc') {
     args.push('--uastc', String(settings.uastc_level));
     args.push('--uastc_rdo_l', String(settings.uastc_rdo));
+    args.push('--uastc_rdo_d', '1');
     args.push('--zcmp', String(settings.zstd));
   } else {
-    // ETC1S/BasisLZ
+    // ETC1S/BasisLZ fallback when explicitly requested via CLI presets
     args.push('--bcmp');
-    args.push('--qlevel', String(settings.qlevel));
-    // No zstd for ETC1S - it's already compressed
+    args.push('--qlevel', String(settings.qlevel ?? 64));
   }
 
   // Generate mipmaps for better performance at different scales
@@ -196,13 +188,22 @@ async function buildToktxArgs(inFile, outFile, settings) {
   // Color space
   args.push('--assign_oetf', 'srgb', '--assign_primaries', 'bt709');
 
-  // Resize if needed
-  if (settings.resize_factor < 1.0) {
-    const dims = await getPngDimensions(inFile);
-    if (dims) {
-      const resizeGeom = calculateResize(dims.width, dims.height, settings.resize_factor);
+  // Always ensure output dimensions align to 4x4 blocks (and optional downscaling)
+  const dims = await getPngDimensions(inFile);
+  if (dims) {
+    const resizeGeom = calculateResize(dims.width, dims.height, settings.resize_factor);
+    const [targetW, targetH] = resizeGeom.split('x').map((n) => Number(n) || 0);
+    const needsResize =
+      targetW > 0 &&
+      targetH > 0 &&
+      (targetW !== dims.width || targetH !== dims.height);
+    if (needsResize) {
       args.push('--resize', resizeGeom);
     }
+  } else if (settings.resize_factor < 1.0) {
+    console.warn(
+      `⚠️  Unable to determine dimensions for ${inFile}; skipping downscale but block alignment may fail.`
+    );
   }
 
   // Output and input files
@@ -278,6 +279,19 @@ async function compressOne(inFile) {
       if (code === 0) {
         try {
           const outStat = await fsp.stat(outFile);
+          const outKB = outStat.size / 1024;
+          const targetKB = settings.targetKB ?? preset.targetKB ?? Infinity;
+          if (outKB > targetKB && targetKB < Infinity) {
+            // Soft fail so caller can retry with stronger compression if desired
+            resolve({
+              ok: false,
+              outFile,
+              code: 0,
+              error: `output ${outKB.toFixed(1)}KB exceeds target ${targetKB}KB`,
+              settings
+            });
+            return;
+          }
           const compression = ((1 - outStat.size / startSize) * 100).toFixed(1);
           resolve({
             ok: true,
