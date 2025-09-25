@@ -50,6 +50,14 @@ export type BoardState = {
   sites: Record<CellKey, SiteTile>;
 };
 
+export type BoardPingEvent = {
+  id: string;
+  position: { x: number; z: number };
+  playerId: string | null;
+  playerKey: PlayerKey | null;
+  ts: number;
+};
+
 // Minimal card reference for zones
 export type CardRef = {
   cardId: number;
@@ -245,6 +253,13 @@ export type GameState = {
   events: GameEvent[];
   eventSeq: number;
   log: (text: string) => void;
+  boardPings: BoardPingEvent[];
+  pushBoardPing: (
+    ping: Omit<BoardPingEvent, "ts"> & { ts?: number }
+  ) => void;
+  removeBoardPing: (id: string) => void;
+  lastPointerWorldPos: { x: number; z: number } | null;
+  setLastPointerWorldPos: (pos: { x: number; z: number } | null) => void;
   // UI cross-surface drag state
   dragFromHand: boolean;
   dragFromPile: {
@@ -480,6 +495,8 @@ function computeAvailableMana(
 
 export type GameEvent = { id: number; ts: number; text: string };
 const MAX_EVENTS = 200;
+export const BOARD_PING_LIFETIME_MS = 2500;
+export const BOARD_PING_MAX_HISTORY = 8;
 
 // Snapshot of serializable game state we can restore on undo
 export type SerializedGame = {
@@ -749,20 +766,57 @@ export const useGameStore = create<GameState>((set, get) => ({
   trySendPatch: (patch) => {
     const tr = get().transport;
     if (!patch || typeof patch !== "object") return false;
+    // Sanitize to prevent illegal opponent mutations in online play
+    const actorKey = get().actorKey;
+    let toSend: ServerPatchT = patch as ServerPatchT;
+    try {
+      const p = patch as ServerPatchT;
+      const sanitized: ServerPatchT = { ...p };
+      // Filter avatars: only allow the actor seat; if actorKey unknown, drop avatars entirely
+      if (p.avatars && typeof p.avatars === "object") {
+        if (actorKey === "p1" || actorKey === "p2") {
+          const v = (p.avatars as GameState["avatars"]) [actorKey] as AvatarState | undefined;
+          if (v && typeof v === "object") {
+            // Do not allow sending opponent tap toggles; remove tapped key from payload
+            const rest = { ...(v as unknown as Record<string, unknown>) };
+            delete (rest as Record<string, unknown>)["tapped"];
+            const out: Partial<GameState["avatars"]> = { [actorKey]: rest as unknown as AvatarState };
+            sanitized.avatars = out as GameState["avatars"];
+          } else {
+            delete (sanitized as unknown as { avatars?: unknown }).avatars;
+          }
+        } else {
+          // Actor unknown -> avoid sending avatars at all to prevent validation issues
+          delete (sanitized as unknown as { avatars?: unknown }).avatars;
+        }
+      }
+      // Filter zones: keep only actor seat updates when actor known
+      if (p.zones && typeof p.zones === "object" && actorKey) {
+        const z = p.zones as Partial<Record<PlayerKey, Zones>>;
+        const outZ: Partial<Record<PlayerKey, Zones>> = {};
+        if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+        if (Object.keys(outZ).length > 0) {
+          sanitized.zones = outZ as GameState["zones"];
+        } else {
+          delete (sanitized as unknown as { zones?: unknown }).zones;
+        }
+      }
+      toSend = sanitized;
+    } catch {}
     if (!tr) {
-      set((s) => ({ pendingPatches: [...s.pendingPatches, patch] }));
+      set((s) => ({ pendingPatches: [...s.pendingPatches, toSend] }));
       try {
         console.warn("[net] Transport unavailable: queued patch");
       } catch {}
       return false;
     }
     try {
-      tr.sendAction(patch);
+      tr.sendAction(toSend);
       // Mark last local action timestamp so undo can wait for server ack ordering
       set({ lastLocalActionTs: Date.now() });
       return true;
     } catch (err) {
-      set((s) => ({ pendingPatches: [...s.pendingPatches, patch] }));
+      set((s) => ({ pendingPatches: [...s.pendingPatches, toSend] }));
       try {
         console.warn(`[net] Send failed, queued patch: ${String(err)}`);
       } catch {}
@@ -778,7 +832,39 @@ export const useGameStore = create<GameState>((set, get) => ({
     let sentAll = true;
     for (const p of queue) {
       try {
-        tr.sendAction(p);
+        // Sanitize queued patch as we do in trySendPatch
+        const actorKey = get().actorKey;
+        let toSend: ServerPatchT = p as ServerPatchT;
+        try {
+          const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
+          if (sanitized.avatars && typeof sanitized.avatars === "object") {
+            if (actorKey === "p1" || actorKey === "p2") {
+              const v = (sanitized.avatars as GameState["avatars"]) [actorKey] as AvatarState | undefined;
+              if (v && typeof v === "object") {
+                const rest = { ...(v as unknown as Record<string, unknown>) };
+                delete (rest as Record<string, unknown>)["tapped"];
+                const out: Partial<GameState["avatars"]> = { [actorKey]: rest as unknown as AvatarState };
+                sanitized.avatars = out as GameState["avatars"];
+              } else {
+                delete (sanitized as unknown as { avatars?: unknown }).avatars;
+              }
+            } else {
+              delete (sanitized as unknown as { avatars?: unknown }).avatars;
+            }
+          }
+          if (sanitized.zones && typeof sanitized.zones === "object" && actorKey) {
+            const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
+            const outZ: Partial<Record<PlayerKey, Zones>> = {};
+            if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+            if (Object.keys(outZ).length > 0) {
+              sanitized.zones = outZ as GameState["zones"];
+            } else {
+              delete (sanitized as unknown as { zones?: unknown }).zones;
+            }
+          }
+          toSend = sanitized;
+        } catch {}
+        tr.sendAction(toSend);
         set({ lastLocalActionTs: Date.now() });
       } catch (err) {
         try {
@@ -881,6 +967,59 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().trySendPatch(patch);
       return { events, eventSeq: nextId } as Partial<GameState> as GameState;
     }),
+  boardPings: [],
+  pushBoardPing: (ping) => {
+    const id = String(ping.id || "").trim();
+    if (!id) return;
+    const ts =
+      typeof ping.ts === "number" && Number.isFinite(ping.ts)
+        ? ping.ts
+        : Date.now();
+    const event: BoardPingEvent = {
+      id,
+      position: {
+        x: Number(ping.position?.x) || 0,
+        z: Number(ping.position?.z) || 0,
+      },
+      playerId: typeof ping.playerId === "string" ? ping.playerId : null,
+      playerKey:
+        ping.playerKey === "p1" || ping.playerKey === "p2"
+          ? ping.playerKey
+          : null,
+      ts,
+    };
+    set((state) => {
+      if (state.boardPings.some((entry) => entry.id === id)) {
+        return state as GameState;
+      }
+      const cutoff = ts - BOARD_PING_LIFETIME_MS;
+      const filtered = state.boardPings.filter((entry) => entry.ts > cutoff);
+      const next = filtered.length >= BOARD_PING_MAX_HISTORY
+        ? [...filtered.slice(filtered.length - BOARD_PING_MAX_HISTORY + 1), event]
+        : [...filtered, event];
+      return {
+        boardPings: next,
+      } as Partial<GameState> as GameState;
+    });
+    const timeout = BOARD_PING_LIFETIME_MS + 100;
+    const removeLater = () => {
+      try {
+        get().removeBoardPing(id);
+      } catch {}
+    };
+    if (typeof window !== "undefined") {
+      window.setTimeout(removeLater, timeout);
+    } else {
+      setTimeout(removeLater, timeout);
+    }
+  },
+  removeBoardPing: (id) =>
+    set((state) => ({
+      boardPings: state.boardPings.filter((entry) => entry.id !== id),
+    })),
+  lastPointerWorldPos: null,
+  setLastPointerWorldPos: (pos) =>
+    set({ lastPointerWorldPos: pos }),
 
   // Apply an incremental server patch into the store.
   // - Only whitelisted game-state fields are updated
@@ -1803,11 +1942,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       } as GameState["avatars"];
 
       {
+        // Server is authoritative for start-of-turn untaps (permanents and avatar).
+        // Only send phase/currentPlayer; server will broadcast the full authoritative patch.
         const patch: ServerPatchT = {
           phase: nextPhase,
           currentPlayer: nextPlayer,
-          permanents: permanents as GameState["permanents"],
-          avatars: avatarsNext as GameState["avatars"],
         };
         get().trySendPatch(patch);
       }
@@ -1856,11 +1995,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     } as GameState["avatars"];
 
     {
+      // Server will compute start-of-turn untaps. Send only phase/currentPlayer.
       const patch: ServerPatchT = {
         phase: "Main",
         currentPlayer: nextPlayer,
-        permanents: permanents as GameState["permanents"],
-        avatars: avatarsNext as GameState["avatars"],
       };
       get().trySendPatch(patch);
     }
@@ -2866,7 +3004,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { avatars: avatarsNext };
+          const patch: ServerPatchT = {
+            avatars: { [who]: { card } } as GameState["avatars"],
+          };
           get().trySendPatch(patch);
         }
       }
@@ -2913,7 +3053,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            avatars: avatars as GameState["avatars"],
+            avatars: { [who]: { pos: [x, y] as [number, number], offset: null } } as GameState["avatars"],
           };
           get().trySendPatch(patch);
         }
@@ -2977,7 +3117,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         `${who.toUpperCase()} ${next.tapped ? "taps" : "untaps"} Avatar`
       );
       const avatarsNext = { ...s.avatars, [who]: next } as GameState["avatars"];
-      get().trySendPatch({ avatars: avatarsNext });
+      // Only send tapped field for the acting seat
+      const patch: ServerPatchT = {
+        avatars: { [who]: { tapped: next.tapped } } as GameState["avatars"],
+      };
+      get().trySendPatch(patch);
       return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
 
@@ -3428,6 +3572,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         hoverCell: null,
         previewCard: null,
         contextMenu: null,
+        boardPings: [],
+        lastPointerWorldPos: null,
         // Reset history
         history: [],
         historyByPlayer: { p1: [], p2: [] },

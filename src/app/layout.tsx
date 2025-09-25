@@ -9,8 +9,8 @@ import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import ConsoleWarningFilter from "@/components/dev/ConsoleWarningFilter";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { authOptions } from "@/lib/auth";
-import { ThemeProvider } from "@/lib/contexts/ThemeContext";
 import { SoundProvider } from "@/lib/contexts/SoundContext";
+import { ThemeProvider } from "@/lib/contexts/ThemeContext";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
 
 // Provide empty variables instead of loading Google fonts in network-restricted environments

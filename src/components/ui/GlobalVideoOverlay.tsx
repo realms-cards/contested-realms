@@ -14,6 +14,7 @@
 
 import Image from 'next/image';
 import React, { useEffect } from 'react';
+import { OnlineContext } from '@/app/online/online-context';
 import SeatMediaControls, { SeatRtcLike } from '@/components/rtc/SeatMediaControls';
 import { useSound } from '@/lib/contexts/SoundContext';
 import { useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
@@ -21,7 +22,6 @@ import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { VideoStreamOverlay } from './VideoStreamOverlay';
 import type { GlobalVideoOverlayProps } from '../../../specs/006-live-video-and/contracts/ui-components';
-import { OnlineContext } from '@/app/online/online-context';
 
 /**
  * Global Video Overlay Component

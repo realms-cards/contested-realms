@@ -245,6 +245,37 @@ export default function OnlineMatchPage() {
     lastConnectedRef.current = connected;
   }, [connected]);
 
+  // Subscribe to lightweight messages for board pings and other signals
+  useEffect(() => {
+    if (!transport) return;
+    const off = transport.on("message", (m) => {
+      const type = (m && typeof m === "object" && (m as Record<string, unknown>).type) as string | undefined;
+      if (type !== "boardPing") return;
+      const msg = m as unknown as {
+        id?: string;
+        position?: { x?: number; z?: number };
+        playerKey?: PlayerKey | null;
+        ts?: number;
+      };
+      const id = typeof msg.id === "string" ? msg.id : `ping_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+      const x = Number(msg.position?.x);
+      const z = Number(msg.position?.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      try {
+        useGameStore.getState().pushBoardPing({
+          id,
+          position: { x, z },
+          playerId: null,
+          playerKey: msg.playerKey === "p1" || msg.playerKey === "p2" ? msg.playerKey : null,
+          ts: typeof msg.ts === "number" ? msg.ts : Date.now(),
+        });
+      } catch {}
+    });
+    return () => {
+      try { off?.(); } catch {}
+    };
+  }, [transport]);
+
   // Also reset one-shot guards if we are no longer in this match (e.g., user left)
   useEffect(() => {
     if (!matchId) return;

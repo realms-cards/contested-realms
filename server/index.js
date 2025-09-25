@@ -1291,7 +1291,26 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           }
         }
       } catch {}
+      // Merge player patch into game snapshot
       match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
+      // Apply start-of-turn effects if phase/currentPlayer indicates a new turn
+      try {
+        const prevPhase = (baseForMerge && baseForMerge.phase) || null;
+        const prevCp = (baseForMerge && typeof baseForMerge.currentPlayer === 'number') ? baseForMerge.currentPlayer : null;
+        const nextPhase = (match.game && match.game.phase) || prevPhase;
+        const nextCp = (match.game && typeof match.game.currentPlayer === 'number') ? match.game.currentPlayer : prevCp;
+        const phaseBecameStart = nextPhase === 'Start' && nextPhase !== prevPhase;
+        const enteredMainWithNewCp = nextPhase === 'Main' && prevCp != null && nextCp != null && nextCp !== prevCp;
+        if (phaseBecameStart || enteredMainWithNewCp) {
+          const tsPatch = applyTurnStart(match.game || {});
+          if (tsPatch && typeof tsPatch === 'object') {
+            // Update stored snapshot and outgoing patch
+            match.game = deepMergeReplaceArrays(match.game || {}, tsPatch);
+            patchToApply = deepMergeReplaceArrays(patchToApply || {}, tsPatch);
+            try { console.debug('[rules] applyTurnStart merged', { matchId, phase: nextPhase, currentPlayer: nextCp }); } catch {}
+          }
+        }
+      } catch {}
       try {
         if (match.game && match.game.permanents) {
           match.game.permanents = dedupePermanents(match.game.permanents);
@@ -2553,6 +2572,19 @@ io.on("connection", (socket) => {
           return;
         }
         await leaderDraftPlayerReady(matchId, player.id, ready);
+      } catch {}
+    } else if (type === "boardPing") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const idx = Array.isArray(match?.playerIds) ? match.playerIds.indexOf(player.id) : 0;
+        const playerKey = idx === 1 ? 'p2' : 'p1';
+        const x = Number(payload && payload.position && payload.position.x);
+        const z = Number(payload && payload.position && payload.position.z);
+        if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+        const id = payload && typeof payload.id === 'string' ? payload.id : rid('ping');
+        const out = { type: 'boardPing', id, position: { x, z }, playerKey, ts: Date.now() };
+        io.to(room).emit('message', out);
       } catch {}
     }
   });
