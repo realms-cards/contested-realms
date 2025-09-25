@@ -3,13 +3,14 @@
 import type { ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
+import { cardRefToPreview } from "@/lib/game/card-preview.types";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
   CARD_LONG,
   CARD_SHORT,
   TILE_SIZE,
 } from "@/lib/game/constants";
-import type { CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 
@@ -134,17 +135,17 @@ export default function Piles3D({
     
     // Use enhanced preview if available, otherwise fall back to legacy
     if (showCardPreview) {
-      showCardPreview({
-        slug: card.slug,
-        name: card.name,
-        type: card.type || null,
-      });
-    } else {
-      hoverTimer.current = window.setTimeout(
-        () => setPreviewCard(card || null),
-        600
-      );
+      const preview = cardRefToPreview(card);
+      if (preview) {
+        showCardPreview(preview);
+        return;
+      }
     }
+
+    hoverTimer.current = window.setTimeout(
+      () => setPreviewCard(card || null),
+      600
+    );
   }
   function clearHoverPreview() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);

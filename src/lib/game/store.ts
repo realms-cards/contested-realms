@@ -9,7 +9,24 @@ import {
   newTokenInstanceId,
   tokenSlug,
 } from "@/lib/game/tokens";
-import type { GameTransport } from "@/lib/net/transport";
+import type {
+  InteractionEnvelope,
+  InteractionGrant,
+  InteractionGrantRequest,
+  InteractionDecision,
+  InteractionMessage,
+  InteractionRequestMessage,
+  InteractionResponseMessage,
+  InteractionRequestKind,
+} from "@/lib/net/interactions";
+import {
+  wrapInteractionMessage,
+  grantFromRequest,
+  generateInteractionRequestId,
+  createInteractionRequest,
+  createInteractionResponse,
+} from "@/lib/net/interactions";
+import type { GameTransport, CustomMessage } from "@/lib/net/transport";
 import type {
   PermanentPosition,
   SitePositionData,
@@ -57,6 +74,98 @@ export type BoardPingEvent = {
   playerKey: PlayerKey | null;
   ts: number;
 };
+
+type InteractionRecordStatus = "pending" | InteractionDecision | "expired";
+
+type InteractionRequestEntry = {
+  request: InteractionRequestMessage;
+  response?: InteractionResponseMessage;
+  status: InteractionRecordStatus;
+  direction: "inbound" | "outbound";
+  grant?: InteractionGrant | null;
+  proposedGrant?: InteractionGrantRequest | null;
+  receivedAt: number;
+  updatedAt: number;
+};
+
+type InteractionStateMap = Record<string, InteractionRequestEntry>;
+
+type SendInteractionRequestInput = {
+  from: string;
+  to: string;
+  kind: InteractionRequestKind;
+  matchId?: string;
+  payload?: Record<string, unknown>;
+  note?: string;
+  requestId?: string;
+  grant?: InteractionGrantRequest;
+};
+
+type InteractionResponseOptions = {
+  reason?: string;
+  payload?: Record<string, unknown>;
+  grant?: InteractionGrantRequest;
+};
+
+function normalizeGrantRequest(candidate: unknown): InteractionGrantRequest | null {
+  if (!candidate || typeof candidate !== "object") return null;
+  const src = candidate as Record<string, unknown>;
+  const normalized: InteractionGrantRequest = {};
+  if ("targetSeat" in src) {
+    const seat = src.targetSeat;
+    if (seat === "p1" || seat === "p2" || seat === null) {
+      normalized.targetSeat = seat;
+    }
+  }
+  if (typeof src.expiresAt === "number" && Number.isFinite(src.expiresAt)) {
+    normalized.expiresAt = src.expiresAt;
+  }
+  if (typeof src.singleUse === "boolean") {
+    normalized.singleUse = src.singleUse;
+  }
+  if (typeof src.allowOpponentZoneWrite === "boolean") {
+    normalized.allowOpponentZoneWrite = src.allowOpponentZoneWrite;
+  }
+  if (typeof src.allowRevealOpponentHand === "boolean") {
+    normalized.allowRevealOpponentHand = src.allowRevealOpponentHand;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function pickNextPendingInteraction(
+  log: InteractionStateMap
+): InteractionRequestEntry | null {
+  let selected: InteractionRequestEntry | null = null;
+  for (const entry of Object.values(log)) {
+    if (!entry || entry.status !== "pending") continue;
+    if (!selected) {
+      selected = entry;
+      continue;
+    }
+    if (selected.direction === "outbound" && entry.direction === "inbound") {
+      selected = entry;
+      continue;
+    }
+    if (
+      entry.direction === selected.direction &&
+      entry.receivedAt < selected.receivedAt
+    ) {
+      selected = entry;
+    }
+  }
+  return selected;
+}
+
+function computeInteractionFocus(log: InteractionStateMap): {
+  active: InteractionRequestEntry | null;
+  pendingId: string | null;
+} {
+  const next = pickNextPendingInteraction(log);
+  return {
+    active: next,
+    pendingId: next ? next.request.requestId : null,
+  };
+}
 
 // Minimal card reference for zones
 export type CardRef = {
@@ -282,6 +391,22 @@ export type GameState = {
   matchEnded: boolean;
   winner: PlayerKey | null;
   checkMatchEnd: () => void;
+  // Cross-turn interactions
+  interactionLog: InteractionStateMap;
+  pendingInteractionId: string | null;
+  acknowledgedInteractionIds: Record<string, true>;
+  activeInteraction: InteractionRequestEntry | null;
+  sendInteractionRequest: (input: SendInteractionRequestInput) => void;
+  receiveInteractionEnvelope: (envelope: InteractionEnvelope | InteractionMessage) => void;
+  respondToInteraction: (
+    requestId: string,
+    decision: InteractionDecision,
+    actorId: string,
+    options?: InteractionResponseOptions
+  ) => void;
+  expireInteraction: (requestId: string) => void;
+  clearInteraction: (requestId: string) => void;
+  transportSubscriptions: Array<() => void>;
   // Safe patch sending
   pendingPatches: ServerPatchT[];
   trySendPatch: (patch: ServerPatchT) => boolean;
@@ -896,19 +1021,345 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastLocalActionTs: 0,
   // Multiplayer transport (injected by online play UI)
   transport: null,
+  transportSubscriptions: [],
   // Actor seat for online play; null in offline/hotseat
   actorKey: null,
   setActorKey: (key) => set({ actorKey: key }),
   // Match end state
   matchEnded: false,
   winner: null,
+  interactionLog: {},
+  pendingInteractionId: null,
+  acknowledgedInteractionIds: {},
+  activeInteraction: null,
   setTransport: (t) => {
-    set({ transport: t });
+    const prev = get().transportSubscriptions;
+    if (Array.isArray(prev) && prev.length > 0) {
+      for (const unsubscribe of prev) {
+        try {
+          unsubscribe?.();
+        } catch {}
+      }
+    }
+    const unsubscribers: Array<() => void> = [];
+    if (t) {
+      try {
+        unsubscribers.push(
+          t.on("interaction", (envelope) => {
+            try {
+              get().receiveInteractionEnvelope(envelope);
+            } catch {}
+          }),
+          t.on("interaction:request", (msg) => {
+            try {
+              get().receiveInteractionEnvelope(wrapInteractionMessage(msg));
+            } catch {}
+          }),
+          t.on("interaction:response", (msg) => {
+            try {
+              get().receiveInteractionEnvelope(wrapInteractionMessage(msg));
+            } catch {}
+          })
+        );
+      } catch {}
+    }
+    set({ transport: t, transportSubscriptions: unsubscribers });
     if (t) {
       try {
         get().flushPendingPatches();
       } catch {}
     }
+  },
+  sendInteractionRequest: (input) => {
+    const requestId = input.requestId ?? generateInteractionRequestId();
+    const grantOverride = normalizeGrantRequest(input.grant);
+    const basePayload = { ...(input.payload ?? {}) } as Record<string, unknown>;
+    if (grantOverride) {
+      basePayload.grant = grantOverride;
+    }
+    const request = createInteractionRequest({
+      requestId,
+      from: input.from,
+      to: input.to,
+      kind: input.kind,
+      matchId: input.matchId,
+      note: input.note,
+      payload: Object.keys(basePayload).length > 0 ? basePayload : undefined,
+    });
+    set((state) => {
+      const existing = state.interactionLog[requestId];
+      const nextEntry: InteractionRequestEntry = {
+        request,
+        response: existing?.response,
+        status: "pending",
+        direction: existing?.direction ?? "outbound",
+        grant: existing?.grant ?? null,
+        proposedGrant: grantOverride ?? existing?.proposedGrant ?? null,
+        receivedAt: existing?.receivedAt ?? request.createdAt,
+        updatedAt: request.createdAt,
+      };
+      const nextLog: InteractionStateMap = {
+        ...state.interactionLog,
+        [requestId]: nextEntry,
+      };
+      const focus = computeInteractionFocus(nextLog);
+      return {
+        interactionLog: nextLog,
+        pendingInteractionId: focus.pendingId,
+        activeInteraction: focus.active,
+      };
+    });
+    const transport = get().transport;
+    const envelope = wrapInteractionMessage(request);
+    try {
+      let maybe: unknown = undefined;
+      if (transport?.sendInteractionRequest) {
+        maybe = transport.sendInteractionRequest(request);
+      } else if (transport?.sendInteractionEnvelope) {
+        maybe = transport.sendInteractionEnvelope(envelope);
+      } else if (transport?.sendMessage) {
+        maybe = transport.sendMessage(envelope as unknown as CustomMessage);
+      } else if (!transport) {
+        try {
+          console.warn("[interaction] transport unavailable; request queued in log", requestId);
+        } catch {}
+      } else {
+        try {
+          console.warn("[interaction] transport missing interaction senders; request not sent", requestId);
+        } catch {}
+      }
+      if (maybe && typeof (maybe as Promise<unknown>).then === "function") {
+        (maybe as Promise<unknown>).catch((err) => {
+          try {
+            console.warn("[interaction] send request rejected", err);
+          } catch {}
+        });
+      }
+    } catch (err) {
+      try {
+        console.warn("[interaction] failed to send request", err);
+      } catch {}
+    }
+  },
+  receiveInteractionEnvelope: (incoming) => {
+    const message: InteractionMessage | null = (() => {
+      if (!incoming || typeof incoming !== "object") return null;
+      if ((incoming as InteractionEnvelope).type === "interaction" && "message" in incoming) {
+        return (incoming as InteractionEnvelope).message;
+      }
+      if (
+        (incoming as Partial<InteractionMessage>).type === "interaction:request" ||
+        (incoming as Partial<InteractionMessage>).type === "interaction:response"
+      ) {
+        return incoming as InteractionMessage;
+      }
+      return null;
+    })();
+    if (!message) return;
+    const now = Date.now();
+    if (message.type === "interaction:request") {
+      const payload = (message.payload ?? {}) as Record<string, unknown>;
+      const proposedGrant =
+        normalizeGrantRequest(payload.grant) ?? normalizeGrantRequest(payload.proposedGrant);
+      set((state) => {
+        const existing = state.interactionLog[message.requestId];
+        const nextEntry: InteractionRequestEntry = {
+          request: message,
+          response: existing?.response,
+          status: existing?.status ?? "pending",
+          direction: existing?.direction ?? "inbound",
+          grant: existing?.grant ?? null,
+          proposedGrant: proposedGrant ?? existing?.proposedGrant ?? null,
+          receivedAt: existing?.receivedAt ?? message.createdAt ?? now,
+          updatedAt: now,
+        };
+        const nextLog: InteractionStateMap = {
+          ...state.interactionLog,
+          [message.requestId]: nextEntry,
+        };
+        const focus = computeInteractionFocus(nextLog);
+        return {
+          interactionLog: nextLog,
+          pendingInteractionId: focus.pendingId,
+          activeInteraction: focus.active,
+        };
+      });
+      return;
+    }
+    if (message.type === "interaction:response") {
+      const payload = (message.payload ?? {}) as Record<string, unknown>;
+      const grantOverride =
+        normalizeGrantRequest(payload.grant) ?? normalizeGrantRequest(payload.proposedGrant);
+      set((state) => {
+        const existing = state.interactionLog[message.requestId];
+        const baseRequest = existing?.request
+          ?? createInteractionRequest({
+            requestId: message.requestId,
+            matchId: message.matchId,
+            from: message.to,
+            to: message.from,
+            kind: message.kind,
+            createdAt: message.createdAt,
+            expiresAt: message.expiresAt,
+          });
+        const nextGrant =
+          message.decision === "approved"
+            ? grantFromRequest(
+                baseRequest,
+                message.from,
+                grantOverride ?? existing?.proposedGrant ?? {}
+              )
+            : null;
+        const nextEntry: InteractionRequestEntry = {
+          request: baseRequest,
+          response: message,
+          status: message.decision,
+          direction: existing?.direction ?? "outbound",
+          grant: nextGrant,
+          proposedGrant: grantOverride ?? existing?.proposedGrant ?? null,
+          receivedAt: existing?.receivedAt ?? baseRequest.createdAt ?? now,
+          updatedAt: now,
+        };
+        const nextLog: InteractionStateMap = {
+          ...state.interactionLog,
+          [message.requestId]: nextEntry,
+        };
+        const focus = computeInteractionFocus(nextLog);
+        const acknowledged = {
+          ...state.acknowledgedInteractionIds,
+          [message.requestId]: true as const,
+        };
+        return {
+          interactionLog: nextLog,
+          pendingInteractionId: focus.pendingId,
+          activeInteraction: focus.active,
+          acknowledgedInteractionIds: acknowledged,
+        };
+      });
+    }
+  },
+  respondToInteraction: (requestId, decision, actorId, options) => {
+    const state = get();
+    const entry = state.interactionLog[requestId];
+    if (!entry) return;
+    const now = Date.now();
+    const request = entry.request;
+    const overrideGrant = normalizeGrantRequest(options?.grant);
+    const payload = { ...(options?.payload ?? {}) } as Record<string, unknown>;
+    if (overrideGrant) {
+      payload.grant = overrideGrant;
+    }
+    const response = createInteractionResponse({
+      requestId,
+      matchId: request.matchId,
+      from: actorId,
+      to: request.from,
+      kind: request.kind,
+      createdAt: request.createdAt,
+      expiresAt: request.expiresAt,
+      decision,
+      reason: options?.reason,
+      payload: Object.keys(payload).length > 0 ? payload : undefined,
+      respondedAt: now,
+    });
+    const nextGrant =
+      decision === "approved"
+        ? grantFromRequest(request, actorId, overrideGrant ?? entry.proposedGrant ?? {})
+        : null;
+    set((state) => {
+      const nextEntry: InteractionRequestEntry = {
+        ...entry,
+        response,
+        status: decision,
+        grant: nextGrant,
+        proposedGrant: overrideGrant ?? entry.proposedGrant ?? null,
+        updatedAt: now,
+      };
+      const nextLog: InteractionStateMap = {
+        ...state.interactionLog,
+        [requestId]: nextEntry,
+      };
+      const focus = computeInteractionFocus(nextLog);
+      const acknowledged = {
+        ...state.acknowledgedInteractionIds,
+        [requestId]: true as const,
+      };
+      return {
+        interactionLog: nextLog,
+        pendingInteractionId: focus.pendingId,
+        activeInteraction: focus.active,
+        acknowledgedInteractionIds: acknowledged,
+      };
+    });
+    const transport = get().transport;
+    const envelope = wrapInteractionMessage(response);
+    try {
+      let maybe: unknown = undefined;
+      if (transport?.sendInteractionResponse) {
+        maybe = transport.sendInteractionResponse(response);
+      } else if (transport?.sendInteractionEnvelope) {
+        maybe = transport.sendInteractionEnvelope(envelope);
+      } else if (transport?.sendMessage) {
+        maybe = transport.sendMessage(envelope as unknown as CustomMessage);
+      } else if (!transport) {
+        try {
+          console.warn("[interaction] transport unavailable; response logged only", requestId);
+        } catch {}
+      } else {
+        try {
+          console.warn("[interaction] transport missing interaction senders; response not sent", requestId);
+        } catch {}
+      }
+      if (maybe && typeof (maybe as Promise<unknown>).then === "function") {
+        (maybe as Promise<unknown>).catch((err) => {
+          try {
+            console.warn("[interaction] response send rejected", err);
+          } catch {}
+        });
+      }
+    } catch (err) {
+      try {
+        console.warn("[interaction] failed to send response", err);
+      } catch {}
+    }
+  },
+  expireInteraction: (requestId) => {
+    const now = Date.now();
+    set((state) => {
+      const entry = state.interactionLog[requestId];
+      if (!entry) return {};
+      const nextEntry: InteractionRequestEntry = {
+        ...entry,
+        status: "expired",
+        updatedAt: now,
+      };
+      const nextLog: InteractionStateMap = {
+        ...state.interactionLog,
+        [requestId]: nextEntry,
+      };
+      const focus = computeInteractionFocus(nextLog);
+      return {
+        interactionLog: nextLog,
+        pendingInteractionId: focus.pendingId,
+        activeInteraction: focus.active,
+      };
+    });
+  },
+  clearInteraction: (requestId) => {
+    set((state) => {
+      if (!(requestId in state.interactionLog)) return {};
+      const nextLog: InteractionStateMap = { ...state.interactionLog };
+      delete nextLog[requestId];
+      const nextAck = { ...state.acknowledgedInteractionIds };
+      delete nextAck[requestId];
+      const focus = computeInteractionFocus(nextLog);
+      return {
+        interactionLog: nextLog,
+        pendingInteractionId: focus.pendingId,
+        activeInteraction: focus.active,
+        acknowledgedInteractionIds: nextAck,
+      };
+    });
   },
   // Pending patches queue for offline/error cases
   pendingPatches: [],
@@ -919,40 +1370,69 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Sanitize to prevent illegal opponent mutations in online play
     const actorKey = get().actorKey;
     let toSend: ServerPatchT = patch as ServerPatchT;
-    try {
-      const p = patch as ServerPatchT;
-      const sanitized: ServerPatchT = { ...p };
-      // Filter avatars: only allow the actor seat; if actorKey unknown, drop avatars entirely
-      if (p.avatars && typeof p.avatars === "object") {
-        if (actorKey === "p1" || actorKey === "p2") {
-          const v = (p.avatars as GameState["avatars"]) [actorKey] as AvatarState | undefined;
-          if (v && typeof v === "object") {
-            // Do not allow sending opponent tap toggles; remove tapped key from payload
-            const rest = { ...(v as unknown as Record<string, unknown>) };
-            delete (rest as Record<string, unknown>)["tapped"];
-            const out: Partial<GameState["avatars"]> = { [actorKey]: rest as unknown as AvatarState };
+    const replaceKeysCandidate = Array.isArray(
+      (patch as ServerPatchT).__replaceKeys
+    )
+      ? (patch as ServerPatchT).__replaceKeys
+      : null;
+    const isAuthoritativeSnapshot = !!(
+      replaceKeysCandidate && replaceKeysCandidate.length > 0
+    );
+    if (!isAuthoritativeSnapshot) {
+      try {
+        const p = patch as ServerPatchT;
+        const sanitized: ServerPatchT = { ...p };
+        // Filter avatars: if actorKey known, allow only that seat; if unknown, allow present seats but remove 'tapped'
+        if (p.avatars && typeof p.avatars === "object") {
+          const out: Partial<GameState["avatars"]> = {};
+          const keys = Object.keys(p.avatars).filter(
+            (k) => k === "p1" || k === "p2"
+          ) as PlayerKey[];
+          if (actorKey === "p1" || actorKey === "p2") {
+            // Keep only actor seat
+            const k = actorKey as PlayerKey;
+            if (keys.includes(k)) {
+              const v = (p.avatars as GameState["avatars"]) [k] as
+                | AvatarState
+                | undefined;
+              if (v && typeof v === "object") {
+                const rest = { ...(v as unknown as Record<string, unknown>) };
+                delete (rest as Record<string, unknown>)["tapped"];
+                (out as Record<string, unknown>)[k] = rest as unknown;
+              }
+            }
+          } else {
+            // Actor unknown: allow any provided seats but never include 'tapped'
+            for (const k of keys) {
+              const v = (p.avatars as GameState["avatars"]) [k] as
+                | AvatarState
+                | undefined;
+              if (!v || typeof v !== "object") continue;
+              const rest = { ...(v as unknown as Record<string, unknown>) };
+              delete (rest as Record<string, unknown>)["tapped"];
+              (out as Record<string, unknown>)[k] = rest as unknown;
+            }
+          }
+          if (Object.keys(out).length > 0) {
             sanitized.avatars = out as GameState["avatars"];
           } else {
             delete (sanitized as unknown as { avatars?: unknown }).avatars;
           }
-        } else {
-          // Actor unknown -> avoid sending avatars at all to prevent validation issues
-          delete (sanitized as unknown as { avatars?: unknown }).avatars;
         }
-      }
-      // Filter zones: keep only actor seat updates when actor known
-      if (p.zones && typeof p.zones === "object" && actorKey) {
-        const z = p.zones as Partial<Record<PlayerKey, Zones>>;
-        const outZ: Partial<Record<PlayerKey, Zones>> = {};
-        if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
-        if (Object.keys(outZ).length > 0) {
-          sanitized.zones = outZ as GameState["zones"];
-        } else {
-          delete (sanitized as unknown as { zones?: unknown }).zones;
+        // Filter zones: keep only actor seat updates when actor known
+        if (p.zones && typeof p.zones === "object" && actorKey) {
+          const z = p.zones as Partial<Record<PlayerKey, Zones>>;
+          const outZ: Partial<Record<PlayerKey, Zones>> = {};
+          if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+          if (Object.keys(outZ).length > 0) {
+            sanitized.zones = outZ as GameState["zones"];
+          } else {
+            delete (sanitized as unknown as { zones?: unknown }).zones;
+          }
         }
-      }
-      toSend = sanitized;
-    } catch {}
+        toSend = sanitized;
+      } catch {}
+    }
     if (!tr) {
       set((s) => ({ pendingPatches: [...s.pendingPatches, toSend] }));
       try {
@@ -985,35 +1465,64 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Sanitize queued patch as we do in trySendPatch
         const actorKey = get().actorKey;
         let toSend: ServerPatchT = p as ServerPatchT;
-        try {
-          const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
-          if (sanitized.avatars && typeof sanitized.avatars === "object") {
-            if (actorKey === "p1" || actorKey === "p2") {
-              const v = (sanitized.avatars as GameState["avatars"]) [actorKey] as AvatarState | undefined;
-              if (v && typeof v === "object") {
-                const rest = { ...(v as unknown as Record<string, unknown>) };
-                delete (rest as Record<string, unknown>)["tapped"];
-                const out: Partial<GameState["avatars"]> = { [actorKey]: rest as unknown as AvatarState };
+        const replaceKeysCandidate = Array.isArray(
+          (p as ServerPatchT).__replaceKeys
+        )
+          ? (p as ServerPatchT).__replaceKeys
+          : null;
+        const isAuthoritativeSnapshot = !!(
+          replaceKeysCandidate && replaceKeysCandidate.length > 0
+        );
+        if (!isAuthoritativeSnapshot) {
+          try {
+            const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
+            if (sanitized.avatars && typeof sanitized.avatars === "object") {
+              const out: Partial<GameState["avatars"]> = {};
+              const keys = Object.keys(sanitized.avatars).filter(
+                (k) => k === "p1" || k === "p2"
+              ) as PlayerKey[];
+              if (actorKey === "p1" || actorKey === "p2") {
+                const k = actorKey as PlayerKey;
+                if (keys.includes(k)) {
+                  const v = (sanitized.avatars as GameState["avatars"]) [k] as
+                    | AvatarState
+                    | undefined;
+                  if (v && typeof v === "object") {
+                    const rest = { ...(v as unknown as Record<string, unknown>) };
+                    delete (rest as Record<string, unknown>)["tapped"];
+                    (out as Record<string, unknown>)[k] = rest as unknown;
+                  }
+                }
+              } else {
+                for (const k of keys) {
+                  const v = (sanitized.avatars as GameState["avatars"]) [k] as
+                    | AvatarState
+                    | undefined;
+                  if (!v || typeof v !== "object") continue;
+                  const rest = { ...(v as unknown as Record<string, unknown>) };
+                  delete (rest as Record<string, unknown>)["tapped"];
+                  (out as Record<string, unknown>)[k] = rest as unknown;
+                }
+              }
+              if (Object.keys(out).length > 0) {
                 sanitized.avatars = out as GameState["avatars"];
               } else {
                 delete (sanitized as unknown as { avatars?: unknown }).avatars;
               }
-            } else {
-              delete (sanitized as unknown as { avatars?: unknown }).avatars;
             }
-          }
-          if (sanitized.zones && typeof sanitized.zones === "object" && actorKey) {
-            const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
-            const outZ: Partial<Record<PlayerKey, Zones>> = {};
-            if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
-            if (Object.keys(outZ).length > 0) {
-              sanitized.zones = outZ as GameState["zones"];
-            } else {
-              delete (sanitized as unknown as { zones?: unknown }).zones;
+            if (sanitized.zones && typeof sanitized.zones === "object" && actorKey) {
+              const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
+              const outZ: Partial<Record<PlayerKey, Zones>> = {};
+              if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+              if (Object.keys(outZ).length > 0) {
+                sanitized.zones = outZ as GameState["zones"];
+              } else {
+                delete (sanitized as unknown as { zones?: unknown }).zones;
+              }
             }
-          }
-          toSend = sanitized;
-        } catch {}
+            toSend = sanitized;
+          } catch {}
+        }
         tr.sendAction(toSend);
         set({ lastLocalActionTs: Date.now() });
       } catch (err) {
@@ -1591,13 +2100,47 @@ export const useGameStore = create<GameState>((set, get) => ({
             (a, v) => a + (Array.isArray(v) ? v.length : 0),
             0
           );
+          const sanitizeBoardSitesForUndo = (
+            board: GameState["board"] | undefined
+          ) => {
+            if (!board || typeof board !== "object") return board;
+            const sitesPrev = board.sites;
+            if (!sitesPrev || typeof sitesPrev !== "object") return board;
+            let changed = false;
+            const sitesNext = {} as typeof sitesPrev;
+            for (const key of Object.keys(sitesPrev)) {
+              const tile = sitesPrev[key];
+              if (
+                tile &&
+                typeof tile === "object" &&
+                Object.prototype.hasOwnProperty.call(tile, "tapped")
+              ) {
+                const cleaned = { ...(tile as Record<string, unknown>) };
+                delete cleaned.tapped;
+                sitesNext[key] = cleaned as typeof sitesPrev[typeof key];
+                changed = true;
+              } else {
+                sitesNext[key] = tile as typeof sitesPrev[typeof key];
+              }
+            }
+            if (!changed) return board;
+            return {
+              ...board,
+              sites: sitesNext,
+            } satisfies GameState["board"];
+          };
+
+          const boardForUndo = sanitizeBoardSitesForUndo(
+            prev.board as GameState["board"]
+          );
+
           const patch: ServerPatchT = {
             players: prev.players,
             currentPlayer: prev.currentPlayer,
             phase: prev.phase,
             d20Rolls: prev.d20Rolls,
             setupWinner: prev.setupWinner,
-            board: prev.board,
+            board: boardForUndo,
             zones: prev.zones,
             avatars: prev.avatars,
             permanents: prev.permanents,
@@ -3669,57 +4212,43 @@ export const useGameStore = create<GameState>((set, get) => ({
   resetGameState: () =>
     set(() => {
       console.log("[game] Resetting game state for new match");
-      return {
-        // Reset player state
+      const reset: Partial<GameState> = {
         players: {
           p1: {
             life: 20,
-            lifeState: "alive" as LifeState,
+            lifeState: "alive",
             mana: 0,
             thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
           },
           p2: {
             life: 20,
-            lifeState: "alive" as LifeState,
+            lifeState: "alive",
             mana: 0,
             thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
           },
         },
         currentPlayer: 1,
-        phase: "Setup" as Phase,
-        // Reset D20 setup
-        d20Rolls: { p1: null, p2: null },
+        phase: "Setup",
+        lastServerTs: 0,
+        lastLocalActionTs: 0,
         setupWinner: null,
-        // Reset match end state
+        d20Rolls: { p1: null, p2: null },
+        actorKey: null,
         matchEnded: false,
         winner: null,
-        // Reset board
         board: { size: { w: 5, h: 4 }, sites: {} },
-        // Reset zones
         zones: createEmptyZonesRecord(),
-        // Reset selections
         selectedCard: null,
         selectedPermanent: null,
         selectedAvatar: null,
-        // Reset hand state
         mouseInHandZone: false,
         handHoverCount: 0,
-        // Reset avatars
-        avatars: {
-          p1: { card: null, pos: null, tapped: false },
-          p2: { card: null, pos: null, tapped: false },
-        },
-        // Reset permanents
+        avatars: createDefaultAvatars(),
         permanents: {},
-        // Reset permanent positions (burrow/submerge)
         permanentPositions: {},
         permanentAbilities: {},
         sitePositions: {},
-        playerPositions: {
-          p1: { playerId: 1, position: { x: 0, z: 0 } },
-          p2: { playerId: 2, position: { x: 0, z: 0 } },
-        },
-        // Reset UI state
+        playerPositions: createDefaultPlayerPositions(),
         dragFromHand: false,
         dragFromPile: null,
         hoverCell: null,
@@ -3727,17 +4256,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         contextMenu: null,
         boardPings: [],
         lastPointerWorldPos: null,
-        // Reset history
         history: [],
         historyByPlayer: { p1: [], p2: [] },
-        // Reset mulligans
         mulligans: { p1: 1, p2: 1 },
         mulliganDrawn: { p1: [], p2: [] },
-        // Reset events/log
         events: [],
         eventSeq: 0,
-        // Keep transport, lastServerTs, and pendingPatches intact
-        // to maintain network connectivity
-      } as Partial<GameState> as GameState;
+        pendingPatches: [],
+        interactionLog: {},
+        pendingInteractionId: null,
+        acknowledgedInteractionIds: {},
+        activeInteraction: null,
+        transportSubscriptions: [],
+      };
+      return reset as GameState;
     }),
 }));

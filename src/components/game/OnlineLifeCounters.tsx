@@ -152,8 +152,6 @@ export default function OnlineLifeCounters({
   myPlayerKey, 
   playerNames 
 }: OnlineLifeCountersProps) {
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
-  
   // In online multiplayer, both players can modify life totals
   // (life changes can come from spells, abilities, etc. from either player)
   const canModifyLife = !!myPlayerKey;

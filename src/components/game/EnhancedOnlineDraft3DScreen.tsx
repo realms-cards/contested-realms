@@ -1703,6 +1703,9 @@ export default function EnhancedOnlineDraft3DScreen({
                 .includes("site")}
               x={staged.x}
               z={staged.z}
+              cardId={packAsBoosterCards[staged.idx]?.cardId}
+              cardName={packAsBoosterCards[staged.idx]?.cardName ?? packAsBoosterCards[staged.idx]?.slug ?? ""}
+              cardType={packAsBoosterCards[staged.idx]?.type ?? null}
               onDrop={(wx, wz) => {
                 // Only allow moving staged cards when it's the player's turn
                 if (!amPicker) return;
@@ -1715,16 +1718,12 @@ export default function EnhancedOnlineDraft3DScreen({
               onDragChange={setOrbitLocked}
               getTopRenderOrder={getTopRenderOrder}
               lockUpright
-              onHoverChange={(hover) => {
-                if (hover && !orbitLocked) {
-                  const c = packAsBoosterCards[staged.idx];
-                  if (!c) return;
-                  showCardPreview({
-                    slug: c.slug,
-                    name: c.cardName,
-                    type: c.type,
-                  });
-                }
+              onHoverStart={(preview) => {
+                if (!preview || orbitLocked) return;
+                showCardPreview(preview);
+              }}
+              onHoverEnd={() => {
+                hideCardPreview();
               }}
               onRelease={(wx, wz) => {
                 // Only allow unstaging when it's the player's turn
@@ -1732,6 +1731,7 @@ export default function EnhancedOnlineDraft3DScreen({
                 const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
                 if (d <= PICK_RADIUS) {
                   setStaged(null);
+                  hideCardPreview();
                 }
               }}
               // Prefer raster textures in draft for better churn performance
@@ -1773,11 +1773,13 @@ export default function EnhancedOnlineDraft3DScreen({
                     isSite={isSite}
                     x={x}
                     z={z}
+                    cardId={p.id}
+                    cardName={p.card.cardName ?? p.card.slug}
+                    cardType={p.card.type ?? null}
                     y={y}
                     baseRenderOrder={baseRO}
                     stackIndex={stackIndex}
                     totalInStack={totalInStack}
-                    cardId={p.id}
                     onDrop={(wx, wz) => {
                       if (!isSortingEnabled) {
                         setPick3D((prev) =>

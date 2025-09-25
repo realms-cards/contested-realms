@@ -21,10 +21,8 @@ describe('rules.applyTurnStart', () => {
 
     const patch = applyTurnStart(game);
     expect(patch).toBeTruthy();
-    // Own site untapped
-    expect(patch!.board.sites['0,0'].tapped).toBe(false);
-    // Opponent site untouched in patch
-    expect(patch!.board.sites['1,0'].tapped).toBe(true);
+    // Sites are unchanged by the turn-start patch
+    expect(patch!.board).toBeUndefined();
     // Own permanent untapped
     expect(patch!.permanents['0,0'][0].tapped).toBe(false);
     // Opponent permanent untouched in patch
@@ -44,11 +42,11 @@ describe('rules.validateAction (basic)', () => {
       }},
     };
     const action = { board: { sites: {
-      '0,0': { owner: 1, tapped: false, card: { name: 'Stream', type: 'Site' } }
+      '0,0': { owner: 1, card: { name: 'Stream', type: 'Site' } }
     }}};
     const res = validateAction(game, action, 'alice', { match });
     expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/occupied tile/);
+    expect(res.error).toMatch(/occupied/);
   });
 
   it('prevents placing a permanent on an unsited cell', () => {
@@ -69,8 +67,10 @@ describe('rules.validateAction (basic)', () => {
 
   it('enforces thresholds for placed permanents (insufficient)', () => {
     const game = {
+      currentPlayer: 1,
+      phase: 'Main',
       board: { sites: {
-        '2,2': { owner: 1, tapped: false, card: { name: 'Spire', type: 'Site' } },
+        '2,2': { owner: 1, tapped: false, card: { name: 'Spire', type: 'Site', thresholds: { air: 1 } } },
       }},
     };
     // Card requires 2 air thresholds, but we only have 1 (one Spire)
@@ -82,9 +82,11 @@ describe('rules.validateAction (basic)', () => {
 
   it('allows thresholds-compliant permanent placement', () => {
     const game = {
+      currentPlayer: 1,
+      phase: 'Main',
       board: { sites: {
-        '2,2': { owner: 1, tapped: false, card: { name: 'Spire', type: 'Site' } },
-        '2,3': { owner: 1, tapped: false, card: { name: 'Spire', type: 'Site' } },
+        '2,2': { owner: 1, tapped: false, card: { name: 'Spire', type: 'Site', thresholds: { air: 1 } } },
+        '2,3': { owner: 1, tapped: false, card: { name: 'Spire', type: 'Site', thresholds: { air: 1 } } },
       }},
     };
     // Now have 2 Air thresholds

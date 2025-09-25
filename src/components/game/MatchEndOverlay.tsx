@@ -25,9 +25,9 @@ export default function MatchEndOverlay({
   if (!isVisible) return null;
 
   const isDraw = winner === null;
-  const didIWin = winner === myPlayerKey;
   const winnerName = winner ? playerNames[winner] : null;
   const isSpectator = !myPlayerKey; // When seat isn't resolved or viewer is a spectator
+  const didIWin = !isSpectator && winner === myPlayerKey;
 
   const handleLeaveMatch = () => {
     if (onLeave) {
@@ -70,19 +70,27 @@ export default function MatchEndOverlay({
               : "Match Over"
             : didIWin
             ? "Victory!"
-            : "Defeat"}
+            : `${winnerName ?? "Opponent"} wins`}
         </h1>
 
         {/* Result Description */}
         <div className="text-lg opacity-90 mb-6">
           {isDraw ? (
-            <p>Both players died simultaneously</p>
+            <p>Both players died simultaneously.</p>
+          ) : isSpectator ? (
+            <p>
+              <span className="font-semibold text-green-400">{winnerName ?? "A player"}</span>
+              {" wins the match."}
+            </p>
+          ) : didIWin ? (
+            <p>
+              <span className="font-semibold text-green-400">You</span>
+              {" won the match!"}
+            </p>
           ) : (
             <p>
-              <span className={`font-semibold ${didIWin ? 'text-green-400' : 'text-red-400'}`}>
-                {winnerName}
-              </span>
-              {" wins the match!"}
+              <span className="font-semibold text-red-400">You were defeated.</span>
+              {winnerName ? ` ${winnerName} wins the match.` : ""}
             </p>
           )}
         </div>
@@ -92,13 +100,19 @@ export default function MatchEndOverlay({
           <div className="text-xs opacity-70 mb-2">Final Result</div>
           <div className="space-y-1">
             <div className={`flex justify-between ${winner === 'p1' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
-              <span>{playerNames.p1} {myPlayerKey === 'p1' && '(You)'}</span>
+              <span>
+                {playerNames.p1}
+                {myPlayerKey === 'p1' ? ' (You)' : ''}
+              </span>
               <span>
                 {winner === null ? 'Draw' : winner === 'p1' ? 'Winner' : 'Loser'}
               </span>
             </div>
             <div className={`flex justify-between ${winner === 'p2' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
-              <span>{playerNames.p2} {myPlayerKey === 'p2' && '(You)'}</span>
+              <span>
+                {playerNames.p2}
+                {myPlayerKey === 'p2' ? ' (You)' : ''}
+              </span>
               <span>
                 {winner === null ? 'Draw' : winner === 'p2' ? 'Winner' : 'Loser'}
               </span>

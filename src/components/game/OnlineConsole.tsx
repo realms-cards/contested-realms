@@ -2,7 +2,7 @@
 
 import { LogOut, MessageCircle, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
 
@@ -45,7 +45,10 @@ export default function OnlineConsole({
   const [showToast, setShowToast] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>("");
   // Only show match chat in match console (or hide entirely in replay)
-  const matchChat = hideChat ? [] : chatLog.filter((m) => m.scope === 'match');
+  const matchChat = useMemo(() => {
+    if (hideChat) return [] as ServerChatPayloadT[];
+    return chatLog.filter((m) => m.scope === 'match');
+  }, [hideChat, chatLog]);
   
   // Game events
   const events = useGameStore((s) => s.events);
@@ -108,7 +111,7 @@ export default function OnlineConsole({
       }
     }
     prevMatchChatLenRef.current = matchChat.length;
-  }, [myPlayerId, consoleOpen, startAutoCloseTimer]);
+  }, [myPlayerId, consoleOpen, startAutoCloseTimer, matchChat]);
 
   // Ensure chat tab cannot be active when chat is hidden
   useEffect(() => {

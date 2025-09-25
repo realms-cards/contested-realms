@@ -25,9 +25,6 @@ export async function loadDeckFor(
     const rawAtlas: CardRef[] = Array.isArray(data?.atlas)
       ? (data.atlas as CardRef[])
       : [];
-    const sideboard: CardRef[] = Array.isArray(data?.sideboard)
-      ? (data.sideboard as CardRef[])
-      : [];
 
     const isAvatar = (c: CardRef) =>
       typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");

@@ -20,9 +20,14 @@ function loadKeywords() {
       if (kw) out.set(kw, desc);
     }
   } catch {
-    // Fallback: seed with common keywords and empty descriptions
-    ['Genesis', 'Airborne'].forEach((k) => out.set(k, ''));
+    // Ignore read errors; fallback keywords will be applied below
   }
+
+  // Always ensure essential keywords exist even if codex omits them
+  ['Genesis', 'Airborne'].forEach((k) => {
+    if (!out.has(k)) out.set(k, '');
+  });
+
   _KEYWORDS = out;
   return _KEYWORDS;
 }

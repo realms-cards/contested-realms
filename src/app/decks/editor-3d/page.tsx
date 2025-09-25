@@ -122,7 +122,6 @@ function AuthenticatedDeckEditor() {
   const [typeFilter, setTypeFilter] = useState<SearchType>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searchExpanded, setSearchExpanded] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -729,10 +728,32 @@ function AuthenticatedDeckEditor() {
       try {
         // Resolve each drafted card to a concrete SearchResult via slug first, fallback to name
         const resolved: SearchResult[] = [];
+        const slugPrefixToSet: Record<string, string> = {
+          alp: "Alpha",
+          bet: "Beta",
+          art: "Arthurian Legends",
+          dra: "Dragonlord",
+          drl: "Dragonlord",
+        };
+        const deriveSetHint = (card: DraftCardLike): string => {
+          const withName = typeof card.setName === "string" ? card.setName.trim() : "";
+          if (withName) return withName;
+          const withSet = (() => {
+            const raw = (card as Record<string, unknown>).set;
+            return typeof raw === "string" ? raw.trim() : "";
+          })();
+          if (withSet) return withSet;
+          const slug = typeof card.slug === "string" ? card.slug.toLowerCase() : "";
+          if (slug.length >= 4 && slugPrefixToSet[slug.slice(0, 3)]) {
+            return slugPrefixToSet[slug.slice(0, 3)];
+          }
+          return "";
+        };
+
         for (const c of drafted) {
           const slug = (c.slug || "").toString().trim();
           const name = (c.name || c.cardName || "").toString().trim();
-          const cardSetName = (c.setName || "").toString().trim() || setName; // Use card's set or fallback to current setName
+          const cardSetName = deriveSetHint(c);
 
           let hit: SearchResult | null = null;
           if (slug) {
@@ -743,6 +764,10 @@ function AuthenticatedDeckEditor() {
                 type: "all",
               });
               hit = list[0] || null;
+              if (!hit && cardSetName) {
+                const list = await searchCards({ q: slug, setName: "", type: "all" });
+                hit = list[0] || null;
+              }
             } catch {}
           }
           if (!hit && name) {
@@ -753,6 +778,10 @@ function AuthenticatedDeckEditor() {
                 type: "all",
               });
               hit = list[0] || null;
+              if (!hit && cardSetName) {
+                const list = await searchCards({ q: name, setName: "", type: "all" });
+                hit = list[0] || null;
+              }
             } catch {}
           }
           if (hit) resolved.push(hit);
@@ -826,7 +855,7 @@ function AuthenticatedDeckEditor() {
         setDraftInitDone(true);
       }
     })();
-  }, [searchParams]);
+  }, [searchParams, draftInitDone, addSearchResultsToSideboard, deckName, setName]);
 
   // (moved) Load deck from URL parameter after loadDeck is declared
 
@@ -1156,7 +1185,7 @@ function AuthenticatedDeckEditor() {
       // auto-clear success message after a short delay
       setTimeout(() => setSaveMsg(null), 1500);
     }
-  }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed, status]);
+  }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed, status, searchParams]);
 
   // Toggle deck public/private status
   const togglePublic = useCallback(
@@ -1724,7 +1753,10 @@ function AuthenticatedDeckEditor() {
     // 3) Emit copies in the computed zones, preserving per-zone positions
     for (const item of Object.values(picks)) {
       for (let i = 0; i < item.count; i++) {
-        const rem = remainingDeckByCard.get(item.cardId) || 0;
+        remainingDeckByCard.set(
+          item.cardId,
+          (remainingDeckByCard.get(item.cardId) ?? 0) - 1
+        );
 
         // Always use the zone from picks as the source of truth
         const zoneKey: "Deck" | "Sideboard" = item.zone;
@@ -1819,7 +1851,6 @@ function AuthenticatedDeckEditor() {
 
   async function doSearch() {
     try {
-      setSearching(true);
       setError(null);
       const list = await searchCards({
         q,
@@ -1830,8 +1861,6 @@ function AuthenticatedDeckEditor() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setResults([]);
-    } finally {
-      setSearching(false);
     }
   }
 
@@ -2236,6 +2265,8 @@ function AuthenticatedDeckEditor() {
                         cy
                       )
                     }
+                    onHoverStart={showCardPreview}
+                    onHoverEnd={hideCardPreview}
                     onDrop={(wx, wz) => {
                       // Move card to drop position - only sort if sorting is enabled and this is a manual drag
                       const newZone = wz < 0 ? "Deck" : "Sideboard";

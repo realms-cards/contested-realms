@@ -5,6 +5,8 @@ const SOUND_SOURCES = {
   cardPlay: "/sounds/card-play.wav",
   cardSelect: "/sounds/card-select.wav",
   cardShuffle: "/sounds/card-shuffle.wav",
+  ping: "/sounds/ping.wav",
+  turnGong: "/sounds/gong.wav",
 } as const;
 
 const DEFAULT_VOLUME = 0.7;
