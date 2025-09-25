@@ -77,6 +77,156 @@ export type Zones = {
   banished: CardRef[]; // removed for the rest of the game
 };
 
+function createEmptyPlayerZones(): Zones {
+  return {
+    spellbook: [],
+    atlas: [],
+    hand: [],
+    graveyard: [],
+    battlefield: [],
+    banished: [],
+  };
+}
+
+function createEmptyZonesRecord(): Record<PlayerKey, Zones> {
+  return {
+    p1: createEmptyPlayerZones(),
+    p2: createEmptyPlayerZones(),
+  };
+}
+
+function ensurePlayerZones(
+  candidate: Partial<Zones> | undefined,
+  fallback?: Zones
+): Zones {
+  const base = fallback ?? createEmptyPlayerZones();
+  const spellbook = candidate?.spellbook;
+  const atlas = candidate?.atlas;
+  const hand = candidate?.hand;
+  const graveyard = candidate?.graveyard;
+  const battlefield = candidate?.battlefield;
+  const banished = candidate?.banished;
+  return {
+    spellbook: Array.isArray(spellbook) ? spellbook : base.spellbook,
+    atlas: Array.isArray(atlas) ? atlas : base.atlas,
+    hand: Array.isArray(hand) ? hand : base.hand,
+    graveyard: Array.isArray(graveyard) ? graveyard : base.graveyard,
+    battlefield: Array.isArray(battlefield) ? battlefield : base.battlefield,
+    banished: Array.isArray(banished) ? banished : base.banished,
+  };
+}
+
+function normalizeZones(
+  zones: Partial<Record<PlayerKey, Partial<Zones>>> | undefined,
+  prev?: Record<PlayerKey, Zones>
+): Record<PlayerKey, Zones> {
+  const base = prev ?? createEmptyZonesRecord();
+  return {
+    p1: ensurePlayerZones(zones?.p1, base.p1),
+    p2: ensurePlayerZones(zones?.p2, base.p2),
+  };
+}
+
+function createEmptyAvatarState(): AvatarState {
+  return { card: null, pos: null, tapped: false };
+}
+
+function createDefaultAvatars(): Record<PlayerKey, AvatarState> {
+  return {
+    p1: createEmptyAvatarState(),
+    p2: createEmptyAvatarState(),
+  };
+}
+
+function ensureAvatarState(
+  candidate: Partial<AvatarState> | undefined,
+  fallback: AvatarState | undefined
+): AvatarState {
+  const base = fallback ? { ...fallback } : createEmptyAvatarState();
+  const next: AvatarState = {
+    ...base,
+    card:
+      candidate && "card" in candidate ? (candidate.card ?? null) : base.card ?? null,
+    pos:
+      candidate && Array.isArray(candidate.pos) && candidate.pos.length === 2
+        ? [candidate.pos[0] ?? 0, candidate.pos[1] ?? 0]
+        : base.pos ?? null,
+    tapped:
+      candidate && typeof candidate.tapped === "boolean"
+        ? candidate.tapped
+        : base.tapped ?? false,
+  };
+  if (candidate && "offset" in candidate) {
+    next.offset = candidate.offset ?? null;
+  } else if (base.offset !== undefined) {
+    next.offset = base.offset;
+  } else {
+    delete next.offset;
+  }
+  return next;
+}
+
+function normalizeAvatars(
+  avatars: Partial<Record<PlayerKey, Partial<AvatarState>>> | undefined,
+  prev?: Record<PlayerKey, AvatarState>
+): Record<PlayerKey, AvatarState> {
+  const base = prev ?? createDefaultAvatars();
+  return {
+    p1: ensureAvatarState(avatars?.p1, base.p1),
+    p2: ensureAvatarState(avatars?.p2, base.p2),
+  };
+}
+
+function createDefaultPlayerPosition(who: PlayerKey): PlayerPositionReference {
+  return {
+    playerId: who === "p1" ? 1 : 2,
+    position: { x: 0, z: 0 },
+  };
+}
+
+function createDefaultPlayerPositions(): Record<PlayerKey, PlayerPositionReference> {
+  return {
+    p1: createDefaultPlayerPosition("p1"),
+    p2: createDefaultPlayerPosition("p2"),
+  };
+}
+
+function ensurePlayerPosition(
+  who: PlayerKey,
+  candidate: Partial<PlayerPositionReference> | undefined,
+  fallback: PlayerPositionReference | undefined
+): PlayerPositionReference {
+  const base = fallback ? { ...fallback } : createDefaultPlayerPosition(who);
+  const coord = candidate && typeof candidate.position === "object" ? candidate.position : undefined;
+  return {
+    playerId:
+      candidate && typeof candidate.playerId === "number"
+        ? candidate.playerId
+        : base.playerId,
+    position: {
+      x:
+        coord && typeof coord.x === "number"
+          ? coord.x
+          : base.position.x,
+      z:
+        coord && typeof coord.z === "number"
+          ? coord.z
+          : base.position.z,
+    },
+  };
+}
+
+function normalizePlayerPositions(
+  positions: Partial<Record<PlayerKey, Partial<PlayerPositionReference>>> | undefined,
+  prev?: Record<PlayerKey, PlayerPositionReference>
+): Record<PlayerKey, PlayerPositionReference> {
+  const base = prev ?? createDefaultPlayerPositions();
+  return {
+    p1: ensurePlayerPosition("p1", positions?.p1, base.p1),
+    p2: ensurePlayerPosition("p2", positions?.p2, base.p2),
+  };
+}
+
 // Shared base for all board entities (avatars and permanents)
 export type EntityBase<TCard> = {
   card: TCard;
@@ -910,34 +1060,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   showGridOverlay: false,
   showPlaymat: true,
   cameraMode: "orbit",
-  zones: {
-    p1: {
-      spellbook: [],
-      atlas: [],
-      hand: [],
-      graveyard: [],
-      battlefield: [],
-      banished: [],
-    },
-    p2: {
-      spellbook: [],
-      atlas: [],
-      hand: [],
-      graveyard: [],
-      battlefield: [],
-      banished: [],
-    },
-  },
+  zones: createEmptyZonesRecord(),
   selectedCard: null,
   selectedPermanent: null,
   selectedAvatar: null,
   // Hand visibility state
   mouseInHandZone: false,
   handHoverCount: 0,
-  avatars: {
-    p1: { card: null, pos: null, tapped: false },
-    p2: { card: null, pos: null, tapped: false },
-  },
+  avatars: createDefaultAvatars(),
   permanents: {},
   // UI state
   dragFromHand: false,
@@ -1109,14 +1239,28 @@ export const useGameStore = create<GameState>((set, get) => ({
           : deepMergeReplaceArrays(s.board, p.board);
       }
       if (p.zones !== undefined) {
-        next.zones = replaceKeys.has("zones")
-          ? p.zones
-          : deepMergeReplaceArrays(s.zones, p.zones);
+        const candidate = replaceKeys.has("zones")
+          ? (p.zones as Partial<Record<PlayerKey, Partial<Zones>>>)
+          : (deepMergeReplaceArrays(
+              s.zones,
+              p.zones
+            ) as Partial<Record<PlayerKey, Partial<Zones>>>);
+        next.zones = normalizeZones(
+          candidate,
+          replaceKeys.has("zones") ? undefined : s.zones
+        );
       }
       if (p.avatars !== undefined) {
-        next.avatars = replaceKeys.has("avatars")
-          ? p.avatars
-          : deepMergeReplaceArrays(s.avatars, p.avatars);
+        const candidate = replaceKeys.has("avatars")
+          ? (p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>)
+          : (deepMergeReplaceArrays(
+              s.avatars,
+              p.avatars
+            ) as Partial<Record<PlayerKey, Partial<AvatarState>>>);
+        next.avatars = normalizeAvatars(
+          candidate,
+          replaceKeys.has("avatars") ? undefined : s.avatars
+        );
       }
       if (p.permanents !== undefined) {
         const source = replaceKeys.has("permanents")
@@ -1160,14 +1304,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.sitePositions = {} as GameState["sitePositions"];
       }
       if (p.playerPositions !== undefined) {
-        next.playerPositions = replaceKeys.has("playerPositions")
-          ? (p.playerPositions as GameState["playerPositions"])
-          : deepMergeReplaceArrays(s.playerPositions, p.playerPositions);
+        const candidate = replaceKeys.has("playerPositions")
+          ? (p.playerPositions as Partial<
+              Record<PlayerKey, Partial<PlayerPositionReference>>
+            >)
+          : (deepMergeReplaceArrays(
+              s.playerPositions,
+              p.playerPositions
+            ) as Partial<Record<PlayerKey, Partial<PlayerPositionReference>>>);
+        next.playerPositions = normalizePlayerPositions(
+          candidate,
+          replaceKeys.has("playerPositions") ? undefined : s.playerPositions
+        );
       } else if (replaceKeys.has("playerPositions")) {
-        next.playerPositions = {
-          p1: { playerId: 1, position: { x: 0, z: 0 } },
-          p2: { playerId: 2, position: { x: 0, z: 0 } },
-        } as GameState["playerPositions"];
+        next.playerPositions = createDefaultPlayerPositions();
       }
       if (p.events !== undefined) {
         // Merge events deterministically
@@ -3526,24 +3676,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Reset board
         board: { size: { w: 5, h: 4 }, sites: {} },
         // Reset zones
-        zones: {
-          p1: {
-            spellbook: [],
-            atlas: [],
-            hand: [],
-            graveyard: [],
-            battlefield: [],
-            banished: [],
-          },
-          p2: {
-            spellbook: [],
-            atlas: [],
-            hand: [],
-            graveyard: [],
-            battlefield: [],
-            banished: [],
-          },
-        },
+        zones: createEmptyZonesRecord(),
         // Reset selections
         selectedCard: null,
         selectedPermanent: null,
