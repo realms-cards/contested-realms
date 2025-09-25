@@ -1,6 +1,11 @@
 "use client";
 
 import { io, Socket } from "socket.io-client";
+import type {
+  InteractionEnvelope,
+  InteractionRequestMessage,
+  InteractionResponseMessage,
+} from "@/lib/net/interactions";
 import { Protocol } from "@/lib/net/protocol";
 import type { LobbyVisibility, ChatScope, DraftConfig } from "@/lib/net/protocol";
 import type {
@@ -161,6 +166,15 @@ export class SocketTransport implements GameTransport {
       socket.on("chat", (payload) =>
         this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
       );
+      socket.on("interaction", (payload) => {
+        this.dispatch("interaction", payload as InteractionEnvelope);
+      });
+      socket.on("interaction:request", (payload) => {
+        this.dispatch("interaction:request", payload as InteractionRequestMessage);
+      });
+      socket.on("interaction:response", (payload) => {
+        this.dispatch("interaction:response", payload as InteractionResponseMessage);
+      });
       // Generic lightweight messages (e.g., draft ready toggles)
       socket.on("message", (payload) => {
         const m = payload as TransportEventMap["message"];
@@ -372,6 +386,18 @@ export class SocketTransport implements GameTransport {
     const t = SocketTransport.getMessageType(msg);
     console.log(`[Transport] message -> type=${t}`);
     this.requireSocket().emit("message", msg);
+  }
+
+  sendInteractionEnvelope(envelope: InteractionEnvelope): void {
+    this.requireSocket().emit("interaction", envelope);
+  }
+
+  sendInteractionRequest(message: InteractionRequestMessage): void {
+    this.requireSocket().emit("interaction:request", message);
+  }
+
+  sendInteractionResponse(message: InteractionResponseMessage): void {
+    this.requireSocket().emit("interaction:response", message);
   }
 
   resync(): void {

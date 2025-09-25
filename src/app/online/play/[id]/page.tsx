@@ -10,6 +10,7 @@ import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -25,6 +26,7 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import Board from "@/lib/game/Board";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import Hand3D from "@/lib/game/components/Hand3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import Piles3D from "@/lib/game/components/Piles3D";
@@ -36,10 +38,7 @@ import {
   BASE_TILE_SIZE,
   MAT_RATIO,
 } from "@/lib/game/constants";
-import {
-  useCardHover,
-  type CardPreviewData,
-} from "@/lib/game/hooks/useCardHover";
+import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 
@@ -146,6 +145,18 @@ export default function OnlineMatchPage() {
 
     return names;
   }, [match?.players]);
+
+  const playerNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (!match || !Array.isArray(match.players)) return map;
+    for (const p of match.players) {
+      if (!p || typeof p !== "object") continue;
+      const id = p.id;
+      if (!id) continue;
+      map[id] = p.displayName || id;
+    }
+    return map;
+  }, [match]);
 
   // Set screen type for video overlay - this is a game page so use game-3d
   useEffect(() => {
@@ -1079,7 +1090,15 @@ export default function OnlineMatchPage() {
         </div>
       )}
 
-      {/* Setup Overlay - only show when in match and setup is open */}
+      {inThisMatch && myPlayerKey && (
+        <InteractionConsentDialog
+          myPlayerId={myPlayerId ?? null}
+          mySeat={myPlayerKey}
+          playerNames={playerNames}
+          playerNameById={playerNameById}
+        />
+      )}
+
       {inThisMatch && setupOpen && myPlayerKey && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
@@ -1200,10 +1219,13 @@ export default function OnlineMatchPage() {
           {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) */}
           {previewCard?.slug && !hoverPreview && !contextMenu && (
             <CardPreview
-              card={previewCard}
+              card={{
+                slug: previewCard.slug ?? "",
+                name: previewCard.name,
+                type: previewCard.type ?? null,
+              }}
               anchor="top-right"
               zIndexClass="z-30"
-              onClose={() => setPreviewCard(null)}
             />
           )}
 
@@ -1298,7 +1320,7 @@ export default function OnlineMatchPage() {
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board />
+                  <Board enableBoardPings />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}

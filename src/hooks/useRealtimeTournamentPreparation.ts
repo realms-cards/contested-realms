@@ -1,56 +1,33 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import {
+  SealedPreparationData,
+  DraftPreparationData,
+  ConstructedPreparationData,
+  PreparationState,
+  mergeSealed,
+  mergeDraft,
+  mergeConstructed,
+  PreparationResponse
+} from './useTournamentPreparation';
 import { useTournamentSocket } from './useTournamentSocket';
 
-interface SealedPreparationData {
-  packs: Array<{ id: string; contents: unknown[] }>;
-  packsOpened: boolean;
-  cardPool: unknown[];
-  deckBuilt: boolean;
-  deckList: Array<{ cardId: string; quantity: number }>;
-}
-
-interface DraftPreparationData {
-  draftSessionId: string | null;
-  joinedAt: string | null;
-  draftCompleted: boolean;
-  pickHistory: unknown[];
-  deckBuilt: boolean;
-  deckList: Array<{ cardId: string; quantity: number }>;
-}
-
-interface ConstructedPreparationData {
-  availableDecks: Array<{
-    id: string;
-    name: string;
-    format: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  selectedDeckId: string | null;
-  deckSelected: boolean;
-  deckValidated: boolean;
+interface RealtimeUpdate {
+  playerId: string;
+  type: 'preparation_update' | 'deck_submitted' | 'ready_status_changed';
+  timestamp: string;
+  data?: Record<string, unknown>;
 }
 
 interface RealtimePreparationState {
-  status: 'notStarted' | 'inProgress' | 'completed';
+  status: PreparationState['status'];
   sealed?: SealedPreparationData;
   draft?: DraftPreparationData;
   constructed?: ConstructedPreparationData;
-  
-  // Real-time coordination data
   playersReady: number;
   totalPlayers: number;
   allPlayersReady: boolean;
-  
-  // Real-time updates
   lastUpdateTime: string | null;
-  realtimeUpdates: Array<{
-    playerId: string;
-    type: 'preparation_update' | 'deck_submitted' | 'ready_status_changed';
-    timestamp: string;
-    data?: Record<string, unknown>;
-  }>;
-  
+  realtimeUpdates: RealtimeUpdate[];
   loading: boolean;
   error: string | null;
 }
@@ -67,10 +44,49 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     error: null
   });
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const refreshStatus = useCallback(async () => {
+    setState(prev => ({ ...prev, loading: true, error: null }));
 
-  // Real-time event handlers
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/status`);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to get preparation status');
+      }
+
+      const result = await response.json() as PreparationResponse<{
+        readyPlayerCount?: number;
+        totalPlayerCount?: number;
+        allPlayersComplete?: boolean;
+      }>;
+
+      setState(prev => ({
+        ...prev,
+        status: result.preparationStatus ?? prev.status,
+        sealed: result.preparationData?.sealed
+          ? mergeSealed(prev.sealed, result.preparationData.sealed)
+          : prev.sealed,
+        draft: result.preparationData?.draft
+          ? mergeDraft(prev.draft, result.preparationData.draft)
+          : prev.draft,
+        constructed: result.preparationData?.constructed
+          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          : prev.constructed,
+        playersReady: result.readyPlayerCount ?? prev.playersReady,
+        totalPlayers: result.totalPlayerCount ?? prev.totalPlayers,
+        allPlayersReady: result.allPlayersComplete ?? prev.allPlayersReady,
+        loading: false
+      }));
+    } catch (err) {
+      setState(prev => ({
+        ...prev,
+        error: err instanceof Error ? err.message : 'Failed to get preparation status',
+        loading: false
+      }));
+    }
+  }, [tournamentId]);
+
   const handlePreparationUpdate = useCallback((data: {
     tournamentId: string;
     playerId: string;
@@ -79,7 +95,9 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     readyPlayerCount: number;
     totalPlayerCount: number;
   }) => {
-    if (data.tournamentId !== tournamentId) return;
+    if (data.tournamentId !== tournamentId) {
+      return;
+    }
 
     console.log('Real-time preparation update:', data);
 
@@ -90,7 +108,7 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
       allPlayersReady: data.readyPlayerCount === data.totalPlayerCount,
       lastUpdateTime: new Date().toISOString(),
       realtimeUpdates: [
-        ...prev.realtimeUpdates.slice(-9), // Keep last 10 updates
+        ...prev.realtimeUpdates.slice(-9),
         {
           playerId: data.playerId,
           type: data.deckSubmitted ? 'deck_submitted' : 'preparation_update',
@@ -103,18 +121,16 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
       ]
     }));
 
-    // Auto-refresh detailed status when we get updates
-    refreshStatus();
-  }, [tournamentId]);
+    void refreshStatus();
+  }, [tournamentId, refreshStatus]);
 
-  // Initialize socket with preparation-specific events
-  const { 
-    socket, 
-    isConnected, 
-    updatePreparation: socketUpdatePreparation 
+  const {
+    socket,
+    isConnected,
+    updatePreparation: socketUpdatePreparation
   } = useTournamentSocket({
     onPreparationUpdate: handlePreparationUpdate,
-    onError: (error) => {
+    onError: error => {
       setState(prev => ({
         ...prev,
         error: error.message,
@@ -123,10 +139,9 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     }
   });
 
-  // Start preparation phase
   const startPreparation = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/start`, {
         method: 'POST',
@@ -138,14 +153,20 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
         throw new Error(error.error || 'Failed to start preparation');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse;
+
       setState(prev => ({
         ...prev,
-        status: 'inProgress',
-        sealed: result.preparationData?.sealed,
-        draft: result.preparationData?.draft,
-        constructed: result.preparationData?.constructed,
+        status: result.preparationStatus ?? 'inProgress',
+        sealed: result.preparationData?.sealed
+          ? mergeSealed(prev.sealed, result.preparationData.sealed)
+          : prev.sealed,
+        draft: result.preparationData?.draft
+          ? mergeDraft(prev.draft, result.preparationData.draft)
+          : prev.draft,
+        constructed: result.preparationData?.constructed
+          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          : prev.constructed,
         loading: false
       }));
     } catch (err) {
@@ -157,48 +178,13 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     }
   }, [tournamentId]);
 
-  // Get preparation status with real-time coordination data
-  const refreshStatus = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/status`);
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to get preparation status');
-      }
-
-      const result = await response.json();
-      
-      setState(prev => ({
-        ...prev,
-        status: result.preparationStatus,
-        sealed: result.preparationData?.sealed,
-        draft: result.preparationData?.draft,
-        constructed: result.preparationData?.constructed,
-        playersReady: result.readyPlayerCount || prev.playersReady,
-        totalPlayers: result.totalPlayerCount || prev.totalPlayers,
-        allPlayersReady: result.allPlayersComplete || prev.allPlayersReady,
-        loading: false
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Failed to get preparation status',
-        loading: false
-      }));
-    }
-  }, [tournamentId]);
-
-  // Submit preparation with real-time broadcasting
   const submitPreparation = useCallback(async (preparationData: {
     sealed?: Partial<SealedPreparationData>;
     draft?: Partial<DraftPreparationData>;
     constructed?: Partial<ConstructedPreparationData>;
   }) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/submit`, {
         method: 'POST',
@@ -211,18 +197,26 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
         throw new Error(error.error || 'Failed to submit preparation');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        isComplete?: boolean;
+        deckSubmitted?: boolean;
+      }>;
+
       setState(prev => ({
         ...prev,
-        status: result.preparationStatus,
-        sealed: result.preparationData?.sealed,
-        draft: result.preparationData?.draft,
-        constructed: result.preparationData?.constructed,
+        status: result.preparationStatus ?? prev.status,
+        sealed: result.preparationData?.sealed
+          ? mergeSealed(prev.sealed, result.preparationData.sealed)
+          : prev.sealed,
+        draft: result.preparationData?.draft
+          ? mergeDraft(prev.draft, result.preparationData.draft)
+          : prev.draft,
+        constructed: result.preparationData?.constructed
+          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          : prev.constructed,
         loading: false
       }));
 
-      // Broadcast preparation update via socket
       if (isConnected && socket) {
         socketUpdatePreparation(tournamentId, {
           ...preparationData,
@@ -240,10 +234,9 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     }
   }, [tournamentId, isConnected, socket, socketUpdatePreparation]);
 
-  // Sealed format actions with real-time updates
   const openSealedPacks = useCallback(async (packIds: string[]) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/sealed/packs`, {
         method: 'POST',
@@ -256,20 +249,21 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
         throw new Error(error.error || 'Failed to open sealed packs');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        cardPool?: unknown[];
+        openedPackIds?: string[];
+      }>;
+
       setState(prev => ({
         ...prev,
-        sealed: {
-          ...prev.sealed!,
+        sealed: mergeSealed(prev.sealed, result.preparationData?.sealed, {
           packsOpened: true,
-          cardPool: result.cardPool,
+          cardPool: result.preparationData?.sealed?.cardPool ?? result.cardPool,
           openedPackIds: result.openedPackIds
-        },
+        }),
         loading: false
       }));
 
-      // Broadcast pack opening update
       if (isConnected && socket) {
         socketUpdatePreparation(tournamentId, {
           sealed: {
@@ -287,10 +281,9 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     }
   }, [tournamentId, isConnected, socket, socketUpdatePreparation]);
 
-  // Draft format actions with real-time coordination
   const joinDraftSession = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/draft/join`, {
         method: 'POST',
@@ -302,20 +295,23 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
         throw new Error(error.error || 'Failed to join draft session');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        draftSession?: { id: string | null };
+      }>;
+
+      const overrides: Partial<DraftPreparationData> = {};
+      if (result.draftSession?.id) {
+        overrides.draftSessionId = result.draftSession.id;
+        overrides.joinedAt = new Date().toISOString();
+      }
+
       setState(prev => ({
         ...prev,
-        draft: {
-          ...prev.draft!,
-          draftSessionId: result.draftSession.id,
-          joinedAt: new Date().toISOString()
-        },
+        draft: mergeDraft(prev.draft, result.preparationData?.draft, overrides),
         loading: false
       }));
 
-      // Broadcast draft join
-      if (isConnected && socket) {
+      if (isConnected && socket && result.draftSession?.id) {
         socketUpdatePreparation(tournamentId, {
           draft: {
             draftSessionId: result.draftSession.id,
@@ -332,10 +328,9 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     }
   }, [tournamentId, isConnected, socket, socketUpdatePreparation]);
 
-  // Constructed format actions with real-time validation
   const selectDeck = useCallback(async (deckId: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/preparation/constructed/decks`, {
         method: 'POST',
@@ -348,21 +343,22 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
         throw new Error(error.error || 'Failed to select deck');
       }
 
-      const result = await response.json();
-      
+      const result = await response.json() as PreparationResponse<{
+        isComplete?: boolean;
+        deckSubmitted?: boolean;
+      }>;
+
       setState(prev => ({
         ...prev,
-        status: 'completed',
-        constructed: {
-          ...prev.constructed!,
-          selectedDeckId: deckId,
-          deckSelected: true,
-          deckValidated: true
-        },
+        status: result.preparationStatus ?? 'completed',
+        constructed: mergeConstructed(prev.constructed, result.preparationData?.constructed, {
+          selectedDeckId: result.preparationData?.constructed?.selectedDeckId ?? deckId,
+          deckSelected: result.preparationData?.constructed?.deckSelected ?? true,
+          deckValidated: result.preparationData?.constructed?.deckValidated ?? true
+        }),
         loading: false
       }));
 
-      // Broadcast deck selection
       if (isConnected && socket) {
         socketUpdatePreparation(tournamentId, {
           constructed: {
@@ -371,8 +367,8 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
             deckValidated: true,
             selectedAt: new Date().toISOString()
           },
-          isComplete: true,
-          deckSubmitted: true
+          isComplete: result.isComplete ?? true,
+          deckSubmitted: result.deckSubmitted ?? true
         });
       }
     } catch (err) {
@@ -384,11 +380,10 @@ export function useRealtimeTournamentPreparation(tournamentId: string) {
     }
   }, [tournamentId, isConnected, socket, socketUpdatePreparation]);
 
-  // Auto-refresh preparation status periodically (backup to real-time)
   useEffect(() => {
     refreshStatus();
-    
-    const interval = setInterval(refreshStatus, 10000); // Poll every 10 seconds as backup
+
+    const interval = setInterval(refreshStatus, 10000);
     return () => clearInterval(interval);
   }, [refreshStatus]);
 

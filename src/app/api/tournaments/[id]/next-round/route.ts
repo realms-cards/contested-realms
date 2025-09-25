@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
 
     // Generate pairings
-    const pairings = await generatePairings(id, nextRoundNumber);
+    const pairings = await generatePairings(id);
 
     // Create matches
     const matchIds = await createRoundMatches(id, newRound.id, pairings);

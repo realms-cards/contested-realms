@@ -216,7 +216,7 @@ export function useTournamentPhases(
         loading: false
       }));
     }
-  }, [tournamentId, state.currentPhase.status, updatePhase]);
+  }, [tournamentId, state.currentPhase.status]);
 
   // Perform phase transition action
   const performAction = useCallback(async (action: string): Promise<Response | undefined> => {

@@ -457,7 +457,7 @@ export class TournamentValidationService {
       if (entry.quantity > maxCopies) {
         return {
           isValid: false,
-          error: `Cannot have more than ${maxCopies} copies of any card`
+          error: `Deck contains too many copies of a card (maximum ${maxCopies})`
         };
       }
 

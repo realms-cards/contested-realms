@@ -360,51 +360,6 @@ export default function DeckEditorPage() {
     });
   }, []);
 
-  async function setAvatarSpellslinger() {
-    try {
-      setError(null);
-      let hit: SearchResult | null = null;
-      // 1) Try in current set
-      try {
-        const resSet = await fetch(
-          `/api/cards/search?q=spellslinger&set=${encodeURIComponent(setName)}&type=avatar`
-        );
-        const dataSet = await resSet.json();
-        if (resSet.ok) hit = (dataSet as SearchResult[])[0] || null;
-      } catch {}
-
-      // 2) Fallback across all sets
-      if (!hit) {
-        try {
-          const resAny = await fetch(`/api/cards/search?q=spellslinger&type=avatar`);
-          const dataAny = await resAny.json();
-          if (resAny.ok) hit = (dataAny as SearchResult[])[0] || null;
-        } catch {}
-      }
-
-      if (!hit) throw new Error("Spellslinger not found");
-      const h = hit as SearchResult; // non-null after guard
-      // Add spellslinger to spellbook without removing other avatars
-      const key = `${h.cardId}:Spellbook:${h.variantId ?? "x"}`;
-      setPicks((prev) => ({
-        ...prev,
-        [key]: prev[key]
-          ? { ...prev[key], count: prev[key].count + 1 }
-          : {
-              cardId: h.cardId,
-              variantId: h.variantId ?? null,
-              name: h.cardName,
-              type: h.type ?? null,
-              slug: h.slug ?? null,
-              zone: "Spellbook",
-              count: 1,
-            },
-      }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
   // (addStandardSitesOnceEach removed; use individual quick-add buttons)
 
   // Quick-add a specific standard site by name, using prefetched results with a network fallback

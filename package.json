@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "prebuild": "npm run lint",
     "fetch:ktx2": "node scripts/fetch-ktx2-transcoder.js",
     "postinstall": "node scripts/fetch-ktx2-transcoder.js || true",
     "dev": "next dev",

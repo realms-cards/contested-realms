@@ -4,6 +4,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
 import { useSound } from "@/lib/contexts/SoundContext";
+import { cardRefToPreview } from "@/lib/game/card-preview.types";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
   CARD_LONG,
@@ -16,7 +18,6 @@ import {
   HAND_CARD_SCALE,
 } from "@/lib/game/constants";
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
-import type { CardPreviewData } from "@/lib/game/hooks/useCardHover";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 
@@ -444,15 +445,15 @@ export default function Hand3D({
 
       // Use enhanced preview if available, otherwise fall back to legacy
       if (showCardPreview) {
-        showCardPreview({
-          slug: card.slug,
-          name: card.name,
-          type: card.type || null,
-        });
-      } else {
-        // Fallback to legacy preview system
-        hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400);
+        const preview = cardRefToPreview(card);
+        if (preview) {
+          showCardPreview(preview);
+          return;
+        }
       }
+
+      // Fallback to legacy preview system when enhanced preview unavailable or conversion failed
+      hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400);
     },
     [setPreviewCard, HAND_PREVIEW_ENABLED, showCardPreview]
   );

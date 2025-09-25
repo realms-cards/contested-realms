@@ -1,4 +1,9 @@
 import type {
+  InteractionEnvelope,
+  InteractionRequestMessage,
+  InteractionResponseMessage,
+} from "@/lib/net/interactions";
+import type {
   LobbyUpdatedPayloadT,
   MatchStartedPayloadT,
   ResyncResponsePayloadT,
@@ -15,12 +20,11 @@ import type {
   DraftConfig,
   TournamentInfo,
 } from "@/lib/net/protocol";
-// Import Draft-3D event types for enhanced online integration
-import type { 
+import type {
   Draft3DEventMap,
   CardPreviewEvent,
   StackInteractionEvent,
-  UIUpdateEvent 
+  UIUpdateEvent,
 } from "@/types/draft-3d-events";
 
 // Draft state type for client-server sync
@@ -64,6 +68,9 @@ export type TransportEventMap = {
   tournamentMatchReady: { tournamentId: string; matchId: string; players: string[] };
   tournamentCompleted: { tournamentId: string; winnerId?: string };
   tournamentsListUpdated: TournamentInfo[];
+  interaction: InteractionEnvelope;
+  "interaction:request": InteractionRequestMessage;
+  "interaction:response": InteractionResponseMessage;
 } & Draft3DEventMap; // Extend with Draft-3D events for enhanced online integration
 
 export type TransportEvent = keyof TransportEventMap;
@@ -122,6 +129,9 @@ export interface GameTransport {
 
   // Generic lightweight message channel for transient signals (e.g., draft ready)
   sendMessage?(msg: CustomMessage): Promise<void> | void;
+  sendInteractionEnvelope?(envelope: InteractionEnvelope): Promise<void> | void;
+  sendInteractionRequest?(message: InteractionRequestMessage): Promise<void> | void;
+  sendInteractionResponse?(message: InteractionResponseMessage): Promise<void> | void;
 
   // Tournament methods
   createTournament?(config: {

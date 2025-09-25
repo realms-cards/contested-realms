@@ -46,7 +46,7 @@
  * ```
  */
 
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import type { Vector3 } from 'three';
 import type { 
   ScreenType, 
@@ -113,7 +113,6 @@ export const VideoOverlayProvider: React.FC<VideoOverlayProviderProps> = ({
   initialScreenType = 'lobby' 
 }) => {
   const [screenType, setScreenType] = useState<ScreenType>(initialScreenType);
-  const [seatPlacements, setSeatPlacements] = useState<Map<string, Vector3>>(new Map());
 
   // Get current screen configuration
   const screenConfig = useMemo(() => SCREEN_OVERLAY_CONFIGS[screenType], [screenType]);
@@ -133,16 +132,8 @@ export const VideoOverlayProvider: React.FC<VideoOverlayProviderProps> = ({
   };
 
   // Set seat position for a specific player
-  const setSeatPosition = (playerId: string, position: Vector3 | null) => {
-    setSeatPlacements(prev => {
-      const updated = new Map(prev);
-      if (position === null) {
-        updated.delete(playerId);
-      } else {
-        updated.set(playerId, position);
-      }
-      return updated;
-    });
+  const setSeatPosition = () => {
+    // No-op placeholder: seat positioning is managed elsewhere during WIP.
   };
 
   // Computed properties

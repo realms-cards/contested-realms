@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useMemo } from "react";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import type { GameTransport } from "@/lib/net/transport";
-import { useDraft3DSession, useDraft3DPlayers } from "@/lib/stores/draft-3d-online";
+import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import type { Position3D } from "@/types/draft-3d-events";
 import OnlineCardStack from "./OnlineCardStack";
 import type { CardInStack } from "./OnlineCardStack";
@@ -22,10 +22,6 @@ export interface OnlineDraftSessionProps {
     waitingFor?: string[];
     timeRemaining?: number;
   };
-  
-  // Camera and layout
-  cameraPosition?: Position3D;
-  cameraTarget?: Position3D;
   
   // Event handlers
   onCardPick?: (cardId: string) => void;
@@ -48,11 +44,9 @@ export default function OnlineDraftSession({
   playerId,
   transport,
   draftState,
-  cameraPosition: _cameraPosition = { x: 0, y: 5, z: 10 },
-  cameraTarget: _cameraTarget = { x: 0, y: 0, z: 0 },
   onCardPick,
   onCardInspect,
-  onDraftComplete: _onDraftComplete,
+  onDraftComplete,
   onError,
 }: OnlineDraftSessionProps) {
   const [currentPack, setCurrentPack] = useState<CardInStack[]>([]);
@@ -63,7 +57,7 @@ export default function OnlineDraftSession({
   const {
     isConnected,
     sendCardPreview,
-    sendStackInteraction: _sendStackInteraction,
+    sendStackInteraction,
     activePreviews,
     playerStates
   } = useDraft3DTransport({
@@ -78,7 +72,6 @@ export default function OnlineDraftSession({
   
   // Session and player state management
   const { joinSession, leaveSession } = useDraft3DSession();
-  const { currentPlayerId: _currentPlayerId } = useDraft3DPlayers();
   
   // Initialize session on mount
   useEffect(() => {
@@ -175,17 +168,22 @@ export default function OnlineDraftSession({
     return positions;
   }, [playerStates, playerId]);
   
-  const handleCardPick = useCallback((cardId: string, _stackId: string) => {
+  const handleCardPick = useCallback((cardId: string, stackId: string) => {
     // Send pick action through existing draft system
     onCardPick?.(cardId);
+    sendStackInteraction('pick', [cardId], stackId);
     
     // Move card from current pack to picked cards
     const pickedCard = currentPack.find(card => card.cardId === cardId);
     if (pickedCard) {
       setCurrentPack(prev => prev.filter(card => card.cardId !== cardId));
-      setPickedCards(prev => [...prev, { ...pickedCard, ownedByPlayer: playerId, isPickable: false }]);
+      setPickedCards(prev => {
+        const next = [...prev, { ...pickedCard, ownedByPlayer: playerId, isPickable: false }];
+        onDraftComplete?.({ pickedCards: next });
+        return next;
+      });
     }
-  }, [currentPack, playerId, onCardPick]);
+  }, [currentPack, playerId, onCardPick, sendStackInteraction, onDraftComplete]);
   
   const handleCardInspect = useCallback((cardId: string) => {
     onCardInspect?.(cardId);

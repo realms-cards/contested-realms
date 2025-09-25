@@ -6,12 +6,9 @@
  */
 
 import { useCallback, useRef } from "react";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
 
-export type CardPreviewData = {
-  slug: string;
-  name: string;
-  type: string | null;
-};
+export type { CardPreviewData } from "@/lib/game/card-preview.types";
 
 export type HoverStateCallbacks = {
   onShow: (card: CardPreviewData) => void;

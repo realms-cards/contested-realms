@@ -461,3 +461,9 @@ Here are the commands to reset the database, apply migrations,
 
   # 3. Seed packs
   npm run seed:packs
+
+
+
+## Sync Textures
+
+s3cmd sync ./data-ktx2/ s3://contested-realms-cdn/data-ktx2/ --acl-public --guess-mime-type --add-header='Cache-Control: public, max-age=31536000, immutable'

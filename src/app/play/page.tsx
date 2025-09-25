@@ -3,18 +3,19 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import Image from "next/image";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
+import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import StatusBar from "@/components/game/StatusBar";
 import Board from "@/lib/game/Board";
+import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import Hand3D from "@/lib/game/components/Hand3D";
 import Hud3D from "@/lib/game/components/Hud3D";
 import Piles3D from "@/lib/game/components/Piles3D";
@@ -27,7 +28,6 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
-import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {
@@ -41,7 +41,6 @@ export default function PlayPage() {
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const clearSelection = useGameStore((s) => s.clearSelection);
   const selected = useGameStore((s) => s.selectedCard);
-  const zones = useGameStore((s) => s.zones);
   const events = useGameStore((s) => s.events);
   const setPhase = useGameStore((s) => s.setPhase);
   const placementDialog = useGameStore((s) => s.placementDialog);
@@ -56,6 +55,14 @@ export default function PlayPage() {
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
+  const offlinePlayerNames = useMemo(() => ({ p1: "Player 1", p2: "Player 2" }), []);
+  const offlineNameById = useMemo(
+    () => ({ hotseat_p1: "Player 1", hotseat_p2: "Player 2" }),
+    []
+  );
+  const consentPlayerId = currentPlayerKey
+    ? (`hotseat_${currentPlayerKey}` satisfies string)
+    : "hotseat";
 
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
@@ -369,6 +376,13 @@ export default function PlayPage() {
         </div>
       )}
 
+      <InteractionConsentDialog
+        myPlayerId={consentPlayerId}
+        mySeat={currentPlayerKey}
+        playerNames={offlinePlayerNames}
+        playerNameById={offlineNameById}
+      />
+
       {/* HUD */}
       <StatusBar dragFromHand={dragFromHand} />
 
@@ -437,11 +451,14 @@ export default function PlayPage() {
       </div>
 
       {/* Hover Preview Overlay (hidden if context menu visible) */}
-      {previewCard?.slug && !contextMenu && (
+      {previewCard && !contextMenu && (
         <CardPreview
-          card={previewCard}
+          card={createCardPreviewData({
+            slug: previewCard.slug,
+            name: previewCard.name,
+            type: previewCard.type,
+          })}
           anchor="top-right"
-          onClose={() => setPreviewCard(null)}
         />
       )}
 
@@ -506,7 +523,7 @@ export default function PlayPage() {
 
         {/* Interactive board (physics-enabled) */}
         <Physics gravity={[0, -9.81, 0]}>
-          <Board />
+          <Board enableBoardPings />
         </Physics>
 
         {/* 3D Piles (sides of the board) */}
