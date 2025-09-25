@@ -1292,6 +1292,112 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
         }
       } catch {}
       // Merge player patch into game snapshot
+      if (patchToApply && Array.isArray(patchToApply.__replaceKeys)) {
+        if (!patchToApply.zones) {
+          const prevZones = (match.game && match.game.zones) || {
+            p1: { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] },
+            p2: { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] },
+          };
+          patchToApply = {
+            ...patchToApply,
+            zones: {
+              p1: Array.isArray(prevZones && prevZones.p1 && prevZones.p1.spellbook)
+                ? prevZones.p1
+                : {
+                    spellbook: [],
+                    atlas: [],
+                    hand: [],
+                    graveyard: [],
+                    battlefield: [],
+                    banished: [],
+                  },
+              p2: Array.isArray(prevZones && prevZones.p2 && prevZones.p2.spellbook)
+                ? prevZones.p2
+                : {
+                    spellbook: [],
+                    atlas: [],
+                    hand: [],
+                    graveyard: [],
+                    battlefield: [],
+                    banished: [],
+                  },
+            },
+          };
+        }
+        if (!patchToApply.avatars) {
+          const prevAvatars = (match.game && match.game.avatars) || { p1: {}, p2: {} };
+          patchToApply = {
+            ...patchToApply,
+            avatars: {
+              p1: {
+                card: prevAvatars.p1 && 'card' in prevAvatars.p1 ? prevAvatars.p1.card ?? null : null,
+                pos:
+                  prevAvatars.p1 && Array.isArray(prevAvatars.p1.pos) && prevAvatars.p1.pos.length === 2
+                    ? prevAvatars.p1.pos
+                    : null,
+                tapped:
+                  prevAvatars.p1 && typeof prevAvatars.p1.tapped === 'boolean'
+                    ? prevAvatars.p1.tapped
+                    : false,
+              },
+              p2: {
+                card: prevAvatars.p2 && 'card' in prevAvatars.p2 ? prevAvatars.p2.card ?? null : null,
+                pos:
+                  prevAvatars.p2 && Array.isArray(prevAvatars.p2.pos) && prevAvatars.p2.pos.length === 2
+                    ? prevAvatars.p2.pos
+                    : null,
+                tapped:
+                  prevAvatars.p2 && typeof prevAvatars.p2.tapped === 'boolean'
+                    ? prevAvatars.p2.tapped
+                    : false,
+              },
+            },
+          };
+        }
+        if (!patchToApply.playerPositions) {
+          const prevPos = (match.game && match.game.playerPositions) || {
+            p1: { playerId: 1, position: { x: 0, z: 0 } },
+            p2: { playerId: 2, position: { x: 0, z: 0 } },
+          };
+          patchToApply = {
+            ...patchToApply,
+            playerPositions: {
+              p1: {
+                playerId:
+                  prevPos && prevPos.p1 && typeof prevPos.p1.playerId === 'number'
+                    ? prevPos.p1.playerId
+                    : 1,
+                position: {
+                  x:
+                    prevPos && prevPos.p1 && prevPos.p1.position && typeof prevPos.p1.position.x === 'number'
+                      ? prevPos.p1.position.x
+                      : 0,
+                  z:
+                    prevPos && prevPos.p1 && prevPos.p1.position && typeof prevPos.p1.position.z === 'number'
+                      ? prevPos.p1.position.z
+                      : 0,
+                },
+              },
+              p2: {
+                playerId:
+                  prevPos && prevPos.p2 && typeof prevPos.p2.playerId === 'number'
+                    ? prevPos.p2.playerId
+                    : 2,
+                position: {
+                  x:
+                    prevPos && prevPos.p2 && prevPos.p2.position && typeof prevPos.p2.position.x === 'number'
+                      ? prevPos.p2.position.x
+                      : 0,
+                  z:
+                    prevPos && prevPos.p2 && prevPos.p2.position && typeof prevPos.p2.position.z === 'number'
+                      ? prevPos.p2.position.z
+                      : 0,
+                },
+              },
+            },
+          };
+        }
+      }
       match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
       // Apply start-of-turn effects if phase/currentPlayer indicates a new turn
       try {
