@@ -1463,8 +1463,8 @@ export default function Board({ noRaycast = false }: BoardProps = {}) {
 
       {/* Avatars */}
       {(["p1", "p2"] as const).map((who) => {
-        const a = avatars[who];
-        if (!a.pos) return null;
+        const a = avatars?.[who];
+        if (!a || !a.pos) return null;
         const [ax, ay] = a.pos;
         const baseX = offsetX + ax * TILE_SIZE;
         const baseZ = offsetY + ay * TILE_SIZE;

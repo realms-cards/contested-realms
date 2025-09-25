@@ -34,6 +34,8 @@ type PileKey = keyof Pick<
   "spellbook" | "atlas" | "graveyard"
 >;
 
+type PlayerZones = ReturnType<typeof useGameStore.getState>["zones"]["p1"];
+
 export default function Piles3D({
   matW: _matW,
   matH: _matH,
@@ -56,7 +58,16 @@ export default function Piles3D({
   void _matW;
   void _matH;
 
-  const playerZones = zones[owner];
+  const emptyPlayerZones = useMemo<PlayerZones>(() => ({
+    spellbook: [],
+    atlas: [],
+    hand: [],
+    graveyard: [],
+    battlefield: [],
+    banished: [],
+  }), []);
+
+  const playerZones = zones?.[owner] ?? emptyPlayerZones;
   // Seat mapping: p1 at TOP, p2 at BOTTOM
   const isBottom = owner === "p2";
 
