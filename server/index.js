@@ -1293,37 +1293,88 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       } catch {}
       // Merge player patch into game snapshot
       if (patchToApply && Array.isArray(patchToApply.__replaceKeys)) {
-        if (!patchToApply.zones) {
-          const prevZones = (match.game && match.game.zones) || {
-            p1: { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] },
-            p2: { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] },
-          };
-          patchToApply = {
-            ...patchToApply,
-            zones: {
-              p1: Array.isArray(prevZones && prevZones.p1 && prevZones.p1.spellbook)
-                ? prevZones.p1
-                : {
-                    spellbook: [],
-                    atlas: [],
-                    hand: [],
-                    graveyard: [],
-                    battlefield: [],
-                    banished: [],
-                  },
-              p2: Array.isArray(prevZones && prevZones.p2 && prevZones.p2.spellbook)
-                ? prevZones.p2
-                : {
-                    spellbook: [],
-                    atlas: [],
-                    hand: [],
-                    graveyard: [],
-                    battlefield: [],
-                    banished: [],
-                  },
-            },
-          };
-        }
+        const prevZones = (match.game && match.game.zones) || null;
+        const emptyZones = {
+          spellbook: [],
+          atlas: [],
+          hand: [],
+          graveyard: [],
+          battlefield: [],
+          banished: [],
+        };
+        const normalizedZones = {
+          p1: prevZones && prevZones.p1
+            ? {
+                spellbook: Array.isArray(prevZones.p1.spellbook) ? prevZones.p1.spellbook : [],
+                atlas: Array.isArray(prevZones.p1.atlas) ? prevZones.p1.atlas : [],
+                hand: Array.isArray(prevZones.p1.hand) ? prevZones.p1.hand : [],
+                graveyard: Array.isArray(prevZones.p1.graveyard) ? prevZones.p1.graveyard : [],
+                battlefield: Array.isArray(prevZones.p1.battlefield) ? prevZones.p1.battlefield : [],
+                banished: Array.isArray(prevZones.p1.banished) ? prevZones.p1.banished : [],
+              }
+            : emptyZones,
+          p2: prevZones && prevZones.p2
+            ? {
+                spellbook: Array.isArray(prevZones.p2.spellbook) ? prevZones.p2.spellbook : [],
+                atlas: Array.isArray(prevZones.p2.atlas) ? prevZones.p2.atlas : [],
+                hand: Array.isArray(prevZones.p2.hand) ? prevZones.p2.hand : [],
+                graveyard: Array.isArray(prevZones.p2.graveyard) ? prevZones.p2.graveyard : [],
+                battlefield: Array.isArray(prevZones.p2.battlefield) ? prevZones.p2.battlefield : [],
+                banished: Array.isArray(prevZones.p2.banished) ? prevZones.p2.banished : [],
+              }
+            : emptyZones,
+        };
+        patchToApply = {
+          ...patchToApply,
+          zones: {
+            p1:
+              patchToApply.zones && patchToApply.zones.p1
+                ? {
+                    spellbook: Array.isArray(patchToApply.zones.p1.spellbook)
+                      ? patchToApply.zones.p1.spellbook
+                      : normalizedZones.p1.spellbook,
+                    atlas: Array.isArray(patchToApply.zones.p1.atlas)
+                      ? patchToApply.zones.p1.atlas
+                      : normalizedZones.p1.atlas,
+                    hand: Array.isArray(patchToApply.zones.p1.hand)
+                      ? patchToApply.zones.p1.hand
+                      : normalizedZones.p1.hand,
+                    graveyard: Array.isArray(patchToApply.zones.p1.graveyard)
+                      ? patchToApply.zones.p1.graveyard
+                      : normalizedZones.p1.graveyard,
+                    battlefield: Array.isArray(patchToApply.zones.p1.battlefield)
+                      ? patchToApply.zones.p1.battlefield
+                      : normalizedZones.p1.battlefield,
+                    banished: Array.isArray(patchToApply.zones.p1.banished)
+                      ? patchToApply.zones.p1.banished
+                      : normalizedZones.p1.banished,
+                  }
+                : normalizedZones.p1,
+            p2:
+              patchToApply.zones && patchToApply.zones.p2
+                ? {
+                    spellbook: Array.isArray(patchToApply.zones.p2.spellbook)
+                      ? patchToApply.zones.p2.spellbook
+                      : normalizedZones.p2.spellbook,
+                    atlas: Array.isArray(patchToApply.zones.p2.atlas)
+                      ? patchToApply.zones.p2.atlas
+                      : normalizedZones.p2.atlas,
+                    hand: Array.isArray(patchToApply.zones.p2.hand)
+                      ? patchToApply.zones.p2.hand
+                      : normalizedZones.p2.hand,
+                    graveyard: Array.isArray(patchToApply.zones.p2.graveyard)
+                      ? patchToApply.zones.p2.graveyard
+                      : normalizedZones.p2.graveyard,
+                    battlefield: Array.isArray(patchToApply.zones.p2.battlefield)
+                      ? patchToApply.zones.p2.battlefield
+                      : normalizedZones.p2.battlefield,
+                    banished: Array.isArray(patchToApply.zones.p2.banished)
+                      ? patchToApply.zones.p2.banished
+                      : normalizedZones.p2.banished,
+                  }
+                : normalizedZones.p2,
+          },
+        };
         if (!patchToApply.avatars) {
           const prevAvatars = (match.game && match.game.avatars) || { p1: {}, p2: {} };
           patchToApply = {

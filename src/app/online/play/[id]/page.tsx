@@ -36,7 +36,10 @@ import {
   BASE_TILE_SIZE,
   MAT_RATIO,
 } from "@/lib/game/constants";
-import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
+import {
+  useCardHover,
+  type CardPreviewData,
+} from "@/lib/game/hooks/useCardHover";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 
@@ -46,7 +49,9 @@ export default function OnlineMatchPage() {
   const { updateScreenType } = useVideoOverlay();
 
   // Enhanced card preview state using the draft-3d/editor-3d pattern
-  const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
+    null
+  );
   const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
     onShow: (card: CardPreviewData) => {
       setHoverPreview(card);
@@ -158,7 +163,7 @@ export default function OnlineMatchPage() {
         if (raw) {
           const payload = JSON.parse(raw) as {
             players?: string[];
-            matchType?: 'constructed' | 'sealed' | 'draft';
+            matchType?: "constructed" | "sealed" | "draft";
             lobbyName?: string;
             sealedConfig?: {
               packCount?: number;
@@ -176,10 +181,10 @@ export default function OnlineMatchPage() {
             } | null;
           };
           // Fire-and-forget: instruct server to create/ensure match exists with the given roster and configs
-          transport.emit('startTournamentMatch', {
+          transport.emit("startTournamentMatch", {
             matchId,
             playerIds: Array.isArray(payload?.players) ? payload.players : [],
-            matchType: payload?.matchType || 'constructed',
+            matchType: payload?.matchType || "constructed",
             lobbyName: payload?.lobbyName,
             sealedConfig: payload?.sealedConfig || null,
             draftConfig: payload?.draftConfig || null,
@@ -228,7 +233,10 @@ export default function OnlineMatchPage() {
     }
     if (joinAttemptedForRef.current === matchId) return;
     try {
-      console.debug("[online] joinMatch ->", { matchId, because: hasBootstrapRef.current ? "bootstrap" : "direct" });
+      console.debug("[online] joinMatch ->", {
+        matchId,
+        because: hasBootstrapRef.current ? "bootstrap" : "direct",
+      });
     } catch {}
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
@@ -249,7 +257,9 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (!transport) return;
     const off = transport.on("message", (m) => {
-      const type = (m && typeof m === "object" && (m as Record<string, unknown>).type) as string | undefined;
+      const type = (m &&
+        typeof m === "object" &&
+        (m as Record<string, unknown>).type) as string | undefined;
       if (type !== "boardPing") return;
       const msg = m as unknown as {
         id?: string;
@@ -257,7 +267,12 @@ export default function OnlineMatchPage() {
         playerKey?: PlayerKey | null;
         ts?: number;
       };
-      const id = typeof msg.id === "string" ? msg.id : `ping_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+      const id =
+        typeof msg.id === "string"
+          ? msg.id
+          : `ping_${Math.random()
+              .toString(36)
+              .slice(2, 8)}_${Date.now().toString(36)}`;
       const x = Number(msg.position?.x);
       const z = Number(msg.position?.z);
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -266,13 +281,18 @@ export default function OnlineMatchPage() {
           id,
           position: { x, z },
           playerId: null,
-          playerKey: msg.playerKey === "p1" || msg.playerKey === "p2" ? msg.playerKey : null,
+          playerKey:
+            msg.playerKey === "p1" || msg.playerKey === "p2"
+              ? msg.playerKey
+              : null,
           ts: typeof msg.ts === "number" ? msg.ts : Date.now(),
         });
       } catch {}
     });
     return () => {
-      try { off?.(); } catch {}
+      try {
+        off?.();
+      } catch {}
     };
   }, [transport]);
 
@@ -439,7 +459,9 @@ export default function OnlineMatchPage() {
       // Persist my exact server-generated sealed packs for the editor to consume
       try {
         const myId = me?.id ?? myPlayerId ?? null;
-        const packsByPlayer = match.sealedPacks as unknown as Record<string, unknown[]> | undefined;
+        const packsByPlayer = match.sealedPacks as unknown as
+          | Record<string, unknown[]>
+          | undefined;
         if (myId && packsByPlayer && Array.isArray(packsByPlayer[myId])) {
           localStorage.setItem(
             `sealedPacks_${match.id}`,
@@ -685,13 +707,13 @@ export default function OnlineMatchPage() {
   function PhysicsProbe({ mid }: { mid: string | undefined | null }) {
     useEffect(() => {
       try {
-        if (process.env.NEXT_PUBLIC_DEBUG_PHYSICS === '1') {
+        if (process.env.NEXT_PUBLIC_DEBUG_PHYSICS === "1") {
           console.debug("[physics] mount", { matchId: mid });
         }
       } catch {}
       return () => {
         try {
-          if (process.env.NEXT_PUBLIC_DEBUG_PHYSICS === '1') {
+          if (process.env.NEXT_PUBLIC_DEBUG_PHYSICS === "1") {
             console.debug("[physics] unmount", { matchId: mid });
           }
         } catch {}
@@ -742,25 +764,28 @@ export default function OnlineMatchPage() {
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
 
-  const gotoBaseline = useCallback((mode: "topdown" | "orbit") => {
-    const c = controlsRef.current;
-    if (!c) return;
-    // Always reset target to board center
-    c.target.set(0, 0, 0);
-    const cam = c.object as THREE.Camera;
-    if (mode === "topdown") {
-      // Natural 2D view: almost top-down from the player's side, slightly tilted
-      // Keep altitude high enough to see the whole mat, but offset slightly in Z
-      const dist = Math.max(matW, matH) * 1.1;
-      const zOffset = Math.min(6, Math.max(1.5, dist * 0.08));
-      const side = myPlayerNumber === 2 ? -1 : 1;
-      cam.position.set(0, dist, side * zOffset);
-    } else {
-      // Reasonable default orbit position based on seat (slightly offset)
-      cam.position.set(0, 10, myPlayerNumber === 2 ? -5 : 5);
-    }
-    c.update();
-  }, [myPlayerNumber, matW, matH]);
+  const gotoBaseline = useCallback(
+    (mode: "topdown" | "orbit") => {
+      const c = controlsRef.current;
+      if (!c) return;
+      // Always reset target to board center
+      c.target.set(0, 0, 0);
+      const cam = c.object as THREE.Camera;
+      if (mode === "topdown") {
+        // Natural 2D view: almost top-down from the player's side, slightly tilted
+        // Keep altitude high enough to see the whole mat, but offset slightly in Z
+        const dist = Math.max(matW, matH) * 1.1;
+        const zOffset = Math.min(6, Math.max(1.5, dist * 0.08));
+        const side = myPlayerNumber === 2 ? -1 : 1;
+        cam.position.set(0, dist, side * zOffset);
+      } else {
+        // Reasonable default orbit position based on seat (slightly offset)
+        cam.position.set(0, 10, myPlayerNumber === 2 ? -5 : 5);
+      }
+      c.update();
+    },
+    [myPlayerNumber, matW, matH]
+  );
 
   function resetCamera() {
     gotoBaseline(cameraMode);
@@ -828,7 +853,7 @@ export default function OnlineMatchPage() {
 
   // Dynamic page title with comprehensive match info
   useEffect(() => {
-    const baseTitle = "Contested Realms";
+    const baseTitle = "Realms.cards";
 
     if (!connected) {
       document.title = `${baseTitle} - Disconnected`;
@@ -1019,7 +1044,9 @@ export default function OnlineMatchPage() {
           </button>
           <button
             className={`ml-1 px-2 py-1 text-xs rounded ${
-              cameraMode === "topdown" ? "bg-white/20" : "bg-transparent hover:bg-white/10"
+              cameraMode === "topdown"
+                ? "bg-white/20"
+                : "bg-transparent hover:bg-white/10"
             }`}
             onClick={() => {
               setCameraMode("topdown");
@@ -1030,7 +1057,9 @@ export default function OnlineMatchPage() {
           </button>
           <button
             className={`ml-1 px-2 py-1 text-xs rounded ${
-              cameraMode === "orbit" ? "bg-white/20" : "bg-transparent hover:bg-white/10"
+              cameraMode === "orbit"
+                ? "bg-white/20"
+                : "bg-transparent hover:bg-white/10"
             }`}
             onClick={() => {
               setCameraMode("orbit");
@@ -1167,7 +1196,7 @@ export default function OnlineMatchPage() {
               zIndexClass="z-30"
             />
           )}
-          
+
           {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) */}
           {previewCard?.slug && !hoverPreview && !contextMenu && (
             <CardPreview
@@ -1213,7 +1242,6 @@ export default function OnlineMatchPage() {
               onClose={() => closeSearchDialog()}
             />
           )}
-
 
           {/* Match Info Popup */}
           <MatchInfoPopup
@@ -1267,80 +1295,80 @@ export default function OnlineMatchPage() {
                   castShadow
                 />
 
-              {/* Interactive board (physics-enabled) */}
-              <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
-                <PhysicsProbe mid={match?.id} />
-                <Board />
-              </Physics>
+                {/* Interactive board (physics-enabled) */}
+                <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
+                  <PhysicsProbe mid={match?.id} />
+                  <Board />
+                </Physics>
 
-              {/* Seat Video planes at player positions (fixed orientation toward board) */}
-              {rtc?.featureEnabled && myPlayerKey && (
-                <>
-                  {/* Local preview at my seat (muted via video texture; audio handled separately) */}
-                  <LegacySeatVideo3D
-                    who={myPlayerKey}
-                    stream={rtc?.localStream ?? null}
-                  />
-                  {/* Remote video at opponent seat */}
-                  <LegacySeatVideo3D
-                    who={myPlayerKey === "p1" ? "p2" : "p1"}
-                    stream={rtc?.remoteStream ?? null}
-                  />
-                </>
-              )}
+                {/* Seat Video planes at player positions (fixed orientation toward board) */}
+                {rtc?.featureEnabled && myPlayerKey && (
+                  <>
+                    {/* Local preview at my seat (muted via video texture; audio handled separately) */}
+                    <LegacySeatVideo3D
+                      who={myPlayerKey}
+                      stream={rtc?.localStream ?? null}
+                    />
+                    {/* Remote video at opponent seat */}
+                    <LegacySeatVideo3D
+                      who={myPlayerKey === "p1" ? "p2" : "p1"}
+                      stream={rtc?.remoteStream ?? null}
+                    />
+                  </>
+                )}
 
-              {/* 3D Piles (sides of the board) */}
-              <Piles3D 
-                owner="p1" 
-                matW={MAT_PIXEL_W} 
-                matH={MAT_PIXEL_H}
-                showCardPreview={showCardPreview}
-                hideCardPreview={hideCardPreview}
-              />
-              <Piles3D 
-                owner="p2" 
-                matW={MAT_PIXEL_W} 
-                matH={MAT_PIXEL_H}
-                showCardPreview={showCardPreview}
-                hideCardPreview={hideCardPreview}
-              />
-              {/* Token piles (face-up) */}
-              <TokenPile3D owner="p1" />
-              <TokenPile3D owner="p2" />
-
-              {/* 3D HUD (thresholds, life, mana) */}
-              <Hud3D owner="p1" />
-              <Hud3D owner="p2" />
-
-              {/* 3D Hands - show both player and opponent hands */}
-              {myPlayerKey && (
-                <Hand3D
-                  owner={myPlayerKey}
+                {/* 3D Piles (sides of the board) */}
+                <Piles3D
+                  owner="p1"
                   matW={MAT_PIXEL_W}
                   matH={MAT_PIXEL_H}
                   showCardPreview={showCardPreview}
                   hideCardPreview={hideCardPreview}
                 />
-              )}
-              {/* Opponent hand with card backs */}
-              {myPlayerKey &&
-                (() => {
-                  const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
-                  return (
-                    <Hand3D
-                      owner={opponentKey}
-                      matW={MAT_PIXEL_W}
-                      matH={MAT_PIXEL_H}
-                      showCardBacks={true}
-                      viewerPlayerNumber={myPlayerNumber}
-                      showCardPreview={showCardPreview}
-                      hideCardPreview={hideCardPreview}
-                    />
-                  );
-                })()}
+                <Piles3D
+                  owner="p2"
+                  matW={MAT_PIXEL_W}
+                  matH={MAT_PIXEL_H}
+                  showCardPreview={showCardPreview}
+                  hideCardPreview={hideCardPreview}
+                />
+                {/* Token piles (face-up) */}
+                <TokenPile3D owner="p1" />
+                <TokenPile3D owner="p2" />
 
-              {/* Invisible texture cache for smooth loading */}
-              <TextureCache />
+                {/* 3D HUD (thresholds, life, mana) */}
+                <Hud3D owner="p1" />
+                <Hud3D owner="p2" />
+
+                {/* 3D Hands - show both player and opponent hands */}
+                {myPlayerKey && (
+                  <Hand3D
+                    owner={myPlayerKey}
+                    matW={MAT_PIXEL_W}
+                    matH={MAT_PIXEL_H}
+                    showCardPreview={showCardPreview}
+                    hideCardPreview={hideCardPreview}
+                  />
+                )}
+                {/* Opponent hand with card backs */}
+                {myPlayerKey &&
+                  (() => {
+                    const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
+                    return (
+                      <Hand3D
+                        owner={opponentKey}
+                        matW={MAT_PIXEL_W}
+                        matH={MAT_PIXEL_H}
+                        showCardBacks={true}
+                        viewerPlayerNumber={myPlayerNumber}
+                        showCardPreview={showCardPreview}
+                        hideCardPreview={hideCardPreview}
+                      />
+                    );
+                  })()}
+
+                {/* Invisible texture cache for smooth loading */}
+                <TextureCache />
 
                 <OrbitControls
                   ref={controlsRef}
@@ -1389,8 +1417,12 @@ export default function OnlineMatchPage() {
                   onChange={clampControls}
                   minDistance={minDist}
                   maxDistance={maxDist}
-                  minPolarAngle={cameraMode === "topdown" ? naturalTiltAngle : 0}
-                  maxPolarAngle={cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4}
+                  minPolarAngle={
+                    cameraMode === "topdown" ? naturalTiltAngle : 0
+                  }
+                  maxPolarAngle={
+                    cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4
+                  }
                   // Adjust rotation constraints based on player position
                   // Default to P1 constraints if player number not determined yet
                   minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
@@ -1403,7 +1435,11 @@ export default function OnlineMatchPage() {
       )}
 
       {/* Video Overlay (uses page-level WebRTC instance) */}
-      <GlobalVideoOverlay position="top-right" showUserAvatar={true} rtc={rtc} />
+      <GlobalVideoOverlay
+        position="top-right"
+        showUserAvatar={true}
+        rtc={rtc}
+      />
     </div>
   );
 }

@@ -20,7 +20,12 @@ import Hud3D from "@/lib/game/components/Hud3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import TokenPile3D from "@/lib/game/components/TokenPile3D";
-import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
+import {
+  MAT_PIXEL_W,
+  MAT_PIXEL_H,
+  BASE_TILE_SIZE,
+  MAT_RATIO,
+} from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 import { LocalTransport } from "@/lib/net/localTransport";
@@ -52,7 +57,6 @@ export default function PlayPage() {
   const setCameraMode = useGameStore((s) => s.setCameraMode);
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
 
-
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
   const transport = useMemo(() => {
@@ -75,7 +79,9 @@ export default function PlayPage() {
         try {
           useGameStore.getState().applyServerPatch(it.patch, it.t);
         } catch (e) {
-          try { console.warn("applyServerPatch failed", e); } catch {}
+          try {
+            console.warn("applyServerPatch failed", e);
+          } catch {}
         }
       }
     });
@@ -98,10 +104,15 @@ export default function PlayPage() {
     (async () => {
       try {
         let displayName = "Offline Player";
-        try { displayName = localStorage.getItem("sorcery:playerName") || displayName; } catch {}
+        try {
+          displayName =
+            localStorage.getItem("sorcery:playerName") || displayName;
+        } catch {}
         await transport.connect({ displayName });
       } catch (e) {
-        try { console.warn("LocalTransport connect failed", e); } catch {}
+        try {
+          console.warn("LocalTransport connect failed", e);
+        } catch {}
       }
     })();
 
@@ -112,11 +123,16 @@ export default function PlayPage() {
       transport.on("resync", (p) => {
         const snap = p.snapshot as { game?: unknown; t?: number };
         if (snap?.game) {
-          queueServerPatch(snap.game, typeof snap.t === "number" ? snap.t : undefined);
+          queueServerPatch(
+            snap.game,
+            typeof snap.t === "number" ? snap.t : undefined
+          );
         }
       }),
       transport.on("error", (p) => {
-        try { console.warn("local transport error", p); } catch {}
+        try {
+          console.warn("local transport error", p);
+        } catch {}
       })
     );
 
@@ -201,17 +217,19 @@ export default function PlayPage() {
   // Start once both players are confirmed in hotseat mulligan
   useEffect(() => {
     if (prepared && p1Ready && p2Ready) {
-      try { useGameStore.getState().finalizeMulligan(); } catch {}
+      try {
+        useGameStore.getState().finalizeMulligan();
+      } catch {}
       startGame();
     }
   }, [prepared, p1Ready, p2Ready, startGame]);
 
-  function gotoBaseline(mode: 'topdown' | 'orbit') {
+  function gotoBaseline(mode: "topdown" | "orbit") {
     const c = controlsRef.current;
     if (!c) return;
     c.target.set(0, 0, 0);
     const cam = c.object as THREE.Camera;
-    if (mode === 'topdown') {
+    if (mode === "topdown") {
       const dist = Math.max(matW, matH) * 1.1;
       cam.position.set(0, dist, 0);
     } else {
@@ -224,7 +242,7 @@ export default function PlayPage() {
 
   // Dynamic page title for offline play
   useEffect(() => {
-    const baseTitle = "Contested Realms";
+    const baseTitle = "Realms.cards";
 
     if (setupOpen) {
       document.title = `${baseTitle} - Game Setup`;
@@ -292,20 +310,28 @@ export default function PlayPage() {
       <div className="absolute top-2 left-2 z-30">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
           <button
-            className={`px-2 py-1 text-xs rounded ${cameraMode === 'topdown' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
-            onClick={() => { 
-              setCameraMode('topdown'); 
-              gotoBaseline('topdown'); 
+            className={`px-2 py-1 text-xs rounded ${
+              cameraMode === "topdown"
+                ? "bg-white/20"
+                : "bg-transparent hover:bg-white/10"
+            }`}
+            onClick={() => {
+              setCameraMode("topdown");
+              gotoBaseline("topdown");
             }}
             title="Top-down 2D camera"
           >
             2D
           </button>
           <button
-            className={`ml-1 px-2 py-1 text-xs rounded ${cameraMode === 'orbit' ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
-            onClick={() => { 
-              setCameraMode('orbit'); 
-              gotoBaseline('orbit'); 
+            className={`ml-1 px-2 py-1 text-xs rounded ${
+              cameraMode === "orbit"
+                ? "bg-white/20"
+                : "bg-transparent hover:bg-white/10"
+            }`}
+            onClick={() => {
+              setCameraMode("orbit");
+              gotoBaseline("orbit");
             }}
             title="3D orbit camera"
           >
@@ -334,7 +360,8 @@ export default function PlayPage() {
               />
               {!(p1Ready && p2Ready) && (
                 <div className="text-center text-xs opacity-80 text-white">
-                  Hotseat: Player 1 confirms mulligans for both players. Click Ready on each to begin.
+                  Hotseat: Player 1 confirms mulligans for both players. Click
+                  Ready on each to begin.
                 </div>
               )}
             </div>
@@ -411,7 +438,11 @@ export default function PlayPage() {
 
       {/* Hover Preview Overlay (hidden if context menu visible) */}
       {previewCard?.slug && !contextMenu && (
-        <CardPreview card={previewCard} anchor="top-right" onClose={() => setPreviewCard(null)} />
+        <CardPreview
+          card={previewCard}
+          anchor="top-right"
+          onClose={() => setPreviewCard(null)}
+        />
       )}
 
       {contextMenu && (
@@ -450,7 +481,6 @@ export default function PlayPage() {
       )}
 
       {/* Replaced 2D overlays with 3D piles and hand inside Canvas */}
-
 
       {/* Board */}
       <Canvas
@@ -504,9 +534,18 @@ export default function PlayPage() {
           ref={controlsRef}
           makeDefault
           target={[0, 0, 0]}
-          mouseButtons={cameraMode === 'topdown'
-            ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
-            : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+          mouseButtons={
+            cameraMode === "topdown"
+              ? {
+                  LEFT: THREE.MOUSE.PAN,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.PAN,
+                }
+              : {
+                  LEFT: THREE.MOUSE.PAN,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.ROTATE,
+                }
           }
           enabled={
             !dragFromHand &&
@@ -522,14 +561,21 @@ export default function PlayPage() {
             !selectedPermanent &&
             !selectedAvatar
           }
-          enableRotate={!dragFromHand && !dragFromPile && !selected && !selectedPermanent && !selectedAvatar && cameraMode !== 'topdown'}
+          enableRotate={
+            !dragFromHand &&
+            !dragFromPile &&
+            !selected &&
+            !selectedPermanent &&
+            !selectedAvatar &&
+            cameraMode !== "topdown"
+          }
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
           onChange={clampControls}
           minDistance={minDist}
           maxDistance={maxDist}
-          minPolarAngle={cameraMode === 'topdown' ? 0 : 0}
-          maxPolarAngle={cameraMode === 'topdown' ? 0 : Math.PI / 2.4}
+          minPolarAngle={cameraMode === "topdown" ? 0 : 0}
+          maxPolarAngle={cameraMode === "topdown" ? 0 : Math.PI / 2.4}
         />
       </Canvas>
     </div>
