@@ -23,20 +23,20 @@ export default function CardPreview({
   zIndexClass = "z-30",
 }: Props) {
   if (!card?.slug) return null;
-  
+
   // Check if this is a site or a token that should be displayed like a site (e.g., Rubble)
   const isRegularSite = (card.type || "").toLowerCase().includes("site");
   const isToken = card.slug.startsWith("token:");
   let isSiteReplacementToken = false;
-  
+
   if (isToken) {
     const key = card.slug.split(":")[1]?.toLowerCase() || "";
     const def = TOKEN_BY_KEY[key];
     isSiteReplacementToken = def?.siteReplacement === true;
   }
-  
+
   const isSite = isRegularSite || isSiteReplacementToken;
-  
+
   const anchorClasses = (() => {
     switch (anchor) {
       case "top-left":
@@ -52,13 +52,16 @@ export default function CardPreview({
   })();
 
   const base = isSite
-    ? "w-[70vw] max-w-[1200px] min-w-[400px] aspect-[4/3]"
-    : "w-[44vw] max-w-[720px] min-w-[360px] aspect-[3/4]";
+    ? "w-[35vw] max-w-[600px] min-w-[200px] aspect-[4/3]"
+    : "w-[22vw] max-w-[360px] min-w-[180px] aspect-[3/4]";
+
+  const previewScale = 1.5;
 
   // Match board conventions: use portrait plane and rotate sites -90deg
-  const planeWidth = CARD_SHORT;
-  const planeHeight = CARD_LONG;
+  const planeWidth = CARD_SHORT * previewScale;
+  const planeHeight = CARD_LONG * previewScale;
   const rotZ = isSite ? -Math.PI / 2 : 0;
+  const cameraZoom = 260 * previewScale;
   const canvasKey = `${card.slug}:${isSite ? "land" : "port"}`;
 
   return (
@@ -74,7 +77,7 @@ export default function CardPreview({
             className="absolute inset-0"
             orthographic
             frameloop="demand"
-            camera={{ position: [0, 0, 5], zoom: 260 }}
+            camera={{ position: [0, 0, 5], zoom: cameraZoom }}
             gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
             dpr={[1, 2]}
           >
