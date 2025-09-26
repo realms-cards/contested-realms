@@ -1548,7 +1548,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Keep only actor seat
             const k = actorKey as PlayerKey;
             if (keys.includes(k)) {
-              const v = (p.avatars as GameState["avatars"])[k] as
+              const v = (p.avatars as GameState["avatars"]) [k] as
                 | AvatarState
                 | undefined;
               if (v && typeof v === "object") {
@@ -1558,16 +1558,9 @@ export const useGameStore = create<GameState>((set, get) => ({
               }
             }
           } else {
-            // Actor unknown: allow any provided seats but never include 'tapped'
-            for (const k of keys) {
-              const v = (p.avatars as GameState["avatars"])[k] as
-                | AvatarState
-                | undefined;
-              if (!v || typeof v !== "object") continue;
-              const rest = { ...(v as unknown as Record<string, unknown>) };
-              delete (rest as Record<string, unknown>)["tapped"];
-              (out as Record<string, unknown>)[k] = rest as unknown;
-            }
+            // Actor unknown: do not send avatar mutations to avoid illegal opponent writes
+            // Drop avatars entirely when seat is unknown
+            delete (sanitized as unknown as { avatars?: unknown }).avatars;
           }
           if (Object.keys(out).length > 0) {
             sanitized.avatars = out as GameState["avatars"];
@@ -1576,13 +1569,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         }
         // Filter zones: keep only actor seat updates when actor known
-        if (p.zones && typeof p.zones === "object" && actorKey) {
-          const z = p.zones as Partial<Record<PlayerKey, Zones>>;
-          const outZ: Partial<Record<PlayerKey, Zones>> = {};
-          if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
-          if (Object.keys(outZ).length > 0) {
-            sanitized.zones = outZ as GameState["zones"];
+        if (p.zones && typeof p.zones === "object") {
+          if (actorKey) {
+            const z = p.zones as Partial<Record<PlayerKey, Zones>>;
+            const outZ: Partial<Record<PlayerKey, Zones>> = {};
+            if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+            if (Object.keys(outZ).length > 0) {
+              sanitized.zones = outZ as GameState["zones"];
+            } else {
+              delete (sanitized as unknown as { zones?: unknown }).zones;
+            }
           } else {
+            // Actor unknown: drop zones entirely to avoid accidental opponent mutations
             delete (sanitized as unknown as { zones?: unknown }).zones;
           }
         }
