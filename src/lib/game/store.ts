@@ -1548,7 +1548,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Keep only actor seat
             const k = actorKey as PlayerKey;
             if (keys.includes(k)) {
-              const v = (p.avatars as GameState["avatars"]) [k] as
+              const v = (p.avatars as GameState["avatars"])[k] as
                 | AvatarState
                 | undefined;
               if (v && typeof v === "object") {

@@ -202,7 +202,20 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
   },
   callbacks: {
-    async jwt({ token, user, account }): Promise<JWT> {
+    async jwt({ token, user, account, trigger, session }): Promise<JWT> {
+      // Merge client-side session updates (e.g., name/image) into the JWT
+      if (trigger === 'update' && session) {
+        try {
+          if (typeof (session as Record<string, unknown>).name === 'string') {
+            token.name = (session as Record<string, string>).name;
+          }
+          const nextImage = (session as Record<string, unknown>).image;
+          if (typeof nextImage === 'string' || nextImage === null) {
+            (token as Record<string, unknown>).picture = nextImage ?? undefined;
+            (token as Record<string, unknown>).image = nextImage ?? undefined;
+          }
+        } catch {}
+      }
       // Ensure user record exists in database for all providers when using JWT strategy
       if (user && account) {
         try {
@@ -224,9 +237,17 @@ export const authOptions: NextAuthOptions = {
               },
             });
             token.id = dbUser.id;
+            // Keep token fields aligned with DB
+            token.name = dbUser.name || token.name;
+            (token as Record<string, unknown>).picture = dbUser.image || (token as Record<string, unknown>).picture;
+            (token as Record<string, unknown>).image = dbUser.image || (token as Record<string, unknown>).image;
           } else {
             // For credentials providers (2fa, passkey), user.id is already set from authorize
             token.id = user.id;
+            // Propagate initial name/image as well
+            token.name = user.name || token.name;
+            (token as Record<string, unknown>).picture = user.image || (token as Record<string, unknown>).picture;
+            (token as Record<string, unknown>).image = user.image || (token as Record<string, unknown>).image;
           }
         } catch (error) {
           console.error('Error ensuring user exists:', error);
@@ -247,14 +268,34 @@ export const authOptions: NextAuthOptions = {
         if (uid) {
           (session.user as { id?: string }).id = uid;
         }
-
-        // Ensure the session exposes a display name for socket connections
-        if (!session.user.name) {
-          const inferredName =
-            token.name as string ||
-            (session.user.email ? session.user.email.split('@')[0] : undefined) ||
-            'Player';
-          (session.user as { name?: string }).name = inferredName;
+        // Prefer fresh DB values for name/image to reflect profile changes
+        if (uid) {
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: uid },
+              select: { name: true, image: true },
+            });
+            if (dbUser) {
+              (session.user as { name?: string | null }).name = dbUser.name ?? session.user.name;
+              (session.user as { image?: string | null }).image = dbUser.image ?? (session.user as { image?: string | null }).image ?? null;
+            }
+          } catch {
+            // Fallback to token-provided values when DB is unavailable
+            const tokenName = token.name as string | undefined;
+            if (tokenName) {
+              (session.user as { name?: string }).name = tokenName;
+            } else if (!session.user.name) {
+              const inferredName =
+                (session.user.email ? session.user.email.split('@')[0] : undefined) ||
+                'Player';
+              (session.user as { name?: string }).name = inferredName;
+            }
+            const tokenImage = (token as Record<string, unknown>).picture as string | undefined
+              ?? (token as Record<string, unknown>).image as string | undefined;
+            if (typeof tokenImage === 'string') {
+              (session.user as { image?: string | null }).image = tokenImage;
+            }
+          }
         }
       }
       return session;
