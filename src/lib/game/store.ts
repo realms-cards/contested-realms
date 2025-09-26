@@ -46,7 +46,14 @@ import type {
   PlayerPositionReference,
 } from "./types";
 
-export type { LifeState, Phase, PlayerKey, PlayerState, Thresholds } from "./store/baseTypes";
+export { REMOTE_CURSOR_TTL_MS } from "./store/remoteCursor";
+export type {
+  LifeState,
+  Phase,
+  PlayerKey,
+  PlayerState,
+  Thresholds,
+} from "./store/baseTypes";
 export type { RemoteCursorState } from "./store/remoteCursor";
 
 export type BoardSize = { w: number; h: number };
@@ -105,7 +112,9 @@ type InteractionResponseOptions = {
   grant?: InteractionGrantRequest;
 };
 
-function normalizeGrantRequest(candidate: unknown): InteractionGrantRequest | null {
+function normalizeGrantRequest(
+  candidate: unknown
+): InteractionGrantRequest | null {
   if (!candidate || typeof candidate !== "object") return null;
   const src = candidate as Record<string, unknown>;
   const normalized: InteractionGrantRequest = {};
@@ -253,7 +262,9 @@ function ensureAvatarState(
   const next: AvatarState = {
     ...base,
     card:
-      candidate && "card" in candidate ? (candidate.card ?? null) : base.card ?? null,
+      candidate && "card" in candidate
+        ? candidate.card ?? null
+        : base.card ?? null,
     pos:
       candidate && Array.isArray(candidate.pos) && candidate.pos.length === 2
         ? [candidate.pos[0] ?? 0, candidate.pos[1] ?? 0]
@@ -291,7 +302,10 @@ function createDefaultPlayerPosition(who: PlayerKey): PlayerPositionReference {
   };
 }
 
-function createDefaultPlayerPositions(): Record<PlayerKey, PlayerPositionReference> {
+function createDefaultPlayerPositions(): Record<
+  PlayerKey,
+  PlayerPositionReference
+> {
   return {
     p1: createDefaultPlayerPosition("p1"),
     p2: createDefaultPlayerPosition("p2"),
@@ -304,27 +318,26 @@ function ensurePlayerPosition(
   fallback: PlayerPositionReference | undefined
 ): PlayerPositionReference {
   const base = fallback ? { ...fallback } : createDefaultPlayerPosition(who);
-  const coord = candidate && typeof candidate.position === "object" ? candidate.position : undefined;
+  const coord =
+    candidate && typeof candidate.position === "object"
+      ? candidate.position
+      : undefined;
   return {
     playerId:
       candidate && typeof candidate.playerId === "number"
         ? candidate.playerId
         : base.playerId,
     position: {
-      x:
-        coord && typeof coord.x === "number"
-          ? coord.x
-          : base.position.x,
-      z:
-        coord && typeof coord.z === "number"
-          ? coord.z
-          : base.position.z,
+      x: coord && typeof coord.x === "number" ? coord.x : base.position.x,
+      z: coord && typeof coord.z === "number" ? coord.z : base.position.z,
     },
   };
 }
 
 function normalizePlayerPositions(
-  positions: Partial<Record<PlayerKey, Partial<PlayerPositionReference>>> | undefined,
+  positions:
+    | Partial<Record<PlayerKey, Partial<PlayerPositionReference>>>
+    | undefined,
   prev?: Record<PlayerKey, PlayerPositionReference>
 ): Record<PlayerKey, PlayerPositionReference> {
   const base = prev ?? createDefaultPlayerPositions();
@@ -395,7 +408,9 @@ export type GameState = {
   acknowledgedInteractionIds: Record<string, true>;
   activeInteraction: InteractionRequestEntry | null;
   sendInteractionRequest: (input: SendInteractionRequestInput) => void;
-  receiveInteractionEnvelope: (envelope: InteractionEnvelope | InteractionMessage) => void;
+  receiveInteractionEnvelope: (
+    envelope: InteractionEnvelope | InteractionMessage
+  ) => void;
   // New: handle server-executed interaction outcomes
   receiveInteractionResult: (message: InteractionResultMessage) => void;
   respondToInteraction: (
@@ -534,9 +549,7 @@ export type GameState = {
   eventSeq: number;
   log: (text: string) => void;
   boardPings: BoardPingEvent[];
-  pushBoardPing: (
-    ping: Omit<BoardPingEvent, "ts"> & { ts?: number }
-  ) => void;
+  pushBoardPing: (ping: Omit<BoardPingEvent, "ts"> & { ts?: number }) => void;
   removeBoardPing: (id: string) => void;
   lastPointerWorldPos: { x: number; z: number } | null;
   setLastPointerWorldPos: (pos: { x: number; z: number } | null) => void;
@@ -731,7 +744,10 @@ const thresholdCache: Record<PlayerKey, ThresholdCacheEntry> = {
   p2: { sitesRef: null, permanentsRef: null, totals: emptyThresholds() },
 };
 
-function getCachedThresholdTotals(state: GameState, who: PlayerKey): Thresholds {
+function getCachedThresholdTotals(
+  state: GameState,
+  who: PlayerKey
+): Thresholds {
   const cache = thresholdCache[who];
   const sitesRef = state.board.sites;
   const permanentsRef = state.permanents;
@@ -1144,11 +1160,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         maybe = transport.sendMessage(envelope as unknown as CustomMessage);
       } else if (!transport) {
         try {
-          console.warn("[interaction] transport unavailable; request queued in log", requestId);
+          console.warn(
+            "[interaction] transport unavailable; request queued in log",
+            requestId
+          );
         } catch {}
       } else {
         try {
-          console.warn("[interaction] transport missing interaction senders; request not sent", requestId);
+          console.warn(
+            "[interaction] transport missing interaction senders; request not sent",
+            requestId
+          );
         } catch {}
       }
       if (maybe && typeof (maybe as Promise<unknown>).then === "function") {
@@ -1167,12 +1189,17 @@ export const useGameStore = create<GameState>((set, get) => ({
   receiveInteractionEnvelope: (incoming) => {
     const message: InteractionMessage | null = (() => {
       if (!incoming || typeof incoming !== "object") return null;
-      if ((incoming as InteractionEnvelope).type === "interaction" && "message" in incoming) {
+      if (
+        (incoming as InteractionEnvelope).type === "interaction" &&
+        "message" in incoming
+      ) {
         return (incoming as InteractionEnvelope).message;
       }
       if (
-        (incoming as Partial<InteractionMessage>).type === "interaction:request" ||
-        (incoming as Partial<InteractionMessage>).type === "interaction:response"
+        (incoming as Partial<InteractionMessage>).type ===
+          "interaction:request" ||
+        (incoming as Partial<InteractionMessage>).type ===
+          "interaction:response"
       ) {
         return incoming as InteractionMessage;
       }
@@ -1183,7 +1210,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (message.type === "interaction:request") {
       const payload = (message.payload ?? {}) as Record<string, unknown>;
       const proposedGrant =
-        normalizeGrantRequest(payload.grant) ?? normalizeGrantRequest(payload.proposedGrant);
+        normalizeGrantRequest(payload.grant) ??
+        normalizeGrantRequest(payload.proposedGrant);
       set((state) => {
         const existing = state.interactionLog[message.requestId];
         const nextEntry: InteractionRequestEntry = {
@@ -1212,11 +1240,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (message.type === "interaction:response") {
       const payload = (message.payload ?? {}) as Record<string, unknown>;
       const grantOverride =
-        normalizeGrantRequest(payload.grant) ?? normalizeGrantRequest(payload.proposedGrant);
+        normalizeGrantRequest(payload.grant) ??
+        normalizeGrantRequest(payload.proposedGrant);
       set((state) => {
         const existing = state.interactionLog[message.requestId];
-        const baseRequest = existing?.request
-          ?? createInteractionRequest({
+        const baseRequest =
+          existing?.request ??
+          createInteractionRequest({
             requestId: message.requestId,
             matchId: message.matchId,
             from: message.to,
@@ -1275,12 +1305,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextLog: InteractionStateMap = nextEntry
         ? { ...state.interactionLog, [message.requestId]: nextEntry }
         : { ...state.interactionLog };
-      const acknowledged = { ...state.acknowledgedInteractionIds, [message.requestId]: true as const };
+      const acknowledged = {
+        ...state.acknowledgedInteractionIds,
+        [message.requestId]: true as const,
+      };
 
       // Attempt to open peek dialog if cards were revealed
       const p = (message.payload ?? {}) as Record<string, unknown>;
-      const requestedBy = typeof p.requestedBy === "string" && p.requestedBy.length > 0 ? p.requestedBy : null;
-      const actorSeat = p.actorSeat === "p1" || p.actorSeat === "p2" ? (p.actorSeat as PlayerKey) : null;
+      const requestedBy =
+        typeof p.requestedBy === "string" && p.requestedBy.length > 0
+          ? p.requestedBy
+          : null;
+      const actorSeat =
+        p.actorSeat === "p1" || p.actorSeat === "p2"
+          ? (p.actorSeat as PlayerKey)
+          : null;
       const localId = state.localPlayerId;
       const mySeat = state.actorKey;
 
@@ -1298,19 +1337,36 @@ export const useGameStore = create<GameState>((set, get) => ({
         } as Partial<GameState> as GameState;
       }
       const cardsAny = Array.isArray(p.cards) ? (p.cards as unknown[]) : [];
-      const cards: CardRef[] = cardsAny.filter((c) => c && typeof c === "object") as CardRef[];
+      const cards: CardRef[] = cardsAny.filter(
+        (c) => c && typeof c === "object"
+      ) as CardRef[];
       if (message.success && cards.length > 0) {
-        const seat = (p.seat === "p1" || p.seat === "p2") ? (p.seat as PlayerKey) : null;
-        const pile = typeof p.pile === "string" ? (p.pile as string) : undefined;
-        const from = typeof p.from === "string" ? (p.from as string) : undefined;
-        const count = Number.isFinite(Number(p.count)) ? Number(p.count) : cards.length;
+        const seat =
+          p.seat === "p1" || p.seat === "p2" ? (p.seat as PlayerKey) : null;
+        const pile =
+          typeof p.pile === "string" ? (p.pile as string) : undefined;
+        const from =
+          typeof p.from === "string" ? (p.from as string) : undefined;
+        const count = Number.isFinite(Number(p.count))
+          ? Number(p.count)
+          : cards.length;
         const title = seat
-          ? `${seat.toUpperCase()} ${pile === "atlas" ? "Atlas" : pile === "hand" ? "Hand" : "Spellbook"}${from ? ` (${from})` : ""}`
-          : (message.kind || "Peek Results");
+          ? `${seat.toUpperCase()} ${
+              pile === "atlas"
+                ? "Atlas"
+                : pile === "hand"
+                ? "Hand"
+                : "Spellbook"
+            }${from ? ` (${from})` : ""}`
+          : message.kind || "Peek Results";
         // Log a warning for hidden information reveals
         const who = seat ? (seat === "p1" ? 1 : 2) : "?";
         try {
-          get().log(`[Warning] Revealed ${count} card(s) from P${who}${pile ? ` ${pile}` : ""}${from ? ` (${from})` : ""}`);
+          get().log(
+            `[Warning] Revealed ${count} card(s) from P${who}${
+              pile ? ` ${pile}` : ""
+            }${from ? ` (${from})` : ""}`
+          );
         } catch {}
         return {
           interactionLog: nextLog,
@@ -1354,7 +1410,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
     const nextGrant =
       decision === "approved"
-        ? grantFromRequest(request, actorId, overrideGrant ?? entry.proposedGrant ?? {})
+        ? grantFromRequest(
+            request,
+            actorId,
+            overrideGrant ?? entry.proposedGrant ?? {}
+          )
         : null;
     set((state) => {
       const nextEntry: InteractionRequestEntry = {
@@ -1393,11 +1453,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         maybe = transport.sendMessage(envelope as unknown as CustomMessage);
       } else if (!transport) {
         try {
-          console.warn("[interaction] transport unavailable; response logged only", requestId);
+          console.warn(
+            "[interaction] transport unavailable; response logged only",
+            requestId
+          );
         } catch {}
       } else {
         try {
-          console.warn("[interaction] transport missing interaction senders; response not sent", requestId);
+          console.warn(
+            "[interaction] transport missing interaction senders; response not sent",
+            requestId
+          );
         } catch {}
       }
       if (maybe && typeof (maybe as Promise<unknown>).then === "function") {
@@ -1482,7 +1548,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Keep only actor seat
             const k = actorKey as PlayerKey;
             if (keys.includes(k)) {
-              const v = (p.avatars as GameState["avatars"]) [k] as
+              const v = (p.avatars as GameState["avatars"])[k] as
                 | AvatarState
                 | undefined;
               if (v && typeof v === "object") {
@@ -1494,7 +1560,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           } else {
             // Actor unknown: allow any provided seats but never include 'tapped'
             for (const k of keys) {
-              const v = (p.avatars as GameState["avatars"]) [k] as
+              const v = (p.avatars as GameState["avatars"])[k] as
                 | AvatarState
                 | undefined;
               if (!v || typeof v !== "object") continue;
@@ -1574,18 +1640,20 @@ export const useGameStore = create<GameState>((set, get) => ({
               if (actorKey === "p1" || actorKey === "p2") {
                 const k = actorKey as PlayerKey;
                 if (keys.includes(k)) {
-                  const v = (sanitized.avatars as GameState["avatars"]) [k] as
+                  const v = (sanitized.avatars as GameState["avatars"])[k] as
                     | AvatarState
                     | undefined;
                   if (v && typeof v === "object") {
-                    const rest = { ...(v as unknown as Record<string, unknown>) };
+                    const rest = {
+                      ...(v as unknown as Record<string, unknown>),
+                    };
                     delete (rest as Record<string, unknown>)["tapped"];
                     (out as Record<string, unknown>)[k] = rest as unknown;
                   }
                 }
               } else {
                 for (const k of keys) {
-                  const v = (sanitized.avatars as GameState["avatars"]) [k] as
+                  const v = (sanitized.avatars as GameState["avatars"])[k] as
                     | AvatarState
                     | undefined;
                   if (!v || typeof v !== "object") continue;
@@ -1600,7 +1668,11 @@ export const useGameStore = create<GameState>((set, get) => ({
                 delete (sanitized as unknown as { avatars?: unknown }).avatars;
               }
             }
-            if (sanitized.zones && typeof sanitized.zones === "object" && actorKey) {
+            if (
+              sanitized.zones &&
+              typeof sanitized.zones === "object" &&
+              actorKey
+            ) {
               const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
               const outZ: Partial<Record<PlayerKey, Zones>> = {};
               if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
@@ -1723,9 +1795,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const cutoff = ts - BOARD_PING_LIFETIME_MS;
       const filtered = state.boardPings.filter((entry) => entry.ts > cutoff);
-      const next = filtered.length >= BOARD_PING_MAX_HISTORY
-        ? [...filtered.slice(filtered.length - BOARD_PING_MAX_HISTORY + 1), event]
-        : [...filtered, event];
+      const next =
+        filtered.length >= BOARD_PING_MAX_HISTORY
+          ? [
+              ...filtered.slice(filtered.length - BOARD_PING_MAX_HISTORY + 1),
+              event,
+            ]
+          : [...filtered, event];
       return {
         boardPings: next,
       } as Partial<GameState> as GameState;
@@ -1747,8 +1823,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       boardPings: state.boardPings.filter((entry) => entry.id !== id),
     })),
   lastPointerWorldPos: null,
-  setLastPointerWorldPos: (pos) =>
-    set({ lastPointerWorldPos: pos }),
+  setLastPointerWorldPos: (pos) => set({ lastPointerWorldPos: pos }),
   // Remote cursors
   remoteCursors: {},
   setRemoteCursor: (cursor) =>
@@ -1759,7 +1834,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const prev = state.remoteCursors[id] || null;
         const ts = Number.isFinite(cursor.ts) ? Number(cursor.ts) : Date.now();
         if (prev && Number(prev.ts) >= ts) return state as GameState;
-        const noPresence = !cursor.position && !cursor.dragging && !cursor.highlight;
+        const noPresence =
+          !cursor.position && !cursor.dragging && !cursor.highlight;
         if (noPresence) {
           if (!(id in state.remoteCursors)) return state as GameState;
           const next = { ...state.remoteCursors };
@@ -1819,9 +1895,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (!entry?.highlight) continue;
       const { cardId: highlightId, slug: highlightSlug } = entry.highlight;
       const matchesId =
-        cardId !== null && Number.isFinite(highlightId) && Number(highlightId) === cardId;
+        cardId !== null &&
+        Number.isFinite(highlightId) &&
+        Number(highlightId) === cardId;
       const matchesSlug =
-        slug !== null && typeof highlightSlug === "string" && highlightSlug === slug;
+        slug !== null &&
+        typeof highlightSlug === "string" &&
+        highlightSlug === slug;
       if (!matchesId && !matchesSlug) continue;
       if (entry.playerKey === "p1") return PLAYER_COLORS.p1;
       if (entry.playerKey === "p2") return PLAYER_COLORS.p2;
@@ -1942,10 +2022,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.zones !== undefined) {
         const candidate = replaceKeys.has("zones")
           ? (p.zones as Partial<Record<PlayerKey, Partial<Zones>>>)
-          : (deepMergeReplaceArrays(
-              s.zones,
-              p.zones
-            ) as Partial<Record<PlayerKey, Partial<Zones>>>);
+          : (deepMergeReplaceArrays(s.zones, p.zones) as Partial<
+              Record<PlayerKey, Partial<Zones>>
+            >);
         next.zones = normalizeZones(
           candidate,
           replaceKeys.has("zones") ? undefined : s.zones
@@ -1954,10 +2033,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.avatars !== undefined) {
         const candidate = replaceKeys.has("avatars")
           ? (p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>)
-          : (deepMergeReplaceArrays(
-              s.avatars,
-              p.avatars
-            ) as Partial<Record<PlayerKey, Partial<AvatarState>>>);
+          : (deepMergeReplaceArrays(s.avatars, p.avatars) as Partial<
+              Record<PlayerKey, Partial<AvatarState>>
+            >);
         next.avatars = normalizeAvatars(
           candidate,
           replaceKeys.has("avatars") ? undefined : s.avatars
@@ -2289,10 +2367,10 @@ export const useGameStore = create<GameState>((set, get) => ({
               ) {
                 const cleaned = { ...(tile as Record<string, unknown>) };
                 delete cleaned.tapped;
-                sitesNext[key] = cleaned as typeof sitesPrev[typeof key];
+                sitesNext[key] = cleaned as (typeof sitesPrev)[typeof key];
                 changed = true;
               } else {
-                sitesNext[key] = tile as typeof sitesPrev[typeof key];
+                sitesNext[key] = tile as (typeof sitesPrev)[typeof key];
               }
             }
             if (!changed) return board;
@@ -3106,7 +3184,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const zonesNext = { ...s.zones, [who]: { ...s.zones[who], ...updated, hand } } as GameState["zones"];
+          const zonesNext = {
+            ...s.zones,
+            [who]: { ...s.zones[who], ...updated, hand },
+          } as GameState["zones"];
           const patch: ServerPatchT = { zones: zonesNext };
           get().trySendPatch(patch);
         }
@@ -3428,7 +3509,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           [key]: { owner: s.currentPlayer as 1 | 2, tapped: false, card },
         };
         get().log(
-          `${who.toUpperCase()} plays site '${card.name}' from ${from} at #${cellNo}`
+          `${who.toUpperCase()} plays site '${
+            card.name
+          }' from ${from} at #${cellNo}`
         );
         {
           const tr = get().transport;
@@ -3852,7 +3935,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? "atlas"
           : "banished";
       get().log(
-        `Moved site '${site.card.name}' from #${cellNo} to ${owner.toUpperCase()} ${label}`
+        `Moved site '${
+          site.card.name
+        }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
       {
         const boardNext = { ...s.board, sites } as GameState["board"];
@@ -3980,7 +4065,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            avatars: { [who]: { pos: [x, y] as [number, number], offset: null } } as GameState["avatars"],
+            avatars: {
+              [who]: { pos: [x, y] as [number, number], offset: null },
+            } as GameState["avatars"],
           };
           get().trySendPatch(patch);
         }
