@@ -599,8 +599,27 @@ export default function OnlineMatchPage() {
       });
       if (match.lobbyName) params.set("matchName", match.lobbyName);
 
-      // Redirect to editor
-      window.location.href = `/decks/editor-3d?${params.toString()}`;
+      // Ensure drafted picks have been persisted by the draft screen before redirecting.
+      // This avoids a race where match.status flips to deck_construction slightly
+      // before the 'complete' draftUpdate handler saves localStorage.
+      const key = `draftedCards_${match.id}`;
+      let hasDraft = false;
+      try {
+        hasDraft = !!localStorage.getItem(key);
+      } catch {}
+      if (hasDraft) {
+        window.location.href = `/decks/editor-3d?${params.toString()}`;
+        return;
+      }
+      // Fallback: recheck shortly, then proceed regardless so the user isn't stuck
+      window.setTimeout(() => {
+        try {
+          const url = `/decks/editor-3d?${params.toString()}`;
+          window.location.href = url;
+        } catch {
+          window.location.href = `/decks/editor-3d?${params.toString()}`;
+        }
+      }, 650);
       return;
     }
   }, [
@@ -1276,7 +1295,7 @@ export default function OnlineMatchPage() {
             <EnhancedOnlineDraft3DScreen
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
-              onDraftComplete={() => setDraftCompleted(true)}
+              onDraftComplete={handleDraftComplete}
             />
           )}
           {/* Online Status Bar with turn restrictions */}
