@@ -30,6 +30,14 @@ import {
 } from "@/lib/net/interactions";
 import type { GameTransport, CustomMessage } from "@/lib/net/transport";
 import type {
+  LifeState,
+  Phase,
+  PlayerKey,
+  PlayerState,
+  Thresholds,
+} from "./store/baseTypes";
+import type { RemoteCursorState } from "./store/remoteCursor";
+import type {
   PermanentPosition,
   SitePositionData,
   BurrowAbility,
@@ -38,24 +46,8 @@ import type {
   PlayerPositionReference,
 } from "./types";
 
-export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
-export type PlayerKey = "p1" | "p2";
-
-export type Thresholds = {
-  air: number;
-  water: number;
-  earth: number;
-  fire: number;
-};
-
-export type LifeState = "alive" | "dd" | "dead";
-
-export type PlayerState = {
-  life: number;
-  lifeState: LifeState; // 'alive', 'dd' (Death's Door), 'dead'
-  mana: number;
-  thresholds: Thresholds;
-};
+export type { LifeState, Phase, PlayerKey, PlayerState, Thresholds } from "./store/baseTypes";
+export type { RemoteCursorState } from "./store/remoteCursor";
 
 export type BoardSize = { w: number; h: number };
 export type CellKey = string; // `${x},${y}`
@@ -78,32 +70,6 @@ export type BoardPingEvent = {
 };
 
 // --- Remote cursor telemetry -----------------------------------------------
-  | {
-      kind: "permanent";
-      from?: string | null;
-      index?: number | null;
-    }
-  | { kind: "hand" }
-  | { kind: "pile"; source?: string | null }
-  | { kind: "token" }
-  | { kind: "avatar"; who?: PlayerKey | null };
-
-export type RemoteCursorHighlight = {
-  slug?: string | null;
-  cardId?: number | null;
-} | null;
-
-export type RemoteCursorState = {
-  playerId: string;
-  playerKey: PlayerKey | null;
-  position: { x: number; z: number } | null;
-  dragging: RemoteCursorDragMeta | null;
-  highlight: RemoteCursorHighlight;
-  ts: number;
-  displayName?: string | null;
-};
-
-export const REMOTE_CURSOR_TTL_MS = 3000;
 
 type InteractionRecordStatus = "pending" | InteractionDecision | "expired";
 

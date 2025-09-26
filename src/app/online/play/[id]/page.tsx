@@ -45,8 +45,8 @@ import {
   useGameStore,
   type PlayerKey,
   type RemoteCursorState,
-  type RemoteCursorDragMeta,
 } from "@/lib/game/store";
+import type { RemoteCursorDragMeta } from "@/lib/game/store/remoteCursor";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 
 export default function OnlineMatchPage() {

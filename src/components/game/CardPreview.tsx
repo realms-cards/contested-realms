@@ -63,8 +63,15 @@ export default function CardPreview({
       const uiTop = parsePx(docStyle.getPropertyValue("--ui-top"));
       const uiBottom = parsePx(docStyle.getPropertyValue("--ui-bottom"));
       const availableHeight = Math.max(innerHeight - uiTop - uiBottom, 0);
-      const isShortHeight = innerHeight < 700;
-      const heightCapFactor = isShortHeight ? 0.7 : 0.8;
+      const isShortHeight = innerHeight < 720;
+      const preferBottomNext = innerHeight < 520;
+
+      let heightCapFactor = 0.8;
+      if (innerHeight < 720) heightCapFactor = 0.68;
+      if (innerHeight < 640) heightCapFactor = 0.6;
+      if (innerHeight < 580) heightCapFactor = 0.54;
+      if (innerHeight < 520) heightCapFactor = 0.5;
+      if (innerHeight < 460) heightCapFactor = 0.46;
       const cappedHeight = Math.max(
         (availableHeight > 0 ? availableHeight : innerHeight) * heightCapFactor,
         0
@@ -73,10 +80,26 @@ export default function CardPreview({
       const aspectWidthOverHeight = isSite ? 4 / 3 : 3 / 4;
       const widthFromHeight = cappedHeight * aspectWidthOverHeight;
 
-      const vwFraction = isSite ? 0.35 : 0.22;
+      const baseVwFraction = isSite ? 0.34 : 0.21;
+      const heightShortness = Math.max(
+        0,
+        Math.min(1, (780 - innerHeight) / 360)
+      );
+      const widthShortness = Math.max(
+        0,
+        Math.min(1, (1400 - innerWidth) / 600)
+      );
+      const heightReduction = 0.5 * heightShortness;
+      const widthReduction = 0.65 * widthShortness;
+      let vwFraction =
+        baseVwFraction * (1 - heightReduction) * (1 - widthReduction);
+      if (preferBottomNext) {
+        vwFraction *= 0.82;
+      }
+      vwFraction = Math.max(vwFraction, isSite ? 0.14 : 0.12);
       const preferredWidth = innerWidth * vwFraction;
-      const minWidth = isSite ? 200 : 180;
-      const absoluteMaxWidth = isSite ? 600 : 360;
+      const minWidth = isSite ? 260 : 200;
+      const absoluteMaxWidth = isSite ? 460 : 345;
 
       let maxWidth = Number.isFinite(widthFromHeight)
         ? Math.min(widthFromHeight, absoluteMaxWidth)
@@ -84,6 +107,27 @@ export default function CardPreview({
       if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
         maxWidth = absoluteMaxWidth;
       }
+
+      // Ensure the preview does not overflow horizontal space
+      const wideViewportRatio = Math.max(0, innerWidth - 1280) / 720;
+      const widthRatioBase = preferBottomNext
+        ? isSite
+          ? 0.34
+          : 0.29
+        : isSite
+        ? 0.5
+        : 0.38;
+      const widthRatioDynamic = widthRatioBase * (1 - widthShortness * 0.45);
+      const widthRatio = Math.max(
+        widthRatioDynamic * (1 - wideViewportRatio * 0.45),
+        isSite ? 0.22 : 0.18
+      );
+      const horizontalCap = Math.min(
+        Math.max(innerWidth - 72, 220),
+        innerWidth * widthRatio,
+        absoluteMaxWidth
+      );
+      maxWidth = Math.min(maxWidth, horizontalCap);
 
       let width = Math.max(minWidth, preferredWidth);
       if (Number.isFinite(maxWidth) && maxWidth > 0) {
@@ -93,10 +137,19 @@ export default function CardPreview({
         width = maxWidth;
       }
 
+      const baseEnlarge = preferBottomNext ? 1.18 : 1.5;
+      const enlargeReduction = wideViewportRatio * 0.45;
+      const enlargeFloor = preferBottomNext ? 1.05 : 1.25;
+      const enlargeFactor = Math.max(
+        enlargeFloor,
+        baseEnlarge - enlargeReduction
+      );
+      width = Math.min(maxWidth, Math.max(minWidth, width * enlargeFactor));
+
       setLayout({
         width,
         isShort: isShortHeight,
-        preferBottom: innerHeight < 520,
+        preferBottom: preferBottomNext,
       });
     };
 
@@ -141,14 +194,19 @@ export default function CardPreview({
     ? "aspect-[4/3] rounded-xl overflow-hidden"
     : "aspect-[3/4] rounded-xl overflow-hidden";
 
-  const previewScale = 1.4;
+  const spriteScale = width / (isSite ? 320 : 240);
+  const maxScale = preferBottom ? 1.25 : isShort ? 1.45 : 1.6;
+  const previewScale = Math.max(0.95, Math.min(spriteScale * 1.02, maxScale));
 
   // Match board conventions: use portrait plane and rotate sites -90deg
   const planeWidth = CARD_SHORT * previewScale;
   const planeHeight = CARD_LONG * previewScale;
   const rotZ = isSite ? -Math.PI / 2 : 0;
   const cameraZoom = 260 * previewScale;
-  const canvasKey = `${card.slug}:${isSite ? "land" : "port"}`;
+  const canvasKey = `${slug}:${isSite ? "land" : "port"}`;
+
+  // Future enhancement: when `preferBottom` is true we can switch to a tap-to-expand overlay
+  // instead of always showing the preview, ensuring ultra-small viewports remain usable.
 
   return (
     <div
@@ -167,7 +225,7 @@ export default function CardPreview({
             <ambientLight intensity={1} />
             <Suspense fallback={null}>
               <CardPlane
-                slug={card.slug}
+                slug={slug}
                 width={planeWidth}
                 height={planeHeight}
                 upright

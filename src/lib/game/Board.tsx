@@ -38,14 +38,16 @@ import {
   DRAG_HOLD_MS,
   PLAYER_COLORS,
 } from "@/lib/game/constants";
-import { useGameStore } from "@/lib/game/store";
+import {
+  useGameStore,
+  type CardRef,
+  type BoardState,
+  type RemoteCursorState,
+} from "@/lib/game/store";
 import type {
-  CardRef,
-  BoardState,
-  RemoteCursorState,
   RemoteCursorDragMeta,
   RemoteCursorHighlight,
-} from "@/lib/game/store";
+} from "@/lib/game/store/remoteCursor";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
@@ -236,8 +238,8 @@ export default function Board({
   }, [board.size.w, board.size.h]);
 
   // Build a list of opponent permanent-drag proxies to render at their live cursor positions
-  const remotePermanentDrags = useMemo(() => {
-    if (overlayBlocking) return [] as Array<{
+  const { remotePermanentDrags, remotePermanentDragLookup } = useMemo(() => {
+    type RemotePermanentDrag = {
       key: string;
       pos: { x: number; z: number };
       rotZ: number;
@@ -247,18 +249,17 @@ export default function Board({
       height: number;
       textureUrl?: string;
       forceTextureUrl?: boolean;
-    }>;
-    const out: Array<{
-      key: string;
-      pos: { x: number; z: number };
-      rotZ: number;
-      slug: string;
-      color: string;
-      width: number;
-      height: number;
-      textureUrl?: string;
-      forceTextureUrl?: boolean;
-    }> = [];
+    };
+
+    if (overlayBlocking) {
+      return {
+        remotePermanentDrags: [] as RemotePermanentDrag[],
+        remotePermanentDragLookup: new Map<string, Set<number>>(),
+      };
+    }
+
+    const drags: RemotePermanentDrag[] = [];
+    const lookup = new Map<string, Set<number>>();
 
     try {
       const rc = remoteCursors || {};
@@ -306,7 +307,11 @@ export default function Board({
             ? PLAYER_COLORS.p2
             : PLAYER_COLORS.spectator;
 
-        out.push({
+        const existing = lookup.get(from);
+        if (existing) existing.add(index);
+        else lookup.set(from, new Set([index]));
+
+        drags.push({
           key: `rdrag:${entry.playerId}:${from}:${index}`,
           pos: { x: entry.position.x, z: entry.position.z },
           rotZ,
@@ -319,24 +324,31 @@ export default function Board({
         });
       }
     } catch {}
-    return out;
+
+    return {
+      remotePermanentDrags: drags,
+      remotePermanentDragLookup: lookup,
+    };
   }, [remoteCursors, localPlayerId, permanents, overlayBlocking]);
 
-  const remoteAvatarDrags = useMemo(() => {
-    if (overlayBlocking) return [] as Array<{
+  const { remoteAvatarDrags, remoteAvatarDragSet } = useMemo(() => {
+    type RemoteAvatarDrag = {
       key: string;
       pos: { x: number; z: number };
       rotZ: number;
       slug: string;
       color: string;
-    }>;
-    const out: Array<{
-      key: string;
-      pos: { x: number; z: number };
-      rotZ: number;
-      slug: string;
-      color: string;
-    }> = [];
+    };
+
+    if (overlayBlocking) {
+      return {
+        remoteAvatarDrags: [] as RemoteAvatarDrag[],
+        remoteAvatarDragSet: new Set<"p1" | "p2">(),
+      };
+    }
+
+    const drags: RemoteAvatarDrag[] = [];
+    const dragging = new Set<"p1" | "p2">();
     try {
       const rc = remoteCursors || {};
       for (const entry of Object.values(rc)) {
@@ -357,7 +369,8 @@ export default function Board({
             : entry.playerKey === "p2"
             ? PLAYER_COLORS.p2
             : PLAYER_COLORS.spectator;
-        out.push({
+        dragging.add(who);
+        drags.push({
           key: `rdrag:avatar:${entry.playerId}:${who}`,
           pos: { x: entry.position.x, z: entry.position.z },
           rotZ,
@@ -366,7 +379,10 @@ export default function Board({
         });
       }
     } catch {}
-    return out;
+    return {
+      remoteAvatarDrags: drags,
+      remoteAvatarDragSet: dragging,
+    };
   }, [remoteCursors, localPlayerId, avatars, overlayBlocking]);
 
   // Set up player positions based on board layout
@@ -1298,6 +1314,10 @@ export default function Board({
                 const items = permanents[key] || [];
                 const marginZ = TILE_SIZE * 0.1; // distance from bottom/top edge
                 return items.map((p, idx) => {
+                  const remoteDragSet = remotePermanentDragLookup.get(key);
+                  if (remoteDragSet?.has(idx)) {
+                    return null;
+                  }
                   // Skip rendering if this token is attached to another permanent
                   if (p.attachedTo) {
                     return null;
@@ -1854,6 +1874,9 @@ export default function Board({
       {(["p1", "p2"] as const).map((who) => {
         const a = avatars?.[who];
         if (!a || !a.pos) return null;
+        if (remoteAvatarDragSet.has(who)) {
+          return null;
+        }
         const [ax, ay] = a.pos;
         const baseX = offsetX + ax * TILE_SIZE;
         const baseZ = offsetY + ay * TILE_SIZE;
