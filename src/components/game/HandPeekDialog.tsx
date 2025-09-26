@@ -48,19 +48,20 @@ export default function HandPeekDialog({ title = "Opponent Hand", cards, onClose
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div
         ref={dialogRef}
-        className="bg-zinc-900/95 backdrop-blur rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 w-auto max-w-[80vw] min-w-[20rem] max-h-[80vh] text-white flex flex-col gap-3"
+        className="bg-zinc-900/95 backdrop-blur rounded-2xl ring-1 ring-white/10 shadow-2xl p-3 w-fit max-w-[90vw] max-h-[80vh] text-white flex flex-col gap-3"
       >
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">{title}</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">✕</button>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto pr-1">
+        <div className="max-h-[60vh] overflow-y-auto">
           {cardsToRender.length === 0 ? (
             <div className="text-center text-zinc-400 py-10">No cards available</div>
           ) : (
             <div
-              className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2"
+              className="grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${Math.min(cardsToRender.length, 5)}, minmax(120px, max-content))` }}
               onMouseLeave={() => setPreviewCard(null)}
             >
               {cardsToRender.map((card, idx) => {

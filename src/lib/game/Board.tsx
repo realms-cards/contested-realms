@@ -140,6 +140,10 @@ export default function Board({
   const actorKey = useGameStore((s) => s.actorKey);
   const remoteCursors = useGameStore((s) => s.remoteCursors);
   const localPlayerId = useGameStore((s) => s.localPlayerId);
+  const avatars = useGameStore((s) => s.avatars);
+  const overlayBlocking = useGameStore(
+    (s) => Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
+  );
   // Counter actions
   const incrementPermanentCounter = useGameStore(
     (s) => s.incrementPermanentCounter
@@ -233,6 +237,17 @@ export default function Board({
 
   // Build a list of opponent permanent-drag proxies to render at their live cursor positions
   const remotePermanentDrags = useMemo(() => {
+    if (overlayBlocking) return [] as Array<{
+      key: string;
+      pos: { x: number; z: number };
+      rotZ: number;
+      slug: string;
+      color: string;
+      width: number;
+      height: number;
+      textureUrl?: string;
+      forceTextureUrl?: boolean;
+    }>;
     const out: Array<{
       key: string;
       pos: { x: number; z: number };
@@ -244,6 +259,7 @@ export default function Board({
       textureUrl?: string;
       forceTextureUrl?: boolean;
     }> = [];
+
     try {
       const rc = remoteCursors || {};
       for (const entry of Object.values(rc)) {
@@ -304,7 +320,54 @@ export default function Board({
       }
     } catch {}
     return out;
-  }, [remoteCursors, localPlayerId, permanents]);
+  }, [remoteCursors, localPlayerId, permanents, overlayBlocking]);
+
+  const remoteAvatarDrags = useMemo(() => {
+    if (overlayBlocking) return [] as Array<{
+      key: string;
+      pos: { x: number; z: number };
+      rotZ: number;
+      slug: string;
+      color: string;
+    }>;
+    const out: Array<{
+      key: string;
+      pos: { x: number; z: number };
+      rotZ: number;
+      slug: string;
+      color: string;
+    }> = [];
+    try {
+      const rc = remoteCursors || {};
+      for (const entry of Object.values(rc)) {
+        if (!entry) continue;
+        if (!entry.position) continue;
+        if (localPlayerId && entry.playerId === localPlayerId) continue;
+        const drag = entry.dragging;
+        if (!drag || drag.kind !== "avatar") continue;
+        const who = drag.who === "p1" || drag.who === "p2" ? drag.who : null;
+        if (!who) continue;
+        const avatar = avatars?.[who];
+        const slug = avatar?.card?.slug || "";
+        const rotZ =
+          (who === "p1" ? 0 : Math.PI) + (avatar?.tapped ? Math.PI / 2 : 0);
+        const color =
+          entry.playerKey === "p1"
+            ? PLAYER_COLORS.p1
+            : entry.playerKey === "p2"
+            ? PLAYER_COLORS.p2
+            : PLAYER_COLORS.spectator;
+        out.push({
+          key: `rdrag:avatar:${entry.playerId}:${who}`,
+          pos: { x: entry.position.x, z: entry.position.z },
+          rotZ,
+          slug,
+          color,
+        });
+      }
+    } catch {}
+    return out;
+  }, [remoteCursors, localPlayerId, avatars, overlayBlocking]);
 
   // Set up player positions based on board layout
   useEffect(() => {
@@ -366,7 +429,6 @@ export default function Board({
   } | null>(null);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const selectAvatar = useGameStore((s) => s.selectAvatar);
-  const avatars = useGameStore((s) => s.avatars);
   const lastAvatarCardsRef = useRef<Record<"p1" | "p2", CardRef | null>>({
     p1: null,
     p2: null,
@@ -536,11 +598,18 @@ export default function Board({
       if (!card) return null;
       const slug = typeof card.slug === "string" && card.slug.length > 0 ? card.slug : null;
       const cardId = Number.isFinite(card.cardId) ? Number(card.cardId) : null;
-      if (slug === null && cardId === null) return null;
-      return { slug, cardId };
+      const type = (card.type || "").toLowerCase();
+      const isToken = type.includes("token");
+      if (cardId === null && !isToken) return null;
+      // For tokens dragged from hand, synthesize a unique negative id so we can highlight only that instance.
+      const baseId = cardId ?? -Math.abs(Number(card.variantId ?? (Date.now() % 1000)));
+      const syntheticId = baseId || -1;
+      return { slug, cardId: syntheticId };
     };
 
-    const fromSelection = deriveCardMeta(state.selectedCard?.card ?? null);
+    const fromSelection = state.dragFromHand
+      ? deriveCardMeta(state.selectedCard?.card ?? state.dragFromPile?.card ?? null)
+      : deriveCardMeta(state.selectedCard?.card ?? null);
     if (fromSelection) {
       return fromSelection;
     }
@@ -1135,7 +1204,7 @@ export default function Board({
                     const siteRemoteColor = getRemoteHighlightColor(site.card ?? null);
                     const siteGlowColor =
                       siteRemoteColor ??
-                      (site.owner === 1 ? "#93c5fd" : "#fca5a5");
+                      (site.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
                     const renderSiteGlow =
                       !isHandVisible && (isSel || !!siteRemoteColor);
 
@@ -1149,7 +1218,7 @@ export default function Board({
                               rotationZ={rotZ}
                               elevation={0}
                               color={siteGlowColor}
-                              renderOrder={siteRemoteColor ? 520 : 500}
+                              renderOrder={-100}
                             />
                           </group>
                         )}
@@ -1275,7 +1344,7 @@ export default function Board({
                   const remotePermanentColor = getRemoteHighlightColor(p.card ?? null);
                   const permanentGlowColor =
                     remotePermanentColor ??
-                    (owner === 1 ? "#93c5fd" : "#fca5a5");
+                    (owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
                   const renderPermanentGlow =
                     !isHandVisible && (isSel || !!remotePermanentColor);
 
@@ -1493,7 +1562,7 @@ export default function Board({
                             rotationZ={rotZ}
                             elevation={0}
                             color={permanentGlowColor}
-                            renderOrder={remotePermanentColor ? 480 : 500}
+                            renderOrder={-100}
                           />
                         )}
                         <group
@@ -1557,9 +1626,9 @@ export default function Board({
                                   width={CARD_SHORT}
                                   height={CARD_LONG}
                                   rotationZ={rotZ}
-                                  elevation={0.001}
+                                  elevation={0}
                                   color={permanentGlowColor}
-                                  renderOrder={remotePermanentColor ? 550 : 600}
+                                  renderOrder={-100}
                                 />
                               )}
                               <CardPlane
@@ -1737,7 +1806,7 @@ export default function Board({
                 rotationZ={d.rotZ}
                 elevation={0}
                 color={d.color}
-                renderOrder={520}
+                renderOrder={-100}
               />
               <CardPlane
                 slug={d.slug}
@@ -1747,6 +1816,34 @@ export default function Board({
                 elevation={0.001}
                 renderOrder={530}
                 interactive={false}
+              />
+            </group>
+          ))}
+        </group>
+      )}
+
+      {/* Remote avatar drag proxies */}
+      {remoteAvatarDrags.length > 0 && (
+        <group>
+          {remoteAvatarDrags.map((d) => (
+            <group key={d.key} position={[d.pos.x, 0.26, d.pos.z]}>
+              <CardGlow
+                width={CARD_SHORT + 0.3}
+                height={CARD_LONG + 0.4}
+                rotationZ={d.rotZ}
+                elevation={0}
+                color={d.color}
+                renderOrder={-100}
+              />
+              <CardPlane
+                slug={d.slug}
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={d.rotZ}
+                elevation={0.001}
+                renderOrder={550}
+                interactive={false}
+                textureUrl={d.slug ? undefined : "/api/assets/cardback_spellbook.png"}
               />
             </group>
           ))}
@@ -1819,8 +1916,8 @@ export default function Board({
                       height={CARD_LONG + 0.4}
                       rotationZ={rotZ}
                       elevation={0}
-                      color={who === "p1" ? "#93c5fd" : "#fca5a5"}
-                      renderOrder={500}
+                      color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
+                      renderOrder={-100}
                     />
                   )}
                   <group
@@ -1865,6 +1962,7 @@ export default function Board({
                     onPointerMove={(e) => {
                       if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                       e.stopPropagation();
+                      handlePointerMove(e.point.x, e.point.z);
                       // Start dragging once hold + threshold exceeded
                       if (
                         !dragAvatar &&
@@ -1957,9 +2055,9 @@ export default function Board({
                             width={CARD_SHORT}
                             height={CARD_LONG}
                             rotationZ={rotZ}
-                            elevation={0.001}
-                            color="#60a5fa"
-                            renderOrder={600}
+                            elevation={0}
+                            color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
+                            renderOrder={-100}
                           />
                         )}
                       <CardPlane

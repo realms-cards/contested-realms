@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import {
   MANA_PROVIDER_BY_NAME,
   THRESHOLD_GRANT_BY_NAME,
@@ -77,7 +78,6 @@ export type BoardPingEvent = {
 };
 
 // --- Remote cursor telemetry -----------------------------------------------
-export type RemoteCursorDragMeta =
   | {
       kind: "permanent";
       from?: string | null;
@@ -1857,9 +1857,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const matchesSlug =
         slug !== null && typeof highlightSlug === "string" && highlightSlug === slug;
       if (!matchesId && !matchesSlug) continue;
-      if (entry.playerKey === "p1") return "#fbbf24";
-      if (entry.playerKey === "p2") return "#60a5fa";
-      return "#a855f7";
+      if (entry.playerKey === "p1") return PLAYER_COLORS.p1;
+      if (entry.playerKey === "p2") return PLAYER_COLORS.p2;
+      return PLAYER_COLORS.spectator;
     }
     return null;
   },
