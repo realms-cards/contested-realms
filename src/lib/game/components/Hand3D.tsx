@@ -6,6 +6,7 @@ import type { Group, PerspectiveCamera } from "three";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import {
   CARD_LONG,
@@ -50,20 +51,11 @@ export default function Hand3D({
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
+  const getRemoteHighlightColor = useGameStore((s) => s.getRemoteHighlightColor);
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
   
-  // Debug logging for opponent hands
-  useEffect(() => {
-    if (showCardBacks) {
-      console.debug(`[Hand3D] Opponent hand (${owner}):`, {
-        handSize: hand.length,
-        cards: hand.map(c => c.name),
-        viewerPlayerNumber
-      });
-    }
-  }, [hand, showCardBacks, owner, viewerPlayerNumber]);
   // Sort hand with sites first, then spells
   const sortedHand = useMemo(() => {
     return [...hand].sort((a, b) => {
@@ -652,12 +644,26 @@ export default function Hand3D({
         // Spells should render on top of sites: sites get lower render order, spells get higher
         const baseRenderOrder = isSite ? 1000 : 2000;
         const renderOrder = !showCardBacks && hoverWeight > 0.5 ? 3000 : baseRenderOrder + i;
+        const remoteHighlightColor = getRemoteHighlightColor(c);
+        const cardRotationZ = showCardBacks ? 0 : (isSite ? -rot - Math.PI / 2 : -rot);
+        const glowWidth = CARD_SHORT + 0.25;
+        const glowHeight = CARD_LONG + 0.35;
         return (
           <group
             key={`${c.cardId}-${owner}-${i}`}
             position={[x, y, i * 0.001]}
             scale={[scale, scale, scale]}
           >
+            {remoteHighlightColor ? (
+              <CardGlow
+                width={glowWidth}
+                height={glowHeight}
+                rotationZ={cardRotationZ}
+                elevation={0}
+                color={remoteHighlightColor}
+                renderOrder={renderOrder - 5}
+              />
+            ) : null}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {!showCardBacks && !isDraggedCard && (
               <mesh
@@ -761,11 +767,7 @@ export default function Hand3D({
                 slug={showCardBacks ? "" : (c.slug || "")}
                 width={CARD_SHORT}
                 height={CARD_LONG}
-                rotationZ={
-                  showCardBacks
-                    ? 0 // Card backs don't use fan rotation
-                    : (isSite ? -rot - Math.PI / 2 : -rot) // Sites need -90° rotation for correct art orientation
-                }
+                rotationZ={cardRotationZ}
                 upright
                 depthWrite={false}
                 depthTest={false}

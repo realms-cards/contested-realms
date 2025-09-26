@@ -10,6 +10,7 @@ import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import GameToolbox from "@/components/game/GameToolbox";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
@@ -21,6 +22,7 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+// (moved GameToolbox import up to satisfy lint ordering)
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
@@ -39,7 +41,12 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
-import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import {
+  useGameStore,
+  type PlayerKey,
+  type RemoteCursorState,
+} from "@/lib/game/store";
+import type { RemoteCursorDragMeta } from "@/lib/game/store/remoteCursor";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 
 export default function OnlineMatchPage() {
@@ -61,6 +68,9 @@ export default function OnlineMatchPage() {
   });
 
   const setActorKey = useGameStore((s) => s.setActorKey);
+  const setLocalPlayerId = useGameStore((s) => s.setLocalPlayerId);
+  const setRemoteCursor = useGameStore((s) => s.setRemoteCursor);
+  const localPlayerId = useGameStore((s) => s.localPlayerId);
 
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
@@ -94,11 +104,101 @@ export default function OnlineMatchPage() {
       ? ((myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey)
       : null;
 
-  // Initialize actor seat in store for ownership guards in online play
+  // Derive opponent identifiers (2-player engine)
+  const opponentSeat: PlayerKey | null = useMemo(() => {
+    if (!myPlayerKey) return null;
+    return myPlayerKey === "p1" ? "p2" : "p1";
+  }, [myPlayerKey]);
+  const opponentPlayerId: string | null = useMemo(() => {
+    if (!match?.players || myPlayerIndex < 0) return null;
+    const opp = match.players[myPlayerIndex === 0 ? 1 : 0];
+    return opp?.id || null;
+  }, [match?.players, myPlayerIndex]);
+
+  // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {
     setActorKey(myPlayerKey);
-    return () => setActorKey(null);
-  }, [setActorKey, myPlayerKey]);
+    setLocalPlayerId(myPlayerId ?? null);
+    return () => {
+      setActorKey(null);
+      setLocalPlayerId(null);
+    };
+  }, [setActorKey, setLocalPlayerId, myPlayerKey, myPlayerId]);
+
+  // Subscribe to remote cursor telemetry
+  useEffect(() => {
+    if (!transport?.on) return;
+
+    const parseDragging = (raw: unknown): RemoteCursorDragMeta | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const d = raw as Record<string, unknown>;
+      const kind = d.kind;
+      if (kind === "permanent") {
+        const meta: RemoteCursorDragMeta = { kind: "permanent" };
+        if (typeof d.from === "string") meta.from = d.from;
+        if (Number.isFinite(d.index)) meta.index = Number(d.index);
+        return meta;
+      }
+      if (kind === "hand") return { kind: "hand" };
+      if (kind === "token") return { kind: "token" };
+      if (kind === "pile") {
+        const meta: RemoteCursorDragMeta = { kind: "pile" };
+        if (typeof d.source === "string") meta.source = d.source;
+        return meta;
+      }
+      if (kind === "avatar") {
+        const meta: RemoteCursorDragMeta = { kind: "avatar" };
+        if (d.who === "p1" || d.who === "p2") meta.who = d.who;
+        return meta;
+      }
+      return null;
+    };
+
+    const parseHighlight = (raw: unknown): { slug: string | null; cardId: number | null } | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const src = raw as Record<string, unknown>;
+      const slug = typeof src.slug === "string" ? src.slug : null;
+      const cardId = typeof src.cardId === "number" && Number.isFinite(src.cardId) ? (src.cardId as number) : null;
+      if (slug === null && cardId === null) return null;
+      return { slug, cardId };
+    };
+
+    const handler = (payload: RemoteCursorState) => {
+      if (!payload || typeof payload !== "object") return;
+      const pid = typeof payload.playerId === "string" ? payload.playerId : null;
+      if (!pid || pid === localPlayerId) return;
+      const px = payload.position?.x;
+      const pz = payload.position?.z;
+      const position =
+        typeof px === "number" && Number.isFinite(px) &&
+        typeof pz === "number" && Number.isFinite(pz)
+          ? { x: px, z: pz }
+          : null;
+      const dragging = parseDragging(payload.dragging);
+      const highlight = parseHighlight(payload.highlight);
+      const ts = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
+
+      setRemoteCursor({
+        playerId: pid,
+        playerKey:
+          payload.playerKey === "p1" || payload.playerKey === "p2"
+            ? payload.playerKey
+            : null,
+        position,
+        dragging,
+        highlight,
+        ts,
+        displayName: null,
+      });
+    };
+
+    const off = transport.on("boardCursor", handler);
+    return () => {
+      try {
+        off?.();
+      } catch {}
+    };
+  }, [transport, localPlayerId, setRemoteCursor]);
 
   const rtc = voice?.rtc ?? null;
 
@@ -1264,6 +1364,15 @@ export default function OnlineMatchPage() {
               onClose={() => closeSearchDialog()}
             />
           )}
+
+          {/* Toolbox overlay (draw/peek/inspect/position tools) */}
+          <GameToolbox
+            myPlayerId={myPlayerId || null}
+            mySeat={myPlayerKey}
+            opponentPlayerId={opponentPlayerId}
+            opponentSeat={opponentSeat}
+            matchId={match?.id || null}
+          />
 
           {/* Match Info Popup */}
           <MatchInfoPopup

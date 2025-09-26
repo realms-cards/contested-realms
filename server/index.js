@@ -35,10 +35,18 @@ function repairDraftInvariants(match) {
 }
 
 const INTERACTION_VERSION = 1;
-  process.env.INTERACTION_ENFORCEMENT_ENABLED === '0' ||
-  process.env.INTERACTION_ENFORCEMENT_ENABLED === 'false'
-    ? false
-    : true;
+const INTERACTION_ENFORCEMENT_ENABLED = (() => {
+  const raw = process.env.INTERACTION_ENFORCEMENT_ENABLED;
+  if (!raw) return false;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true' || normalized === 'on' || normalized === 'yes') {
+    return true;
+  }
+  if (normalized === '0' || normalized === 'false' || normalized === 'off' || normalized === 'no') {
+    return false;
+  }
+  return false;
+})();
 const INTERACTION_REQUEST_KINDS = new Set([
   'instantSpell',
   'defend',
@@ -178,7 +186,7 @@ function createGrantRecord(request, response, grantOpts, now) {
   };
 }
 
-function recordInteractionRequest(match, message, proposedGrant) {
+function recordInteractionRequest(match, message, proposedGrant, pendingAction) {
   ensureInteractionState(match);
   const entry = match.interactionRequests.get(message.requestId) || {};
   const now = message.createdAt || Date.now();
@@ -188,6 +196,8 @@ function recordInteractionRequest(match, message, proposedGrant) {
     status: 'pending',
     proposedGrant: proposedGrant || entry.proposedGrant || null,
     grant: entry.grant || null,
+    pendingAction: pendingAction || entry.pendingAction || null,
+    result: entry.result || null,
     createdAt: entry.createdAt || now,
     updatedAt: now,
   });
@@ -203,6 +213,8 @@ function recordInteractionResponse(match, response, grantRecord) {
     status: response.decision,
     proposedGrant: entry.proposedGrant || null,
     grant: grantRecord || entry.grant || null,
+    pendingAction: entry.pendingAction || null,
+    result: entry.result || null,
     createdAt: entry.createdAt || (entry.request && entry.request.createdAt) || now,
     updatedAt: now,
   };
@@ -226,6 +238,114 @@ function emitInteraction(matchId, message) {
   const room = `match:${matchId}`;
   io.to(room).emit('interaction', envelope);
   io.to(room).emit(message.type, message);
+}
+
+function emitInteractionResult(matchId, result) {
+  const room = `match:${matchId}`;
+  io.to(room).emit('interaction:result', result);
+}
+
+function sanitizePendingAction(kind, payload, actorSeat, requestingPlayerId) {
+  if (!payload || typeof payload !== 'object') return null;
+  const safe = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined) continue;
+    if (key === 'grant' || key === 'proposedGrant') continue;
+    safe[key] = value;
+  }
+  safe.kind = kind;
+  safe.actorSeat = actorSeat;
+  safe.requestedBy = requestingPlayerId;
+  return safe;
+}
+
+function getTopCards(match, seat, pile, count, from) {
+  if (!match || !match.game || !match.game.zones) return [];
+  const zones = match.game.zones;
+  const seatZones = zones && typeof zones === 'object' ? zones[seat] : null;
+  if (!seatZones || typeof seatZones !== 'object') return [];
+  const list = Array.isArray(seatZones[pile]) ? [...seatZones[pile]] : [];
+  if (count <= 0) return [];
+  if (from === 'bottom') {
+    return list.slice(Math.max(0, list.length - count));
+  }
+  return list.slice(0, count);
+}
+
+function applyPendingAction(match, entry, now) {
+  if (!match || !entry || !entry.pendingAction) return null;
+  const { pendingAction, request } = entry;
+  if (!pendingAction || typeof pendingAction !== 'object') return null;
+  const kind = pendingAction.kind;
+  const actorSeat = pendingAction.actorSeat;
+  const resultBase = {
+    requestId: request.requestId,
+    matchId: match.id,
+    kind,
+    success: false,
+    t: now,
+  };
+  if (kind === 'takeFromPile') {
+    const seat = pendingAction.seat === 'p1' || pendingAction.seat === 'p2' ? pendingAction.seat : null;
+    const pile = pendingAction.pile === 'atlas' ? 'atlas' : 'spellbook';
+    const from = pendingAction.from === 'bottom' ? 'bottom' : 'top';
+    const rawCount = Number(pendingAction.count);
+    const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.min(rawCount, 20) : 3;
+    if (!seat) {
+      return { ...resultBase, success: false, message: 'Invalid seat for pile peek' };
+    }
+    const cards = getTopCards(match, seat, pile, count, from).map((card) => {
+      if (!card || typeof card !== 'object') return {};
+      const out = {};
+      if (card.name) out.name = card.name;
+      if (card.type) out.type = card.type;
+      if (card.slug) out.slug = card.slug;
+      if (Number.isFinite(card.cardId)) out.cardId = Number(card.cardId);
+      if (Number.isFinite(card.variantId)) out.variantId = Number(card.variantId);
+      return out;
+    });
+    return {
+      ...resultBase,
+      success: true,
+      payload: {
+        seat,
+        pile,
+        from,
+        count,
+        cards,
+        requestedBy: pendingAction.requestedBy || null,
+      },
+    };
+  }
+  if (kind === 'inspectHand') {
+    const seat = pendingAction.seat === 'p1' || pendingAction.seat === 'p2' ? pendingAction.seat : null;
+    if (!seat) {
+      return { ...resultBase, success: false, message: 'Invalid seat for hand inspect' };
+    }
+    const cards = getTopCards(match, seat, 'hand', 99, 'top').map((card) => {
+      if (!card || typeof card !== 'object') return {};
+      const out = {};
+      if (card.name) out.name = card.name;
+      if (card.type) out.type = card.type;
+      if (card.slug) out.slug = card.slug;
+      if (Number.isFinite(card.cardId)) out.cardId = Number(card.cardId);
+      if (Number.isFinite(card.variantId)) out.variantId = Number(card.variantId);
+      return out;
+    });
+    return {
+      ...resultBase,
+      success: true,
+      payload: {
+        seat,
+        pile: 'hand',
+        from: 'top',
+        count: cards.length,
+        cards,
+        requestedBy: pendingAction.requestedBy || null,
+      },
+    };
+  }
+  return { ...resultBase, success: false, message: 'Unsupported pending action kind' };
 }
 async function leaderDraftPlayerReady(matchId, playerId, ready) {
   const match = await getOrLoadMatch(matchId);
@@ -1838,7 +1958,8 @@ async function leaderHandleInteractionRequest(matchId, playerId, payload, actorS
     if (note) message.note = note;
     if (Object.keys(sanitizedPayload).length > 0) message.payload = sanitizedPayload;
 
-    recordInteractionRequest(match, message, proposedGrant || null);
+    const pendingAction = sanitizePendingAction(rawKind, sanitizedPayload, actorSeat, playerId);
+    recordInteractionRequest(match, message, proposedGrant || null, pendingAction);
     match.lastTs = now;
     emitInteraction(matchId, message);
     try { await persistMatchUpdate(match, null, playerId, now); } catch {}
@@ -1943,6 +2064,22 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
     }
 
     recordInteractionResponse(match, responseMessage, grantRecord);
+    if (rawDecision === 'approved') {
+      try {
+        const entry = match.interactionRequests.get(requestId);
+        if (entry) {
+          const result = applyPendingAction(match, entry, now);
+          if (result) {
+            entry.result = result;
+            entry.pendingAction = null;
+            match.interactionRequests.set(requestId, entry);
+            emitInteractionResult(matchId, result);
+          }
+        }
+      } catch (err) {
+        try { console.warn('[interaction] failed to execute pending action', err?.message || err); } catch {}
+      }
+    }
     match.lastTs = now;
     emitInteraction(matchId, responseMessage);
     try { await persistMatchUpdate(match, null, playerId, now); } catch {}
@@ -3181,6 +3318,71 @@ io.on("connection", (socket) => {
         const id = payload && typeof payload.id === 'string' ? payload.id : rid('ping');
         const out = { type: 'boardPing', id, position: { x, z }, playerKey, ts: Date.now() };
         io.to(room).emit('message', out);
+      } catch {}
+    } else if (type === "boardCursor") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const idx = Array.isArray(match?.playerIds) ? match.playerIds.indexOf(player.id) : 0;
+        const playerKey = idx === 1 ? 'p2' : 'p1';
+        const positionPayload = payload && payload.position ? payload.position : null;
+        const x = Number(positionPayload && positionPayload.x);
+        const z = Number(positionPayload && positionPayload.z);
+        const position = Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
+        let dragging = null;
+        if (payload && typeof payload.dragging === 'object' && payload.dragging) {
+          const raw = payload.dragging;
+          const kind = typeof raw.kind === 'string' ? raw.kind : null;
+          const allowedKinds = new Set(['permanent', 'hand', 'pile', 'avatar', 'token']);
+          if (kind && allowedKinds.has(kind)) {
+            const next = { kind };
+            if (kind === 'permanent') {
+              const from = typeof raw.from === 'string' ? raw.from.slice(0, 32) : null;
+              const index = Number.isFinite(Number(raw.index)) ? Number(raw.index) : null;
+              if (from) next.from = from;
+              if (index !== null) next.index = index;
+            }
+            if (kind === 'avatar') {
+              const who = raw.who === 'p1' || raw.who === 'p2' ? raw.who : null;
+              if (who) next.who = who;
+            }
+            const source = typeof raw.source === 'string' ? raw.source.slice(0, 32) : null;
+            if (source) next.source = source;
+            const cardId = Number.isFinite(Number(raw.cardId)) ? Number(raw.cardId) : null;
+            if (cardId !== null) next.cardId = cardId;
+            const slug = typeof raw.slug === 'string' ? raw.slug.slice(0, 64) : null;
+            if (slug) next.slug = slug;
+            if (typeof raw.meta === 'object' && raw.meta) {
+              const meta = {};
+              if (typeof raw.meta.owner === 'number' && Number.isFinite(raw.meta.owner)) {
+                meta.owner = Number(raw.meta.owner);
+              }
+              if (meta.owner !== undefined) next.meta = meta;
+            }
+            dragging = Object.keys(next).length > 1 ? next : null;
+          }
+        }
+        // Sanitize highlight from payload: expect an object with { cardId?, slug? }
+        let highlight = null;
+        if (payload && typeof payload.highlight === 'object' && payload.highlight) {
+          const h = payload.highlight;
+          const cardId = Number.isFinite(Number(h.cardId)) ? Number(h.cardId) : null;
+          const slug = typeof h.slug === 'string' ? String(h.slug).slice(0, 64) : null;
+          if (cardId !== null || (slug && slug.length > 0)) {
+            highlight = { cardId, slug };
+          }
+        }
+        const out = {
+          type: 'boardCursor',
+          playerId: player.id,
+          playerKey,
+          position,
+          dragging,
+          highlight,
+          ts: Date.now(),
+        };
+        io.to(room).emit('message', out);
+        io.to(room).emit('boardCursor', out);
       } catch {}
     }
   });

@@ -75,6 +75,28 @@ export const InteractionEnvelopeSchema = z.object({
 
 export type InteractionEnvelope = z.infer<typeof InteractionEnvelopeSchema>;
 
+// Lightweight result envelope emitted by the server once an approved
+// interaction has been executed authoritatively. This is intentionally
+// not part of the InteractionMessage discriminated union used for
+// request/response, as it may carry arbitrary payloads depending on the
+// kind (e.g., revealed cards for peek/inspect, metadata for toolbox actions).
+export type InteractionResultMessage = {
+  requestId: string;
+  matchId?: string;
+  from?: string;
+  to?: string;
+  // Prefer the canonical kind when known; server may return a custom string
+  kind?: (typeof InteractionRequestKinds)[number] | string;
+  // Whether the requested action succeeded (e.g., approved and executed)
+  success: boolean;
+  // Opaque payload; common fields used by the client (cards, seat, pile, count, from, message)
+  payload?: Record<string, unknown>;
+  // Optional short message suitable for console log
+  message?: string;
+  // Server timestamp when produced
+  t?: number;
+};
+
 export type InteractionGrantRequest = {
   targetSeat?: "p1" | "p2" | null;
   expiresAt?: number;
