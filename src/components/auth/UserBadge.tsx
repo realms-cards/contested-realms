@@ -1,12 +1,21 @@
 "use client";
 
+import { Settings, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, {
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
+import { useSound } from "@/lib/contexts/SoundContext";
 
 /**
  * UserBadge
@@ -18,18 +27,54 @@ import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 export default function UserBadge({
   variant = "inline",
   className = "",
+  showPresence = true,
 }: {
   variant?: "inline" | "floating";
   className?: string;
+  showPresence?: boolean;
 }) {
-  const { data: session, status } = useSession();
+  const {
+    data: session,
+    status,
+    update: updateSession,
+  } = useSession();
+  const user = session?.user;
   const onlineCtx = useContext(OnlineContext);
   const connected: boolean = onlineCtx ? !!onlineCtx.connected : false;
   const voice = onlineCtx?.voice;
   const hasVoiceContext = !!(onlineCtx?.lobby?.id || onlineCtx?.match?.id);
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  // Sound controls
+  const { volume, setVolume, playCardShuffle } = useSound();
+  const volumeSliderId = useId();
+  const [profileName, setProfileName] = useState("");
+  const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleOpenSettings = useCallback(() => {
+    setProfileSuccess(null);
+    setProfileError(null);
+    setProfileName(user?.name ?? "");
+    setAvatarDataUrl(undefined);
+    setOpen(false);
+    setSettingsOpen(true);
+  }, [user?.name]);
+  const handleCloseSettings = useCallback(() => {
+    setSettingsOpen(false);
+    setProfileSuccess(null);
+    setProfileError(null);
+    setProfileName(user?.name ?? "");
+    setAvatarDataUrl(undefined);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [user?.name]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -40,20 +85,37 @@ export default function UserBadge({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  // Loading shimmer similar to AuthButton
+  // Close settings with Escape
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleCloseSettings();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen, handleCloseSettings]);
+
+  useEffect(() => {
+    const nextName = user?.name ?? "";
+    setProfileName(nextName);
+  }, [user?.name]);
+
+  useEffect(() => {
+    setAvatarDataUrl(undefined);
+  }, [user?.image]);
+
+  
+
+  // Loading shimmer (minimal): avoid floating placeholder to prevent gray pill flash
   if (status === "loading") {
-    if (variant === "floating") {
-      return (
-        <div className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}>
-          <div className="h-9 w-[7.5rem] rounded-full bg-slate-800/80 animate-pulse" />
-        </div>
-      );
-    }
-    return <div className={`w-24 h-9 bg-slate-800 rounded animate-pulse ${className}`} />;
+    if (variant === "floating") return null;
+    return <div className={`w-8 h-8 rounded-full bg-slate-800/80 animate-pulse ${className}`} />;
   }
 
   // Not authenticated: reuse AuthButton
-  if (!session?.user?.id) {
+  if (!user?.id) {
     if (variant === "floating") {
       return (
         <div className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}>
@@ -64,42 +126,121 @@ export default function UserBadge({
     return <AuthButton className={className} />;
   }
 
-  const presence = (
-    <span
-      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ring-1 ${
-        connected
-          ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
-          : "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30"
-      }`}
-      title={
-        connected
-          ? "Online services connected"
-          : onlineCtx
-          ? "Online services disconnected"
-          : "Online services are not active on this page"
-      }
-    >
-      <span
-        className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`}
-      />
-      {connected ? "Online" : "Offline"}
-    </span>
-  );
+  const shouldShowPresence = showPresence && !!onlineCtx;
 
-  const avatar = session.user.image ? (
+  const previewAvatar =
+    avatarDataUrl === undefined ? user?.image ?? null : avatarDataUrl;
+
+  const handleAvatarFileChange: React.ChangeEventHandler<HTMLInputElement> = (
+    event,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setProfileError("Avatar must be a PNG, JPEG, or WebP image.");
+      event.target.value = "";
+      return;
+    }
+    const maxBytes = 512 * 1024; // 512KB cap
+    if (file.size > maxBytes) {
+      setProfileError("Avatar must be smaller than 512KB.");
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        setAvatarDataUrl(result);
+        setProfileError(null);
+      }
+    };
+    reader.onerror = () => {
+      setProfileError("Failed to read image file.");
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const handleProfileSave = async () => {
+    const trimmedName = profileName.trim();
+    const updates: Record<string, unknown> = {};
+    if (trimmedName && trimmedName !== (user?.name || "")) {
+      updates.displayName = trimmedName;
+    } else if (!trimmedName && user?.name) {
+      updates.displayName = "";
+    }
+
+    if (avatarDataUrl !== undefined) {
+      updates.avatar = avatarDataUrl ?? null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      setProfileError("No changes to save.");
+      setProfileSuccess(null);
+      return;
+    }
+
+    setProfileSaving(true);
+    setProfileError(null);
+    setProfileSuccess(null);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+
+      const data = (await res.json()) as {
+        error?: string;
+        user?: { name: string | null; image: string | null };
+        success?: boolean;
+      };
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to update profile.");
+      }
+
+      if (data.user && typeof updateSession === "function") {
+        // Immediately reflect in UI without storing large data URLs in JWT cookie
+        setAvatarDataUrl(data.user.image ?? null);
+        if (data.user.name) setProfileName(data.user.name);
+        await updateSession({ name: data.user.name ?? undefined });
+      }
+
+      setProfileSuccess("Profile updated.");
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Update failed.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const avatarImageSrc = previewAvatar ?? null;
+  const avatarIsDataUrl =
+    typeof avatarImageSrc === "string" && avatarImageSrc.startsWith("data:");
+  const avatar = avatarImageSrc ? (
     <Image
-      src={session.user.image}
-      alt={session.user.name || "User avatar"}
+      src={avatarImageSrc}
+      alt={user?.name || "User avatar"}
       width={32}
       height={32}
       className="rounded-full w-8 h-8"
       priority={false}
+      unoptimized={avatarIsDataUrl}
     />
   ) : (
     <div className="w-8 h-8 rounded-full bg-slate-700 text-white grid place-items-center text-[12px]">
-      {(session.user.name || "?").slice(0, 1).toUpperCase()}
+      {(user?.name || "?").slice(0, 1).toUpperCase()}
     </div>
   );
+
+  
 
   return (
     <div
@@ -116,7 +257,7 @@ export default function UserBadge({
         aria-expanded={open}
         aria-haspopup="menu"
         className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/30"
-        title={session.user.name || "User"}
+        title={user?.name || "User"}
       >
         {avatar}
       </button>
@@ -127,9 +268,57 @@ export default function UserBadge({
             <div className="px-2 py-1.5 flex items-center gap-2">
               {avatar}
               <div className="min-w-0 flex-1">
-                <div className="text-slate-200 text-sm truncate">{session.user.name || "User"}</div>
-                <div className="mt-1">{presence}</div>
+                <div className="text-slate-200 text-sm truncate">{user?.name || "User"}</div>
+                {shouldShowPresence && (
+                  <div className="mt-1">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ring-1 ${
+                        connected
+                          ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                          : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
+                      }`}
+                      title={
+                        connected
+                          ? "Online services connected"
+                          : "Online services disconnected"
+                      }
+                    >
+                      <span
+                        className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`}
+                      />
+                      {connected ? "Online" : "Offline"}
+                    </span>
+                  </div>
+                )}
               </div>
+              <button
+                onClick={handleOpenSettings}
+                className="ml-2 p-1 rounded hover:bg-white/10 text-slate-300"
+                title="User Settings"
+                aria-label="Open user settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Sound volume control */}
+            <div className="mt-2 px-2 py-2 rounded-md bg-slate-800/70 ring-1 ring-slate-700/50">
+              <label htmlFor={volumeSliderId} className="flex items-center justify-between text-xs uppercase tracking-wide text-white/70">
+                <span>Sound Volume</span>
+                <span>{Math.round(volume * 100)}%</span>
+              </label>
+              <input
+                id={volumeSliderId}
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(volume * 100)}
+                onChange={(e) => setVolume(e.currentTarget.valueAsNumber / 100)}
+                onPointerUp={(e) => {
+                  const next = e.currentTarget.valueAsNumber / 100;
+                  if (next > 0) playCardShuffle();
+                }}
+                className="mt-1 w-full accent-purple-400"
+              />
             </div>
             <div className="my-2 h-px bg-white/10" />
             {voice && voice.enabled && voice.rtc.featureEnabled && (
@@ -216,6 +405,120 @@ export default function UserBadge({
               >
                 Sign Out
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Settings overlay */}
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4"
+          onMouseDown={(e) => {
+            if (e.currentTarget === e.target) handleCloseSettings();
+          }}
+          aria-modal="true"
+          role="dialog"
+        >
+          <div
+            className="relative w-full max-w-md rounded-xl bg-slate-900 ring-1 ring-slate-800 shadow-2xl p-4"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">User Settings</h2>
+              <button
+                onClick={handleCloseSettings}
+                className="p-1 rounded hover:bg-white/10 text-slate-300"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mt-3 flex flex-col gap-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                <span>Display Name</span>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.currentTarget.value)}
+                  maxLength={40}
+                  className="h-9 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+                  placeholder="Enter your name"
+                />
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
+                  {previewAvatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previewAvatar} alt="Avatar preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-base text-slate-300">
+                      {(profileName || user?.name || "?").slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex items-center gap-2 h-9 px-3 rounded bg-white/10 text-sm text-white cursor-pointer hover:bg-white/20">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="sr-only"
+                      onChange={handleAvatarFileChange}
+                    />
+                    Upload Image
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAvatarDataUrl(undefined);
+                      setProfileError(null);
+                      setProfileSuccess(null);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                    className="h-9 px-3 rounded bg-white/10 text-sm text-white hover:bg-white/20"
+                    title="Use current avatar"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAvatarDataUrl(null);
+                      setProfileError(null);
+                      setProfileSuccess(null);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                    className="h-9 px-3 rounded bg-rose-500/20 text-sm text-rose-200 hover:bg-rose-500/30"
+                    title="Remove avatar"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+              {profileError && <p className="text-[11px] text-rose-300">{profileError}</p>}
+              {profileSuccess && <p className="text-[11px] text-emerald-300">{profileSuccess}</p>}
+              <div className="mt-1 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseSettings}
+                  className="h-9 px-3 rounded bg-white/10 text-sm text-white hover:bg-white/20"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleProfileSave();
+                    // Keep overlay open but reflect saved state
+                  }}
+                  disabled={profileSaving}
+                  className={`h-9 px-4 rounded bg-purple-600 text-sm font-semibold text-white hover:bg-purple-500 transition-colors ${
+                    profileSaving ? "opacity-60 cursor-progress" : ""
+                  }`}
+                >
+                  {profileSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

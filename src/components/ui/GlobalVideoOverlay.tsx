@@ -81,15 +81,7 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   // Global audio-only flag disables video tiles regardless of screen config
   const shouldShowVideo = FEATURE_AUDIO_ONLY ? false : shouldShowVideoFromScreen;
 
-  // Compute compact status color for the dot-only mode (compute before any early return to satisfy hooks rule)
-  const statusColor = React.useMemo(() => {
-    const s = rtc?.state;
-    if (!s) return 'bg-gray-400';
-    if (s === 'connected') return 'bg-green-400';
-    if (s === 'joining' || s === 'negotiating') return 'bg-yellow-400';
-    if (s === 'failed' || s === 'closed') return 'bg-red-400';
-    return 'bg-gray-400';
-  }, [rtc?.state]);
+  // No compact status indicator when avatar is hidden; rely on UserBadge presence instead
 
   // Don't render if overlay is disabled for current screen
   if (!shouldShowVideo && !shouldShowControls) {
@@ -137,16 +129,7 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
             )}
           </button>
         </div>
-      ) : (
-        <div className="pointer-events-auto">
-          <button
-            onClick={() => setIsMinimized(!isMinimized)}
-            className={`w-3.5 h-3.5 rounded-full border border-white/70 shadow ${statusColor}`}
-            title={isMinimized ? 'Show video controls' : 'Hide video controls'}
-            aria-label="Connection status"
-          />
-        </div>
-      )}
+      ) : null}
 
       {!isMinimized && (
         <>

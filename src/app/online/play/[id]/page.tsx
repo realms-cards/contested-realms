@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useOnline } from "@/app/online/online-context";
+import UserBadge from "@/components/auth/UserBadge";
 import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
@@ -1582,14 +1583,12 @@ export default function OnlineMatchPage() {
             </div>
           )}
         </>
-      )}
+        )}
 
-      {/* Video Overlay (uses page-level WebRTC instance) */}
-      <GlobalVideoOverlay
-        position="top-right"
-        showUserAvatar={true}
-        rtc={rtc}
-      />
-    </div>
+        {/* Floating user badge (top-right) with presence + volume control */}
+        <UserBadge variant="floating" />
+        {/* Video overlay (avatar hidden to avoid duplicate badge) */}
+        <GlobalVideoOverlay position="top-right" showUserAvatar={false} rtc={rtc} />
+      </div>
   );
 }

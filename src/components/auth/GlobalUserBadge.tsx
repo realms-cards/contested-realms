@@ -10,7 +10,10 @@ import UserBadge from "@/components/auth/UserBadge";
  */
 export default function GlobalUserBadge() {
   const pathname = usePathname();
-  const isOnline = pathname?.startsWith("/online");
-  if (isOnline) return null;
-  return <UserBadge variant="floating" />;
+  const isOnlineSection = pathname?.startsWith("/online");
+  if (isOnlineSection) return null;
+
+  const wantsPresence = Boolean(pathname && pathname.includes("editor-3d"));
+
+  return <UserBadge variant="floating" showPresence={wantsPresence} />;
 }
