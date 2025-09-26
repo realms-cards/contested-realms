@@ -36,6 +36,7 @@ import type {
   PlayerPositionReference,
 } from "./types";
 
+<<<<<<< Updated upstream
 export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
 export type PlayerKey = "p1" | "p2";
 
@@ -54,6 +55,11 @@ export type PlayerState = {
   mana: number;
   thresholds: Thresholds;
 };
+=======
+export type { LifeState, Phase, PlayerKey, PlayerState, Thresholds } from "./store/baseTypes";
+export type { RemoteCursorState } from "./store/remoteCursor";
+export { REMOTE_CURSOR_TTL_MS } from "./store/remoteCursor";
+>>>>>>> Stashed changes
 
 export type BoardSize = { w: number; h: number };
 export type CellKey = string; // `${x},${y}`
