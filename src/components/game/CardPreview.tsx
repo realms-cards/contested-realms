@@ -1,11 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-<<<<<<< Updated upstream
-import { Suspense } from "react";
-=======
-import { Suspense, useEffect, useRef, useState } from "react";
->>>>>>> Stashed changes
+import { Suspense, useEffect, useState } from "react";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
@@ -26,28 +22,18 @@ export default function CardPreview({
   className = "",
   zIndexClass = "z-30",
 }: Props) {
-  if (!card?.slug) return null;
+  const slug = card?.slug ?? "";
 
   // Check if this is a site or a token that should be displayed like a site (e.g., Rubble)
-<<<<<<< Updated upstream
-  const isRegularSite = (card.type || "").toLowerCase().includes("site");
-  const isToken = card.slug.startsWith("token:");
+  const isRegularSite = (card?.type || "").toLowerCase().includes("site");
+  const isToken = slug.startsWith("token:");
   let isSiteReplacementToken = false;
 
   if (isToken) {
-    const key = card.slug.split(":")[1]?.toLowerCase() || "";
+    const key = slug.split(":")[1]?.toLowerCase() || "";
     const def = TOKEN_BY_KEY[key];
     isSiteReplacementToken = def?.siteReplacement === true;
   }
-
-  const isSite = isRegularSite || isSiteReplacementToken;
-
-=======
-  const isRegularSite = (card?.type || "").toLowerCase().includes("site");
-  const isToken = slug.startsWith("token:");
-  const tokenKey = isToken ? slug.split(":")[1]?.toLowerCase() ?? "" : "";
-  const tokenDefinition = isToken ? TOKEN_BY_KEY[tokenKey] : undefined;
-  const isSiteReplacementToken = tokenDefinition?.siteReplacement === true;
 
   const isSite = isRegularSite || isSiteReplacementToken;
 
@@ -62,8 +48,6 @@ export default function CardPreview({
     isShort: false,
     preferBottom: false,
   }));
-  const [isExpanded, setIsExpanded] = useState(true);
-  const prevPreferBottomRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -180,17 +164,6 @@ export default function CardPreview({
 
   const { width, isShort, preferBottom } = layout;
 
-  useEffect(() => {
-    const prev = prevPreferBottomRef.current;
-    if (preferBottom && !prev) {
-      setIsExpanded(false);
-    }
-    if (!preferBottom && prev) {
-      setIsExpanded(true);
-    }
-    prevPreferBottomRef.current = preferBottom;
-  }, [preferBottom]);
-
   if (!slug) return null;
 
   const toBottomAnchor = (a: Anchor): Anchor => {
@@ -203,59 +176,44 @@ export default function CardPreview({
   const topOffsetClass = isShort ? "top-12" : "top-20";
   const bottomOffsetClass = isShort ? "bottom-2" : "bottom-3";
 
->>>>>>> Stashed changes
   const anchorClasses = (() => {
-    switch (anchor) {
+    switch (effectiveAnchor) {
       case "top-left":
-        return "absolute left-3 top-20";
+        return `absolute left-3 ${topOffsetClass}`;
       case "bottom-left":
-        return "absolute left-3 bottom-3";
+        return `absolute left-3 ${bottomOffsetClass}`;
       case "bottom-right":
-        return "absolute right-1 bottom-3";
+        return `absolute right-2 ${bottomOffsetClass}`;
       case "top-right":
       default:
-        return "absolute right-3 top-20";
+        return `absolute right-3 ${topOffsetClass}`;
     }
   })();
 
   const base = isSite
-    ? "w-[35vw] max-w-[600px] min-w-[200px] aspect-[4/3]"
-    : "w-[22vw] max-w-[360px] min-w-[180px] aspect-[3/4]";
+    ? "aspect-[4/3] rounded-xl overflow-hidden"
+    : "aspect-[3/4] rounded-xl overflow-hidden";
 
-  const previewScale = 1.5;
-
-  const shouldRenderPreview = !preferBottom || isExpanded;
-  const collapsedWidth = Math.min(width, isSite ? 240 : 200);
-  const fallbackSlugName = slug.includes(":")
-    ? slug.split(":").slice(1).join(":")
-    : slug;
-  const displayName =
-    card?.name ??
-    (fallbackSlugName.replace(/[-_]/g, " ").trim() || "Card");
+  const spriteScale = width / (isSite ? 320 : 240);
+  const maxScale = preferBottom ? 1.25 : isShort ? 1.45 : 1.6;
+  const previewScale = Math.max(0.95, Math.min(spriteScale * 1.02, maxScale));
 
   // Match board conventions: use portrait plane and rotate sites -90deg
   const planeWidth = CARD_SHORT * previewScale;
   const planeHeight = CARD_LONG * previewScale;
   const rotZ = isSite ? -Math.PI / 2 : 0;
   const cameraZoom = 260 * previewScale;
-<<<<<<< Updated upstream
-  const canvasKey = `${card.slug}:${isSite ? "land" : "port"}`;
-=======
   const canvasKey = `${slug}:${isSite ? "land" : "port"}`;
 
-  // When `preferBottom` is true we collapse to a tap-to-expand control to avoid covering the viewport.
->>>>>>> Stashed changes
+  // Future enhancement: when `preferBottom` is true we can switch to a tap-to-expand overlay
+  // instead of always showing the preview, ensuring ultra-small viewports remain usable.
 
   return (
     <div
       className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
     >
-<<<<<<< Updated upstream
       <div className="relative">
-        <div
-          key={canvasKey}
-          className={`relative ${base} rounded-xl overflow-hidden`}
-        >
+        <div key={canvasKey} className={`relative ${base}`} style={{ width }}>
           <Canvas
             className="absolute inset-0"
             orthographic
@@ -267,7 +225,7 @@ export default function CardPreview({
             <ambientLight intensity={1} />
             <Suspense fallback={null}>
               <CardPlane
-                slug={card.slug}
+                slug={slug}
                 width={planeWidth}
                 height={planeHeight}
                 upright
@@ -281,58 +239,6 @@ export default function CardPreview({
             </Suspense>
           </Canvas>
         </div>
-=======
-      <div className="relative pointer-events-auto">
-        {preferBottom && !shouldRenderPreview ? (
-          <button
-            type="button"
-            onClick={() => setIsExpanded(true)}
-            className="flex w-full flex-col items-center gap-1 rounded-lg border border-white/10 bg-slate-900/85 px-3 py-2 text-xs font-medium text-slate-200 shadow-lg backdrop-blur-sm transition hover:bg-slate-900/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/50"
-            style={{ width: collapsedWidth }}
-          >
-            <span>Show card preview</span>
-            <span className="text-[10px] uppercase tracking-wide text-slate-400">
-              {displayName}
-            </span>
-          </button>
-        ) : (
-          <div key={canvasKey} className={`relative ${base}`} style={{ width }}>
-            {preferBottom ? (
-              <button
-                type="button"
-                onClick={() => setIsExpanded(false)}
-                className="absolute right-2 top-2 z-10 rounded-full bg-slate-900/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200 shadow-md transition hover:bg-slate-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/60"
-              >
-                Hide
-              </button>
-            ) : null}
-            <Canvas
-              className="absolute inset-0"
-              orthographic
-              frameloop="demand"
-              camera={{ position: [0, 0, 5], zoom: cameraZoom }}
-              gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-              dpr={[1, 2]}
-            >
-              <ambientLight intensity={1} />
-              <Suspense fallback={null}>
-                <CardPlane
-                  slug={slug}
-                  width={planeWidth}
-                  height={planeHeight}
-                  upright
-                  rotationZ={rotZ}
-                  depthWrite={false}
-                  depthTest={false}
-                  interactive={false}
-                  elevation={0}
-                  renderOrder={0}
-                />
-              </Suspense>
-            </Canvas>
-          </div>
-        )}
->>>>>>> Stashed changes
       </div>
     </div>
   );
