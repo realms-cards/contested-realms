@@ -28,6 +28,7 @@ export default function GameToolbox({
   const log = useGameStore((s) => s.log);
   const sendInteraction = useGameStore((s) => s.sendInteractionRequest);
   const interactionLog = useGameStore((s) => s.interactionLog);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
 
   const isOnline = !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
 
@@ -71,6 +72,7 @@ export default function GameToolbox({
           count: number;
           from: "top" | "bottom";
         }
+      | { kind: "instantSpell" }
     >
   >({});
 
@@ -109,6 +111,24 @@ export default function GameToolbox({
   }
 
   // Actions
+  const isMyTurn = mySeat ? ((mySeat === "p1" ? 1 : 2) === currentPlayer) : false;
+  const showInstantRequest = isOnline && !!mySeat && !isMyTurn;
+
+  const handleRequestInstantSpell = () => {
+    if (!showInstantRequest) return;
+    const ttlMs = 20000; // 20s courtesy window
+    const rid = requestConsent(
+      "instantSpell",
+      "Request to play a card out of turn",
+      {
+        // Show a helpful summary in the consent dialog
+        proposedGrant: { singleUse: true, expiresAt: Date.now() + ttlMs },
+      }
+    );
+    if (rid) {
+      pendingRequestRef.current[rid] = { kind: "instantSpell" };
+    }
+  };
   const handleDraw = () => {
     const seat = drawSeat;
     if (isOnline && mySeat && seat !== mySeat) {
@@ -253,6 +273,19 @@ export default function GameToolbox({
         </div>
         {open && (
           <div className="p-3 space-y-3 text-sm">
+            {/* Instant Spell (request when not your turn) */}
+            {showInstantRequest && (
+              <div>
+                <div className="font-medium mb-1">Instant: ask to play now</div>
+                <button
+                  className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1"
+                  onClick={handleRequestInstantSpell}
+                  title="Sends a consent request to the acting player"
+                >
+                  Ask Permission
+                </button>
+              </div>
+            )}
             {/* Draw Controls */}
             <div>
               <div className="font-medium mb-1">Draw from pile</div>
