@@ -15,6 +15,7 @@ import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import type { SearchResult } from "@/lib/deckEditor/search";
 import Board from "@/lib/game/Board";
 import {
   toCardMetaMap,
@@ -526,6 +527,25 @@ export default function EnhancedOnlineDraft3DScreen({
               `draftedCards_${matchId}`,
               JSON.stringify(mine)
             );
+            // Also persist a resolved SearchResult[] so the editor can avoid network resolution
+            const resolved: SearchResult[] = mine.map((c) => ({
+              variantId: 0,
+              slug: c.slug,
+              finish: "Standard",
+              product: "Draft",
+              cardId:
+                (typeof c.slug === "string" && slugToCardId[c.slug])
+                  ? slugToCardId[c.slug]
+                  : (Number(c.id) || 0),
+              cardName: c.cardName || c.name,
+              set: c.setName || "Beta",
+              type: c.type || null,
+              rarity: (c.rarity as SearchResult["rarity"]) || null,
+            }));
+            localStorage.setItem(
+              `draftedCardsResolved_${matchId}`,
+              JSON.stringify(resolved)
+            );
           }
         } catch (err) {
           console.error(
@@ -565,7 +585,7 @@ export default function EnhancedOnlineDraft3DScreen({
         console.warn("Error cleaning up transport listeners:", err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete, matchId, router]);
+  }, [transport, myPlayerIndex, onDraftComplete, matchId, router, slugToCardId]);
 
   // Fetch metadata for picked cards (for enhanced sorting and stats)
   useEffect(() => {
