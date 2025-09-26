@@ -1,6 +1,7 @@
 "use client";
 
 import { io, Socket } from "socket.io-client";
+import type { RemoteCursorState } from "@/lib/game/store";
 import type {
   InteractionEnvelope,
   InteractionRequestMessage,
@@ -11,13 +12,13 @@ import type { LobbyVisibility, ChatScope, DraftConfig } from "@/lib/net/protocol
 import type {
   GameTransport,
   TransportEvent,
-  TransportEventMap,
   TransportHandler,
   StartMatchConfig,
   DraftState,
   CustomMessage,
+  TransportEventMap,
 } from "@/lib/net/transport";
-import type { 
+import type {
   CardPreviewEvent,
   StackInteractionEvent,
   UIUpdateEvent 
@@ -175,12 +176,20 @@ export class SocketTransport implements GameTransport {
       socket.on("interaction:response", (payload) => {
         this.dispatch("interaction:response", payload as InteractionResponseMessage);
       });
+      socket.on("interaction:result", (payload) => {
+        this.dispatch("interaction:result", payload as TransportEventMap["interaction:result"]);
+      });
       // Generic lightweight messages (e.g., draft ready toggles)
       socket.on("message", (payload) => {
         const m = payload as TransportEventMap["message"];
         const t = SocketTransport.getMessageType(m);
-        console.log(`[Transport] message <= type=${t}`);
+        if (t !== "boardCursor") {
+          console.log(`[Transport] message <= type=${t}`);
+        }
         this.dispatch("message", m);
+      });
+      socket.on("boardCursor", (payload) => {
+        this.dispatch("boardCursor", payload as RemoteCursorState);
       });
       socket.on("resyncResponse", (payload) =>
         this.dispatch("resync", Protocol.ResyncResponsePayload.parse(payload))
@@ -384,7 +393,9 @@ export class SocketTransport implements GameTransport {
   // Generic lightweight message channel for transient signals (e.g., draft ready)
   sendMessage(msg: CustomMessage): void {
     const t = SocketTransport.getMessageType(msg);
-    console.log(`[Transport] message -> type=${t}`);
+    if (t !== "boardCursor") {
+      console.log(`[Transport] message -> type=${t}`);
+    }
     this.requireSocket().emit("message", msg);
   }
 
