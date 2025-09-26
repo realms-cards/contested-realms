@@ -17,6 +17,7 @@ import {
 } from "three";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
 import { useSound } from "@/lib/contexts/SoundContext";
+import BoardCursorLayer from "@/lib/game/components/BoardCursorLayer";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
@@ -35,9 +36,16 @@ import {
   WALL_HALF_HEIGHT,
   DRAG_THRESHOLD,
   DRAG_HOLD_MS,
+  PLAYER_COLORS,
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef, BoardState } from "@/lib/game/store";
+import type {
+  CardRef,
+  BoardState,
+  RemoteCursorState,
+  RemoteCursorDragMeta,
+  RemoteCursorHighlight,
+} from "@/lib/game/store";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
@@ -116,6 +124,7 @@ export default function Board({
   const permanentPositions = useGameStore((s) => s.permanentPositions);
   const { playCardPlay, playTurnGong } = useSound();
   const dragFromHand = useGameStore((s) => s.dragFromHand);
+  const previewCard = useGameStore((s) => s.previewCard);
   // Hand visibility state to disable glows when hand is shown
   const mouseInHandZone = useGameStore((s) => s.mouseInHandZone);
   const handHoverCount = useGameStore((s) => s.handHoverCount);
@@ -126,7 +135,11 @@ export default function Board({
   const setLastPointerWorldPos = useGameStore((s) => s.setLastPointerWorldPos);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
+  const getRemoteHighlightColor = useGameStore((s) => s.getRemoteHighlightColor);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const actorKey = useGameStore((s) => s.actorKey);
+  const remoteCursors = useGameStore((s) => s.remoteCursors);
+  const localPlayerId = useGameStore((s) => s.localPlayerId);
   // Counter actions
   const incrementPermanentCounter = useGameStore(
     (s) => s.incrementPermanentCounter
@@ -217,6 +230,81 @@ export default function Board({
     }
     return out;
   }, [board.size.w, board.size.h]);
+
+  // Build a list of opponent permanent-drag proxies to render at their live cursor positions
+  const remotePermanentDrags = useMemo(() => {
+    const out: Array<{
+      key: string;
+      pos: { x: number; z: number };
+      rotZ: number;
+      slug: string;
+      color: string;
+      width: number;
+      height: number;
+      textureUrl?: string;
+      forceTextureUrl?: boolean;
+    }> = [];
+    try {
+      const rc = remoteCursors || {};
+      for (const entry of Object.values(rc)) {
+        if (!entry) continue;
+        if (!entry.position) continue;
+        if (localPlayerId && entry.playerId === localPlayerId) continue;
+        const drag = entry.dragging;
+        if (!drag || drag.kind !== "permanent") continue;
+        const from = String(drag.from || "");
+        const index = Number(drag.index ?? -1);
+        if (!from || index < 0) continue;
+        const list = permanents[from] || [];
+        const p = list[index];
+        if (!p || !p.card) continue;
+
+        // Determine card size (tokens may be smaller or site-replacement landscape)
+        const isToken = ((p.card.type || "") as string)
+          .toLowerCase()
+          .includes("token");
+        const tokenDef = isToken
+          ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
+          : undefined;
+        let w = CARD_SHORT;
+        let h = CARD_LONG;
+        if (isToken && tokenDef?.size === "small") {
+          w = CARD_SHORT * 0.5;
+          h = CARD_LONG * 0.5;
+        }
+        if (isToken && tokenDef?.siteReplacement) {
+          const tmp = w;
+          w = h;
+          h = tmp;
+        }
+
+        // Orientation like board permanents (owner-facing + tap + tilt)
+        const ownerRot = p.owner === 1 ? 0 : Math.PI;
+        // Match local permanent orientation logic (site replacement handled by width/height swap)
+        const rotZ = ownerRot + (p.tapped ? Math.PI / 2 : 0) + (p.tilt || 0);
+
+        const color =
+          entry.playerKey === "p1"
+            ? PLAYER_COLORS.p1
+            : entry.playerKey === "p2"
+            ? PLAYER_COLORS.p2
+            : PLAYER_COLORS.spectator;
+
+        out.push({
+          key: `rdrag:${entry.playerId}:${from}:${index}`,
+          pos: { x: entry.position.x, z: entry.position.z },
+          rotZ,
+          slug: isToken ? "" : p.card.slug || "",
+          color,
+          width: w,
+          height: h,
+          textureUrl: isToken && tokenDef ? tokenTextureUrl(tokenDef) : undefined,
+          forceTextureUrl: Boolean(isToken && tokenDef),
+        });
+      }
+    } catch {}
+    return out;
+  }, [remoteCursors, localPlayerId, permanents]);
 
   // Set up player positions based on board layout
   useEffect(() => {
@@ -436,16 +524,163 @@ export default function Board({
     setPreviewCard(null);
   }
 
+  // --- Remote cursor telemetry (position + dragging meta + highlight) ---
+  const lastCursorRef = useRef<RemoteCursorState | null>(null);
+  const lastCursorSentAtRef = useRef<number>(0);
+  const lastPointerRef = useRef<{ x: number; z: number } | null>(null);
+
+  const resolveHighlight = useCallback((): RemoteCursorHighlight => {
+    const state = useGameStore.getState();
+
+    const deriveCardMeta = (card: CardRef | null | undefined) => {
+      if (!card) return null;
+      const slug = typeof card.slug === "string" && card.slug.length > 0 ? card.slug : null;
+      const cardId = Number.isFinite(card.cardId) ? Number(card.cardId) : null;
+      if (slug === null && cardId === null) return null;
+      return { slug, cardId };
+    };
+
+    const fromSelection = deriveCardMeta(state.selectedCard?.card ?? null);
+    if (fromSelection) {
+      return fromSelection;
+    }
+
+    const selPermanent = state.selectedPermanent;
+    if (selPermanent) {
+      const at = selPermanent.at;
+      const index = selPermanent.index;
+      const card = state.permanents?.[at]?.[index]?.card ?? null;
+      const meta = deriveCardMeta(card);
+      if (meta) {
+        return meta;
+      }
+    }
+
+    const pileDragCard = state.dragFromPile?.card ?? null;
+    const pileDragMeta = deriveCardMeta(pileDragCard);
+    if (pileDragMeta) {
+      return pileDragMeta;
+    }
+
+    return null;
+  }, []);
+
+  const resolveDraggingMeta = useCallback((): RemoteCursorDragMeta | null => {
+    const s = useGameStore.getState();
+    // Avatar drag (local-only UI state here)
+    if ((dragAvatar as unknown as string | null)) {
+      return { kind: "avatar", who: dragAvatar };
+    }
+    // Prefer explicit board permanent drag metadata over generic flags
+    if (dragging) {
+      return { kind: "permanent", from: dragging.from, index: dragging.index };
+    }
+    if (s.dragFromHand) return { kind: "hand" };
+    const pile = s.dragFromPile;
+    if (pile) {
+      if (pile.from === "tokens") return { kind: "token" };
+      return { kind: "pile", source: pile.from ?? null };
+    }
+    return null;
+  }, [dragAvatar, dragging]);
+
+  function round3(n: number): number {
+    return Number.isFinite(n) ? Number(n.toFixed(3)) : 0;
+  }
+
+  function positionsEqual(a: RemoteCursorState["position"], b: RemoteCursorState["position"]) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return a.x === b.x && a.z === b.z;
+  }
+
+  function draggingEquals(a: RemoteCursorDragMeta | null, b: RemoteCursorDragMeta | null) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    if (a.kind !== b.kind) return false;
+    switch (a.kind) {
+      case "permanent":
+        return b.kind === "permanent" && a.from === b.from && a.index === b.index;
+      case "hand":
+        return b.kind === "hand";
+      case "pile":
+        return b.kind === "pile" && a.source === b.source;
+      case "token":
+        return b.kind === "token";
+      case "avatar":
+        return b.kind === "avatar" && a.who === b.who;
+      default:
+        return false;
+    }
+  }
+
+  const sendCursor = useCallback((position: { x: number; z: number } | null) => {
+    const s = useGameStore.getState();
+    const playerId = s.localPlayerId;
+    if (!playerId) return;
+    const tr = s.transport;
+    if (!tr?.sendMessage) return;
+
+    const highlight = resolveHighlight();
+
+    const payload: RemoteCursorState = {
+      playerId,
+      playerKey: s.actorKey,
+      position: position ? { x: round3(position.x), z: round3(position.z) } : null,
+      dragging: resolveDraggingMeta(),
+      highlight,
+      ts: Date.now(),
+      displayName: undefined,
+    };
+
+    const prev = lastCursorRef.current;
+    const now = Date.now();
+    if (
+      prev &&
+      positionsEqual(prev.position, payload.position) &&
+      draggingEquals(prev.dragging, payload.dragging) &&
+      ((prev.highlight?.slug || null) === (payload.highlight?.slug || null)) &&
+      ((prev.highlight?.cardId || null) === (payload.highlight?.cardId || null))
+    ) {
+      // unchanged
+      lastCursorRef.current = { ...payload };
+      return;
+    }
+    if (now - lastCursorSentAtRef.current < 45) {
+      lastCursorRef.current = { ...payload };
+      return;
+    }
+    lastCursorRef.current = { ...payload };
+    lastCursorSentAtRef.current = now;
+    try {
+      tr.sendMessage({ type: "boardCursor", ...payload });
+    } catch (err) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[cursor] send failed", err);
+      }
+    }
+  }, [resolveDraggingMeta, resolveHighlight]);
+
   const handlePointerMove = useCallback(
     (x: number, z: number) => {
-      setLastPointerWorldPos({ x, z });
+      const position = { x, z };
+      setLastPointerWorldPos(position);
+      lastPointerRef.current = position;
+      sendCursor(position);
     },
-    [setLastPointerWorldPos]
+    [setLastPointerWorldPos, sendCursor]
   );
 
   const handlePointerOut = useCallback(() => {
     setLastPointerWorldPos(null);
-  }, [setLastPointerWorldPos]);
+    lastPointerRef.current = null;
+    sendCursor(null);
+  }, [setLastPointerWorldPos, sendCursor]);
+
+  // Re-emit cursor when drag or highlight changes (using last known position)
+  useEffect(() => {
+    sendCursor(lastPointerRef.current ?? null);
+  }, [actorKey, dragAvatar, dragging, previewCard, selected, selectedPermanent, sendCursor]);
 
   const emitBoardPing = useCallback((position: { x: number; z: number } | null) => {
     if (!position) return;
@@ -453,6 +688,7 @@ export default function Board({
     const z = Number(position.z);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const { actorKey, pushBoardPing, transport } = useGameStore.getState();
+    const seat = actorKey === "p1" || actorKey === "p2" ? actorKey : "p1";
     const id = `ping_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
     const ts = Date.now();
     try {
@@ -460,7 +696,7 @@ export default function Board({
         id,
         position: { x, z },
         playerId: null,
-        playerKey: actorKey,
+        playerKey: seat,
         ts,
       });
     } catch {}
@@ -469,7 +705,7 @@ export default function Board({
         type: "boardPing",
         id,
         position: { x, z },
-        playerKey: actorKey,
+        playerKey: seat,
         ts,
       });
     } catch {}
@@ -896,18 +1132,24 @@ export default function Board({
                       tileCoords,
                       playerPos.position
                     );
+                    const siteRemoteColor = getRemoteHighlightColor(site.card ?? null);
+                    const siteGlowColor =
+                      siteRemoteColor ??
+                      (site.owner === 1 ? "#93c5fd" : "#fca5a5");
+                    const renderSiteGlow =
+                      !isHandVisible && (isSel || !!siteRemoteColor);
 
                     return (
                       <>
-                        {isSel && !isHandVisible && (
+                        {renderSiteGlow && (
                           <group position={[edgeOffset.x, 0, edgeOffset.z]}>
                             <CardGlow
                               width={CARD_SHORT + 0.3}
                               height={CARD_LONG + 0.4}
                               rotationZ={rotZ}
                               elevation={0}
-                              color={site.owner === 1 ? "#93c5fd" : "#fca5a5"}
-                              renderOrder={500}
+                              color={siteGlowColor}
+                              renderOrder={siteRemoteColor ? 520 : 500}
                             />
                           </group>
                         )}
@@ -1030,6 +1272,13 @@ export default function Board({
                   // This puts burrowed cards under sites but still visible
                   const yPos = isBurrowed ? 0.0005 : 0.25;
 
+                  const remotePermanentColor = getRemoteHighlightColor(p.card ?? null);
+                  const permanentGlowColor =
+                    remotePermanentColor ??
+                    (owner === 1 ? "#93c5fd" : "#fca5a5");
+                  const renderPermanentGlow =
+                    !isHandVisible && (isSel || !!remotePermanentColor);
+
                   return (
                     <RigidBody
                       key={`perm-${key}-${idx}`}
@@ -1112,14 +1361,16 @@ export default function Board({
                           emitBoardPing({ x: e.point.x, z: e.point.z });
                         }}
                         onPointerMove={(e) => {
-                          if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
-                          if (tokenSiteReplace) return; // no drag for Rubble
-                          e.stopPropagation();
-                          // Start dragging once hold + threshold exceeded
-                          if (
-                            !dragging &&
-                            dragStartRef.current &&
-                            dragStartRef.current.at === key &&
+                  if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
+                  if (tokenSiteReplace) return; // no drag for Rubble
+                  e.stopPropagation();
+                  // Always feed cursor telemetry with current world coordinates
+                  handlePointerMove(e.point.x, e.point.z);
+                  // Start dragging once hold + threshold exceeded
+                  if (
+                    !dragging &&
+                    dragStartRef.current &&
+                    dragStartRef.current.at === key &&
                             dragStartRef.current.index === idx
                           ) {
                             const [sx, sz] = dragStartRef.current.start;
@@ -1226,8 +1477,8 @@ export default function Board({
                           }
                         }}
                       >
-                        {/* Selection glow */}
-                        {isSel && !isHandVisible && (
+                        {/* Selection / remote highlight glow */}
+                        {renderPermanentGlow && (
                           <CardGlow
                             width={
                               (tokenDef && tokenDef.size === "small"
@@ -1241,8 +1492,8 @@ export default function Board({
                             }
                             rotationZ={rotZ}
                             elevation={0}
-                            color={owner === 1 ? "#93c5fd" : "#fca5a5"}
-                            renderOrder={500}
+                            color={permanentGlowColor}
+                            renderOrder={remotePermanentColor ? 480 : 500}
                           />
                         )}
                         <group
@@ -1301,20 +1552,16 @@ export default function Board({
                             })()
                           ) : p.card.slug ? (
                             <>
-                              {((selectedPermanent?.at === key &&
-                                selectedPermanent?.index === idx) ||
-                                (dragging?.from === key &&
-                                  dragging?.index === idx)) &&
-                                !isHandVisible && (
-                                  <CardGlow
-                                    width={CARD_SHORT}
-                                    height={CARD_LONG}
-                                    rotationZ={rotZ}
-                                    elevation={0.001}
-                                    color="#60a5fa"
-                                    renderOrder={600}
-                                  />
-                                )}
+                              {renderPermanentGlow && (
+                                <CardGlow
+                                  width={CARD_SHORT}
+                                  height={CARD_LONG}
+                                  rotationZ={rotZ}
+                                  elevation={0.001}
+                                  color={permanentGlowColor}
+                                  renderOrder={remotePermanentColor ? 550 : 600}
+                                />
+                              )}
                               <CardPlane
                                 slug={p.card?.slug || ""}
                                 width={CARD_SHORT}
@@ -1475,6 +1722,36 @@ export default function Board({
 
       {/* Board ping markers */}
       {enableBoardPings ? <BoardPingLayer /> : null}
+
+      {/* Remote cursors */}
+      <BoardCursorLayer />
+
+      {/* Remote permanent drag proxies (opponent live drags) */}
+      {remotePermanentDrags.length > 0 && (
+        <group>
+          {remotePermanentDrags.map((d) => (
+            <group key={d.key} position={[d.pos.x, 0.26, d.pos.z]}>
+              <CardGlow
+                width={d.width}
+                height={d.height}
+                rotationZ={d.rotZ}
+                elevation={0}
+                color={d.color}
+                renderOrder={520}
+              />
+              <CardPlane
+                slug={d.slug}
+                width={d.width}
+                height={d.height}
+                rotationZ={d.rotZ}
+                elevation={0.001}
+                renderOrder={530}
+                interactive={false}
+              />
+            </group>
+          ))}
+        </group>
+      )}
 
       {/* Avatars */}
       {(["p1", "p2"] as const).map((who) => {

@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import type { Mesh, MeshBasicMaterial } from "three";
 import { useSound } from "@/lib/contexts/SoundContext";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import {
   BOARD_PING_LIFETIME_MS,
   useGameStore,
@@ -58,7 +59,13 @@ function PingMarker({
         ref={materialRef}
         transparent
         opacity={1}
-        color={ping.playerKey === "p1" ? "#fbbf24" : "#60a5fa"}
+        color={
+          ping.playerKey === "p1"
+            ? PLAYER_COLORS.p1
+            : ping.playerKey === "p2"
+            ? PLAYER_COLORS.p2
+            : PLAYER_COLORS.spectator
+        }
         depthWrite={false}
       />
     </mesh>
