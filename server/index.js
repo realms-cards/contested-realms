@@ -47,6 +47,7 @@ const INTERACTION_ENFORCEMENT_ENABLED = (() => {
   }
   return false;
 })();
+const SNAPSHOT_INTERACTION_GRACE_MS = Number(process.env.SNAPSHOT_INTERACTION_GRACE_MS || 1500);
 const INTERACTION_REQUEST_KINDS = new Set([
   'instantSpell',
   'defend',
@@ -1449,6 +1450,11 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
             t: now,
           });
         } catch {}
+        // Record time of last snapshot per player to allow a brief grace window for follow-up client sync messages
+        try {
+          if (!match._lastSnapshotByPlayer) match._lastSnapshotByPlayer = new Map();
+          match._lastSnapshotByPlayer.set(playerId, now);
+        } catch {}
       }
       if (patch && typeof patch === 'object' && patch.d20Rolls) {
         const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
@@ -1516,6 +1522,16 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
         try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
       }
+      // Compute a short grace window for post-snapshot follow-up messages
+      const withinUndoGrace = (() => {
+        try {
+          if (match._lastSnapshotByPlayer && typeof match._lastSnapshotByPlayer.get === 'function') {
+            const t = match._lastSnapshotByPlayer.get(playerId);
+            return typeof t === 'number' && (now - t) <= SNAPSHOT_INTERACTION_GRACE_MS;
+          }
+        } catch {}
+        return false;
+      })();
       if (!isSnapshot) {
         try {
           const costRes = ensureCosts(match.game || {}, patchToApply, playerId, { match });
@@ -1531,7 +1547,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
             } catch {}
           }
           if (costRes && costRes.ok === false) {
-            if (enforce) {
+            if (enforce && !withinUndoGrace) {
               if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
               try {
                 console.warn('[rules] ensureCosts rejected action', {
@@ -1566,7 +1582,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
               if (actorSocketId) io.to(actorSocketId).emit('error', { message: msg || 'Illegal tap action', code: 'rules_violation' });
               return;
             }
-            if (enforce) {
+            if (enforce && !withinUndoGrace) {
               if (actorSocketId) io.to(actorSocketId).emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
               return;
             } else {
@@ -1590,10 +1606,22 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
         } catch {}
       }
       const interactionRequirements = collectInteractionRequirements(patchToApply, actorSeat);
+      // Provide a brief grace period after an authoritative snapshot from this actor
+      // to avoid gating benign follow-up messages during client resync.
+      const withinUndoGrace = (() => {
+        try {
+          if (match._lastSnapshotByPlayer && typeof match._lastSnapshotByPlayer.get === 'function') {
+            const t = match._lastSnapshotByPlayer.get(playerId);
+            return typeof t === 'number' && (now - t) <= SNAPSHOT_INTERACTION_GRACE_MS;
+          }
+        } catch {}
+        return false;
+      })();
       const shouldEnforceInteraction =
         INTERACTION_ENFORCEMENT_ENABLED &&
         match.status === 'in_progress' &&
-        !isSnapshot;
+        !isSnapshot &&
+        !withinUndoGrace;
       if (shouldEnforceInteraction && interactionRequirements.needsOpponentZoneWrite) {
         const grant = usePermitForRequirement(match, playerId, actorSeat, 'allowOpponentZoneWrite', now);
         if (!grant) {
