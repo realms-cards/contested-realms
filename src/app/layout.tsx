@@ -6,7 +6,6 @@ import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
-import ConsoleWarningFilter from "@/components/dev/ConsoleWarningFilter";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { authOptions } from "@/lib/auth";
 import { SoundProvider } from "@/lib/contexts/SoundContext";
@@ -42,8 +41,6 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${fantaisieArtistique.variable} antialiased`}
         suppressHydrationWarning
       >
-        {/* Dev-only: filter noisy troika/opentype warnings in the browser console */}
-        {process.env.NODE_ENV !== 'production' ? <ConsoleWarningFilter /> : null}
         <ThemeProvider defaultMode="colorful">
           <SoundProvider>
             <AuthProvider session={session}>

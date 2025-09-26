@@ -38,3 +38,11 @@ export const DRAG_HOLD_MS = 50; // Require a tiny hold before allowing drag star
 // Hand visual scales
 export const HAND_CARD_SCALE = 1.35; // balanced scale factor for hand cards - big but not overwhelming
 export const HAND_HOVER_SCALE = 1; // multiplier when hovering a hand card
+
+// Player accent colors (p1 = amber/gold, p2 = blue). Spectators/unknown fall back to violet.
+export const PLAYER_COLORS = {
+  p1: "#fbbf24",
+  p2: "#60a5fa",
+  spectator: "#a855f7",
+} as const;
+export type PlayerColorKey = keyof typeof PLAYER_COLORS;
