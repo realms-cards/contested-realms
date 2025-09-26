@@ -35,7 +35,6 @@ function repairDraftInvariants(match) {
 }
 
 const INTERACTION_VERSION = 1;
-const INTERACTION_ENFORCEMENT_ENABLED =
   process.env.INTERACTION_ENFORCEMENT_ENABLED === '0' ||
   process.env.INTERACTION_ENFORCEMENT_ENABLED === 'false'
     ? false
