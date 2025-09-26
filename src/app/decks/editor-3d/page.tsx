@@ -200,6 +200,13 @@ function AuthenticatedDeckEditor() {
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
 
+  // Draft picks resolution progress (when opening editor in draft mode)
+  const [draftLoadProgress, setDraftLoadProgress] = useState<{
+    processed: number;
+    total: number;
+    inProgress: boolean;
+  }>({ processed: 0, total: 0, inProgress: false });
+
   // Track which packs are opened so we can preserve UI state across server/local updates
   const openedByIdRef = useRef<Map<string, boolean>>(new Map());
   useEffect(() => {
@@ -724,6 +731,62 @@ function AuthenticatedDeckEditor() {
       return;
     }
 
+    // Fast path: use resolved picks if present to avoid any network lookups
+    try {
+      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${matchId}`);
+      if (resolvedRaw) {
+        const resolvedParsed = JSON.parse(resolvedRaw) as unknown;
+        const resolvedList = Array.isArray(resolvedParsed)
+          ? (resolvedParsed as SearchResult[])
+          : [];
+        const allPositiveIds = resolvedList.every((r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0);
+        if (resolvedList.length > 0 && allPositiveIds && resolvedList.length === drafted.length) {
+          setPicks((prev) => {
+            const next = { ...prev } as Record<PickKey, PickItem>;
+            for (const r of resolvedList) {
+              const zone: Zone = "Sideboard";
+              const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+              const exists = next[key];
+              next[key] = exists
+                ? { ...exists, count: exists.count + 1 }
+                : {
+                    cardId: r.cardId,
+                    variantId: r.variantId ?? null,
+                    name: r.cardName,
+                    type: r.type,
+                    slug: r.slug,
+                    zone,
+                    count: 1,
+                    set: r.set,
+                  };
+            }
+            return next;
+          });
+          // Infer default set from resolved cards
+          const counts = new Map<string, number>();
+          for (const r of resolvedList)
+            counts.set(r.set, (counts.get(r.set) || 0) + 1);
+          if (counts.size) {
+            let best = setName;
+            let bestN = -1;
+            for (const [name, n] of counts.entries()) {
+              if (n > bestN) {
+                best = name;
+                bestN = n;
+              }
+            }
+            setSetName(best);
+          }
+          if (!deckName || deckName === "New Deck") {
+            const matchName = searchParams?.get("matchName");
+            setDeckName(matchName || "Draft Deck");
+          }
+          setDraftInitDone(true);
+          return; // skip network resolution entirely
+        }
+      }
+    } catch {}
+
     (async () => {
       try {
         // Resolve each drafted card to a concrete SearchResult via slug first, fallback to name
@@ -767,9 +830,15 @@ function AuthenticatedDeckEditor() {
         const tasks = Array.from(dedup.values()).map((q) => () =>
           fetchSearchResult({ slug: q.slug, name: q.name, set: q.set })
         );
-        const runInBatches = async <T,>(fns: Array<() => Promise<T>>, limit = 8) => {
+        const runInBatches = async <T,>(
+          fns: Array<() => Promise<T>>,
+          limit = 8,
+          onProgress?: (done: number, total: number) => void
+        ) => {
           const out: T[] = [];
           let idx = 0;
+          let done = 0;
+          const total = fns.length;
           const workers = new Array(Math.min(limit, fns.length)).fill(0).map(async () => {
             while (idx < fns.length) {
               const cur = idx++;
@@ -779,13 +848,28 @@ function AuthenticatedDeckEditor() {
               } catch {
                 // ignore individual failures
               }
+              done += 1;
+              if (onProgress) onProgress(done, total);
             }
           });
           await Promise.all(workers);
           return out;
         };
 
-        const hits = await runInBatches<SearchResult | null>(tasks, 8);
+        const lookupConcurrencyCap = Math.max(
+          4,
+          Math.min(
+            24,
+            Number(process.env.NEXT_PUBLIC_EDITOR_LOOKUP_CONCURRENCY ?? "12")
+          )
+        );
+        // Initialize progress indicator
+        setDraftLoadProgress({ processed: 0, total: tasks.length, inProgress: tasks.length > 0 });
+        const hits = await runInBatches<SearchResult | null>(
+          tasks,
+          lookupConcurrencyCap,
+          (done, total) => setDraftLoadProgress({ processed: done, total, inProgress: done < total })
+        );
         for (const h of hits) if (h) resolved.push(h);
 
         if (resolved.length === 0) {
@@ -853,6 +937,7 @@ function AuthenticatedDeckEditor() {
         console.error("Draft initialization failed:", e);
         setError(e instanceof Error ? e.message : String(e));
       } finally {
+        setDraftLoadProgress((p) => ({ ...p, inProgress: false }));
         setDraftInitDone(true);
       }
     })();
@@ -2195,6 +2280,15 @@ function AuthenticatedDeckEditor() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
+      {/* Draft picks loading indicator */}
+      {isDraftMode && !draftInitDone && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-black/70 text-white rounded px-3 py-1 text-xs shadow">
+          Loading drafted cards...
+          {draftLoadProgress.total > 0 && (
+            <> {draftLoadProgress.processed}/{draftLoadProgress.total}</>
+          )}
+        </div>
+      )}
       {/* 3D Game View as the stage - EXACT same as draft-3d */}
       <div className="absolute inset-0 w-full h-full">
         <EditorCanvas orbitLocked={orbitLocked}>
