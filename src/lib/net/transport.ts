@@ -1,7 +1,9 @@
+import type { RemoteCursorState } from "@/lib/game/store";
 import type {
   InteractionEnvelope,
   InteractionRequestMessage,
   InteractionResponseMessage,
+  InteractionResultMessage,
 } from "@/lib/net/interactions";
 import type {
   LobbyUpdatedPayloadT,
@@ -58,6 +60,7 @@ export type TransportEventMap = {
   lobbyInvite: LobbyInvitePayloadT;
   draftUpdate: DraftState;
   message: CustomMessage; // generic channel for lightweight messages
+  boardCursor: RemoteCursorState;
   // Tournament events
   tournamentCreated: TournamentInfo;
   tournamentUpdated: TournamentInfo;
@@ -71,6 +74,7 @@ export type TransportEventMap = {
   interaction: InteractionEnvelope;
   "interaction:request": InteractionRequestMessage;
   "interaction:response": InteractionResponseMessage;
+  "interaction:result": InteractionResultMessage;
 } & Draft3DEventMap; // Extend with Draft-3D events for enhanced online integration
 
 export type TransportEvent = keyof TransportEventMap;
