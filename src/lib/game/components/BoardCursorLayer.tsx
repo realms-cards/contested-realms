@@ -73,6 +73,9 @@ export default function BoardCursorLayer() {
   const remoteCursors = useGameStore((s) => s.remoteCursors);
   const localPlayerId = useGameStore((s) => s.localPlayerId);
   const prune = useGameStore((s) => s.pruneRemoteCursors);
+  const peekDialog = useGameStore((s) => s.peekDialog);
+  const searchDialog = useGameStore((s) => s.searchDialog);
+  const placementDialog = useGameStore((s) => s.placementDialog);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -81,11 +84,18 @@ export default function BoardCursorLayer() {
     return () => window.clearInterval(timer);
   }, [prune]);
 
+  const overlayBlocking = Boolean(
+    peekDialog ||
+      searchDialog ||
+      placementDialog
+  );
+
   const entries = useMemo(() => {
+    if (overlayBlocking) return [] as RemoteCursorState[];
     return Object.values(remoteCursors || {})
       .filter((entry) => entry && entry.position && entry.playerId !== localPlayerId)
       .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-  }, [remoteCursors, localPlayerId]);
+  }, [remoteCursors, localPlayerId, overlayBlocking]);
 
   if (!entries.length) return null;
 
