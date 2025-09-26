@@ -4,6 +4,9 @@
   /* Minimal grayscale defaults */
   --background: #0b0f1d;
   --foreground: #e9ecf1;
+  /* UI safe area defaults (overridable per-layout) */
+  --ui-top: 72px;
+  --ui-bottom: 96px;
 }
 
 @theme inline {

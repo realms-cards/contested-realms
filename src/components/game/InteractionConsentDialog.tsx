@@ -12,7 +12,7 @@ const KIND_LABEL: Record<string, string> = {
   defend: "Defend Action",
   forcedDraw: "Forced Draw",
   inspectHand: "Inspect Hand",
-  takeFromPile: "Take Card From Pile",
+  takeFromPile: "Look at Card From Pile",
   manipulatePermanent: "Manipulate Permanent",
 };
 
@@ -96,7 +96,11 @@ export function InteractionConsentDialog({
       return null;
     }
     return (
-      <div className={`pointer-events-none absolute inset-x-0 top-4 z-40 flex justify-center ${className ?? ""}`.trim()}>
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-4 z-40 flex justify-center ${
+          className ?? ""
+        }`.trim()}
+      >
         <div className="pointer-events-auto rounded-lg bg-slate-800/90 px-4 py-2 text-sm text-slate-100 shadow-lg ring-1 ring-slate-700/70">
           Waiting for opponent consent &middot; {outboundWaitingCount}
         </div>
@@ -132,7 +136,9 @@ export function InteractionConsentDialog({
 
   return (
     <div
-      className={`absolute inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4 ${className ?? ""}`.trim()}
+      className={`absolute inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4 ${
+        className ?? ""
+      }`.trim()}
     >
       <div className="max-w-lg rounded-xl bg-slate-900/95 p-6 text-slate-100 shadow-2xl ring-1 ring-slate-700/70">
         <div className="flex items-start justify-between gap-4">
@@ -150,9 +156,7 @@ export function InteractionConsentDialog({
             <span className="text-slate-400">Requester:</span>{" "}
             <span className="font-medium text-slate-100">{requesterName}</span>
           </p>
-          {note && (
-            <p className="text-slate-200">{note}</p>
-          )}
+          {note && <p className="text-slate-200">{note}</p>}
           {grantSummary && (
             <p className="text-slate-300">
               <span className="text-slate-400">This will allow them to</span>{" "}
