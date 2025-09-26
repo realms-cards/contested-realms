@@ -727,6 +727,7 @@ function AuthenticatedDeckEditor() {
     (async () => {
       try {
         // Resolve each drafted card to a concrete SearchResult via slug first, fallback to name
+        // Optimize: dedupe identical queries and resolve in parallel with a modest concurrency cap
         const resolved: SearchResult[] = [];
         const slugPrefixToSet: Record<string, string> = {
           alp: "Alpha",
@@ -750,42 +751,42 @@ function AuthenticatedDeckEditor() {
           return "";
         };
 
+        // Build unique lookup queries
+        type Lookup = { slug: string; name: string; set: string };
+        const dedup = new Map<string, Lookup>();
         for (const c of drafted) {
           const slug = (c.slug || "").toString().trim();
           const name = (c.name || c.cardName || "").toString().trim();
-          const cardSetName = deriveSetHint(c);
-
-          let hit: SearchResult | null = null;
-          if (slug) {
-            try {
-              const list = await searchCards({
-                q: slug,
-                setName: cardSetName,
-                type: "all",
-              });
-              hit = list[0] || null;
-              if (!hit && cardSetName) {
-                const list = await searchCards({ q: slug, setName: "", type: "all" });
-                hit = list[0] || null;
-              }
-            } catch {}
-          }
-          if (!hit && name) {
-            try {
-              const list = await searchCards({
-                q: name,
-                setName: cardSetName,
-                type: "all",
-              });
-              hit = list[0] || null;
-              if (!hit && cardSetName) {
-                const list = await searchCards({ q: name, setName: "", type: "all" });
-                hit = list[0] || null;
-              }
-            } catch {}
-          }
-          if (hit) resolved.push(hit);
+          const set = deriveSetHint(c);
+          if (!slug && !name) continue;
+          const key = slug ? `slug:${slug}:${set}` : `name:${name}:${set}`;
+          if (!dedup.has(key)) dedup.set(key, { slug, name, set });
         }
+
+        // Small concurrency runner to avoid spamming the API
+        const tasks = Array.from(dedup.values()).map((q) => () =>
+          fetchSearchResult({ slug: q.slug, name: q.name, set: q.set })
+        );
+        const runInBatches = async <T,>(fns: Array<() => Promise<T>>, limit = 8) => {
+          const out: T[] = [];
+          let idx = 0;
+          const workers = new Array(Math.min(limit, fns.length)).fill(0).map(async () => {
+            while (idx < fns.length) {
+              const cur = idx++;
+              try {
+                const v = await fns[cur]();
+                out.push(v);
+              } catch {
+                // ignore individual failures
+              }
+            }
+          });
+          await Promise.all(workers);
+          return out;
+        };
+
+        const hits = await runInBatches<SearchResult | null>(tasks, 8);
+        for (const h of hits) if (h) resolved.push(h);
 
         if (resolved.length === 0) {
           setError("Could not resolve drafted cards to known card data.");
@@ -855,7 +856,7 @@ function AuthenticatedDeckEditor() {
         setDraftInitDone(true);
       }
     })();
-  }, [searchParams, draftInitDone, addSearchResultsToSideboard, deckName, setName]);
+  }, [searchParams, draftInitDone, addSearchResultsToSideboard, deckName, setName, fetchSearchResult]);
 
   // (moved) Load deck from URL parameter after loadDeck is declared
 

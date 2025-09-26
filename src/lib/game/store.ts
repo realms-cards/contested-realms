@@ -2014,6 +2014,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
+      // Apply match end result from server so all clients reflect the outcome
+      if (p.matchEnded !== undefined) {
+        next.matchEnded = !!p.matchEnded;
+      }
+      if (p.winner !== undefined) {
+        next.winner = p.winner as PlayerKey | null;
+      }
+
       if (p.board !== undefined) {
         next.board = replaceKeys.has("board")
           ? p.board
