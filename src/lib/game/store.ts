@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import {
   MANA_PROVIDER_BY_NAME,
   THRESHOLD_GRANT_BY_NAME,
@@ -18,6 +19,7 @@ import type {
   InteractionRequestMessage,
   InteractionResponseMessage,
   InteractionRequestKind,
+  InteractionResultMessage,
 } from "@/lib/net/interactions";
 import {
   wrapInteractionMessage,
@@ -28,6 +30,14 @@ import {
 } from "@/lib/net/interactions";
 import type { GameTransport, CustomMessage } from "@/lib/net/transport";
 import type {
+  LifeState,
+  Phase,
+  PlayerKey,
+  PlayerState,
+  Thresholds,
+} from "./store/baseTypes";
+import type { RemoteCursorState } from "./store/remoteCursor";
+import type {
   PermanentPosition,
   SitePositionData,
   BurrowAbility,
@@ -36,24 +46,8 @@ import type {
   PlayerPositionReference,
 } from "./types";
 
-export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
-export type PlayerKey = "p1" | "p2";
-
-export type Thresholds = {
-  air: number;
-  water: number;
-  earth: number;
-  fire: number;
-};
-
-export type LifeState = "alive" | "dd" | "dead";
-
-export type PlayerState = {
-  life: number;
-  lifeState: LifeState; // 'alive', 'dd' (Death's Door), 'dead'
-  mana: number;
-  thresholds: Thresholds;
-};
+export type { LifeState, Phase, PlayerKey, PlayerState, Thresholds } from "./store/baseTypes";
+export type { RemoteCursorState } from "./store/remoteCursor";
 
 export type BoardSize = { w: number; h: number };
 export type CellKey = string; // `${x},${y}`
@@ -75,6 +69,8 @@ export type BoardPingEvent = {
   ts: number;
 };
 
+// --- Remote cursor telemetry -----------------------------------------------
+
 type InteractionRecordStatus = "pending" | InteractionDecision | "expired";
 
 type InteractionRequestEntry = {
@@ -86,6 +82,8 @@ type InteractionRequestEntry = {
   proposedGrant?: InteractionGrantRequest | null;
   receivedAt: number;
   updatedAt: number;
+  // Optional result emitted by the server after executing an approved request
+  result?: InteractionResultMessage;
 };
 
 type InteractionStateMap = Record<string, InteractionRequestEntry>;
@@ -398,6 +396,8 @@ export type GameState = {
   activeInteraction: InteractionRequestEntry | null;
   sendInteractionRequest: (input: SendInteractionRequestInput) => void;
   receiveInteractionEnvelope: (envelope: InteractionEnvelope | InteractionMessage) => void;
+  // New: handle server-executed interaction outcomes
+  receiveInteractionResult: (message: InteractionResultMessage) => void;
   respondToInteraction: (
     requestId: string,
     decision: InteractionDecision,
@@ -441,6 +441,11 @@ export type GameState = {
   shuffleSpellbook: (who: PlayerKey) => void;
   shuffleAtlas: (who: PlayerKey) => void;
   drawFrom: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    count?: number
+  ) => void;
+  drawFromBottom: (
     who: PlayerKey,
     from: "spellbook" | "atlas",
     count?: number
@@ -590,6 +595,10 @@ export type GameState = {
     onSelectCard: (card: CardRef) => void
   ) => void;
   closeSearchDialog: () => void;
+  // Peek-only dialog used for reveals (no selection handler)
+  peekDialog: { title?: string; cards: CardRef[] } | null;
+  openPeekDialog: (title: string, cards: CardRef[]) => void;
+  closePeekDialog: () => void;
   // Tokens
   addTokenToHand: (who: PlayerKey, name: string) => void;
   attachTokenToTopPermanent: (at: CellKey, index: number) => void;
@@ -646,6 +655,15 @@ export type GameState = {
     tilePos: { x: number; z: number },
     playerPos: { x: number; z: number }
   ) => number;
+  // Remote cursor telemetry
+  remoteCursors: Record<string, RemoteCursorState>;
+  setRemoteCursor: (cursor: RemoteCursorState) => void;
+  pruneRemoteCursors: (olderThanMs: number) => void;
+  getRemoteHighlightColor: (
+    card: { cardId?: number | null; slug?: string | null } | null | undefined
+  ) => string | null;
+  localPlayerId: string | null;
+  setLocalPlayerId: (id: string | null) => void;
 };
 
 const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "Combat", "End"];
@@ -1059,6 +1077,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             try {
               get().receiveInteractionEnvelope(wrapInteractionMessage(msg));
             } catch {}
+          }),
+          t.on("interaction:result", (msg) => {
+            try {
+              get().receiveInteractionResult(msg);
+            } catch {}
           })
         );
       } catch {}
@@ -1237,6 +1260,73 @@ export const useGameStore = create<GameState>((set, get) => ({
         };
       });
     }
+  },
+  receiveInteractionResult: (message: InteractionResultMessage) => {
+    const now = Date.now();
+    set((state) => {
+      const existing = state.interactionLog[message.requestId];
+      const nextEntry: InteractionRequestEntry | undefined = existing
+        ? {
+            ...existing,
+            result: message,
+            updatedAt: now,
+          }
+        : undefined;
+      const nextLog: InteractionStateMap = nextEntry
+        ? { ...state.interactionLog, [message.requestId]: nextEntry }
+        : { ...state.interactionLog };
+      const acknowledged = { ...state.acknowledgedInteractionIds, [message.requestId]: true as const };
+
+      // Attempt to open peek dialog if cards were revealed
+      const p = (message.payload ?? {}) as Record<string, unknown>;
+      const requestedBy = typeof p.requestedBy === "string" && p.requestedBy.length > 0 ? p.requestedBy : null;
+      const actorSeat = p.actorSeat === "p1" || p.actorSeat === "p2" ? (p.actorSeat as PlayerKey) : null;
+      const localId = state.localPlayerId;
+      const mySeat = state.actorKey;
+
+      let isAllowed = true;
+      if (requestedBy) {
+        isAllowed = localId === requestedBy;
+      } else if (actorSeat) {
+        isAllowed = mySeat === actorSeat;
+      }
+
+      if (!isAllowed) {
+        return {
+          interactionLog: nextLog,
+          acknowledgedInteractionIds: acknowledged,
+        } as Partial<GameState> as GameState;
+      }
+      const cardsAny = Array.isArray(p.cards) ? (p.cards as unknown[]) : [];
+      const cards: CardRef[] = cardsAny.filter((c) => c && typeof c === "object") as CardRef[];
+      if (message.success && cards.length > 0) {
+        const seat = (p.seat === "p1" || p.seat === "p2") ? (p.seat as PlayerKey) : null;
+        const pile = typeof p.pile === "string" ? (p.pile as string) : undefined;
+        const from = typeof p.from === "string" ? (p.from as string) : undefined;
+        const count = Number.isFinite(Number(p.count)) ? Number(p.count) : cards.length;
+        const title = seat
+          ? `${seat.toUpperCase()} ${pile === "atlas" ? "Atlas" : pile === "hand" ? "Hand" : "Spellbook"}${from ? ` (${from})` : ""}`
+          : (message.kind || "Peek Results");
+        // Log a warning for hidden information reveals
+        const who = seat ? (seat === "p1" ? 1 : 2) : "?";
+        try {
+          get().log(`[Warning] Revealed ${count} card(s) from P${who}${pile ? ` ${pile}` : ""}${from ? ` (${from})` : ""}`);
+        } catch {}
+        return {
+          interactionLog: nextLog,
+          acknowledgedInteractionIds: acknowledged,
+          peekDialog: { title, cards },
+        } as Partial<GameState> as GameState;
+      }
+      // Default: just update the log/acknowledged flags and optionally log message
+      try {
+        if (message.message) get().log(message.message);
+      } catch {}
+      return {
+        interactionLog: nextLog,
+        acknowledgedInteractionIds: acknowledged,
+      } as Partial<GameState> as GameState;
+    });
   },
   respondToInteraction: (requestId, decision, actorId, options) => {
     const state = get();
@@ -1659,6 +1749,88 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastPointerWorldPos: null,
   setLastPointerWorldPos: (pos) =>
     set({ lastPointerWorldPos: pos }),
+  // Remote cursors
+  remoteCursors: {},
+  setRemoteCursor: (cursor) =>
+    set((state) => {
+      try {
+        const id = String(cursor.playerId || "").trim();
+        if (!id) return state as GameState;
+        const prev = state.remoteCursors[id] || null;
+        const ts = Number.isFinite(cursor.ts) ? Number(cursor.ts) : Date.now();
+        if (prev && Number(prev.ts) >= ts) return state as GameState;
+        const noPresence = !cursor.position && !cursor.dragging && !cursor.highlight;
+        if (noPresence) {
+          if (!(id in state.remoteCursors)) return state as GameState;
+          const next = { ...state.remoteCursors };
+          delete next[id];
+          return { remoteCursors: next } as Partial<GameState> as GameState;
+        }
+        const nextHighlight =
+          cursor.highlight === undefined
+            ? prev?.highlight ?? null
+            : cursor.highlight;
+
+        const nextEntry: RemoteCursorState = {
+          playerId: id,
+          playerKey:
+            cursor.playerKey === "p1" || cursor.playerKey === "p2"
+              ? cursor.playerKey
+              : prev?.playerKey ?? null,
+          position: cursor.position ?? null,
+          dragging: cursor.dragging ?? null,
+          highlight: nextHighlight,
+          ts,
+          displayName: null,
+        };
+        return {
+          remoteCursors: {
+            ...state.remoteCursors,
+            [id]: nextEntry,
+          },
+        } as Partial<GameState> as GameState;
+      } catch {
+        return state as GameState;
+      }
+    }),
+  pruneRemoteCursors: (olderThanMs) =>
+    set((state) => {
+      const cutoff = Date.now() - olderThanMs;
+      const next: Record<string, RemoteCursorState> = {};
+      let changed = false;
+      for (const [id, entry] of Object.entries(state.remoteCursors || {})) {
+        if (!entry || Number(entry.ts) < cutoff) {
+          changed = true;
+          continue;
+        }
+        next[id] = entry;
+      }
+      if (!changed) return state as GameState;
+      return { remoteCursors: next } as Partial<GameState> as GameState;
+    }),
+  getRemoteHighlightColor: (card) => {
+    if (!card) return null;
+    const state = get();
+    const slug =
+      typeof card.slug === "string" && card.slug.length > 0 ? card.slug : null;
+    const cardId = Number.isFinite(card.cardId) ? Number(card.cardId) : null;
+    if (cardId === null && slug === null) return null;
+    for (const entry of Object.values(state.remoteCursors || {})) {
+      if (!entry?.highlight) continue;
+      const { cardId: highlightId, slug: highlightSlug } = entry.highlight;
+      const matchesId =
+        cardId !== null && Number.isFinite(highlightId) && Number(highlightId) === cardId;
+      const matchesSlug =
+        slug !== null && typeof highlightSlug === "string" && highlightSlug === slug;
+      if (!matchesId && !matchesSlug) continue;
+      if (entry.playerKey === "p1") return PLAYER_COLORS.p1;
+      if (entry.playerKey === "p2") return PLAYER_COLORS.p2;
+      return PLAYER_COLORS.spectator;
+    }
+    return null;
+  },
+  localPlayerId: null,
+  setLocalPlayerId: (id) => set({ localPlayerId: id ?? null }),
 
   // Apply an incremental server patch into the store.
   // - Only whitelisted game-state fields are updated
@@ -2237,6 +2409,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().log(`Viewing ${pileName} (${cards.length} cards)`);
   },
   closeSearchDialog: () => set({ searchDialog: null }),
+  // Peek-only dialog used for reveals (no selection handler)
+  peekDialog: null,
+  openPeekDialog: (title, cards) => set({ peekDialog: { title, cards } }),
+  closePeekDialog: () => set({ peekDialog: null }),
 
   // --- Tokens ---------------------------------------------------------------
   addTokenToHand: (who, name) =>
@@ -2901,6 +3077,44 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         zones: { ...s.zones, [who]: { ...s.zones[who], ...updated, hand } },
       };
+    }),
+
+  // Draw from the BOTTOM of a pile (useful for effects that place cards on bottom)
+  drawFromBottom: (who: PlayerKey, from: "spellbook" | "atlas", count = 1) =>
+    set((s) => {
+      // Only allow draws by the current player during Draw/Main (same rule as drawFrom)
+      const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
+      if (!isCurrent || (s.phase !== "Draw" && s.phase !== "Main")) return s;
+
+      const pile =
+        from === "spellbook"
+          ? [...s.zones[who].spellbook]
+          : [...s.zones[who].atlas];
+      const hand = [...s.zones[who].hand];
+
+      for (let i = 0; i < count; i++) {
+        const c = pile.pop();
+        if (!c) break;
+        hand.push(c);
+      }
+
+      const updated =
+        from === "spellbook" ? { spellbook: pile } : { atlas: pile };
+      get().log(`${who.toUpperCase()} draws ${count} from bottom of ${from}`);
+
+      // Broadcast as a zones patch if online
+      {
+        const tr = get().transport;
+        if (tr) {
+          const zonesNext = { ...s.zones, [who]: { ...s.zones[who], ...updated, hand } } as GameState["zones"];
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+
+      return {
+        zones: { ...s.zones, [who]: { ...s.zones[who], ...updated, hand } },
+      } as Partial<GameState> as GameState;
     }),
 
   drawOpening: (who, spellbookCount?: number, atlasCount?: number) =>
@@ -4051,12 +4265,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         },
       };
 
+      const nextPositions = {
+        ...state.permanentPositions,
+        [permanentId]: updatedPosition,
+      } as GameState["permanentPositions"];
+
+      // Broadcast as a partial patch if online
+      try {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { permanentPositions: nextPositions };
+          get().trySendPatch(patch);
+        }
+      } catch {}
+
       return {
-        permanentPositions: {
-          ...state.permanentPositions,
-          [permanentId]: updatedPosition,
-        },
-      };
+        permanentPositions: nextPositions,
+      } as Partial<GameState> as GameState;
     }),
 
   setPermanentAbility: (permanentId: number, ability: BurrowAbility) =>

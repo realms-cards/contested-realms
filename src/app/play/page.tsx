@@ -8,6 +8,7 @@ import * as THREE from "three";
 import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
+import GameToolbox from "@/components/game/GameToolbox";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
@@ -381,6 +382,15 @@ export default function PlayPage() {
         mySeat={currentPlayerKey}
         playerNames={offlinePlayerNames}
         playerNameById={offlineNameById}
+      />
+
+      {/* Toolbox overlay (draw/peek/inspect/position tools) */}
+      <GameToolbox
+        myPlayerId={null}
+        mySeat={currentPlayerKey}
+        opponentPlayerId={null}
+        opponentSeat={currentPlayerKey === "p1" ? "p2" : "p1"}
+        matchId={null}
       />
 
       {/* HUD */}
