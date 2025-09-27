@@ -644,7 +644,10 @@ export default function Hand3D({
         // Spells should render on top of sites: sites get lower render order, spells get higher
         const baseRenderOrder = isSite ? 1000 : 2000;
         const renderOrder = !showCardBacks && hoverWeight > 0.5 ? 3000 : baseRenderOrder + i;
-        const remoteHighlightColor = getRemoteHighlightColor(c);
+        const handInstanceKey = `hand:${owner}:${originalIndex}`;
+        const remoteHighlightColor = getRemoteHighlightColor(c, {
+          instanceKey: handInstanceKey,
+        });
         const cardRotationZ = showCardBacks ? 0 : (isSite ? -rot - Math.PI / 2 : -rot);
         const glowWidth = CARD_SHORT + 0.25;
         const glowHeight = CARD_LONG + 0.35;

@@ -14,6 +14,7 @@ export type RemoteCursorDragMeta =
 export type RemoteCursorHighlight = {
   slug?: string | null;
   cardId?: number | null;
+  instanceKey?: string | null;
 } | null;
 
 export type RemoteCursorState = {

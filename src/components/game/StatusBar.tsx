@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
+import { FEATURE_UNDO } from "@/lib/config/features";
 
 interface StatusBarProps {
   dragFromHand: boolean;
@@ -75,14 +76,16 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
               End Turn
             </button>
             
-            <button
-              className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 disabled:opacity-40"
-              onClick={() => undo()}
-              disabled={!history.length}
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              Undo
-            </button>
+            {FEATURE_UNDO && (
+              <button
+                className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 disabled:opacity-40"
+                onClick={() => undo()}
+                disabled={!history.length}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                Undo
+              </button>
+            )}
           </>
         )}
       </div>

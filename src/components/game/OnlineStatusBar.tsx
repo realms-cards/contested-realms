@@ -2,6 +2,7 @@
 
 import { Star, Settings } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
+import { FEATURE_UNDO } from "@/lib/config/features";
 
 interface OnlineStatusBarProps {
   dragFromHand: boolean;
@@ -62,18 +63,20 @@ export default function OnlineStatusBar({
           </button>
         )}
         
-        {/* Utility Controls */}
-        <div className="w-px h-4 bg-white/20" />
-        
-        <button
-          className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 disabled:opacity-40 transition-colors"
-          onClick={() => undo()}
-          disabled={!history.length || !canControlTurn}
-          title={canControlTurn ? "Undo last action" : "Only current player can undo"}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          Undo
-        </button>
+        {FEATURE_UNDO && (
+          <>
+            <div className="w-px h-4 bg-white/20" />
+            <button
+              className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 disabled:opacity-40 transition-colors"
+              onClick={() => undo()}
+              disabled={!history.length || !canControlTurn}
+              title={canControlTurn ? "Undo last action" : "Only current player can undo"}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              Undo
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
