@@ -77,8 +77,9 @@ describe("Game store undo safety", () => {
       },
     }));
 
-    useGameStore.getState().setActorKey(null);
+    useGameStore.getState().setActorKey("p2");
     useGameStore.getState().pushHistory();
+    useGameStore.getState().setActorKey(null);
 
     const drawnCard = useGameStore.getState().zones.p2.spellbook[0];
 

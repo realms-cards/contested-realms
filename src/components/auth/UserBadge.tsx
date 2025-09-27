@@ -33,11 +33,7 @@ export default function UserBadge({
   className?: string;
   showPresence?: boolean;
 }) {
-  const {
-    data: session,
-    status,
-    update: updateSession,
-  } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const user = session?.user;
   const onlineCtx = useContext(OnlineContext);
   const connected: boolean = onlineCtx ? !!onlineCtx.connected : false;
@@ -52,7 +48,7 @@ export default function UserBadge({
   const volumeSliderId = useId();
   const [profileName, setProfileName] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(
-    undefined,
+    undefined
   );
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
@@ -106,19 +102,23 @@ export default function UserBadge({
     setAvatarDataUrl(undefined);
   }, [user?.image]);
 
-  
-
   // Loading shimmer (minimal): avoid floating placeholder to prevent gray pill flash
   if (status === "loading") {
     if (variant === "floating") return null;
-    return <div className={`w-8 h-8 rounded-full bg-slate-800/80 animate-pulse ${className}`} />;
+    return (
+      <div
+        className={`w-8 h-8 rounded-full bg-slate-800/80 animate-pulse ${className}`}
+      />
+    );
   }
 
   // Not authenticated: reuse AuthButton
   if (!user?.id) {
     if (variant === "floating") {
       return (
-        <div className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}>
+        <div
+          className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}
+        >
           <AuthButton variant="floating" />
         </div>
       );
@@ -132,7 +132,7 @@ export default function UserBadge({
     avatarDataUrl === undefined ? user?.image ?? null : avatarDataUrl;
 
   const handleAvatarFileChange: React.ChangeEventHandler<HTMLInputElement> = (
-    event,
+    event
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -215,7 +215,9 @@ export default function UserBadge({
 
       setProfileSuccess("Profile updated.");
     } catch (error) {
-      setProfileError(error instanceof Error ? error.message : "Update failed.");
+      setProfileError(
+        error instanceof Error ? error.message : "Update failed."
+      );
     } finally {
       setProfileSaving(false);
     }
@@ -239,8 +241,6 @@ export default function UserBadge({
       {(user?.name || "?").slice(0, 1).toUpperCase()}
     </div>
   );
-
-  
 
   return (
     <div
@@ -268,7 +268,9 @@ export default function UserBadge({
             <div className="px-2 py-1.5 flex items-center gap-2">
               {avatar}
               <div className="min-w-0 flex-1">
-                <div className="text-slate-200 text-sm truncate">{user?.name || "User"}</div>
+                <div className="text-slate-200 text-sm truncate">
+                  {user?.name || "User"}
+                </div>
                 {shouldShowPresence && (
                   <div className="mt-1">
                     <span
@@ -284,7 +286,9 @@ export default function UserBadge({
                       }
                     >
                       <span
-                        className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`}
+                        className={`inline-block w-2 h-2 rounded-full ${
+                          connected ? "bg-emerald-400" : "bg-rose-400"
+                        }`}
                       />
                       {connected ? "Online" : "Offline"}
                     </span>
@@ -302,7 +306,10 @@ export default function UserBadge({
             </div>
             {/* Sound volume control */}
             <div className="mt-2 px-2 py-2 rounded-md bg-slate-800/70 ring-1 ring-slate-700/50">
-              <label htmlFor={volumeSliderId} className="flex items-center justify-between text-xs uppercase tracking-wide text-white/70">
+              <label
+                htmlFor={volumeSliderId}
+                className="flex items-center justify-between text-xs uppercase tracking-wide text-white/70"
+              >
                 <span>Sound Volume</span>
                 <span>{Math.round(volume * 100)}%</span>
               </label>
@@ -324,12 +331,15 @@ export default function UserBadge({
             {voice && voice.enabled && voice.rtc.featureEnabled && (
               <div className="px-2 py-2 mb-2 rounded-md bg-slate-800/70 ring-1 ring-slate-700/50">
                 <div className="flex items-center justify-between text-xs text-slate-200">
-                  <span className="font-semibold tracking-wide uppercase">Voice Chat</span>
+                  <span className="font-semibold tracking-wide uppercase">
+                    Voice Chat
+                  </span>
                   <span
                     className={`text-[10px] uppercase ${
                       voice.rtc.state === "connected"
                         ? "text-emerald-300"
-                        : voice.rtc.state === "joining" || voice.rtc.state === "negotiating"
+                        : voice.rtc.state === "joining" ||
+                          voice.rtc.state === "negotiating"
                         ? "text-amber-300"
                         : "text-slate-400"
                     }`}
@@ -353,9 +363,16 @@ export default function UserBadge({
                 </div>
                 {voice.connectedPeers.length > 0 && (
                   <div className="mt-2 text-[11px] text-slate-300">
-                    <span className="uppercase tracking-wide text-slate-400 mr-1">Connected:</span>
+                    <span className="uppercase tracking-wide text-slate-400 mr-1">
+                      Connected:
+                    </span>
                     <span className="text-slate-100">
-                      {voice.connectedPeers.map((peer) => peer.displayName || `Player ${peer.id.slice(-4)}`).join(", ")}
+                      {voice.connectedPeers
+                        .map(
+                          (peer) =>
+                            peer.displayName || `Player ${peer.id.slice(-4)}`
+                        )
+                        .join(", ")}
                     </span>
                   </div>
                 )}
@@ -369,7 +386,7 @@ export default function UserBadge({
                 }}
                 className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
               >
-                Go Home
+                Home
               </button>
             </div>
             <div className="px-2 py-1.5">
@@ -380,7 +397,7 @@ export default function UserBadge({
                 }}
                 className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
               >
-                Go to Lobby
+                Lobby
               </button>
             </div>
             <div className="px-2 py-1.5">
@@ -424,7 +441,9 @@ export default function UserBadge({
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-white">User Settings</h2>
+              <h2 className="text-base font-semibold text-white">
+                User Settings
+              </h2>
               <button
                 onClick={handleCloseSettings}
                 className="p-1 rounded hover:bg-white/10 text-slate-300"
@@ -449,10 +468,16 @@ export default function UserBadge({
                 <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
                   {previewAvatar ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewAvatar} alt="Avatar preview" className="w-full h-full object-cover" />
+                    <img
+                      src={previewAvatar}
+                      alt="Avatar preview"
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <span className="text-base text-slate-300">
-                      {(profileName || user?.name || "?").slice(0, 1).toUpperCase()}
+                      {(profileName || user?.name || "?")
+                        .slice(0, 1)
+                        .toUpperCase()}
                     </span>
                   )}
                 </div>
@@ -495,8 +520,12 @@ export default function UserBadge({
                   </button>
                 </div>
               </div>
-              {profileError && <p className="text-[11px] text-rose-300">{profileError}</p>}
-              {profileSuccess && <p className="text-[11px] text-emerald-300">{profileSuccess}</p>}
+              {profileError && (
+                <p className="text-[11px] text-rose-300">{profileError}</p>
+              )}
+              {profileSuccess && (
+                <p className="text-[11px] text-emerald-300">{profileSuccess}</p>
+              )}
               <div className="mt-1 flex items-center justify-end gap-2">
                 <button
                   type="button"
