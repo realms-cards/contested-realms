@@ -51,36 +51,44 @@ export default function ReplayViewerPage() {
 
   // Setup socket connection
   useEffect(() => {
+    let isMounted = true;
+
     const socketTransport = new SocketTransport();
     setTransport(socketTransport);
 
-    const handleConnect = () => setConnected(true);
-    const handleDisconnect = () => setConnected(false);
+    const handleConnect = () => {
+      if (!isMounted) return;
+      setConnected(true);
+    };
+    const handleDisconnect = () => {
+      if (!isMounted) return;
+      setConnected(false);
+    };
 
-    // Connect first, then set up event listeners
+    socketTransport.onGeneric("connect", handleConnect);
+    socketTransport.onGeneric("disconnect", handleDisconnect);
+
     const displayName = (session?.user?.name && String(session.user.name).trim()) || `Replay_${Date.now()}`;
     const playerId = (session?.user && (session.user as { id?: string }).id) || `replay_viewer_${Date.now()}`;
-    socketTransport.connect({
-      displayName,
-      playerId,
-    }).then(() => {
-      // Set up event listeners after connection is established
-      socketTransport.onGeneric("connect", handleConnect);
-      socketTransport.onGeneric("disconnect", handleDisconnect);
-      setConnected(true);
-    }).catch((error) => {
-      console.error("Failed to connect to replay server:", error);
-      setLoading(false);
-      setError("Failed to connect to server");
-    });
+
+    socketTransport
+      .connect({
+        displayName,
+        playerId,
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        console.error("Failed to connect to replay server:", error);
+        setLoading(false);
+        setError("Failed to connect to server");
+      });
 
     return () => {
+      isMounted = false;
       try {
-        if (socketTransport) {
-          socketTransport.offGeneric("connect", handleConnect);
-          socketTransport.offGeneric("disconnect", handleDisconnect);
-          socketTransport.disconnect();
-        }
+        socketTransport.offGeneric("connect", handleConnect);
+        socketTransport.offGeneric("disconnect", handleDisconnect);
+        socketTransport.disconnect();
       } catch {
         // Ignore cleanup errors
       }
@@ -90,6 +98,7 @@ export default function ReplayViewerPage() {
   // Load the recording
   useEffect(() => {
     if (!connected || !transport || !matchId) return;
+    if (!transport.isConnected()) return;
 
     const handleRecording = (payload: unknown) => {
       const data = payload as { recording?: MatchRecording; error?: string };
