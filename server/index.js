@@ -65,6 +65,22 @@ function getSeatForPlayer(match, playerId) {
   return null;
 }
 
+function getPlayerIdForSeat(match, seat) {
+  if (!match || !Array.isArray(match.playerIds)) return null;
+  if (seat === 'p1') return match.playerIds[0] || null;
+  if (seat === 'p2') return match.playerIds[1] || null;
+  return null;
+}
+
+function inferLoserId(match, winnerId) {
+  if (!match || !Array.isArray(match.playerIds)) return null;
+  if (!winnerId) return null;
+  for (const pid of match.playerIds) {
+    if (pid !== winnerId) return pid;
+  }
+  return null;
+}
+
 function getOpponentSeat(seat) {
   if (seat === 'p1') return 'p2';
   if (seat === 'p2') return 'p1';
@@ -1538,6 +1554,76 @@ async function recordLeaderboardMatchResult(match, payload = {}) {
   }
 }
 
+async function finalizeMatch(match, options = {}) {
+  if (!match) return;
+  if (match._finalized) {
+    if (!match.winnerId && typeof options?.winnerId === 'string') {
+      match.winnerId = options.winnerId;
+    }
+    return;
+  }
+
+  const now = Date.now();
+  const winnerSeatOption = options?.winnerSeat;
+  const loserSeatOption = options?.loserSeat;
+  const winnerSeat = winnerSeatOption === 'p1' || winnerSeatOption === 'p2'
+    ? winnerSeatOption
+    : (match.game && (match.game.winner === 'p1' || match.game.winner === 'p2')
+        ? match.game.winner
+        : null);
+  const loserSeat = loserSeatOption === 'p1' || loserSeatOption === 'p2'
+    ? loserSeatOption
+    : (winnerSeat ? getOpponentSeat(winnerSeat) : null);
+
+  let winnerId = typeof options?.winnerId === 'string' ? options.winnerId : null;
+  if (!winnerId && winnerSeat) {
+    winnerId = getPlayerIdForSeat(match, winnerSeat);
+  }
+
+  let loserId = typeof options?.loserId === 'string' ? options.loserId : null;
+  if (!loserId && loserSeat) {
+    loserId = getPlayerIdForSeat(match, loserSeat);
+  }
+  if (!loserId && winnerId) {
+    loserId = inferLoserId(match, winnerId);
+  }
+
+  let isDraw = options?.isDraw === true;
+  if (!winnerId && !isDraw) {
+    isDraw = true;
+  }
+  if (winnerId && loserId && winnerId === loserId) {
+    loserId = inferLoserId(match, winnerId);
+  }
+  if (isDraw) {
+    winnerId = null;
+    loserId = null;
+  }
+
+  match.status = 'ended';
+  match.winnerId = winnerId || null;
+  match.lastTs = now;
+  match._finalized = true;
+
+  const room = `match:${match.id}`;
+  io.to(room).emit('matchStarted', { match: getMatchInfo(match) });
+  try { botManager.cleanupBotsAfterMatch(match); } catch {}
+  try { await persistMatchEnded(match); } catch {}
+  try { finishMatchRecording(match.id); } catch {}
+  try {
+    if (match._cleanupTimer) {
+      clearTimeout(match._cleanupTimer);
+      match._cleanupTimer = null;
+    }
+  } catch {}
+
+  const leaderboardPayload = isDraw
+    ? { isDraw: true }
+    : { winnerId, loserId };
+
+  recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
+}
+
 // Bot lifecycle helpers moved into BotManager
 
 // -----------------------------
@@ -1745,6 +1831,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
   }
   try {
     const patch = incomingPatch;
+    let shouldFinalizeMatch = false;
+    let finalizeOptions = null;
     if (
       match &&
       match.status === 'waiting' &&
@@ -1754,6 +1842,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       io.to(matchRoom).emit('matchStarted', { match: getMatchInfo(match) });
     }
     if (match && patch && typeof patch === 'object') {
+      const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
       let patchToApply = patch;
       const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && isCpuPlayerId(playerId));
       const isSnapshot = Array.isArray(patchToApply && patchToApply.__replaceKeys) && patchToApply.__replaceKeys.length > 0;
@@ -2109,6 +2198,18 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           }
         }
       } catch {}
+      const nextMatchEnded = Boolean(match.game && match.game.matchEnded);
+      if (!prevMatchEnded && nextMatchEnded) {
+        const winnerSeatFromPatch =
+          patchToApply && (patchToApply.winner === 'p1' || patchToApply.winner === 'p2')
+            ? patchToApply.winner
+            : null;
+        const loserSeatFromPatch = winnerSeatFromPatch ? getOpponentSeat(winnerSeatFromPatch) : null;
+        finalizeOptions = {};
+        if (winnerSeatFromPatch) finalizeOptions.winnerSeat = winnerSeatFromPatch;
+        if (loserSeatFromPatch) finalizeOptions.loserSeat = loserSeatFromPatch;
+        shouldFinalizeMatch = true;
+      }
       try {
         if (match.game && match.game.permanents) {
           match.game.permanents = dedupePermanents(match.game.permanents);
@@ -2142,6 +2243,13 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
     } else {
       io.to(matchRoom).emit('statePatch', { patch, t: now });
       try { await persistMatchUpdate(match, patch || null, playerId, now); } catch {}
+    }
+    if (shouldFinalizeMatch) {
+      try {
+        await finalizeMatch(match, finalizeOptions || {});
+      } catch (err) {
+        try { console.warn('[match] finalize failed', err?.message || err); } catch {}
+      }
     }
   } catch {
     io.to(matchRoom).emit('statePatch', { patch: incomingPatch || null, t: Date.now() });
@@ -4478,19 +4586,15 @@ io.on("connection", (socket) => {
   });
 
   // Explicit end match (optional). Allows cleanup and status update.
-  socket.on("endMatch", (payload = {}) => {
+  socket.on("endMatch", async (payload = {}) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
     const match = matches.get(player.matchId);
     if (!match) return;
-    match.status = 'ended';
-    match.winnerId = payload && typeof payload.winnerId === 'string' ? payload.winnerId : match.winnerId || null;
-    io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
-    try { botManager.cleanupBotsAfterMatch(match); } catch {}
-    try { persistMatchEnded(match); } catch {}
-    try { finishMatchRecording(match.id); } catch {}
-    recordLeaderboardMatchResult(match, payload).catch(() => {});
+    try { await finalizeMatch(match, payload || {}); } catch (err) {
+      try { console.warn('[match] explicit finalize failed', err?.message || err); } catch {}
+    }
     try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
   });
 
