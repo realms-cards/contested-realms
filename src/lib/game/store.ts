@@ -4208,7 +4208,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { avatars: avatarsNext };
+          // Only send the acting seat to avoid touching opponent avatar state
+          const patch: ServerPatchT = {
+            avatars: { [who]: { pos: [x, y] as [number, number], offset: null } } as GameState["avatars"],
+          };
           get().trySendPatch(patch);
         }
       }
@@ -4256,8 +4259,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
+          // Only send the acting seat to avoid opponent-zone write detection
           const patch: ServerPatchT = {
-            avatars: avatars as GameState["avatars"],
+            avatars: {
+              [who]: { pos: [x, y] as [number, number], offset },
+            } as GameState["avatars"],
           };
           get().trySendPatch(patch);
         }
@@ -4276,7 +4282,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { avatars: avatarsNext };
+          // Only send the acting seat's offset change
+          const patch: ServerPatchT = {
+            avatars: { [who]: { offset } } as GameState["avatars"],
+          };
           get().trySendPatch(patch);
         }
       }

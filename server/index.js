@@ -1998,6 +1998,18 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           }
         } catch {}
       }
+      // Prune avatar updates to only the acting seat to avoid accidental opponent writes
+      try {
+        if (patchToApply && patchToApply.avatars && typeof patchToApply.avatars === 'object') {
+          const seat = actorSeat === 'p1' || actorSeat === 'p2' ? actorSeat : null;
+          if (seat) {
+            const av = patchToApply.avatars || {};
+            const scoped = {};
+            if (av[seat] && typeof av[seat] === 'object') scoped[seat] = av[seat];
+            patchToApply = { ...patchToApply, avatars: scoped };
+          }
+        }
+      } catch {}
       const interactionRequirements = collectInteractionRequirements(patchToApply, actorSeat);
       const shouldEnforceInteraction =
         INTERACTION_ENFORCEMENT_ENABLED &&
