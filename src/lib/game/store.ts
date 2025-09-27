@@ -2327,6 +2327,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       // Fallback to global history if nothing in per-player
       if (!prev) {
+        if (s.transport) {
+          try {
+            get().log("Nothing to undo for your seat yet");
+          } catch {}
+          return s as GameState;
+        }
         if (!s.history.length) return s as GameState;
         const nextHist = [...s.history];
         prev = nextHist.pop() || null;
@@ -3145,6 +3151,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Enforce simple rule: only current player may draw during Draw/Main
       const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
       if (!isCurrent || (s.phase !== "Draw" && s.phase !== "Main")) return s;
+
+      get().pushHistory();
+
       const pile =
         from === "spellbook"
           ? [...s.zones[who].spellbook]
@@ -3158,9 +3167,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       const updated =
         from === "spellbook" ? { spellbook: pile } : { atlas: pile };
       get().log(`${who.toUpperCase()} draws ${count} from ${from}`);
+
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...s.zones[who], ...updated, hand },
+      } as GameState["zones"];
+
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { zones: zonesNext };
+          get().trySendPatch(patch);
+        }
+      }
+
       return {
-        zones: { ...s.zones, [who]: { ...s.zones[who], ...updated, hand } },
-      };
+        zones: zonesNext,
+      } as Partial<GameState> as GameState;
     }),
 
   // Draw from the BOTTOM of a pile (useful for effects that place cards on bottom)
@@ -3169,6 +3192,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Only allow draws by the current player during Draw/Main (same rule as drawFrom)
       const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
       if (!isCurrent || (s.phase !== "Draw" && s.phase !== "Main")) return s;
+
+      get().pushHistory();
 
       const pile =
         from === "spellbook"
@@ -3206,6 +3231,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   drawOpening: (who, spellbookCount?: number, atlasCount?: number) =>
     set((s) => {
+      get().pushHistory();
+
       const isSpellslinger =
         (s.avatars[who]?.card?.name || "").toLowerCase() === "spellslinger";
       const sbCount = spellbookCount ?? (isSpellslinger ? 4 : 3);
@@ -3276,7 +3303,26 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { who, index, card } = sel;
       const typeEarly = (card.type || "").toLowerCase();
       const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
-      if (!isCurrent && !typeEarly.includes("token")) {
+      // Allow a single out-of-turn play if we have an approved 'instantSpell' grant
+      let consumeInstantId: string | null = null;
+      const allowInstant =
+        !isCurrent && !!s.transport && (() => {
+          const myId = s.localPlayerId;
+          for (const [rid, entry] of Object.entries(s.interactionLog)) {
+            if (!entry || entry.status !== "approved") continue;
+            if (entry.request.kind !== "instantSpell") continue;
+            const g = entry.grant;
+            if (!g) continue;
+            const isMe = myId ? g.grantedTo === myId : entry.direction === "outbound";
+            if (!isMe) continue;
+            const exp = typeof g.expiresAt === "number" ? g.expiresAt : null;
+            if (exp !== null && exp <= Date.now()) continue;
+            if (g.singleUse) consumeInstantId = rid;
+            return true;
+          }
+          return false;
+        })();
+      if (!isCurrent && !allowInstant && !typeEarly.includes("token")) {
         get().log(
           `Cannot play '${
             card.name
@@ -3309,7 +3355,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (
         !type.includes("site") &&
         !type.includes("token") &&
-        s.phase !== "Main"
+        s.phase !== "Main" &&
+        !allowInstant
       ) {
         get().log(`Cannot play '${card.name}' during ${s.phase} phase`);
         return s;
@@ -3356,11 +3403,19 @@ export const useGameStore = create<GameState>((set, get) => ({
             get().trySendPatch(patch);
           }
         }
+        // Consume single-use instant permission if present
+        let nextInteractionLog: GameState["interactionLog"] | undefined;
+        if (consumeInstantId) {
+          nextInteractionLog = { ...(s.interactionLog as GameState["interactionLog"]) };
+          const e0 = nextInteractionLog[consumeInstantId];
+          if (e0) nextInteractionLog[consumeInstantId] = { ...e0, status: "expired", updatedAt: Date.now() } as typeof e0;
+        }
         return {
           zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
           board: { ...s.board, sites },
           selectedCard: null,
           selectedPermanent: null,
+          ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         } as Partial<GameState> as GameState;
       }
 
@@ -3400,11 +3455,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
+      // Consume single-use instant permission if present
+      let nextInteractionLog: GameState["interactionLog"] | undefined;
+      if (consumeInstantId) {
+        nextInteractionLog = { ...(s.interactionLog as GameState["interactionLog"]) };
+        const e0 = nextInteractionLog[consumeInstantId];
+        if (e0) nextInteractionLog[consumeInstantId] = { ...e0, status: "expired", updatedAt: Date.now() } as typeof e0;
+      }
       return {
         zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,
+        ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
       } as Partial<GameState> as GameState;
     }),
 
@@ -3431,7 +3494,26 @@ export const useGameStore = create<GameState>((set, get) => ({
         } as Partial<GameState> as GameState;
       }
       const isCurrent = (who === "p1" ? 1 : 2) === s.currentPlayer;
-      if (!isCurrent && !type.includes("token")) {
+      // Allow a single out-of-turn play if we have an approved 'instantSpell' grant
+      let consumeInstantId: string | null = null;
+      const allowInstant =
+        !isCurrent && !!s.transport && (() => {
+          const myId = s.localPlayerId;
+          for (const [rid, entry] of Object.entries(s.interactionLog)) {
+            if (!entry || entry.status !== "approved") continue;
+            if (entry.request.kind !== "instantSpell") continue;
+            const g = entry.grant;
+            if (!g) continue;
+            const isMe = myId ? g.grantedTo === myId : entry.direction === "outbound";
+            if (!isMe) continue;
+            const exp = typeof g.expiresAt === "number" ? g.expiresAt : null;
+            if (exp !== null && exp <= Date.now()) continue;
+            if (g.singleUse) consumeInstantId = rid;
+            return true;
+          }
+          return false;
+        })();
+      if (!isCurrent && !allowInstant && !type.includes("token")) {
         get().log(
           `Cannot play '${
             card.name
@@ -3447,7 +3529,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (
         !type.includes("site") &&
         !type.includes("token") &&
-        s.phase !== "Main"
+        s.phase !== "Main" &&
+        !allowInstant
       ) {
         get().log(
           `Cannot play '${card.name}' from ${from} during ${s.phase} phase`
@@ -3535,6 +3618,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             get().trySendPatch(patch);
           }
         }
+        // Consume single-use instant permission if present
+        let nextInteractionLog: GameState["interactionLog"] | undefined;
+        if (consumeInstantId) {
+          nextInteractionLog = { ...(s.interactionLog as GameState["interactionLog"]) };
+          const e0 = nextInteractionLog[consumeInstantId];
+          if (e0) nextInteractionLog[consumeInstantId] = { ...e0, status: "expired", updatedAt: Date.now() } as typeof e0;
+        }
         return {
           zones: pileName
             ? { ...s.zones, [who]: { ...z, [pileName]: pile } }
@@ -3542,6 +3632,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           board: { ...s.board, sites },
           dragFromPile: null,
           dragFromHand: false,
+          ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         } as Partial<GameState> as GameState;
       }
 
@@ -3590,6 +3681,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
+      // Consume single-use instant permission if present
+      let nextInteractionLog: GameState["interactionLog"] | undefined;
+      if (consumeInstantId) {
+        nextInteractionLog = { ...(s.interactionLog as GameState["interactionLog"]) };
+        const e0 = nextInteractionLog[consumeInstantId];
+        if (e0) nextInteractionLog[consumeInstantId] = { ...e0, status: "expired", updatedAt: Date.now() } as typeof e0;
+      }
       return {
         zones:
           from !== "tokens"
@@ -3601,6 +3699,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         permanents: per,
         dragFromPile: null,
         dragFromHand: false,
+        ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
       } as Partial<GameState> as GameState;
     }),
 
