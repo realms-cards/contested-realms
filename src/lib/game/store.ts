@@ -673,7 +673,8 @@ export type GameState = {
   setRemoteCursor: (cursor: RemoteCursorState) => void;
   pruneRemoteCursors: (olderThanMs: number) => void;
   getRemoteHighlightColor: (
-    card: { cardId?: number | null; slug?: string | null } | null | undefined
+    card: { cardId?: number | null; slug?: string | null } | null | undefined,
+    options?: { instanceKey?: string | null }
   ) => string | null;
   localPlayerId: string | null;
   setLocalPlayerId: (id: string | null) => void;
