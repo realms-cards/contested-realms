@@ -809,6 +809,7 @@ export const BOARD_PING_MAX_HISTORY = 8;
 
 // Snapshot of serializable game state we can restore on undo
 export type SerializedGame = {
+  actorKey: PlayerKey | null;
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
   phase: Phase;
@@ -1058,7 +1059,30 @@ export const useGameStore = create<GameState>((set, get) => ({
   transportSubscriptions: [],
   // Actor seat for online play; null in offline/hotseat
   actorKey: null,
-  setActorKey: (key) => set({ actorKey: key }),
+  setActorKey: (key) =>
+    set((state) => {
+      if (state.actorKey === key) return state as GameState;
+      if (!key) {
+        return { actorKey: null } as Partial<GameState> as GameState;
+      }
+
+      const promotedHistory = state.history.map((snap) =>
+        snap.actorKey ? snap : { ...snap, actorKey: key }
+      );
+      const nextHistoryByPlayer = {
+        ...state.historyByPlayer,
+      } as Record<PlayerKey, SerializedGame[]>;
+      const mine = promotedHistory
+        .filter((snap) => snap.actorKey === key)
+        .slice(-10);
+      nextHistoryByPlayer[key] = mine;
+
+      return {
+        actorKey: key,
+        history: promotedHistory.slice(-10),
+        historyByPlayer: nextHistoryByPlayer,
+      } as Partial<GameState> as GameState;
+    }),
   // Match end state
   matchEnded: false,
   winner: null,
@@ -2264,6 +2288,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   pushHistory: () =>
     set((s) => {
       const snap: SerializedGame = {
+        actorKey: s.actorKey ?? null,
         players: JSON.parse(JSON.stringify(s.players)),
         currentPlayer: s.currentPlayer,
         phase: s.phase,
@@ -2327,15 +2352,35 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       // Fallback to global history if nothing in per-player
       if (!prev) {
-        if (s.transport) {
-          try {
-            get().log("Nothing to undo for your seat yet");
-          } catch {}
+        if (!s.history.length) {
+          if (s.transport) {
+            try {
+              get().log("Nothing to undo for your seat yet");
+            } catch {}
+          }
           return s as GameState;
         }
-        if (!s.history.length) return s as GameState;
         const nextHist = [...s.history];
-        prev = nextHist.pop() || null;
+        let candidate: SerializedGame | null = null;
+        while (nextHist.length) {
+          const maybe = nextHist.pop() || null;
+          if (!maybe) continue;
+          const snapshotActor = maybe.actorKey ?? null;
+          const isOnline = !!s.transport;
+          if (!isOnline || snapshotActor === null || snapshotActor === s.actorKey) {
+            candidate = maybe;
+            break;
+          }
+        }
+        if (!candidate) {
+          if (s.transport) {
+            try {
+              get().log("Nothing to undo for your seat yet");
+            } catch {}
+          }
+          return s as GameState;
+        }
+        prev = candidate;
         historyNext = nextHist;
       }
       if (!prev) return s as GameState;
