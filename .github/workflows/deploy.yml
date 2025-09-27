@@ -121,6 +121,17 @@ jobs:
             $COMPOSE -f docker-compose.prod.yml up -d caddy
           fi
 
+          # One-time: ensure Caddy has persistent volumes mounted for /data and /config (to persist ACME certs/account)
+          # If the mounts are missing (older container), force-recreate Caddy to pick up new volume mappings.
+          if docker inspect sorcery-caddy >/dev/null 2>&1; then
+            HAS_DATA=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/data" }}yes{{ end }}{{ end }}' sorcery-caddy | grep -q yes && echo yes || echo no)
+            HAS_CONFIG=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/config" }}yes{{ end }}{{ end }}' sorcery-caddy | grep -q yes && echo yes || echo no)
+            if [ "$HAS_DATA" != "yes" ] || [ "$HAS_CONFIG" != "yes" ]; then
+              echo "Recreating Caddy to attach persistent volumes (/data, /config)"
+              $COMPOSE -f docker-compose.prod.yml up -d --no-deps --force-recreate caddy
+            fi
+          fi
+
           # Rolling restart servers to avoid downtime (do not restart caddy)
           $COMPOSE -f docker-compose.prod.yml up -d --no-deps --force-recreate server1
           wait_healthy sorcery-server-1

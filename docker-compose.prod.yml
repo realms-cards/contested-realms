@@ -87,9 +87,14 @@ services:
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
       - /var/log/caddy:/var/log/caddy
+      # Persist Caddy certificates and account data
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - server1
       - server2
 
 volumes:
   redisdata:
+  caddy_data:
+  caddy_config:
