@@ -19,6 +19,7 @@ function SignInContent() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isPasskeyBusy, setIsPasskeyBusy] = useState<boolean>(false);
   const [registerDisplayName, setRegisterDisplayName] = useState<string>('');
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -59,6 +60,7 @@ function SignInContent() {
   // Passkey sign-in (authentication)
   const handlePasskeySignIn = async (): Promise<void> => {
     setIsPasskeyBusy(true);
+    setPasskeyError(null);
     try {
       const res = await fetch('/api/webauthn/authentication/options', { method: 'POST' });
       if (!res.ok) throw new Error('Failed to get authentication options');
@@ -77,10 +79,58 @@ function SignInContent() {
     }
   };
 
+  const ensureDocumentFocus = async (): Promise<boolean> => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return true;
+    }
+
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      return true;
+    }
+
+    window.focus();
+
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      let timeoutId: number | undefined;
+
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('focus', onWindowFocus);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
+        }
+      };
+
+      const onWindowFocus = () => {
+        cleanup();
+        resolve(true);
+      };
+
+      const onVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && document.hasFocus()) {
+          cleanup();
+          resolve(true);
+        }
+      };
+
+      timeoutId = window.setTimeout(() => {
+        cleanup();
+        resolve(document.hasFocus());
+      }, 500);
+
+      window.addEventListener('focus', onWindowFocus, { once: true });
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    });
+  };
+
   // Passkey registration flow
   const handlePasskeyRegistration = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setIsPasskeyBusy(true);
+    setPasskeyError(null);
     try {
       const res = await fetch('/api/webauthn/registration/options', {
         method: 'POST',
@@ -89,6 +139,13 @@ function SignInContent() {
       });
       if (!res.ok) throw new Error('Failed to get registration options');
       const { options } = await res.json();
+
+      const hasFocus = await ensureDocumentFocus();
+      if (!hasFocus) {
+        setPasskeyError('Focus this tab to finish passkey registration, then try again.');
+        return;
+      }
+
       const attestation = await startRegistration(options);
       const vr = await fetch('/api/webauthn/registration/verify', {
         method: 'POST',
@@ -99,6 +156,17 @@ function SignInContent() {
       await handlePasskeySignIn();
     } catch (err) {
       console.error('Passkey registration failed:', err);
+      if (
+        err instanceof DOMException &&
+        err.name === 'NotAllowedError' &&
+        /document is not focused/i.test(err.message)
+      ) {
+        setPasskeyError('Your browser blocked the prompt because this tab is unfocused. Click the app and try again.');
+      } else if (err instanceof Error) {
+        setPasskeyError(err.message || 'Passkey registration failed. Please try again.');
+      } else {
+        setPasskeyError('Passkey registration failed. Please try again.');
+      }
     } finally {
       setIsPasskeyBusy(false);
     }
@@ -223,6 +291,11 @@ function SignInContent() {
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                 disabled={isPasskeyBusy}
               />
+              {passkeyError && (
+                <p className="text-sm text-red-400">
+                  {passkeyError}
+                </p>
+              )}
               <button
                 type="submit"
                 disabled={isPasskeyBusy}

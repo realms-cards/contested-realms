@@ -1,17 +1,50 @@
 import { z } from "zod";
 
 // Basic shared types
-export const PlayerInfoSchema = z.object({
+const PlayerInfoInputSchema = z.object({
   id: z.string(),
-  displayName: z.string(),
+  displayName: z.string().optional(),
+  name: z.string().optional(),
+  avatar: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  image: z.string().optional(),
 });
+
+type PlayerInfoInput = z.infer<typeof PlayerInfoInputSchema>;
+
+function normalizePlayerInfo(raw: PlayerInfoInput) {
+  const fallbackId = raw.id || "player";
+  const trimmedNameCandidates = [raw.displayName, raw.name]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
+  const displayName =
+    trimmedNameCandidates[0] ||
+    (fallbackId.length >= 4
+      ? `Player ${fallbackId.slice(-4)}`
+      : fallbackId || "Player");
+
+  const avatarCandidate = [raw.avatar, raw.avatarUrl, raw.image]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .find((value) => value.length > 0);
+
+  return {
+    id: raw.id,
+    displayName,
+    avatarUrl: avatarCandidate ?? null,
+  };
+}
+
+export const PlayerInfoSchema = PlayerInfoInputSchema.transform(normalizePlayerInfo);
 export type PlayerInfo = z.infer<typeof PlayerInfoSchema>;
 
-export const TournamentPlayerInfoSchema = z.object({
-  id: z.string(),
-  displayName: z.string(),
-  ready: z.boolean().default(false),
+const TournamentPlayerInfoInputSchema = PlayerInfoInputSchema.extend({
+  ready: z.boolean().optional(),
 });
+
+export const TournamentPlayerInfoSchema = TournamentPlayerInfoInputSchema.transform((raw) => ({
+  ...normalizePlayerInfo(raw),
+  ready: raw.ready ?? false,
+}));
 export type TournamentPlayerInfo = z.infer<typeof TournamentPlayerInfoSchema>;
 
 export const LobbyStatusSchema = z.enum(["open", "started", "closed"]);
