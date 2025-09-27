@@ -19,12 +19,40 @@ function mapToProtocolTournament(tournament: {
   format: string; 
   status: string;
   maxPlayers: number;
-  registeredPlayers?: Array<{ id: string; displayName: string; ready: boolean }>;
+  registeredPlayers?: Array<{
+    id: string;
+    displayName?: string | null;
+    name?: string | null;
+    ready?: boolean;
+    avatarUrl?: string | null;
+    avatar?: string | null;
+    image?: string | null;
+  }>;
   settings?: Record<string, unknown>;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
 }): ProtocolTournamentInfo {
+  const registeredPlayers = (tournament.registeredPlayers ?? []).map((player) => {
+    const id = player.id;
+    const trimmedNameCandidates = [player.displayName, player.name]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0);
+    const displayName =
+      trimmedNameCandidates[0] ||
+      (id && id.length >= 4 ? `Player ${id.slice(-4)}` : id || "Player");
+    const avatarCandidate = [player.avatarUrl, player.avatar, player.image]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .find((value) => value.length > 0);
+
+    return {
+      id,
+      displayName,
+      ready: player.ready ?? false,
+      avatarUrl: avatarCandidate ?? null,
+    };
+  });
+
   return {
     id: tournament.id,
     name: tournament.name,
@@ -36,7 +64,7 @@ function mapToProtocolTournament(tournament: {
           : (tournament.status === 'active' || tournament.status === 'preparing') ? 'playing'
           : 'completed',
     maxPlayers: tournament.maxPlayers,
-    registeredPlayers: tournament.registeredPlayers || [],
+    registeredPlayers,
     standings: [], // TODO: map when available
     currentRound: 0, // TODO: map when available
     totalRounds: (typeof tournament.settings?.totalRounds === 'number' ? tournament.settings.totalRounds : 3),
@@ -63,7 +91,15 @@ interface TournamentsAPI {
   endTournament: (tournamentId: string) => Promise<void>;
   tournaments: Array<{
     id: string; name: string; creatorId: string; format: string; status: string; maxPlayers: number;
-    registeredPlayers?: Array<{ id: string; displayName: string; ready: boolean }>;
+    registeredPlayers?: Array<{
+      id: string;
+      displayName?: string | null;
+      name?: string | null;
+      ready?: boolean;
+      avatarUrl?: string | null;
+      avatar?: string | null;
+      image?: string | null;
+    }>;
     settings?: Record<string, unknown>;
     createdAt: string; startedAt?: string; completedAt?: string;
   }>;
