@@ -292,13 +292,6 @@ function validateAction(game, action, playerId, context) {
       for (const key of Object.keys(action.board.sites)) {
         const nextTile = action.board.sites[key];
         const prevTile = currentSites[key];
-        // Sites cannot be tapped at all: reject any attempt to set tapped on an existing site
-        if (nextTile && Object.prototype.hasOwnProperty.call(nextTile, 'tapped')) {
-          // If site exists already and tapped value is being changed or explicitly set, reject
-          if (prevTile) {
-            return { ok: false, error: `Sites cannot be tapped` };
-          }
-        }
         // If both have a card, then it's an overwrite attempt
         if (nextTile && nextTile.card && prevTile && prevTile.card) {
           const cellNum = getCellNumber(key, getBoardWidth(game));

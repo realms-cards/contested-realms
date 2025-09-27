@@ -1970,7 +1970,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
                 isSnapshot,
               });
             } catch {}
-            const mustReject = /Cannot tap or untap opponent|Sites cannot be tapped/i.test(msg);
+            const mustReject = /Cannot tap or untap opponent/i.test(msg);
             if (mustReject) {
               if (actorSocketId) io.to(actorSocketId).emit('error', { message: msg || 'Illegal tap action', code: 'rules_violation' });
               return;
