@@ -999,6 +999,12 @@ export default function OnlineLayout({
                 >
                   Replays
                 </Link>
+                <Link
+                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
+                  href="/leaderboard"
+                >
+                  Leaderboard
+                </Link>
               </div>
               <UserBadge />
               {!isLobbyPage && (

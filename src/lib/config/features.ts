@@ -20,6 +20,9 @@ export interface FeatureFlags {
   audioOnlyRtc: {
     enabled: boolean;
   };
+  undo: {
+    enabled: boolean;
+  };
 }
 
 /**
@@ -53,6 +56,9 @@ export const FEATURE_FLAGS: FeatureFlags = {
   },
   audioOnlyRtc: {
     enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_AUDIO_ONLY, false)
+  },
+  undo: {
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_UNDO, true)
   }
 };
 
@@ -86,3 +92,4 @@ export const tournamentFeatures = {
  */
 export const FEATURE_SEAT_VIDEO: boolean = FEATURE_FLAGS.seatVideo.enabled;
 export const FEATURE_AUDIO_ONLY: boolean = FEATURE_FLAGS.audioOnlyRtc.enabled;
+export const FEATURE_UNDO: boolean = FEATURE_FLAGS.undo.enabled;

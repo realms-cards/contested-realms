@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   useMemo,
@@ -88,6 +88,7 @@ type PickItem = {
 function AuthenticatedDeckEditor() {
   const { status } = useSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   // Deck editor state (same as 2D version)
   const [decks, setDecks] = useState<DeckListItem[]>([]);
@@ -199,6 +200,44 @@ function AuthenticatedDeckEditor() {
   const cardLookupCacheRef = useRef(new Map<string, SearchResult | null>());
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
+
+  // Reliable navigation helper back to the match page
+  const goBackToMatch = useCallback(
+    (targetId?: string | null) => {
+      const id = typeof targetId === "string" && targetId.trim().length ? targetId : null;
+      const url = id ? `/online/play/${id}` : null;
+      try {
+        if (url) {
+          // Try hard navigation first (most reliable across contexts)
+          if (typeof window !== "undefined") {
+            try {
+              window.location.assign(url);
+            } catch {}
+          }
+          // Also attempt SPA replace to cover cases where client routing helps
+          try {
+            router.replace(url);
+          } catch {}
+        } else {
+          // Unknown match id – try going back, then fall back to generic play page
+          try {
+            window.history.back();
+          } catch {}
+          setTimeout(() => {
+            try {
+              window.location.assign("/online/play");
+            } catch {}
+          }, 250);
+        }
+      } catch {
+        // Last resort: go to lobby
+        try {
+          window.location.assign("/online/lobby");
+        } catch {}
+      }
+    },
+    [router]
+  );
 
   // Draft picks resolution progress (when opening editor in draft mode)
   const [draftLoadProgress, setDraftLoadProgress] = useState<{
@@ -1382,19 +1421,19 @@ function AuthenticatedDeckEditor() {
 
       setSaveMsg("Sealed deck submitted successfully!");
 
-      // Show waiting overlay for multiplayer coordination
+      // Show waiting overlay and navigate back to the match page reliably
       setWaitingForOtherPlayers(true);
 
-      // Redirect back to match page where the proper waiting overlay will be shown
-      setTimeout(() => {
-        window.location.href = `/online/play/${matchId}`;
-      }, 3000); // Allow time for the submission success message to be seen
+      // Attempt immediate navigation and schedule a couple of fallbacks
+      goBackToMatch(matchId);
+      window.setTimeout(() => goBackToMatch(matchId), 1200);
+      window.setTimeout(() => goBackToMatch(matchId), 3500);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
-  }, [isSealed, pick3D, searchParams, saveDeck, setName, metaByCardId]);
+  }, [isSealed, pick3D, searchParams, saveDeck, setName, metaByCardId, goBackToMatch]);
 
   const submitDraftDeck = useCallback(async () => {
     if (!isDraftMode) return;
@@ -1458,21 +1497,19 @@ function AuthenticatedDeckEditor() {
 
       setSaveMsg("Draft deck submitted successfully!");
 
-      // Show waiting overlay for multiplayer coordination
+      // Show waiting overlay and navigate back to the match page reliably
       setWaitingForOtherPlayers(true);
 
-      // Redirect back to match page where the proper waiting overlay will be shown
-      setTimeout(() => {
-        if (matchId) {
-          window.location.href = `/online/play/${matchId}`;
-        }
-      }, 3000); // Allow time for the submission success message to be seen
+      // Attempt immediate navigation and schedule a couple of fallbacks
+      goBackToMatch(matchId);
+      window.setTimeout(() => goBackToMatch(matchId), 1200);
+      window.setTimeout(() => goBackToMatch(matchId), 3500);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
-  }, [isDraftMode, pick3D, searchParams, saveDeck, setName, metaByCardId]);
+  }, [isDraftMode, pick3D, searchParams, saveDeck, setName, metaByCardId, goBackToMatch]);
 
   const loadDeck = useCallback(
     async (id: string) => {
@@ -2867,6 +2904,15 @@ function AuthenticatedDeckEditor() {
                 </p>
                 <div className="text-sm text-gray-500">
                   You will be redirected to the match page shortly.
+                </div>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    className="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    onClick={() => goBackToMatch(searchParams?.get("matchId"))}
+                  >
+                    Return to Match Now
+                  </button>
                 </div>
               </div>
             </div>

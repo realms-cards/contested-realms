@@ -1906,25 +1906,40 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (!changed) return state as GameState;
       return { remoteCursors: next } as Partial<GameState> as GameState;
     }),
-  getRemoteHighlightColor: (card) => {
+  getRemoteHighlightColor: (card, options) => {
     if (!card) return null;
     const state = get();
     const slug =
       typeof card.slug === "string" && card.slug.length > 0 ? card.slug : null;
     const cardId = Number.isFinite(card.cardId) ? Number(card.cardId) : null;
-    if (cardId === null && slug === null) return null;
+    const instanceKey = options?.instanceKey ?? null;
+    if (cardId === null && slug === null && instanceKey === null) return null;
     for (const entry of Object.values(state.remoteCursors || {})) {
       if (!entry?.highlight) continue;
-      const { cardId: highlightId, slug: highlightSlug } = entry.highlight;
-      const matchesId =
-        cardId !== null &&
-        Number.isFinite(highlightId) &&
-        Number(highlightId) === cardId;
-      const matchesSlug =
-        slug !== null &&
-        typeof highlightSlug === "string" &&
-        highlightSlug === slug;
-      if (!matchesId && !matchesSlug) continue;
+      const {
+        cardId: highlightId,
+        slug: highlightSlug,
+        instanceKey: highlightInstanceKey,
+      } = entry.highlight;
+      const instanceMatches =
+        instanceKey !== null &&
+        typeof highlightInstanceKey === "string" &&
+        highlightInstanceKey === instanceKey;
+      const allowFallback =
+        instanceKey === null || highlightInstanceKey === null;
+      let matchesId = false;
+      let matchesSlug = false;
+      if (allowFallback) {
+        matchesId =
+          cardId !== null &&
+          Number.isFinite(highlightId) &&
+          Number(highlightId) === cardId;
+        matchesSlug =
+          slug !== null &&
+          typeof highlightSlug === "string" &&
+          highlightSlug === slug;
+      }
+      if (!instanceMatches && !matchesId && !matchesSlug) continue;
       if (entry.playerKey === "p1") return PLAYER_COLORS.p1;
       if (entry.playerKey === "p2") return PLAYER_COLORS.p2;
       return PLAYER_COLORS.spectator;

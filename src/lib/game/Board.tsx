@@ -610,24 +610,46 @@ export default function Board({
   const resolveHighlight = useCallback((): RemoteCursorHighlight => {
     const state = useGameStore.getState();
 
-    const deriveCardMeta = (card: CardRef | null | undefined) => {
+    const deriveCardMeta = (
+      card: CardRef | null | undefined,
+      instanceKey?: string | null
+    ) => {
       if (!card) return null;
       const slug = typeof card.slug === "string" && card.slug.length > 0 ? card.slug : null;
       const cardId = Number.isFinite(card.cardId) ? Number(card.cardId) : null;
       const type = (card.type || "").toLowerCase();
       const isToken = type.includes("token");
-      if (cardId === null && !isToken) return null;
+      if (cardId === null && !isToken) {
+        // Allow highlighting purely via slug when no numeric identifier exists
+        if (!slug) return null;
+      }
       // For tokens dragged from hand, synthesize a unique negative id so we can highlight only that instance.
       const baseId = cardId ?? -Math.abs(Number(card.variantId ?? (Date.now() % 1000)));
       const syntheticId = baseId || -1;
-      return { slug, cardId: syntheticId };
+      return {
+        slug,
+        cardId: syntheticId,
+        instanceKey: instanceKey ?? null,
+      };
     };
 
-    const fromSelection = state.dragFromHand
-      ? deriveCardMeta(state.selectedCard?.card ?? state.dragFromPile?.card ?? null)
-      : deriveCardMeta(state.selectedCard?.card ?? null);
-    if (fromSelection) {
-      return fromSelection;
+    const selectedCard = state.selectedCard;
+    if (state.dragFromHand) {
+      if (selectedCard) {
+        const key = `hand:${selectedCard.who}:${selectedCard.index}`;
+        const meta = deriveCardMeta(selectedCard.card, key);
+        if (meta) return meta;
+      }
+      const pileCard = state.dragFromPile?.card ?? null;
+      if (pileCard) {
+        const key = `pile:${state.dragFromPile?.from ?? "unknown"}`;
+        const meta = deriveCardMeta(pileCard, key);
+        if (meta) return meta;
+      }
+    } else if (selectedCard) {
+      const key = `hand:${selectedCard.who}:${selectedCard.index}`;
+      const meta = deriveCardMeta(selectedCard.card, key);
+      if (meta) return meta;
     }
 
     const selPermanent = state.selectedPermanent;
@@ -635,14 +657,17 @@ export default function Board({
       const at = selPermanent.at;
       const index = selPermanent.index;
       const card = state.permanents?.[at]?.[index]?.card ?? null;
-      const meta = deriveCardMeta(card);
+      const meta = deriveCardMeta(card, `perm:${at}:${index}`);
       if (meta) {
         return meta;
       }
     }
 
     const pileDragCard = state.dragFromPile?.card ?? null;
-    const pileDragMeta = deriveCardMeta(pileDragCard);
+    const pileDragMeta = deriveCardMeta(
+      pileDragCard,
+      state.dragFromPile ? `pile:${state.dragFromPile.from ?? "unknown"}` : null
+    );
     if (pileDragMeta) {
       return pileDragMeta;
     }
@@ -725,7 +750,8 @@ export default function Board({
       positionsEqual(prev.position, payload.position) &&
       draggingEquals(prev.dragging, payload.dragging) &&
       ((prev.highlight?.slug || null) === (payload.highlight?.slug || null)) &&
-      ((prev.highlight?.cardId || null) === (payload.highlight?.cardId || null))
+      ((prev.highlight?.cardId || null) === (payload.highlight?.cardId || null)) &&
+      ((prev.highlight?.instanceKey || null) === (payload.highlight?.instanceKey || null))
     ) {
       // unchanged
       lastCursorRef.current = { ...payload };
@@ -1217,7 +1243,10 @@ export default function Board({
                       tileCoords,
                       playerPos.position
                     );
-                    const siteRemoteColor = getRemoteHighlightColor(site.card ?? null);
+                    const siteInstanceKey = `site:${x},${y}`;
+                    const siteRemoteColor = getRemoteHighlightColor(site.card ?? null, {
+                      instanceKey: siteInstanceKey,
+                    });
                     const siteGlowColor =
                       siteRemoteColor ??
                       (site.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
@@ -1361,7 +1390,10 @@ export default function Board({
                   // This puts burrowed cards under sites but still visible
                   const yPos = isBurrowed ? 0.0005 : 0.25;
 
-                  const remotePermanentColor = getRemoteHighlightColor(p.card ?? null);
+                  const permanentInstanceKey = `perm:${key}:${idx}`;
+                  const remotePermanentColor = getRemoteHighlightColor(p.card ?? null, {
+                    instanceKey: permanentInstanceKey,
+                  });
                   const permanentGlowColor =
                     remotePermanentColor ??
                     (owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
