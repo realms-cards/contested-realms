@@ -28,11 +28,15 @@ export default function GameToolbox({
   const log = useGameStore((s) => s.log);
   const sendInteraction = useGameStore((s) => s.sendInteractionRequest);
   const interactionLog = useGameStore((s) => s.interactionLog);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const localPlayerId = useGameStore((s) => s.localPlayerId);
 
   const isOnline = !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
 
   // UI state
   const [open, setOpen] = useState(false);
+  // Timer tick for live-updating countdowns (re-renders component)
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [drawSeat, setDrawSeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [drawPile, setDrawPile] = useState<"spellbook" | "atlas">("spellbook");
   const [drawCount, setDrawCount] = useState<number>(1);
@@ -59,6 +63,14 @@ export default function GameToolbox({
   const peekDialog = useGameStore((s) => s.peekDialog);
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
 
+  // Drive the indicator countdown via a simple interval
+  useEffect(() => {
+    const id = setInterval(() => {
+      setNowMs(Date.now());
+    }, 500);
+    return () => clearInterval(id as unknown as number);
+  }, []);
+
   // Track pending permission requests we initiated so we can react on approval
   const pendingRequestRef = useRef<
     Record<
@@ -71,6 +83,7 @@ export default function GameToolbox({
           count: number;
           from: "top" | "bottom";
         }
+      | { kind: "instantSpell" }
     >
   >({});
 
@@ -109,6 +122,24 @@ export default function GameToolbox({
   }
 
   // Actions
+  const isMyTurn = mySeat ? ((mySeat === "p1" ? 1 : 2) === currentPlayer) : false;
+  const showInstantRequest = isOnline && !!mySeat && !isMyTurn;
+
+  const handleRequestInstantSpell = () => {
+    if (!showInstantRequest) return;
+    const ttlMs = 20000; // 20s courtesy window
+    const rid = requestConsent(
+      "instantSpell",
+      "Request to play a card out of turn",
+      {
+        // Show a helpful summary in the consent dialog
+        proposedGrant: { singleUse: true, expiresAt: Date.now() + ttlMs },
+      }
+    );
+    if (rid) {
+      pendingRequestRef.current[rid] = { kind: "instantSpell" };
+    }
+  };
   const handleDraw = () => {
     const seat = drawSeat;
     if (isOnline && mySeat && seat !== mySeat) {
@@ -241,6 +272,47 @@ export default function GameToolbox({
 
   return (
     <div className="absolute bottom-3 right-3 z-20 text-white">
+      {/* Instant permission indicator */}
+      {(() => {
+        // Compute active instant permission and its remaining time
+        let msLeft: number | null = null;
+        let hasExpiry = false;
+        try {
+          const now = nowMs;
+          for (const entry of Object.values(interactionLog)) {
+            if (!entry || entry.status !== "approved") continue;
+            if (!entry.request || entry.request.kind !== "instantSpell") continue;
+            const g = entry.grant as
+              | { grantedTo?: string; expiresAt?: number; singleUse?: boolean }
+              | null
+              | undefined;
+            if (!g) continue;
+            const isMe = localPlayerId ? g.grantedTo === localPlayerId : entry.direction === "outbound";
+            if (!isMe) continue;
+            if (typeof g.expiresAt === "number") {
+              const left = g.expiresAt - now;
+              if (left > 0 && (msLeft === null || left > msLeft)) {
+                msLeft = left;
+                hasExpiry = true;
+              }
+            } else {
+              // No expiry => active without countdown
+              msLeft = 0;
+              hasExpiry = false;
+            }
+          }
+        } catch {}
+        const show = msLeft !== null && (hasExpiry ? msLeft > 0 : true);
+        if (!show) return null;
+        const seconds = hasExpiry ? Math.ceil(Math.max(0, msLeft as number) / 1000) : null;
+        return (
+          <div className="flex justify-end mb-2 pr-1">
+            <div className="rounded-full bg-purple-600/90 px-3 py-1 text-[11px] font-medium shadow ring-1 ring-white/10">
+              Instant permission active{hasExpiry && seconds !== null ? ` · ${seconds}s` : ""}
+            </div>
+          </div>
+        );
+      })()}
       <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg w-80">
         <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
           <div className="text-sm font-semibold">Toolbox</div>
@@ -253,6 +325,19 @@ export default function GameToolbox({
         </div>
         {open && (
           <div className="p-3 space-y-3 text-sm">
+            {/* Instant Spell (request when not your turn) */}
+            {showInstantRequest && (
+              <div>
+                <div className="font-medium mb-1">Instant: ask to play now</div>
+                <button
+                  className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1"
+                  onClick={handleRequestInstantSpell}
+                  title="Sends a consent request to the acting player"
+                >
+                  Ask Permission
+                </button>
+              </div>
+            )}
             {/* Draw Controls */}
             <div>
               <div className="font-medium mb-1">Draw from pile</div>

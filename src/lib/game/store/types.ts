@@ -151,6 +151,7 @@ export const BOARD_PING_MAX_HISTORY = 8;
 
 // Snapshot of serializable game state we can restore on undo
 export type SerializedGame = {
+  actorKey: PlayerKey | null;
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
   phase: Phase;
