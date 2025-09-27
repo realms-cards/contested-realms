@@ -92,37 +92,33 @@ function SignInContent() {
 
     return await new Promise<boolean>((resolve) => {
       let settled = false;
-      let timeoutId: number | undefined;
+      const timeoutId = window.setTimeout(handleTimeout, 500);
 
-      const cleanup = () => {
+      window.addEventListener('focus', onWindowFocus, { once: true });
+      document.addEventListener('visibilitychange', onVisibilityChange);
+
+      function resolveAndCleanup(result: boolean) {
         if (settled) return;
         settled = true;
         window.removeEventListener('focus', onWindowFocus);
         document.removeEventListener('visibilitychange', onVisibilityChange);
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
-        }
-      };
+        window.clearTimeout(timeoutId);
+        resolve(result);
+      }
 
-      const onWindowFocus = () => {
-        cleanup();
-        resolve(true);
-      };
+      function onWindowFocus() {
+        resolveAndCleanup(true);
+      }
 
-      const onVisibilityChange = () => {
+      function onVisibilityChange() {
         if (document.visibilityState === 'visible' && document.hasFocus()) {
-          cleanup();
-          resolve(true);
+          resolveAndCleanup(true);
         }
-      };
+      }
 
-      timeoutId = window.setTimeout(() => {
-        cleanup();
-        resolve(document.hasFocus());
-      }, 500);
-
-      window.addEventListener('focus', onWindowFocus, { once: true });
-      document.addEventListener('visibilitychange', onVisibilityChange);
+      function handleTimeout() {
+        resolveAndCleanup(document.hasFocus());
+      }
     });
   };
 
