@@ -1583,9 +1583,16 @@ export const useGameStore = create<GameState>((set, get) => ({
               }
             }
           } else {
-            // Actor unknown: do not send avatar mutations to avoid illegal opponent writes
-            // Drop avatars entirely when seat is unknown
-            delete (sanitized as unknown as { avatars?: unknown }).avatars;
+            // Actor unknown: keep provided seat(s) but strip 'tapped' to avoid illegal tap attempts
+            for (const k of keys) {
+              const v = (p.avatars as GameState["avatars"])[k] as
+                | AvatarState
+                | undefined;
+              if (!v || typeof v !== "object") continue;
+              const rest = { ...(v as unknown as Record<string, unknown>) };
+              delete (rest as Record<string, unknown>)["tapped"];
+              (out as Record<string, unknown>)[k] = rest as unknown;
+            }
           }
           if (Object.keys(out).length > 0) {
             sanitized.avatars = out as GameState["avatars"];
@@ -1610,6 +1617,17 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         }
         toSend = sanitized;
+      } catch {}
+    }
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        const p = toSend as ServerPatchT;
+        if (p.avatars && typeof p.avatars === "object") {
+          console.debug("[net] trySendPatch avatars ->", {
+            actorKey,
+            avatars: p.avatars,
+          });
+        }
       } catch {}
     }
     if (!tr) {
@@ -1708,13 +1726,23 @@ export const useGameStore = create<GameState>((set, get) => ({
             toSend = sanitized;
           } catch {}
         }
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            if (toSend.avatars && typeof toSend.avatars === "object") {
+              console.debug("[net] flushPendingPatches avatars ->", {
+                actorKey,
+                avatars: toSend.avatars,
+              });
+            }
+          } catch {}
+        }
+        // Send each patch
         tr.sendAction(toSend);
-        set({ lastLocalActionTs: Date.now() });
       } catch (err) {
+        sentAll = false;
         try {
           console.warn(`[net] Flush failed: ${String(err)}`);
         } catch {}
-        sentAll = false;
         break;
       }
     }
