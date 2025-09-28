@@ -88,12 +88,21 @@ export default function OnlineLayout({
 
   // Resolve the HTTP origin for the Socket server (for REST-like endpoints)
   const getSocketHttpOrigin = useCallback((): string => {
-    const exp = (process.env.NEXT_PUBLIC_WS_HTTP_ORIGIN || '').trim();
-    if (exp) return exp;
-    const ws = (process.env.NEXT_PUBLIC_WS_URL || '').trim();
-    if (ws.startsWith('ws://')) return ws.replace(/^ws:\/\//, 'http://');
-    if (ws.startsWith('wss://')) return ws.replace(/^wss:\/\//, 'https://');
-    return 'http://localhost:3010';
+    const explicit = (process.env.NEXT_PUBLIC_WS_HTTP_ORIGIN || "").trim();
+    if (explicit) return explicit;
+
+    const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || "").trim();
+    if (wsUrl) {
+      if (wsUrl.startsWith("ws://")) return wsUrl.replace(/^ws:\/\//, "http://");
+      if (wsUrl.startsWith("wss://")) return wsUrl.replace(/^wss:\/\//, "https://");
+      if (wsUrl.startsWith("http://") || wsUrl.startsWith("https://")) return wsUrl;
+    }
+
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return window.location.origin;
+    }
+
+    return "http://localhost:3010";
   }, []);
 
   const voiceScopeId = useMemo(() => {
