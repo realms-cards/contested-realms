@@ -16,6 +16,18 @@ import type { UseMatchWebRTCReturn } from "@/lib/rtc/useMatchWebRTC";
 
 export type VoiceRequestPeer = Pick<PlayerInfo, "id" | "displayName">;
 
+// HTTP-available players list item from the Socket server API
+export type AvailablePlayer = {
+  userId: string;
+  shortUserId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  presence: { online: boolean; inMatch: boolean };
+  isFriend: boolean;
+  lastPlayedAt?: string | null;
+  matchCountInLast10?: number | null;
+};
+
 export type VoiceIncomingRequest = {
   requestId: string;
   from: VoiceRequestPeer;
@@ -55,11 +67,17 @@ export type OnlineContextValue = {
   chatLog: ServerChatPayloadT[];
   // Extended state
   lobbies: LobbyInfo[];
-  players: PlayerInfo[];
+  players: PlayerInfo[]; // legacy socket-driven simple presence list (id/displayName)
+  // HTTP-derived available players list (richer data for invites UI)
+  availablePlayers: AvailablePlayer[];
+  availablePlayersNextCursor: string | null;
+  availablePlayersLoading: boolean;
+  playersError?: string | null;
   invites: LobbyInvitePayloadT[];
   // Extended actions
   requestLobbies: () => void;
-  requestPlayers: () => void;
+  // Fetch HTTP available players with optional query/sort/cursor. If reset=true, clears and loads first page.
+  requestPlayers: (opts?: { q?: string; sort?: "recent" | "alphabetical"; cursor?: string | null; reset?: boolean }) => void;
   setLobbyVisibility: (visibility: LobbyVisibility) => void;
   setLobbyPlan?: (planned: "constructed" | "sealed" | "draft") => void;
   inviteToLobby: (targetPlayerId: string, lobbyId?: string) => void;
