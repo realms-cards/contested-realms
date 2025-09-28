@@ -813,6 +813,16 @@ export default function OnlineMatchPage() {
   const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] =
     useState<boolean>(false);
 
+  // Frozen context for the match end overlay so results don't change if roster updates
+  const [finalEndContext, setFinalEndContext] = useState<
+    | {
+        winner: PlayerKey | null;
+        playerNames: { p1: string; p2: string };
+        myPlayerKey: PlayerKey | null;
+      }
+    | null
+  >(null);
+
   // Debug: page mount/unmount
   useEffect(() => {
     try {
@@ -972,11 +982,19 @@ export default function OnlineMatchPage() {
     }
   }, [matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
 
+  // When the overlay first opens, snapshot the end-of-match context to keep it stable
+  useEffect(() => {
+    if (matchEndOverlayOpen && !finalEndContext) {
+      setFinalEndContext({ winner, playerNames, myPlayerKey });
+    }
+  }, [matchEndOverlayOpen, finalEndContext, winner, playerNames, myPlayerKey]);
+
   // Reset match end overlay when joining a new match
   useEffect(() => {
     // Reset the overlay states when the match ID changes (new match)
     setMatchEndOverlayOpen(false);
     setMatchEndOverlayDismissed(false);
+    setFinalEndContext(null);
   }, [matchId]);
 
   // Check if we're in the correct match
@@ -1407,9 +1425,9 @@ export default function OnlineMatchPage() {
           {/* Match End Overlay */}
           <MatchEndOverlay
             isVisible={matchEndOverlayOpen}
-            winner={winner}
-            playerNames={playerNames}
-            myPlayerKey={myPlayerKey}
+            winner={finalEndContext ? finalEndContext.winner : winner}
+            playerNames={finalEndContext ? finalEndContext.playerNames : playerNames}
+            myPlayerKey={finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey}
             onClose={() => {
               setMatchEndOverlayOpen(false);
               setMatchEndOverlayDismissed(true);
