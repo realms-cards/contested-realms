@@ -1,3 +1,7 @@
+{
+    email kingofthe@realms.cards
+}
+
 ws.realms.cards {
     encode zstd gzip
     log {
