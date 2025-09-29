@@ -1,0 +1,63 @@
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
+import UserBadge from "@/components/auth/UserBadge";
+
+interface OnlinePageShellProps {
+  children: ReactNode;
+  className?: string;
+  showNav?: boolean;
+}
+
+const NAV_LINKS = [
+  { href: "/", label: "Home" },
+  { href: "/online/lobby", label: "Lobby" },
+  { href: "/decks", label: "Decks" },
+  { href: "/replay", label: "Replays" },
+  { href: "/leaderboard", label: "Leaderboard" },
+];
+
+export default function OnlinePageShell({
+  children,
+  className,
+  showNav = true,
+}: OnlinePageShellProps) {
+  const pathname = usePathname();
+
+  const containerClassName = `max-w-5xl mx-auto px-6 py-8 space-y-6${
+    className ? ` ${className}` : ""
+  }`;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100">
+      <div className={containerClassName}>
+        {showNav && (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold font-fantaisie">Online Play</h1>
+              {NAV_LINKS.map((link, index) => {
+                const active = pathname ? pathname === link.href || pathname.startsWith(`${link.href}/`) : false;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`${
+                      index === 0 ? "ml-2" : ""
+                    } text-xs underline transition-colors ${
+                      active ? "text-slate-100" : "text-slate-300/80 hover:text-slate-200"
+                    }`}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+            <UserBadge />
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}

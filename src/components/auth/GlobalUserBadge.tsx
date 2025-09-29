@@ -13,6 +13,10 @@ export default function GlobalUserBadge() {
   const isOnlineSection = pathname?.startsWith("/online");
   if (isOnlineSection) return null;
 
+  if (pathname && (pathname.startsWith("/replay") || pathname.startsWith("/leaderboard") || pathname.startsWith("/decks"))) {
+    return null;
+  }
+
   const wantsPresence = Boolean(pathname && pathname.includes("editor-3d"));
 
   return <UserBadge variant="floating" showPresence={wantsPresence} />;

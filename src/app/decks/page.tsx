@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
+import OnlinePageShell from "@/components/online/OnlinePageShell";
 import DeckImportCuriosa from "./DeckImportCuriosa";
 import DeckImportText from "./DeckImportText";
 import DeckItem from "./DeckItem";
@@ -161,128 +162,138 @@ export default function DecksPage() {
 
   if (!session) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="text-center space-y-4">
-          <div>Please sign in to view your decks.</div>
-          <div className="flex justify-center">
-            <AuthButton />
+      <OnlinePageShell>
+        <div className="pt-2">
+          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-center space-y-4">
+            <div className="text-sm text-slate-200">
+              Please sign in to view your decks.
+            </div>
+            <div className="flex justify-center">
+              <AuthButton />
+            </div>
           </div>
         </div>
-      </div>
+      </OnlinePageShell>
     );
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold font-fantaisie">Your Decks</h1>
-        <div className="ml-auto flex items-center gap-3">
-          <Link
-            href="/"
-            className="text-xs underline text-foreground/70 hover:text-foreground"
-          >
-            Home
-          </Link>
-          <Link
-            href="/online/lobby"
-            className="text-xs underline text-foreground/70 hover:text-foreground"
-          >
-            Lobby
-          </Link>
-          <button
-            onClick={() => setShowImport(!showImport)}
-            className="px-3 py-2 rounded bg-foreground/10 hover:bg-foreground/20 text-foreground border border-foreground/20"
-          >
-            Import Deck
-          </button>
-          <Link
-            href="/decks/editor-3d"
-            className="px-3 py-2 rounded bg-foreground text-background"
-          >
-            New Deck
-          </Link>
-        </div>
-      </div>
-
-      {/* Import panels - shown when Import Deck is clicked */}
-      {showImport && (
-        <div className="grid gap-4 p-4 bg-zinc-900/30 rounded-lg">
-          <DeckImportCuriosa />
-          <DeckImportText />
-        </div>
-      )}
-
-      {/* Import panels appear inline in the empty-state below to emphasize onboarding */}
-
-      {loading ? (
-        <div className="text-sm opacity-80">Loading decks...</div>
-      ) : error ? (
-        <div className="text-sm text-red-500">Error: {error}</div>
-      ) : (
-        <>
-          {/* My Decks Section */}
-          {myDecks.length === 0 ? (
-            <div className="text-sm opacity-80">
-              No decks yet. Create one from the{" "}
-              <Link href="/decks/editor-3d" className="underline">
-                editor
-              </Link>{" "}
-              , import an existing deck, or save from Draft.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <h2 className="text-xl font-semibold font-fantaisie">
+    <OnlinePageShell>
+      <div className="space-y-6 pt-2">
+        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold font-fantaisie text-slate-50">
                 Your Decks
-              </h2>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                {myDecks.map((d) => (
-                  <DeckItem
-                    key={d.id}
-                    deck={{
-                      id: d.id,
-                      name: d.name,
-                      format: d.format,
-                      isPublic: d.isPublic,
-                      imported: d.imported,
-                      avatarState: d.avatarState,
-                      avatarCard: d.avatarCard,
-                      updatedAt: d.updatedAt,
-                      isOwner: true,
-                    }}
-                  />
-                ))}
-              </div>
+              </h1>
+              <p className="text-sm text-slate-300/90">
+                Manage your collections, import decklists, and create new builds.
+              </p>
             </div>
-          )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowImport((prev) => !prev)}
+                className="rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200 transition-colors"
+              >
+                {showImport ? "Hide Importers" : "Import Deck"}
+              </button>
+              <Link
+                href="/decks/editor-3d"
+                className="rounded-lg bg-blue-600/80 hover:bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors"
+              >
+                New Deck
+              </Link>
+            </div>
+          </div>
+        </div>
 
-          {publicDecks.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="text-xl font-semibold font-fantaisie mt-8">
-                Public Decks
-              </h2>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                {publicDecks.map((d) => (
-                  <DeckItem
-                    key={d.id}
-                    deck={{
-                      id: d.id,
-                      name: d.name,
-                      format: d.format,
-                      imported: d.imported,
-                      userName: d.userName,
-                      avatarState: d.avatarState,
-                      avatarCard: d.avatarCard,
-                      updatedAt: d.updatedAt,
-                      isPublic: Boolean(d.isPublic),
-                      isOwner: false,
-                    }}
-                  />
-                ))}
+        {showImport && (
+          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5 space-y-4">
+            <DeckImportCuriosa />
+            <DeckImportText />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5 text-sm text-slate-300">
+            Loading decks...
+          </div>
+        ) : error ? (
+          <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/40 p-5 text-sm text-red-200">
+            Error: {error}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {myDecks.length === 0 ? (
+              <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-sm text-slate-300 space-y-2">
+                <div>No decks yet. Create one from the editor, import an existing list, or save from Draft.</div>
+                <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+                  <Link href="/decks/editor-3d" className="underline text-slate-200 hover:text-slate-100">
+                    Open Deck Editor
+                  </Link>
+                  <button
+                    onClick={() => setShowImport(true)}
+                    className="underline text-slate-200 hover:text-slate-100"
+                  >
+                    Show Import Tools
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+            ) : (
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                  Your Decks
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                  {myDecks.map((d) => (
+                    <DeckItem
+                      key={d.id}
+                      deck={{
+                        id: d.id,
+                        name: d.name,
+                        format: d.format,
+                        isPublic: d.isPublic,
+                        imported: d.imported,
+                        avatarState: d.avatarState,
+                        avatarCard: d.avatarCard,
+                        updatedAt: d.updatedAt,
+                        isOwner: true,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {publicDecks.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                  Public Decks
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                  {publicDecks.map((d) => (
+                    <DeckItem
+                      key={d.id}
+                      deck={{
+                        id: d.id,
+                        name: d.name,
+                        format: d.format,
+                        imported: d.imported,
+                        userName: d.userName,
+                        avatarState: d.avatarState,
+                        avatarCard: d.avatarCard,
+                        updatedAt: d.updatedAt,
+                        isPublic: Boolean(d.isPublic),
+                        isOwner: false,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </OnlinePageShell>
   );
 }
