@@ -6,6 +6,9 @@ import type { JWT } from 'next-auth/jwt';
 import { getServerSession } from 'next-auth/next';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import DiscordProvider from 'next-auth/providers/discord';
+import EmailProvider from 'next-auth/providers/email';
+import type { SendVerificationRequestParams } from 'next-auth/providers/email';
+import { createTransport } from 'nodemailer';
 import { prisma } from '@/lib/prisma';
 
 // Build providers list, always include Discord and optionally 2FA test provider
@@ -58,7 +61,98 @@ if (!discordClientId || !discordClientSecret) {
   throw new Error('Discord OAuth credentials are not configured');
 }
 
+const emailFrom = process.env.EMAIL_FROM;
+const emailServer = process.env.EMAIL_SERVER;
+
+if (!emailFrom || !emailServer) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn(
+      'EMAIL_FROM and EMAIL_SERVER are not fully configured; email magic links will be disabled.'
+    );
+  }
+}
+
+async function sendMagicLinkEmail({ identifier, url, provider, theme }: SendVerificationRequestParams): Promise<void> {
+  const transport = createTransport(provider.server);
+  const brandColor = theme?.brandColor || '#7c3aed';
+  const buttonTextColor = theme?.buttonText || '#ffffff';
+  const backgroundColor = '#0f172a';
+  const previewText = 'Use this link to finish signing in to Sorcery';
+  const subject = 'Welcome to Sorcery — Your secure sign-in link';
+  const text = `Welcome to Sorcery!
+
+Your one-time sign-in link is ready:
+${url}
+
+This link expires in 24 hours. If you did not request it, you can safely ignore this email.
+
+See you in the Realms,
+The Sorcery Team`;
+
+  const escapedUrl = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sorcery Sign-in</title>
+  </head>
+  <body style="margin:0;padding:0;background:${backgroundColor};font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#e2e8f0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${backgroundColor};padding:32px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellspacing="0" cellpadding="0" style="background:#111827;border-radius:16px;padding:32px;text-align:left;">
+            <tr>
+              <td style="font-size:28px;font-weight:700;color:#f8fafc;">Welcome to Sorcery</td>
+            </tr>
+            <tr>
+              <td style="padding-top:12px;font-size:15px;line-height:1.6;color:#cbd5f5;">
+                Thanks for joining the Realms. Use the secure button below to finish signing in.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:24px;padding-bottom:32px;">
+                <a href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:12px;font-weight:600;">Complete sign-in</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;line-height:1.6;color:#94a3b8;">
+                Link expires in 24 hours. If you didn’t request this, you can ignore this message.
+              </td>
+            </tr>
+          </table>
+          <p style="margin-top:16px;font-size:12px;color:#475569;">Sent securely by Sorcery • ${previewText}</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  try {
+    await transport.sendMail({
+      to: identifier,
+      from: provider.from,
+      subject,
+      text,
+      html,
+    });
+  } catch (error) {
+    console.error('Failed to send magic link email:', error);
+    throw error;
+  }
+}
+
 const providers = [
+  ...(emailFrom && emailServer
+    ? [
+        EmailProvider({
+          from: emailFrom,
+          server: emailServer,
+          maxAge: 60 * 60 * 24, // 24 hours
+          sendVerificationRequest: sendMagicLinkEmail,
+        }),
+      ]
+    : []),
   DiscordProvider({
     clientId: discordClientId,
     clientSecret: discordClientSecret,
@@ -214,6 +308,10 @@ export const authOptions: NextAuthOptions = {
             (token as Record<string, unknown>).picture = nextImage ?? undefined;
             (token as Record<string, unknown>).image = nextImage ?? undefined;
           }
+          const nextEmail = (session as Record<string, unknown>).email;
+          if (typeof nextEmail === 'string' || nextEmail === null) {
+            token.email = nextEmail === null ? null : nextEmail;
+          }
         } catch {}
       }
       // Ensure user record exists in database for all providers when using JWT strategy
@@ -239,15 +337,30 @@ export const authOptions: NextAuthOptions = {
             token.id = dbUser.id;
             // Keep token fields aligned with DB
             token.name = dbUser.name || token.name;
+            token.email = dbUser.email ?? null;
             (token as Record<string, unknown>).picture = dbUser.image || (token as Record<string, unknown>).picture;
             (token as Record<string, unknown>).image = dbUser.image || (token as Record<string, unknown>).image;
+            (token as Record<string, unknown>).emailVerified = dbUser.emailVerified
+              ? dbUser.emailVerified.toISOString()
+              : null;
           } else {
             // For credentials providers (2fa, passkey), user.id is already set from authorize
             token.id = user.id;
             // Propagate initial name/image as well
             token.name = user.name || token.name;
+            if (typeof user.email === 'string') {
+              token.email = user.email;
+            } else if (user.email === null) {
+              token.email = null;
+            }
             (token as Record<string, unknown>).picture = user.image || (token as Record<string, unknown>).picture;
             (token as Record<string, unknown>).image = user.image || (token as Record<string, unknown>).image;
+            const userEmailVerified = (user as { emailVerified?: Date | null }).emailVerified;
+            if (userEmailVerified instanceof Date) {
+              (token as Record<string, unknown>).emailVerified = userEmailVerified.toISOString();
+            } else if (userEmailVerified === null) {
+              (token as Record<string, unknown>).emailVerified = null;
+            }
           }
         } catch (error) {
           console.error('Error ensuring user exists:', error);
@@ -273,11 +386,15 @@ export const authOptions: NextAuthOptions = {
           try {
             const dbUser = await prisma.user.findUnique({
               where: { id: uid },
-              select: { name: true, image: true },
+              select: { name: true, image: true, email: true, emailVerified: true },
             });
             if (dbUser) {
               (session.user as { name?: string | null }).name = dbUser.name ?? session.user.name;
               (session.user as { image?: string | null }).image = dbUser.image ?? (session.user as { image?: string | null }).image ?? null;
+              (session.user as { email?: string | null }).email = dbUser.email ?? null;
+              (session.user as { emailVerified?: string | null }).emailVerified = dbUser.emailVerified
+                ? dbUser.emailVerified.toISOString()
+                : null;
             }
           } catch {
             // Fallback to token-provided values when DB is unavailable
@@ -294,6 +411,16 @@ export const authOptions: NextAuthOptions = {
               ?? (token as Record<string, unknown>).image as string | undefined;
             if (typeof tokenImage === 'string') {
               (session.user as { image?: string | null }).image = tokenImage;
+            }
+            const tokenEmail = token.email as string | null | undefined;
+            if (typeof tokenEmail === 'string') {
+              (session.user as { email?: string | null }).email = tokenEmail;
+            } else if (tokenEmail === null) {
+              (session.user as { email?: string | null }).email = null;
+            }
+            const tokenEmailVerified = (token as Record<string, unknown>).emailVerified;
+            if (typeof tokenEmailVerified === 'string' || tokenEmailVerified === null) {
+              (session.user as { emailVerified?: string | null }).emailVerified = tokenEmailVerified ?? null;
             }
           }
         }
@@ -320,4 +447,3 @@ export async function getServerAuthSession(): Promise<AppSession> {
     return null;
   }
 }
-

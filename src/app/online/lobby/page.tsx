@@ -169,52 +169,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   const [chatInput, setChatInput] = useState("");
   // Default to global when not in a lobby; will auto-switch on join/leave transitions
   const [chatTab, setChatTab] = useState<"lobby" | "global">("global");
-  
-  // Top tabs removed: invites are shown inline above the friends list
-  // Discoverability (presence) first-run prompt
-  const [presencePromptOpen, setPresencePromptOpen] = useState<boolean>(false);
-  const [presenceHidden, setPresenceHidden] = useState<boolean>(false);
-  const [presenceBusy, setPresenceBusy] = useState<boolean>(false);
-  const presencePromptKey = 'presencePrompt:v1';
 
-  useEffect(() => {
-    // Only show prompt once per device unless user resets storage
-    const seen = typeof window !== 'undefined' ? window.localStorage.getItem(presencePromptKey) : '1';
-    // If already seen, no need to fetch
-    if (seen === '1') return;
-    // Fetch current presence to display current state; defaults to visible
-    (async () => {
-      try {
-        const res = await fetch('/api/users/me/presence');
-        if (res.ok) {
-          const data = await res.json();
-          setPresenceHidden(!!data?.hidden);
-        }
-      } catch {}
-      setPresencePromptOpen(true);
-    })();
-  }, []);
 
-  async function updatePresence(hidden: boolean) {
-    try {
-      setPresenceBusy(true);
-      const res = await fetch('/api/users/me/presence', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ hidden }),
-      });
-      if (res.ok) {
-        setPresenceHidden(hidden);
-      }
-    } catch (e) {
-      console.warn('Failed to update presence', e);
-    } finally {
-      setPresenceBusy(false);
-      try { window.localStorage.setItem(presencePromptKey, '1'); } catch {}
-      setPresencePromptOpen(false);
-    }
-  }
-  
   const voiceEnabled = voice?.enabled ?? false;
   const incomingVoiceRequest = voice?.incomingRequest ?? null;
   const outgoingVoiceRequest = voice?.outgoingRequest ?? null;
@@ -836,44 +792,6 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           />
         </div>
       </div>
-
-      {/* Discoverability Prompt */}
-      {presencePromptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60" onClick={() => { /* enforce explicit choice */ }} />
-          <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
-            <div className="text-base font-semibold mb-1">Discoverability</div>
-            <div className="text-sm text-slate-300 mb-3">
-              You can be visible to other players when you are online and not in a match. This helps friends find and invite you.
-            </div>
-            <div className="text-sm text-slate-200 mb-3">Current setting: {presenceHidden ? 'Hidden' : 'Visible'}</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                className="px-3 py-2 rounded bg-emerald-600/90 hover:bg-emerald-600 text-sm disabled:opacity-50"
-                disabled={presenceBusy || !presenceHidden}
-                onClick={() => updatePresence(false)}
-                title="Show me in the available players list"
-              >
-                Stay Visible
-              </button>
-              <button
-                className="px-3 py-2 rounded bg-slate-700/80 hover:bg-slate-700 text-sm disabled:opacity-50"
-                disabled={presenceBusy || presenceHidden}
-                onClick={() => updatePresence(true)}
-                title="Hide me from the available players list"
-              >
-                Go Invisible
-              </button>
-            </div>
-            <div className="text-[11px] opacity-70 mt-3">
-              You can change this later in your profile settings.
-            </div>
-          </div>
-        </div>
-      )}
-
-      
-
       {/* Match Configuration Overlay (Host) */}
       {isHost && configOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

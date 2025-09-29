@@ -3,7 +3,7 @@
 import { Settings, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
 import React, {
   useContext,
   useEffect,
@@ -16,6 +16,8 @@ import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 import { useSound } from "@/lib/contexts/SoundContext";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 /**
  * UserBadge
@@ -35,6 +37,7 @@ export default function UserBadge({
 }) {
   const { data: session, status, update: updateSession } = useSession();
   const user = session?.user;
+  const userEmailVerifiedRaw = (user as { emailVerified?: string | Date | null } | undefined)?.emailVerified ?? null;
   const onlineCtx = useContext(OnlineContext);
   const connected: boolean = onlineCtx ? !!onlineCtx.connected : false;
   const voice = onlineCtx?.voice;
@@ -47,30 +50,41 @@ export default function UserBadge({
   const { volume, setVolume, playCardShuffle } = useSound();
   const volumeSliderId = useId();
   const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState(() => (user?.email as string | undefined) ?? "");
+  const [serverEmail, setServerEmail] = useState(() => (user?.email as string | undefined) ?? "");
+  const [emailVerified, setEmailVerified] = useState<boolean>(() => Boolean(userEmailVerifiedRaw));
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(
     undefined
   );
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [verificationSending, setVerificationSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleOpenSettings = useCallback(() => {
     setProfileSuccess(null);
     setProfileError(null);
     setProfileName(user?.name ?? "");
+    setProfileEmail((user?.email as string | undefined) ?? "");
+    setServerEmail((user?.email as string | undefined) ?? "");
+    setEmailVerified(Boolean(userEmailVerifiedRaw));
     setAvatarDataUrl(undefined);
     setOpen(false);
     setSettingsOpen(true);
-  }, [user?.name]);
+  }, [user?.email, user?.name, userEmailVerifiedRaw]);
   const handleCloseSettings = useCallback(() => {
     setSettingsOpen(false);
     setProfileSuccess(null);
     setProfileError(null);
     setProfileName(user?.name ?? "");
+    setProfileEmail((user?.email as string | undefined) ?? "");
+    setServerEmail((user?.email as string | undefined) ?? "");
+    setEmailVerified(Boolean(userEmailVerifiedRaw));
     setAvatarDataUrl(undefined);
+    setVerificationSending(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [user?.name]);
+  }, [user?.email, user?.name, userEmailVerifiedRaw]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -99,8 +113,32 @@ export default function UserBadge({
   }, [user?.name]);
 
   useEffect(() => {
+    const nextEmail = (user?.email as string | undefined) ?? "";
+    setProfileEmail(nextEmail);
+    setServerEmail(nextEmail);
+    setEmailVerified(Boolean(userEmailVerifiedRaw));
+  }, [user?.email, userEmailVerifiedRaw]);
+
+  useEffect(() => {
     setAvatarDataUrl(undefined);
   }, [user?.image]);
+
+  const sendVerificationLink = useCallback(async (email: string): Promise<boolean> => {
+    setVerificationSending(true);
+    try {
+      const result = await signIn("email", {
+        email,
+        callbackUrl: "/",
+        redirect: false,
+      });
+      return Boolean(result?.ok);
+    } catch (error) {
+      console.error("Verification email error:", error);
+      return false;
+    } finally {
+      setVerificationSending(false);
+    }
+  }, []);
 
   // Loading shimmer (minimal): avoid floating placeholder to prevent gray pill flash
   if (status === "loading") {
@@ -174,6 +212,18 @@ export default function UserBadge({
       updates.displayName = "";
     }
 
+    const trimmedEmail = profileEmail.trim();
+    const normalizedEmail = trimmedEmail.length > 0 ? trimmedEmail.toLowerCase() : "";
+    const currentEmailNormalized = serverEmail.trim().toLowerCase();
+    if (normalizedEmail !== currentEmailNormalized) {
+      if (normalizedEmail && !EMAIL_REGEX.test(normalizedEmail)) {
+        setProfileError("Enter a valid email address.");
+        setProfileSuccess(null);
+        return;
+      }
+      updates.email = normalizedEmail || null;
+    }
+
     if (avatarDataUrl !== undefined) {
       updates.avatar = avatarDataUrl ?? null;
     }
@@ -198,22 +248,50 @@ export default function UserBadge({
 
       const data = (await res.json()) as {
         error?: string;
-        user?: { name: string | null; image: string | null };
+        user?: { name: string | null; image: string | null; email: string | null; emailVerified: string | null };
         success?: boolean;
+        emailChanged?: boolean;
       };
 
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to update profile.");
       }
 
-      if (data.user && typeof updateSession === "function") {
+      if (data.user) {
         // Immediately reflect in UI without storing large data URLs in JWT cookie
         setAvatarDataUrl(data.user.image ?? null);
-        if (data.user.name) setProfileName(data.user.name);
-        await updateSession({ name: data.user.name ?? undefined });
+        if (data.user.name !== undefined) setProfileName(data.user.name ?? "");
+        setProfileEmail(data.user.email ?? "");
+        setServerEmail(data.user.email ?? "");
+        setEmailVerified(Boolean(data.user.emailVerified));
       }
 
-      setProfileSuccess("Profile updated.");
+      if (data.user && typeof updateSession === "function") {
+        await updateSession({
+          name: data.user.name ?? undefined,
+          email: data.user.email ?? null,
+        });
+      }
+
+      let successMessage = "Profile updated.";
+
+      if (data.emailChanged) {
+        if (data.user?.email) {
+          const sent = await sendVerificationLink(data.user.email);
+          if (sent) {
+            successMessage = `Profile updated. Verification email sent to ${data.user.email}.`;
+            setEmailVerified(false);
+          } else {
+            successMessage = "Profile updated.";
+            setProfileError("Profile updated, but we couldn't send a verification email. Try again below.");
+          }
+        } else {
+          successMessage = "Profile updated. Email removed.";
+          setEmailVerified(false);
+        }
+      }
+
+      setProfileSuccess(successMessage);
     } catch (error) {
       setProfileError(
         error instanceof Error ? error.message : "Update failed."
@@ -223,7 +301,34 @@ export default function UserBadge({
     }
   };
 
+  const handleSendVerificationEmail = async () => {
+    if (verificationSending) return;
+    const trimmed = profileEmail.trim().toLowerCase();
+    setProfileSuccess(null);
+    setProfileError(null);
+    if (!trimmed) {
+      setProfileError("Enter an email address first.");
+      return;
+    }
+    if (!EMAIL_REGEX.test(trimmed)) {
+      setProfileError("Enter a valid email address.");
+      return;
+    }
+    const sent = await sendVerificationLink(trimmed);
+    if (sent) {
+      setProfileSuccess(`Verification email sent to ${trimmed}.`);
+      setEmailVerified(false);
+      if (profileEmail !== trimmed) setProfileEmail(trimmed);
+    } else {
+      setProfileError("We couldn't send the verification email. Try again shortly.");
+    }
+  };
+
   const avatarImageSrc = previewAvatar ?? null;
+  const normalizedEmailInput = profileEmail.trim().toLowerCase();
+  const normalizedServerEmail = serverEmail.trim().toLowerCase();
+  const emailDirty = normalizedEmailInput !== normalizedServerEmail;
+  const canSendVerification = Boolean(normalizedServerEmail) && !emailDirty && !emailVerified;
   const avatarIsDataUrl =
     typeof avatarImageSrc === "string" && avatarImageSrc.startsWith("data:");
   const avatar = avatarImageSrc ? (
@@ -453,6 +558,44 @@ export default function UserBadge({
               </button>
             </div>
             <div className="mt-3 flex flex-col gap-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                <span>Email Address (optional)</span>
+                <input
+                  type="email"
+                  value={profileEmail}
+                  onChange={(e) => {
+                    setProfileEmail(e.currentTarget.value);
+                    setProfileSuccess(null);
+                    setProfileError(null);
+                  }}
+                  autoComplete="email"
+                  className="h-9 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+                  placeholder="you@example.com"
+                />
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                <span className="leading-tight">
+                  {normalizedServerEmail || profileEmail.trim()
+                    ? emailDirty
+                      ? "Save to apply your email changes."
+                      : emailVerified
+                      ? "Email verified."
+                      : "Email pending verification."
+                    : "Add an email to enable magic link sign-in."}
+                </span>
+                {canSendVerification && (
+                  <button
+                    type="button"
+                    onClick={handleSendVerificationEmail}
+                    disabled={verificationSending}
+                    className={`inline-flex items-center gap-1 rounded bg-white/10 px-2 py-1 text-[11px] text-white hover:bg-white/20 ${
+                      verificationSending ? "opacity-60 cursor-progress" : ""
+                    }`}
+                  >
+                    {verificationSending ? "Sending…" : "Send verification email"}
+                  </button>
+                )}
+              </div>
               <label className="flex flex-col gap-1 text-xs text-slate-300">
                 <span>Display Name</span>
                 <input

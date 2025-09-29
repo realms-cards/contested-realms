@@ -19,7 +19,7 @@ interface OnlineConsoleProps {
   hideLeaveButton?: boolean;
   defaultOpen?: boolean;
   hideChat?: boolean;
-  position?: 'bottom-left' | 'top-right';
+  position?: 'bottom-left' | 'top-right' | 'top-left';
 }
 
 type TabType = 'events' | 'chat';
@@ -157,9 +157,16 @@ export default function OnlineConsole({
     }
   };
 
-  const positionClasses = position === 'top-right' 
-    ? 'right-3 top-2' 
-    : 'left-3 bottom-2';
+  const positionClasses = (() => {
+    switch (position) {
+      case 'top-right':
+        return 'right-3 top-2';
+      case 'top-left':
+        return 'left-3 top-2';
+      default:
+        return 'left-3 bottom-2';
+    }
+  })();
 
   return (
     <div

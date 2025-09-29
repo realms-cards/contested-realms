@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
+import OnlinePageShell from "@/components/online/OnlinePageShell";
 import { SocketTransport } from "@/lib/net/socketTransport";
 
 interface MatchRecordingSummary {
@@ -24,7 +25,6 @@ export default function ReplayListPage() {
   const [connected, setConnected] = useState(false);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const { data: session } = useSession();
-  
 
   useEffect(() => {
     let isMounted = true;
@@ -122,84 +122,80 @@ export default function ReplayListPage() {
 
   if (!connected) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white">Connecting...</div>
-      </div>
+      <OnlinePageShell>
+        <div className="flex items-center justify-center py-32">
+          <div className="text-sm text-slate-300">Connecting to replay service…</div>
+        </div>
+      </OnlinePageShell>
     );
   }
 
-
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-fantaisie">Match Replays</h1>
-          <button
-            onClick={() => router.push("/online/lobby")}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-          >
-            Back to Online
-          </button>
-        </div>
-
+    <OnlinePageShell>
+      <div className="space-y-6 pt-2">
         {loading ? (
-          <div className="text-center py-12">
-            <div className="text-lg">Loading recordings...</div>
+          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 text-center text-sm text-slate-300">
+            Loading recordings…
           </div>
         ) : recordings.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-lg text-slate-400">
-              No match recordings found
+          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-8 text-center space-y-2">
+            <div className="text-base font-semibold text-slate-100">
+              No match recordings found.
             </div>
-            <div className="text-sm text-slate-500 mt-2">
+            <div className="text-sm text-slate-400">
               Play some online matches to generate replays!
             </div>
           </div>
         ) : (
-          <div className="space-y-8">
-            {/* Own Matches Section */}
+          <div className="space-y-6">
             {ownRecordings.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4 text-white">
-                  Your Matches
-                </h2>
-                <div className="grid gap-4">
+              <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                    Your Matches
+                  </h2>
+                  <span className="text-xs text-slate-400">
+                    {ownRecordings.length} replays
+                  </span>
+                </div>
+                <div className="grid gap-3">
                   {ownRecordings.map((recording) => (
                     <div
                       key={recording.matchId}
-                      className="bg-slate-800 rounded-lg p-4 hover:bg-slate-750 transition-colors cursor-pointer ring-1 ring-blue-500/20"
-                      onClick={() =>
-                        router.push(`/replay/${recording.matchId}`)
-                      }
+                      className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/replay/${recording.matchId}`)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="text-sm font-semibold text-slate-100">
                               {recording.playerNames.join(" vs ")}
                             </h3>
                             <span
-                              className={`px-2 py-1 rounded text-xs ${
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
                                 recording.matchType === "sealed"
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-green-600 text-white"
+                                  ? "bg-blue-500/60 text-blue-50"
+                                  : "bg-emerald-500/60 text-emerald-50"
                               }`}
                             >
                               {recording.matchType}
                             </span>
                           </div>
-                          <div className="text-sm text-slate-400">
+                          <div className="text-xs text-slate-400">
                             {formatDate(recording.startTime)}
                           </div>
                         </div>
-                        <div className="text-right text-sm text-slate-400">
+                        <div className="text-right text-xs text-slate-400 space-y-1">
                           <div>
-                            Duration:{" "}
+                            <span className="uppercase tracking-wide text-slate-500">Duration:</span>{" "}
                             {recording.duration
                               ? formatDuration(recording.duration)
                               : "In Progress"}
                           </div>
-                          <div>Actions: {recording.actionCount}</div>
+                          <div>
+                            <span className="uppercase tracking-wide text-slate-500">Actions:</span>{" "}
+                            {recording.actionCount}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -208,49 +204,54 @@ export default function ReplayListPage() {
               </div>
             )}
 
-            {/* Other Matches Section */}
             {otherRecordings.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4 text-white">
-                  Other Matches
-                </h2>
-                <div className="grid gap-4">
+              <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                    Other Matches
+                  </h2>
+                  <span className="text-xs text-slate-400">
+                    {otherRecordings.length} replays
+                  </span>
+                </div>
+                <div className="grid gap-3">
                   {otherRecordings.map((recording) => (
                     <div
                       key={recording.matchId}
-                      className="bg-slate-800 rounded-lg p-4 hover:bg-slate-750 transition-colors cursor-pointer"
-                      onClick={() =>
-                        router.push(`/replay/${recording.matchId}`)
-                      }
+                      className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/replay/${recording.matchId}`)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="text-sm font-semibold text-slate-100">
                               {recording.playerNames.join(" vs ")}
                             </h3>
                             <span
-                              className={`px-2 py-1 rounded text-xs ${
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
                                 recording.matchType === "sealed"
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-green-600 text-white"
+                                  ? "bg-blue-500/60 text-blue-50"
+                                  : "bg-emerald-500/60 text-emerald-50"
                               }`}
                             >
                               {recording.matchType}
                             </span>
                           </div>
-                          <div className="text-sm text-slate-400">
+                          <div className="text-xs text-slate-400">
                             {formatDate(recording.startTime)}
                           </div>
                         </div>
-                        <div className="text-right text-sm text-slate-400">
+                        <div className="text-right text-xs text-slate-400 space-y-1">
                           <div>
-                            Duration:{" "}
+                            <span className="uppercase tracking-wide text-slate-500">Duration:</span>{" "}
                             {recording.duration
                               ? formatDuration(recording.duration)
                               : "In Progress"}
                           </div>
-                          <div>Actions: {recording.actionCount}</div>
+                          <div>
+                            <span className="uppercase tracking-wide text-slate-500">Actions:</span>{" "}
+                            {recording.actionCount}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -261,6 +262,6 @@ export default function ReplayListPage() {
           </div>
         )}
       </div>
-    </div>
+    </OnlinePageShell>
   );
 }

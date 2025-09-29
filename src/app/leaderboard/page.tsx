@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
+import OnlinePageShell from "@/components/online/OnlinePageShell";
 
 interface LeaderboardEntry {
   rank: number;
@@ -37,21 +38,27 @@ export default function LeaderboardPage() {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [format, setFormat] = useState<'constructed' | 'sealed' | 'draft'>('constructed');
-  const [timeFrame, setTimeFrame] = useState<'all_time' | 'monthly' | 'weekly'>('all_time');
+  const [format, setFormat] = useState<"constructed" | "sealed" | "draft">(
+    "constructed"
+  );
+  const [timeFrame, setTimeFrame] = useState<"all_time" | "monthly" | "weekly">(
+    "all_time"
+  );
 
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/leaderboard?format=${format}&timeFrame=${timeFrame}&limit=50`);
+      const response = await fetch(
+        `/api/leaderboard?format=${format}&timeFrame=${timeFrame}&limit=50`
+      );
       if (!response.ok) {
-        throw new Error('Failed to fetch leaderboard');
+        throw new Error("Failed to fetch leaderboard");
       }
       const result = await response.json();
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -65,10 +72,14 @@ export default function LeaderboardPage() {
 
   const getTimeFrameDisplay = (timeFrame: string) => {
     switch (timeFrame) {
-      case 'all_time': return 'All Time';
-      case 'monthly': return 'This Month';
-      case 'weekly': return 'This Week';
-      default: return timeFrame;
+      case "all_time":
+        return "All Time";
+      case "monthly":
+        return "This Month";
+      case "weekly":
+        return "This Week";
+      default:
+        return timeFrame;
     }
   };
 
@@ -77,171 +88,204 @@ export default function LeaderboardPage() {
   };
 
   const getRankBadgeColor = (rank: number) => {
-    if (rank === 1) return 'from-yellow-400 to-yellow-600';
-    if (rank === 2) return 'from-gray-300 to-gray-500';
-    if (rank === 3) return 'from-amber-600 to-amber-800';
-    if (rank <= 10) return 'from-blue-500 to-blue-700';
-    return 'from-slate-600 to-slate-800';
+    if (rank === 1) return "from-yellow-400 to-yellow-600";
+    if (rank === 2) return "from-gray-300 to-gray-500";
+    if (rank === 3) return "from-amber-600 to-amber-800";
+    if (rank <= 10) return "from-blue-500 to-blue-700";
+    return "from-slate-600 to-slate-800";
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Global Leaderboard</h1>
-            <p className="text-sm text-slate-300">
-              Compete with players across all game formats
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-sm"
-              onClick={fetchLeaderboard}
-              disabled={loading}
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-300">Format:</span>
-              {(['constructed', 'sealed', 'draft'] as const).map((f) => (
-                <button
-                  key={f}
-                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                    format === f
-                      ? 'bg-blue-600/80 text-white'
-                      : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600/60'
-                  }`}
-                  onClick={() => setFormat(f)}
-                >
-                  {getFormatDisplay(f)}
-                </button>
-              ))}
+    <OnlinePageShell>
+      <div className="space-y-6 pt-2">
+        {/* Header */}
+        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap sm:gap-6">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-50 font-fantaisie">
+                Global Leaderboard
+              </h1>
+              <p className="text-sm text-slate-300/90">
+                Compete with players across all game formats
+              </p>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-300">Period:</span>
-              {(['all_time', 'monthly', 'weekly'] as const).map((t) => (
-                <button
-                  key={t}
-                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                    timeFrame === t
-                      ? 'bg-purple-600/80 text-white'
-                      : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600/60'
-                  }`}
-                  onClick={() => setTimeFrame(t)}
-                >
-                  {getTimeFrameDisplay(t)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Error display */}
-      {error && (
-        <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/30 p-4">
-          <div className="text-red-200 text-sm">{error}</div>
-        </div>
-      )}
-
-      {/* Leaderboard */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">
-            {getFormatDisplay(format)} - {getTimeFrameDisplay(timeFrame)}
-          </h2>
-          {data && (
-            <span className="text-sm text-slate-400">
-              {data.pagination.total} players
-            </span>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="text-center py-8 text-sm text-slate-400">
-            Loading leaderboard...
-          </div>
-        ) : data && data.leaderboard.length > 0 ? (
-          <div className="space-y-2">
-            {data.leaderboard.map((entry) => (
-              <div
-                key={entry.playerId}
-                className="flex items-center justify-between bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-pointer"
-                onClick={() => router.push(`/leaderboard/player/${entry.playerId}`)}
+            <div className="flex flex-wrap gap-3 items-center">
+              <button
+                type="button"
+                className="text-xs font-semibold uppercase tracking-wide text-blue-300 hover:text-blue-200 disabled:opacity-50 disabled:hover:text-blue-300"
+                onClick={fetchLeaderboard}
+                disabled={loading}
               >
-                <div className="flex items-center gap-3">
-                  {/* Rank Badge */}
-                  <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getRankBadgeColor(entry.rank)} flex items-center justify-center text-white text-sm font-bold`}>
-                    {entry.rank <= 999 ? entry.rank : '999+'}
-                  </div>
-                  
-                  {/* Player Info */}
-                  <div className="flex items-center gap-3">
-                    {entry.playerImage ? (
-                      <Image
-                        src={entry.playerImage}
-                        alt={entry.displayName}
-                        width={40}
-                        height={40}
-                        className="rounded-full"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center text-white text-sm font-medium">
-                        {entry.displayName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <div className="font-semibold text-white">{entry.displayName}</div>
-                      <div className="text-xs text-slate-400">
-                        {entry.tournamentWins > 0 && (
-                          <span className="text-yellow-400">🏆 {entry.tournamentWins} </span>
-                        )}
-                        Last active: {new Date(entry.lastActive).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stats */}
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-center">
-                    <div className="font-bold text-white">{entry.rating}</div>
-                    <div className="text-xs text-slate-400">Rating</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-white">{formatWinRate(entry.winRate)}</div>
-                    <div className="text-xs text-slate-400">Win Rate</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-white">
-                      {entry.wins}-{entry.losses}
-                      {entry.draws > 0 && `-${entry.draws}`}
-                    </div>
-                    <div className="text-xs text-slate-400">W-L{entry.draws > 0 && '-D'}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+                Refresh Data
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="text-center py-8 text-sm text-slate-400">
-            No leaderboard data available. Play some matches to see rankings!
+        </div>
+
+        {/* Filters */}
+        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-200 uppercase tracking-wide">
+                  Format
+                </span>
+                {(["constructed", "sealed", "draft"] as const).map((f) => (
+                  <button
+                    key={f}
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-semibold uppercase tracking-wide ${
+                      format === f
+                        ? "bg-blue-600 text-white shadow-inner"
+                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
+                    }`}
+                    onClick={() => setFormat(f)}
+                  >
+                    {getFormatDisplay(f)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-200 uppercase tracking-wide">
+                  Period
+                </span>
+                {(["all_time", "monthly", "weekly"] as const).map((t) => (
+                  <button
+                    key={t}
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-semibold uppercase tracking-wide ${
+                      timeFrame === t
+                        ? "bg-purple-600 text-white shadow-inner"
+                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
+                    }`}
+                    onClick={() => setTimeFrame(t)}
+                  >
+                    {getTimeFrameDisplay(t)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/30 p-4">
+            <div className="text-red-200 text-sm">{error}</div>
           </div>
         )}
+
+        {/* Leaderboard */}
+        <div className="rounded-xl bg-slate-950/70 ring-1 ring-slate-800/80 p-5 shadow-lg shadow-black/20">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg font-semibold text-slate-100 uppercase tracking-wide">
+              {getFormatDisplay(format)} · {getTimeFrameDisplay(timeFrame)}
+            </h2>
+            {data && (
+              <span className="text-sm text-slate-400">
+                {data.pagination.total} players
+              </span>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="text-center py-10 text-sm text-slate-400">
+              Loading leaderboard...
+            </div>
+          ) : data && data.leaderboard.length > 0 ? (
+            <div className="space-y-3">
+              {data.leaderboard.map((entry) => (
+                <div
+                  key={entry.playerId}
+                  className="flex items-center justify-between bg-slate-900/70 border border-slate-800/70 rounded-xl px-4 py-3 hover:bg-slate-900 transition-colors cursor-pointer"
+                  onClick={() =>
+                    router.push(`/leaderboard/player/${entry.playerId}`)
+                  }
+                >
+                  <div className="flex items-center gap-4">
+                    {/* Rank Badge */}
+                    <div
+                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${getRankBadgeColor(
+                        entry.rank
+                      )} flex items-center justify-center text-white text-sm font-bold shadow`}
+                    >
+                      {entry.rank <= 999 ? entry.rank : "999+"}
+                    </div>
+
+                    {/* Player Info */}
+                    <div className="flex items-center gap-4">
+                      {entry.playerImage ? (
+                        <Image
+                          src={entry.playerImage}
+                          alt={entry.displayName}
+                          width={44}
+                          height={44}
+                          className="rounded-full ring-2 ring-slate-800"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-11 h-11 rounded-full bg-slate-700 flex items-center justify-center text-white text-base font-semibold ring-2 ring-slate-800/80">
+                          {entry.displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-sm font-semibold text-slate-50">
+                          {entry.displayName}
+                        </div>
+                        <div className="text-xs text-slate-400 flex items-center gap-2">
+                          {entry.tournamentWins > 0 && (
+                            <span className="text-amber-300 flex items-center gap-1">
+                              <span aria-hidden>🏆</span>
+                              {entry.tournamentWins}
+                            </span>
+                          )}
+                          <span>
+                            Last active: {" "}
+                            {new Date(entry.lastActive).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex items-center gap-6 text-sm text-slate-200">
+                    <div className="text-center min-w-[80px]">
+                      <div className="text-base font-semibold text-slate-50">
+                        {entry.rating}
+                      </div>
+                      <div className="text-xs uppercase tracking-wide text-slate-400">
+                        Rating
+                      </div>
+                    </div>
+                    <div className="text-center min-w-[80px]">
+                      <div className="text-base font-semibold text-emerald-300">
+                        {formatWinRate(entry.winRate)}
+                      </div>
+                      <div className="text-xs uppercase tracking-wide text-slate-400">
+                        Win Rate
+                      </div>
+                    </div>
+                    <div className="text-center min-w-[80px]">
+                      <div className="text-base font-semibold text-slate-50">
+                        {entry.wins}-{entry.losses}
+                        {entry.draws > 0 && `-${entry.draws}`}
+                      </div>
+                      <div className="text-xs uppercase tracking-wide text-slate-400">
+                        W-L{entry.draws > 0 && "-D"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10 text-sm text-slate-400">
+              No leaderboard data available. Play some matches to see rankings!
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </OnlinePageShell>
   );
 }
