@@ -9,6 +9,8 @@ import { Suspense } from 'react';
 
 type ProvidersType = Record<LiteralUnion<string, string>, ClientSafeProvider> | null;
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface SignInPageProps {}
 
@@ -19,7 +21,12 @@ function SignInContent() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isPasskeyBusy, setIsPasskeyBusy] = useState<boolean>(false);
   const [registerDisplayName, setRegisterDisplayName] = useState<string>('');
+  const [registerEmail, setRegisterEmail] = useState<string>('');
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [isEmailSending, setIsEmailSending] = useState<boolean>(false);
+  const [emailSuccessMessage, setEmailSuccessMessage] = useState<string | null>(null);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,6 +61,44 @@ function SignInContent() {
       console.error('Discord sign-in error:', error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEmailSignIn = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    const trimmed = emailInput.trim().toLowerCase();
+    if (!trimmed) {
+      setEmailError('Enter an email address.');
+      setEmailSuccessMessage(null);
+      return;
+    }
+    if (!EMAIL_PATTERN.test(trimmed)) {
+      setEmailError('Enter a valid email address.');
+      setEmailSuccessMessage(null);
+      return;
+    }
+
+    setIsEmailSending(true);
+    setEmailError(null);
+    setEmailSuccessMessage(null);
+    try {
+      const result = await signIn('email', {
+        email: trimmed,
+        callbackUrl,
+        redirect: false,
+      });
+
+      if (result?.ok) {
+        setEmailSuccessMessage(`Magic link sent to ${trimmed}. Check your inbox to continue.`);
+        setEmailInput('');
+      } else {
+        setEmailError('Unable to send magic link. Try again in a moment.');
+      }
+    } catch (error) {
+      console.error('Email sign-in error:', error);
+      setEmailError('We could not send the email. Please try again.');
+    } finally {
+      setIsEmailSending(false);
     }
   };
 
@@ -127,13 +172,31 @@ function SignInContent() {
     e.preventDefault();
     setIsPasskeyBusy(true);
     setPasskeyError(null);
+    const trimmedEmail = registerEmail.trim().toLowerCase();
+    if (registerEmail && !EMAIL_PATTERN.test(trimmedEmail)) {
+      setPasskeyError('Enter a valid email address.');
+      setIsPasskeyBusy(false);
+      return;
+    }
     try {
       const res = await fetch('/api/webauthn/registration/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: registerDisplayName }),
+        body: JSON.stringify({
+          displayName: registerDisplayName,
+          email: registerEmail ? trimmedEmail : undefined,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to get registration options');
+      if (!res.ok) {
+        let message = 'Failed to get registration options';
+        try {
+          const data = await res.json();
+          if (typeof data?.error === 'string') {
+            message = data.error;
+          }
+        } catch {}
+        throw new Error(message);
+      }
       const { options } = await res.json();
 
       const hasFocus = await ensureDocumentFocus();
@@ -150,6 +213,8 @@ function SignInContent() {
       });
       if (!vr.ok) throw new Error('Registration verification failed');
       await handlePasskeySignIn();
+      setRegisterDisplayName('');
+      setRegisterEmail('');
     } catch (err) {
       console.error('Passkey registration failed:', err);
       if (
@@ -239,6 +304,42 @@ function SignInContent() {
             </button>
           )}
 
+          {/* Email Magic Link */}
+          {providers?.email && (
+            <form onSubmit={handleEmailSignIn} className="space-y-2 bg-slate-800/70 border border-slate-700 rounded-lg p-4">
+              <label className="block text-sm text-slate-200" htmlFor="email-signin-input">
+                Email Address
+              </label>
+              <input
+                id="email-signin-input"
+                type="email"
+                value={emailInput}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setEmailInput(e.target.value);
+                  setEmailError(null);
+                  setEmailSuccessMessage(null);
+                }}
+                placeholder="you@example.com"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                disabled={isEmailSending}
+                required
+              />
+              {emailError && (
+                <p className="text-sm text-red-400">{emailError}</p>
+              )}
+              {emailSuccessMessage && (
+                <p className="text-sm text-emerald-300">{emailSuccessMessage}</p>
+              )}
+              <button
+                type="submit"
+                disabled={isEmailSending}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-semibold py-2 px-4 rounded transition-colors"
+              >
+                {isEmailSending ? 'Sending…' : 'Send Magic Link'}
+              </button>
+            </form>
+          )}
+
           {/* Passkey Sign-In */}
           <button
             onClick={handlePasskeySignIn}
@@ -284,6 +385,14 @@ function SignInContent() {
                 value={registerDisplayName}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegisterDisplayName(e.target.value)}
                 placeholder="Display name (optional)"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                disabled={isPasskeyBusy}
+              />
+              <input
+                type="email"
+                value={registerEmail}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegisterEmail(e.target.value)}
+                placeholder="Email (optional)"
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                 disabled={isPasskeyBusy}
               />
