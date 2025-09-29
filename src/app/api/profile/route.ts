@@ -164,6 +164,44 @@ export async function PATCH(req: Request) {
   }
 }
 
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
+    if (!userId) {
+      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        email: true,
+        emailVerified: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User account not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        image: user.image,
+        email: user.email,
+        emailVerified: user.emailVerified ? user.emailVerified.toISOString() : null,
+      },
+    });
+  } catch (error) {
+    console.error("/api/profile GET failed", error);
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+  }
+}
+
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
