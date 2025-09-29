@@ -6,9 +6,14 @@ import { prisma } from "@/lib/prisma";
 const MAX_DISPLAY_NAME_LENGTH = 40;
 const MAX_AVATAR_BYTES = 512 * 1024; // 512KB
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function parseAvatarDataUrl(input: string) {
@@ -39,7 +44,7 @@ export async function PATCH(req: Request) {
     let body: unknown;
     try {
       body = await req.json();
-    } catch (error) {
+    } catch {
       return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
     }
 
@@ -47,12 +52,24 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Payload must be an object." }, { status: 400 });
     }
 
-    const { displayName, avatar } = body as {
+    const { displayName, avatar, email } = body as {
       displayName?: unknown;
       avatar?: unknown;
+      email?: unknown;
     };
 
-    const data: { name?: string | null; image?: string | null } = {};
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) {
+      return NextResponse.json({ error: "User account not found." }, { status: 404 });
+    }
+
+    const data: {
+      name?: string | null;
+      image?: string | null;
+      email?: string | null;
+      emailVerified?: Date | null;
+    } = {};
+    let emailChanged = false;
 
     if (displayName !== undefined) {
       if (displayName !== null && typeof displayName !== "string") {
@@ -82,13 +99,40 @@ export async function PATCH(req: Request) {
       }
     }
 
-    if (Object.keys(data).length === 0) {
-      return NextResponse.json({ error: "No profile changes provided." }, { status: 400 });
+    if (email !== undefined) {
+      if (email !== null && typeof email !== "string") {
+        return NextResponse.json({ error: "Email must be a string or null." }, { status: 400 });
+      }
+      let normalizedEmail: string | null = null;
+      if (typeof email === "string") {
+        const trimmed = email.trim();
+        if (trimmed.length > 0) {
+          normalizedEmail = normalizeEmail(trimmed);
+          if (!EMAIL_REGEX.test(normalizedEmail)) {
+            return NextResponse.json({ error: "Email address is not valid." }, { status: 400 });
+          }
+        }
+      }
+
+      const currentEmail = existingUser.email ? normalizeEmail(existingUser.email) : null;
+
+      if (normalizedEmail !== currentEmail) {
+        if (normalizedEmail) {
+          const conflict = await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } });
+          if (conflict && conflict.id !== userId) {
+            return NextResponse.json({
+              error: "That email is already in use by another account.",
+            }, { status: 409 });
+          }
+        }
+        data.email = normalizedEmail;
+        data.emailVerified = null;
+        emailChanged = true;
+      }
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
-    if (!existingUser) {
-      return NextResponse.json({ error: "User account not found." }, { status: 404 });
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No profile changes provided." }, { status: 400 });
     }
 
     const updated = await prisma.user.update({
@@ -98,15 +142,20 @@ export async function PATCH(req: Request) {
         id: true,
         name: true,
         image: true,
+        email: true,
+        emailVerified: true,
       },
     });
 
     return NextResponse.json({
       success: true,
+      emailChanged,
       user: {
         id: updated.id,
         name: updated.name,
         image: updated.image,
+        email: updated.email,
+        emailVerified: updated.emailVerified,
       },
     });
   } catch (error) {

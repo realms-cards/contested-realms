@@ -70,6 +70,7 @@ interface PlaymatProps {
 interface BoardProps {
   noRaycast?: boolean;
   enableBoardPings?: boolean;
+  interactionMode?: "normal" | "spectator";
 }
 
 const DEFAULT_BOARD_STATE: BoardState = { size: { w: 5, h: 4 }, sites: {} };
@@ -107,7 +108,9 @@ function Playmat({ matW, matH }: PlaymatProps) {
 export default function Board({
   noRaycast = false,
   enableBoardPings = false,
+  interactionMode = "normal",
 }: BoardProps = {}) {
+  const isSpectator = interactionMode === "spectator";
   const boardState = useGameStore((s) => s.board);
   const board = boardState ?? DEFAULT_BOARD_STATE;
   const showGrid = useGameStore((s) => s.showGridOverlay);
@@ -677,6 +680,9 @@ export default function Board({
 
   const resolveDraggingMeta = useCallback((): RemoteCursorDragMeta | null => {
     const s = useGameStore.getState();
+    if (isSpectator) {
+      return null;
+    }
     // Avatar drag (local-only UI state here)
     if ((dragAvatar as unknown as string | null)) {
       return { kind: "avatar", who: dragAvatar };
@@ -692,7 +698,7 @@ export default function Board({
       return { kind: "pile", source: pile.from ?? null };
     }
     return null;
-  }, [dragAvatar, dragging]);
+  }, [dragAvatar, dragging, isSpectator]);
 
   function round3(n: number): number {
     return Number.isFinite(n) ? Number(n.toFixed(3)) : 0;
@@ -725,6 +731,9 @@ export default function Board({
   }
 
   const sendCursor = useCallback((position: { x: number; z: number } | null) => {
+    if (isSpectator) {
+      return;
+    }
     const s = useGameStore.getState();
     const playerId = s.localPlayerId;
     if (!playerId) return;
@@ -770,23 +779,27 @@ export default function Board({
         console.warn("[cursor] send failed", err);
       }
     }
-  }, [resolveDraggingMeta, resolveHighlight]);
+  }, [isSpectator, resolveDraggingMeta, resolveHighlight]);
 
   const handlePointerMove = useCallback(
     (x: number, z: number) => {
       const position = { x, z };
       setLastPointerWorldPos(position);
       lastPointerRef.current = position;
-      sendCursor(position);
+      if (!isSpectator) {
+        sendCursor(position);
+      }
     },
-    [setLastPointerWorldPos, sendCursor]
+    [setLastPointerWorldPos, sendCursor, isSpectator]
   );
 
   const handlePointerOut = useCallback(() => {
     setLastPointerWorldPos(null);
     lastPointerRef.current = null;
-    sendCursor(null);
-  }, [setLastPointerWorldPos, sendCursor]);
+    if (!isSpectator) {
+      sendCursor(null);
+    }
+  }, [setLastPointerWorldPos, sendCursor, isSpectator]);
 
   // Re-emit cursor when drag or highlight changes (using last known position)
   useEffect(() => {
@@ -794,7 +807,7 @@ export default function Board({
   }, [actorKey, dragAvatar, dragging, previewCard, selected, selectedPermanent, sendCursor]);
 
   const emitBoardPing = useCallback((position: { x: number; z: number } | null) => {
-    if (!position) return;
+    if (!position || isSpectator) return;
     const x = Number(position.x);
     const z = Number(position.z);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -820,7 +833,7 @@ export default function Board({
         ts,
       });
     } catch {}
-  }, []);
+  }, [isSpectator]);
 
   // Global keyboard: Space to ping at current pointer position
   useEffect(() => {
@@ -836,6 +849,7 @@ export default function Board({
         ) {
           return; // don't interfere with typing
         }
+        if (isSpectator) return;
         e.preventDefault();
         const { lastPointerWorldPos } = useGameStore.getState();
         emitBoardPing(lastPointerWorldPos);
@@ -843,7 +857,7 @@ export default function Board({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [emitBoardPing]);
+  }, [emitBoardPing, isSpectator]);
 
   return (
     <group>
@@ -939,6 +953,9 @@ export default function Board({
                   // Track ghost only for hand/pile drags; still drive bodies for board/avatar drags
                   const world = e.point;
                   handlePointerMove(world.x, world.z);
+                  if (isSpectator) {
+                    return;
+                  }
                   if (
                     dragFromHand &&
                     !dragAvatar &&
@@ -953,12 +970,14 @@ export default function Board({
                   }
                 }}
                 onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
+                  if (isSpectator) return;
                   if (dragFromHand || dragFromPile || dragging || dragAvatar) return;
                   e.stopPropagation();
                   emitBoardPing({ x: e.point.x, z: e.point.z });
                 }}
                 onPointerUp={(e: ThreeEvent<PointerEvent>) => {
                   if (e.button !== 0) return; // only handle left-button releases for drops
+                  if (isSpectator) return;
                   e.stopPropagation();
                   // Handle drop from hand or moving a dragged permanent
                   if (dragAvatar) {
@@ -1282,6 +1301,7 @@ export default function Board({
                             }}
                             onDoubleClick={(e) => {
                               if (dragFromHand || dragFromPile) return;
+                              if (isSpectator) return;
                               e.stopPropagation();
                               emitBoardPing({ x: e.point.x, z: e.point.z });
                             }}
@@ -1301,6 +1321,7 @@ export default function Board({
                                   : undefined
                               }
                               onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                                if (isSpectator) return;
                                 e.stopPropagation();
                                 e.nativeEvent.preventDefault();
                                 openContextMenu(
@@ -1317,6 +1338,7 @@ export default function Board({
                             position={[edgeOffset.x, 0.001, edgeOffset.z]}
                             castShadow
                             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                              if (isSpectator) return;
                               e.stopPropagation();
                               e.nativeEvent.preventDefault();
                               openContextMenu(
@@ -1435,6 +1457,10 @@ export default function Board({
                       />
                       <group
                         onPointerDown={(e) => {
+                          if (isSpectator) {
+                            e.stopPropagation();
+                            return;
+                          }
                           // Only start potential drag on left-click
                           if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
                           if (tokenSiteReplace) {
@@ -1478,39 +1504,36 @@ export default function Board({
                         onDoubleClick={(e) => {
                           if (dragFromHand || dragFromPile) return;
                           if (tokenSiteReplace) return;
+                          if (isSpectator) return;
                           e.stopPropagation();
                           emitBoardPing({ x: e.point.x, z: e.point.z });
                         }}
                         onPointerMove={(e) => {
-                  if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
-                  if (tokenSiteReplace) return; // no drag for Rubble
-                  e.stopPropagation();
-                  // Always feed cursor telemetry with current world coordinates
-                  handlePointerMove(e.point.x, e.point.z);
-                  // Start dragging once hold + threshold exceeded
-                  if (
-                    !dragging &&
-                    dragStartRef.current &&
-                    dragStartRef.current.at === key &&
+                          if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
+                          if (tokenSiteReplace) return; // no drag for Rubble
+                          e.stopPropagation();
+                          // Always feed cursor telemetry with current world coordinates
+                          handlePointerMove(e.point.x, e.point.z);
+                          if (isSpectator) return;
+                          // Start dragging once hold + threshold exceeded
+                          if (
+                            !dragging &&
+                            dragStartRef.current &&
+                            dragStartRef.current.at === key &&
                             dragStartRef.current.index === idx
                           ) {
                             const [sx, sz] = dragStartRef.current.start;
                             const dx = e.point.x - sx;
                             const dz = e.point.z - sz;
                             const dist = Math.hypot(dx, dz);
-                            const heldFor =
-                              Date.now() - dragStartRef.current.time;
-                            if (
-                              heldFor >= DRAG_HOLD_MS &&
-                              dist > DRAG_THRESHOLD
-                            ) {
+                            const heldFor = Date.now() - dragStartRef.current.time;
+                            if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
                               setDragging({ from: key, index: idx });
                               setDragFromHand(true);
                               setGhost(null);
                               // No ghost for board permanent drags; just move the body
                               draggedBody.current =
-                                bodyMap.current.get(`perm:${key}:${idx}`) ||
-                                null;
+                                bodyMap.current.get(`perm:${key}:${idx}`) || null;
                               if (draggedBody.current) {
                                 moveDraggedBody(e.point.x, e.point.z, true);
                               }
@@ -1526,6 +1549,7 @@ export default function Board({
                           }
                         }}
                         onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                          if (isSpectator) return;
                           e.stopPropagation();
                           e.nativeEvent.preventDefault();
                           useGameStore.getState().selectPermanent(key, idx);
@@ -1538,6 +1562,10 @@ export default function Board({
                           if (e.button !== 0) return; // ignore non-left button releases
                           if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
                           if (tokenSiteReplace) {
+                            e.stopPropagation();
+                            return;
+                          }
+                          if (isSpectator) {
                             e.stopPropagation();
                             return;
                           }
@@ -1621,6 +1649,7 @@ export default function Board({
                           onClick={(e) => {
                             if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                             e.stopPropagation();
+                            if (isSpectator) return;
                             // If dragging this item, ignore clicks
                             if (
                               dragging &&
@@ -1632,6 +1661,7 @@ export default function Board({
                             useGameStore.getState().selectPermanent(key, idx);
                           }}
                           onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                            if (isSpectator) return;
                             e.stopPropagation();
                             e.nativeEvent.preventDefault();
                             // Ensure the permanent is selected before opening the menu
@@ -1977,6 +2007,10 @@ export default function Board({
                   )}
                   <group
                     onPointerDown={(e) => {
+                      if (isSpectator) {
+                        e.stopPropagation();
+                        return;
+                      }
                       // Only start potential drag on left-click
                       if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
                       if (e.button === 0) {
@@ -2011,6 +2045,7 @@ export default function Board({
                     onDoubleClick={(e) => {
                       if (dragFromHand || dragFromPile) return;
                       if (dragAvatar) return;
+                      if (isSpectator) return;
                       e.stopPropagation();
                       emitBoardPing({ x: e.point.x, z: e.point.z });
                     }}
@@ -2018,6 +2053,9 @@ export default function Board({
                       if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                       e.stopPropagation();
                       handlePointerMove(e.point.x, e.point.z);
+                      if (isSpectator) {
+                        return;
+                      }
                       // Start dragging once hold + threshold exceeded
                       if (
                         !dragAvatar &&
@@ -2047,6 +2085,7 @@ export default function Board({
                       }
                     }}
                     onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                      if (isSpectator) return;
                       e.stopPropagation();
                       e.nativeEvent.preventDefault();
                       selectAvatar(who);
@@ -2058,6 +2097,10 @@ export default function Board({
                     onPointerUp={(e) => {
                       if (e.button !== 0) return; // ignore non-left button releases
                       if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
+                      if (isSpectator) {
+                        e.stopPropagation();
+                        return;
+                      }
                       e.stopPropagation();
                       if (dragAvatar === who) {
                         // Compute nearest tile from world position and preserve exact world drop
@@ -2088,12 +2131,14 @@ export default function Board({
                       onClick={(e) => {
                         if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                         e.stopPropagation();
+                        if (isSpectator) return;
                         // If dragging this avatar, ignore clicks
                         if (dragAvatar === who) return;
                         // Left-click selects only; context menu via right-click
                         selectAvatar(who);
                       }}
                       onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+                        if (isSpectator) return;
                         e.stopPropagation();
                         e.nativeEvent.preventDefault();
                         // Ensure the avatar is selected before opening the menu

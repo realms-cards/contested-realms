@@ -5,25 +5,76 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(value);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const displayNameReq: string | undefined = typeof body?.displayName === 'string' ? body.displayName : undefined;
+    const rawDisplayName: string | undefined = typeof body?.displayName === 'string' ? body.displayName : undefined;
+    const displayNameReq = rawDisplayName?.trim().slice(0, 40);
+    const rawEmail: string | undefined = typeof body?.email === 'string' ? body.email : undefined;
+    const normalizedEmail = rawEmail ? normalizeEmail(rawEmail) : undefined;
+
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      return NextResponse.json({ error: 'Email address is not valid.' }, { status: 400 });
+    }
 
     // Resolve user: if session exists, use it; otherwise create a new minimal user
     const session = await getServerSession(authOptions);
     let userId: string | null = session?.user?.id || null;
-    let userName: string | null = session?.user?.name || null;
+    let userName: string | null = session?.user?.name || displayNameReq || null;
+
+    let emailOwner: { id: string } | null = null;
+    if (normalizedEmail) {
+      emailOwner = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      });
+      if (emailOwner && emailOwner.id !== userId) {
+        return NextResponse.json({
+          error: 'That email address is already linked to another account. Sign in first to add a passkey.',
+        }, { status: 409 });
+      }
+    }
 
     if (!userId) {
-      const baseName = (displayNameReq || 'Player').trim().slice(0, 40);
       const user = await prisma.user.create({
         data: {
-          name: baseName,
+          name: displayNameReq || 'Player',
+          email: normalizedEmail,
+          emailVerified: normalizedEmail ? null : undefined,
         },
+        select: { id: true, name: true },
       });
       userId = user.id;
       userName = user.name;
+    } else if (normalizedEmail && (!emailOwner || emailOwner.id === userId)) {
+      const existingUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, name: true },
+      });
+      if (!existingUser) {
+        return NextResponse.json({ error: 'User account not found.' }, { status: 404 });
+      }
+      if (existingUser.email !== normalizedEmail) {
+        const updated = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            email: normalizedEmail,
+            emailVerified: null,
+          },
+          select: { name: true },
+        });
+        userName = updated.name ?? userName;
+      } else if (!userName && existingUser.name) {
+        userName = existingUser.name;
+      }
     }
 
     // Exclude existing credentials for this user

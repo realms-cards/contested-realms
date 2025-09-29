@@ -6,6 +6,7 @@ import { Physics } from "@react-three/rapier";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
+import CardPreview from "@/components/game/CardPreview";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import Board from "@/lib/game/Board";
 import TextureCache from "@/lib/game/components/TextureCache";
@@ -48,6 +49,8 @@ export default function ReplayViewerPage() {
   const [currentActionIndex, setCurrentActionIndex] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [chatInput, setChatInput] = useState("");
+  const previewCard = useGameStore((s) => s.previewCard);
+  const contextMenu = useGameStore((s) => s.contextMenu);
 
   // Setup socket connection
   useEffect(() => {
@@ -236,7 +239,7 @@ export default function ReplayViewerPage() {
           />
 
           <Physics gravity={[0, -9.81, 0]}>
-            <Board />
+            <Board interactionMode="spectator" enableBoardPings={false} />
             <TextureCache />
           </Physics>
 
@@ -259,6 +262,18 @@ export default function ReplayViewerPage() {
           />
         </Canvas>
       </div>
+
+      {previewCard?.slug && !contextMenu && (
+        <CardPreview
+          card={{
+            slug: previewCard.slug ?? "",
+            name: previewCard.name,
+            type: previewCard.type ?? null,
+          }}
+          anchor="top-right"
+          zIndexClass="z-30"
+        />
+      )}
 
       {/* Replay Controls Overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4">
@@ -385,7 +400,7 @@ export default function ReplayViewerPage() {
         hideLeaveButton={true}
         defaultOpen={true}
         hideChat={true}
-        position="top-right"
+        position="top-left"
       />
     </div>
   );
