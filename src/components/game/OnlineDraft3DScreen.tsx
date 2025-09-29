@@ -646,6 +646,29 @@ export default function OnlineDraft3DScreen({
       setPick3D((prev) => [...prev, newPick]);
       setNextPickId((prev) => prev + 1);
 
+      if (myPlayerIndex >= 0) {
+        setDraftState((prev) => {
+          if (!prev || !Array.isArray(prev.picks)) return prev;
+          const nextPicks = prev.picks.map((p) =>
+            Array.isArray(p) ? [...(p as DraftCard[])] : []
+          ) as DraftCard[][];
+          const mine = Array.isArray(nextPicks[myPlayerIndex])
+            ? (nextPicks[myPlayerIndex] as DraftCard[])
+            : [];
+
+          const alreadyPresent = mine.some(
+            (card) => card.id === stagedCard.id && card.slug === stagedCard.slug
+          );
+          const updatedMine = alreadyPresent ? mine : [...mine, stagedCard];
+          nextPicks[myPlayerIndex] = updatedMine;
+
+          return {
+            ...prev,
+            picks: nextPicks,
+          };
+        });
+      }
+
       try {
         await deckPersistence.addStandardCards([stagedCard.id]);
       } catch (err) {
@@ -665,6 +688,7 @@ export default function OnlineDraft3DScreen({
       nextPickId,
       draftSync,
       deckPersistence,
+      myPlayerIndex,
     ]
   );
   useEffect(() => {

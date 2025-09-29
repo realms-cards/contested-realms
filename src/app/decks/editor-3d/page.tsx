@@ -770,6 +770,8 @@ function AuthenticatedDeckEditor() {
       return;
     }
 
+    const totalDraftedCards = drafted.length;
+
     // Fast path: use resolved picks if present to avoid any network lookups
     try {
       const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${matchId}`);
@@ -872,7 +874,20 @@ function AuthenticatedDeckEditor() {
         }
 
         // Small concurrency runner to avoid spamming the API
-        const tasks = Array.from(dedup.values()).map((q) => async () => {
+        const lookupEntries = Array.from(dedup.values());
+        const cumulativeCounts: number[] = [];
+        lookupEntries.forEach((entry, index) => {
+          const prevTotal = index > 0 ? cumulativeCounts[index - 1] : 0;
+          cumulativeCounts[index] = prevTotal + Math.max(entry.count, 0);
+        });
+
+        setDraftLoadProgress({
+          processed: 0,
+          total: totalDraftedCards,
+          inProgress: totalDraftedCards > 0,
+        });
+
+        const tasks = lookupEntries.map((q) => async () => {
           try {
             const result = await fetchSearchResult({ slug: q.slug, name: q.name, set: q.set });
             return { lookup: q, result } as ResolvedEntry;
@@ -914,11 +929,19 @@ function AuthenticatedDeckEditor() {
           )
         );
         // Initialize progress indicator
-        setDraftLoadProgress({ processed: 0, total: tasks.length, inProgress: tasks.length > 0 });
         const hits = await runInBatches<ResolvedEntry>(
           tasks,
           lookupConcurrencyCap,
-          (done, total) => setDraftLoadProgress({ processed: done, total, inProgress: done < total })
+          (done) => {
+            const cardsResolved = done <= 0
+              ? 0
+              : cumulativeCounts[Math.min(done, cumulativeCounts.length) - 1] ?? 0;
+            setDraftLoadProgress({
+              processed: Math.min(cardsResolved, totalDraftedCards),
+              total: totalDraftedCards,
+              inProgress: cardsResolved < totalDraftedCards,
+            });
+          }
         );
         for (const entry of hits) {
           if (!entry) continue;
@@ -1015,7 +1038,11 @@ function AuthenticatedDeckEditor() {
         console.error("Draft initialization failed:", e);
         setError(e instanceof Error ? e.message : String(e));
       } finally {
-        setDraftLoadProgress((p) => ({ ...p, inProgress: false }));
+        setDraftLoadProgress((p) => ({
+          processed: totalDraftedCards || p.processed,
+          total: totalDraftedCards || p.total,
+          inProgress: false,
+        }));
         setDraftInitDone(true);
       }
     })();
@@ -2358,11 +2385,17 @@ function AuthenticatedDeckEditor() {
     <div className="fixed inset-0 w-screen h-screen">
       {/* Draft picks loading indicator */}
       {isDraftMode && !draftInitDone && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-black/70 text-white rounded px-3 py-1 text-xs shadow">
-          Loading drafted cards...
-          {draftLoadProgress.total > 0 && (
-            <> {draftLoadProgress.processed}/{draftLoadProgress.total}</>
-          )}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-xl bg-slate-900/90 px-6 py-4 text-center text-white shadow-2xl border border-white/10">
+            <div className="text-xs uppercase tracking-widest text-white/60">
+              Loading Drafted Cards
+            </div>
+            <div className="mt-2 text-lg font-semibold">
+              {draftLoadProgress.total > 0
+                ? `${draftLoadProgress.processed}/${draftLoadProgress.total}`
+                : "Preparing…"}
+            </div>
+          </div>
         </div>
       )}
       {/* 3D Game View as the stage - EXACT same as draft-3d */}
