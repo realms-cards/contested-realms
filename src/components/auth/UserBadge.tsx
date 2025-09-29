@@ -123,6 +123,40 @@ export default function UserBadge({
     setAvatarDataUrl(undefined);
   }, [user?.image]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      try {
+        const res = await fetch("/api/profile", { method: "GET" });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          user?: {
+            name: string | null;
+            image: string | null;
+            email: string | null;
+            emailVerified: string | null;
+          };
+        };
+        if (!data.user || cancelled) return;
+        setProfileName(data.user.name ?? "");
+        setProfileEmail(data.user.email ?? "");
+        setServerEmail(data.user.email ?? "");
+        setEmailVerified(Boolean(data.user.emailVerified));
+        setAvatarDataUrl(data.user.image ?? null);
+      } catch (error) {
+        console.error("Failed to load profile details:", error);
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   const sendVerificationLink = useCallback(async (email: string): Promise<boolean> => {
     setVerificationSending(true);
     try {

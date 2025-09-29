@@ -18,6 +18,10 @@ export default function AuthButton({ variant = 'inline', className }: AuthButton
   const { data: session, status } = useSession();
   const [providers, setProviders] = useState<ProvidersType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [profileName, setProfileName] = useState<string>(session?.user?.name ?? '');
+  const [profileImage, setProfileImage] = useState<string | null>(
+    (session?.user?.image as string | null | undefined) ?? null,
+  );
   const router = useRouter();
 
   useEffect(() => {
@@ -44,6 +48,40 @@ export default function AuthButton({ variant = 'inline', className }: AuthButton
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setProfileName(session?.user?.name ?? '');
+    setProfileImage((session?.user?.image as string | null | undefined) ?? null);
+  }, [session?.user?.name, session?.user?.image]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let cancelled = false;
+
+    const loadProfile = async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/profile', { method: 'GET' });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          user?: {
+            name: string | null;
+            image: string | null;
+          };
+        };
+        if (!data.user || cancelled) return;
+        setProfileName(data.user.name ?? '');
+        setProfileImage(data.user.image ?? null);
+      } catch (error) {
+        console.error('Failed to refresh profile data:', error);
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   const handleSignIn = (): void => {
     router.push('/auth/signin');
@@ -72,17 +110,17 @@ export default function AuthButton({ variant = 'inline', className }: AuthButton
   if (session?.user?.id) {
     return (
       <div className="flex items-center gap-3">
-        {session.user.image && (
+        {profileImage && (
           <Image
-            src={session.user.image}
-            alt={session.user.name || 'User avatar'}
+            src={profileImage}
+            alt={profileName || 'User avatar'}
             width={32}
             height={32}
             className="rounded-full"
           />
         )}
         <span className="text-sm font-medium text-slate-200">
-          {session.user.name || 'User'}
+          {profileName || session.user.name || 'User'}
         </span>
         <button
           onClick={handleSignOut}
