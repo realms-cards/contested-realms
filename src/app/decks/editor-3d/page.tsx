@@ -830,7 +830,9 @@ function AuthenticatedDeckEditor() {
       try {
         // Resolve each drafted card to a concrete SearchResult via slug first, fallback to name
         // Optimize: dedupe identical queries and resolve in parallel with a modest concurrency cap
-        const resolved: SearchResult[] = [];
+        type Lookup = { slug: string; name: string; set: string; count: number };
+        type ResolvedEntry = { lookup: Lookup; result: SearchResult | null };
+        const resolvedEntries: ResolvedEntry[] = [];
         const slugPrefixToSet: Record<string, string> = {
           alp: "Alpha",
           bet: "Beta",
@@ -853,8 +855,7 @@ function AuthenticatedDeckEditor() {
           return "";
         };
 
-        // Build unique lookup queries
-        type Lookup = { slug: string; name: string; set: string };
+        // Build unique lookup queries while tracking duplicate counts
         const dedup = new Map<string, Lookup>();
         for (const c of drafted) {
           const slug = (c.slug || "").toString().trim();
@@ -862,13 +863,23 @@ function AuthenticatedDeckEditor() {
           const set = deriveSetHint(c);
           if (!slug && !name) continue;
           const key = slug ? `slug:${slug}:${set}` : `name:${name}:${set}`;
-          if (!dedup.has(key)) dedup.set(key, { slug, name, set });
+          const existing = dedup.get(key);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            dedup.set(key, { slug, name, set, count: 1 });
+          }
         }
 
         // Small concurrency runner to avoid spamming the API
-        const tasks = Array.from(dedup.values()).map((q) => () =>
-          fetchSearchResult({ slug: q.slug, name: q.name, set: q.set })
-        );
+        const tasks = Array.from(dedup.values()).map((q) => async () => {
+          try {
+            const result = await fetchSearchResult({ slug: q.slug, name: q.name, set: q.set });
+            return { lookup: q, result } as ResolvedEntry;
+          } catch {
+            return { lookup: q, result: null } as ResolvedEntry;
+          }
+        });
         const runInBatches = async <T,>(
           fns: Array<() => Promise<T>>,
           limit = 8,
@@ -904,14 +915,24 @@ function AuthenticatedDeckEditor() {
         );
         // Initialize progress indicator
         setDraftLoadProgress({ processed: 0, total: tasks.length, inProgress: tasks.length > 0 });
-        const hits = await runInBatches<SearchResult | null>(
+        const hits = await runInBatches<ResolvedEntry>(
           tasks,
           lookupConcurrencyCap,
           (done, total) => setDraftLoadProgress({ processed: done, total, inProgress: done < total })
         );
-        for (const h of hits) if (h) resolved.push(h);
+        for (const entry of hits) {
+          if (!entry) continue;
+          if (entry.result) {
+            resolvedEntries.push(entry);
+          } else {
+            console.warn(
+              "[Draft Init] Failed to resolve drafted card lookup",
+              entry.lookup
+            );
+          }
+        }
 
-        if (resolved.length === 0) {
+        if (resolvedEntries.length === 0) {
           setError("Could not resolve drafted cards to known card data.");
           setDraftInitDone(true);
           return;
@@ -919,29 +940,35 @@ function AuthenticatedDeckEditor() {
 
         // Batch update picks to include all drafted cards in sideboard (not deck)
         // IMPORTANT: Preserve any existing picks (like Standard Cards) that may have been added
+        const expandedResolved: SearchResult[] = [];
         setPicks((prev) => {
           const next = { ...prev } as Record<PickKey, PickItem>;
           console.log(
             `[Draft Init] Preserving ${Object.keys(prev).length} existing picks`
           );
 
-          for (const r of resolved) {
-            // All draft picks should start in sideboard, not directly in deck zones
-            const zone: Zone = "Sideboard";
-            const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
-            const exists = next[key];
-            next[key] = exists
-              ? { ...exists, count: exists.count + 1 }
-              : {
-                  cardId: r.cardId,
-                  variantId: r.variantId ?? null,
-                  name: r.cardName,
-                  type: r.type,
-                  slug: r.slug,
-                  zone,
-                  count: 1,
-                  set: r.set,
-                };
+          for (const { lookup, result } of resolvedEntries) {
+            if (!result) continue;
+            const copies = Math.max(lookup.count, 1);
+            for (let i = 0; i < copies; i++) {
+              // All draft picks should start in sideboard, not directly in deck zones
+              const zone: Zone = "Sideboard";
+              const key = `${result.cardId}:${zone}:${result.variantId ?? "x"}` as PickKey;
+              const exists = next[key];
+              next[key] = exists
+                ? { ...exists, count: exists.count + 1 }
+                : {
+                    cardId: result.cardId,
+                    variantId: result.variantId ?? null,
+                    name: result.cardName,
+                    type: result.type,
+                    slug: result.slug,
+                    zone,
+                    count: 1,
+                    set: result.set,
+                  };
+              expandedResolved.push(result);
+            }
           }
           console.log(
             `[Draft Init] After adding drafted cards: ${
@@ -951,9 +978,21 @@ function AuthenticatedDeckEditor() {
           return next;
         });
 
+        // Cache resolved results for future reloads (preserves duplicate counts)
+        try {
+          if (matchId && expandedResolved.length > 0) {
+            localStorage.setItem(
+              `draftedCardsResolved_${matchId}`,
+              JSON.stringify(expandedResolved)
+            );
+          }
+        } catch (storageError) {
+          console.warn("[Draft Init] Unable to cache resolved draft cards", storageError);
+        }
+
         // Infer deck set from majority of resolved hits for better metadata/search defaults
         const counts = new Map<string, number>();
-        for (const r of resolved)
+        for (const r of expandedResolved)
           counts.set(r.set, (counts.get(r.set) || 0) + 1);
         if (counts.size) {
           let best = setName;

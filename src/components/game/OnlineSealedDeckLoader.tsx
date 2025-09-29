@@ -26,6 +26,8 @@ export default function OnlineSealedDeckLoader({
   const [loading, setLoading] = useState(false);
   const [initiated, setInitiated] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
+  const [waitingForMe, setWaitingForMe] = useState(false);
 
   const loadSealedDecks = useCallback(async () => {
     if (!match?.playerDecks || !me) return;
@@ -33,6 +35,8 @@ export default function OnlineSealedDeckLoader({
     setLoading(true);
     setDeckError("");
     setCompleted(false);
+    setWaitingForOpponent(false);
+    setWaitingForMe(false);
 
     try {
       const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -49,8 +53,12 @@ export default function OnlineSealedDeckLoader({
       const myDeckData = match.playerDecks?.[me.id];
       const otherPlayers = match.players.filter(p => p.id !== me.id);
       const allPlayerDecksReady = otherPlayers.every(p => match.playerDecks?.[p.id]);
+      const deckSubmissions = Array.isArray(match.deckSubmissions) ? match.deckSubmissions : [];
+      const meSubmitted = me ? deckSubmissions.includes(me.id) : false;
 
       if (!myDeckData || !allPlayerDecksReady) {
+        setWaitingForMe(!myDeckData && !meSubmitted);
+        setWaitingForOpponent(!allPlayerDecksReady && meSubmitted);
         setLoading(false);
         return;
       }
@@ -102,7 +110,7 @@ export default function OnlineSealedDeckLoader({
         setLoading(false);
         return;
       }
-      
+
       // All decks loaded successfully
       setCompleted(true);
       onPrepareComplete();
@@ -193,7 +201,21 @@ export default function OnlineSealedDeckLoader({
               Loading sealed decks...
             </div>
           )}
-          
+
+          {!loading && !deckError && waitingForMe && (
+            <div className="flex items-center justify-center gap-2 text-slate-300">
+              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+              Waiting for your sealed deck submission to register...
+            </div>
+          )}
+
+          {!loading && !deckError && waitingForOpponent && (
+            <div className="flex items-center justify-center gap-2 text-slate-300">
+              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+              Waiting for other players to submit their sealed decks...
+            </div>
+          )}
+
           {deckError && (
             <div className="bg-red-900/50 border border-red-600/50 rounded-lg p-3 text-red-200">
               Error: {deckError}
