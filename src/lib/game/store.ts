@@ -981,32 +981,20 @@ function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   return out as unknown as T;
 }
 
-// Remove duplicate permanents per cell by stable card identity (cardId)
+// Normalize permanents arrays without dropping duplicates across cells.
+// Trust server/state sync; allow multiple copies of the same cardId.
 function dedupePermanents(
   per: Permanents | undefined | null
 ): Permanents | undefined {
   if (!per || typeof per !== "object")
     return per as unknown as Permanents | undefined;
   const out: Permanents = {} as Permanents;
-  const seenGlobal = new Set<number>();
   for (const [cell, arrAny] of Object.entries(per as Record<string, unknown>)) {
     const arr = Array.isArray(arrAny) ? (arrAny as PermanentItem[]) : [];
     const nextArr: PermanentItem[] = [];
     for (const item of arr) {
-      const id = Number(item?.card?.cardId ?? NaN);
-      if (Number.isFinite(id)) {
-        if (seenGlobal.has(id)) {
-          try {
-            console.warn(
-              "[net] dedupe permanents: dropping duplicate across cells",
-              { cell, cardId: id, name: item.card?.name }
-            );
-          } catch {}
-          continue;
-        }
-        seenGlobal.add(id);
-      }
-      nextArr.push(item);
+      if (!item || typeof item !== "object") continue;
+      nextArr.push(item as PermanentItem);
     }
     out[cell as keyof Permanents] = nextArr as Permanents[keyof Permanents];
   }
