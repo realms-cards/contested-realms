@@ -520,27 +520,30 @@ export default function OnlineDraft3DScreen({
         // Then auto-pick it after a short delay
         setTimeout(() => {
           if (!transport || !match) return;
-          
-          console.log(`[DraftClient 3D] Auto-makeDraftPick -> cardId=${lastCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber}`);
-          
-          setReady(true);
-          
-          try {
-            transport.makeDraftPick({
-              matchId: match.id,
-              cardId: lastCard.id,
-              packIndex: draftState.packIndex,
-              pickNumber: draftState.pickNumber,
-            });
-          } catch (err) {
-            console.error(`[DraftClient 3D] Auto-pick error:`, err);
-          }
-          
-          setStaged(null);
+
+          console.log(
+            `[DraftClient 3D] Auto-handlePickAndPass -> cardId=${lastCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+          );
+
+          void handlePickAndPass();
         }, 500); // Small delay to show the staging visually
       }
     }
-  }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker, staged, ready, myPlayerIndex, transport, match, draftState, packChoiceOverlay, shownPackOverlayForRound]);
+  }, [
+    draftState.phase,
+    draftState.packIndex,
+    draftState.pickNumber,
+    amPicker,
+    staged,
+    ready,
+    myPlayerIndex,
+    transport,
+    match,
+    draftState,
+    packChoiceOverlay,
+    shownPackOverlayForRound,
+    handlePickAndPass,
+  ]);
 
   // Ready state (one-way)
   const handleToggleReady = useCallback(async () => {
