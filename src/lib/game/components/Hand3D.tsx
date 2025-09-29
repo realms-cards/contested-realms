@@ -17,6 +17,7 @@ import {
   HAND_STEP_MAX,
   HAND_FAN_ARC_Y,
   HAND_CARD_SCALE,
+  TILE_SIZE,
 } from "@/lib/game/constants";
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
@@ -34,12 +35,17 @@ export interface Hand3DProps {
 }
 
 export default function Hand3D({ 
+  matW: _matW,
+  matH: _matH,
   owner = "p1", 
   showCardBacks = false, 
   viewerPlayerNumber = null,
   showCardPreview,
   hideCardPreview 
 }: Hand3DProps) {
+  // Intentionally unused after layout refactor; keep signature stable
+  void _matW;
+  void _matH;
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
@@ -161,6 +167,7 @@ export default function Hand3D({
     return () => window.removeEventListener("mouseup", onUp);
   }, [dragFromHand, selected, owner, setDragFromHand]);
   // Keep the hand anchored to the camera with less frequent updates
+  const boardSize = useGameStore((s) => s.board.size);
   useFrame(() => {
     const cam = camera as PerspectiveCamera;
     if (!rootRef.current || !("fov" in cam)) return;
@@ -201,11 +208,14 @@ export default function Hand3D({
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
     if (showCardBacks) {
-      // Opponent hand: position beyond the board edge like before
-      const z = viewerPlayerNumber === 1 ? -4.5 : 4.5; // Beyond board edge
-      const mirroredY = 0.2; // At board level like before
-      rootRef.current.position.set(0, mirroredY, z);
-      // Face the viewing player properly
+      // Opponent hand: position just beyond the board edge using world units so it stays visible
+      const gridHalfH = (boardSize?.h || 4) * TILE_SIZE * 0.5;
+      const marginZ = CARD_LONG * HAND_CARD_SCALE * 0.65; // keep comfortably outside grid
+      const edge = gridHalfH + marginZ;
+      const z = (viewerPlayerNumber === 1 ? -edge : edge);
+      const elevateY = 0.2; // slight lift above board
+      rootRef.current.position.set(0, elevateY, z);
+      // Face the viewing player properly (top faces down toward P1, bottom faces up toward P2)
       const rotation = viewerPlayerNumber === 1 ? 0 : Math.PI;
       rootRef.current.rotation.set(0, rotation, 0);
     } else {
