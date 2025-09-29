@@ -1459,7 +1459,6 @@ function AuthenticatedDeckEditor() {
         ? `${matchName} (Sealed)`
         : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
-      await saveDeck();
 
       // Mark deck as submitted to prevent redirect loop
       const matchId = searchParams?.get("matchId");
@@ -1467,7 +1466,7 @@ function AuthenticatedDeckEditor() {
         localStorage.setItem(`sealed_submitted_${matchId}`, "true");
       }
 
-      // Submit to match server using postMessage to parent window (online match page)
+      // Submit to match server immediately; persist deck in background
       if (window.opener) {
         window.opener.postMessage(
           {
@@ -1484,6 +1483,9 @@ function AuthenticatedDeckEditor() {
           JSON.stringify(deckCards)
         );
       }
+
+      // Save to account in the background (do not block submission UX)
+      saveDeck().catch(() => {});
 
       setSaveMsg("Sealed deck submitted successfully!");
 
@@ -1538,7 +1540,6 @@ function AuthenticatedDeckEditor() {
         ? `${matchName} (Draft)`
         : `Draft Deck (${today})`;
       setDeckName(draftDeckName);
-      await saveDeck();
 
       // Mark deck as submitted to prevent redirect loop
       const matchId = searchParams?.get("matchId");
@@ -1546,7 +1547,7 @@ function AuthenticatedDeckEditor() {
         localStorage.setItem(`draft_submitted_${matchId}`, "true");
       }
 
-      // Submit to match server using postMessage to parent window (same as sealed)
+      // Submit to match server immediately; persist deck in background (same as sealed)
       if (window.opener) {
         window.opener.postMessage(
           {
@@ -1560,6 +1561,11 @@ function AuthenticatedDeckEditor() {
         // Fallback: save to localStorage for the match page to pick up
         localStorage.setItem(`draftDeck_${matchId}`, JSON.stringify(deckCards));
       }
+
+      // Save to account in the background (do not block submission UX)
+      try {
+        void saveDeck();
+      } catch {}
 
       setSaveMsg("Draft deck submitted successfully!");
 
@@ -1905,6 +1911,9 @@ function AuthenticatedDeckEditor() {
     }
   }, [isSortingEnabled]); // Only reset when sorting is toggled, not when cards change
 
+  // Click dedupe guard: avoid multiple toggles when overlapping instances receive the same click
+  const cardClickGuardRef = useRef<Map<number, number>>(new Map());
+
   // Create sorted stack positions using the shared utility
   const stackPositions = useMemo(() => {
     return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
@@ -2129,6 +2138,18 @@ function AuthenticatedDeckEditor() {
         if (isStandardSite(card.card.cardName)) {
           // Remove the card entirely
           updated.splice(idx, 1);
+          // Also decrement picks for this card from Deck zone to keep state in sync
+          const variantId = card.card.variantId ?? undefined; // preserve 0
+          setPicks((prevPicks) => {
+            const next = { ...prevPicks } as Record<PickKey, PickItem>;
+            const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
+            const deckItem = next[deckKey];
+            if (deckItem) {
+              if (deckItem.count > 1) next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+              else delete next[deckKey];
+            }
+            return next;
+          });
           return updated;
         }
 
@@ -2144,7 +2165,7 @@ function AuthenticatedDeckEditor() {
         };
 
         // Sync picks state for all modes (draft, sealed, and normal editor)
-        const variantId = card.card.variantId || undefined;
+        const variantId = card.card.variantId ?? undefined; // preserve 0
         setPicks((prevPicks) => {
           const next = { ...prevPicks } as Record<PickKey, PickItem>;
           const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
@@ -2203,7 +2224,7 @@ function AuthenticatedDeckEditor() {
       };
 
       // Sync picks state for all modes (draft, sealed, and normal editor)
-      const variantId = card.card.variantId || undefined;
+      const variantId = card.card.variantId ?? undefined; // preserve 0
       setPicks((prevPicks) => {
         const next = { ...prevPicks } as Record<PickKey, PickItem>;
         const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
@@ -2259,7 +2280,7 @@ function AuthenticatedDeckEditor() {
           // Remove the card entirely
           updated.splice(cardIndex, 1);
           // Also decrement picks for this card from Deck zone
-          const variantId = card.card.variantId || undefined;
+          const variantId = card.card.variantId ?? undefined; // preserve 0
           setPicks((prevPicks) => {
             const next = { ...prevPicks } as Record<PickKey, PickItem>;
             const deckKey = `${card.card.cardId}:Deck:${
@@ -2289,15 +2310,11 @@ function AuthenticatedDeckEditor() {
         };
 
         // Sync picks: move one copy from Deck to Sideboard
-        const variantId = card.card.variantId || undefined;
+        const variantId = card.card.variantId ?? undefined; // preserve 0
         setPicks((prevPicks) => {
           const next = { ...prevPicks } as Record<PickKey, PickItem>;
-          const deckKey = `${card.card.cardId}:Deck:${
-            variantId ?? "x"
-          }` as PickKey;
-          const sideboardKey = `${card.card.cardId}:Sideboard:${
-            variantId ?? "x"
-          }` as PickKey;
+          const deckKey = `${card.card.cardId}:Deck:${variantId ?? "x"}` as PickKey;
+          const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? "x"}` as PickKey;
           const deckItem = next[deckKey];
           if (deckItem) {
             if (deckItem.count > 1)
@@ -2346,7 +2363,7 @@ function AuthenticatedDeckEditor() {
 
       // Sync picks: move one copy from Sideboard to Deck
       const card = updated[cardIndex];
-      const variantId = card.card.variantId || undefined;
+      const variantId = card.card.variantId ?? undefined; // preserve 0
       setPicks((prevPicks) => {
         const next = { ...prevPicks } as Record<PickKey, PickItem>;
         const deckKey = `${card.card.cardId}:Deck:${
@@ -2499,7 +2516,8 @@ function AuthenticatedDeckEditor() {
 
                       // Keep picks in sync with zone changes so future updates don't revert layout
                       if (zoneChanged) {
-                        const variantId = p.card.variantId || undefined;
+                        // Preserve 0 as a valid variant key; only treat null/undefined as absent
+                        const variantId = p.card.variantId ?? undefined;
                         setPicks((prev) => {
                           const next = { ...prev } as Record<PickKey, PickItem>;
                           const decKey = `${p.card.cardId}:${oldZone}:${
@@ -2551,6 +2569,14 @@ function AuthenticatedDeckEditor() {
                       // Click to move between deck/sideboard using the same functions as sidebar
                       if (!wasDragging) {
                         const currentZone = p.zone; // Use explicit zone field
+
+                        // Dedupe: if we recently toggled this cardId via click, ignore repeats briefly
+                        const now = Date.now();
+                        const last = cardClickGuardRef.current.get(p.card.cardId) || 0;
+                        if (now - last < 150) {
+                          return;
+                        }
+                        cardClickGuardRef.current.set(p.card.cardId, now);
 
                         if (currentZone === "Deck") {
                           // Move from deck to sideboard

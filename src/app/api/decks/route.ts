@@ -24,9 +24,10 @@ export async function GET() {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
   try {
+    const userId = session.user.id;
     // Get user's own decks (both public and private)
     const myDecks = await prisma.deck.findMany({
-      where: { userId: session.user.id },
+      where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: { id: true, name: true, format: true, isPublic: true, imported: true, updatedAt: true },
     });
@@ -187,8 +188,9 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
   try {
+    const userId = session.user.id;
     // Ensure the authenticated user exists in the database (useful after local DB resets)
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       return new Response(
         JSON.stringify({
@@ -252,25 +254,24 @@ export async function POST(req: NextRequest) {
     const setByVariant = new Map<number, number>();
     for (const v of variants) setByVariant.set(v.id, v.setId);
 
-        const deck = await prisma.deck.create({
-      data: { name, format, isPublic, userId: session.user.id },
+    // Create deck and all cards in a single transaction to minimize latency
+    const result = await prisma.$transaction(async (tx) => {
+      const deck = await tx.deck.create({ data: { name, format, isPublic, userId } });
+      const createData = Array.from(agg.values()).map(({ cardId, zone, count, variantId }) => ({
+        deckId: deck.id,
+        cardId,
+        setId: (variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null)),
+        variantId: variantId ?? null,
+        zone,
+        count,
+      }));
+      if (createData.length) {
+        await tx.deckCard.createMany({ data: createData });
+      }
+      return { id: deck.id, name: deck.name, format: deck.format };
     });
 
-    for (const { cardId, zone, count, variantId } of agg.values()) {
-      await prisma.deckCard.create({
-        data: {
-          deckId: deck.id,
-          cardId,
-          // Prefer per-variant setId if available; otherwise fall back to top-level set
-          setId: (variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null)),
-          variantId: variantId ?? null,
-          zone,
-          count,
-        },
-      });
-    }
-
-    return new Response(JSON.stringify({ id: deck.id, name: deck.name, format: deck.format }), {
+    return new Response(JSON.stringify(result), {
       status: 201,
       headers: { 'content-type': 'application/json' },
     });
