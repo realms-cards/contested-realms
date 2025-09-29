@@ -2773,24 +2773,17 @@ function deepMergeReplaceArrays(base, patch) {
   return out;
 }
 
-// Remove duplicate permanents across the entire board by cardId
+// Normalize permanents arrays without dropping duplicates across the board.
+// Trust client/server sync to resolve identity; allow multiple copies of same cardId.
 function dedupePermanents(per) {
   try {
     if (!per || typeof per !== 'object') return per;
     const out = {};
-    const seen = new Set();
     for (const [cell, arrAny] of Object.entries(per)) {
       const arr = Array.isArray(arrAny) ? arrAny : [];
       const next = [];
       for (const item of arr) {
-        const id = Number(item && item.card && item.card.cardId);
-        if (Number.isFinite(id)) {
-          if (seen.has(id)) {
-            try { console.warn('[match] dedupe permanents: drop duplicate', { cell, cardId: id, name: item && item.card && item.card.name }); } catch {}
-            continue;
-          }
-          seen.add(id);
-        }
+        if (!item || typeof item !== 'object') continue;
         next.push(item);
       }
       out[cell] = next;
