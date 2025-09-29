@@ -496,55 +496,6 @@ export default function OnlineDraft3DScreen({
   }, [pick3D]);
 
   // When a new pick for me becomes available, unlock UI and clear any previous staged state
-  useEffect(() => {
-    if (draftState.phase === "picking" && amPicker) {
-      setReady(false);
-      
-      // Show pack choice overlay at the start of each pack (only once per round)
-      if (draftState.pickNumber === 1 && !packChoiceOverlay && shownPackOverlayForRound !== draftState.packIndex) {
-        console.log(`[DraftClient 3D] Showing pack choice overlay for pack ${draftState.packIndex + 1}`);
-        setPackChoiceOverlay(true);
-        setShownPackOverlayForRound(draftState.packIndex);
-        return; // Don't auto-pick when pack choice is needed
-      }
-      
-      // Auto-pick if only one card left in pack
-      const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
-      if (myPack.length === 1 && !staged && !ready) {
-        const lastCard = myPack[0];
-        console.log(`[DraftClient 3D] Auto-picking last card: ${lastCard.name} (${lastCard.id})`);
-        
-        // Stage the card first
-        setStaged({ card: lastCard, x: 0, z: 0 });
-        
-        // Then auto-pick it after a short delay
-        setTimeout(() => {
-          if (!transport || !match) return;
-
-          console.log(
-            `[DraftClient 3D] Auto-handlePickAndPass -> cardId=${lastCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
-          );
-
-          void handlePickAndPass();
-        }, 500); // Small delay to show the staging visually
-      }
-    }
-  }, [
-    draftState.phase,
-    draftState.packIndex,
-    draftState.pickNumber,
-    amPicker,
-    staged,
-    ready,
-    myPlayerIndex,
-    transport,
-    match,
-    draftState,
-    packChoiceOverlay,
-    shownPackOverlayForRound,
-    handlePickAndPass,
-  ]);
-
   // Ready state (one-way)
   const handleToggleReady = useCallback(async () => {
     if (!transport || !match) return;
@@ -634,81 +585,137 @@ export default function OnlineDraft3DScreen({
   );
 
   // Enhanced pick handling with new sync system
-  const handlePickAndPass = useCallback(async () => {
-    console.log(`[DraftClient 3D] handlePickAndPass called - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`);
-    
-    if (!staged || !transport || !match || ready) {
-      console.warn(`[DraftClient 3D] handlePickAndPass blocked - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`);
-      return;
-    }
-    
-    console.log(`[DraftClient 3D] makeDraftPick -> cardId=${staged.card.id} pack=${draftState.packIndex} pick=${draftState.pickNumber} match=${match.id}`);
-    
-    setReady(true);
-    
-    // Use new sync system if connected, fallback to old transport
-    if (draftSync.isConnected) {
-      try {
-        console.log(`[DraftClient 3D] Using new sync system for pick`);
-        const result = await draftSync.makePickAttempt(staged.card.id);
-        
-        if (result.success) {
-          console.log(`[DraftClient 3D] New sync pick successful: ${result.message}`);
-        } else {
-          console.error(`[DraftClient 3D] New sync pick failed: ${result.message}`);
+  const handlePickAndPass = useCallback(
+    async (cardToPick?: DraftCard | null) => {
+      const stagedCard = cardToPick ?? staged?.card;
+      if (!stagedCard || !transport || !match || ready) {
+        console.warn(
+          `[DraftClient 3D] handlePickAndPass blocked - staged:${!!stagedCard} transport:${!!transport} match:${!!match} ready:${ready}`
+        );
+        return;
+      }
+
+      console.log(
+        `[DraftClient 3D] makeDraftPick -> cardId=${stagedCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber} match=${match.id}`
+      );
+
+      setReady(true);
+
+      // Use new sync system if connected, fallback to old transport
+      if (draftSync.isConnected) {
+        try {
+          const result = await draftSync.makePickAttempt(stagedCard.id);
+          if (!result.success) {
+            console.error(`[DraftClient 3D] New sync pick failed: ${result.message}`);
+            setReady(false);
+            return;
+          }
+        } catch (err) {
+          console.error(`[DraftClient 3D] New sync pick error:`, err);
           setReady(false);
           return;
         }
-      } catch (err) {
-        console.error(`[DraftClient 3D] New sync pick error:`, err);
-        setReady(false);
-        return;
+      } else {
+        if (!transport.makeDraftPick) {
+          console.error(`[DraftClient 3D] transport.makeDraftPick is not available!`);
+          return;
+        }
+
+        try {
+          transport.makeDraftPick({
+            matchId: match.id,
+            cardId: stagedCard.id,
+            packIndex: draftState.packIndex,
+            pickNumber: draftState.pickNumber,
+          });
+        } catch (err) {
+          console.error(`[DraftClient 3D] makeDraftPick error:`, err);
+          setReady(false);
+          return;
+        }
       }
-    } else {
-      // Fallback to old transport system
-      if (!transport.makeDraftPick) {
-        console.error(`[DraftClient 3D] transport.makeDraftPick is not available!`);
-        return;
+
+      const boosterCard = draftCardToBoosterCard(stagedCard);
+      const newPick: Pick3D = {
+        id: nextPickId,
+        card: boosterCard,
+        x: staged?.x ?? 0,
+        z: staged?.z ?? 0,
+        zone: (staged?.z ?? 0) < 0 ? "Deck" : "Sideboard",
+      };
+      setPick3D((prev) => [...prev, newPick]);
+      setNextPickId((prev) => prev + 1);
+
+      try {
+        await deckPersistence.addStandardCards([stagedCard.id]);
+      } catch (err) {
+        console.warn(`[DraftClient 3D] Failed to add drafted card to persistence:`, err);
+      }
+
+      setStaged(null);
+    },
+    [
+      staged,
+      transport,
+      match,
+      ready,
+      draftState.packIndex,
+      draftState.pickNumber,
+      draftCardToBoosterCard,
+      nextPickId,
+      draftSync,
+      deckPersistence,
+    ]
+  );
+  useEffect(() => {
+    if (draftState.phase === "picking" && amPicker) {
+      setReady(false);
+      
+      // Show pack choice overlay at the start of each pack (only once per round)
+      if (draftState.pickNumber === 1 && !packChoiceOverlay && shownPackOverlayForRound !== draftState.packIndex) {
+        console.log(`[DraftClient 3D] Showing pack choice overlay for pack ${draftState.packIndex + 1}`);
+        setPackChoiceOverlay(true);
+        setShownPackOverlayForRound(draftState.packIndex);
+        return; // Don't auto-pick when pack choice is needed
       }
       
-      try {
-        transport.makeDraftPick({
-          matchId: match.id,
-          cardId: staged.card.id,
-          packIndex: draftState.packIndex,
-          pickNumber: draftState.pickNumber,
-        });
-      } catch (err) {
-        console.error(`[DraftClient 3D] makeDraftPick error:`, err);
-        setReady(false);
-        return;
+      // Auto-pick if only one card left in pack
+      const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+      if (myPack.length === 1 && !staged && !ready) {
+        const lastCard = myPack[0];
+        console.log(`[DraftClient 3D] Auto-picking last card: ${lastCard.name} (${lastCard.id})`);
+        
+        // Stage the card first
+        setStaged({ card: lastCard, x: 0, z: 0 });
+        
+        // Then auto-pick it after a short delay
+        setTimeout(() => {
+          if (!transport || !match) return;
+
+          console.log(
+            `[DraftClient 3D] Auto-handlePickAndPass -> cardId=${lastCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+          );
+
+          void handlePickAndPass(lastCard);
+        }, 500); // Small delay to show the staging visually
       }
     }
-    
-    // Add picked card to 3D board display and persistence
-    const boosterCard = draftCardToBoosterCard(staged.card);
-    const newPick: Pick3D = {
-      id: nextPickId,
-      card: boosterCard,
-      x: staged.x,
-      z: staged.z,
-      zone: staged.z < 0 ? "Deck" : "Sideboard",
-    };
-    setPick3D(prev => [...prev, newPick]);
-    setNextPickId(prev => prev + 1);
-    
-    // Add drafted card to persistence system
-    try {
-      await deckPersistence.addStandardCards([staged.card.id]);
-      console.log(`[DraftClient 3D] Added drafted card to persistence`);
-    } catch (err) {
-      console.warn(`[DraftClient 3D] Failed to add drafted card to persistence:`, err);
-    }
-    
-    // Clear staged after pick
-    console.log(`[DraftClient 3D] pickAndPass -> cardId=${staged.card.id}`);
-    setStaged(null);
-  }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber, draftCardToBoosterCard, nextPickId, draftSync, deckPersistence]);
+  }, [
+    draftState.phase,
+    draftState.packIndex,
+    draftState.pickNumber,
+    amPicker,
+    staged,
+    ready,
+    myPlayerIndex,
+    transport,
+    match,
+    draftState,
+    packChoiceOverlay,
+    shownPackOverlayForRound,
+    handlePickAndPass,
+  ]);
+
 
   // Keyboard event handling for spacebar pick and pass
   useEffect(() => {
