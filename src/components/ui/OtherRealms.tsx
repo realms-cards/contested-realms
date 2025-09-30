@@ -29,19 +29,16 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
     label: "Sorcery Official Discord",
     href: "https://discord.gg/qvYVGFAS5n",
     subtitle: "Community, announcements, and rules discussions",
-    disabledReason: "Invite URL needed (please provide)",
   },
   {
     label: "Sorcery League — Official Discord",
     href: "https://discord.gg/YSAa5E82",
     subtitle: "Organized play, leagues, and events",
-    disabledReason: "Invite URL needed (please provide)",
   },
   {
     label: "Sorcerers at the Core",
     href: "https://www.sorcerersatthecore.com/",
     subtitle: "Community-driven content and discussion",
-    disabledReason: "Invite URL needed (please provide)",
   },
   {
     label: "Trolls of the Realm",
