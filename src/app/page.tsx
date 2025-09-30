@@ -96,7 +96,11 @@ export default function Home() {
         {/* Footer */}
         <div className="text-xs text-orange-300/80 space-y-1">
           <p>
-            Sorcery: Contested Realm is a trademark of Erik&apos;s Curiosa.
+            All rights to Sorcery: Contested Realms intellectual property,
+            including but not limited to card images, artwork, logos, and
+            trademarks, remain with Erik’s Curiosa Limited and or the original
+            artists.
+            <br />
             Visit the official site at{" "}
             <a
               href="https://curiosa.io"
@@ -107,11 +111,12 @@ export default function Home() {
               curiosa.io
             </a>
             .
+            <br />
+            This simulator is an independent community focused project and is
+            provided as is - free of charge for community and educational
+            purposes only.
           </p>
-          <p>
-            This is an unofficial digital client for educational and friendly
-            tournament purposes.
-          </p>
+          <p></p>
         </div>
       </div>
       {/* Bottom ASCII art background */}
