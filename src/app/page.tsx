@@ -99,9 +99,7 @@ export default function Home() {
             All rights to Sorcery: Contested Realms intellectual property,
             including but not limited to card images, artwork, logos, and
             trademarks, remain with Erik’s Curiosa Limited and or the original
-            artists.
-            <br />
-            Visit the official site at{" "}
+            artists.Visit the official site at{" "}
             <a
               href="https://curiosa.io"
               target="_blank"
@@ -113,8 +111,9 @@ export default function Home() {
             .
             <br />
             This simulator is an independent community focused project and is
-            provided as is - free of charge for community and educational
-            purposes only.
+            provided as is:
+            <br />
+            free of charge for community and educational purposes only.
           </p>
           <p></p>
         </div>
