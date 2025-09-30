@@ -846,6 +846,7 @@ const {
 const { BotManager } = require("./botManager");
 const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
+const { buildMatchInfo } = require("./matchInfo");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 const prisma = new PrismaClient();
@@ -2731,63 +2732,11 @@ function getLobbyInfo(lobby) {
   };
 }
 
-function fallbackDisplayName(playerId) {
-  const suffix = String(playerId || "").slice(-4) || "0000";
-  return `Player ${suffix}`;
-}
-
-function ensurePlayerEntry(playerId) {
-  if (players.has(playerId)) return players.get(playerId);
-  const entry = {
-    id: playerId,
-    displayName: fallbackDisplayName(playerId),
-    socketId: null,
-    lobbyId: null,
-    matchId: null,
-  };
-  players.set(playerId, entry);
-  // Best-effort async hydrate from Redis without blocking caller
-  try {
-    void ensurePlayerCached(playerId);
-  } catch {}
-  return entry;
-}
-
 function getMatchInfo(match) {
-  const orderedPlayers = [];
-  if (Array.isArray(match.playerIds)) {
-    for (const pid of match.playerIds) {
-      if (!pid) continue;
-      const existing = players.get(pid) || ensurePlayerEntry(pid);
-      const info = existing ? getPlayerInfo(pid) : null;
-      orderedPlayers.push(
-        info || { id: pid, displayName: fallbackDisplayName(pid) }
-      );
-    }
-  }
-
-  return {
-    id: match.id,
-    lobbyId: match.lobbyId || undefined,
-    lobbyName: match.lobbyName || undefined,
-    players: orderedPlayers,
-    playerIds: Array.isArray(match.playerIds) ? [...match.playerIds] : [],
-    status: match.status,
-    seed: match.seed,
-    turn: match.turn,
-    winnerId: match.winnerId ?? null,
-    matchType: match.matchType || "constructed",
-    sealedConfig: match.sealedConfig,
-    draftConfig: match.draftConfig,
-    deckSubmissions: match.playerDecks
-      ? Array.from(match.playerDecks.keys())
-      : [],
-    playerDecks: match.playerDecks
-      ? Object.fromEntries(match.playerDecks)
-      : undefined,
-    sealedPacks: match.sealedPacks || undefined,
-    draftState: match.draftState || undefined,
-  };
+  return buildMatchInfo(match, {
+    playersMap: players,
+    ensurePlayerCached,
+  });
 }
 
 // Deep merge that replaces arrays and merges plain objects.
