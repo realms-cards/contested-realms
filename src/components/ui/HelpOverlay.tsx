@@ -66,14 +66,14 @@ export default function HelpOverlay({
       {open && (
         <div
           id={baseId}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={labelId}
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm grid justify-items-center p-4 min-h-[100svh]"
           onMouseDown={() => setOpen(false)}
         >
           <div
-            className="relative w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelId}
+            className="relative place-self-center w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -92,7 +92,7 @@ export default function HelpOverlay({
             </div>
 
             {/* Body */}
-            <div className="px-5 py-4 max-h-[calc(100vh-10rem)] overflow-auto">
+            <div className="px-5 py-4 max-h-[70svh] overflow-auto">
               {children}
             </div>
 

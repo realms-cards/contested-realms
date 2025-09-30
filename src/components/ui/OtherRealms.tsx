@@ -27,21 +27,36 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
   },
   {
     label: "Sorcery Official Discord",
-    href: "#",
+    href: "https://discord.gg/qvYVGFAS5n",
     subtitle: "Community, announcements, and rules discussions",
     disabledReason: "Invite URL needed (please provide)",
   },
   {
     label: "Sorcery League — Official Discord",
-    href: "#",
+    href: "https://discord.gg/YSAa5E82",
     subtitle: "Organized play, leagues, and events",
     disabledReason: "Invite URL needed (please provide)",
   },
   {
-    label: "Sorcerers at the Core — Official Discord",
-    href: "#",
+    label: "Sorcerers at the Core",
+    href: "https://www.sorcerersatthecore.com/",
     subtitle: "Community-driven content and discussion",
     disabledReason: "Invite URL needed (please provide)",
+  },
+  {
+    label: "Trolls of the Realm",
+    href: "https://trollsoftherealm.com/",
+    subtitle: "Buy and sell single cards (Europe)",
+  },
+  {
+    label: "TCGPlayer",
+    href: "https://www.tcgplayer.com/search/sorcery-contested-realm/product?productLineName=sorcery-contested-realm&view=grid",
+    subtitle: "Buy and sell single cards (US)",
+  },
+  {
+    label: "Sorcery.market",
+    href: "https://sorcery.market/",
+    subtitle: "Live card market data",
   },
   {
     label: "The Painted Realm",

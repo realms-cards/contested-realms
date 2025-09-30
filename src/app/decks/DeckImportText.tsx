@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import AnimatedImage from "@/components/ui/AnimatedImage";
 import HelpOverlay from "@/components/ui/HelpOverlay";
 
 export default function DeckImportText() {
@@ -83,12 +84,16 @@ export default function DeckImportText() {
           idSuffix="deck-import-text-help"
         >
           <figure className="space-y-2">
-            {/* Using <img> to preserve animation behavior */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <AnimatedImage
               src="/userhelp/realms-copyandimportdeck.webp"
               alt="Animation showing how to copy a deck from Realms and import it here"
-              className="w-full h-auto rounded-md border border-slate-700"
+              width={1280}
+              height={720}
+              className="block w-full h-auto"
+              wrapperClassName="rounded-md border border-slate-700"
+              showSkeleton
+              // keep animation intact via unoptimized
+              unoptimized
             />
             <figcaption className="text-xs text-slate-300/90">
               Tip: Copy your decklist from Curiosa Decks (or any other text
