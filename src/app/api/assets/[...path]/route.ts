@@ -118,8 +118,16 @@ export async function GET(
         // Check if this is a subdirectory request (like Dragonlord/cardname.png)
         const hasSubdir = segments.length > 1;
         const subdir = hasSubdir ? segments.slice(0, -1).join("/") : "";
+        const normalizedSubdir = hasSubdir
+          ? segments
+              .slice(0, -1)
+              .map((segment, idx) => (idx === 0 ? segment.toLowerCase() : segment))
+              .join("/")
+          : "";
 
-        if (segments[0] === "tokens") {
+        const topSegment = segments[0]?.toLowerCase();
+
+        if (topSegment === "tokens") {
           // Token images - map into data-* folders on the CDN
           if (wantKtx2 || requestedExt === "ktx2") {
             const ktx2Name = baseName + ".ktx2";
@@ -132,23 +140,30 @@ export async function GET(
           } else {
             cdnPath = `data/tokens/${last}`;
           }
-        } else if (segments[0] === "Dragonlord") {
-          // Dragonlord assets - special handling since they're webp in both folders
-          // For CDN, they should be in /data-webp/Dragonlord/
-          const webpName = baseName + ".webp";
-          cdnPath = `data-webp/Dragonlord/${webpName}`;
+        } else if (topSegment === "dragonlord") {
+          if (wantKtx2 || requestedExt === "ktx2") {
+            const ktx2Name = baseName + ".ktx2";
+            cdnPath = `data-ktx2/dragonlord/${ktx2Name}`;
+          } else if (requestedExt === "webp") {
+            cdnPath = `data-webp/dragonlord/${last}`;
+          } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+            const webpName = baseName + ".webp";
+            cdnPath = `data-webp/dragonlord/${webpName}`;
+          } else {
+            cdnPath = `data/dragonlord/${last}`;
+          }
         } else if (hasSubdir) {
           // Other subdirectory assets - preserve path structure within data-* folders
           if (wantKtx2 || requestedExt === "ktx2") {
             const ktx2Name = baseName + ".ktx2";
-            cdnPath = `data-ktx2/${subdir}/${ktx2Name}`;
+            cdnPath = `data-ktx2/${normalizedSubdir}/${ktx2Name}`;
           } else if (requestedExt === "webp") {
-            cdnPath = `data-webp/${subdir}/${last}`;
+            cdnPath = `data-webp/${normalizedSubdir}/${last}`;
           } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
             const webpName = baseName + ".webp";
-            cdnPath = `data-webp/${subdir}/${webpName}`;
+            cdnPath = `data-webp/${normalizedSubdir}/${webpName}`;
           } else {
-            cdnPath = `data/${subdir}/${last}`;
+            cdnPath = `data/${normalizedSubdir}/${last}`;
           }
         } else if (wantKtx2 || requestedExt === "ktx2") {
           // Prefer ktx2 format for cards at CDN
@@ -217,22 +232,33 @@ export async function GET(
     // Build candidate paths.
     // If ?ktx2 was requested for a raster path, first try swapping extension to .ktx2.
     // For raster fallback, prefer a .webp variant before the originally requested file.
+    const pathVariants: string[][] = [segments];
+    if (segments.length >= 1) {
+      const loweredFirst = [segments[0].toLowerCase(), ...segments.slice(1)];
+      if (loweredFirst[0] !== segments[0]) {
+        pathVariants.push(loweredFirst);
+      }
+    }
+
     const candidates: string[] = [];
-    for (const root of roots) {
-      if (wantKtx2 && requestedExt !== "ktx2" && !shouldForceDataOnly) {
-        const ktx2Name = last.replace(/\.[^.]+$/, ".ktx2");
-        const ktx2Path = path.join(root, ...segments.slice(0, -1), ktx2Name);
-        candidates.push(ktx2Path);
-      }
-      if (requestedExt !== "ktx2") {
-        const ext = requestedExt;
-        if (["png", "jpg", "jpeg"].includes(ext)) {
-          const webpName = last.replace(/\.[^.]+$/, ".webp");
-          const webpPath = path.join(root, ...segments.slice(0, -1), webpName);
-          candidates.push(webpPath);
+    for (const variant of pathVariants) {
+      const variantLast = variant[variant.length - 1];
+      for (const root of roots) {
+        if (wantKtx2 && requestedExt !== "ktx2" && !shouldForceDataOnly) {
+          const ktx2Name = variantLast.replace(/\.[^.]+$/, ".ktx2");
+          const ktx2Path = path.join(root, ...variant.slice(0, -1), ktx2Name);
+          candidates.push(ktx2Path);
         }
+        if (requestedExt !== "ktx2") {
+          const ext = requestedExt;
+          if (["png", "jpg", "jpeg"].includes(ext)) {
+            const webpName = variantLast.replace(/\.[^.]+$/, ".webp");
+            const webpPath = path.join(root, ...variant.slice(0, -1), webpName);
+            candidates.push(webpPath);
+          }
+        }
+        candidates.push(path.join(root, ...variant));
       }
-      candidates.push(path.join(root, ...segments));
     }
     
     // Debug logging for cardback files
