@@ -1571,14 +1571,12 @@ export const useGameStore = create<GameState>((set, get) => ({
               }
             }
           } else {
-            // Actor unknown: keep provided seat(s) but strip 'tapped' to avoid illegal tap attempts
+            // Actor unknown: allow optimistic avatar updates but strip tap intent
             for (const k of keys) {
-              const v = (p.avatars as GameState["avatars"])[k] as
-                | AvatarState
-                | undefined;
+              const v = (p.avatars as GameState["avatars"])[k];
               if (!v || typeof v !== "object") continue;
-              const rest = { ...(v as unknown as Record<string, unknown>) };
-              delete (rest as Record<string, unknown>)["tapped"];
+              const rest = { ...(v as Record<string, unknown>) };
+              delete rest.tapped;
               (out as Record<string, unknown>)[k] = rest as unknown;
             }
           }
@@ -1590,7 +1588,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         // Filter zones: keep only actor seat updates when actor known
         if (p.zones && typeof p.zones === "object") {
-          if (actorKey) {
+          if (actorKey === "p1" || actorKey === "p2") {
             const z = p.zones as Partial<Record<PlayerKey, Zones>>;
             const outZ: Partial<Record<PlayerKey, Zones>> = {};
             if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
@@ -1600,8 +1598,13 @@ export const useGameStore = create<GameState>((set, get) => ({
               delete (sanitized as unknown as { zones?: unknown }).zones;
             }
           } else {
-            // Actor unknown: drop zones entirely to avoid accidental opponent mutations
-            delete (sanitized as unknown as { zones?: unknown }).zones;
+            // Actor unknown: allow zones through; server-side validation will enforce seat safety
+            try {
+              console.warn(
+                "[net] trySendPatch: zones allowed with unknown actor",
+                { keys: Object.keys(p.zones) }
+              );
+            } catch {}
           }
         }
         toSend = sanitized;
@@ -1682,12 +1685,10 @@ export const useGameStore = create<GameState>((set, get) => ({
                 }
               } else {
                 for (const k of keys) {
-                  const v = (sanitized.avatars as GameState["avatars"])[k] as
-                    | AvatarState
-                    | undefined;
+                  const v = (sanitized.avatars as GameState["avatars"])[k];
                   if (!v || typeof v !== "object") continue;
-                  const rest = { ...(v as unknown as Record<string, unknown>) };
-                  delete (rest as Record<string, unknown>)["tapped"];
+                  const rest = { ...(v as Record<string, unknown>) };
+                  delete rest.tapped;
                   (out as Record<string, unknown>)[k] = rest as unknown;
                 }
               }
@@ -1697,18 +1698,23 @@ export const useGameStore = create<GameState>((set, get) => ({
                 delete (sanitized as unknown as { avatars?: unknown }).avatars;
               }
             }
-            if (
-              sanitized.zones &&
-              typeof sanitized.zones === "object" &&
-              actorKey
-            ) {
-              const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
-              const outZ: Partial<Record<PlayerKey, Zones>> = {};
-              if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
-              if (Object.keys(outZ).length > 0) {
-                sanitized.zones = outZ as GameState["zones"];
+            if (sanitized.zones && typeof sanitized.zones === "object") {
+              if (actorKey === "p1" || actorKey === "p2") {
+                const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
+                const outZ: Partial<Record<PlayerKey, Zones>> = {};
+                if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+                if (Object.keys(outZ).length > 0) {
+                  sanitized.zones = outZ as GameState["zones"];
+                } else {
+                  delete (sanitized as unknown as { zones?: unknown }).zones;
+                }
               } else {
-                delete (sanitized as unknown as { zones?: unknown }).zones;
+                try {
+                  console.warn(
+                    "[net] flushPendingPatches: zones allowed with unknown actor",
+                    { keys: Object.keys(sanitized.zones) }
+                  );
+                } catch {}
               }
             }
             toSend = sanitized;
