@@ -95,10 +95,20 @@ export default function OnlineMatchPage() {
 
   // Determine which player this client is (support for 2-8 players)
   const myPlayerId = me?.id;
+  const orderedPlayerIds = useMemo(() => {
+    if (Array.isArray(match?.playerIds) && match.playerIds.length > 0) {
+      return match.playerIds;
+    }
+    if (Array.isArray(match?.players)) {
+      return match.players.map((p) => p.id).filter(Boolean);
+    }
+    return [] as string[];
+  }, [match?.playerIds, match?.players]);
+
   const myPlayerIndex = useMemo(() => {
-    if (!match?.players || !myPlayerId) return -1;
-    return match.players.findIndex((p) => p.id === myPlayerId);
-  }, [match?.players, myPlayerId]);
+    if (!myPlayerId) return -1;
+    return orderedPlayerIds.indexOf(myPlayerId);
+  }, [orderedPlayerIds, myPlayerId]);
   const myPlayerNumber = myPlayerIndex >= 0 ? myPlayerIndex + 1 : null;
   const myPlayerKey =
     myPlayerIndex >= 0 && myPlayerIndex < 2
@@ -111,10 +121,13 @@ export default function OnlineMatchPage() {
     return myPlayerKey === "p1" ? "p2" : "p1";
   }, [myPlayerKey]);
   const opponentPlayerId: string | null = useMemo(() => {
-    if (!match?.players || myPlayerIndex < 0) return null;
-    const opp = match.players[myPlayerIndex === 0 ? 1 : 0];
-    return opp?.id || null;
-  }, [match?.players, myPlayerIndex]);
+    if (myPlayerIndex < 0) return null;
+    if (orderedPlayerIds.length < 2) return null;
+    const opponentIndex = myPlayerIndex === 0 ? 1 : 0;
+    const opponentId = orderedPlayerIds[opponentIndex] || null;
+    if (!opponentId) return null;
+    return opponentId;
+  }, [orderedPlayerIds, myPlayerIndex]);
 
   // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {

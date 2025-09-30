@@ -147,6 +147,7 @@ export const MatchInfoSchema = z.object({
   sealedPacks: z.record(z.string(), z.array(SealedPackSchema)).optional(),
   draftState: DraftStateSchema.optional(),
   // Multi-player support
+  playerIds: z.array(z.string()).optional(),
   maxPlayers: z.number().int().min(2).max(8).default(2),
   isMultiplayer: z.boolean().default(false),
 });
