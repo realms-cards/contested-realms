@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import HelpOverlay from "@/components/ui/HelpOverlay";
 
 export default function DeckImportText() {
   const enabled = process.env.NEXT_PUBLIC_ENABLE_TEXT_IMPORT === "true";
@@ -9,7 +10,9 @@ export default function DeckImportText() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [unresolved, setUnresolved] = useState<{ name: string; count: number }[] | null>(null);
+  const [unresolved, setUnresolved] = useState<
+    { name: string; count: number }[] | null
+  >(null);
   const router = useRouter();
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -22,7 +25,10 @@ export default function DeckImportText() {
       const res = await fetch("/api/decks/import/text", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: text.trim(), name: name.trim() || undefined }),
+        body: JSON.stringify({
+          text: text.trim(),
+          name: name.trim() || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -32,8 +38,14 @@ export default function DeckImportText() {
           setUnresolved(
             (data.unresolved as unknown[])
               .map((u: unknown) => {
-                const o = (u && typeof u === "object" ? (u as Record<string, unknown>) : {});
-                return { name: String(o.name ?? ""), count: Number(o.count ?? 0) };
+                const o =
+                  u && typeof u === "object"
+                    ? (u as Record<string, unknown>)
+                    : {};
+                return {
+                  name: String(o.name ?? ""),
+                  count: Number(o.count ?? 0),
+                };
               })
               .filter((u) => u.name)
           );
@@ -42,7 +54,9 @@ export default function DeckImportText() {
         setName("");
         setText("");
         // Notify listeners on the page to refetch deck lists immediately
-        try { window.dispatchEvent(new Event("decks:refresh")); } catch {}
+        try {
+          window.dispatchEvent(new Event("decks:refresh"));
+        } catch {}
         router.refresh();
       }
     } catch {
@@ -57,8 +71,33 @@ export default function DeckImportText() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3">
-      <div className="text-sm font-medium">Import Deck from Text</div>
+    <form
+      onSubmit={onSubmit}
+      className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3"
+    >
+      <div className="text-sm font-medium flex items-center gap-2">
+        <span>Import Deck from Text</span>
+        <HelpOverlay
+          title="Import from text — Help"
+          triggerAriaLabel="Show help for Import Deck from Text"
+          idSuffix="deck-import-text-help"
+        >
+          <figure className="space-y-2">
+            {/* Using <img> to preserve animation behavior */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/userhelp/realms-copyandimportdeck.webp"
+              alt="Animation showing how to copy a deck from Realms and import it here"
+              className="w-full h-auto rounded-md border border-slate-700"
+            />
+            <figcaption className="text-xs text-slate-300/90">
+              Tip: Copy your decklist from Curiosa Decks (or any other text
+              based source), paste it into the text box, optionally set a name,
+              then click Import.
+            </figcaption>
+          </figure>
+        </HelpOverlay>
+      </div>
       <div className="grid gap-2 sm:grid-cols-5">
         <textarea
           className="sm:col-span-3 w-full h-40 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white font-mono text-xs"
@@ -88,14 +127,20 @@ export default function DeckImportText() {
         </div>
       </div>
       {error && (
-        <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">{error}</div>
+        <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+          {error}
+        </div>
       )}
       {unresolved && unresolved.length > 0 && (
         <div className="text-xs bg-zinc-800/60 rounded px-3 py-2 ring-1 ring-zinc-700">
-          <div className="font-medium mb-1">Unresolved cards (please correct names):</div>
+          <div className="font-medium mb-1">
+            Unresolved cards (please correct names):
+          </div>
           <ul className="list-disc pl-5 space-y-0.5">
             {unresolved.map((u, i) => (
-              <li key={`${u.name}-${i}`}>{u.count} × {u.name}</li>
+              <li key={`${u.name}-${i}`}>
+                {u.count} × {u.name}
+              </li>
             ))}
           </ul>
         </div>
