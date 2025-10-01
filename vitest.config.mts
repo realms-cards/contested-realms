@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+process.env.TS_NODE_PROJECT = path.resolve(__dirname, 'tsconfig.vitest.json');
+
 export default defineConfig({
   test: {
     environment: 'jsdom',
@@ -14,7 +16,10 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     reporters: ['default'],
     coverage: {
-      enabled: false,
+      enabled: true,
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      reporter: ['text', 'html'],
     },
   },
   resolve: {

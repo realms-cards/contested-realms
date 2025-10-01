@@ -175,7 +175,7 @@ describe('Draft Event Compatibility', () => {
       }
 
       // Assert
-      expect(transport.mockSocket.emit).toHaveBeenCalledWith('submitDeck', { deck: testDeck });
+      expect(transport.mockSocket.emit).toHaveBeenCalledWith('submitDeck', { deckData: testDeck, playerId: 'player-1' });
     });
   });
 
