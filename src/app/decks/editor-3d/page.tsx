@@ -2470,6 +2470,8 @@ function AuthenticatedDeckEditor() {
                     key={p.id}
                     slug={p.card.slug}
                     isSite={isSite}
+                    cardName={p.card.cardName}
+                    cardType={p.card.type}
                     x={x}
                     z={z}
                     y={y}
