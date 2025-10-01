@@ -369,6 +369,9 @@ export type ServerEventMap = {
 };
 
 export const Protocol = {
+  // Schemas
+  SealedConfigSchema,
+  MatchInfoSchema,
   // Client -> Server
   HelloPayload,
   CreateLobbyPayload,
