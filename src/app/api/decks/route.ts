@@ -254,6 +254,40 @@ export async function POST(req: NextRequest) {
     const setByVariant = new Map<number, number>();
     for (const v of variants) setByVariant.set(v.id, v.setId);
 
+    // Validate constructed rules if format is 'constructed'
+    const isConstructed = String(format).toLowerCase() === 'constructed';
+    if (isConstructed) {
+      // Determine (cardId, setId, zone, count) for validation
+      type FlatItem = { cardId: number; setId: number | null; zone: string; count: number };
+      const flat: FlatItem[] = [];
+      for (const { cardId, zone, count, variantId } of agg.values()) {
+        const sId = variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null);
+        flat.push({ cardId, setId: sId, zone, count });
+      }
+      const pairs = Array.from(new Set(flat
+        .filter((it) => it.setId != null)
+        .map(it => `${it.cardId}:${it.setId as number}`)
+      ));
+      const orPairs = pairs.map(k => ({ cardId: Number(k.split(':')[0]), setId: Number(k.split(':')[1]) }));
+      const metaMap = new Map<string, string | null>();
+      if (orPairs.length) {
+        const metas = await prisma.cardSetMetadata.findMany({ where: { OR: orPairs }, select: { cardId: true, setId: true, type: true } });
+        for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
+      }
+      let avatarCount = 0; let spellbook = 0; let atlas = 0;
+      for (const it of flat) {
+        if (it.zone === 'Spellbook') spellbook += it.count;
+        if (it.zone === 'Atlas') atlas += it.count;
+        const type = (it.setId != null ? (metaMap.get(`${it.cardId}:${it.setId}`) || '') : '').toLowerCase();
+        if (type.includes('avatar')) avatarCount += it.count;
+      }
+      if (!(avatarCount === 1 && spellbook >= 50 && atlas >= 30)) {
+        return new Response(JSON.stringify({
+          error: `Constructed deck invalid: requires exactly 1 Avatar, >=50 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`
+        }), { status: 400 });
+      }
+    }
+
     // Create deck and all cards in a single transaction to minimize latency
     const result = await prisma.$transaction(async (tx) => {
       const deck = await tx.deck.create({ data: { name, format, isPublic, userId } });

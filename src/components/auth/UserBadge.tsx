@@ -61,6 +61,7 @@ export default function UserBadge({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [verificationSending, setVerificationSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [joinedTournament, setJoinedTournament] = useState<{ id: string; name: string } | null>(null);
 
   const handleOpenSettings = useCallback(() => {
     setProfileSuccess(null);
@@ -173,6 +174,36 @@ export default function UserBadge({
       setVerificationSending(false);
     }
   }, []);
+
+  // When opening the menu (or on mount if already open), query current tournaments to detect membership
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchJoinedTournament() {
+      if (!session?.user?.id) return;
+      try {
+        // Only fetch when the menu is opened to avoid background traffic
+        if (!open) return;
+        const res = await fetch('/api/tournaments');
+        if (!res.ok) return;
+        const list = (await res.json()) as Array<{
+          id: string;
+          name: string;
+          status: string;
+          registeredPlayers?: Array<{ id: string; displayName?: string; ready?: boolean }>;
+        }>;
+        const mine = Array.isArray(list)
+          ? list.find(t => (t.registeredPlayers || []).some(p => p.id === session.user!.id) && t.status !== 'completed')
+          : null;
+        if (!cancelled) setJoinedTournament(mine ? { id: mine.id, name: mine.name } : null);
+      } catch {
+        if (!cancelled) setJoinedTournament(null);
+      }
+    }
+    void fetchJoinedTournament();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, session?.user?.id]);
 
   // Loading shimmer (minimal): avoid floating placeholder to prevent gray pill flash
   if (status === "loading") {
@@ -536,6 +567,20 @@ export default function UserBadge({
                 Home
               </button>
             </div>
+            {joinedTournament && (
+              <div className="px-2 py-1.5">
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    router.push(`/tournaments/${joinedTournament.id}`);
+                  }}
+                  className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+                  title={joinedTournament.name}
+                >
+                  My Tournament
+                </button>
+              </div>
+            )}
             <div className="px-2 py-1.5">
               <button
                 onClick={() => {
