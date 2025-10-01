@@ -203,7 +203,81 @@ export async function createMockServer(config: MockServerConfig = {}): Promise<M
               }
             }
           });
-          
+
+          // WebRTC connection request/approval handlers
+          socket.on('rtc:request', (payload) => {
+            if (!authed) return;
+
+            const playerId = playersBySocket.get(socket.id);
+            const player = playerId ? players.get(playerId) : null;
+            if (!player) return;
+
+            const targetId = payload?.targetId;
+            const matchId = payload?.matchId || payload?.lobbyId;
+            if (!targetId || !matchId) return;
+
+            const target = players.get(targetId);
+            if (!target || target.matchId !== matchId) return;
+
+            const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+            // Send request to target player
+            if (target.socketId) {
+              io.to(target.socketId).emit('rtc:request', {
+                requestId,
+                from: { id: player.id, displayName: player.displayName },
+                lobbyId: matchId.startsWith('lobby_') ? matchId : null,
+                matchId: matchId.startsWith('lobby_') ? null : matchId,
+                timestamp: Date.now()
+              });
+            }
+
+            // Acknowledge request to requester
+            socket.emit('rtc:request:sent', {
+              requestId,
+                targetId,
+                lobbyId: matchId.startsWith('lobby_') ? matchId : null,
+                matchId: matchId.startsWith('lobby_') ? null : matchId,
+                timestamp: Date.now()
+              });
+          });
+
+          socket.on('rtc:request:respond', (payload) => {
+            if (!authed) return;
+
+            const playerId = playersBySocket.get(socket.id);
+            const player = playerId ? players.get(playerId) : null;
+            if (!player) return;
+
+            const requestId = payload?.requestId;
+            const requesterId = payload?.requesterId;
+            const accepted = payload?.accepted === true;
+
+            if (!requestId || !requesterId) return;
+
+            const requester = players.get(requesterId);
+            if (!requester) return;
+
+            // Send response to requester
+            if (requester.socketId) {
+              const eventName = accepted ? 'rtc:request:accepted' : 'rtc:request:declined';
+              io.to(requester.socketId).emit(eventName, {
+                requestId,
+                from: { id: player.id, displayName: player.displayName },
+                lobbyId: player.matchId?.startsWith('lobby_') ? player.matchId : null,
+                matchId: player.matchId && !player.matchId.startsWith('lobby_') ? player.matchId : null,
+                timestamp: Date.now()
+              });
+            }
+
+            // Send ack back to responder
+            socket.emit('rtc:request:ack', {
+              requestId,
+              accepted,
+              timestamp: Date.now()
+            });
+          });
+
           // WebRTC connection failure reporting
           socket.on('rtc:connection-failed', (payload) => {
             if (!authed) return;

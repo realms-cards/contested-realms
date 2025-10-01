@@ -498,6 +498,14 @@ export default function UserBadge({
                     playbackEnabled={voice.playbackEnabled}
                     onTogglePlayback={voice.setPlaybackEnabled}
                     menuAlignment="right"
+                    onRequestConnection={voice.requestConnection}
+                    targetPlayerId={(() => {
+                      // Find opponent in current match/lobby
+                      const currentPlayers = onlineCtx?.match?.players ?? onlineCtx?.lobby?.players ?? [];
+                      const myId = onlineCtx?.me?.id;
+                      const opponent = currentPlayers.find((p) => p.id !== myId);
+                      return opponent?.id ?? null;
+                    })()}
                   />
                 </div>
                 {voice.connectedPeers.length > 0 && (

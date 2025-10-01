@@ -1,10 +1,11 @@
 /**
  * Integration Test: Server Signaling with Participant Tracking
- * 
+ *
  * This test validates the enhanced server-side WebRTC signaling
- * with proper participant tracking and isolation.
- * 
- * CRITICAL: This test MUST FAIL until server enhancements are implemented
+ * with proper participant tracking, isolation, and request/approval flow.
+ *
+ * NOTE: WebRTC connections now require explicit request/approval via
+ * rtc:request and rtc:request:respond events, not automatic on rtc:join.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
@@ -333,5 +334,233 @@ describe('Integration: Enhanced Server WebRTC Signaling', () => {
     // Server state should be consistent
     expect(testEnv.server.rtcParticipants.get('signaling-test-match')?.size).toBe(1);
     expect(testEnv.server.participantDetails.size).toBe(1);
+  });
+
+  test('rtc:join announces presence without auto-connecting', async () => {
+    const [client1, client2] = testEnv.clients;
+
+    const signalsReceived: Array<{ from: string }> = [];
+
+    client2.socket.on('rtc:signal', (payload) => {
+      signalsReceived.push(payload);
+    });
+
+    // Both clients join WebRTC room
+    client1.socket.emit('rtc:join');
+    client2.socket.emit('rtc:join');
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Both should be tracked as participants
+    expect(testEnv.server.rtcParticipants.get('signaling-test-match')?.size).toBe(2);
+
+    // But NO WebRTC signals should be exchanged (no auto-connection)
+    expect(signalsReceived).toHaveLength(0);
+  });
+
+  test('WebRTC connection requires explicit request/approval', async () => {
+    const [client1, client2] = testEnv.clients;
+
+    const requestsReceived: Array<{
+      requestId: string;
+      from: { id: string; displayName: string };
+    }> = [];
+
+    const acceptedEvents: Array<{
+      requestId: string;
+      from: { id: string };
+    }> = [];
+
+    // Client2 listens for incoming requests
+    client2.socket.on('rtc:request', (payload) => {
+      requestsReceived.push(payload);
+    });
+
+    // Client1 listens for acceptance notifications
+    client1.socket.on('rtc:request:accepted', (payload) => {
+      acceptedEvents.push(payload);
+    });
+
+    // Both clients join the room first
+    client1.socket.emit('rtc:join');
+    client2.socket.emit('rtc:join');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client1 sends connection request to Client2
+    client1.socket.emit('rtc:request', {
+      targetId: 'player-2',
+      matchId: 'signaling-test-match',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client2 should receive the request
+    expect(requestsReceived).toHaveLength(1);
+    expect(requestsReceived[0].from.id).toBe('player-1');
+    expect(requestsReceived[0].from.displayName).toBe('Test Player 1');
+    expect(requestsReceived[0].requestId).toBeDefined();
+
+    const requestId = requestsReceived[0].requestId;
+
+    // Client2 accepts the request
+    client2.socket.emit('rtc:request:respond', {
+      requestId,
+      requesterId: 'player-1',
+      accepted: true,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client1 should receive acceptance notification
+    expect(acceptedEvents).toHaveLength(1);
+    expect(acceptedEvents[0].requestId).toBe(requestId);
+    expect(acceptedEvents[0].from.id).toBe('player-2');
+  });
+
+  test('declined connection request is properly communicated', async () => {
+    const [client1, client2] = testEnv.clients;
+
+    const requestsReceived: Array<{ requestId: string }> = [];
+    const declinedEvents: Array<{
+      requestId: string;
+      from: { id: string };
+    }> = [];
+
+    client2.socket.on('rtc:request', (payload) => {
+      requestsReceived.push(payload);
+    });
+
+    client1.socket.on('rtc:request:declined', (payload) => {
+      declinedEvents.push(payload);
+    });
+
+    // Both clients join the room
+    client1.socket.emit('rtc:join');
+    client2.socket.emit('rtc:join');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client1 sends connection request
+    client1.socket.emit('rtc:request', {
+      targetId: 'player-2',
+      matchId: 'signaling-test-match',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const requestId = requestsReceived[0].requestId;
+
+    // Client2 declines the request
+    client2.socket.emit('rtc:request:respond', {
+      requestId,
+      requesterId: 'player-1',
+      accepted: false,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client1 should receive decline notification
+    expect(declinedEvents).toHaveLength(1);
+    expect(declinedEvents[0].requestId).toBe(requestId);
+    expect(declinedEvents[0].from.id).toBe('player-2');
+  });
+
+  test('multiple connection requests are handled independently', async () => {
+    const [client1, client2, client3] = testEnv.clients;
+
+    const client2Requests: Array<{ requestId: string; from: { id: string } }> = [];
+    const client3Requests: Array<{ requestId: string; from: { id: string } }> = [];
+    const client1Accepted: Array<{ from: { id: string } }> = [];
+    const client1Declined: Array<{ from: { id: string } }> = [];
+
+    client2.socket.on('rtc:request', (payload) => client2Requests.push(payload));
+    client3.socket.on('rtc:request', (payload) => client3Requests.push(payload));
+    client1.socket.on('rtc:request:accepted', (payload) => client1Accepted.push(payload));
+    client1.socket.on('rtc:request:declined', (payload) => client1Declined.push(payload));
+
+    // All clients join
+    client1.socket.emit('rtc:join');
+    client2.socket.emit('rtc:join');
+    client3.socket.emit('rtc:join');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client1 sends requests to both Client2 and Client3
+    client1.socket.emit('rtc:request', {
+      targetId: 'player-2',
+      matchId: 'signaling-test-match',
+    });
+
+    client1.socket.emit('rtc:request', {
+      targetId: 'player-3',
+      matchId: 'signaling-test-match',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Both should receive requests
+    expect(client2Requests).toHaveLength(1);
+    expect(client3Requests).toHaveLength(1);
+    expect(client2Requests[0].from.id).toBe('player-1');
+    expect(client3Requests[0].from.id).toBe('player-1');
+
+    // Client2 accepts, Client3 declines
+    client2.socket.emit('rtc:request:respond', {
+      requestId: client2Requests[0].requestId,
+      requesterId: 'player-1',
+      accepted: true,
+    });
+
+    client3.socket.emit('rtc:request:respond', {
+      requestId: client3Requests[0].requestId,
+      requesterId: 'player-1',
+      accepted: false,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Client1 should receive both responses independently
+    expect(client1Accepted).toHaveLength(1);
+    expect(client1Accepted[0].from.id).toBe('player-2');
+
+    expect(client1Declined).toHaveLength(1);
+    expect(client1Declined[0].from.id).toBe('player-3');
+  });
+
+  test('connection requests are scoped to lobby/match', async () => {
+    const [client1] = testEnv.clients;
+
+    // Create a client in a different match
+    const otherMatch = await createTestEnvironment({
+      enableWebRTC: true,
+      clientCount: 1,
+      matchId: 'other-match'
+    });
+
+    try {
+      const requestsReceived: unknown[] = [];
+
+      otherMatch.clients[0].socket.on('rtc:request', (payload) => {
+        requestsReceived.push(payload);
+      });
+
+      // Both join their respective rooms
+      client1.socket.emit('rtc:join');
+      otherMatch.clients[0].socket.emit('rtc:join');
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Client1 tries to request connection to player in other match
+      // This should fail or be rejected by server
+      client1.socket.emit('rtc:request', {
+        targetId: 'player-1', // Same player ID but different match
+        matchId: 'signaling-test-match',
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Request should not cross match boundaries
+      expect(requestsReceived).toHaveLength(0);
+
+    } finally {
+      await otherMatch.cleanup();
+    }
   });
 });

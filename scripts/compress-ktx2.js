@@ -98,6 +98,31 @@ async function computeResizeGeometry(inFile) {
   return `${w}x${h}`;
 }
 
+async function padToMultipleOf4(inFile) {
+  if (!ENFORCE_M4) return null;
+  const dim = await getImageDimensions(inFile);
+  if (!dim) return null;
+  const w = toMultipleOf4(dim.width);
+  const h = toMultipleOf4(dim.height);
+  if (w === dim.width && h === dim.height) return null;
+  const sharp = require('sharp');
+  const buffer = await sharp(inFile)
+    .ensureAlpha()
+    .extend({
+      top: 0,
+      left: 0,
+      right: w - dim.width,
+      bottom: h - dim.height,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .toFormat('png')
+    .toBuffer();
+  const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'ktx-pad-'));
+  const tmpFile = path.join(tmpDir, path.basename(inFile));
+  await fsp.writeFile(tmpFile, buffer);
+  return { tmpFile, width: w, height: h };
+}
+
 const INPUT_DIR = path.resolve(getFlag('input', 'data'));
 const OUT_DIR = getFlag('outDir', '') ? path.resolve(String(getFlag('outDir'))) : '';
 const FORMAT = String(getFlag('format', 'uastc')).toLowerCase(); // 'uastc' | 'etc1s'
@@ -313,6 +338,8 @@ async function compressOne(inFile) {
   let toolUsed = null;
   let cmd = null;
   let argv = null;
+  let cleanup = null;
+  let workingInput = inFile;
 
   function canUseKtx() { return !!KTX && KTX_ACCEPTED.has(ext); }
   function canUseToktx() { return !!TOKTX && TOKTX_ACCEPTED.has(ext); }
@@ -333,17 +360,34 @@ async function compressOne(inFile) {
   }
 
   // Build argv now (compute ktx --format lazily)
+  async function applyPaddingIfNeeded() {
+    const pad = await padToMultipleOf4(inFile);
+    if (!pad) return;
+    workingInput = pad.tmpFile;
+    cleanup = async () => {
+      try {
+        await fsp.unlink(pad.tmpFile);
+      } catch {}
+      try {
+        await fsp.rm(path.dirname(pad.tmpFile), { recursive: true, force: true });
+      } catch {}
+    };
+  }
+
   if (toolUsed === 'ktx') {
-    const vkFormat = await determineKtxFormat(inFile);
-    argv = buildKtxArgs(inFile, outFile, vkFormat);
+    await applyPaddingIfNeeded();
+    const vkFormat = await determineKtxFormat(workingInput);
+    argv = buildKtxArgs(workingInput, outFile, vkFormat);
   } else if (toolUsed === 'toktx') {
-    const resizeGeom = await computeResizeGeometry(inFile);
-    argv = buildToktxArgs(inFile, outFile, resizeGeom);
+    await applyPaddingIfNeeded();
+    const resizeGeom = await computeResizeGeometry(workingInput);
+    argv = buildToktxArgs(workingInput, outFile, resizeGeom);
   }
 
   return new Promise((resolve) => {
     const p = spawn(cmd, argv, { stdio: 'inherit' });
-    p.on('close', (code) => {
+    p.on('close', async (code) => {
+      if (cleanup) await cleanup();
       if (code === 0) resolve({ ok: true, outFile, tool: toolUsed });
       else resolve({ ok: false, outFile, code, tool: toolUsed });
     });
