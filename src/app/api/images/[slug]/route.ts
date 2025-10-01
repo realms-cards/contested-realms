@@ -14,9 +14,9 @@ function setDirFromSlug(slug: string): string | null {
       return "arthurian_legends";
     case "dra":
       // Some data sources use 'dra' for Dragonlord; accept both 'dra' and 'drl'.
-      return "Dragonlord";
+      return "dragonlord";
     case "drl":
-      return "Dragonlord";
+      return "dragonlord";
     default:
       return null;
   }
@@ -34,6 +34,12 @@ function suffixDirFromBasename(base: string): string | null {
   return `${a}_${b}`;
 }
 
+function dirVariants(name: string): string[] {
+  const lower = name.toLowerCase();
+  const upperFirst = name.charAt(0).toUpperCase() + name.slice(1);
+  return Array.from(new Set([name, lower, upperFirst].filter(Boolean)));
+}
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { slug: slugRaw } = await params;
@@ -49,6 +55,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     const base = imageBasenameFromSlug(slug);
     const suffix = suffixDirFromBasename(base);
+    const setDirVariants = dirVariants(setDir);
 
     // If explicitly requesting KTX2, only check for .ktx2 and return 404 if missing.
     const wantKtx2 = (() => {
@@ -71,8 +78,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       const suffix = suffixDirFromBasename(base);
       // Prefer .ktx2 when requested, otherwise default to .webp for better raster compression
       const name = wantKtx2 ? `${base}.ktx2` : `${base}.webp`;
-      const baseDir = wantKtx2 ? 'data-ktx2' : 'data-webp';
-      const pathParts = suffix ? [baseDir, setDir, suffix, name] : [baseDir, setDir, name];
+      const baseDir = wantKtx2 ? "data-ktx2" : "data-webp";
+      const normalizedSetDir = setDir.toLowerCase();
+      const pathParts = suffix
+        ? [baseDir, normalizedSetDir, suffix, name]
+        : [baseDir, normalizedSetDir, name];
       const cdnUrl = `${cdn.replace(/\/$/, '')}/${pathParts.join('/')}`;
       return new Response(null, {
         status: 308,
@@ -86,15 +96,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     // Roots to search.
     // - For KTX2, prefer data-ktx2 output dir then fallback to data (original rasters).
     // - For raster, prefer WebP under data-webp first, then fallback to original data.
-    const roots = wantKtx2
-      ? [
-          path.join(process.cwd(), "data-ktx2", setDir),
-          path.join(process.cwd(), "data", setDir),
-        ]
-      : [
-          path.join(process.cwd(), "data-webp", setDir),
-          path.join(process.cwd(), "data", setDir),
-        ];
+    const roots = (() => {
+      const preferredBases = wantKtx2
+        ? ["data-ktx2", "data"]
+        : ["data-webp", "data"];
+      const seen = new Set<string>();
+      const result: string[] = [];
+      for (const baseDir of preferredBases) {
+        for (const variant of setDirVariants) {
+          const candidate = path.join(process.cwd(), baseDir, variant);
+          if (!seen.has(candidate)) {
+            seen.add(candidate);
+            result.push(candidate);
+          }
+        }
+      }
+      return result;
+    })();
 
     // Prefer WebP for raster when available, then PNG/JPEG as fallback
     const exts = wantKtx2 ? ["ktx2"] : ["webp", "png", "jpg", "jpeg"];
@@ -124,21 +142,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         "beta",
         "alpha",
         "arthurian_legends",
-        "Dragonlord",
+        "dragonlord",
       ];
       // Ensure we don't duplicate the already-checked setDir, and keep order preference
       const searchSets = allSetsPreferredOrder.filter((s) => s !== setDir);
       const crossSetCandidates: string[] = [];
       for (const setName of searchSets) {
+        const altVariants = dirVariants(setName);
         const altRoots = wantKtx2
-          ? [
-              path.join(process.cwd(), "data-ktx2", setName),
-              path.join(process.cwd(), "data", setName),
-            ]
-          : [
-              path.join(process.cwd(), "data-webp", setName),
-              path.join(process.cwd(), "data", setName),
-            ];
+          ? altVariants.flatMap((variant) => [
+              path.join(process.cwd(), "data-ktx2", variant),
+              path.join(process.cwd(), "data", variant),
+            ])
+          : altVariants.flatMap((variant) => [
+              path.join(process.cwd(), "data-webp", variant),
+              path.join(process.cwd(), "data", variant),
+            ]);
         for (const root of altRoots) {
           if (suffix) {
             for (const ext of exts)
