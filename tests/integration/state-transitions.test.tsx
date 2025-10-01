@@ -1,6 +1,12 @@
+import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PermanentPositionState } from '@/lib/game/types';
+import {
+  getAvailablePermanentTransitions,
+  validatePermanentStateTransition,
+  type ExtendedPermanentPositionState,
+  type PermanentStateTransitionContext,
+} from '@/lib/game/stateTransitionValidator';
 
 /**
  * Integration Test: State Transition Validation
@@ -12,172 +18,49 @@ import { PermanentPositionState } from '@/lib/game/types';
  * Only implement the functionality after confirming these tests fail.
  */
 
-interface StateTransition {
-  from: PermanentPositionState;
-  to: PermanentPositionState;
-  isValid: boolean;
-  requiredAbility?: string;
-  requiredCondition?: string;
-  errorMessage?: string;
-}
+type PermanentPositionState = ExtendedPermanentPositionState;
 
 interface PermanentWithAbilities {
   id: number;
   state: PermanentPositionState;
-  abilities: {
-    canBurrow: boolean;
-    canSubmerge: boolean;
-    canFly: boolean;
-    requiresWaterSite: boolean;
-  };
-  conditions: {
-    atWaterSite: boolean;
-    hasMovementLeft: boolean;
-    isTapped: boolean;
-  };
+  abilities: PermanentStateTransitionContext['abilities'];
+  conditions: PermanentStateTransitionContext['conditions'];
 }
 
-interface StateTransitionRule {
-  from: PermanentPositionState;
-  to: PermanentPositionState;
-  validate: (permanent: PermanentWithAbilities) => { isValid: boolean; reason?: string };
-}
+const mockContextFromPermanent = (
+  permanent: PermanentWithAbilities
+): PermanentStateTransitionContext => ({
+  state: permanent.state,
+  abilities: permanent.abilities,
+  conditions: permanent.conditions,
+});
 
-// Mock components that will be implemented
-const MockStateTransitionValidator = ({ 
+const MockStateTransitionValidator = ({
   permanent,
   onStateChange,
-  onValidationError 
+  onValidationError,
 }: {
   permanent: PermanentWithAbilities;
   onStateChange: (newState: PermanentPositionState) => void;
   onValidationError: (error: string) => void;
 }) => {
-  const transitionRules: StateTransitionRule[] = [
-    // Surface transitions
-    {
-      from: 'surface',
-      to: 'burrowed',
-      validate: (p) => ({
-        isValid: p.abilities.canBurrow && p.conditions.hasMovementLeft,
-        reason: !p.abilities.canBurrow ? 'Cannot burrow' : !p.conditions.hasMovementLeft ? 'No movement left' : undefined
-      })
-    },
-    {
-      from: 'surface',
-      to: 'submerged',
-      validate: (p) => ({
-        isValid: p.abilities.canSubmerge && (!p.abilities.requiresWaterSite || p.conditions.atWaterSite) && p.conditions.hasMovementLeft,
-        reason: !p.abilities.canSubmerge ? 'Cannot submerge' : 
-                (p.abilities.requiresWaterSite && !p.conditions.atWaterSite) ? 'Requires water site' :
-                !p.conditions.hasMovementLeft ? 'No movement left' : undefined
-      })
-    },
-    {
-      from: 'surface',
-      to: 'flying',
-      validate: (p) => ({
-        isValid: p.abilities.canFly && p.conditions.hasMovementLeft && !p.conditions.isTapped,
-        reason: !p.abilities.canFly ? 'Cannot fly' :
-                !p.conditions.hasMovementLeft ? 'No movement left' :
-                p.conditions.isTapped ? 'Cannot fly while tapped' : undefined
-      })
-    },
-    // Burrowed transitions
-    {
-      from: 'burrowed',
-      to: 'surface',
-      validate: (p) => ({
-        isValid: p.conditions.hasMovementLeft,
-        reason: !p.conditions.hasMovementLeft ? 'No movement left' : undefined
-      })
-    },
-    {
-      from: 'burrowed',
-      to: 'submerged',
-      validate: () => ({ isValid: false, reason: 'Cannot transition directly from burrowed to submerged' })
-    },
-    {
-      from: 'burrowed',
-      to: 'flying',
-      validate: () => ({ isValid: false, reason: 'Cannot transition directly from burrowed to flying' })
-    },
-    // Submerged transitions
-    {
-      from: 'submerged',
-      to: 'surface',
-      validate: (p) => ({
-        isValid: p.conditions.hasMovementLeft,
-        reason: !p.conditions.hasMovementLeft ? 'No movement left' : undefined
-      })
-    },
-    {
-      from: 'submerged',
-      to: 'burrowed',
-      validate: () => ({ isValid: false, reason: 'Cannot transition directly from submerged to burrowed' })
-    },
-    {
-      from: 'submerged',
-      to: 'flying',
-      validate: () => ({ isValid: false, reason: 'Cannot transition directly from submerged to flying' })
-    },
-    // Flying transitions
-    {
-      from: 'flying',
-      to: 'surface',
-      validate: () => ({ isValid: true }) // Can always land
-    },
-    {
-      from: 'flying',
-      to: 'burrowed',
-      validate: () => ({ isValid: false, reason: 'Cannot transition directly from flying to burrowed' })
-    },
-    {
-      from: 'flying',
-      to: 'submerged',
-      validate: () => ({ isValid: false, reason: 'Cannot transition directly from flying to submerged' })
-    }
-  ];
-
-  const validateTransition = (newState: PermanentPositionState): { isValid: boolean; reason?: string } => {
-    if (newState === permanent.state) {
-      return { isValid: false, reason: 'Already in that state' };
-    }
-
-    const rule = transitionRules.find(r => r.from === permanent.state && r.to === newState);
-    if (!rule) {
-      return { isValid: false, reason: `No transition rule from ${permanent.state} to ${newState}` };
-    }
-
-    return rule.validate(permanent);
-  };
-
-  const getAvailableTransitions = () => {
-    const possibleStates: PermanentPositionState[] = ['surface', 'burrowed', 'submerged', 'flying'];
-    return possibleStates
-      .filter(state => state !== permanent.state)
-      .map(state => ({
-        state,
-        validation: validateTransition(state)
-      }));
-  };
+  const availableTransitions = React.useMemo(
+    () => getAvailablePermanentTransitions(mockContextFromPermanent(permanent)),
+    [permanent]
+  );
 
   const handleTransitionAttempt = (newState: PermanentPositionState) => {
-    const validation = validateTransition(newState);
-    
-    if (validation.isValid) {
+    const result = validatePermanentStateTransition(mockContextFromPermanent(permanent), newState);
+    if (result.isValid) {
       onStateChange(newState);
     } else {
-      onValidationError(validation.reason || 'Invalid transition');
+      onValidationError(result.reason || 'Invalid transition');
     }
   };
 
   return (
     <div data-testid="state-transition-validator">
-      <div 
-        data-testid="current-state"
-        data-state={permanent.state}
-      >
+      <div data-testid="current-state" data-state={permanent.state}>
         Current State: {permanent.state}
       </div>
 
@@ -195,13 +78,13 @@ const MockStateTransitionValidator = ({
       </div>
 
       <div data-testid="available-transitions">
-        {getAvailableTransitions().map(({ state, validation }) => (
+        {availableTransitions.map(({ state, validation }) => (
           <button
             key={state}
             data-testid={`transition-to-${state}`}
             data-valid={validation.isValid}
             data-reason={validation.reason || ''}
-            disabled={!validation.isValid}
+            aria-disabled={!validation.isValid}
             onClick={() => handleTransitionAttempt(state)}
             title={validation.reason}
             style={{
@@ -209,7 +92,7 @@ const MockStateTransitionValidator = ({
               padding: 10,
               backgroundColor: validation.isValid ? 'lightgreen' : 'lightcoral',
               border: '2px solid #333',
-              cursor: validation.isValid ? 'pointer' : 'not-allowed'
+              cursor: validation.isValid ? 'pointer' : 'not-allowed',
             }}
           >
             → {state}
@@ -221,10 +104,10 @@ const MockStateTransitionValidator = ({
   );
 };
 
-const MockGameStateManager = ({ 
+const MockGameStateManager = ({
   initialState = 'surface',
   abilities = { canBurrow: true, canSubmerge: true, canFly: true, requiresWaterSite: false },
-  conditions = { atWaterSite: true, hasMovementLeft: true, isTapped: false }
+  conditions = { atWaterSite: true, hasMovementLeft: true, isTapped: false },
 }: {
   initialState?: PermanentPositionState;
   abilities?: Partial<PermanentWithAbilities['abilities']>;
@@ -233,8 +116,19 @@ const MockGameStateManager = ({
   const [permanent, setPermanent] = React.useState<PermanentWithAbilities>({
     id: 1,
     state: initialState,
-    abilities: { canBurrow: true, canSubmerge: true, canFly: true, requiresWaterSite: false, ...abilities },
-    conditions: { atWaterSite: true, hasMovementLeft: true, isTapped: false, ...conditions }
+    abilities: {
+      canBurrow: true,
+      canSubmerge: true,
+      canFly: true,
+      requiresWaterSite: false,
+      ...abilities,
+    },
+    conditions: {
+      atWaterSite: true,
+      hasMovementLeft: true,
+      isTapped: false,
+      ...conditions,
+    },
   });
 
   const [lastError, setLastError] = React.useState<string | null>(null);
@@ -246,12 +140,15 @@ const MockGameStateManager = ({
 
   const handleStateChange = (newState: PermanentPositionState) => {
     const oldState = permanent.state;
-    setPermanent(prev => ({ ...prev, state: newState }));
-    setTransitionHistory(prev => [...prev, {
-      from: oldState,
-      to: newState,
-      timestamp: Date.now()
-    }]);
+    setPermanent((prev) => ({ ...prev, state: newState }));
+    setTransitionHistory((prev) => [
+      ...prev,
+      {
+        from: oldState,
+        to: newState,
+        timestamp: Date.now(),
+      },
+    ]);
     setLastError(null);
   };
 
@@ -260,18 +157,15 @@ const MockGameStateManager = ({
   };
 
   const updateConditions = (newConditions: Partial<PermanentWithAbilities['conditions']>) => {
-    setPermanent(prev => ({
+    setPermanent((prev) => ({
       ...prev,
-      conditions: { ...prev.conditions, ...newConditions }
+      conditions: { ...prev.conditions, ...newConditions },
     }));
   };
 
   return (
     <div data-testid="game-state-manager">
-      <div 
-        data-testid="last-error"
-        data-error={lastError || ''}
-      >
+      <div data-testid="last-error" data-error={lastError || ''}>
         {lastError && (
           <div style={{ color: 'red', padding: 10, border: '1px solid red', margin: 10 }}>
             Error: {lastError}
@@ -432,7 +326,7 @@ describe('Integration: State Transition Validation', () => {
       const burrowButton = screen.getByTestId('transition-to-burrowed');
       expect(burrowButton).toHaveAttribute('data-valid', 'false');
       expect(burrowButton).toHaveAttribute('data-reason', 'Cannot burrow');
-      expect(burrowButton).toBeDisabled();
+      expect(burrowButton).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(burrowButton);
 
@@ -456,7 +350,7 @@ describe('Integration: State Transition Validation', () => {
       const submergeButton = screen.getByTestId('transition-to-submerged');
       expect(submergeButton).toHaveAttribute('data-valid', 'false');
       expect(submergeButton).toHaveAttribute('data-reason', 'Requires water site');
-      expect(submergeButton).toBeDisabled();
+      expect(submergeButton).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(submergeButton);
 
@@ -668,7 +562,7 @@ describe('Integration: State Transition Validation', () => {
 
       // Try Burrowed -> Flying (invalid)
       const flyButton = screen.getByTestId('transition-to-flying');
-      expect(flyButton).toBeDisabled();
+      expect(flyButton).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(flyButton);
 
       // Should remain burrowed and show error
