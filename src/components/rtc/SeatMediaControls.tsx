@@ -151,18 +151,12 @@ export default function SeatMediaControls({
   }, [needsAudioUnlock, setPlaybackEnabled]);
 
   const handleJoinClick = useCallback(() => {
-    console.debug('[SeatMediaControls] Join button clicked', {
-      hasRequestCallback: !!onRequestConnection,
-      targetPlayerId,
-      rtcState: rtc.state
-    });
 
     // First join the voice room (announce presence)
     void rtc.join();
 
     // Then send connection request if we have a target player
     if (onRequestConnection && targetPlayerId) {
-      console.debug('[SeatMediaControls] Sending connection request', { targetPlayerId });
       onRequestConnection(targetPlayerId);
     } else {
       console.warn('[SeatMediaControls] Cannot send request', {

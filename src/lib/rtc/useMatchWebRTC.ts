@@ -115,9 +115,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     pcRef.current = pc;
 
     pc.ontrack = (ev) => {
-      console.debug('[RTC][client] ontrack received', {
-        trackCount: ev.streams?.[0]?.getTracks?.().length ?? 0,
-      });
       if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
       const stream = remoteStreamRef.current;
       for (const track of ev.streams?.[0]?.getTracks?.() || []) {
@@ -130,13 +127,11 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
     pc.onicecandidate = (ev) => {
       if (!ev.candidate || !transport) return;
-      console.debug('[RTC][client] local ICE candidate', ev.candidate);
       transport.emit?.('rtc:signal', { data: { candidate: ev.candidate } });
     };
 
     pc.onconnectionstatechange = () => {
       const cs = pc.connectionState;
-      console.debug('[RTC] Connection state:', cs);
 
       if (cs === 'connected') setState('connected');
       else if (cs === 'failed') setState('failed');
@@ -148,7 +143,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     // Phase 1 Fix: ICE connection state monitoring for better failure detection
     pc.oniceconnectionstatechange = () => {
       const iceState = pc.iceConnectionState;
-      console.debug('[RTC] ICE connection state:', iceState);
 
       switch (iceState) {
         case 'checking':
@@ -202,12 +196,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       setVideoDevices(videoInputs);
       setAudioOutputDevices(audioOutputs);
 
-      console.debug('[RTC] Devices enumerated:', {
-        audioInputs: audioInputs.length,
-        videoInputs: videoInputs.length,
-        audioOutputs: audioOutputs.length,
-      });
-
       // Clear selected device if it's no longer available
       if (audioOutputDeviceId && !audioOutputs.some((d) => d.deviceId === audioOutputDeviceId)) {
         console.warn('[RTC] Selected audio output device no longer available');
@@ -247,10 +235,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.debug('[RTC] Opened media stream with quality constraints', {
-        audioTracks: stream.getAudioTracks().length,
-        videoTracks: stream.getVideoTracks().length,
-      });
       return stream;
     } catch (primaryError) {
       console.warn('[RTC] Failed with selected devices:', primaryError);
@@ -304,7 +288,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
           parameters.encodings[0].maxBitrate = 32000; // 32 kbps for voice quality
 
           await sender.setParameters(parameters);
-          console.debug('[RTC] Audio bitrate optimized to 32kbps');
         } catch (error) {
           console.warn('[RTC] Failed to set audio bitrate:', error);
         }
@@ -322,10 +305,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     }
     const stream = localStreamRef.current;
     if (!stream) return;
-    console.debug('[RTC][client] adding local tracks', {
-      audioTracks: stream.getAudioTracks().length,
-      videoTracks: stream.getVideoTracks().length,
-    });
     const existingTracks = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
     for (const track of stream.getTracks()) {
       if (existingTracks.has(track.id)) {
@@ -341,10 +320,8 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const makeOffer = useCallback(async () => {
     const pc = ensurePc();
     setState('negotiating');
-    console.debug('[RTC][client] creating offer');
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    console.debug('[RTC][client] sending offer');
     transport?.emit?.('rtc:signal', { data: { sdp: pc.localDescription } });
   }, [ensurePc, transport]);
 
@@ -361,25 +338,15 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (from) remotePeerIdRef.current = from;
 
     const d = data as { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-    console.debug('[RTC][client] received signal', {
-      from,
-      hasSdp: !!d.sdp,
-      sdpType: d.sdp?.type,
-      hasCandidate: !!d.candidate,
-    });
 
     try {
       if (d.sdp) {
         await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
-        console.debug('[RTC] Remote description set, flushing buffered ICE candidates', {
-          bufferedCount: pendingIceCandidatesRef.current.length,
-        });
 
         // Phase 1 Fix: Flush buffered ICE candidates after remote description is set
         for (const candidate of pendingIceCandidatesRef.current) {
           try {
             await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            console.debug('[RTC] Added buffered ICE candidate');
           } catch (error) {
             console.warn('[RTC] Failed to add buffered ICE candidate:', error);
           }
@@ -389,19 +356,15 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
         if (d.sdp.type === 'offer') {
           // Answer offer
           await addLocalTracks();
-          console.debug('[RTC][client] creating answer');
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          console.debug('[RTC][client] sending answer');
           transport?.emit?.('rtc:signal', { data: { sdp: pc.localDescription } });
         }
       } else if (d.candidate) {
         // Phase 1 Fix: Buffer ICE candidates if remote description not set yet
         if (!pc.remoteDescription) {
-          console.debug('[RTC] Buffering ICE candidate (no remote description yet)');
           pendingIceCandidatesRef.current.push(d.candidate);
         } else {
-          console.debug('[RTC][client] adding remote ICE candidate');
           await pc.addIceCandidate(new RTCIceCandidate(d.candidate));
         }
       }
@@ -421,11 +384,8 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
     // If we're already in the process of joining/negotiating, don't interfere
     if (state !== 'idle' && state !== 'failed' && state !== 'closed') {
-      console.debug('[RTC][client] peer joined but we are already active', { state, pid });
       return;
     }
-
-    console.debug('[RTC][client] peer joined - tracking participant (no auto-connect)', { pid, myPlayerId });
     remotePeerIdRef.current = pid;
     setParticipantIds((prev) => {
       if (pid === myPlayerId || prev.includes(pid)) return prev;
@@ -444,8 +404,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const list = Array.isArray(obj.participants) ? obj.participants : [];
     const others = list.map((p) => (p && p.id ? String(p.id) : null)).filter((x): x is string => !!x && x !== myPlayerId);
     if (others.length === 0 || !myPlayerId) return;
-
-    console.debug('[RTC][client] participants list received (no auto-connect)', { others, myPlayerId });
 
     // Track the first remote peer for potential connection
     const remote = others.sort()[0];
@@ -477,11 +435,9 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
     try {
       setState('joining');
-      console.debug('[RTC][client] join start', { myPlayerId, activeScopeId });
       // Announce presence to room without establishing media connection yet
       // Connection will be established after rtc:request approval
       transport.emit?.('rtc:join');
-      console.debug('[RTC][client] join signal sent (waiting for connection request)', { myPlayerId, activeScopeId });
       setState('idle'); // Return to idle, waiting for connection request
     } catch {
       setState('failed');
@@ -490,7 +446,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
   const leave = useCallback(() => {
     if (!transport) return;
-    console.debug('[RTC][client] leaving voice room');
     try { transport.emit?.('rtc:leave'); } catch {}
     reset();
     setParticipantIds([]);
@@ -500,13 +455,11 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const initiateConnection = useCallback(async () => {
     if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
     if (state !== 'idle' && state !== 'failed' && state !== 'closed') {
-      console.debug('[RTC][client] cannot initiate - already active', { state });
       return;
     }
 
     try {
       setState('negotiating');
-      console.debug('[RTC][client] initiating approved connection');
 
       // Get local media tracks
       await addLocalTracks();
@@ -516,7 +469,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       if (remotePid && String(myPlayerId) < String(remotePid)) {
         await makeOffer();
       } else {
-        console.debug('[RTC][client] waiting for offer from remote peer');
       }
     } catch (err) {
       console.warn('[RTC][client] failed to initiate connection', err);
@@ -677,10 +629,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
             }
 
             // Log quality metrics at debug level
-            console.debug('[RTC] Connection quality:', {
-              packetLoss: (lossRate * 100).toFixed(2) + '%',
-              jitter: (jitter * 1000).toFixed(2) + 'ms',
-            });
           }
         }
       } catch (error) {
