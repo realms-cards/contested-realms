@@ -1616,10 +1616,77 @@ export default function OnlineMatchPage() {
         </>
         )}
 
+        {/* Incoming Voice Request Dialog */}
+        {voice?.incomingRequest && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 shadow-2xl max-w-md">
+              <h3 className="text-lg font-bold text-white mb-2">
+                Incoming Voice Call
+              </h3>
+              <p className="text-slate-300 mb-4">
+                {voice.incomingRequest.from.displayName || 'A player'} wants to connect via voice chat.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-medium"
+                  onClick={() => {
+                    if (voice.respondToRequest) {
+                      voice.respondToRequest(
+                        voice.incomingRequest!.requestId,
+                        voice.incomingRequest!.from.id,
+                        false
+                      );
+                    }
+                  }}
+                >
+                  Decline
+                </button>
+                <button
+                  className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-medium"
+                  onClick={() => {
+                    if (voice.respondToRequest) {
+                      voice.respondToRequest(
+                        voice.incomingRequest!.requestId,
+                        voice.incomingRequest!.from.id,
+                        true
+                      );
+                    }
+                  }}
+                >
+                  Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Floating user badge (top-right) with presence + volume control */}
         <UserBadge variant="floating" />
         {/* Video overlay (avatar hidden to avoid duplicate badge) */}
-        <GlobalVideoOverlay position="top-right" showUserAvatar={false} rtc={rtc} />
+        {(() => {
+          const targetId = match?.players?.find((p) => p.id !== myPlayerId)?.id ?? null;
+          const callback = voice?.requestConnection;
+
+          console.debug('[OnlineMatchPage] Rendering GlobalVideoOverlay', {
+            hasVoice: !!voice,
+            hasRequestConnection: !!callback,
+            targetPlayerId: targetId,
+            myPlayerId,
+            matchPlayers: match?.players?.map(p => p.id),
+            voiceEnabled: voice?.enabled,
+            voiceKeys: voice ? Object.keys(voice) : []
+          });
+
+          return (
+            <GlobalVideoOverlay
+              position="top-right"
+              showUserAvatar={false}
+              rtc={rtc}
+              onRequestConnection={callback}
+              targetPlayerId={targetId}
+            />
+          );
+        })()}
       </div>
   );
 }

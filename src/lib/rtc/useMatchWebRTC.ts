@@ -37,6 +37,8 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remotePeerIdRef = useRef<string | null>(null);
   const previousScopeIdRef = useRef<string | null>(activeScopeId);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const disconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [state, setState] = useState<RtcState>('idle');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [micMuted, setMicMuted] = useState(false);
@@ -54,19 +56,48 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
   const cleanupPc = useCallback(() => {
     try {
+      // Clear disconnect timer
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
+
+      // Clear buffered ICE candidates
+      pendingIceCandidatesRef.current = [];
+
       pcRef.current?.getSenders().forEach((s) => {
-        try { s.track?.stop(); } catch {}
+        try {
+          s.track?.stop();
+        } catch (error) {
+          console.warn('[RTC] Error stopping sender track:', error);
+        }
       });
       pcRef.current?.getReceivers().forEach((r) => {
-        try { r.track?.stop(); } catch {}
+        try {
+          r.track?.stop();
+        } catch (error) {
+          console.warn('[RTC] Error stopping receiver track:', error);
+        }
       });
       pcRef.current?.close();
-    } catch {}
+    } catch (error) {
+      console.error('[RTC] Error during peer connection cleanup:', error);
+    }
     pcRef.current = null;
   }, []);
 
   const cleanupStreams = useCallback(() => {
-    try { localStreamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+    try {
+      localStreamRef.current?.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch (error) {
+          console.warn('[RTC] Error stopping local track:', error);
+        }
+      });
+    } catch (error) {
+      console.error('[RTC] Error cleaning up streams:', error);
+    }
     localStreamRef.current = null;
     remoteStreamRef.current = null;
   }, []);
@@ -84,9 +115,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     pcRef.current = pc;
 
     pc.ontrack = (ev) => {
-      console.debug('[RTC][client] ontrack received', {
-        trackCount: ev.streams?.[0]?.getTracks?.().length ?? 0,
-      });
       if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
       const stream = remoteStreamRef.current;
       for (const track of ev.streams?.[0]?.getTracks?.() || []) {
@@ -99,17 +127,58 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
     pc.onicecandidate = (ev) => {
       if (!ev.candidate || !transport) return;
-      console.debug('[RTC][client] local ICE candidate', ev.candidate);
       transport.emit?.('rtc:signal', { data: { candidate: ev.candidate } });
     };
 
     pc.onconnectionstatechange = () => {
       const cs = pc.connectionState;
+
       if (cs === 'connected') setState('connected');
       else if (cs === 'failed') setState('failed');
       else if (cs === 'closed' || cs === 'disconnected') {
-        // Keep it simple for prototype: mark closed and keep streams as-is
         setState('closed');
+      }
+    };
+
+    // Phase 1 Fix: ICE connection state monitoring for better failure detection
+    pc.oniceconnectionstatechange = () => {
+      const iceState = pc.iceConnectionState;
+
+      switch (iceState) {
+        case 'checking':
+          setState('negotiating');
+          break;
+        case 'connected':
+        case 'completed':
+          setState('connected');
+          // Clear any disconnect timers
+          if (disconnectTimerRef.current) {
+            clearTimeout(disconnectTimerRef.current);
+            disconnectTimerRef.current = null;
+          }
+          break;
+        case 'failed':
+          console.error('[RTC] ICE connection failed, attempting ICE restart');
+          setState('failed');
+          // Attempt ICE restart
+          pc.restartIce();
+          break;
+        case 'disconnected':
+          console.warn('[RTC] ICE connection disconnected, starting recovery timer');
+          // Give it 5 seconds to recover before restarting
+          if (disconnectTimerRef.current) {
+            clearTimeout(disconnectTimerRef.current);
+          }
+          disconnectTimerRef.current = setTimeout(() => {
+            if (pc.iceConnectionState === 'disconnected') {
+              console.warn('[RTC] ICE still disconnected after 5s, restarting');
+              pc.restartIce();
+            }
+          }, 5000);
+          break;
+        case 'closed':
+          setState('closed');
+          break;
       }
     };
 
@@ -126,11 +195,14 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       setAudioDevices(audioInputs);
       setVideoDevices(videoInputs);
       setAudioOutputDevices(audioOutputs);
+
+      // Clear selected device if it's no longer available
       if (audioOutputDeviceId && !audioOutputs.some((d) => d.deviceId === audioOutputDeviceId)) {
+        console.warn('[RTC] Selected audio output device no longer available');
         setAudioOutputDeviceId(null);
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('[RTC] Failed to enumerate devices:', error);
     }
   }, [audioOutputDeviceId]);
 
@@ -145,25 +217,83 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   }, [enabled, refreshDevices]);
 
   const openLocalStream = useCallback(async () => {
-    // Build constraints from selected IDs; allow default when null
+    // Build constraints with audio quality optimization
+    const audioConstraints: MediaTrackConstraints = {
+      ...(audioDeviceId && { deviceId: { exact: audioDeviceId } }),
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: { ideal: 48000 },
+      channelCount: { ideal: 1 }, // Mono for voice chat
+    };
+
     const constraints: MediaStreamConstraints = {
-      audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true,
+      audio: audioConstraints,
       // In audio-only mode, do not request video at all
       video: FEATURE_AUDIO_ONLY ? false : (videoDeviceId ? { deviceId: { exact: videoDeviceId } } : true),
     };
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       return stream;
-    } catch (err) {
-      // Fallback to permissive defaults if specific device failed
+    } catch (primaryError) {
+      console.warn('[RTC] Failed with selected devices:', primaryError);
+
+      // Phase 2 Fix: Better fallback with error messaging
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: FEATURE_AUDIO_ONLY ? false : true });
+        // Try default devices with quality constraints
+        const fallbackConstraints: MediaStreamConstraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: { ideal: 48000 },
+            channelCount: { ideal: 1 },
+          },
+          video: FEATURE_AUDIO_ONLY ? false : true,
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        console.log('[RTC] Using default devices as fallback');
+
+        // Clear selected devices since they failed
+        setAudioDeviceId(null);
+        if (!FEATURE_AUDIO_ONLY) {
+          setVideoDeviceId(null);
+        }
+
         return stream;
-      } catch {
-        throw err;
+      } catch (fallbackError) {
+        console.error('[RTC] All media acquisition attempts failed:', fallbackError);
+        throw new Error(`Media acquisition failed: ${(fallbackError as Error).message}`);
       }
     }
   }, [audioDeviceId, videoDeviceId]);
+
+  // Phase 3 Fix: Optimize audio bitrate for voice chat
+  const optimizeAudioBitrate = useCallback(async () => {
+    const pc = pcRef.current;
+    if (!pc) return;
+
+    const senders = pc.getSenders();
+    for (const sender of senders) {
+      if (sender.track?.kind === 'audio') {
+        try {
+          const parameters = sender.getParameters();
+          if (!parameters.encodings) {
+            parameters.encodings = [{}];
+          }
+
+          // Set max bitrate for audio (Opus codec optimized for voice)
+          parameters.encodings[0].maxBitrate = 32000; // 32 kbps for voice quality
+
+          await sender.setParameters(parameters);
+        } catch (error) {
+          console.warn('[RTC] Failed to set audio bitrate:', error);
+        }
+      }
+    }
+  }, []);
 
   const addLocalTracks = useCallback(async () => {
     const pc = ensurePc();
@@ -175,10 +305,6 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     }
     const stream = localStreamRef.current;
     if (!stream) return;
-    console.debug('[RTC][client] adding local tracks', {
-      audioTracks: stream.getAudioTracks().length,
-      videoTracks: stream.getVideoTracks().length,
-    });
     const existingTracks = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
     for (const track of stream.getTracks()) {
       if (existingTracks.has(track.id)) {
@@ -186,15 +312,16 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       }
       pc.addTrack(track, stream);
     }
-  }, [ensurePc, openLocalStream, refreshDevices]);
+
+    // Phase 3 Fix: Optimize bitrate after adding tracks
+    await optimizeAudioBitrate();
+  }, [ensurePc, openLocalStream, refreshDevices, optimizeAudioBitrate]);
 
   const makeOffer = useCallback(async () => {
     const pc = ensurePc();
     setState('negotiating');
-    console.debug('[RTC][client] creating offer');
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    console.debug('[RTC][client] sending offer');
     transport?.emit?.('rtc:signal', { data: { sdp: pc.localDescription } });
   }, [ensurePc, transport]);
 
@@ -211,30 +338,39 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (from) remotePeerIdRef.current = from;
 
     const d = data as { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-    console.debug('[RTC][client] received signal', {
-      from,
-      hasSdp: !!d.sdp,
-      sdpType: d.sdp?.type,
-      hasCandidate: !!d.candidate,
-    });
+
     try {
       if (d.sdp) {
         await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+
+        // Phase 1 Fix: Flush buffered ICE candidates after remote description is set
+        for (const candidate of pendingIceCandidatesRef.current) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (error) {
+            console.warn('[RTC] Failed to add buffered ICE candidate:', error);
+          }
+        }
+        pendingIceCandidatesRef.current = [];
+
         if (d.sdp.type === 'offer') {
           // Answer offer
           await addLocalTracks();
-          console.debug('[RTC][client] creating answer');
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          console.debug('[RTC][client] sending answer');
           transport?.emit?.('rtc:signal', { data: { sdp: pc.localDescription } });
         }
       } else if (d.candidate) {
-        console.debug('[RTC][client] adding remote ICE candidate');
-        await pc.addIceCandidate(new RTCIceCandidate(d.candidate));
+        // Phase 1 Fix: Buffer ICE candidates if remote description not set yet
+        if (!pc.remoteDescription) {
+          pendingIceCandidatesRef.current.push(d.candidate);
+        } else {
+          await pc.addIceCandidate(new RTCIceCandidate(d.candidate));
+        }
       }
-    } catch {
-      // Swallow errors for prototype, mark failed to allow retry via Leave/Join
+    } catch (error) {
+      // Phase 2 Fix: Proper error logging
+      console.error('[RTC] Signal handling error:', error);
       setState('failed');
     }
   }, [addLocalTracks, ensurePc, transport]);
@@ -245,51 +381,38 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const obj = payload as { from?: { id?: string } };
     const pid = obj.from?.id ? String(obj.from.id) : null;
     if (!pid || !myPlayerId) return;
-    const willCall = String(myPlayerId) < String(pid);
-    console.debug('[RTC][client] peer joined handler', { pid, myPlayerId, willCall });
+
+    // If we're already in the process of joining/negotiating, don't interfere
+    if (state !== 'idle' && state !== 'failed' && state !== 'closed') {
+      return;
+    }
     remotePeerIdRef.current = pid;
     setParticipantIds((prev) => {
       if (pid === myPlayerId || prev.includes(pid)) return prev;
       return [...prev, pid];
     });
 
-    // Decide caller deterministically: lower id starts offer
-    if (willCall) {
-      try {
-        await addLocalTracks();
-        await makeOffer();
-      } catch (err) {
-        console.warn('[RTC][client] failed to make offer after peer joined', err);
-        setState('failed');
-      }
-    }
-  }, [addLocalTracks, makeOffer, myPlayerId]);
+    // NOTE: WebRTC connection is now initiated via rtc:request/rtc:request:respond flow
+    // No automatic connection - players must explicitly request/accept connections
+  }, [myPlayerId, state]);
 
   // When we first join, the server sends us the current roster via `rtc:participants`.
-  // If there is already someone in the room and our id is lexicographically lower,
-  // we should initiate the offer (the existing peer will otherwise do it if their id is lower).
+  // Update participant list but do not auto-connect - require explicit request/approval
   const handleParticipants = useCallback(async (payload: unknown) => {
     if (!payload || typeof payload !== 'object') return;
     const obj = payload as { participants?: Array<{ id?: string }> };
     const list = Array.isArray(obj.participants) ? obj.participants : [];
     const others = list.map((p) => (p && p.id ? String(p.id) : null)).filter((x): x is string => !!x && x !== myPlayerId);
     if (others.length === 0 || !myPlayerId) return;
-    // Pick a deterministic remote to compare (lowest id).
+
+    // Track the first remote peer for potential connection
     const remote = others.sort()[0];
-    const willCall = String(myPlayerId) < String(remote);
-    console.debug('[RTC][client] participants handler', { others, myPlayerId, remote, willCall });
     remotePeerIdRef.current = remote;
     setParticipantIds(others);
-    if (willCall) {
-      try {
-        await addLocalTracks();
-        await makeOffer();
-      } catch (err) {
-        console.warn('[RTC][client] failed to make offer after participants update', err);
-        setState('failed');
-      }
-    }
-  }, [addLocalTracks, makeOffer, myPlayerId]);
+
+    // NOTE: WebRTC connection is now initiated via rtc:request/rtc:request:respond flow
+    // No automatic connection - players must explicitly request/accept connections
+  }, [myPlayerId]);
 
   const handlePeerLeft = useCallback((payload: unknown) => {
     if (payload && typeof payload === 'object') {
@@ -312,24 +435,46 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
     try {
       setState('joining');
-      console.debug('[RTC][client] join start', { myPlayerId, activeScopeId });
-      await addLocalTracks();
-      // Announce presence to room; other peer will respond with offer or we will, based on id ordering
+      // Announce presence to room without establishing media connection yet
+      // Connection will be established after rtc:request approval
       transport.emit?.('rtc:join');
-      console.debug('[RTC][client] join signal sent', { myPlayerId, activeScopeId });
-      setState('negotiating');
+      setState('idle'); // Return to idle, waiting for connection request
     } catch {
       setState('failed');
     }
-  }, [enabled, transport, myPlayerId, activeScopeId, addLocalTracks]);
+  }, [enabled, transport, myPlayerId, activeScopeId]);
 
   const leave = useCallback(() => {
     if (!transport) return;
-    console.debug('[RTC][client] leaving voice room');
     try { transport.emit?.('rtc:leave'); } catch {}
     reset();
     setParticipantIds([]);
   }, [transport, reset]);
+
+  // Initiate WebRTC connection after both parties have approved
+  const initiateConnection = useCallback(async () => {
+    if (!enabled || !transport || !myPlayerId || !activeScopeId) return;
+    if (state !== 'idle' && state !== 'failed' && state !== 'closed') {
+      return;
+    }
+
+    try {
+      setState('negotiating');
+
+      // Get local media tracks
+      await addLocalTracks();
+
+      // Determine who should create the offer (lower ID initiates)
+      const remotePid = remotePeerIdRef.current;
+      if (remotePid && String(myPlayerId) < String(remotePid)) {
+        await makeOffer();
+      } else {
+      }
+    } catch (err) {
+      console.warn('[RTC][client] failed to initiate connection', err);
+      setState('failed');
+    }
+  }, [enabled, transport, myPlayerId, activeScopeId, state, addLocalTracks, makeOffer]);
 
   useEffect(() => {
     const prevScopeId = previousScopeIdRef.current;
@@ -453,6 +598,47 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     };
   }, [enabled, transport, handlePeerJoined, handleSignal, handlePeerLeft, handleParticipants]);
 
+  // Phase 3 Fix: Connection quality monitoring
+  useEffect(() => {
+    if (state !== 'connected' || !pcRef.current) return;
+
+    const pc = pcRef.current;
+    const monitoringInterval = setInterval(async () => {
+      try {
+        const stats = await pc.getStats();
+
+        for (const [, stat] of stats) {
+          if (stat.type === 'inbound-rtp' && stat.kind === 'audio') {
+            const packetsLost = (stat as { packetsLost?: number }).packetsLost || 0;
+            const packetsReceived = (stat as { packetsReceived?: number }).packetsReceived || 1;
+            const lossRate = packetsLost / (packetsLost + packetsReceived);
+
+            if (lossRate > 0.05) {
+              console.warn('[RTC] High packet loss detected:', {
+                lossRate: (lossRate * 100).toFixed(2) + '%',
+                packetsLost,
+                packetsReceived,
+              });
+            }
+
+            const jitter = (stat as { jitter?: number }).jitter || 0;
+            if (jitter > 0.03) {
+              console.warn('[RTC] High jitter detected:', {
+                jitter: (jitter * 1000).toFixed(2) + 'ms',
+              });
+            }
+
+            // Log quality metrics at debug level
+          }
+        }
+      } catch (error) {
+        console.warn('[RTC] Failed to get stats:', error);
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(monitoringInterval);
+  }, [state]);
+
   // Auto-cleanup on unmount
   useEffect(() => () => { reset(); setParticipantIds([]); }, [reset]);
 
@@ -464,6 +650,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     remoteStream,
     join,
     leave,
+    initiateConnection,
     participantIds,
     micMuted,
     camOff,
