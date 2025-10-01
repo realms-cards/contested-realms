@@ -144,11 +144,6 @@ export default function OnlineLayout({
     if (!voiceFeatureEnabled) return;
     // Join the voice room (announce presence) but don't auto-connect
     if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
-      console.debug('[RTC][client] attempting join (room presence only)', {
-        state: voiceState,
-        lobbyId: lobby?.id ?? null,
-        matchId: match?.id ?? null,
-      });
       void voiceJoin();
     }
   }, [voiceFeatureEnabled, voiceJoin, voiceState, lobby?.id, match?.id]);
@@ -157,11 +152,6 @@ export default function OnlineLayout({
     if (!voiceFeatureEnabled) return;
     // Initiate actual WebRTC connection after approval
     if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
-      console.debug('[RTC][client] initiating WebRTC connection', {
-        state: voiceState,
-        lobbyId: lobby?.id ?? null,
-        matchId: match?.id ?? null,
-      });
       void voiceRtc.initiateConnection();
     }
   }, [voiceFeatureEnabled, voiceRtc, voiceState, lobby?.id, match?.id]);
@@ -171,7 +161,6 @@ export default function OnlineLayout({
       if (!transport || !voiceFeatureEnabled || !targetId) return;
       if (me?.id && targetId === me.id) return;
       if (voiceParticipantIdSet.has(targetId)) {
-        console.debug('[RTC][client] skipping request (already connected)', { targetId });
         return;
       }
       if (
@@ -195,11 +184,6 @@ export default function OnlineLayout({
       setVoicePlaybackEnabled(true);
 
       try {
-        console.debug('[RTC][client] sending request', {
-          targetId,
-          lobbyId: base.lobbyId,
-          matchId: base.matchId,
-        });
         transport.emit("rtc:request", {
           targetId,
           lobbyId: lobby?.id ?? null,
@@ -239,11 +223,6 @@ export default function OnlineLayout({
       });
 
       try {
-        console.debug('[RTC][client] responding to request', {
-          requestId,
-          requesterId,
-          accepted,
-        });
         transport.emit("rtc:request:respond", {
           requestId,
           requesterId,
@@ -373,11 +352,6 @@ export default function OnlineLayout({
           ? data.from.displayName
           : `Player ${String(data.from.id).slice(-4)}`;
 
-      console.debug('[RTC][client] incoming request', {
-        ...data,
-        from: data.from?.id,
-      });
-
       setIncomingVoiceRequest({
         requestId: data.requestId,
         from: {
@@ -401,7 +375,6 @@ export default function OnlineLayout({
       };
       const requestId = data.requestId;
       if (!requestId) return;
-      console.debug('[RTC][client] request acknowledged', data);
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
         const resolvedTarget = data.targetId ? String(data.targetId) : prev.targetId;
@@ -427,7 +400,6 @@ export default function OnlineLayout({
         timestamp?: number;
       };
       if (!data.from || !data.from.id) return;
-      console.debug('[RTC][client] request accepted', data);
       const responderId = String(data.from.id);
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
@@ -460,7 +432,6 @@ export default function OnlineLayout({
         timestamp?: number;
       };
       if (!data.from || !data.from.id) return;
-      console.debug('[RTC][client] request declined', data);
       const responderId = String(data.from.id);
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
@@ -485,7 +456,6 @@ export default function OnlineLayout({
         accepted?: boolean;
       };
       if (!data.requestId) return;
-      console.debug('[RTC][client] acknowledgement from responder', data);
       setIncomingVoiceRequest((prev) => {
         if (!prev || prev.requestId !== data.requestId) return prev;
         return null;
@@ -507,7 +477,6 @@ export default function OnlineLayout({
         timestamp?: number;
       };
       if (!data.requestId) return;
-      console.debug('[RTC][client] request cancelled', data);
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
         if (prev.requestId && prev.requestId !== data.requestId) return prev;
@@ -731,13 +700,6 @@ export default function OnlineLayout({
         };
         // Debug: server-initiated resync snapshot received
         try {
-          console.debug("[online] resync start (server snapshot) ->", {
-            matchInSnap: snap?.match?.id,
-            hasLobby: !!snap?.lobby,
-            hasGame: !!snap?.game,
-            t: snap?.t,
-            gen,
-          });
         } catch {}
         if (snap?.lobby) {
           setLobby(snap.lobby);
@@ -797,11 +759,6 @@ export default function OnlineLayout({
         }
         // Debug: report whether we applied the snapshot
         try {
-          console.debug("[online] resync apply ->", {
-            allowApplyGame,
-            hasGame: !!snap?.game,
-            gen,
-          });
         } catch {}
         // Clear resyncing on the next frame after queueing applies
         try {
@@ -816,16 +773,12 @@ export default function OnlineLayout({
               return;
             }
             try {
-              console.debug("[online] resync stop (server)", { gen });
             } catch {}
             setResyncing(false);
           });
         } catch {
           if (resyncGenRef.current === gen) {
             try {
-              console.debug("[online] resync stop (server, immediate)", {
-                gen,
-              });
             } catch {}
             setResyncing(false);
           } else {
@@ -1025,10 +978,6 @@ export default function OnlineLayout({
       setResyncing(true);
       // Debug: client-initiated resync start
       try {
-        console.debug("[online] resync start (client request) ->", {
-          matchId: match?.id,
-          gen,
-        });
       } catch {}
       try {
         transport.resync();
@@ -1038,10 +987,6 @@ export default function OnlineLayout({
         setTimeout(() => {
           if (resyncGenRef.current !== gen) {
             try {
-              console.debug("[online] resync fallback ignored (superseded)", {
-                gen,
-                current: resyncGenRef.current,
-              });
             } catch {}
             return;
           }
