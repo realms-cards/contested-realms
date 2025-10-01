@@ -37,6 +37,8 @@ export default function SeatMediaControls({
   renderAudioElement = true,
   showSpeakerToggle,
   menuAlignment = 'left',
+  onRequestConnection,
+  targetPlayerId,
 }: {
   rtc: SeatRtcLike;
   className?: string;
@@ -45,6 +47,8 @@ export default function SeatMediaControls({
   renderAudioElement?: boolean;
   showSpeakerToggle?: boolean;
   menuAlignment?: 'left' | 'right';
+  onRequestConnection?: (targetId: string) => void;
+  targetPlayerId?: string | null;
 }) {
   const [showDevices, setShowDevices] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -146,6 +150,28 @@ export default function SeatMediaControls({
     };
   }, [needsAudioUnlock, setPlaybackEnabled]);
 
+  const handleJoinClick = useCallback(() => {
+    console.debug('[SeatMediaControls] Join button clicked', {
+      hasRequestCallback: !!onRequestConnection,
+      targetPlayerId,
+      rtcState: rtc.state
+    });
+
+    // First join the voice room (announce presence)
+    void rtc.join();
+
+    // Then send connection request if we have a target player
+    if (onRequestConnection && targetPlayerId) {
+      console.debug('[SeatMediaControls] Sending connection request', { targetPlayerId });
+      onRequestConnection(targetPlayerId);
+    } else {
+      console.warn('[SeatMediaControls] Cannot send request', {
+        hasCallback: !!onRequestConnection,
+        hasTarget: !!targetPlayerId
+      });
+    }
+  }, [rtc, onRequestConnection, targetPlayerId]);
+
   const isIdle = rtc.state === "idle" || rtc.state === "failed" || rtc.state === "closed";
 
   if (!rtc.featureEnabled) return null;
@@ -154,9 +180,9 @@ export default function SeatMediaControls({
     <div className={`inline-flex items-center gap-2 bg-black/55 rounded-lg px-2 py-1 ring-1 ring-white/10 ${className ?? ""}`}>
       {isIdle ? (
         <button
-          onClick={() => rtc.join()}
+          onClick={handleJoinClick}
           className="h-7 w-7 grid place-items-center rounded bg-green-600 hover:bg-green-700 text-white"
-          title={FEATURE_AUDIO_ONLY ? "Join audio" : "Join video"}
+          title={FEATURE_AUDIO_ONLY ? "Request audio connection" : "Request video connection"}
         >
           {FEATURE_AUDIO_ONLY ? <Phone className="h-4 w-4" /> : <Video className="h-4 w-4" />}
         </button>

@@ -37,6 +37,9 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   rtc?: SeatRtcLike | null;
   // When expanded, try to auto-connect if RTC is idle (helps with UX and autoplay gating)
   autoConnectOnExpand?: boolean;
+  // Connection request callback for matches
+  onRequestConnection?: (targetId: string) => void;
+  targetPlayerId?: string | null;
 }> = ({
   className = '',
   position = 'top-right',
@@ -45,6 +48,8 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   userAvatarUrl = null,
   rtc: rtcProp = null,
   autoConnectOnExpand = false,
+  onRequestConnection,
+  targetPlayerId,
 }) => {
   const { shouldShowVideo: shouldShowVideoFromScreen, shouldShowControls } = useVideoOverlay();
   const onlineCtx = React.useContext(OnlineContext);
@@ -143,6 +148,8 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
                 onTogglePlayback={setPlaybackEnabled}
                 renderAudioElement={!voiceFeatureEnabled}
                 showSpeakerToggle={!voiceFeatureEnabled}
+                onRequestConnection={onRequestConnection}
+                targetPlayerId={targetPlayerId}
               />
             </div>
           )}
