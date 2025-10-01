@@ -40,6 +40,7 @@ export interface PreparationState {
   error: string | null;
 }
 
+<<<<<<< HEAD
 export type PreparationDataPayload = {
   sealed?: Partial<SealedPreparationData>;
   draft?: Partial<DraftPreparationData>;
@@ -131,7 +132,10 @@ export const mergeConstructed = (
   };
 };
 
-export function useTournamentPreparation(tournamentId: string | null) {
+export function useTournamentPreparation(
+  tournamentId: string | null,
+  options?: { isConnected?: boolean; pollIntervalMs?: number }
+) {
   const [state, setState] = useState<PreparationState>({
     status: 'notStarted',
     loading: false,
@@ -406,12 +410,26 @@ export function useTournamentPreparation(tournamentId: string | null) {
     }
   }, [tournamentId]);
 
+  // Auto-refresh preparation status (backup). Prefer sockets; poll only when not connected and tab is visible
   useEffect(() => {
     refreshStatus();
-
-    const interval = setInterval(refreshStatus, 5000);
-    return () => clearInterval(interval);
-  }, [refreshStatus]);
+    const pollMs = options?.pollIntervalMs ?? 15000; // back off to 15s
+    let interval: number | null = null;
+    const start = () => {
+      if (options?.isConnected) return; // don't poll when socket is connected
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (interval != null) return;
+      interval = window.setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        void refreshStatus();
+      }, pollMs);
+    };
+    const stop = () => { if (interval != null) { clearInterval(interval); interval = null; } };
+    start();
+    const onVis = () => { stop(); start(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+    return () => { stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis); };
+  }, [refreshStatus, options?.isConnected, options?.pollIntervalMs]);
 
   return {
     ...state,

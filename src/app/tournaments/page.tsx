@@ -44,6 +44,15 @@ export default function TournamentsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // View filter: default 'active' uses realtime context; other filters fetch via API
+  const [viewFilter, setViewFilter] = useState<'active' | 'completed' | 'all' | 'mine'>('active');
+  const [localTournaments, setLocalTournaments] = useState<Tournament[]>([]);
+  const [loadingLocal, setLoadingLocal] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
+
   const [form, setForm] = useState<CreateTournamentForm>({
     name: '',
     format: 'constructed',
@@ -75,6 +84,51 @@ export default function TournamentsPage() {
   }, [status, router]);
 
   // Polling removed; realtime provider handles live updates
+
+  // Load completed/all/mine tournaments when requested
+  useEffect(() => {
+    (async () => {
+      if (viewFilter === 'active') return;
+      setLoadingLocal(true);
+      setLocalError(null);
+      try {
+        const params = new URLSearchParams();
+        if (viewFilter === 'completed') {
+          params.set('status', 'completed');
+          params.set('limit', String(pageSize));
+          params.set('offset', String((page - 1) * pageSize));
+          if (search.trim()) params.set('q', search.trim());
+          const res = await fetch(`/api/tournaments?${params.toString()}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Failed to fetch tournaments');
+          setLocalTournaments(data as Tournament[]);
+        } else if (viewFilter === 'all') {
+          params.set('status', 'all');
+          params.set('limit', String(pageSize));
+          params.set('offset', String((page - 1) * pageSize));
+          if (search.trim()) params.set('q', search.trim());
+          const res = await fetch(`/api/tournaments?${params.toString()}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Failed to fetch tournaments');
+          setLocalTournaments(data as Tournament[]);
+        } else if (viewFilter === 'mine') {
+          params.set('page', String(page));
+          params.set('pageSize', String(pageSize));
+          if (search.trim()) params.set('q', search.trim());
+          // role=any returns both creator and participant
+          const res = await fetch(`/api/tournaments/my?${params.toString()}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Failed to fetch my tournaments');
+          setLocalTournaments((data?.items || []) as Tournament[]);
+        }
+      } catch (e) {
+        setLocalError(e instanceof Error ? e.message : 'Failed to fetch tournaments');
+        setLocalTournaments([]);
+      } finally {
+        setLoadingLocal(false);
+      }
+    })();
+  }, [viewFilter, page, search]);
 
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,34 +244,102 @@ export default function TournamentsPage() {
           </button>
         </div>
 
+        {/* View Filter */}
+        <div className="flex items-center gap-2 mb-6">
+          <button
+            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'active' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
+            onClick={() => setViewFilter('active')}
+          >
+            Active
+          </button>
+          <button
+            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'completed' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
+            onClick={() => setViewFilter('completed')}
+          >
+            Completed
+          </button>
+          <button
+            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'all' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
+            onClick={() => setViewFilter('all')}
+          >
+            All
+          </button>
+          <button
+            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'mine' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
+            onClick={() => { setViewFilter('mine'); setPage(1); }}
+          >
+            My Tournaments
+          </button>
+          {viewFilter !== 'active' && (
+            <span className="text-xs text-slate-400 ml-2">Showing {viewFilter} tournaments</span>
+          )}
+          {viewFilter !== 'active' && (
+            <div className="ml-auto flex items-center gap-2">
+              <input
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search…"
+                className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+        </div>
+
         {/* Error Display */}
-        {(error || rtError) && (
+        {(error || rtError || localError) && (
           <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
             <div className="flex items-center">
               <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
-              {error || rtError}
+              {error || rtError || localError}
             </div>
           </div>
         )}
 
+        {/* Pagination for non-active views */}
+        {viewFilter !== 'active' && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              className="px-3 py-1.5 rounded-md text-sm bg-slate-800 text-slate-200 border border-slate-600 disabled:opacity-50"
+              disabled={page <= 1 || loadingLocal}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </button>
+            <span className="text-slate-400 text-sm">Page {page}</span>
+            <button
+              className="px-3 py-1.5 rounded-md text-sm bg-slate-800 text-slate-200 border border-slate-600 disabled:opacity-50"
+              disabled={loadingLocal || localTournaments.length < pageSize}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
+        )}
+
         {/* Tournaments Grid */}
-        {tournaments.length === 0 ? (
+        {(viewFilter === 'active' ? tournaments.length === 0 : (loadingLocal ? false : localTournaments.length === 0)) ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🏆</div>
-            <h2 className="text-2xl font-semibold text-slate-300 mb-2">No tournaments available</h2>
-            <p className="text-slate-500 mb-6">Be the first to create a tournament!</p>
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              Create First Tournament
-            </button>
+            <h2 className="text-2xl font-semibold text-slate-300 mb-2">No tournaments found</h2>
+            {viewFilter === 'active' ? (
+              <>
+                <p className="text-slate-500 mb-6">Be the first to create a tournament!</p>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  Create First Tournament
+                </button>
+              </>
+            ) : (
+              <p className="text-slate-500">Try switching filters or check back later.</p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tournaments.map((tournament) => (
+            {(viewFilter === 'active' ? tournaments : localTournaments).map((tournament) => (
               <div
                 key={tournament.id}
                 className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"

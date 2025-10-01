@@ -249,6 +249,7 @@ function TournamentMatchesModal({
                                             lobbyName: (tObj?.name as string | undefined) || undefined,
                                             sealedConfig,
                                             draftConfig,
+                                            tournamentId: String(tObj?.id || ''),
                                           };
                                           localStorage.setItem(`tournamentMatchBootstrap_${m.id}`, JSON.stringify(payload));
                                           window.location.href = `/online/play/${encodeURIComponent(m.id)}`;
@@ -282,6 +283,17 @@ export type CreateTournamentConfig = {
   format: "swiss" | "elimination" | "round_robin";
   matchType: "constructed" | "sealed" | "draft";
   maxPlayers: number;
+  sealedConfig?: {
+    packCounts: Record<string, number>;
+    timeLimit: number;
+    replaceAvatars: boolean;
+  };
+  draftConfig?: {
+    setMix: string[];
+    packCount: number;
+    packSize: number;
+    packCounts: Record<string, number>;
+  };
 };
 
 export default function LobbiesCentral({
@@ -360,6 +372,12 @@ export default function LobbiesCentral({
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [matchesData, setMatchesData] = useState<TournamentMatchesResponse | null>(null);
+
+  // Pending states for tournament actions to prevent double clicks and show small loaders
+  const [pendingReady, setPendingReady] = useState<Record<string, boolean>>({});
+  const [pendingJoinT, setPendingJoinT] = useState<Record<string, boolean>>({});
+  const [pendingLeaveT, setPendingLeaveT] = useState<Record<string, boolean>>({});
+  const [pendingStartT, setPendingStartT] = useState<Record<string, boolean>>({});
   
   // Check if user is already engaged in a lobby or tournament
   // IMPORTANT: Use joinedLobbyId as the single source of truth for membership.
@@ -384,6 +402,13 @@ export default function LobbiesCentral({
   const [tournamentFormat, setTournamentFormat] = useState<"swiss" | "elimination" | "round_robin">("swiss");
   const [tournamentMatchType, setTournamentMatchType] = useState<"constructed" | "sealed" | "draft">("sealed");
   const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
+  // Tournament pack settings
+  const [sealedPackCounts, setSealedPackCounts] = useState<Record<string, number>>({ Beta: 6, "Arthurian Legends": 0 });
+  const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
+  const [sealedReplaceAvatars, setSealedReplaceAvatars] = useState<boolean>(false);
+  const [draftPackCounts, setDraftPackCounts] = useState<Record<string, number>>({ Beta: 3, "Arthurian Legends": 0 });
+  const [draftPackCount, setDraftPackCount] = useState<number>(3);
+  const [draftPackSize, setDraftPackSize] = useState<number>(15);
 
   // Generate a random name when overlay opens
   const handleOverlayOpen = () => {
@@ -874,6 +899,12 @@ export default function LobbiesCentral({
           const isRegistered = tournament.registeredPlayers.some(p => p.id === myId);
           const myRegistration = tournament.registeredPlayers.find(p => p.id === myId);
           const isReady = myRegistration?.ready || false;
+          // Consider a deck submitted when the API marks deckSubmitted (preferred) or when the player is ready
+          const hasSubmitted = (() => {
+            if (!myRegistration) return false;
+            const maybe = myRegistration as typeof myRegistration & { deckSubmitted?: boolean };
+            return Boolean(maybe.deckSubmitted || isReady);
+          })();
           const canJoin = tournament.status === "registering" && !isRegistered && tournament.registeredPlayers.length < tournament.maxPlayers && !isEngaged;
           const allPlayersReady = tournament.registeredPlayers.length >= 2 && tournament.registeredPlayers.every(p => p.ready);
           const canStart = tournament.creatorId === myId && tournament.status === "registering" && allPlayersReady;
@@ -921,18 +952,38 @@ export default function LobbiesCentral({
               <div className="flex items-center gap-2">
                 {canJoin && onJoinTournament && (
                   <button
-                    className="rounded bg-purple-600/80 hover:bg-purple-600 px-3 py-1 text-xs"
-                    onClick={() => onJoinTournament(tournament.id)}
+                    className={`rounded px-3 py-1 text-xs ${pendingJoinT[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-purple-600/80 hover:bg-purple-600'} text-white`}
+                    onClick={async () => {
+                      if (pendingJoinT[tournament.id]) return;
+                      setPendingJoinT((m) => ({ ...m, [tournament.id]: true }));
+                      try {
+                        await Promise.resolve(onJoinTournament(tournament.id));
+                        if (onRefresh) onRefresh();
+                      } finally {
+                        setPendingJoinT((m) => ({ ...m, [tournament.id]: false }));
+                      }
+                    }}
+                    disabled={pendingJoinT[tournament.id]}
                   >
-                    Join
+                    {pendingJoinT[tournament.id] ? 'Joining…' : 'Join'}
                   </button>
                 )}
                 {isRegistered && tournament.status === "registering" && onLeaveTournament && (
                   <button
-                    className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
-                    onClick={() => onLeaveTournament(tournament.id)}
+                    className={`rounded px-3 py-1 text-xs ${pendingLeaveT[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-red-600/80 hover:bg-red-600'} text-white`}
+                    onClick={async () => {
+                      if (pendingLeaveT[tournament.id]) return;
+                      setPendingLeaveT((m) => ({ ...m, [tournament.id]: true }));
+                      try {
+                        await Promise.resolve(onLeaveTournament(tournament.id));
+                        if (onRefresh) onRefresh();
+                      } finally {
+                        setPendingLeaveT((m) => ({ ...m, [tournament.id]: false }));
+                      }
+                    }}
+                    disabled={pendingLeaveT[tournament.id]}
                   >
-                    Leave
+                    {pendingLeaveT[tournament.id] ? 'Leaving…' : 'Leave'}
                   </button>
                 )}
                 {tournament.creatorId === myId && tournament.status === "registering" && onUpdateTournamentSettings && (
@@ -947,23 +998,48 @@ export default function LobbiesCentral({
                   </button>
                 )}
                 {isRegistered && tournament.status === "registering" && onToggleTournamentReady && (
-                  <button
-                    className={`rounded px-3 py-1 text-xs ${
-                      isReady 
-                        ? "bg-yellow-600/80 hover:bg-yellow-600 text-yellow-100" 
-                        : "bg-green-600/80 hover:bg-green-600 text-green-100"
-                    }`}
-                    onClick={() => onToggleTournamentReady(tournament.id, !isReady)}
-                  >
-                    {isReady ? "Not Ready" : "Ready"}
-                  </button>
+                  isReady ? (
+                    <span
+                      className="rounded px-3 py-1 text-xs bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 cursor-not-allowed"
+                      title="You're marked as ready"
+                    >
+                      Ready ✓
+                    </span>
+                  ) : (
+                    <button
+                      className={`rounded px-3 py-1 text-xs ${pendingReady[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-green-600/80 hover:bg-green-600 text-green-100'}`}
+                      onClick={async () => {
+                        if (pendingReady[tournament.id]) return;
+                        setPendingReady((m) => ({ ...m, [tournament.id]: true }));
+                        try {
+                          await Promise.resolve(onToggleTournamentReady(tournament.id, true));
+                          if (onRefresh) onRefresh();
+                        } finally {
+                          setPendingReady((m) => ({ ...m, [tournament.id]: false }));
+                        }
+                      }}
+                      disabled={pendingReady[tournament.id]}
+                    >
+                      {pendingReady[tournament.id] ? 'Marking…' : 'Ready'}
+                    </button>
+                  )
                 )}
                 {canStart && onStartTournament && (
                   <button
-                    className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100 font-medium"
-                    onClick={() => onStartTournament(tournament.id)}
+                    className={`rounded px-3 py-1 text-xs text-white font-medium ${pendingStartT[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-blue-600/80 hover:bg-blue-600'}`}
+                    onClick={async () => {
+                      if (pendingStartT[tournament.id]) return;
+                      setPendingStartT((m) => ({ ...m, [tournament.id]: true }));
+                      try {
+                        await Promise.resolve(onStartTournament(tournament.id));
+                        if (onRefresh) onRefresh();
+                      } finally {
+                        setPendingStartT((m) => ({ ...m, [tournament.id]: false }));
+                      }
+                    }}
+                    disabled={pendingStartT[tournament.id]}
                   >
-                    Start Tournament
+                    {pendingStartT[tournament.id] ? 'Starting…' : 'Start Tournament'}
                   </button>
                 )}
                 {tournament.creatorId === myId && tournament.status !== "completed" && onEndTournament && (
@@ -977,18 +1053,59 @@ export default function LobbiesCentral({
                 {isRegistered && tournament.status === "draft_phase" && (
                   <button
                     className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
-                    onClick={() => window.location.href = `/online/play/tournament-${tournament.id}`}
+                    onClick={() => window.location.href = `/tournaments/${tournament.id}/draft`}
                   >
                     Enter Draft
                   </button>
                 )}
                 {isRegistered && tournament.status === "sealed_phase" && (
-                  <button
-                    className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs text-green-100"
-                    onClick={() => window.location.href = `/decks/editor-3d?mode=sealed&tournament=${tournament.id}`}
-                  >
-                    Build Deck
-                  </button>
+                  (hasSubmitted
+                    ? (
+                      <span
+                        className="rounded px-3 py-1 text-xs bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 cursor-not-allowed"
+                        title="Deck submitted to tournament"
+                      >
+                        Deck Submitted ✓
+                      </span>
+                    ) : (
+                      <button
+                        className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs text-green-100"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data?.error || 'Failed to start preparation');
+                            // Persist generated packs for the editor (if provided)
+                            const packs = data?.preparationData?.sealed?.generatedPacks as Array<{ packId: string; setId: string; cards: unknown[] }> | undefined;
+                            if (Array.isArray(packs)) {
+                              const storePacks = packs.map(p => ({ id: p.packId, set: p.setId, cards: Array.isArray(p.cards) ? p.cards : [], opened: false }));
+                              try { localStorage.setItem(`sealedPacks_tournament_${tournament.id}`, JSON.stringify(storePacks)); } catch {}
+                            }
+                          } catch (e) {
+                            console.warn('Failed to start preparation:', e);
+                          }
+                          const cfg = (tournament as unknown as { settings?: { sealedConfig?: { packCounts?: Record<string, number>; timeLimit?: number; replaceAvatars?: boolean }}}).settings?.sealedConfig || {};
+                          const packCount = Object.values(cfg.packCounts || { Beta: 6 }).reduce((a, b) => a + (b || 0), 0) || 6;
+                          const setMix = Object.entries(cfg.packCounts || { Beta: 6 }).filter(([, c]) => (c || 0) > 0).map(([s]) => s);
+                          const timeLimit = cfg.timeLimit ?? 40;
+                          const replaceAvatars = cfg.replaceAvatars ?? false;
+                          const params = new URLSearchParams({
+                            sealed: 'true',
+                            tournament: tournament.id,
+                            packCount: String(packCount),
+                            setMix: setMix.join(','),
+                            timeLimit: String(timeLimit),
+                            constructionStartTime: String(Date.now()),
+                            replaceAvatars: String(replaceAvatars),
+                            matchName: tournament.name,
+                          });
+                          window.location.href = `/decks/editor-3d?${params.toString()}`;
+                        }}
+                      >
+                        Build Deck
+                      </button>
+                    )
+                  )
                 )}
                 {isRegistered && tournament.status === "playing" && (
                   <button
@@ -1187,6 +1304,98 @@ export default function LobbiesCentral({
                   ))}
                 </div>
               </div>
+              {tournamentMatchType === 'sealed' && (
+                <div className="space-y-3 mt-2">
+                  <div className="text-xs font-medium">Sealed Pack Mix</div>
+                  {Object.keys(sealedPackCounts).map((setName) => (
+                    <div key={`sealed-${setName}`} className="flex items-center justify-between gap-2">
+                      <div className="text-xs text-slate-300">{setName}</div>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        value={sealedPackCounts[setName] || 0}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0));
+                          setSealedPackCounts(prev => ({ ...prev, [setName]: val }));
+                        }}
+                        className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Time Limit (min)</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={90}
+                        value={sealedTimeLimit}
+                        onChange={(e) => setSealedTimeLimit(Math.max(10, Math.min(90, parseInt(e.target.value) || 40)))}
+                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs mt-5">
+                      <input type="checkbox" checked={sealedReplaceAvatars} onChange={(e) => setSealedReplaceAvatars(e.target.checked)} />
+                      Replace Avatars
+                    </label>
+                  </div>
+                </div>
+              )}
+              {tournamentMatchType === 'draft' && (
+                <div className="space-y-3 mt-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Packs per Player</label>
+                      <input
+                        type="number"
+                        min={2}
+                        max={5}
+                        value={draftPackCount}
+                        onChange={(e) => setDraftPackCount(Math.max(2, Math.min(5, parseInt(e.target.value) || 3)))}
+                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Pack Size</label>
+                      <input
+                        type="number"
+                        min={8}
+                        max={20}
+                        value={draftPackSize}
+                        onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
+                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-xs font-medium">Draft Pack Mix</div>
+                  {Object.keys(draftPackCounts).map((setName) => (
+                    <div key={`draft-${setName}`} className="flex items-center justify-between gap-2">
+                      <div className="text-xs text-slate-300">{setName}</div>
+                      <input
+                        type="number"
+                        min={0}
+                        max={5}
+                        value={draftPackCounts[setName] || 0}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(5, parseInt(e.target.value) || 0));
+                          setDraftPackCounts(prev => ({ ...prev, [setName]: val }));
+                        }}
+                        className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  ))}
+                  {(() => {
+                    const total = Object.values(draftPackCounts).reduce((s, n) => s + (n || 0), 0);
+                    const ok = total === draftPackCount;
+                    return (
+                      <div className={`text-[11px] ${ok ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        Pack mix total: {total}/{draftPackCount} {ok ? '✓' : '(adjust to match)'}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
               
               <div>
                 <label className="block text-xs font-medium mb-2">Max Players</label>
@@ -1217,12 +1426,28 @@ export default function LobbiesCentral({
                 onClick={() => {
                   const trimmedName = tournamentName.trim();
                   if (trimmedName) {
-                    onCreateTournament({
+                    const payload: CreateTournamentConfig = {
                       name: trimmedName,
                       format: tournamentFormat,
                       matchType: tournamentMatchType,
-                      maxPlayers: tournamentMaxPlayers
-                    });
+                      maxPlayers: tournamentMaxPlayers,
+                    };
+                    if (tournamentMatchType === 'sealed') {
+                      payload.sealedConfig = {
+                        packCounts: sealedPackCounts,
+                        timeLimit: sealedTimeLimit,
+                        replaceAvatars: sealedReplaceAvatars,
+                      };
+                    } else if (tournamentMatchType === 'draft') {
+                      const mix = Object.entries(draftPackCounts).filter(([, c]) => (c || 0) > 0).map(([s]) => s);
+                      payload.draftConfig = {
+                        setMix: mix.length ? mix : ['Beta'],
+                        packCount: draftPackCount,
+                        packSize: draftPackSize,
+                        packCounts: draftPackCounts,
+                      };
+                    }
+                    onCreateTournament(payload);
                     setTournamentOverlayOpen(false);
                   }
                 }}
