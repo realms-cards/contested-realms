@@ -142,8 +142,9 @@ export default function OnlineLayout({
 
   const attemptVoiceJoin = useCallback(() => {
     if (!voiceFeatureEnabled) return;
+    // Join the voice room (announce presence) but don't auto-connect
     if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
-      console.debug('[RTC][client] attempting join', {
+      console.debug('[RTC][client] attempting join (room presence only)', {
         state: voiceState,
         lobbyId: lobby?.id ?? null,
         matchId: match?.id ?? null,
@@ -151,6 +152,19 @@ export default function OnlineLayout({
       void voiceJoin();
     }
   }, [voiceFeatureEnabled, voiceJoin, voiceState, lobby?.id, match?.id]);
+
+  const attemptVoiceConnection = useCallback(() => {
+    if (!voiceFeatureEnabled) return;
+    // Initiate actual WebRTC connection after approval
+    if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
+      console.debug('[RTC][client] initiating WebRTC connection', {
+        state: voiceState,
+        lobbyId: lobby?.id ?? null,
+        matchId: match?.id ?? null,
+      });
+      void voiceRtc.initiateConnection();
+    }
+  }, [voiceFeatureEnabled, voiceRtc, voiceState, lobby?.id, match?.id]);
 
   const requestVoiceConnection = useCallback(
     (targetId: string) => {
@@ -246,9 +260,14 @@ export default function OnlineLayout({
         return;
       }
 
-      if (accepted && voiceRtc.state !== "connected") attemptVoiceJoin();
+      if (accepted && voiceRtc.state !== "connected") {
+        // Join the room first if not already joined
+        attemptVoiceJoin();
+        // Then initiate the WebRTC connection
+        attemptVoiceConnection();
+      }
     },
-    [transport, attemptVoiceJoin, setVoicePlaybackEnabled, voiceRtc.state]
+    [transport, attemptVoiceJoin, attemptVoiceConnection, setVoicePlaybackEnabled, voiceRtc.state]
   );
 
   const dismissOutgoingRequest = useCallback(() => {
@@ -425,7 +444,10 @@ export default function OnlineLayout({
         };
       });
       setVoicePlaybackEnabled(true);
+      // Join the room first if not already joined
       attemptVoiceJoin();
+      // Then initiate the WebRTC connection
+      attemptVoiceConnection();
     };
 
     const handleVoiceDeclined = (payload: unknown) => {
@@ -469,7 +491,10 @@ export default function OnlineLayout({
         return null;
       });
       if (data.accepted) {
+        // Join the room first if not already joined
         attemptVoiceJoin();
+        // Then initiate the WebRTC connection (this will be no-op if already connected)
+        attemptVoiceConnection();
       }
     };
 
@@ -518,7 +543,7 @@ export default function OnlineLayout({
       transport.offGeneric("rtc:request:ack", handleVoiceAck);
       transport.offGeneric("rtc:request:cancelled", handleVoiceCancelled);
     };
-  }, [transport, attemptVoiceJoin]);
+  }, [transport, attemptVoiceJoin, attemptVoiceConnection]);
 
   useEffect(() => {
     setIncomingVoiceRequest(null);
