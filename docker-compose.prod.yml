@@ -81,6 +81,10 @@ services:
     container_name: sorcery-caddy
     user: root
     restart: unless-stopped
+    environment:
+      # Space-separated CIDRs or IPs allowed to access /metrics and /metrics.json
+      # Example: "203.0.113.10/32 198.51.100.0/24"
+      METRICS_IP_ALLOWLIST: ${METRICS_IP_ALLOWLIST:-}
     ports:
       - "80:80"
       - "443:443"
