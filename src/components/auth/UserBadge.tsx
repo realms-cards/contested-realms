@@ -191,8 +191,8 @@ export default function UserBadge({
           status: string;
           registeredPlayers?: Array<{ id: string; displayName?: string; ready?: boolean }>;
         }>;
-        const mine = Array.isArray(list)
-          ? list.find(t => (t.registeredPlayers || []).some(p => p.id === session.user!.id) && t.status !== 'completed')
+        const mine = Array.isArray(list) && session.user
+          ? list.find(t => (t.registeredPlayers || []).some(p => p.id === session.user.id) && t.status !== 'completed')
           : null;
         if (!cancelled) setJoinedTournament(mine ? { id: mine.id, name: mine.name } : null);
       } catch {
@@ -203,7 +203,7 @@ export default function UserBadge({
     return () => {
       cancelled = true;
     };
-  }, [open, session?.user?.id]);
+  }, [open, session?.user]);
 
   // Loading shimmer (minimal): avoid floating placeholder to prevent gray pill flash
   if (status === "loading") {

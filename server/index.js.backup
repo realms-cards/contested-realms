@@ -54,7 +54,6 @@ const INTERACTION_REQUEST_KINDS = new Set([
   'inspectHand',
   'takeFromPile',
   'manipulatePermanent',
-  'tieGame',
 ]);
 const INTERACTION_DECISIONS = new Set(['approved', 'declined', 'cancelled']);
 
@@ -158,76 +157,6 @@ function collectInteractionRequirements(patch, actorSeat) {
   return {
     needsOpponentZoneWrite: detectOpponentZoneMutation(patch, actorSeat),
   };
-}
-
-function bufferPersistUpdate(matchId, data, action) {
-  if (!PERSIST_IS_WRITE_BEHIND) return;
-  const buf = persistBuffers.get(matchId) || { latestData: null, actions: [], timer: null, lastFlushAt: 0 };
-  buf.latestData = data;
-  if (action) {
-    buf.actions.push(action);
-    if (buf.actions.length > PERSIST_ACTION_BATCH_SIZE * 2) {
-      // prevent unbounded growth
-      buf.actions = buf.actions.slice(-PERSIST_ACTION_BATCH_SIZE * 2);
-    }
-  }
-  persistBuffers.set(matchId, buf);
-  schedulePersistFlush(matchId);
-}
-
-function schedulePersistFlush(matchId, dataOverride = null) {
-  if (!PERSIST_IS_WRITE_BEHIND) return;
-  const buf = persistBuffers.get(matchId) || { latestData: null, actions: [], timer: null, lastFlushAt: 0 };
-  if (dataOverride) buf.latestData = dataOverride;
-  if (buf.timer) return; // already scheduled
-  buf.timer = setTimeout(() => flushPersistBuffer(matchId, 'timer'), PERSIST_FLUSH_INTERVAL_MS);
-  persistBuffers.set(matchId, buf);
-}
-
-async function flushPersistBuffer(matchId, reason = 'manual') {
-  const buf = persistBuffers.get(matchId);
-  if (!buf || !buf.latestData) return;
-  // Capture and clear timer first to avoid overlap
-  if (buf.timer) {
-    try { clearTimeout(buf.timer); } catch {}
-    buf.timer = null;
-  }
-  const data = buf.latestData;
-  const actions = buf.actions.splice(0, PERSIST_ACTION_BATCH_SIZE);
-  persistBuffers.set(matchId, buf);
-  try {
-    // Upsert session row
-    await prisma.onlineMatchSession.upsert({
-      where: { id: matchId },
-      create: { id: matchId, ...data },
-      update: data,
-    });
-    // Batch actions if any
-    if (actions.length > 0) {
-      const rows = actions.map((a) => ({
-        matchId,
-        playerId: a.playerId || 'system',
-        timestamp: BigInt(Number(a.timestamp || Date.now())),
-        patch: a.patch,
-      }));
-      try {
-        await prisma.onlineMatchAction.createMany({ data: rows });
-      } catch (e) {
-        // Fallback to individual inserts if createMany fails (e.g., JSON size issues)
-        for (const r of rows) {
-          try { await prisma.onlineMatchAction.create({ data: r }); } catch {}
-        }
-      }
-    }
-  } catch (e) {
-    try { console.warn(`[persist] flush failed for ${matchId} (${reason}):`, e?.message || e); } catch {}
-  } finally {
-    buf.lastFlushAt = Date.now();
-    // If more actions remain, schedule another quick flush
-    if (buf.actions.length > 0) {
-      schedulePersistFlush(matchId);
-    }
-  }
 }
 
 function usePermitForRequirement(match, playerId, actorSeat, requirement, now) {
@@ -431,43 +360,6 @@ function applyPendingAction(match, entry, now) {
         requestedBy: pendingAction.requestedBy || null,
       },
     };
-  }
-  if (kind === 'tieGame') {
-    try {
-      const g = match.game || {};
-      const players = g.players && typeof g.players === 'object' ? g.players : {};
-      const p1 = players.p1 || {};
-      const p2 = players.p2 || {};
-      const p1LS = typeof p1.lifeState === 'string' ? p1.lifeState : null;
-      const p2LS = typeof p2.lifeState === 'string' ? p2.lifeState : null;
-      const eligible = p1LS === 'dd' && p2LS === 'dd' && !(g && g.matchEnded);
-      if (!eligible) {
-        return { ...resultBase, success: false, message: 'Tie not eligible: both players must be at Death\'s Door and match not ended' };
-      }
-      // Apply authoritative patch
-      const patch = {
-        players: {
-          p1: { ...p1, life: 0, lifeState: 'dead' },
-          p2: { ...p2, life: 0, lifeState: 'dead' },
-        },
-        matchEnded: true,
-        winner: null,
-      };
-      match.game = deepMergeReplaceArrays(match.game || {}, patch);
-      match.lastTs = now;
-      const room = `match:${match.id}`;
-      io.to(room).emit('statePatch', { patch, t: now });
-      // Finalize as draw (fire-and-forget)
-      try { finalizeMatch(match, { isDraw: true }); } catch {}
-      return {
-        ...resultBase,
-        success: true,
-        payload: { requestedBy: pendingAction.requestedBy || null },
-        message: 'Tie declared: both players died simultaneously.',
-      };
-    } catch (e) {
-      return { ...resultBase, success: false, message: 'Failed to apply tie' };
-    }
   }
   return { ...resultBase, success: false, message: 'Unsupported pending action kind' };
 }
@@ -975,7 +867,6 @@ const RULES_HELPERS_ENABLED = !(
   (process.env.RULES_HELPERS_ENABLED || '').toLowerCase() === 'false'
 );
 
-
 const server = http.createServer();
 // Allow multiple origins via env to support localhost and LAN IPs in dev
 const CORS_ORIGINS = (process.env.SOCKET_CORS_ORIGIN || "http://localhost:3000")
@@ -991,37 +882,6 @@ const io = new Server(server, {
   pingInterval: Number(process.env.SOCKET_PING_INTERVAL_MS || 15000),
   pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT_MS || 30000),
 });
-
-// Persistence strategy: default to Redis write-behind to avoid DB pool pressure
-const PERSIST_STRATEGY = (process.env.PERSIST_STRATEGY || 'write_behind').toLowerCase();
-const PERSIST_IS_WRITE_BEHIND = (
-  PERSIST_STRATEGY === 'write_behind' ||
-  PERSIST_STRATEGY === 'redis' ||
-  PERSIST_STRATEGY === 'redis_writebehind'
-);
-const PERSIST_FLUSH_INTERVAL_MS = Number(process.env.PERSIST_FLUSH_INTERVAL_MS || 3000);
-const PERSIST_MAX_WAIT_MS = Number(process.env.PERSIST_MAX_WAIT_MS || 2000);
-const PERSIST_TIMEOUT_MS = Number(process.env.PERSIST_TIMEOUT_MS || 2000);
-const PERSIST_ACTION_BATCH_SIZE = Number(process.env.PERSIST_ACTION_BATCH_SIZE || 200);
-const REDIS_SESSION_TTL_SEC = Number(process.env.MATCH_SESSION_TTL_SEC || 60 * 60 * 24);
-
-// Simple in-memory metrics registry (process lifetime)
-const METRICS = {
-  counters: new Map(), // key -> number
-  hist: new Map(), // key -> { sum:number, count:number }
-};
-function metricsInc(key, delta = 1) {
-  METRICS.counters.set(key, (METRICS.counters.get(key) || 0) + delta);
-}
-function metricsGet(key) {
-  return METRICS.counters.get(key) || 0;
-}
-function metricsObserveMs(key, ms) {
-  const cur = METRICS.hist.get(key) || { sum: 0, count: 0 };
-  cur.sum += ms;
-  cur.count += 1;
-  METRICS.hist.set(key, cur);
-}
 
 // Socket.IO Redis adapter (horizontal scaling)
 let pubClient = null;
@@ -1156,7 +1016,7 @@ server.on("request", async (req, res) => {
     };
     const allowCorsForOptions = () => {
       allowCors();
-      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     };
 
@@ -1334,78 +1194,6 @@ server.on("request", async (req, res) => {
       return;
     }
 
-    // Handle tournament broadcast requests from Next.js API routes
-    if (pathname === "/tournament/broadcast" && method === "POST") {
-      allowCors();
-
-      // Collect request body
-      const chunks = [];
-      req.on('data', chunk => chunks.push(chunk));
-      req.on('end', () => {
-        try {
-          const body = Buffer.concat(chunks).toString();
-          const { event, data } = JSON.parse(body);
-
-          // Call the appropriate broadcast function
-          switch (event) {
-            case 'TOURNAMENT_UPDATED':
-              if (data.id) broadcastTournamentUpdate(data.id, data);
-              break;
-            case 'PHASE_CHANGED':
-              if (data.tournamentId && data.newPhase) {
-                const { tournamentId, newPhase, ...additionalData } = data;
-                broadcastPhaseChanged(tournamentId, newPhase, additionalData);
-              }
-              break;
-            case 'ROUND_STARTED':
-              if (data.tournamentId && data.roundNumber && data.matches) {
-                broadcastRoundStarted(data.tournamentId, data.roundNumber, data.matches);
-              }
-              break;
-            case 'PLAYER_JOINED':
-              if (data.tournamentId) {
-                broadcastPlayerJoined(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
-              }
-              break;
-            case 'PLAYER_LEFT':
-              if (data.tournamentId) {
-                broadcastPlayerLeft(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
-              }
-              break;
-            case 'UPDATE_PREPARATION':
-              if (data.tournamentId) {
-                broadcastPreparationUpdate(data.tournamentId, data.playerId, data.preparationStatus, data.readyPlayerCount, data.totalPlayerCount, data.deckSubmitted);
-              }
-              break;
-            case 'STATISTICS_UPDATED':
-              if (data.tournamentId) {
-                broadcastStatisticsUpdate(data.tournamentId, data);
-              }
-              break;
-            case 'MATCH_ASSIGNED':
-              // For now, just log - MATCH_ASSIGNED needs player-specific routing
-              console.log('[Tournament] MATCH_ASSIGNED broadcast received');
-              break;
-          }
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
-        } catch (err) {
-          console.error('[Tournament] Broadcast error:', err);
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid request', details: err.message }));
-        }
-      });
-
-      req.on('error', (err) => {
-        console.error('[Tournament] Request error:', err);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Server error' }));
-      });
-
-      return;
-    }
-
     // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
     return;
   } catch (e) {
@@ -1448,13 +1236,6 @@ function getVoiceRoomIdForPlayer(player) {
 const draftStartWatchdogs = new Map();
 clusterStateReady = true;
 
-/**
- * Redis write-behind buffers per match
- * matchId -> { latestData, actions: [{playerId, timestamp:number, patch}], timer: Timeout|null, lastFlushAt?: number }
- */
-/** @type {Map<string, { latestData: any, actions: Array<{ playerId: string, timestamp: number, patch: any }>, timer?: NodeJS.Timeout|null, lastFlushAt?: number }>} */
-const persistBuffers = new Map();
-
 // -----------------------------
 // Persistence helpers (PostgreSQL via Prisma) and Redis cache
 // -----------------------------
@@ -1485,14 +1266,13 @@ function matchToSessionUpsertData(match) {
 
 async function cacheSessionToRedis(sessionData) {
   try {
-    const client = storeRedis || pubClient;
-    if (!client) return;
+    if (!pubClient) return;
     const key = `match:session:${sessionData.id}`;
-    await client.set(
+    await pubClient.set(
       key,
       JSON.stringify(sessionData, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)),
       'EX',
-      REDIS_SESSION_TTL_SEC
+      60 * 60 * 24
     );
   } catch {}
 }
@@ -1500,19 +1280,14 @@ async function cacheSessionToRedis(sessionData) {
 async function persistMatchCreated(match) {
   try {
     const data = matchToSessionUpsertData(match);
+    const createData = { id: match.id, ...data };
+    const updateData = { ...data };
+    await prisma.onlineMatchSession.upsert({
+      where: { id: match.id },
+      update: updateData,
+      create: createData,
+    });
     await cacheSessionToRedis({ ...data, id: match.id });
-    if (PERSIST_IS_WRITE_BEHIND) {
-      // Schedule an initial snapshot to DB soon after creation
-      try { schedulePersistFlush(match.id, data); } catch {}
-    } else {
-      const createData = { id: match.id, ...data };
-      const updateData = { ...data };
-      await prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        update: updateData,
-        create: createData,
-      });
-    }
   } catch (e) {
     try { console.warn(`[persist] create session failed for ${match.id}:`, e?.message || e); } catch {}
   }
@@ -1521,20 +1296,15 @@ async function persistMatchCreated(match) {
 async function persistMatchUpdate(match, patch, playerId, ts) {
   try {
     const data = matchToSessionUpsertData(match);
+    await prisma.$transaction([
+      prisma.onlineMatchSession.upsert({
+        where: { id: match.id },
+        create: { id: match.id, ...data },
+        update: data
+      }),
+      ...(patch ? [prisma.onlineMatchAction.create({ data: { matchId: match.id, playerId: playerId || 'system', timestamp: BigInt(Number(ts || Date.now())), patch } })] : []),
+    ]);
     await cacheSessionToRedis({ ...data, id: match.id });
-    if (PERSIST_IS_WRITE_BEHIND) {
-      // Buffer and schedule a batched flush
-      bufferPersistUpdate(match.id, data, patch ? { playerId: playerId || 'system', timestamp: Number(ts || Date.now()), patch } : null);
-    } else {
-      await prisma.$transaction([
-        prisma.onlineMatchSession.upsert({
-          where: { id: match.id },
-          create: { id: match.id, ...data },
-          update: data
-        }),
-        ...(patch ? [prisma.onlineMatchAction.create({ data: { matchId: match.id, playerId: playerId || 'system', timestamp: BigInt(Number(ts || Date.now())), patch } })] : []),
-      ], { maxWait: PERSIST_MAX_WAIT_MS, timeout: PERSIST_TIMEOUT_MS });
-    }
   } catch (e) {
     try { console.warn(`[persist] update session failed for ${match.id}:`, e?.message || e); } catch {}
   }
@@ -1543,21 +1313,11 @@ async function persistMatchUpdate(match, patch, playerId, ts) {
 async function persistMatchEnded(match) {
   try {
     const endData = { status: 'ended', winnerId: match.winnerId || null, lastTs: BigInt(Number(match.lastTs || Date.now())) };
-    if (PERSIST_IS_WRITE_BEHIND) {
-      // Force-flush any buffered updates first, then write the final end state synchronously
-      try { await flushPersistBuffer(match.id, 'match_end'); } catch {}
-      await prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
-        update: endData
-      });
-    } else {
-      await prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
-        update: endData
-      });
-    }
+    await prisma.onlineMatchSession.upsert({
+      where: { id: match.id },
+      create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
+      update: endData
+    });
   } catch (e) {
     try { console.warn(`[persist] end session failed for ${match.id}:`, e?.message || e); } catch {}
   }
@@ -3449,75 +3209,6 @@ function broadcastLobbies() {
   })();
 }
 
-// Tournament broadcast helpers
-function broadcastTournamentUpdate(tournamentId, data) {
-  io.to(`tournament:${tournamentId}`).emit("TOURNAMENT_UPDATED", data);
-  // Also broadcast globally so lobby lists update
-  io.emit("TOURNAMENT_UPDATED", data);
-}
-
-function broadcastPhaseChanged(tournamentId, newPhase, additionalData = {}) {
-  const payload = {
-    tournamentId,
-    newPhase,
-    newStatus: newPhase,
-    timestamp: new Date().toISOString(),
-    ...additionalData
-  };
-  io.to(`tournament:${tournamentId}`).emit("PHASE_CHANGED", payload);
-  io.emit("PHASE_CHANGED", payload);
-}
-
-function broadcastRoundStarted(tournamentId, roundNumber, matches) {
-  io.to(`tournament:${tournamentId}`).emit("ROUND_STARTED", {
-    tournamentId,
-    roundNumber,
-    matches
-  });
-}
-
-function broadcastPlayerJoined(tournamentId, playerId, playerName, currentPlayerCount) {
-  const payload = {
-    tournamentId,
-    playerId,
-    playerName,
-    currentPlayerCount
-  };
-  io.to(`tournament:${tournamentId}`).emit("PLAYER_JOINED", payload);
-  io.emit("PLAYER_JOINED", payload);
-}
-
-function broadcastPlayerLeft(tournamentId, playerId, playerName, currentPlayerCount) {
-  const payload = {
-    tournamentId,
-    playerId,
-    playerName,
-    currentPlayerCount
-  };
-  io.to(`tournament:${tournamentId}`).emit("PLAYER_LEFT", payload);
-  io.emit("PLAYER_LEFT", payload);
-}
-
-function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted = false) {
-  const payload = {
-    tournamentId,
-    playerId,
-    preparationStatus,
-    readyPlayerCount,
-    totalPlayerCount,
-    deckSubmitted
-  };
-  io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", payload);
-  io.emit("UPDATE_PREPARATION", payload);
-}
-
-function broadcastStatisticsUpdate(tournamentId, statistics) {
-  io.to(`tournament:${tournamentId}`).emit("STATISTICS_UPDATED", {
-    tournamentId,
-    ...statistics
-  });
-}
-
 function broadcastPlayers() {
   io.emit("playerList", { players: playersArray() });
 }
@@ -3695,59 +3386,6 @@ io.on("connection", (socket) => {
         }
       } catch {}
     }
-  });
-
-  // Tournament room join/leave handlers (matches constants.ts event names)
-  socket.on("tournament:join", async (payload) => {
-    const tournamentId = payload?.tournamentId;
-    if (!tournamentId) return;
-
-    console.log(`[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`);
-    await socket.join(`tournament:${tournamentId}`);
-
-    // Acknowledge the join
-    try {
-      socket.emit("tournament:joined", { tournamentId });
-    } catch (err) {
-      console.error("[Tournament] Error sending join acknowledgment:", err);
-    }
-  });
-
-  socket.on("tournament:leave", async (payload) => {
-    const tournamentId = payload?.tournamentId;
-    if (!tournamentId) return;
-
-    console.log(`[Tournament] Player ${socket.id} leaving tournament room: tournament:${tournamentId}`);
-    await socket.leave(`tournament:${tournamentId}`);
-
-    // Acknowledge the leave
-    try {
-      socket.emit("tournament:left", { tournamentId });
-    } catch (err) {
-      console.error("[Tournament] Error sending leave acknowledgment:", err);
-    }
-  });
-
-  // Tournament chat
-  socket.on("TOURNAMENT_CHAT", async (payload) => {
-    const tournamentId = payload?.tournamentId;
-    const content = payload?.content;
-    const timestamp = payload?.timestamp || Date.now();
-
-    if (!tournamentId || !content) return;
-
-    const player = getPlayerBySocket(socket);
-    const from = player?.displayName || "Anonymous";
-
-    console.log(`[Tournament Chat] ${from} in ${tournamentId}: ${content}`);
-
-    // Broadcast to all players in tournament room
-    io.to(`tournament:${tournamentId}`).emit("TOURNAMENT_CHAT", {
-      tournamentId,
-      from,
-      content,
-      timestamp
-    });
   });
 
   // Per-player mulligan completion. When all players are done, advance to Main.
@@ -4046,23 +3684,6 @@ io.on("connection", (socket) => {
         interactionRequests: new Map(),
         interactionGrants: new Map(),
       };
-
-      // For constructed tournaments, load playerDecks from database
-      if (matchType === 'constructed' && tournamentId) {
-        try {
-          const dbMatch = await prisma.match.findUnique({
-            where: { id: matchId },
-            select: { playerDecks: true }
-          });
-          if (dbMatch && dbMatch.playerDecks && typeof dbMatch.playerDecks === 'object') {
-            match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
-            console.log(`[Tournament] Loaded playerDecks for match ${matchId}:`, Object.keys(dbMatch.playerDecks));
-          }
-        } catch (err) {
-          console.error(`[Tournament] Failed to load playerDecks for match ${matchId}:`, err);
-        }
-      }
-
       matches.set(matchId, match);
       // Begin recording
       startMatchRecording(match);
@@ -5202,106 +4823,6 @@ io.on("connection", (socket) => {
     try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
   });
 
-  // ==========================================
-  // TOURNAMENT SOCKET EVENTS  
-  // ==========================================
-  
-  // Join tournament room for real-time updates
-  socket.on("joinTournament", async (payload) => {
-    const { tournamentId } = payload || {};
-    if (!tournamentId) return;
-    
-    const pid = playerIdBySocket.get(socket.id);
-    if (!pid) return;
-    
-    // Join the tournament room
-    socket.join(`tournament:${tournamentId}`);
-    console.log(`[Tournament] Socket ${socket.id} (player ${pid}) joined tournament ${tournamentId}`);
-    
-    // Send current tournament state
-    try {
-      const tournament = await prisma.tournament.findUnique({
-        where: { id: tournamentId },
-        include: { registrations: true }
-      });
-      if (tournament) {
-        socket.emit("TOURNAMENT_UPDATED", {
-          id: tournament.id,
-          name: tournament.name,
-          format: tournament.format,
-          status: tournament.status,
-          maxPlayers: tournament.maxPlayers,
-          currentPlayers: tournament.registrations.length,
-          creatorId: tournament.creatorId,
-          settings: tournament.settings,
-          createdAt: tournament.createdAt.toISOString(),
-          startedAt: tournament.startedAt?.toISOString() || null,
-          completedAt: tournament.completedAt?.toISOString() || null
-        });
-      }
-    } catch (err) {
-      console.error("[Tournament] Failed to send initial state:", err);
-    }
-  });
-
-  // Leave tournament room
-  socket.on("leaveTournament", (payload) => {
-    const { tournamentId } = payload || {};
-    if (!tournamentId) return;
-    
-    socket.leave(`tournament:${tournamentId}`);
-    console.log(`[Tournament] Socket ${socket.id} left tournament ${tournamentId}`);
-  });
-
-  // Update preparation status (sealed/draft/constructed)
-  socket.on("UPDATE_PREPARATION", async (payload) => {
-    const { tournamentId, preparationData } = payload || {};
-    if (!tournamentId) return;
-    
-    const pid = playerIdBySocket.get(socket.id);
-    if (!pid) return;
-    
-    try {
-      const registration = await prisma.tournamentRegistration.findUnique({
-        where: {
-          tournamentId_playerId: {
-            tournamentId,
-            playerId: pid
-          }
-        }
-      });
-      
-      if (!registration) return;
-      
-      await prisma.tournamentRegistration.update({
-        where: { id: registration.id },
-        data: {
-          preparationData: JSON.parse(JSON.stringify(preparationData)),
-          preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
-          deckSubmitted: Boolean(preparationData.deckSubmitted)
-        }
-      });
-      
-      // Broadcast preparation update
-      const [readyCount, totalCount] = await Promise.all([
-        prisma.tournamentRegistration.count({
-          where: { tournamentId, preparationStatus: 'completed', deckSubmitted: true }
-        }),
-        prisma.tournamentRegistration.count({ where: { tournamentId } })
-      ]);
-      
-      io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", {
-        tournamentId,
-        playerId: pid,
-        preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
-        deckSubmitted: Boolean(preparationData.deckSubmitted),
-        readyPlayerCount: readyCount,
-        totalPlayerCount: totalCount
-      });
-    } catch (err) {
-      console.error("[Tournament] Preparation update failed:", err);
-    }
-  });
   socket.on("disconnect", () => {
     const pid = playerIdBySocket.get(socket.id);
     if (!pid) return;
@@ -5487,14 +5008,6 @@ async function shutdown() {
   try { await new Promise((resolve) => server.close(() => resolve())); } catch {}
   try { if (pubClient) await pubClient.quit(); } catch {}
   try { if (subClient) await subClient.quit(); } catch {}
-  // Flush any buffered persists before disconnecting from DB
-  try {
-    if (PERSIST_IS_WRITE_BEHIND && persistBuffers.size > 0) {
-      for (const matchId of persistBuffers.keys()) {
-        try { await flushPersistBuffer(matchId, 'shutdown'); } catch {}
-      }
-    }
-  } catch {}
   try { await prisma.$disconnect(); } catch {}
   clearTimeout(timer);
   process.exit(0);

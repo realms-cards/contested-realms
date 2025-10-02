@@ -2,9 +2,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
-import { TournamentStatus as DBTournamentStatus, RoundStatus as DBRoundStatus } from '@prisma/client';
-import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 
 const SubmitPreparationRequestSchema = z.object({
   preparationData: z.object({
@@ -179,63 +177,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       console.warn('Failed to broadcast preparation update:', socketErr);
     }
 
-    // Check if all players are ready to start matches
+    // Check if all players are ready to start matches; host will manually trigger rounds
     if (isComplete) {
-      const transitioned = await checkAndTransitionToActivePhase(id);
-      if (transitioned) {
-        // Create first round and matches now that all players are ready
-        const newRound = await prisma.tournamentRound.create({
-          data: {
-            tournamentId: id,
-            roundNumber: 1,
-            status: DBRoundStatus.pending
-          }
-        });
-        const pairings = await generatePairings(id, 1);
-        const matchIds = await createRoundMatches(id, newRound.id, pairings);
-        await prisma.tournamentRound.update({ where: { id: newRound.id }, data: { status: DBRoundStatus.active, startedAt: new Date() } });
-
-        // Broadcast phase change + round started + full snapshot
-        try {
-          await tournamentSocketService.broadcastPhaseChanged(id, 'active', { transitionedFrom: 'preparing', startedAt: new Date().toISOString() });
-          const createdMatches = await prisma.match.findMany({ where: { id: { in: matchIds } }, select: { id: true, players: true } });
-          const broadcastMatches = createdMatches.map((m) => {
-            const players = (m.players as Array<{ id: string; displayName?: string; name?: string }>);
-            const p1 = players?.[0];
-            const p2 = players?.[1];
-            return {
-              id: m.id,
-              player1Id: p1?.id || '',
-              player1Name: (p1?.displayName || p1?.name || 'Player 1'),
-              player2Id: p2?.id || null,
-              player2Name: (p2?.displayName || p2?.name || null)
-            };
-          });
-          await tournamentSocketService.broadcastRoundStarted(id, 1, broadcastMatches);
-          // Targeted match assignment notifications
-          const t = await prisma.tournament.findUnique({ where: { id }, select: { name: true } });
-          const tName = t?.name || 'Tournament Match';
-          for (const m of broadcastMatches) {
-            await tournamentSocketService.broadcastMatchAssigned(id, m.player1Id, {
-              matchId: m.id,
-              opponentId: m.player2Id,
-              opponentName: m.player2Name,
-              lobbyName: tName,
-            });
-            if (m.player2Id) {
-              await tournamentSocketService.broadcastMatchAssigned(id, m.player2Id, {
-                matchId: m.id,
-                opponentId: m.player1Id,
-                opponentName: m.player1Name,
-                lobbyName: tName,
-              });
-            }
-          }
-          await tournamentSocketService.broadcastTournamentUpdateById(id);
-        } catch (socketErr2) {
-          console.warn('Failed to broadcast activation + round start:', socketErr2);
-        }
-      }
+      await checkAndTransitionToActivePhase(id);
     }
 
     return new Response(JSON.stringify({
@@ -269,23 +213,40 @@ function validateDeckList(deckList: Array<{ cardId: string; quantity: number }>)
 
 // Helper function to check if tournament should transition to active phase
 async function checkAndTransitionToActivePhase(tournamentId: string) {
-  const allRegistrations = await prisma.tournamentRegistration.findMany({
-    where: { tournamentId },
-    select: { preparationStatus: true, deckSubmitted: true }
-  });
+  const [allRegistrations, tournament] = await Promise.all([
+    prisma.tournamentRegistration.findMany({
+      where: { tournamentId },
+      select: { preparationStatus: true, deckSubmitted: true }
+    }),
+    prisma.tournament.findUnique({ where: { id: tournamentId }, select: { status: true, name: true } })
+  ]);
+
+  if (!tournament) return false;
 
   const allComplete = allRegistrations.every(reg => 
     reg.preparationStatus === 'completed' && reg.deckSubmitted
   );
 
-  if (allComplete) {
-    await prisma.tournament.update({
-      where: { id: tournamentId },
-      data: { status: 'active' }
-    });
-
-    console.log(`Tournament ${tournamentId} transitioned to active phase - all players ready`);
-    return true;
+  if (!allComplete || tournament.status === 'active') {
+    return false;
   }
-  return false;
+
+  await prisma.tournament.update({
+    where: { id: tournamentId },
+    data: { status: 'active' }
+  });
+
+  console.log(`Tournament ${tournamentId} transitioned to active phase - host may start Round 1 manually`);
+
+  try {
+    await tournamentSocketService.broadcastPhaseChanged(tournamentId, 'active', {
+      previousStatus: 'preparing',
+      message: 'All players ready. Host can start the next round when ready.'
+    });
+    await tournamentSocketService.broadcastTournamentUpdateById(tournamentId);
+  } catch (socketError) {
+    console.warn('Failed to broadcast phase change:', socketError);
+  }
+
+  return true;
 }

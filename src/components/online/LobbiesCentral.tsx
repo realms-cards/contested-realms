@@ -3,6 +3,7 @@
 */
 "use client";
 
+import Link from "next/link";
 import { RefreshCw, Eye, EyeOff, Phone, Loader2, Check, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
@@ -589,15 +590,24 @@ export default function LobbiesCentral({
             Lobbies ({filtered.length})
           </button>
           {tournamentsEnabled && (
-            <button
-              className={`text-[11px] px-2 py-0.5 rounded ${
-                showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-              }`}
-              onClick={() => setShowTournaments(!showTournaments)}
-              title="Toggle tournaments"
-            >
-              Tournaments ({filteredTournaments.length})
-            </button>
+            <>
+              <button
+                className={`text-[11px] px-2 py-0.5 rounded ${
+                  showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+                }`}
+                onClick={() => setShowTournaments(!showTournaments)}
+                title="Toggle tournaments"
+              >
+                Tournaments ({filteredTournaments.length})
+              </button>
+              <Link
+                href="/tournaments"
+                className="text-[11px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 transition-colors"
+                title="View all tournaments"
+              >
+                View All →
+              </Link>
+            </>
           )}
         </div>
         <label className="text-xs flex items-center gap-1 opacity-80">

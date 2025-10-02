@@ -2,7 +2,7 @@ import { TournamentFormat, TournamentStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
+      currentPlayers: tournament.registrations.length,
       registeredPlayers: tournament.registrations.map(reg => {
         const prepData = reg.preparationData as Record<string, unknown> | null;
         return {

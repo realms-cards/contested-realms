@@ -402,6 +402,8 @@ export type GameState = {
   matchEnded: boolean;
   winner: PlayerKey | null;
   checkMatchEnd: () => void;
+  // Manual tie declaration when both players are at Death's Door
+  tieGame: () => void;
   // Cross-turn interactions
   interactionLog: InteractionStateMap;
   pendingInteractionId: string | null;
@@ -1598,13 +1600,14 @@ export const useGameStore = create<GameState>((set, get) => ({
               delete (sanitized as unknown as { zones?: unknown }).zones;
             }
           } else {
-            // Actor unknown: allow zones through; server-side validation will enforce seat safety
+            // Actor unknown: DROP zone mutations until seat is known to avoid cross-seat wipes
             try {
               console.warn(
-                "[net] trySendPatch: zones allowed with unknown actor",
+                "[net] trySendPatch: dropping zones until actorKey is set",
                 { keys: Object.keys(p.zones) }
               );
             } catch {}
+            delete (sanitized as unknown as { zones?: unknown }).zones;
           }
         }
         toSend = sanitized;
@@ -1709,12 +1712,14 @@ export const useGameStore = create<GameState>((set, get) => ({
                   delete (sanitized as unknown as { zones?: unknown }).zones;
                 }
               } else {
+                // Drop zones on unknown actor for queued patches as well
                 try {
                   console.warn(
-                    "[net] flushPendingPatches: zones allowed with unknown actor",
+                    "[net] flushPendingPatches: dropping zones until actorKey is set",
                     { keys: Object.keys(sanitized.zones) }
                   );
                 } catch {}
+                delete (sanitized as unknown as { zones?: unknown }).zones;
               }
             }
             toSend = sanitized;
@@ -2908,6 +2913,29 @@ export const useGameStore = create<GameState>((set, get) => ({
       return newState;
     }),
 
+  // Manual tie declaration: only when both players are at Death's Door
+  tieGame: () =>
+    set((s) => {
+      const p1 = s.players.p1;
+      const p2 = s.players.p2;
+      if (s.matchEnded) return s as GameState;
+      if (!(p1.lifeState === "dd" && p2.lifeState === "dd")) {
+        // Not eligible; ignore
+        return s as GameState;
+      }
+      const nextPlayers = {
+        ...s.players,
+        p1: { ...p1, life: 0, lifeState: "dead" as LifeState },
+        p2: { ...p2, life: 0, lifeState: "dead" as LifeState },
+      };
+      // Broadcast players update; checkMatchEnd will send matchEnded/winner patch
+      get().trySendPatch({ players: nextPlayers });
+      get().log("Tie declared: both players have died simultaneously.");
+      // Defer match end check to ensure state is updated first
+      setTimeout(() => get().checkMatchEnd(), 0);
+      return { players: nextPlayers } as Partial<GameState> as GameState;
+    }),
+
   addMana: (who, delta) =>
     set((s) => {
       const currentMana = s.players[who].mana;
@@ -3178,7 +3206,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: zonesNext };
+          // Send only my seat to avoid wiping opponent zones on the server
+          const patch: ServerPatchT = { zones: { [who]: sub } as unknown as GameState["zones"] };
           get().trySendPatch(patch);
         }
       }
@@ -3200,7 +3229,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: zonesNext };
+          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
           get().trySendPatch(patch);
         }
       }
@@ -3222,7 +3251,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: zonesNext };
+          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
           get().trySendPatch(patch);
         }
       }
@@ -3259,7 +3288,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: zonesNext };
+          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
           get().trySendPatch(patch);
         }
       }
@@ -3298,11 +3327,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const zonesNext = {
-            ...s.zones,
-            [who]: { ...s.zones[who], ...updated, hand },
-          } as GameState["zones"];
-          const patch: ServerPatchT = { zones: zonesNext };
+          const seatZones = { ...s.zones[who], ...updated, hand } as Zones;
+          const patch: ServerPatchT = { zones: { [who]: seatZones } as unknown as GameState["zones"] };
           get().trySendPatch(patch);
         }
       }
@@ -3343,7 +3369,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: zonesNext };
+          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
           get().trySendPatch(patch);
         }
       }
@@ -4468,9 +4494,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            zones: zonesNext,
-            mulligans: mulligansNext,
-            mulliganDrawn: mulliganDrawnNext,
+            zones: { [who]: zonesNext[who] } as unknown as GameState["zones"],
+            mulligans: { [who]: mulligansNext[who] } as unknown as GameState["mulligans"],
+            mulliganDrawn: { [who]: mulliganDrawnNext[who] } as unknown as GameState["mulliganDrawn"],
           };
           get().trySendPatch(patch);
         }
@@ -4489,8 +4515,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { mulliganDrawn: next };
-          get().trySendPatch(patch);
+          // Only clear my seat on the server to avoid interfering with opponent state
+          const who = get().actorKey;
+          if (who === "p1" || who === "p2") {
+            const patch: ServerPatchT = { mulliganDrawn: { [who]: [] } as unknown as GameState["mulliganDrawn"] };
+            get().trySendPatch(patch);
+          }
           // Explicitly notify the server that this player has completed mulligans
           try {
             tr.mulliganDone();

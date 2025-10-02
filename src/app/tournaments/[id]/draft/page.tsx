@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useEffect, useState, useCallback } from "react";
 
 type DraftParticipant = { playerId: string; playerName: string; seatNumber: number; status: string };
 type DraftSession = {
@@ -126,14 +126,15 @@ export default function TournamentDraftPage() {
           >
             Refresh
           </button>
-          <button
-            className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm disabled:opacity-50"
-            disabled={session?.status !== "active"}
-            onClick={proceedToDeckBuild}
-            title={session?.status !== 'active' ? 'Draft not started yet' : 'Proceed to deck construction'}
-          >
-            Proceed to Deck Construction
-          </button>
+          {session?.status === "completed" && (
+            <button
+              className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm"
+              onClick={proceedToDeckBuild}
+              title="Proceed to deck construction"
+            >
+              Proceed to Deck Construction
+            </button>
+          )}
         </div>
       </div>
     </div>

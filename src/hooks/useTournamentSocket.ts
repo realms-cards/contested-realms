@@ -3,6 +3,18 @@ import type { Socket } from 'socket.io-client';
 import { useSocket } from '@/lib/hooks/useSocket';
 import { TOURNAMENT_SOCKET_EVENTS } from '@/lib/tournament/constants';
 
+const SERVER_EVENT_ALIASES: Partial<Record<string, string[]>> = {
+  [TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED]: ['TOURNAMENT_UPDATED'],
+  [TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED]: ['PHASE_CHANGED'],
+  [TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED]: ['PLAYER_JOINED'],
+  [TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT]: ['PLAYER_LEFT'],
+  [TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED]: ['ROUND_STARTED'],
+  [TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED]: ['MATCH_ASSIGNED'],
+  [TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED]: ['STATISTICS_UPDATED'],
+  [TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION]: ['UPDATE_PREPARATION'],
+  [TOURNAMENT_SOCKET_EVENTS.ERROR]: ['TOURNAMENT_ERROR'],
+};
+
 interface TournamentSocketEvents {
   // Tournament events
   onTournamentUpdated?: (data: { id: string; name?: string; status?: string; [key: string]: unknown }) => void;
@@ -75,12 +87,9 @@ interface UseTournamentSocketReturn {
 }
 
 export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTournamentSocketReturn {
-  // Prefer Next.js in-process Socket.IO server under '/api/socket' at current origin
-  // Fallback to explicit NEXT_PUBLIC_WS_URL (legacy external server)
-  const defaultUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
+  // Use the exact same Socket.IO server configuration as matches
+  // The useSocket hook will use NEXT_PUBLIC_WS_URL and NEXT_PUBLIC_WS_PATH from env
   const socket = useSocket({
-    url: process.env.NEXT_PUBLIC_TOURNAMENT_WS_URL || defaultUrl,
-    path: process.env.NEXT_PUBLIC_TOURNAMENT_WS_PATH || '/api/socket',
     autoConnect: true,
     reconnection: true,
     reconnectionDelay: 1000,
@@ -98,6 +107,15 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
   // Set up event listeners
   useEffect(() => {
     if (!socket) return;
+
+    const registerEvent = <Args extends unknown[]>(eventName: string, handler: (...args: Args) => void) => {
+      const aliases = SERVER_EVENT_ALIASES[eventName] ?? [];
+      const eventNames = [eventName, ...aliases];
+      eventNames.forEach((name) => socket.on(name, handler));
+      return () => {
+        eventNames.forEach((name) => socket.off(name, handler));
+      };
+    };
 
     // Tournament events
     const handleTournamentUpdated = (data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
@@ -182,16 +200,18 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       eventsRef.current.onError?.(error);
     };
 
-    // Register event listeners
-    socket.on(TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED, handleTournamentUpdated);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, handlePhaseChanged);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, handlePlayerJoined);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, handlePlayerLeft);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED, handleRoundStarted);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED, handleMatchAssigned);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED, handleStatisticsUpdated);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, handlePreparationUpdate);
-    socket.on(TOURNAMENT_SOCKET_EVENTS.ERROR, handleError);
+    // Register event listeners (with uppercase fallbacks for legacy server broadcasts)
+    const cleanups = [
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED, handleTournamentUpdated),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, handlePhaseChanged),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, handlePlayerJoined),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, handlePlayerLeft),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED, handleRoundStarted),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED, handleMatchAssigned),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED, handleStatisticsUpdated),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, handlePreparationUpdate),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.ERROR, handleError),
+    ];
 
     // Connection events
     socket.on('connect', () => {
@@ -219,15 +239,7 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
 
     // Cleanup
     return () => {
-      socket.off(TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED, handleTournamentUpdated);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, handlePhaseChanged);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, handlePlayerJoined);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, handlePlayerLeft);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED, handleRoundStarted);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED, handleMatchAssigned);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED, handleStatisticsUpdated);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, handlePreparationUpdate);
-      socket.off(TOURNAMENT_SOCKET_EVENTS.ERROR, handleError);
+      cleanups.forEach((cleanup) => cleanup());
       socket.off('connect');
       socket.off('disconnect');
       socket.off('connect_error');

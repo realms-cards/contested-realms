@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { buildTournamentDeckList, deckCardSelect, type DeckCardWithRelations } from '@/lib/tournament/deck-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,14 +16,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   try {
+    const userId = (session.user as { id?: string }).id;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'User ID missing from session' }), { status: 400 });
+    }
+
     const url = new URL(req.url);
     const sp = url.searchParams;
     const includePublic = sp.get('includePublic') === 'true';
-    const userId = session.user.id;
+
     const registration = await prisma.tournamentRegistration.findFirst({
       where: {
         tournamentId: id,
-        playerId: session.user.id
+        playerId: userId
       },
       include: {
         tournament: {
@@ -135,7 +142,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
     // Finalize validity
-    for (const [deckId, agg] of constructedValidityByDeck) {
+    for (const [, agg] of constructedValidityByDeck) {
       agg.valid = (agg.avatarCount === 1) && (agg.spellbook >= 50) && (agg.atlas >= 30);
     }
     const isDeckValid = (id: string) => constructedValidityByDeck.get(id)?.valid === true;
@@ -189,6 +196,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
+    const userId = (session.user as { id?: string }).id;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'User ID missing from session' }), { status: 400 });
+    }
+
     const body = await req.json();
     const { deckId } = body;
 
@@ -199,7 +211,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const registration = await prisma.tournamentRegistration.findFirst({
       where: {
         tournamentId: id,
-        playerId: session.user.id
+        playerId: userId
       },
       include: {
         tournament: {
@@ -227,23 +239,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Validate the selected deck
     const deckFull = await prisma.deck.findFirst({
       where: { id: deckId },
-      include: { cards: { select: { cardId: true, setId: true, zone: true, count: true, variantId: true, variant: { select: { typeText: true } } } } }
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        format: true,
+        isPublic: true,
+        cards: {
+          select: deckCardSelect,
+        }
+      }
     });
 
     if (!deckFull) {
       return new Response(JSON.stringify({ error: 'Deck not found' }), { status: 404 });
     }
 
-    // Validate deck meets tournament requirements
-    const settings = registration.tournament.settings as Record<string, unknown> || {};
-    const constructedConfig = settings.constructed as Record<string, unknown> || {};
-    const allowedFormats = constructedConfig.allowedFormats as string[] || ['standard', 'pioneer', 'modern'];
-
-    if (allowedFormats.length > 0 && !allowedFormats.includes(deckFull.format || 'constructed')) {
-      return new Response(JSON.stringify({ 
-        error: `Deck format '${deckFull.format}' not allowed. Allowed formats: ${allowedFormats.join(', ')}` 
-      }), { status: 400 });
-    }
+    // For constructed tournaments, we don't validate textual deck format - we only validate constructed rules below
+    // (avatar count, spellbook size, atlas size)
 
     // Validate official constructed rules: exactly 1 Avatar, >=50 in Spellbook, >=30 in Atlas
     const pairsSel = deckFull.cards.filter(c => c.setId != null).map(c => ({ cardId: c.cardId, setId: c.setId as number }));
@@ -269,15 +282,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let selectedDeckIdFinal = deckFull.id;
     let selectedDeckNameFinal = deckFull.name;
     let selectedDeckFormatFinal = deckFull.format;
-    if (deckFull.userId !== session.user.id) {
-      // Check public (use scalar field on the fetched deck)
-      if (!(deckFull as { isPublic?: boolean }).isPublic) {
+    if (deckFull.userId !== userId) {
+      // Check public
+      if (!deckFull.isPublic) {
         return new Response(JSON.stringify({ error: 'Deck is not available for public use' }), { status: 403 });
       }
       // Clone deck
       const cloned = await prisma.deck.create({
         data: {
-          userId: session.user.id,
+          userId,
           name: deckFull.name,
           format: 'constructed',
           cards: {
@@ -298,13 +311,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Update preparation data
     const currentPrepData = registration.preparationData as Record<string, unknown> || {};
+    // Convert deck to deckList format (same as sealed/draft)
+    const deckListRaw = buildTournamentDeckList(deckFull.cards as DeckCardWithRelations[]);
+    const deckList = JSON.parse(JSON.stringify(deckListRaw));
+
     const updatedConstructedData = {
       deckSelected: true,
       deckId: selectedDeckIdFinal,
       deckName: selectedDeckNameFinal,
       deckFormat: selectedDeckFormatFinal,
       deckValidated: true,
-      selectedAt: new Date().toISOString()
+      selectedAt: new Date().toISOString(),
+      deckList // Store deck list like sealed/draft (already normalized)
     };
 
     const updatedPrepData = {
@@ -322,9 +340,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    console.log(`Player ${session.user.id} selected deck ${deckId} for tournament ${id}`);
+    console.log(`Player ${userId} selected deck ${deckId} for tournament ${id}`);
 
-    // Check if all players are ready to transition to active phase
+    // Broadcast preparation update so UI syncs immediately
+    try {
+      const [readyCount, totalCount] = await Promise.all([
+        prisma.tournamentRegistration.count({
+          where: { tournamentId: id, preparationStatus: 'completed', deckSubmitted: true }
+        }),
+        prisma.tournamentRegistration.count({ where: { tournamentId: id } })
+      ]);
+
+      await tournamentSocketService.broadcastPreparationUpdate(
+        id,
+        userId,
+        'completed',
+        readyCount,
+        totalCount,
+        true
+      );
+    } catch (socketError) {
+      console.warn('Failed to broadcast preparation update:', socketError);
+    }
+
+    // Check if all players are ready to transition to active phase. Host controls round start.
     await checkAndTransitionToActivePhase(id);
 
     return new Response(JSON.stringify({
@@ -350,21 +389,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Helper function to check if tournament should transition to active phase
 async function checkAndTransitionToActivePhase(tournamentId: string) {
-  const allRegistrations = await prisma.tournamentRegistration.findMany({
-    where: { tournamentId },
-    select: { preparationStatus: true, deckSubmitted: true }
-  });
+  const [allRegistrations, tournament] = await Promise.all([
+    prisma.tournamentRegistration.findMany({
+      where: { tournamentId },
+      select: { preparationStatus: true, deckSubmitted: true }
+    }),
+    prisma.tournament.findUnique({ where: { id: tournamentId }, select: { status: true } })
+  ]);
 
-  const allComplete = allRegistrations.every(reg => 
+  if (!tournament) return;
+
+  const allComplete = allRegistrations.every(reg =>
     reg.preparationStatus === 'completed' && reg.deckSubmitted
   );
 
-  if (allComplete) {
-    await prisma.tournament.update({
-      where: { id: tournamentId },
-      data: { status: 'active' }
-    });
+  if (!allComplete || tournament.status === 'active') {
+    return;
+  }
 
-    console.log(`Tournament ${tournamentId} transitioned to active phase - all players ready`);
+  await prisma.tournament.update({
+    where: { id: tournamentId },
+    data: { status: 'active' }
+  });
+
+  console.log(`Tournament ${tournamentId} transitioned to active phase - host may start Round 1 manually`);
+
+  try {
+    await tournamentSocketService.broadcastPhaseChanged(
+      tournamentId,
+      'active',
+      {
+        previousStatus: 'preparing',
+        message: 'All players ready. Host can start the next round when ready.'
+      }
+    );
+    await tournamentSocketService.broadcastTournamentUpdateById(tournamentId);
+  } catch (socketError) {
+    console.warn('Failed to broadcast phase change:', socketError);
   }
 }

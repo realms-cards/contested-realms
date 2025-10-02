@@ -146,7 +146,7 @@ export default function OnlineLayout({
     if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
       void voiceJoin();
     }
-  }, [voiceFeatureEnabled, voiceJoin, voiceState, lobby?.id, match?.id]);
+  }, [voiceFeatureEnabled, voiceJoin, voiceState]);
 
   const attemptVoiceConnection = useCallback(() => {
     if (!voiceFeatureEnabled) return;
@@ -154,7 +154,7 @@ export default function OnlineLayout({
     if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
       void voiceRtc.initiateConnection();
     }
-  }, [voiceFeatureEnabled, voiceRtc, voiceState, lobby?.id, match?.id]);
+  }, [voiceFeatureEnabled, voiceRtc, voiceState]);
 
   const requestVoiceConnection = useCallback(
     (targetId: string) => {
@@ -1094,6 +1094,14 @@ export default function OnlineLayout({
                 >
                   Replays
                 </Link>
+                {isLobbyPage && (
+                  <Link
+                    className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
+                    href="/tournaments"
+                  >
+                    Tournaments
+                  </Link>
+                )}
                 <Link
                   className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
                   href="/leaderboard"
