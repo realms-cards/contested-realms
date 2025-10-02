@@ -170,7 +170,9 @@ function bufferPersistUpdate(matchId, data, action) {
       // prevent unbounded growth
       buf.actions = buf.actions.slice(-PERSIST_ACTION_BATCH_SIZE * 2);
     }
+    try { metricsInc('persist.buffer.action', 1); } catch {}
   }
+  try { metricsInc('persist.buffer.update', 1); } catch {}
   persistBuffers.set(matchId, buf);
   schedulePersistFlush(matchId);
 }
@@ -182,6 +184,7 @@ function schedulePersistFlush(matchId, dataOverride = null) {
   if (buf.timer) return; // already scheduled
   buf.timer = setTimeout(() => flushPersistBuffer(matchId, 'timer'), PERSIST_FLUSH_INTERVAL_MS);
   persistBuffers.set(matchId, buf);
+  try { metricsInc('persist.flush.scheduled', 1); } catch {}
 }
 
 async function flushPersistBuffer(matchId, reason = 'manual') {
@@ -196,6 +199,8 @@ async function flushPersistBuffer(matchId, reason = 'manual') {
   const actions = buf.actions.splice(0, PERSIST_ACTION_BATCH_SIZE);
   persistBuffers.set(matchId, buf);
   try {
+    const t0 = Date.now();
+    try { metricsInc('persist.flush.attempt', 1); } catch {}
     // Upsert session row
     await prisma.onlineMatchSession.upsert({
       where: { id: matchId },
@@ -212,15 +217,22 @@ async function flushPersistBuffer(matchId, reason = 'manual') {
       }));
       try {
         await prisma.onlineMatchAction.createMany({ data: rows });
+        try { metricsInc('persist.actions.createMany.ok', rows.length); } catch {}
       } catch (e) {
         // Fallback to individual inserts if createMany fails (e.g., JSON size issues)
         for (const r of rows) {
           try { await prisma.onlineMatchAction.create({ data: r }); } catch {}
         }
+        try { metricsInc('persist.actions.createMany.fallback', rows.length); } catch {}
       }
     }
+    try {
+      metricsInc('persist.flush.success', 1);
+      metricsObserveMs('persist.flush.ms', Date.now() - t0);
+    } catch {}
   } catch (e) {
     try { console.warn(`[persist] flush failed for ${matchId} (${reason}):`, e?.message || e); } catch {}
+    try { metricsInc('persist.flush.failure', 1); } catch {}
   } finally {
     buf.lastFlushAt = Date.now();
     // If more actions remain, schedule another quick flush
@@ -1023,6 +1035,88 @@ function metricsObserveMs(key, ms) {
   METRICS.hist.set(key, cur);
 }
 
+function promSafe(name) {
+  return String(name).replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+function getBufferedActionsCount() {
+  try {
+    let total = 0;
+    for (const buf of persistBuffers.values()) {
+      if (buf && Array.isArray(buf.actions)) total += buf.actions.length;
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+function collectMetricsSnapshot() {
+  const now = Date.now();
+  const counters = {};
+  for (const [k, v] of METRICS.counters.entries()) counters[k] = v;
+  const hist = {};
+  for (const [k, v] of METRICS.hist.entries()) hist[k] = { sum: v.sum, count: v.count, avg: v.count > 0 ? v.sum / v.count : 0 };
+  const sockets = (() => { try { return io.of('/').sockets.size; } catch { return 0; } })();
+  const mem = process.memoryUsage();
+  const bufferedActions = getBufferedActionsCount();
+  return {
+    time: now,
+    uptimeSec: Math.floor(process.uptime()),
+    matchesCached: typeof matches !== 'undefined' && matches ? matches.size : 0,
+    persistBuffers: persistBuffers.size,
+    bufferedActions,
+    socketsConnected: sockets,
+    dbReady: !!isReady,
+    redisAdapterStatus: pubClient ? pubClient.status : 'none',
+    storeRedisStatus: storeRedis ? storeRedis.status : 'none',
+    memory: { rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal, external: mem.external },
+    counters,
+    hist,
+  };
+}
+
+function buildPromMetrics() {
+  const snap = collectMetricsSnapshot();
+  const lines = [];
+  const pushGauge = (name, value, help) => {
+    const n = `sorcery_${promSafe(name)}`;
+    if (help) lines.push(`# HELP ${n} ${help}`);
+    lines.push(`# TYPE ${n} gauge`);
+    lines.push(`${n} ${Number(value)}`);
+  };
+  const pushCounter = (name, value, help) => {
+    const n = `sorcery_${promSafe(name)}_total`;
+    if (help) lines.push(`# HELP ${n} ${help}`);
+    lines.push(`# TYPE ${n} counter`);
+    lines.push(`${n} ${Number(value)}`);
+  };
+  const pushSummary = (name, sum, count, help) => {
+    const base = `sorcery_${promSafe(name)}`;
+    if (help) lines.push(`# HELP ${base} ${help}`);
+    lines.push(`# TYPE ${base} summary`);
+    lines.push(`${base}_sum ${Number(sum)}`);
+    lines.push(`${base}_count ${Number(count)}`);
+  };
+  // Gauges
+  pushGauge('matches_cached', snap.matchesCached, 'Number of matches in memory');
+  pushGauge('persist_buffers', snap.persistBuffers, 'Number of write-behind buffers');
+  pushGauge('persist_buffered_actions', snap.bufferedActions, 'Queued actions in buffers');
+  pushGauge('sockets_connected', snap.socketsConnected, 'Connected WebSocket clients');
+  pushGauge('uptime_seconds', snap.uptimeSec, 'Process uptime in seconds');
+  pushGauge('process_heap_used_bytes', snap.memory.heapUsed, 'Node.js heap used');
+  pushGauge('process_rss_bytes', snap.memory.rss, 'Resident set size');
+  // Counters
+  for (const [k, v] of Object.entries(snap.counters)) {
+    pushCounter(k.replace(/\./g, '_'), v, `Counter ${k}`);
+  }
+  // Summaries
+  for (const [k, v] of Object.entries(snap.hist)) {
+    pushSummary(`${k.replace(/\./g, '_')}_ms`, v.sum, v.count, `Summary ${k}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
 // Socket.IO Redis adapter (horizontal scaling)
 let pubClient = null;
 let subClient = null;
@@ -1173,6 +1267,26 @@ server.on("request", async (req, res) => {
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       res.end(body);
+      return;
+    }
+
+    // Metrics endpoints
+    if (pathname === "/metrics" && method === "GET") {
+      allowCors();
+      try { metricsInc('http.metrics.requests', 1); } catch {}
+      const text = buildPromMetrics();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+      res.end(text);
+      return;
+    }
+    if (pathname === "/metrics.json" && method === "GET") {
+      allowCors();
+      try { metricsInc('http.metrics_json.requests', 1); } catch {}
+      const snap = collectMetricsSnapshot();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(snap));
       return;
     }
 
@@ -1494,6 +1608,7 @@ async function cacheSessionToRedis(sessionData) {
       'EX',
       REDIS_SESSION_TTL_SEC
     );
+    try { metricsInc('persist.redis.cache.set', 1); } catch {}
   } catch {}
 }
 
@@ -1501,6 +1616,7 @@ async function persistMatchCreated(match) {
   try {
     const data = matchToSessionUpsertData(match);
     await cacheSessionToRedis({ ...data, id: match.id });
+    try { metricsInc('persist.created', 1); } catch {}
     if (PERSIST_IS_WRITE_BEHIND) {
       // Schedule an initial snapshot to DB soon after creation
       try { schedulePersistFlush(match.id, data); } catch {}
@@ -1522,6 +1638,10 @@ async function persistMatchUpdate(match, patch, playerId, ts) {
   try {
     const data = matchToSessionUpsertData(match);
     await cacheSessionToRedis({ ...data, id: match.id });
+    try {
+      metricsInc('persist.update', 1);
+      if (patch) metricsInc('persist.update.withPatch', 1);
+    } catch {}
     if (PERSIST_IS_WRITE_BEHIND) {
       // Buffer and schedule a batched flush
       bufferPersistUpdate(match.id, data, patch ? { playerId: playerId || 'system', timestamp: Number(ts || Date.now()), patch } : null);
@@ -1543,6 +1663,7 @@ async function persistMatchUpdate(match, patch, playerId, ts) {
 async function persistMatchEnded(match) {
   try {
     const endData = { status: 'ended', winnerId: match.winnerId || null, lastTs: BigInt(Number(match.lastTs || Date.now())) };
+    try { metricsInc('persist.ended', 1); } catch {}
     if (PERSIST_IS_WRITE_BEHIND) {
       // Force-flush any buffered updates first, then write the final end state synchronously
       try { await flushPersistBuffer(match.id, 'match_end'); } catch {}
