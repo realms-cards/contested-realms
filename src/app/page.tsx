@@ -88,6 +88,36 @@ export default function Home() {
           </AsciiPanel>
         </div>
 
+        {/* Support Links */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
+          <AsciiPanel>
+            <a
+              href="https://github.com/realms-cards/issues/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block hover:scale-[1.02] transition-transform duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+              aria-label="Report an issue on GitHub"
+            >
+              <div className="flex items-center justify-center py-4">
+                <h4 className="text-lg font-semibold tracking-wide">
+                  Report an Issue
+                </h4>
+              </div>
+            </a>
+          </AsciiPanel>
+          <AsciiPanel>
+            <a
+              href="mailto:kingofthe@realms.cards"
+              className="group block hover:scale-[1.02] transition-transform duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+              aria-label="Email the Realms team"
+            >
+              <div className="flex items-center justify-center py-4">
+                <h4 className="text-lg font-semibold tracking-wide">Email Us</h4>
+              </div>
+            </a>
+          </AsciiPanel>
+        </div>
+
         {/* Other Realms (wide bottom element) */}
         <div className="max-w-5xl mx-auto">
           <OtherRealms />
@@ -115,7 +145,7 @@ export default function Home() {
             <br />
             free of charge for community and educational purposes only.
           </p>
-          <p></p>
+          <p />
         </div>
       </div>
       {/* Bottom ASCII art background */}

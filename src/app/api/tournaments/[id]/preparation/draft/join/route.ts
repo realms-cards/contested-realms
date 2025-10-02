@@ -52,8 +52,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament is not in preparation phase' }), { status: 400 });
     }
 
-    if (registration.preparationStatus !== 'inProgress') {
-      return new Response(JSON.stringify({ error: 'Preparation not started. Call /start first' }), { status: 400 });
+    // Auto-start preparation if not started yet
+    if (registration.preparationStatus === 'notStarted') {
+      const initialPreparationData = {
+        draft: {
+          draftCompleted: false,
+          deckBuilt: false,
+          draftSessionId: null,
+          deckList: []
+        }
+      };
+
+      await prisma.tournamentRegistration.update({
+        where: { id: registration.id },
+        data: {
+          preparationStatus: 'inProgress',
+          preparationData: JSON.parse(JSON.stringify(initialPreparationData))
+        }
+      });
+
+      // Update local registration object
+      registration.preparationStatus = 'inProgress';
+      registration.preparationData = initialPreparationData;
+    } else if (registration.preparationStatus !== 'inProgress') {
+      return new Response(JSON.stringify({ error: `Invalid preparation status: ${registration.preparationStatus}` }), { status: 400 });
     }
 
     // Check if a draft session already exists for this tournament

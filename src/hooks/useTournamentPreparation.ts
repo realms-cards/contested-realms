@@ -40,7 +40,6 @@ export interface PreparationState {
   error: string | null;
 }
 
-<<<<<<< HEAD
 export type PreparationDataPayload = {
   sealed?: Partial<SealedPreparationData>;
   draft?: Partial<DraftPreparationData>;

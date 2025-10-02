@@ -96,11 +96,13 @@ export default function OnlineMatchPage() {
   // Determine which player this client is (support for 2-8 players)
   const myPlayerId = me?.id;
   const orderedPlayerIds = useMemo(() => {
-    if (Array.isArray(match?.playerIds) && match.playerIds.length > 0) {
-      return match.playerIds;
+    const pids = match?.playerIds;
+    if (Array.isArray(pids) && pids.length > 0) {
+      return pids;
     }
-    if (Array.isArray(match?.players)) {
-      return match.players.map((p) => p.id).filter(Boolean);
+    const players = match?.players;
+    if (Array.isArray(players)) {
+      return players.map((p) => p.id).filter(Boolean);
     }
     return [] as string[];
   }, [match?.playerIds, match?.players]);
@@ -313,6 +315,7 @@ export default function OnlineMatchPage() {
             playerIds: Array.isArray(payload?.players) ? payload.players : [],
             matchType: payload?.matchType || "constructed",
             lobbyName: payload?.lobbyName,
+            tournamentId: payload?.tournamentId,
             sealedConfig: payload?.sealedConfig || null,
             draftConfig: payload?.draftConfig || null,
           });
@@ -491,6 +494,7 @@ export default function OnlineMatchPage() {
 
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
+  const storeActorKey = useGameStore((s) => s.actorKey);
 
   // Setup state (like offline play)
   // Default CLOSED to avoid flashing overlay on rejoin; we'll open it for new/waiting matches
@@ -542,6 +546,140 @@ export default function OnlineMatchPage() {
     }
   }, [matchId, match?.playerDecks, me?.id, localDraftSubmitted]);
 
+  // Determine if this match is part of a tournament (server or bootstrap)
+  const isTournamentMatch = !!(
+    (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId ||
+    bootstrapTournamentIdRef.current
+  );
+
+  // Track constructed deck submission for tournament matches
+  const hasSubmittedConstructedDeck = useMemo(() => {
+    if (!matchId || match?.matchType !== "constructed") return false;
+    if (isTournamentMatch) return true;
+    const myId = me?.id;
+    // Check if deck exists in match.playerDecks (server-confirmed)
+    if (
+      myId &&
+      match?.playerDecks &&
+      (match.playerDecks as Record<string, unknown>)[myId]
+    ) {
+      return true;
+    }
+    // For tournament matches, check if there's a tournamentId - deck should be pre-submitted
+    if (bootstrapTournamentIdRef.current) {
+      return true; // Tournament decks are submitted during preparation
+    }
+    return false;
+  }, [matchId, match?.playerDecks, match?.matchType, me?.id, isTournamentMatch]);
+
+  // Auto-load constructed deck for tournament matches and skip to next phase
+  useEffect(() => {
+    if (!hasSubmittedConstructedDeck || prepared) return;
+    if (!me?.id || !myPlayerKey) return;
+    // Wait until seat ownership is registered in the store to avoid unknown-actor zone patches
+    if (storeActorKey !== myPlayerKey) return;
+
+    const tryLoadFromMatch = async () => {
+      const myDeckData = (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
+      if (!myDeckData) return false;
+      const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+      const ok = await loadSealedDeckFor(
+        myPlayerKey as "p1" | "p2",
+        myDeckData,
+        (error) => console.error("[Tournament] Deck load error:", error)
+      );
+      return ok;
+    };
+
+    const tryLoadFromTournament = async () => {
+      const tId = (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId || bootstrapTournamentIdRef.current;
+      if (!tId) return false;
+      try {
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(String(tId))}`);
+        if (!res.ok) throw new Error("Failed to load tournament detail");
+        const detail = await res.json();
+        const list: Array<{ cardId: string; quantity: number }> | undefined = detail?.viewerDeck;
+        if (!Array.isArray(list) || list.length === 0) return false;
+        const ids = Array.from(new Set(list.map((it) => Number(it.cardId)).filter((n) => Number.isFinite(n) && n > 0)));
+        const resMeta = await fetch(`/api/cards/by-id?ids=${encodeURIComponent(ids.join(','))}`);
+        if (!resMeta.ok) throw new Error('Failed to load card meta');
+        const metas = (await resMeta.json()) as Array<{ cardId: number; name: string; slug: string; setName: string; type?: string | null }>;
+        const byId = new Map<number, { name: string; slug: string; setName: string; type: string | null }>();
+        for (const m of metas) byId.set(Number(m.cardId), { name: m.name, slug: m.slug, setName: m.setName, type: m.type || null });
+        const deck: Array<Record<string, unknown>> = [];
+        for (const entry of list) {
+          const idNum = Number(entry.cardId);
+          const meta = byId.get(idNum);
+          if (!meta) continue;
+          const q = Math.max(1, Number(entry.quantity) || 0);
+          for (let i = 0; i < q; i++) {
+            deck.push({
+              id: String(idNum),
+              cardId: idNum,
+              name: meta.name,
+              slug: meta.slug,
+              set: meta.setName,
+              type: meta.type || '',
+            });
+          }
+        }
+        if (deck.length === 0) return false;
+        const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+        const ok = await loadSealedDeckFor(
+          myPlayerKey as "p1" | "p2",
+          deck,
+          (error) => console.error("[Tournament] Deck load error:", error)
+        );
+        return ok;
+      } catch (e) {
+        console.warn('[Tournament] Fallback deck load failed:', e);
+        return false;
+      }
+    };
+
+    (async () => {
+      // Prefer server-attached deck on the match; otherwise fallback to viewerDeck
+      const loaded = (await tryLoadFromMatch()) || (await tryLoadFromTournament());
+      if (loaded) {
+        console.log("[Tournament] Deck loaded -> Setup phase");
+        useGameStore.getState().setPhase("Setup");
+        setPrepared(true);
+      } else {
+        console.error("[Tournament] Could not load deck for tournament constructed match");
+      }
+    })();
+  }, [hasSubmittedConstructedDeck, prepared, match, match?.playerDecks, match?.id, me?.id, myPlayerKey, storeActorKey]);
+
+  // Auto-load tournament decks for sealed/draft when server deck data is present (no overlay)
+  useEffect(() => {
+    if (!isTournamentMatch) return;
+    if (prepared) return;
+    if (match?.matchType !== "sealed" && match?.matchType !== "draft") return;
+    if (!match?.playerDecks || !me?.id) return;
+    if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
+
+    const myDeckData = match.playerDecks[me.id];
+    if (!myDeckData) return;
+
+    (async () => {
+      try {
+        const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+        const success = await loadSealedDeckFor(
+          myPlayerKey as "p1" | "p2",
+          myDeckData,
+          (error) => console.error("[Tournament] Deck load error:", error)
+        );
+        if (success) {
+          console.log("[Tournament] Deck loaded (", match.matchType, ") advancing to Setup");
+          useGameStore.getState().setPhase("Setup");
+          setPrepared(true);
+        }
+      } catch (error) {
+        console.error("[Tournament] Failed to auto-load tournament deck:", error);
+      }
+    })();
+  }, [isTournamentMatch, prepared, match?.matchType, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
+
   // Track draft state and completion
   const [draftCompleted, setDraftCompleted] = useState(false);
   const isDraftMatch = match?.matchType === "draft";
@@ -568,8 +706,14 @@ export default function OnlineMatchPage() {
       match.matchType === "sealed" &&
       !hasSubmittedSealedDeck
     ) {
-      if (bootstrapTournamentIdRef.current) {
+      // Check if this is a tournament match (either from bootstrap or match.tournamentId)
+      const tournamentId = (match as unknown as { tournamentId?: string })?.tournamentId || bootstrapTournamentIdRef.current;
+      if (tournamentId) {
         // We'll auto-submit the saved tournament deck (see effect below) and avoid opening the editor.
+        // Update ref to ensure auto-submit effect can access it
+        if (!bootstrapTournamentIdRef.current && tournamentId) {
+          bootstrapTournamentIdRef.current = tournamentId;
+        }
         return;
       }
       // Clear game state before opening sealed editor
@@ -611,7 +755,9 @@ export default function OnlineMatchPage() {
     }
 
     // Auto-redirect to deck editor when draft is completed and in deck construction
-    if (isDraftDeckConstruction && !hasSubmittedDraftDeck && !autoSubmittingFromTournament) {
+    // Skip if this is a tournament match with deck already submitted
+    const tournamentIdForDraft = (match as unknown as { tournamentId?: string })?.tournamentId || bootstrapTournamentIdRef.current;
+    if (isDraftDeckConstruction && !hasSubmittedDraftDeck && !autoSubmittingFromTournament && !tournamentIdForDraft) {
       // Clear game state before opening deck editor
       useGameStore.getState().resetGameState();
 
@@ -664,7 +810,8 @@ export default function OnlineMatchPage() {
       try {
         if (!connected || !matchId || match?.id !== matchId) return;
         if (!transport) return;
-        if (match?.matchType !== 'sealed') return; // handle draft separately if needed
+        // Support sealed and constructed tournament matches
+        if (match?.matchType !== 'sealed' && match?.matchType !== 'constructed') return;
         if (hasSubmittedSealedDeck) return; // already submitted to match
         if (match?.status !== 'deck_construction') return;
         const tId = bootstrapTournamentIdRef.current;
@@ -807,34 +954,36 @@ export default function OnlineMatchPage() {
     } catch {}
   }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 
-  // Control setup overlay based on match status
+  // Canonical control for setup overlay (prevents ping-pong updates)
   useEffect(() => {
-    // Only react once we know we're in this specific match
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
-    // For draft matches, don't show setup overlay during active draft or if we've submitted a deck
-    if (shouldShowDraft) {
-      if (setupOpen) setSetupOpen(false);
-      return;
+    let desired = setupOpen;
+    const ended = match.status === "ended";
+
+    if (ended) {
+      desired = false;
+    } else if (resyncing) {
+      desired = true;
+    } else if (shouldShowDraft) {
+      desired = false;
+    } else if (match.status === "waiting" || match.status === "deck_construction") {
+      desired = true;
+    } else if (isTournamentMatch && !prepared) {
+      // Keep overlay open while tournament deck autoload/validation runs
+      desired = true;
+    } else if (isTournamentMatch && prepared && serverPhase !== "Main") {
+      // Keep overlay open for D20/Mulligan until server reaches Main
+      desired = true;
+    } else if (serverPhase === "Main") {
+      desired = false;
     }
 
-    if (match.status === "waiting" || match.status === "deck_construction") {
-      // Keep overlay open during waiting and deck construction
-      if (!setupOpen) setSetupOpen(true);
-    } else if (match.status === "ended") {
-      // Close on end
-      if (setupOpen) setSetupOpen(false);
-    }
-    // Do not auto-close on "in_progress"; we'll close when serverPhase reaches Main
-  }, [matchId, match, match?.id, match?.status, setupOpen, shouldShowDraft]);
+    if (desired !== setupOpen) setSetupOpen(desired);
+  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, isTournamentMatch, prepared, serverPhase, setupOpen]);
 
-  useEffect(() => {
-    if (!match) return;
-    if (prepared && match.status === "in_progress") {
-      if (setupOpen) setSetupOpen(false);
-    }
-  }, [match, prepared, setupOpen]);
+  
 
   // Reset setup wizard when entering a different match (fresh waiting match)
   useEffect(() => {
@@ -865,22 +1014,22 @@ export default function OnlineMatchPage() {
   }, [matchId, match]);
 
   // Reset game state only when match transitions to "in_progress" (once per match)
+  // IMPORTANT: For tournament matches, do NOT reset here — hands/decks were loaded locally during setup.
   useEffect(() => {
     if (
       match?.status === "in_progress" &&
       prevMatchStatusRef.current !== "in_progress"
     ) {
-      console.log("[game] Match started - resetting game state");
-      useGameStore.getState().resetGameState();
+      if (!isTournamentMatch) {
+        console.log("[game] Match started - resetting game state (non-tournament)");
+        useGameStore.getState().resetGameState();
+      } else {
+        console.log("[game] Match started (tournament) - preserving local deck/hand state");
+      }
     }
-  }, [match?.status]);
+  }, [match?.status, isTournamentMatch]);
 
-  // Also close setup if server advances phase to Main (in case match.status races)
-  useEffect(() => {
-    if (setupOpen && serverPhase === "Main") {
-      setSetupOpen(false);
-    }
-  }, [serverPhase, setupOpen]);
+  
 
   // Chat
   const [chatInput, setChatInput] = useState("");
@@ -937,7 +1086,7 @@ export default function OnlineMatchPage() {
         // Ignore failures; host can trigger next round if needed
       }
     })();
-  }, [matchId, match?.id, matchEnded, match?.status, winner, match?.players]);
+  }, [matchId, match, matchEnded, winner]);
 
   // Frozen context for the match end overlay so results don't change if roster updates
   const [finalEndContext, setFinalEndContext] = useState<
@@ -1006,7 +1155,6 @@ export default function OnlineMatchPage() {
   const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
   const boardSize = useGameStore((s) => s.board.size);
   // Compute playmat extents for camera baselines and clamps
   const baseGridW = boardSize.w * BASE_TILE_SIZE;
@@ -1408,6 +1556,19 @@ export default function OnlineMatchPage() {
                   </div>
                 </div>
               )
+            ) : hasSubmittedConstructedDeck ? (
+              // Tournament constructed matches - auto skip deck selector
+              <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-white mb-4">
+                    Loading Tournament Deck
+                  </h2>
+                  <div className="text-slate-300 mb-4">
+                    Your tournament deck is being loaded...
+                  </div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto" />
+                </div>
+              </div>
             ) : (
               <OnlineDeckSelector
                 myPlayerKey={myPlayerKey}
@@ -1598,7 +1759,7 @@ export default function OnlineMatchPage() {
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board enableBoardPings />
+                  <Board />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}
@@ -1748,10 +1909,10 @@ export default function OnlineMatchPage() {
                 <button
                   className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-medium"
                   onClick={() => {
-                    if (voice.respondToRequest) {
+                    if (voice.respondToRequest && voice.incomingRequest) {
                       voice.respondToRequest(
-                        voice.incomingRequest!.requestId,
-                        voice.incomingRequest!.from.id,
+                        voice.incomingRequest.requestId,
+                        voice.incomingRequest.from.id,
                         false
                       );
                     }
@@ -1762,10 +1923,10 @@ export default function OnlineMatchPage() {
                 <button
                   className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-medium"
                   onClick={() => {
-                    if (voice.respondToRequest) {
+                    if (voice.respondToRequest && voice.incomingRequest) {
                       voice.respondToRequest(
-                        voice.incomingRequest!.requestId,
-                        voice.incomingRequest!.from.id,
+                        voice.incomingRequest.requestId,
+                        voice.incomingRequest.from.id,
                         true
                       );
                     }

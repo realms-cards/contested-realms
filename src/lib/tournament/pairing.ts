@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma';
+import { buildTournamentDeckList, deckCardSelect, deckListHasMetadata, type DeckCardWithRelations } from '@/lib/tournament/deck-utils';
+import type { Prisma } from '@prisma/client';
 
 export interface PlayerPairing {
   playerId: string;
@@ -173,19 +175,114 @@ export async function createRoundMatches(
 ): Promise<string[]> {
   const matchIds: string[] = [];
 
-  // Create matches
-  for (const pairing of pairings.matches) {
-    const match = await prisma.match.create({
-      data: {
-        tournamentId,
-        roundId,
-        status: 'pending',
-        players: [
-          { id: pairing.player1.playerId, displayName: pairing.player1.displayName },
-          { id: pairing.player2.playerId, displayName: pairing.player2.displayName }
-        ]
+  // Fetch tournament to get format and player deck data
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    include: {
+      registrations: {
+        select: {
+          playerId: true,
+          preparationData: true
+        }
+      }
+    }
+  });
+
+  // Build playerDecks map from registrations
+  const playerDecksMap: Record<string, Prisma.JsonValue> = {};
+  const deckCache = new Map<string, Prisma.JsonValue>();
+
+  async function loadDeckListForConstructed(constructedData: Record<string, unknown> | null | undefined) {
+    if (!constructedData) return null;
+
+    const existing = constructedData.deckList as unknown;
+    if (deckListHasMetadata(existing)) {
+      return existing as unknown as Prisma.JsonValue;
+    }
+
+    const deckId = typeof constructedData.deckId === 'string' ? constructedData.deckId : null;
+    if (!deckId) return null;
+
+    if (deckCache.has(deckId)) {
+      return deckCache.get(deckId) ?? null;
+    }
+
+    const deck = await prisma.deck.findUnique({
+      where: { id: deckId },
+      select: {
+        cards: {
+          select: deckCardSelect,
+        }
       }
     });
+
+    if (!deck) return null;
+
+    const normalized = buildTournamentDeckList(deck.cards as DeckCardWithRelations[]);
+    const jsonValue = JSON.parse(JSON.stringify(normalized)) as Prisma.JsonValue;
+    deckCache.set(deckId, jsonValue);
+    return jsonValue;
+  }
+
+  if (tournament?.registrations) {
+    for (const reg of tournament.registrations) {
+      const prepData = reg.preparationData as Record<string, unknown> | null;
+      if (tournament.format === 'constructed' && prepData?.constructed) {
+        const constructedData = prepData.constructed as Record<string, unknown>;
+        const deckJson = await loadDeckListForConstructed(constructedData);
+        if (deckJson) {
+          playerDecksMap[reg.playerId] = deckJson;
+        }
+      } else if (tournament.format === 'sealed' && prepData?.sealed) {
+        const sealedData = prepData.sealed as Record<string, unknown>;
+        const deckList = sealedData.deckList;
+        if (deckList !== undefined) {
+          playerDecksMap[reg.playerId] = JSON.parse(JSON.stringify(deckList)) as Prisma.JsonValue;
+        }
+      } else if (tournament.format === 'draft' && prepData?.draft) {
+        const draftData = prepData.draft as Record<string, unknown>;
+        const deckList = draftData.deckList;
+        if (deckList !== undefined) {
+          playerDecksMap[reg.playerId] = JSON.parse(JSON.stringify(deckList)) as Prisma.JsonValue;
+        }
+      }
+    }
+  }
+
+  // Create matches
+  for (const pairing of pairings.matches) {
+    // Build playerDecks for this specific match (only the two players)
+    const matchPlayerDecks: Prisma.JsonObject = {};
+    if (playerDecksMap[pairing.player1.playerId]) {
+      matchPlayerDecks[pairing.player1.playerId] = playerDecksMap[pairing.player1.playerId];
+    }
+    if (playerDecksMap[pairing.player2.playerId]) {
+      matchPlayerDecks[pairing.player2.playerId] = playerDecksMap[pairing.player2.playerId];
+    }
+
+    console.log('[Tournament Pairing] Creating match with playerDecks:', {
+      player1: pairing.player1.playerId,
+      player2: pairing.player2.playerId,
+      hasPlayer1Deck: !!matchPlayerDecks[pairing.player1.playerId],
+      hasPlayer2Deck: !!matchPlayerDecks[pairing.player2.playerId],
+      deckCount: Object.keys(matchPlayerDecks).length
+    });
+
+    const matchData: Prisma.MatchUncheckedCreateInput = {
+      tournamentId,
+      roundId,
+      status: 'pending',
+      players: [
+        { id: pairing.player1.playerId, displayName: pairing.player1.displayName },
+        { id: pairing.player2.playerId, displayName: pairing.player2.displayName }
+      ]
+    };
+
+    if (Object.keys(matchPlayerDecks).length > 0) {
+      matchData.playerDecks = matchPlayerDecks;
+    }
+
+    const match = await prisma.match.create({ data: matchData });
     matchIds.push(match.id);
 
     // Update player standings with current match
@@ -230,9 +327,17 @@ export async function updateStandingsAfterMatch(
 ): Promise<void> {
   const { winnerId, loserId, isDraw = false } = results;
 
+  console.log('[Tournament] updateStandingsAfterMatch:', {
+    tournamentId,
+    matchId,
+    winnerId,
+    loserId,
+    isDraw
+  });
+
   if (isDraw) {
     // Both players get 1 point for draw
-    await prisma.playerStanding.updateMany({
+    const updateResult = await prisma.playerStanding.updateMany({
       where: {
         tournamentId,
         playerId: { in: [winnerId, loserId] }
@@ -242,6 +347,10 @@ export async function updateStandingsAfterMatch(
         matchPoints: { increment: 1 },
         currentMatchId: null
       }
+    });
+    console.log('[Tournament] Draw standings updated:', {
+      playersUpdated: updateResult.count,
+      playerIds: [winnerId, loserId]
     });
   } else {
     // Winner gets 3 points, loser gets 0

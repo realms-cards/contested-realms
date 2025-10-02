@@ -1,5 +1,5 @@
-import { NextRequest } from 'next/server';
 import { TournamentStatus } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
+      currentPlayers: tournament.registrations.length,
       registeredPlayers: tournament.registrations.map((reg) => {
         const prepData = (reg.preparationData as Record<string, unknown> | null) || {};
         return {

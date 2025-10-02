@@ -9,7 +9,7 @@ import type {
   InteractionResponseMessage,
   InteractionResultMessage,
 } from "@/lib/net/interactions";
-import type { CustomMessage, GameTransport } from "@/lib/net/transport";
+import type { GameTransport } from "@/lib/net/transport";
 import type {
   BurrowAbility,
   ContextMenuAction,

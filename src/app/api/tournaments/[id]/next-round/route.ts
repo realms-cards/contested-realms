@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
@@ -115,6 +115,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         nextRoundNumber,
         matchData
       );
+
+      // Broadcast tournament update so UI refreshes automatically
+      await tournamentSocketService.broadcastTournamentUpdateById(id);
+
       // Additionally, send MATCH_ASSIGNED to each participant of created matches
       const t = await prisma.tournament.findUnique({ where: { id }, select: { name: true } });
       const lobbyName = t?.name || 'Tournament Match';

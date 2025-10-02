@@ -1,6 +1,6 @@
+import { Finish } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { Finish } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,13 +25,37 @@ export async function GET(req: NextRequest) {
         cardId: true,
         slug: true,
         typeText: true,
+        setId: true,
         set: { select: { name: true } },
-        card: { select: { name: true } },
+        card: {
+          select: {
+            name: true,
+            meta: {
+              select: {
+                cost: true,
+                thresholds: true,
+                setId: true,
+              }
+            }
+          }
+        },
       },
     });
-    const byCard = new Map<number, { cardId: number; name: string; slug: string; setName: string; type: string | null }>();
+    const byCard = new Map<number, { cardId: number; name: string; slug: string; setName: string; type: string | null; cost: number | null; thresholds: Record<string, number> | null }>();
     for (const v of variants) {
-      if (!byCard.has(v.cardId)) byCard.set(v.cardId, { cardId: v.cardId, name: v.card.name, slug: v.slug, setName: v.set.name, type: v.typeText || null });
+      if (!byCard.has(v.cardId)) {
+        // Find metadata for this set
+        const metadata = v.card.meta.find(m => m.setId === v.setId);
+        byCard.set(v.cardId, {
+          cardId: v.cardId,
+          name: v.card.name,
+          slug: v.slug,
+          setName: v.set.name,
+          type: v.typeText || null,
+          cost: metadata?.cost ?? null,
+          thresholds: metadata?.thresholds as Record<string, number> | null ?? null,
+        });
+      }
     }
     // Fill missing with any variant
     const missing = ids.filter(id => !byCard.has(id));
@@ -42,13 +66,37 @@ export async function GET(req: NextRequest) {
           cardId: true,
           slug: true,
           typeText: true,
+          setId: true,
           set: { select: { name: true } },
-          card: { select: { name: true } },
+          card: {
+            select: {
+              name: true,
+              meta: {
+                select: {
+                  cost: true,
+                  thresholds: true,
+                  setId: true,
+                }
+              }
+            }
+          },
         },
         orderBy: { id: 'asc' },
       });
       for (const v of anyVariants) {
-        if (!byCard.has(v.cardId)) byCard.set(v.cardId, { cardId: v.cardId, name: v.card.name, slug: v.slug, setName: v.set.name, type: v.typeText || null });
+        if (!byCard.has(v.cardId)) {
+          // Find metadata for this set
+          const metadata = v.card.meta.find(m => m.setId === v.setId);
+          byCard.set(v.cardId, {
+            cardId: v.cardId,
+            name: v.card.name,
+            slug: v.slug,
+            setName: v.set.name,
+            type: v.typeText || null,
+            cost: metadata?.cost ?? null,
+            thresholds: metadata?.thresholds as Record<string, number> | null ?? null,
+          });
+        }
       }
     }
 

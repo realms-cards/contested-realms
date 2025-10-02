@@ -292,31 +292,34 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
   const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
     console.log('Statistics updated:', data);
-    
-    // Refresh statistics if it's for our current tournament
-    if (currentTournament?.id === data.tournamentId && statsHookRef.current) {
-      statsHookRef.current.actions.refreshAll();
+
+    // Refresh statistics if it's for our current tournament (this includes rounds data)
+    if (currentTournament?.id === data.tournamentId) {
+      if (statsHookRef.current) {
+        statsHookRef.current.actions.refreshAll();
+      }
     }
   }, [currentTournament]);
 
-  const handleRoundStarted = useCallback((data: { 
-    tournamentId: string; 
-    roundNumber: number; 
+  const handleRoundStarted = useCallback((data: {
+    tournamentId: string;
+    roundNumber: number;
     matches: Array<{
       id: string;
       player1Id: string;
       player1Name: string;
       player2Id: string | null;
       player2Name: string | null;
-    }>; 
+    }>;
   }) => {
     console.log('Round started:', data);
-    
-    // Refresh statistics to get new matches and standings
-    if (currentTournament?.id === data.tournamentId && statsHookRef.current) {
-      statsHookRef.current.actions.refreshAll();
+
+    // Refresh statistics to get new matches, rounds, and standings
+    if (currentTournament?.id === data.tournamentId) {
+      if (statsHookRef.current) {
+        statsHookRef.current.actions.refreshAll();
+      }
     }
-    // List view will be updated via server events; avoid redundant list fetch
   }, [currentTournament]);
 
   const handleMatchAssigned = useCallback((data: { 
@@ -391,7 +394,8 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     setError(null);
     setLoading(true);
     try {
-      const response = await fetch('/api/tournaments');
+      // Include completed tournaments to ensure we can view them after finishing
+      const response = await fetch('/api/tournaments?includeCompleted=true');
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to fetch tournaments');
@@ -484,7 +488,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [socketJoinTournament, refreshTournaments]);
+  }, [socketJoinTournament, isConnected, refreshTournamentsDebounced]);
 
   const joinTournament = useCallback(async (tournamentId: string) => {
     setLoading(true);
@@ -525,7 +529,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [socketJoinTournament, refreshTournaments]);
+  }, [socketJoinTournament, isConnected, refreshTournamentsDebounced]);
 
   const leaveTournament = useCallback(async (tournamentId: string) => {
     setLoading(true);
@@ -629,7 +633,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [refreshTournaments]);
+  }, [isConnected, refreshTournamentsDebounced]);
 
   const updateTournamentSettings = useCallback(async (
     tournamentId: string, 
@@ -661,7 +665,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [refreshTournaments]);
+  }, [isConnected, refreshTournamentsDebounced]);
 
   const toggleTournamentReady = useCallback(async (tournamentId: string, ready: boolean) => {
     setLoading(true);
@@ -690,13 +694,13 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [refreshTournaments]);
+  }, [isConnected, refreshTournamentsDebounced]);
 
   // Auto-fetch tournaments on mount
   useEffect(() => {
     // Initial load only once; subsequent updates come from socket events
     void refreshTournaments();
-  }, [refreshTournaments]);
+  }, [isConnected, refreshTournamentsDebounced, refreshTournaments]);
 
   const contextValue: RealtimeTournamentContextValue = {
     tournaments,

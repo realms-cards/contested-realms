@@ -336,6 +336,7 @@ model Match {
   status       MatchStatus @default(pending)
   players      Json        // Array of player IDs and info
   results      Json?       // Match results and game scores
+  playerDecks  Json?       // Submitted decklists per player (constructed/sealed/draft)
   startedAt    DateTime?
   completedAt  DateTime?
   createdAt    DateTime    @default(now())

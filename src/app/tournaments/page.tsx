@@ -233,6 +233,12 @@ export default function TournamentsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
+            <Link
+              href="/online/lobby"
+              className="text-slate-400 hover:text-white mb-2 inline-flex items-center text-sm"
+            >
+              ← Back to Lobby
+            </Link>
             <h1 className="text-3xl font-bold text-white mb-2">Tournaments</h1>
             <p className="text-slate-400">Join or create competitive tournaments</p>
           </div>
@@ -465,10 +471,12 @@ export default function TournamentsPage() {
                     onChange={(e) => setForm(prev => ({ ...prev, maxPlayers: parseInt(e.target.value) }))}
                     className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
+                    <option value={2}>2 Players</option>
                     <option value={4}>4 Players</option>
                     <option value={8}>8 Players</option>
                     <option value={16}>16 Players</option>
                     <option value={32}>32 Players</option>
+                    <option value={64}>64 Players</option>
                   </select>
                 </div>
 

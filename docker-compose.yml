@@ -53,16 +53,15 @@ services:
       dockerfile: Dockerfile.server
     container_name: sorcery-server-1
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      # Use internal service hosts for DB and Redis
+      # Override specific values for Docker environment
       DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       REDIS_URL: redis://redis:6379
       INSTANCE_ID: server1
       PORT: 3010
-      CPU_BOTS_ENABLED: "0"
-      RULES_ENFORCE_MODE: off
-      RULES_HELPERS_ENABLED: "true"
     depends_on:
       - postgres
       - redis
@@ -76,15 +75,15 @@ services:
       dockerfile: Dockerfile.server
     container_name: sorcery-server-2
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
+      # Override specific values for Docker environment
       DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
       REDIS_URL: redis://redis:6379
       INSTANCE_ID: server2
       PORT: 3010
-      CPU_BOTS_ENABLED: "0"
-      RULES_ENFORCE_MODE: off
-      RULES_HELPERS_ENABLED: "true"
     depends_on:
       - postgres
       - redis

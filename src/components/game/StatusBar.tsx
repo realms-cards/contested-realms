@@ -1,8 +1,8 @@
 "use client";
 
 import { Star } from "lucide-react";
-import { useGameStore } from "@/lib/game/store";
 import { FEATURE_UNDO } from "@/lib/config/features";
+import { useGameStore } from "@/lib/game/store";
 
 interface StatusBarProps {
   dragFromHand: boolean;
