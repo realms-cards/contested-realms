@@ -1177,7 +1177,7 @@ export default function TournamentDetailsPage() {
                                       src={`/api/images/${c.slug}`}
                                       alt={c.name}
                                       fill
-                                      className={`${isSite ? "object-cover rotate-90" : "object-cover"}`}
+                                      className={`${isSite ? "object-contain rotate-90" : "object-cover"}`}
                                       sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
                                     />
                                   </div>
