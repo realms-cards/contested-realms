@@ -494,6 +494,7 @@ model DraftSession {
   status            DraftStatus        @default(waiting)
   packConfiguration Json               // Pack configuration for the draft
   settings          Json               // Draft settings (time limits, etc.)
+  draftState        Json?              // Current draft state (packs, picks, etc.)
   startedAt         DateTime?
   completedAt       DateTime?
   createdAt         DateTime           @default(now())

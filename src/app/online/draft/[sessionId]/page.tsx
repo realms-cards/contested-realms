@@ -1,0 +1,212 @@
+"use client";
+
+import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useCallback, useEffect, useState } from "react";
+import { useOnline } from "@/app/online/online-context";
+import TournamentDraft3DScreen from "@/components/game/TournamentDraft3DScreen";
+
+type DraftParticipant = {
+  playerId: string;
+  playerName: string;
+  seatNumber: number;
+  status: string;
+};
+
+type DraftSession = {
+  id: string;
+  tournamentId: string;
+  status: "waiting" | "active" | "completed";
+  participants: DraftParticipant[];
+  packConfiguration: Array<{ setId: string; packCount: number }>;
+  settings: {
+    timePerPick: number;
+    deckBuildingTime: number;
+  };
+  startedAt: string | null;
+};
+
+type DraftCard = {
+  id: string;
+  name: string;
+  cardName?: string;
+  slug: string;
+  type?: string;
+  cost?: string;
+  rarity?: string;
+  setName?: string;
+  [k: string]: unknown;
+};
+
+export default function TournamentDraftSessionPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { data: session, status } = useSession();
+  const sessionId = String(params?.sessionId || "");
+  const { transport } = useOnline();
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [draftSession, setDraftSession] = useState<DraftSession | null>(null);
+
+  // Fetch draft session details
+  const fetchDraftSession = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/draft-sessions/${sessionId}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch draft session");
+      }
+
+      setDraftSession(data);
+      setLoading(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setLoading(false);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push(`/auth/signin?callbackUrl=/online/draft/${sessionId}`);
+      return;
+    }
+
+    if (status === "authenticated" && sessionId) {
+      fetchDraftSession();
+    }
+  }, [status, sessionId, router, fetchDraftSession]);
+
+  // Handle draft completion
+  const handleDraftComplete = (_draftedCards: DraftCard[]) => {
+    // Navigate to deck construction
+    if (draftSession) {
+      const params = new URLSearchParams({
+        draft: "true",
+        tournament: draftSession.tournamentId,
+        matchName: "Draft",
+        sessionId: draftSession.id,
+      });
+      router.push(`/decks/editor-3d?${params.toString()}`);
+    }
+  };
+
+  if (status === "loading" || loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
+        <div className="text-slate-300">Loading draft session…</div>
+      </div>
+    );
+  }
+
+  if (error || !draftSession) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
+        <div className="p-4 bg-rose-900/40 border border-rose-700 rounded">
+          {error || "Draft session not found"}
+        </div>
+      </div>
+    );
+  }
+
+  // Show 3D draft UI for active or waiting sessions (skip redundant lobby)
+  if ((draftSession.status === "active" || draftSession.status === "waiting") && session?.user && transport) {
+    const myPlayerId = session.user.id;
+    const myParticipant = draftSession.participants.find(
+      (p) => p.playerId === myPlayerId
+    );
+
+    if (!myParticipant) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
+          <div className="p-4 bg-rose-900/40 border border-rose-700 rounded">
+            You are not a participant in this draft session
+          </div>
+        </div>
+      );
+    }
+
+    // Build player names map indexed by seat number (for compatibility)
+    const playerNamesBySeat: Record<number, string> = {};
+    draftSession.participants.forEach((p) => {
+      playerNamesBySeat[p.seatNumber] = p.playerName;
+    });
+
+    return (
+      <TournamentDraft3DScreen
+        draftSessionId={draftSession.id}
+        tournamentId={draftSession.tournamentId}
+        myPlayerId={myPlayerId}
+        mySeatNumber={myParticipant.seatNumber}
+        participants={draftSession.participants}
+        playerNamesBySeat={playerNamesBySeat}
+        onDraftComplete={handleDraftComplete}
+      />
+    );
+  }
+
+  // Show waiting screen
+  return (
+    <div className="min-h-screen bg-slate-900 text-white">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold mb-6">Tournament Draft Session</h1>
+
+        <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 mb-6">
+          <div className="text-slate-300">
+            Status:{" "}
+            <span className="font-semibold text-white capitalize">
+              {draftSession.status}
+            </span>
+          </div>
+          <div className="text-slate-300 mt-2">
+            Players: {draftSession.participants.length}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-3">Participants</h2>
+          <div className="grid gap-2">
+            {draftSession.participants.map((p) => (
+              <div
+                key={p.playerId}
+                className="flex items-center justify-between bg-black/20 border border-slate-700 rounded px-3 py-2"
+              >
+                <div className="text-white">{p.playerName}</div>
+                <div className="text-xs text-slate-300">
+                  Seat {p.seatNumber} • {p.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {draftSession.status === "completed" && (
+          <div className="bg-green-900/40 border border-green-700 rounded-lg p-4">
+            <div className="text-green-200 font-semibold mb-2">
+              Draft completed
+            </div>
+            <div className="text-green-100 text-sm mb-4">
+              The draft has finished. You can now build your deck.
+            </div>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams({
+                  draft: "true",
+                  tournament: draftSession.tournamentId,
+                  matchName: "Draft",
+                  sessionId: draftSession.id,
+                });
+                router.push(`/decks/editor-3d?${params.toString()}`);
+              }}
+              className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm"
+            >
+              Build Draft Deck
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

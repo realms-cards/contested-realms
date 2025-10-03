@@ -63,14 +63,19 @@ export default function TournamentDraftPage() {
     return () => clearInterval(id);
   }, [tournamentId, joinDraft]);
 
-  const proceedToDeckBuild = () => {
-    const params = new URLSearchParams({
-      draft: "true",
-      tournament: tournamentId,
-      matchName: "Draft",
-    });
-    window.location.href = `/decks/editor-3d?${params.toString()}`;
-  };
+  const proceedToDeckBuild = useCallback(() => {
+    // Redirect to dedicated tournament draft session page
+    if (session?.id) {
+      window.location.href = `/online/draft/${session.id}`;
+    }
+  }, [session?.id]);
+
+  // Auto-redirect to draft editor when session becomes active
+  useEffect(() => {
+    if (session?.status === "active") {
+      proceedToDeckBuild();
+    }
+  }, [session?.status, proceedToDeckBuild]);
 
   if (status === "loading" || loading) {
     return (

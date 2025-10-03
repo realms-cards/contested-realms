@@ -187,9 +187,12 @@ export async function POST(req: NextRequest) {
       }), { status: 400 });
     }
 
-    // Calculate optimal rounds based on player count (Swiss system)
+    // Use client-provided totalRounds if available, otherwise calculate optimal rounds
     const optimalRounds = Math.ceil(Math.log2(maxPlayers));
-    const totalRounds = Math.max(3, optimalRounds); // Minimum 3 rounds
+    const clientTotalRounds = typeof incomingSettings?.totalRounds === 'number'
+      ? incomingSettings.totalRounds
+      : null;
+    const totalRounds = clientTotalRounds ?? Math.max(3, optimalRounds); // Minimum 3 rounds if not specified
 
     // Merge provided arbitrary settings (e.g., pairingFormat) while enforcing server-calculated fields
     const settingsOut: Record<string, unknown> = {
