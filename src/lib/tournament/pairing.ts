@@ -1,6 +1,6 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { buildTournamentDeckList, deckCardSelect, deckListHasMetadata, type DeckCardWithRelations } from '@/lib/tournament/deck-utils';
-import type { Prisma } from '@prisma/client';
 
 export interface PlayerPairing {
   playerId: string;
@@ -268,7 +268,7 @@ export async function createRoundMatches(
       deckCount: Object.keys(matchPlayerDecks).length
     });
 
-    const matchData: Prisma.MatchUncheckedCreateInput = {
+    const matchData: Prisma.MatchUncheckedCreateInput & { playerDecks?: Prisma.InputJsonValue } = {
       tournamentId,
       roundId,
       status: 'pending',
@@ -279,7 +279,7 @@ export async function createRoundMatches(
     };
 
     if (Object.keys(matchPlayerDecks).length > 0) {
-      matchData.playerDecks = matchPlayerDecks;
+      matchData.playerDecks = matchPlayerDecks as unknown as Prisma.InputJsonValue;
     }
 
     const match = await prisma.match.create({ data: matchData });

@@ -729,20 +729,22 @@ function AuthenticatedDeckEditor() {
   useEffect(() => {
     const draft = searchParams?.get("draft");
     const matchId = searchParams?.get("matchId");
-    if (draft !== "true" || !matchId) return;
+    const sessionId = searchParams?.get("sessionId"); // Tournament draft session
+    const draftId = matchId || sessionId; // Support both match-based and tournament drafts
+    if (draft !== "true" || !draftId) return;
     if (draftInitDone) return;
 
     setIsDraftMode(true);
 
     let raw: string | null = null;
     try {
-      raw = localStorage.getItem(`draftedCards_${matchId}`);
+      raw = localStorage.getItem(`draftedCards_${draftId}`);
     } catch (e) {
       console.warn("Failed to read drafted cards from localStorage:", e);
     }
 
     if (!raw) {
-      setError("No drafted cards found for this match.");
+      setError("No drafted cards found for this draft.");
       setDraftInitDone(true);
       return;
     }
@@ -777,7 +779,7 @@ function AuthenticatedDeckEditor() {
 
     // Fast path: use resolved picks if present to avoid any network lookups
     try {
-      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${matchId}`);
+      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${draftId}`);
       if (resolvedRaw) {
         const resolvedParsed = JSON.parse(resolvedRaw) as unknown;
         const resolvedList = Array.isArray(resolvedParsed)

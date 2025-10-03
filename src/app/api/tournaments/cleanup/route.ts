@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +6,7 @@ export const dynamic = 'force-dynamic';
  * POST /api/tournaments/cleanup
  * Cleans up abandoned tournaments (in registering status with no players after timeout)
  */
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     // Delete tournaments in 'registering' status with no players that are older than 10 minutes
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);

@@ -1,5 +1,4 @@
 import jwt from 'jsonwebtoken';
-
 import { getServerAuthSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';

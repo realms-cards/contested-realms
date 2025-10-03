@@ -676,13 +676,16 @@ async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickN
       draftState.pickNumber++;
       draftState.phase = 'passing';
       const temp = [...draftState.currentPacks];
+      const n = temp.length;
       if (draftState.packDirection === 'left') {
-        for (let i = 0; i < temp.length; i++) {
-          draftState.currentPacks[(i + 1) % temp.length] = temp[i];
+        // Rotate left: pack i goes to (i+1) mod n
+        for (let i = 0; i < n; i++) {
+          draftState.currentPacks[(i + 1) % n] = temp[i];
         }
       } else {
-        for (let i = 0; i < temp.length; i++) {
-          draftState.currentPacks[i] = temp[(i + 1) % temp.length];
+        // Rotate right: pack i goes to (i-1+n) mod n
+        for (let i = 0; i < n; i++) {
+          draftState.currentPacks[(i - 1 + n) % n] = temp[i];
         }
       }
       draftState.phase = 'picking';
