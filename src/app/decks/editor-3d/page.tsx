@@ -743,6 +743,38 @@ function AuthenticatedDeckEditor() {
       console.warn("Failed to read drafted cards from localStorage:", e);
     }
 
+    // Fallback: fetch picks from server if sessionId is provided and no local data is present
+    if (!raw) {
+      const sessionIdParam = searchParams?.get("sessionId");
+      if (sessionIdParam) {
+        (async () => {
+          try {
+            const res = await fetch(`/api/draft-sessions/${sessionIdParam}/state`, { cache: 'no-store' });
+            if (res.ok) {
+              const payload = await res.json();
+              const myPicks = Array.isArray(payload?.myPicks) ? (payload.myPicks as unknown[]) : [];
+              if (myPicks.length > 0) {
+                const json = JSON.stringify(myPicks);
+                try { localStorage.setItem(`draftedCards_${draftId}`, json); } catch {}
+                try { window.location.reload(); } catch {}
+              } else {
+                setError("No drafted cards found for this draft.");
+                setDraftInitDone(true);
+              }
+            } else {
+              setError("No drafted cards found for this draft.");
+              setDraftInitDone(true);
+            }
+          } catch (err) {
+            console.warn("Draft editor fallback fetch failed:", err);
+            setError("No drafted cards found for this draft.");
+            setDraftInitDone(true);
+          }
+        })();
+        return;
+      }
+    }
+
     if (!raw) {
       setError("No drafted cards found for this draft.");
       setDraftInitDone(true);

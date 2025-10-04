@@ -64,6 +64,12 @@ export default function TournamentsPage() {
     }
   });
 
+  // Pairing format and pack configuration (pack size is fixed at 15; do not expose)
+  const [pairingFormat, setPairingFormat] = useState<'swiss' | 'elimination' | 'round_robin'>('swiss');
+  const [sealedPackCounts, setSealedPackCounts] = useState<Record<string, number>>({ Beta: 6, 'Arthurian Legends': 0 });
+  const [draftPackCounts, setDraftPackCounts] = useState<Record<string, number>>({ Beta: 3, 'Arthurian Legends': 0 });
+  const [draftPackCount, setDraftPackCount] = useState<number>(3);
+
   // Type guard helpers
   function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
@@ -138,11 +144,25 @@ export default function TournamentsPage() {
     setError(null);
 
     try {
+      // Build settings with pairing format and format-specific configuration
+      const settingsOut: Record<string, unknown> = {
+        ...(form.settings as Record<string, unknown>),
+        pairingFormat,
+      };
+      if (form.format === 'sealed') {
+        settingsOut.sealedConfig = { packCounts: sealedPackCounts };
+      } else if (form.format === 'draft') {
+        settingsOut.draftConfig = {
+          packCount: draftPackCount,
+          packCounts: draftPackCounts,
+        };
+      }
+
       const newTournament = await rtCreateTournament({
         name: form.name,
         format: form.format,
         maxPlayers: form.maxPlayers,
-        settings: form.settings as unknown as Record<string, unknown>
+        settings: settingsOut,
       });
       
       // Add to local state immediately for better UX
@@ -159,6 +179,10 @@ export default function TournamentsPage() {
           allowSpectators: true
         }
       });
+      setPairingFormat('swiss');
+      setSealedPackCounts({ Beta: 6, 'Arthurian Legends': 0 });
+      setDraftPackCounts({ Beta: 3, 'Arthurian Legends': 0 });
+      setDraftPackCount(3);
       setShowCreateForm(false);
       
       // Navigate to the new tournament
@@ -447,6 +471,23 @@ export default function TournamentsPage() {
                   />
                 </div>
 
+                {/* Pairing Format */}
+                <div>
+                  <label className="block text-slate-300 text-sm font-medium mb-2">Pairing Format</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['swiss','elimination','round_robin'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        className={`px-3 py-2 rounded text-sm transition-colors ${pairingFormat === fmt ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+                        onClick={() => setPairingFormat(fmt)}
+                      >
+                        {fmt === 'swiss' ? 'Swiss' : fmt === 'elimination' ? 'Elimination' : 'Round Robin'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-slate-300 text-sm font-medium mb-2">
                     Format
@@ -461,6 +502,78 @@ export default function TournamentsPage() {
                     <option value="draft">Draft</option>
                   </select>
                 </div>
+
+                {/* Sealed Set Mix */}
+                {form.format === 'sealed' && (
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-2">Sealed Pack Mix</label>
+                    <div className="space-y-2">
+                      {Object.keys(sealedPackCounts).map((setName) => (
+                        <div key={`sealed-${setName}`} className="flex items-center justify-between gap-2">
+                          <div className="text-slate-200 text-sm">{setName}</div>
+                          <input
+                            type="number"
+                            min={0}
+                            max={10}
+                            value={sealedPackCounts[setName] || 0}
+                            onChange={(e) => {
+                              const n = Math.max(0, Math.min(10, parseInt(e.target.value) || 0));
+                              setSealedPackCounts((prev) => ({ ...prev, [setName]: n }));
+                            }}
+                            className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Draft Set Mix */}
+                {form.format === 'draft' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-300 text-sm font-medium mb-2">Packs per Player</label>
+                      <input
+                        type="number"
+                        min={2}
+                        max={5}
+                        value={draftPackCount}
+                        onChange={(e) => setDraftPackCount(Math.max(2, Math.min(5, parseInt(e.target.value) || 3)))}
+                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                      />
+                    </div>
+                    <div>
+                      <div className="block text-slate-300 text-sm font-medium mb-2">Draft Pack Mix</div>
+                      <div className="space-y-2">
+                        {Object.keys(draftPackCounts).map((setName) => (
+                          <div key={`draft-${setName}`} className="flex items-center justify-between gap-2">
+                            <div className="text-slate-200 text-sm">{setName}</div>
+                            <input
+                              type="number"
+                              min={0}
+                              max={5}
+                              value={draftPackCounts[setName] || 0}
+                              onChange={(e) => {
+                                const n = Math.max(0, Math.min(5, parseInt(e.target.value) || 0));
+                                setDraftPackCounts((prev) => ({ ...prev, [setName]: n }));
+                              }}
+                              className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {(() => {
+                        const total = Object.values(draftPackCounts).reduce((s, n) => s + (n || 0), 0);
+                        const ok = total === draftPackCount;
+                        return (
+                          <div className={`text-xs mt-1 ${ok ? 'text-emerald-300' : 'text-amber-300'}`}>
+                            Pack mix total: {total}/{draftPackCount} {ok ? '✓' : '(adjust to match)'}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-slate-300 text-sm font-medium mb-2">

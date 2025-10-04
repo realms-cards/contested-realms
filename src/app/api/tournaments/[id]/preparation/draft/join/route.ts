@@ -117,7 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           packConfiguration: JSON.parse(JSON.stringify(packConfiguration)),
           settings: JSON.parse(JSON.stringify({
             timePerPick: (draftConfig.draftTimeLimit as number) || 90,
-            deckBuildingTime: (draftConfig.deckBuildingTimeLimit as number) || 30
+            deckBuildingTime: (draftConfig.deckBuildingTimeLimit as number) || 30,
           }))
         },
         include: {

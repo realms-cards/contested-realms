@@ -15,7 +15,6 @@ type DraftCard = {
   [k: string]: unknown;
 };
 
-// Local extension to carry opaque engine-managed fields in persisted state
 interface DraftStateExtended extends DraftState {
   allGeneratedPacks?: DraftCard[][][];
   packChoice: (string | null)[];
@@ -243,6 +242,7 @@ export class TournamentDraftEngine {
 
     const playerCount = this.session.participants.length;
     const packConfig = this.session.packConfiguration;
+    const packSize = 15;
 
     // Determine which set to use for this round
     const setInfo = this.getSetForRound(roundIndex, packConfig);
@@ -252,7 +252,7 @@ export class TournamentDraftEngine {
     // Generate one pack per player for this round
     const roundPacks: DraftCard[][] = [];
     for (let player = 0; player < playerCount; player++) {
-      const pack = await this.generatePack(setInfo.setId, 15); // 15 cards per pack
+      const pack = await this.generatePack(setInfo.setId, packSize);
       roundPacks.push(pack);
     }
 
@@ -339,8 +339,7 @@ export class TournamentDraftEngine {
 
       // Compute seat totals before enforcing turn guards; support idempotency on duplicate requests
       const currSeatPicks = (base.picks?.[playerIndex] as DraftCard[] | undefined) ?? [];
-      const picksPerRound = 15; // current pack size; keep in sync with generatePack()
-      const expectedTotalBefore = (base.packIndex || 0) * picksPerRound + Math.max(0, (base.pickNumber || 1) - 1);
+      const picksPerRound = 15;
       const targetTotalThisPick = (base.packIndex || 0) * picksPerRound + (base.pickNumber || 1);
 
       // If request arrives after the player already picked this turn, treat as idempotent success
@@ -350,9 +349,9 @@ export class TournamentDraftEngine {
         }
         throw new Error(`Not player ${playerId}'s turn to pick`);
       }
-      if (currSeatPicks.length !== expectedTotalBefore) {
-        // Player already picked for this pick number or state is out of sync
-        throw new Error('Out-of-order or duplicate pick');
+      // Allow out-of-order recovery: if a duplicate request arrives after the pick was applied, treat as idempotent
+      if (currSeatPicks.length >= targetTotalThisPick) {
+        return base as DraftState;
       }
 
       const currentPack = (base.currentPacks?.[playerIndex] as DraftCard[] | undefined) ?? [];
@@ -378,8 +377,8 @@ export class TournamentDraftEngine {
       });
       const effectiveWaiting: string[] = [];
       for (let idx = 0; idx < participants.length; idx++) {
-        const seatP = mergedPicks[idx] as DraftCard[] | undefined;
-        const countMerged = Array.isArray(seatP) ? seatP.length : 0;
+        const seatPicks = mergedPicks[idx] as DraftCard[] | undefined;
+        const countMerged = Array.isArray(seatPicks) ? seatPicks.length : 0;
         const persisted = persistedPickData[idx]?.pickData as unknown;
         let countPersisted = 0;
         if (persisted && typeof persisted === 'object') {
@@ -390,7 +389,10 @@ export class TournamentDraftEngine {
           } catch { /* ignore */ }
         }
         const seatPickCount = Math.max(countMerged, countPersisted);
-        if (seatPickCount < targetTotalThisPick) {
+        // If the seat has no pack to pick from, do not wait on them this pick
+        const seatPack = mergedPacks[idx] as DraftCard[] | undefined;
+        const hasCards = Array.isArray(seatPack) && seatPack.length > 0;
+        if (hasCards && seatPickCount < targetTotalThisPick) {
           effectiveWaiting.push(participants[idx].playerId);
         }
       }
@@ -403,19 +405,37 @@ export class TournamentDraftEngine {
         const allPacksEmpty = (mergedPacks || []).every((pack) => Array.isArray(pack) && pack.length === 0);
 
         if (allPacksEmpty) {
-          // Advance round
+          // Determine if we have more rounds or if the draft is complete
+          const packConfig = (session.packConfiguration as Array<{ setId: string; packCount: number }>) || [];
+          const totalRounds = Array.isArray(packConfig)
+            ? packConfig.reduce((sum, cfg) => sum + (Number(cfg.packCount) || 0), 0)
+            : 0;
           const nextRoundIndex = (base.packIndex || 0) + 1;
-          const newDirection = base.packDirection === 'left' ? 'right' : 'left';
-          nextState = {
-            ...base,
-            phase: 'pack_selection',
-            packIndex: nextRoundIndex,
-            pickNumber: 1,
-            currentPacks: [],
-            packDirection: newDirection,
-            waitingFor: participants.map((p) => p.playerId),
-            packChoice: participants.map(() => null),
-          } as DraftStateExtended;
+
+          if (nextRoundIndex >= totalRounds) {
+            // Draft complete
+            nextState = {
+              ...base,
+              phase: 'complete',
+              currentPacks: null,
+              picks: mergedPicks,
+              waitingFor: [],
+            } as DraftStateExtended;
+          } else {
+            // Advance to next round's pack selection
+            const newDirection = base.packDirection === 'left' ? 'right' : 'left';
+            nextState = {
+              ...base,
+              phase: 'pack_selection',
+              packIndex: nextRoundIndex,
+              pickNumber: 1,
+              currentPacks: [],
+              picks: mergedPicks,
+              packDirection: newDirection,
+              waitingFor: participants.map((p) => p.playerId),
+              packChoice: participants.map(() => null),
+            } as DraftStateExtended;
+          }
         } else {
           // Pass packs
           const passed: unknown[][] = [];
@@ -428,12 +448,20 @@ export class TournamentDraftEngine {
               passed[i] = mergedPacks[from];
             }
           }
+          // Only require players that actually received a non-empty pack to pick
+          const nextWaiting: string[] = [];
+          for (let i = 0; i < playerCount; i++) {
+            const pack = passed[i] as DraftCard[] | undefined;
+            if (Array.isArray(pack) && pack.length > 0) {
+              nextWaiting.push(participants[i].playerId);
+            }
+          }
           nextState = {
             ...base,
             pickNumber: (base.pickNumber || 1) + 1,
             currentPacks: passed,
             picks: mergedPicks,
-            waitingFor: participants.map((p) => p.playerId),
+            waitingFor: nextWaiting,
           };
         }
       } else {
@@ -455,6 +483,7 @@ export class TournamentDraftEngine {
       {
         const data: PrismaClientNS.DraftSessionUpdateArgs['data'] = {
           draftState: JSON.parse(JSON.stringify(nextState)) as PrismaClientNS.InputJsonValue,
+          ...(nextState.phase === 'complete' ? { status: 'completed' as const } : {}),
         };
         await tx.draftSession.update({ where: { id: this.sessionId }, data });
       }
@@ -509,12 +538,19 @@ export class TournamentDraftEngine {
       }
     }
 
-    // Increment pick number
+    // Increment pick number and only wait for seats that received non-empty packs
+    const nextWaiting: string[] = [];
+    for (let i = 0; i < playerCount; i++) {
+      const pack = passedPacks[i] as DraftCard[] | undefined;
+      if (Array.isArray(pack) && pack.length > 0) {
+        nextWaiting.push(this.session.participants[i].playerId);
+      }
+    }
     this.draftState = {
       ...this.draftState,
       pickNumber: this.draftState.pickNumber + 1,
       currentPacks: passedPacks,
-      waitingFor: this.session.participants.map(p => p.playerId),
+      waitingFor: nextWaiting,
     };
 
     await this.saveState();
@@ -639,6 +675,61 @@ export class TournamentDraftEngine {
       if (dsx.allGeneratedPacks && !this.allGeneratedPacks) {
         this.allGeneratedPacks = dsx.allGeneratedPacks;
       }
+      // Self-heal: if we're beyond the configured total rounds, finalize as complete
+      try {
+        const ds = this.draftState as DraftState;
+        const pc = (session.packConfiguration as Array<{ setId: string; packCount: number }>) || [];
+        const totalRounds = Array.isArray(pc) ? pc.reduce((s, c) => s + (Number(c.packCount) || 0), 0) : 0;
+        if (totalRounds > 0 && ds && ds.packIndex >= totalRounds) {
+          this.draftState = { ...ds, phase: 'complete', currentPacks: null, waitingFor: [] };
+          await prisma.draftSession.update({
+            where: { id: this.sessionId },
+            data: {
+              status: 'completed',
+              draftState: JSON.parse(JSON.stringify(this.draftState)) as PrismaClientNS.InputJsonValue,
+            },
+          });
+          return this.draftState;
+        }
+      } catch (healErr) {
+        console.warn('[DraftEngine] round overflow self-heal skipped:', healErr);
+      }
+
+      // Self-heal: if picking and waitingFor looks wrong, recompute from packs+picks
+      try {
+        const ds = this.draftState as DraftState;
+        if (ds && ds.phase === 'picking' && Array.isArray(ds.picks)) {
+          const picksPerRound = 15;
+          const targetTotalThisPick = (Number(ds.packIndex) || 0) * picksPerRound + (Number(ds.pickNumber) || 1);
+          const participants = Array.isArray(session.participants) ? session.participants : [];
+          const calcWaiting: string[] = [];
+          for (let i = 0; i < participants.length; i++) {
+            const seatPack = (ds.currentPacks?.[i] as unknown[]) || [];
+            const hasCards = Array.isArray(seatPack) && seatPack.length > 0;
+            const seatPicks = (ds.picks?.[i] as unknown[]) || [];
+            const seatCount = Array.isArray(seatPicks) ? seatPicks.length : 0;
+            if (hasCards && seatCount < targetTotalThisPick) {
+              calcWaiting.push(participants[i]?.playerId);
+            }
+          }
+
+          const current = Array.isArray(ds.waitingFor) ? ds.waitingFor.slice() : [];
+          const a = new Set(calcWaiting);
+          const b = new Set(current);
+          let different = a.size !== b.size;
+          if (!different) {
+            for (const v of a) { if (!b.has(v)) { different = true; break; } }
+          }
+          if (different) {
+            this.draftState = { ...ds, waitingFor: calcWaiting };
+            await this.saveState();
+            return this.draftState;
+          }
+        }
+      } catch (healErr) {
+        console.warn('[DraftEngine] waitingFor self-heal skipped:', healErr);
+      }
+
       return this.draftState;
     } catch {
       return null;
@@ -701,21 +792,8 @@ export class TournamentDraftEngine {
     pc[pIdx] = chosenSet;
     (this.draftState as DraftStateExtended).packChoice = pc;
 
-    // Auto-finalize: if some players haven't chosen, default them to their current round pack's set
-    let allChosen = pc.every((x) => x !== null);
-    if (!allChosen) {
-      const playerCount = this.session.participants.length;
-      for (let idx = 0; idx < playerCount; idx++) {
-        if (pc[idx] === null) {
-          const fallbackPack = this.allGeneratedPacks?.[idx]?.[roundIdx] ?? [];
-          const fallbackSet = fallbackPack[0]?.setName ?? null;
-          pc[idx] = fallbackSet;
-        }
-      }
-      allChosen = pc.every((x) => x !== null);
-      (this.draftState as DraftStateExtended).packChoice = pc;
-    }
-    // When all players have chosen (including auto-finalized), distribute packs and enter picking
+    // When all players have chosen explicitly, distribute packs and enter picking
+    const allChosen = pc.every((x) => x !== null);
     if (allChosen) {
       // Ensure uniqueness across players for this round even after choices
       const allPacks = this.allGeneratedPacks ?? [];
@@ -745,12 +823,32 @@ export class TournamentDraftEngine {
         const pack = (this.allGeneratedPacks?.[idx]?.[roundIdx] ?? []) as DraftCard[];
         return [...pack];
       });
+      // Only wait for seats with cards in their pack at the start of the pick
+      const waitingIds: string[] = [];
+      for (let i = 0; i < this.session.participants.length; i++) {
+        const pack = distribute[i] as DraftCard[];
+        if (Array.isArray(pack) && pack.length > 0) {
+          waitingIds.push(this.session.participants[i].playerId);
+        }
+      }
       this.draftState = {
         ...this.draftState,
         phase: 'picking',
         currentPacks: distribute,
-        waitingFor: this.session.participants.map(p => p.playerId),
+        waitingFor: waitingIds,
       } as DraftStateExtended;
+      (this.draftState as DraftStateExtended).allGeneratedPacks = this.allGeneratedPacks ?? undefined;
+    } else {
+      // Stay in pack_selection; update waitingFor to players who haven't chosen yet
+      const waitingIds = this.session.participants
+        .filter((p) => pc[p.seatNumber - 1] === null)
+        .map((p) => p.playerId);
+      this.draftState = {
+        ...this.draftState,
+        phase: 'pack_selection',
+        waitingFor: waitingIds,
+      } as DraftStateExtended;
+      (this.draftState as DraftStateExtended).packChoice = pc;
       (this.draftState as DraftStateExtended).allGeneratedPacks = this.allGeneratedPacks ?? undefined;
     }
     await this.saveState();

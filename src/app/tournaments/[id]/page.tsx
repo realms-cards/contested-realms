@@ -1670,7 +1670,7 @@ export default function TournamentDetailsPage() {
         {/* Spectacular Start Tournament Button */}
         {tournament.status === "registering" &&
           isCreator &&
-          getCurrentPlayersCount(tournament) >= 2 && (
+          getCurrentPlayersCount(tournament) === tournament.maxPlayers && (
             <div className="mb-8">
               <button
                 onClick={handleStartTournament}
@@ -1688,7 +1688,7 @@ export default function TournamentDetailsPage() {
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity blur-xl -z-10" />
               </button>
               <div className="text-center text-slate-400 text-sm mt-2">
-                {getCurrentPlayersCount(tournament)} players ready • Click to begin
+                All players joined ({getCurrentPlayersCount(tournament)}/{tournament.maxPlayers}) • Click to begin
               </div>
             </div>
           )}

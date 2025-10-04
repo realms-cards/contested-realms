@@ -33,8 +33,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament already started' }), { status: 400 });
     }
 
-    if (tournament.registrations.length < 2) {
-      return new Response(JSON.stringify({ error: 'Need at least 2 players to start tournament' }), { status: 400 });
+    // Require all seats to be filled before starting
+    if (tournament.registrations.length !== tournament.maxPlayers) {
+      return new Response(
+        JSON.stringify({
+          error: `All players must join before starting (${tournament.registrations.length}/${tournament.maxPlayers})`,
+        }),
+        { status: 400 }
+      );
     }
 
     // Determine next status based on format
