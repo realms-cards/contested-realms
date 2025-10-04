@@ -1,6 +1,9 @@
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, Phase } from "@/lib/game/store";
 
+// Internal helper: extend CardRef with an optional classification zone
+type CardRefWithZone = CardRef & { __zone?: string | null };
+
 export async function loadDeckFor(
   who: "p1" | "p2",
   deckId: string,
@@ -95,15 +98,22 @@ export async function loadSealedDeckFor(
       return false;
     }
 
-    // Convert sealed card format to CardRef format
-    const cards: CardRef[] = sealedCards.map((card: Record<string, unknown>) => ({
-      cardId: parseInt(String(card.id || card.cardId)),
-      variantId: (card.variantId as number) || null,
-      name: String(card.name || card.cardName),
-      type: card.type as string,
-      slug: card.slug as string,
-      thresholds: (card.thresholds as Record<string, number>) || null,
-    }));
+    // Convert incoming card format to CardRef format (support optional zone for constructed decks)
+    const cards: CardRefWithZone[] = sealedCards.map(
+      (card: Record<string, unknown>) => {
+        const zoneRaw = (card.zone as string | null) || null;
+        const zone = typeof zoneRaw === "string" ? zoneRaw.toLowerCase() : null;
+        return {
+          cardId: parseInt(String(card.id ?? card.cardId)),
+          variantId: (card.variantId as number) || null,
+          name: String(card.name ?? card.cardName ?? ""),
+          type: (card.type as string) || "",
+          slug: String(card.slug ?? ""),
+          thresholds: (card.thresholds as Record<string, number>) || null,
+          __zone: zone,
+        };
+      }
+    );
 
     // Separate cards by type
     const isAvatar = (c: CardRef) =>
@@ -111,9 +121,24 @@ export async function loadSealedDeckFor(
     const isSite = (c: CardRef) =>
       typeof c?.type === "string" && c.type.toLowerCase().includes("site");
 
+    // Prefer zone-based classification when zones are provided (constructed tournament decks)
+    const anyZonesProvided = cards.some((c: CardRefWithZone) => !!c.__zone);
+    let rawAtlas: CardRef[];
+    let spellbook: CardRef[];
     const avatars = cards.filter(isAvatar);
-    const rawAtlas = cards.filter(isSite);
-    const spellbook = cards.filter((c: CardRef) => !isAvatar(c) && !isSite(c));
+    if (anyZonesProvided) {
+      const atlasZ: CardRefWithZone[] = cards.filter((c: CardRefWithZone) => c.__zone === "atlas");
+      const spellZ: CardRefWithZone[] = cards.filter(
+        (c: CardRefWithZone) => c.__zone === "spellbook" || c.__zone === "spell" || c.__zone == null
+      );
+      rawAtlas = atlasZ;
+      // Exclude avatar from spellbook later using isAvatar
+      spellbook = (spellZ as CardRef[]).filter((c: CardRef) => !isAvatar(c));
+    } else {
+      // Fallback to type-based classification for sealed/draft inputs
+      rawAtlas = cards.filter(isSite);
+      spellbook = cards.filter((c: CardRef) => !isAvatar(c) && !isSite(c));
+    }
 
     if (avatars.length !== 1) {
       setError(

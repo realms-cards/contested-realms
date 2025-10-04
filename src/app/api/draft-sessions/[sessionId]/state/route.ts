@@ -20,7 +20,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
       where: { id: sessionId },
       include: {
         participants: {
-          select: { playerId: true }
+          select: { playerId: true, seatNumber: true },
+          orderBy: { seatNumber: 'asc' },
         }
       }
     });
@@ -44,9 +45,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
       console.log(`[API/state] Phase: ${currentState.phase}, packs: ${currentState.currentPacks?.length || 0}`);
     }
 
+    // Compute my picks for convenience (deck editor fallback)
+    let myPicks: unknown[] | undefined;
+    try {
+      const pidList = draftSession.participants || [];
+      const idx = pidList.findIndex((p) => p.playerId === userId);
+      if (idx >= 0 && currentState && Array.isArray(currentState.picks)) {
+        myPicks = (currentState.picks[idx] as unknown[]) || [];
+      }
+    } catch {}
+
     return new Response(JSON.stringify({
       draftState: currentState,
       status: draftSession.status,
+      myPicks: myPicks ?? null,
     }), {
       status: 200,
       headers: { 'content-type': 'application/json' }

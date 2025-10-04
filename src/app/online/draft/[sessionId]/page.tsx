@@ -191,7 +191,27 @@ export default function TournamentDraftSessionPage() {
               The draft has finished. You can now build your deck.
             </div>
             <button
-              onClick={() => {
+              onClick={async () => {
+                // Fallback persistence: fetch final picks and store them for the editor
+                try {
+                  const res = await fetch(`/api/draft-sessions/${draftSession.id}/state`, { cache: 'no-store' });
+                  if (res.ok) {
+                    const payload = await res.json();
+                    const ds = payload?.draftState as unknown;
+                    type DraftCard = { id: string | number; slug: string; name?: string; cardName?: string; type?: string | null; setName?: string; rarity?: string };
+                    type DraftStateLike = { picks?: DraftCard[][] };
+                    const state = ds as DraftStateLike;
+                    const me = session?.user?.id ? String(session.user.id) : null;
+                    const mySeat = me ? draftSession.participants.find((p) => p.playerId === me)?.seatNumber : undefined;
+                    const myIdx = typeof mySeat === 'number' && mySeat > 0 ? mySeat - 1 : 0;
+                    const mine = Array.isArray(state?.picks?.[myIdx]) ? (state!.picks![myIdx] as DraftCard[]) : [];
+                    if (mine.length) {
+                      try {
+                        localStorage.setItem(`draftedCards_${draftSession.id}`, JSON.stringify(mine));
+                      } catch {}
+                    }
+                  }
+                } catch {}
                 const params = new URLSearchParams({
                   draft: "true",
                   tournament: draftSession.tournamentId,

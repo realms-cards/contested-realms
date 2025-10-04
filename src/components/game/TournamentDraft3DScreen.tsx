@@ -137,6 +137,8 @@ export default function TournamentDraft3DScreen({
   useEffect(() => {
     draftStateRef.current = draftState;
   }, [draftState]);
+  // Ensure we only handle completion once, even if both polling and socket fire
+  const completionHandledRef = useRef(false);
   const pick3DRef = useRef<Pick3D[]>(pick3D);
   useEffect(() => {
     pick3DRef.current = pick3D;
@@ -188,6 +190,13 @@ export default function TournamentDraft3DScreen({
   }, [draftState.phase, draftState.packIndex, draftSessionId]);
   const autoPickTimerRef = useRef<number | null>(null);
 
+  // Close the pack overlay as soon as we enter picking
+  useEffect(() => {
+    if (draftState.phase === "picking" && packChoiceOverlay) {
+      setPackChoiceOverlay(false);
+    }
+  }, [draftState.phase, packChoiceOverlay]);
+
   // Set screen type for video overlay
   useEffect(() => {
     updateScreenType("draft-3d");
@@ -231,6 +240,46 @@ export default function TournamentDraft3DScreen({
           if (data.draftState.phase !== "waiting") {
             everOutOfWaitingRef.current = true;
           }
+
+          // Handle completion via polling as well (write picks to localStorage and navigate)
+          if (s.phase === "complete" && !completionHandledRef.current) {
+            const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
+            try {
+              if (draftSessionId) {
+                localStorage.setItem(
+                  `draftedCards_${draftSessionId}`,
+                  JSON.stringify(mine)
+                );
+                const resolved: SearchResult[] = mine.map((c) => ({
+                  variantId: 0,
+                  slug: c.slug,
+                  finish: "Standard",
+                  product: "Draft",
+                  cardId:
+                    (typeof c.slug === "string" && slugToCardId[c.slug])
+                      ? slugToCardId[c.slug]
+                      : (Number(c.id) || 0),
+                  cardName: c.cardName || c.name,
+                  set: c.setName || "Beta",
+                  type: c.type || null,
+                  rarity: (c.rarity as SearchResult["rarity"]) || null,
+                }));
+                localStorage.setItem(
+                  `draftedCardsResolved_${draftSessionId}`,
+                  JSON.stringify(resolved)
+                );
+              }
+            } catch (err) {
+              console.error(
+                `[TournamentDraft3D] Failed to save draft data (poll path):`,
+                err
+              );
+            }
+            completionHandledRef.current = true;
+            setTimeout(() => {
+              onDraftComplete(mine);
+            }, 600);
+          }
         }
       } catch (err) {
         console.error('[TournamentDraft3D] Error polling state:', err);
@@ -265,7 +314,7 @@ export default function TournamentDraft3DScreen({
       mounted = false;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [draftSessionId, myPlayerId, myPlayerIndex]);
+  }, [draftSessionId, myPlayerId, myPlayerIndex, onDraftComplete, slugToCardId]);
 
   // Load tournament packConfiguration to display all booster packs (usually 3)
   useEffect(() => {
@@ -1322,13 +1371,24 @@ export default function TournamentDraft3DScreen({
                           onClick={async () => {
                             if (isAlreadyUsed) return;
                             try {
-                              await fetch(`/api/draft-sessions/${draftSessionId}/choose-pack`, {
+                              const res = await fetch(`/api/draft-sessions/${draftSessionId}/choose-pack`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ packIndex: packIdx, setChoice: setName }),
                               });
                               setUsedPacks((prev) => prev.includes(packIdx) ? prev : [...prev, packIdx]);
-                              setPackChoiceOverlay(false);
+                              // Only close the overlay if server moved us into picking
+                              try {
+                                const payload = await res.json();
+                                const nextPhase = (payload && typeof payload === 'object')
+                                  ? (payload.draftState?.phase ?? payload.phase)
+                                  : undefined;
+                                if (nextPhase === 'picking') {
+                                  setPackChoiceOverlay(false);
+                                }
+                              } catch {
+                                // ignore JSON errors; overlay will auto-close when phase updates
+                              }
                             } catch (e) {
                               console.warn('[TournamentDraft3D] choose-pack failed', e);
                             }
