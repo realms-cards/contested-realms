@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
 import TournamentDraft3DScreen from "@/components/game/TournamentDraft3DScreen";
 
@@ -48,6 +48,7 @@ export default function TournamentDraftSessionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draftSession, setDraftSession] = useState<DraftSession | null>(null);
+  const redirectedRef = useRef(false);
 
   // Fetch draft session details
   const fetchDraftSession = useCallback(async () => {
@@ -78,6 +79,51 @@ export default function TournamentDraftSessionPage() {
       fetchDraftSession();
     }
   }, [status, sessionId, router, fetchDraftSession]);
+
+  // Fallback: poll minimal state to detect completion and navigate to deck construction
+  useEffect(() => {
+    if (!sessionId || redirectedRef.current) return;
+    let mounted = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/draft-sessions/${sessionId}/state`, {
+          cache: "no-store",
+        });
+        if (!mounted || !res.ok) return;
+        const data = await res.json();
+        if (
+          data?.status === "completed" &&
+          session?.user &&
+          !redirectedRef.current
+        ) {
+          redirectedRef.current = true;
+          // Attempt to stash picks for editor if provided
+          try {
+            if (Array.isArray(data?.myPicks)) {
+              localStorage.setItem(
+                `draftedCards_${sessionId}`,
+                JSON.stringify(data.myPicks)
+              );
+            }
+          } catch {}
+          const params = new URLSearchParams({
+            draft: "true",
+            tournament: draftSession?.tournamentId || "",
+            matchName: "Draft",
+            sessionId,
+          });
+          router.push(`/decks/editor-3d?${params.toString()}`);
+        }
+      } catch {}
+    };
+    const id = window.setInterval(tick, 2000);
+    // run once quickly
+    void tick();
+    return () => {
+      mounted = false;
+      window.clearInterval(id);
+    };
+  }, [sessionId, session?.user, draftSession?.tournamentId, router]);
 
   // Handle draft completion
   const handleDraftComplete = (_draftedCards: DraftCard[]) => {
@@ -112,7 +158,11 @@ export default function TournamentDraftSessionPage() {
   }
 
   // Show 3D draft UI for active or waiting sessions (skip redundant lobby)
-  if ((draftSession.status === "active" || draftSession.status === "waiting") && session?.user && transport) {
+  if (
+    (draftSession.status === "active" || draftSession.status === "waiting") &&
+    session?.user &&
+    transport
+  ) {
     const myPlayerId = session.user.id;
     const myParticipant = draftSession.participants.find(
       (p) => p.playerId === myPlayerId
@@ -194,20 +244,42 @@ export default function TournamentDraftSessionPage() {
               onClick={async () => {
                 // Fallback persistence: fetch final picks and store them for the editor
                 try {
-                  const res = await fetch(`/api/draft-sessions/${draftSession.id}/state`, { cache: 'no-store' });
+                  const res = await fetch(
+                    `/api/draft-sessions/${draftSession.id}/state`,
+                    { cache: "no-store" }
+                  );
                   if (res.ok) {
                     const payload = await res.json();
                     const ds = payload?.draftState as unknown;
-                    type DraftCard = { id: string | number; slug: string; name?: string; cardName?: string; type?: string | null; setName?: string; rarity?: string };
+                    type DraftCard = {
+                      id: string | number;
+                      slug: string;
+                      name?: string;
+                      cardName?: string;
+                      type?: string | null;
+                      setName?: string;
+                      rarity?: string;
+                    };
                     type DraftStateLike = { picks?: DraftCard[][] };
                     const state = ds as DraftStateLike;
-                    const me = session?.user?.id ? String(session.user.id) : null;
-                    const mySeat = me ? draftSession.participants.find((p) => p.playerId === me)?.seatNumber : undefined;
-                    const myIdx = typeof mySeat === 'number' && mySeat > 0 ? mySeat - 1 : 0;
-                    const mine = Array.isArray(state?.picks?.[myIdx]) ? (state!.picks![myIdx] as DraftCard[]) : [];
+                    const me = session?.user?.id
+                      ? String(session.user.id)
+                      : null;
+                    const mySeat = me
+                      ? draftSession.participants.find((p) => p.playerId === me)
+                          ?.seatNumber
+                      : undefined;
+                    const myIdx =
+                      typeof mySeat === "number" && mySeat > 0 ? mySeat - 1 : 0;
+                    const mine = Array.isArray(state?.picks?.[myIdx])
+                      ? (state!.picks![myIdx] as DraftCard[])
+                      : [];
                     if (mine.length) {
                       try {
-                        localStorage.setItem(`draftedCards_${draftSession.id}`, JSON.stringify(mine));
+                        localStorage.setItem(
+                          `draftedCards_${draftSession.id}`,
+                          JSON.stringify(mine)
+                        );
                       } catch {}
                     }
                   }

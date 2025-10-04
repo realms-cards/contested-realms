@@ -90,7 +90,23 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
     const handleConnect = () => console.log('[useSocket] Connected to server');
     const handleDisconnect = (reason: string) => console.log(`[useSocket] Disconnected: ${reason}`);
     const handleConnecting = () => console.log('[useSocket] Connecting...');
-    const handleConnectError = (error: Error) => console.error('[useSocket] Connection error:', error);
+    const handleConnectError = async (error: Error | { message?: string }) => {
+      console.error('[useSocket] Connection error:', error);
+      // If token expired/unauthorized, refresh token for the next attempt
+      try {
+        const msg = (error as { message?: string })?.message || String(error);
+        if (msg?.toLowerCase().includes('jwt') || msg?.toLowerCase().includes('unauthor')) {
+          const res = await fetch('/api/socket-token', { credentials: 'include' });
+          if (res.ok) {
+            const j = await res.json();
+            const mgr = socketInstance.io as unknown as { opts: { auth?: Record<string, unknown> } };
+            mgr.opts.auth = { token: j?.token as string };
+            // Nudge a reconnect attempt if currently disconnected
+            try { if (!socketInstance.connected) socketInstance.connect(); } catch {}
+          }
+        }
+      } catch {}
+    };
     const handleReconnect = (attemptNumber: number) => console.log(`[useSocket] Reconnected after ${attemptNumber} attempts`);
     const handleReconnectAttempt = (attemptNumber: number) => console.log(`[useSocket] Reconnection attempt ${attemptNumber}`);
     const handleReconnectError = (error: Error) => console.error('[useSocket] Reconnection error:', error);

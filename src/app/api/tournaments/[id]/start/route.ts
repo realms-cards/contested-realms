@@ -64,9 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    // Broadcast phase change event via Socket.io
-    try {
-      await tournamentSocketService.broadcastPhaseChanged(
+    // Broadcast phase change event via Socket.io (fire-and-forget so API response is instant)
+    tournamentSocketService
+      .broadcastPhaseChanged(
         id,
         nextStatus,
         {
@@ -75,13 +75,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           format: tournament.format,
           totalPlayers: tournament.registrations.length
         }
-      );
-      // Also broadcast a full tournament snapshot so lists sync immediately
-      await tournamentSocketService.broadcastTournamentUpdateById(id);
-    } catch (socketError) {
-      console.warn('Failed to broadcast phase changed event:', socketError);
-      // Don't fail the request if socket broadcast fails
-    }
+      )
+      .catch((socketError) => {
+        console.warn('Failed to broadcast phase changed event:', socketError);
+      });
+    // Also broadcast a full tournament snapshot so lists sync immediately
+    tournamentSocketService
+      .broadcastTournamentUpdateById(id)
+      .catch((socketError) => {
+        console.warn('Failed to broadcast tournament update:', socketError);
+      });
 
     // If we ever reintroduce direct start into 'active', re-add round creation here.
 

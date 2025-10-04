@@ -30,8 +30,8 @@ type CacheEntry = {
 const textureCache = new Map<string, CacheEntry>();
 // Pending loads by URL to dedupe concurrent requests.
 const pendingLoads = new Map<string, Promise<Texture>>();
-// One KTX2Loader per renderer to reuse workers/transcoder and internal caches.
-const ktx2LoaderByRenderer = new WeakMap<WebGLRenderer, KTX2Loader>();
+// Single KTX2Loader per app to reuse workers/transcoder and internal caches across all canvases.
+let globalKtx2Loader: KTX2Loader | null = null;
 // Remember KTX2 URLs that failed recently; retry after a cooldown.
 const ktx2FailureTimes = new Map<string, number>();
 const KTX2_RETRY_DELAY_MS = (() => {
@@ -45,9 +45,8 @@ const KTX2_RETRY_DELAY_MS = (() => {
 })();
 
 function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
-  let loader = ktx2LoaderByRenderer.get(gl);
-  if (!loader) {
-    loader = new KTX2Loader();
+  if (!globalKtx2Loader) {
+    const loader = new KTX2Loader();
     // Allow overriding transcoder path via env; default to self-hosted /ktx2/
     const envPath = process.env.NEXT_PUBLIC_KTX2_TRANSCODER_PATH;
     loader.setTranscoderPath(envPath && envPath.trim() ? envPath : "/ktx2/");
@@ -58,14 +57,15 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
         "anonymous"
       );
     } catch {}
-    try {
-      loader.detectSupport(gl);
-    } catch {
-      // ignore; loader will reject if unsupported
-    }
-    ktx2LoaderByRenderer.set(gl, loader);
+    globalKtx2Loader = loader;
   }
-  return loader;
+  // Detect/refresh support against the current renderer context (safe to call repeatedly)
+  try {
+    globalKtx2Loader.detectSupport(gl);
+  } catch {
+    // ignore; loader will reject if unsupported
+  }
+  return globalKtx2Loader;
 }
 
 type TextureWithDimensions = Texture & {

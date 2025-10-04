@@ -50,7 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ses
       'Out-of-order or duplicate pick',
       'Card', // card not found in current pack
     ];
-    const isConflict = conflictSignals.some((s) => message.includes(s));
+    const isConflict = conflictSignals.some((s) => message.includes(s))
+      // Serialize conflicts from the DB layer (e.g., Postgres code 40001)
+      || message.includes('could not serialize access due to concurrent update');
     console.error('[API/pick] error:', message);
     return new Response(JSON.stringify({ error: message }), { status: isConflict ? 409 : 500 });
   }

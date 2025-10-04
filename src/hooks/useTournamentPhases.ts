@@ -310,6 +310,9 @@ export function useTournamentPhases(
   // Periodic condition checking (backup): avoid polling when socket is connected or tab hidden
   useEffect(() => {
     if (!tournamentId) return undefined;
+    if (options?.isConnected) {
+      return undefined;
+    }
     checkConditions();
     const pollMs = options?.pollIntervalMs ?? 20000;
     let id: number | null = null;
