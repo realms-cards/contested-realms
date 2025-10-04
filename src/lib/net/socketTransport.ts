@@ -296,6 +296,9 @@ export class SocketTransport implements GameTransport {
       socket.on("draft:session:leave", (payload) =>
         this.dispatch("draft:session:leave", payload)
       );
+      socket.on("draft:session:presence", (payload) =>
+        this.dispatch("draft:session:presence", payload as TransportEventMap["draft:session:presence"])
+      );
       socket.on("draft:error", (payload) =>
         this.dispatch("draft:error", payload)
       );

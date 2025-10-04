@@ -35,6 +35,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ses
       return new Response(JSON.stringify({ error: 'Not a participant in this draft session' }), { status: 403 });
     }
 
+    // If already completed, do NOT re-initialize. Return final state for clients to transition to deck build.
+    if (draftSession.status === 'completed') {
+      try {
+        const engine = new TournamentDraftEngine(sessionId);
+        const current = await engine.getState();
+        return new Response(
+          JSON.stringify({
+            success: true,
+            draftState: current ?? draftSession.draftState ?? null,
+            message: 'Draft session already completed',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      } catch {
+        return new Response(
+          JSON.stringify({ success: true, draftState: draftSession.draftState ?? null, message: 'Draft session already completed' }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+    }
+
     // Idempotent start: if active and has state, return current state
     if (draftSession.status === 'active' && draftSession.draftState) {
       console.log(`[API] Draft session ${sessionId} already started and has state - returning current state (200)`);

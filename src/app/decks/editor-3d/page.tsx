@@ -34,6 +34,10 @@ const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
 const BottomBar = dynamic(() => import("@/app/decks/editor-3d/BottomBar"), {
   ssr: false,
 });
+const TournamentPresenceOverlay = dynamic(
+  () => import("@/components/tournament/TournamentPresenceOverlay"),
+  { ssr: false }
+);
 
 // Lazy load the Canvas/three stack to trim initial JS and avoid SSR
 const EditorCanvas = dynamic(
@@ -100,6 +104,24 @@ function AuthenticatedDeckEditor() {
   const [deckCreatorName, setDeckCreatorName] = useState<string | null>(null);
   const [setName, setSetName] = useState<string>("Beta");
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
+
+  // If the editor is launched with a tournament param, set the deck name to the tournament's name.
+  useEffect(() => {
+    const tournamentId = searchParams?.get("tournament");
+    if (!tournamentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(String(tournamentId))}`);
+        if (!res.ok) return;
+        const detail = await res.json();
+        if (!cancelled && detail?.name && typeof detail.name === 'string') {
+          setDeckName(detail.name);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [searchParams]);
 
   // Debug: Track picks changes
   // Runs once on initial picks change logging; intentionally omits deckName/setName
@@ -2536,6 +2558,19 @@ function AuthenticatedDeckEditor() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
+      {/* Tournament presence overlay if launched from a tournament context */}
+      {(() => {
+        const tournamentId = searchParams?.get("tournament") || null;
+        const draftSessionId = searchParams?.get("sessionId") || null;
+        if (!tournamentId && !draftSessionId) return null;
+        return (
+          <TournamentPresenceOverlay
+            tournamentId={tournamentId}
+            draftSessionId={draftSessionId}
+            position="top-right"
+          />
+        );
+      })()}
       {/* Draft picks loading indicator */}
       {isDraftMode && !draftInitDone && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">

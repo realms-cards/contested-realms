@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react";
+import type { Socket } from "socket.io-client";
 import { useTournamentPhases } from "@/hooks/useTournamentPhases";
 import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
@@ -37,7 +38,8 @@ interface RealtimeTournamentContextValue {
   // Real-time connection status
   isSocketConnected: boolean;
   connectionError: string | null;
-  
+  socket: Socket | null;
+
   // Tournament actions
   createTournament: (config: {
     name: string;
@@ -51,6 +53,7 @@ interface RealtimeTournamentContextValue {
   endTournament: (tournamentId: string) => Promise<void>;
   updateTournamentSettings: (tournamentId: string, settings: Record<string, unknown>) => Promise<void>;
   toggleTournamentReady: (tournamentId: string, ready: boolean) => Promise<void>;
+  sendTournamentChat: (tournamentId: string, content: string) => void;
   
   // Enhanced state management
   refreshTournaments: () => Promise<void>;
@@ -71,6 +74,10 @@ interface RealtimeTournamentContextValue {
     phaseChangeCount: number;
     lastEventTime: string | null;
   };
+  // Presence for current tournament (umbrella presence)
+  tournamentPresence: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+  // Presence selector for arbitrary tournament id
+  getPresenceFor: (tournamentId: string | null) => Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
   
   // Global state
   loading: boolean;
@@ -94,6 +101,9 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     preparationUpdateCount: 0,
     lastEventTime: null as string | null
   });
+  const [presenceByTournament, setPresenceByTournament] = useState<Record<string, Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>>>({});
+  // Track which tournament we've already joined on this connection to avoid spam re-joins
+  const joinedTournamentIdRef = useRef<string | null>(null);
 
   // Initialize state management hooks for current tournament
   // Use null as safe fallback - hooks will handle this gracefully
@@ -144,6 +154,14 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       };
     });
     
+    setLastUpdated(new Date().toISOString());
+  }, []);
+
+  const handlePresenceUpdated = useCallback((data: {
+    tournamentId: string;
+    players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+  }) => {
+    setPresenceByTournament(prev => ({ ...prev, [data.tournamentId]: data.players }));
     setLastUpdated(new Date().toISOString());
   }, []);
 
@@ -295,8 +313,10 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
     // Refresh statistics if it's for our current tournament (this includes rounds data)
     if (currentTournament?.id === data.tournamentId) {
-      if (statsHookRef.current) {
-        statsHookRef.current.actions.refreshAll();
+      const statsActions = statsHookRef.current?.actions;
+      if (statsActions) {
+        void statsActions.refreshStatistics();
+        void statsActions.refreshStandings();
       }
     }
   }, [currentTournament]);
@@ -316,8 +336,11 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
     // Refresh statistics to get new matches, rounds, and standings
     if (currentTournament?.id === data.tournamentId) {
-      if (statsHookRef.current) {
-        statsHookRef.current.actions.refreshAll();
+      const statsActions = statsHookRef.current?.actions;
+      if (statsActions) {
+        void statsActions.refreshStatistics();
+        void statsActions.refreshMatches();
+        void statsActions.refreshStandings();
       }
     }
   }, [currentTournament]);
@@ -347,6 +370,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
   // Initialize socket and socket-aware hooks
   const { 
+    socket,
     isConnected, 
     joinTournament: socketJoinTournament, 
     leaveTournament: socketLeaveTournament
@@ -359,6 +383,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     onStatisticsUpdated: handleStatisticsUpdated,
     onRoundStarted: handleRoundStarted,
     onMatchAssigned: handleMatchAssigned,
+    onPresenceUpdated: handlePresenceUpdated,
     onError: handleSocketError
   });
   const preparation = useTournamentPreparation(preparationId, { isConnected });
@@ -373,12 +398,26 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   useEffect(() => { statsHookRef.current = activeStatistics; }, [activeStatistics]);
   useEffect(() => { phasesHookRef.current = activePhases; }, [activePhases]);
 
-  // Auto-join current tournament when socket connects
+  const sendTournamentChat = useCallback((tournamentId: string, content: string) => {
+    if (!socket) return;
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    socket.emit("TOURNAMENT_CHAT", {
+      tournamentId,
+      content: trimmed,
+      timestamp: Date.now()
+    });
+  }, [socket]);
+
+  // Auto-join current tournament when socket connects or when the id changes
   useEffect(() => {
-    if (isConnected && currentTournament) {
-      socketJoinTournament(currentTournament.id);
-    }
-  }, [isConnected, currentTournament, socketJoinTournament]);
+    if (!isConnected) return;
+    const id = currentTournament?.id || null;
+    if (!id) return;
+    if (joinedTournamentIdRef.current === id) return;
+    joinedTournamentIdRef.current = id;
+    socketJoinTournament(id);
+  }, [isConnected, currentTournament?.id, socketJoinTournament]);
 
   // Clear connection error when socket connects
   useEffect(() => {
@@ -710,6 +749,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     setCurrentTournamentById,
     isSocketConnected: isConnected,
     connectionError,
+    socket,
     createTournament,
     joinTournament,
     leaveTournament,
@@ -717,11 +757,14 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     endTournament,
     updateTournamentSettings,
     toggleTournamentReady,
+    sendTournamentChat,
     refreshTournaments,
     preparation: activePreparation,
     statistics: activeStatistics,
     phases: activePhases,
     realtimeEvents,
+    tournamentPresence: currentTournament ? (presenceByTournament[currentTournament.id] || []) : [],
+    getPresenceFor: (tournamentId: string | null) => (tournamentId ? (presenceByTournament[tournamentId] || []) : []),
     loading,
     error,
     lastUpdated,
@@ -740,4 +783,15 @@ export function useRealtimeTournaments() {
     throw new Error("useRealtimeTournaments must be used within a RealtimeTournamentProvider");
   }
   return context;
+}
+
+// Optional hook: returns null if not inside the provider.
+// Useful for layouts/pages that may render outside tournaments/ trees.
+export function useRealtimeTournamentsOptional() {
+  try {
+    const context = useContext(RealtimeTournamentContext);
+    return context;
+  } catch {
+    return null;
+  }
 }

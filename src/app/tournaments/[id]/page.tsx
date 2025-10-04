@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -10,7 +11,11 @@ import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
-import { useSocket } from "@/lib/hooks/useSocket";
+
+const TournamentPresenceOverlay = dynamic(
+  () => import("@/components/tournament/TournamentPresenceOverlay"),
+  { ssr: false }
+);
 
 interface Tournament {
   id: string;
@@ -52,6 +57,8 @@ export default function TournamentDetailsPage() {
     loading: rtLoading,
     error: rtError,
     lastUpdated,
+    socket: tournamentSocket,
+    sendTournamentChat,
   } = useRealtimeTournaments();
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -66,11 +73,9 @@ export default function TournamentDetailsPage() {
   >([]);
   const [chatInput, setChatInput] = useState("");
   const chatRef = useRef<HTMLDivElement | null>(null);
-  const socket = useSocket();
-
   // Socket chat handlers
   useEffect(() => {
-    if (!socket || !tournamentId) return;
+    if (!tournamentSocket || !tournamentId) return;
 
     const handleChatMessage = (data: {
       tournamentId: string;
@@ -86,12 +91,12 @@ export default function TournamentDetailsPage() {
       }
     };
 
-    socket.on("TOURNAMENT_CHAT", handleChatMessage);
+    tournamentSocket.on("TOURNAMENT_CHAT", handleChatMessage);
 
     return () => {
-      socket.off("TOURNAMENT_CHAT", handleChatMessage);
+      tournamentSocket.off("TOURNAMENT_CHAT", handleChatMessage);
     };
-  }, [socket, tournamentId]);
+  }, [tournamentSocket, tournamentId]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -102,13 +107,9 @@ export default function TournamentDetailsPage() {
 
   // Send chat message
   const sendChatMessage = () => {
-    if (!socket || !chatInput.trim() || !tournamentId) return;
+    if (!tournamentId || !chatInput.trim()) return;
 
-    socket.emit("TOURNAMENT_CHAT", {
-      tournamentId,
-      content: chatInput.trim(),
-      timestamp: Date.now(),
-    });
+    sendTournamentChat(tournamentId, chatInput);
 
     setChatInput("");
   };
@@ -161,15 +162,22 @@ export default function TournamentDetailsPage() {
   }, []);
 
   // Fallback fetch for specific tournament if not in context
-  const [fallbackTournament, setFallbackTournament] = useState<Tournament | null>(null);
+  const [fallbackTournament, setFallbackTournament] =
+    useState<Tournament | null>(null);
   const [fallbackLoading, setFallbackLoading] = useState(false);
 
   useEffect(() => {
     // Only fetch if tournament not found in context and not already loading
-    const tournamentInContext = currentTournament?.id === tournamentId ||
+    const tournamentInContext =
+      currentTournament?.id === tournamentId ||
       tournaments.some((t) => t.id === tournamentId);
 
-    if (!tournamentInContext && !fallbackLoading && !fallbackTournament && tournamentId) {
+    if (
+      !tournamentInContext &&
+      !fallbackLoading &&
+      !fallbackTournament &&
+      tournamentId
+    ) {
       setFallbackLoading(true);
       fetch(`/api/tournaments/${tournamentId}`)
         .then(async (res) => {
@@ -181,13 +189,20 @@ export default function TournamentDetailsPage() {
           }
         })
         .catch((err) => {
-          console.error('Failed to fetch tournament:', err);
+          console.error("Failed to fetch tournament:", err);
         })
         .finally(() => {
           setFallbackLoading(false);
         });
     }
-  }, [tournamentId, currentTournament, tournaments, fallbackLoading, fallbackTournament, setCurrentTournamentById]);
+  }, [
+    tournamentId,
+    currentTournament,
+    tournaments,
+    fallbackLoading,
+    fallbackTournament,
+    setCurrentTournamentById,
+  ]);
 
   // Derive tournament from realtime context or fallback
   const derivedTournament: Tournament | null =
@@ -195,7 +210,9 @@ export default function TournamentDetailsPage() {
       ? (currentTournament as unknown as Tournament)
       : (tournaments.find((t) => t.id === tournamentId) as unknown as
           | Tournament
-          | undefined) || fallbackTournament || null;
+          | undefined) ||
+        fallbackTournament ||
+        null;
 
   useEffect(() => {
     if (
@@ -422,7 +439,14 @@ export default function TournamentDetailsPage() {
           throw new Error(data?.error || "Failed to load deck cards");
         const byId = new Map<
           number,
-          { name: string; slug: string; setName: string; type?: string | null; cost?: number | null; thresholds?: Record<string, number> | null }
+          {
+            name: string;
+            slug: string;
+            setName: string;
+            type?: string | null;
+            cost?: number | null;
+            thresholds?: Record<string, number> | null;
+          }
         >();
         for (const c of data as Array<{
           cardId: number;
@@ -992,7 +1016,11 @@ export default function TournamentDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white relative">
+      {/* Presence overlay (hover to open) */}
+      <div className="absolute top-3 right-3 z-[3000]">
+        <TournamentPresenceOverlay tournamentId={tournamentId} />
+      </div>
       {/* Toast overlay */}
       {toast && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded bg-black/70 border border-white/20 text-sm shadow-lg">
@@ -1139,13 +1167,25 @@ export default function TournamentDetailsPage() {
                     {viewerDeckCards.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                         {viewerDeckCards.map((c) => {
-                          const isSite = (c.type || "").toLowerCase().includes("site");
-                          const order = ["air", "water", "earth", "fire"] as const;
+                          const isSite = (c.type || "")
+                            .toLowerCase()
+                            .includes("site");
+                          const order = [
+                            "air",
+                            "water",
+                            "earth",
+                            "fire",
+                          ] as const;
                           const thresholds: Record<string, number> = {};
                           if (c.thresholds) {
-                            for (const [k, v] of Object.entries(c.thresholds as Record<string, number>)) {
+                            for (const [k, v] of Object.entries(
+                              c.thresholds as Record<string, number>
+                            )) {
                               const key = k.toLowerCase();
-                              if (v && ["air", "water", "earth", "fire"].includes(key)) {
+                              if (
+                                v &&
+                                ["air", "water", "earth", "fire"].includes(key)
+                              ) {
                                 thresholds[key] = v;
                               }
                             }
@@ -1160,7 +1200,7 @@ export default function TournamentDetailsPage() {
                                   setHoveredCard({
                                     slug: c.slug,
                                     name: c.name,
-                                    type: c.type || null
+                                    type: c.type || null,
                                   });
                                 }
                               }}
@@ -1170,14 +1210,20 @@ export default function TournamentDetailsPage() {
                                 {c.slug && (
                                   <div
                                     className={`relative flex-none ${
-                                      isSite ? "aspect-[4/3] w-16" : "aspect-[3/4] w-12"
+                                      isSite
+                                        ? "aspect-[4/3] w-16"
+                                        : "aspect-[3/4] w-12"
                                     } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
                                   >
                                     <Image
                                       src={`/api/images/${c.slug}`}
                                       alt={c.name}
                                       fill
-                                      className={`${isSite ? "object-contain rotate-90" : "object-cover"}`}
+                                      className={`${
+                                        isSite
+                                          ? "object-contain rotate-90"
+                                          : "object-cover"
+                                      }`}
                                       sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
                                     />
                                   </div>
@@ -1185,22 +1231,38 @@ export default function TournamentDetailsPage() {
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between">
                                     <div className="min-w-0">
-                                      <div className="font-semibold truncate text-sm" title={c.name}>
+                                      <div
+                                        className="font-semibold truncate text-sm"
+                                        title={c.name}
+                                      >
                                         {c.name}
                                       </div>
                                       <div className="text-[11px] text-slate-400 mt-0.5">
                                         {c.setName}
                                       </div>
                                     </div>
-                                    <div className="text-right font-semibold text-sm">x{c.quantity}</div>
+                                    <div className="text-right font-semibold text-sm">
+                                      x{c.quantity}
+                                    </div>
                                   </div>
                                   <div className="mt-1 flex items-center flex-wrap gap-1 opacity-90">
                                     <div className="flex items-center gap-0.5">
                                       {order.map((k) =>
                                         thresholds[k] ? (
-                                          <span key={k} className="inline-flex items-center gap-0.5">
-                                            {Array.from({ length: thresholds[k] }).map((_, i) => (
-                                              <Image key={i} src={`/api/assets/${k}.png`} alt={k} width={12} height={12} />
+                                          <span
+                                            key={k}
+                                            className="inline-flex items-center gap-0.5"
+                                          >
+                                            {Array.from({
+                                              length: thresholds[k],
+                                            }).map((_, i) => (
+                                              <Image
+                                                key={i}
+                                                src={`/api/assets/${k}.png`}
+                                                alt={k}
+                                                width={12}
+                                                height={12}
+                                              />
                                             ))}
                                           </span>
                                         ) : null
@@ -1209,7 +1271,11 @@ export default function TournamentDetailsPage() {
                                     {c.cost != null && !isSite && (
                                       <div className="ml-auto flex items-center gap-1">
                                         {c.cost >= 0 && c.cost <= 9 ? (
-                                          <NumberBadge value={c.cost as Digit} size={16} strokeWidth={8} />
+                                          <NumberBadge
+                                            value={c.cost as Digit}
+                                            size={16}
+                                            strokeWidth={8}
+                                          />
                                         ) : (
                                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
                                             {c.cost}
@@ -1248,18 +1314,46 @@ export default function TournamentDetailsPage() {
             </div>
             {isRegistered && (
               <div className="flex items-center gap-2">
-                {tournament.format === "draft" && (
-                  <button
-                    onClick={() => {
-                      try {
-                        window.location.href = `/tournaments/${tournament.id}/draft`;
-                      } catch {}
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
-                  >
-                    Enter Draft
-                  </button>
-                )}
+                {tournament.format === "draft" && (() => {
+                  const meId = session?.user?.id;
+                  const rp = (
+                    tournament as unknown as {
+                      registeredPlayers?: Array<{ id: string; deckSubmitted?: boolean }>;
+                    }
+                  ).registeredPlayers || [];
+                  const mine = rp.find((p) => p.id === meId);
+                  // Consider server flag and optimistic client flag to reduce flicker
+                  let optimisticSubmitted = false;
+                  try {
+                    optimisticSubmitted =
+                      localStorage.getItem(`draft_submitted_tournament_${tournament.id}`) === "true";
+                  } catch {}
+                  const submitted = Boolean((mine as { deckSubmitted?: boolean })?.deckSubmitted) || optimisticSubmitted || viewerDeckCards.length > 0;
+                  if (submitted) {
+                    return (
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm"
+                          title="Deck submitted"
+                        >
+                          Draft Deck submitted!
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      onClick={() => {
+                        try {
+                          window.location.href = `/tournaments/${tournament.id}/draft`;
+                        } catch {}
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
+                    >
+                      Enter Draft
+                    </button>
+                  );
+                })()}
                 {tournament.format === "sealed" &&
                   (() => {
                     const meId = session?.user?.id;
@@ -1688,7 +1782,8 @@ export default function TournamentDetailsPage() {
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity blur-xl -z-10" />
               </button>
               <div className="text-center text-slate-400 text-sm mt-2">
-                All players joined ({getCurrentPlayersCount(tournament)}/{tournament.maxPlayers}) • Click to begin
+                All players joined ({getCurrentPlayersCount(tournament)}/
+                {tournament.maxPlayers}) • Click to begin
               </div>
             </div>
           )}
@@ -2099,472 +2194,483 @@ export default function TournamentDetailsPage() {
             )}
           </div>
         )}
-      {/* Bottom actions: Forfeit/End */}
-      <div className="container mx-auto px-4 pb-10">
-        <div className="mt-10 border-t border-slate-800 pt-6 flex items-center justify-between">
-          <div className="text-xs text-slate-400">Tournament actions</div>
-          <div className="flex gap-3">
-            {isRegistered &&
-              tournament.status !== "completed" &&
-              !isCreator && (
-                <button
-                  onClick={async () => {
-                    const ok = window.confirm("Forfeit this tournament now?");
-                    if (!ok) return;
-                    try {
-                      const res = await fetch(
-                        `/api/tournaments/${encodeURIComponent(
-                          tournament.id
-                        )}/forfeit`,
-                        {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                        }
-                      );
-                      const data = await res.json();
-                      if (!res.ok)
-                        throw new Error(data?.error || "Failed to forfeit");
+        {/* Bottom actions: Forfeit/End */}
+        <div className="container mx-auto px-4 pb-10">
+          <div className="mt-10 border-t border-slate-800 pt-6 flex items-center justify-between">
+            <div className="text-xs text-slate-400">Tournament actions</div>
+            <div className="flex gap-3">
+              {isRegistered &&
+                tournament.status !== "completed" &&
+                !isCreator && (
+                  <button
+                    onClick={async () => {
+                      const ok = window.confirm("Forfeit this tournament now?");
+                      if (!ok) return;
                       try {
-                        localStorage.setItem(
-                          "app:toast",
-                          "You forfeited the tournament"
-                        );
-                        window.dispatchEvent(
-                          new CustomEvent("app:toast", {
-                            detail: { message: "You forfeited the tournament" },
-                          })
-                        );
-                      } catch {}
-                    } catch (err) {
-                      setError(
-                        err instanceof Error ? err.message : "Failed to forfeit"
-                      );
-                    }
-                  }}
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-md text-sm"
-                  title="Forfeit this tournament"
-                >
-                  Forfeit Tournament
-                </button>
-              )}
-
-            {isCreator && tournament.status !== "completed" && (
-              <button
-                onClick={handleEndTournament}
-                className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-md text-sm"
-                title="End this tournament now"
-              >
-                End Tournament
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-      {/* Join Prompt Overlay */}
-      {/* Constructed Decks Modal */}
-      {constructedModalOpen &&
-        tournament.status === "preparing" &&
-        tournament.format === "constructed" &&
-        isRegistered && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-lg shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-white text-lg font-semibold">
-                  Select Your Constructed Deck
-                </div>
-                <button
-                  onClick={() => setConstructedModalOpen(false)}
-                  className="text-slate-300 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-              {constructedError && (
-                <div className="mb-3 text-sm text-red-300">
-                  {constructedError}
-                </div>
-              )}
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-xs text-emerald-200/80">
-                  Allowed formats:{" "}
-                  {constructedAllowedFormats.length
-                    ? constructedAllowedFormats.join(", ")
-                    : "standard"}
-                </div>
-                <label className="flex items-center gap-2 text-xs text-emerald-200/80">
-                  <input
-                    type="checkbox"
-                    className="accent-emerald-600"
-                    checked={includePublicDecks}
-                    onChange={async (e) => {
-                      setIncludePublicDecks(e.target.checked);
-                      try {
-                        setConstructedLoading(true);
                         const res = await fetch(
                           `/api/tournaments/${encodeURIComponent(
                             tournament.id
-                          )}/preparation/constructed/decks?includePublic=${
-                            e.target.checked ? "true" : "false"
-                          }`
+                          )}/forfeit`,
+                          {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                          }
                         );
                         const data = await res.json();
-                        if (res.ok) {
-                          const decks = Array.isArray(data?.myDecks)
-                            ? (data.myDecks as Array<{
-                                id: string;
-                                name: string;
-                                format?: string;
-                              }>)
-                            : Array.isArray(data?.availableDecks)
-                            ? (data.availableDecks as Array<{
-                                id: string;
-                                name: string;
-                                format?: string;
-                              }>)
-                            : [];
-                          const pubDecks = Array.isArray(data?.publicDecks)
-                            ? (data.publicDecks as Array<{
-                                id: string;
-                                name: string;
-                                format?: string;
-                              }>)
-                            : [];
-                          setConstructedDecks(decks);
-                          setConstructedPublicDecks(pubDecks);
-                        }
-                      } catch {
-                      } finally {
-                        setConstructedLoading(false);
+                        if (!res.ok)
+                          throw new Error(data?.error || "Failed to forfeit");
+                        try {
+                          localStorage.setItem(
+                            "app:toast",
+                            "You forfeited the tournament"
+                          );
+                          window.dispatchEvent(
+                            new CustomEvent("app:toast", {
+                              detail: {
+                                message: "You forfeited the tournament",
+                              },
+                            })
+                          );
+                        } catch {}
+                      } catch (err) {
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to forfeit"
+                        );
                       }
                     }}
-                  />
-                  Include public decks
-                </label>
-              </div>
-              {constructedLoading ? (
-                <div className="text-emerald-200/80 text-sm">
-                  Loading your decks…
-                </div>
-              ) : constructedDecks.length || constructedPublicDecks.length ? (
-                <div className="space-y-4 max-h-80 overflow-auto pr-1">
-                  {constructedDecks.length > 0 && (
-                    <div>
-                      <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
-                        My Decks
-                      </div>
-                      <div className="space-y-2">
-                        {constructedDecks.map((d) => (
-                          <div
-                            key={`my-modal-${d.id}`}
-                            className={`flex items-center justify-between px-3 py-2 rounded ${
-                              constructedSelectedDeckId === d.id
-                                ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                : "bg-slate-800/40"
-                            }`}
-                          >
-                            <div className="text-sm text-slate-200">
-                              <div className="font-medium">{d.name}</div>
-                              <div className="text-xs text-slate-400">
-                                {d.format || "constructed"}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {constructedSelectedDeckId === d.id ? (
-                                <span className="text-emerald-300 text-xs">
-                                  Selected
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={async () => {
-                                    await handleSubmitConstructedDeck(
-                                      d.id,
-                                      false
-                                    );
-                                    setConstructedModalOpen(false);
-                                  }}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
-                                  disabled={constructedLoading}
-                                >
-                                  Select
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {includePublicDecks && constructedPublicDecks.length > 0 && (
-                    <div>
-                      <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
-                        Public Decks
-                      </div>
-                      <div className="space-y-2">
-                        {constructedPublicDecks.map((d) => (
-                          <div
-                            key={`pub-modal-${d.id}`}
-                            className={`flex items-center justify-between px-3 py-2 rounded ${
-                              constructedSelectedDeckId === d.id
-                                ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                : "bg-slate-800/40"
-                            }`}
-                          >
-                            <div className="text-sm text-slate-200">
-                              <div className="font-medium">{d.name}</div>
-                              <div className="text-xs text-slate-400">
-                                {d.format || "constructed"}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {constructedSelectedDeckId === d.id ? (
-                                <span className="text-emerald-300 text-xs">
-                                  Selected
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={async () => {
-                                    await handleSubmitConstructedDeck(
-                                      d.id,
-                                      true
-                                    );
-                                    setConstructedModalOpen(false);
-                                  }}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
-                                  disabled={constructedLoading}
-                                >
-                                  Select
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-emerald-200/80 text-sm">
-                  No decks found. Create a constructed deck in the{" "}
-                  <a className="underline" href="/decks">
-                    Decks
-                  </a>{" "}
-                  section first.
-                </div>
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-md text-sm"
+                    title="Forfeit this tournament"
+                  >
+                    Forfeit Tournament
+                  </button>
+                )}
+
+              {isCreator && tournament.status !== "completed" && (
+                <button
+                  onClick={handleEndTournament}
+                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-md text-sm"
+                  title="End this tournament now"
+                >
+                  End Tournament
+                </button>
               )}
             </div>
           </div>
-        )}
-      {/* Join Prompt Overlay */}
-      {joinPrompt.open && joinPrompt.matchId && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-md shadow-xl">
-            <div className="text-white text-lg font-semibold mb-2">
-              Your match is ready
-            </div>
-            <div className="text-slate-300 mb-4">
-              Round {activeRound?.roundNumber ?? ""} has been paired. Join your
-              match when ready.
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setJoinPrompt({ open: false, matchId: null })}
-                className="px-4 py-2 rounded-md bg-slate-700 text-white"
-              >
-                Later
-              </button>
-              <button
-                onClick={() => {
-                  void startJoinMatch(String(joinPrompt.matchId));
-                  setJoinPrompt({ open: false, matchId: null });
-                }}
-                className="px-4 py-2 rounded-md bg-emerald-600 text-white"
-              >
-                Join Now
-              </button>
-            </div>
-          </div>
         </div>
-      )}
-
-      {/* Tournament Chat */}
-      {isRegistered && (
-        <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4 mt-6">
-          <h3 className="text-lg font-semibold mb-3">Tournament Chat</h3>
-
-          <div
-            ref={chatRef}
-            className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1 mb-3 bg-slate-800/50 rounded p-2"
-          >
-            {chatMessages.length === 0 && (
-              <div className="opacity-60 text-center py-4">No messages yet</div>
-            )}
-            {chatMessages.map((m, i) => (
-              <div key={i} className="opacity-90">
-                <span className="font-medium text-emerald-400">{m.from}</span>:{" "}
-                {m.content}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder="Type a message to tournament participants"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && socket) {
-                  sendChatMessage();
-                }
-              }}
-              disabled={!socket}
-            />
-            <button
-              className="rounded bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={sendChatMessage}
-              disabled={!socket || !chatInput.trim()}
-            >
-              Send
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tournament Completion Celebration Modal */}
-      {showCompletionModal &&
-        tournament.status === "completed" &&
-        statistics?.standings &&
-        myStanding && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl border-2 border-emerald-500/50 p-8 w-full max-w-2xl shadow-2xl">
-              {/* Celebration Header */}
-              <div className="text-center mb-6">
-                <div className="text-6xl mb-4">
-                  {myStanding.rank === 1
-                    ? "🏆"
-                    : myStanding.rank === 2
-                    ? "🥈"
-                    : myStanding.rank === 3
-                    ? "🥉"
-                    : "🎯"}
+        {/* Join Prompt Overlay */}
+        {/* Constructed Decks Modal */}
+        {constructedModalOpen &&
+          tournament.status === "preparing" &&
+          tournament.format === "constructed" &&
+          isRegistered && (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-lg shadow-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-white text-lg font-semibold">
+                    Select Your Constructed Deck
+                  </div>
+                  <button
+                    onClick={() => setConstructedModalOpen(false)}
+                    className="text-slate-300 hover:text-white"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <h2 className="text-3xl font-bold text-white mb-2">
-                  {myStanding.rank === 1 ? "Victory!" : "Tournament Complete!"}
-                </h2>
-                <p className="text-slate-300">{tournament.name}</p>
-              </div>
-
-              {/* Player Stats */}
-              <div className="bg-slate-800/50 rounded-lg p-6 mb-6">
-                <div className="text-center mb-4">
-                  <div className="text-5xl font-bold text-emerald-400 mb-2">
-                    #{myStanding.rank}
+                {constructedError && (
+                  <div className="mb-3 text-sm text-red-300">
+                    {constructedError}
                   </div>
-                  <div className="text-xl text-slate-300">
-                    {myStanding.rank === 1
-                      ? "1st Place"
-                      : myStanding.rank === 2
-                      ? "2nd Place"
-                      : myStanding.rank === 3
-                      ? "3rd Place"
-                      : `${myStanding.rank}th Place`}
+                )}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-emerald-200/80">
+                    Allowed formats:{" "}
+                    {constructedAllowedFormats.length
+                      ? constructedAllowedFormats.join(", ")
+                      : "standard"}
                   </div>
+                  <label className="flex items-center gap-2 text-xs text-emerald-200/80">
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-600"
+                      checked={includePublicDecks}
+                      onChange={async (e) => {
+                        setIncludePublicDecks(e.target.checked);
+                        try {
+                          setConstructedLoading(true);
+                          const res = await fetch(
+                            `/api/tournaments/${encodeURIComponent(
+                              tournament.id
+                            )}/preparation/constructed/decks?includePublic=${
+                              e.target.checked ? "true" : "false"
+                            }`
+                          );
+                          const data = await res.json();
+                          if (res.ok) {
+                            const decks = Array.isArray(data?.myDecks)
+                              ? (data.myDecks as Array<{
+                                  id: string;
+                                  name: string;
+                                  format?: string;
+                                }>)
+                              : Array.isArray(data?.availableDecks)
+                              ? (data.availableDecks as Array<{
+                                  id: string;
+                                  name: string;
+                                  format?: string;
+                                }>)
+                              : [];
+                            const pubDecks = Array.isArray(data?.publicDecks)
+                              ? (data.publicDecks as Array<{
+                                  id: string;
+                                  name: string;
+                                  format?: string;
+                                }>)
+                              : [];
+                            setConstructedDecks(decks);
+                            setConstructedPublicDecks(pubDecks);
+                          }
+                        } catch {
+                        } finally {
+                          setConstructedLoading(false);
+                        }
+                      }}
+                    />
+                    Include public decks
+                  </label>
                 </div>
-
-                <div className="grid grid-cols-3 gap-4 mt-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-white">
-                      {myStanding.matchPoints}
-                    </div>
-                    <div className="text-sm text-slate-400">Match Points</div>
+                {constructedLoading ? (
+                  <div className="text-emerald-200/80 text-sm">
+                    Loading your decks…
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-white">
-                      {myStanding.wins}-{myStanding.losses}-{myStanding.draws}
-                    </div>
-                    <div className="text-sm text-slate-400">Record</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-white">
-                      {myStanding.gameWinPercentage
-                        ? `${(myStanding.gameWinPercentage * 100).toFixed(0)}%`
-                        : "0%"}
-                    </div>
-                    <div className="text-sm text-slate-400">Game Win %</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Top 3 Standings */}
-              {statistics.standings.length > 1 && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-white mb-3">
-                    Final Standings
-                  </h3>
-                  <div className="space-y-2">
-                    {statistics.standings.slice(0, 3).map((standing, idx) => {
-                      const isMe = standing.playerId === session?.user?.id;
-                      return (
-                        <div
-                          key={standing.playerId}
-                          className={`flex items-center justify-between p-3 rounded-lg ${
-                            isMe
-                              ? "bg-emerald-900/30 border border-emerald-500/50"
-                              : "bg-slate-800/30"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="text-2xl">
-                              {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
-                            </div>
-                            <div>
-                              <div className="text-white font-semibold">
-                                {standing.playerName}{" "}
-                                {isMe && (
-                                  <span className="text-emerald-400 text-sm">
-                                    (You)
+                ) : constructedDecks.length || constructedPublicDecks.length ? (
+                  <div className="space-y-4 max-h-80 overflow-auto pr-1">
+                    {constructedDecks.length > 0 && (
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
+                          My Decks
+                        </div>
+                        <div className="space-y-2">
+                          {constructedDecks.map((d) => (
+                            <div
+                              key={`my-modal-${d.id}`}
+                              className={`flex items-center justify-between px-3 py-2 rounded ${
+                                constructedSelectedDeckId === d.id
+                                  ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
+                                  : "bg-slate-800/40"
+                              }`}
+                            >
+                              <div className="text-sm text-slate-200">
+                                <div className="font-medium">{d.name}</div>
+                                <div className="text-xs text-slate-400">
+                                  {d.format || "constructed"}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {constructedSelectedDeckId === d.id ? (
+                                  <span className="text-emerald-300 text-xs">
+                                    Selected
                                   </span>
+                                ) : (
+                                  <button
+                                    onClick={async () => {
+                                      await handleSubmitConstructedDeck(
+                                        d.id,
+                                        false
+                                      );
+                                      setConstructedModalOpen(false);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                    disabled={constructedLoading}
+                                  >
+                                    Select
+                                  </button>
                                 )}
                               </div>
-                              <div className="text-sm text-slate-400">
-                                {standing.wins}-{standing.losses}-
-                                {standing.draws}
-                              </div>
                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {includePublicDecks &&
+                      constructedPublicDecks.length > 0 && (
+                        <div>
+                          <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
+                            Public Decks
                           </div>
-                          <div className="text-right">
-                            <div className="text-lg font-bold text-white">
-                              {standing.matchPoints} pts
-                            </div>
+                          <div className="space-y-2">
+                            {constructedPublicDecks.map((d) => (
+                              <div
+                                key={`pub-modal-${d.id}`}
+                                className={`flex items-center justify-between px-3 py-2 rounded ${
+                                  constructedSelectedDeckId === d.id
+                                    ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
+                                    : "bg-slate-800/40"
+                                }`}
+                              >
+                                <div className="text-sm text-slate-200">
+                                  <div className="font-medium">{d.name}</div>
+                                  <div className="text-xs text-slate-400">
+                                    {d.format || "constructed"}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {constructedSelectedDeckId === d.id ? (
+                                    <span className="text-emerald-300 text-xs">
+                                      Selected
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={async () => {
+                                        await handleSubmitConstructedDeck(
+                                          d.id,
+                                          true
+                                        );
+                                        setConstructedModalOpen(false);
+                                      }}
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                      disabled={constructedLoading}
+                                    >
+                                      Select
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      );
-                    })}
+                      )}
                   </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3">
+                ) : (
+                  <div className="text-emerald-200/80 text-sm">
+                    No decks found. Create a constructed deck in the{" "}
+                    <a className="underline" href="/decks">
+                      Decks
+                    </a>{" "}
+                    section first.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        {/* Join Prompt Overlay */}
+        {joinPrompt.open && joinPrompt.matchId && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-md shadow-xl">
+              <div className="text-white text-lg font-semibold mb-2">
+                Your match is ready
+              </div>
+              <div className="text-slate-300 mb-4">
+                Round {activeRound?.roundNumber ?? ""} has been paired. Join
+                your match when ready.
+              </div>
+              <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => {
-                    setActiveTab("standings");
-                    setShowCompletionModal(false);
-                  }}
-                  className="flex-1 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+                  onClick={() => setJoinPrompt({ open: false, matchId: null })}
+                  className="px-4 py-2 rounded-md bg-slate-700 text-white"
                 >
-                  View Full Standings
+                  Later
                 </button>
                 <button
-                  onClick={() => setShowCompletionModal(false)}
-                  className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors"
+                  onClick={() => {
+                    void startJoinMatch(String(joinPrompt.matchId));
+                    setJoinPrompt({ open: false, matchId: null });
+                  }}
+                  className="px-4 py-2 rounded-md bg-emerald-600 text-white"
                 >
-                  Continue
+                  Join Now
                 </button>
               </div>
             </div>
           </div>
         )}
+
+        {/* Tournament Chat */}
+        {isRegistered && (
+          <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4 mt-6">
+            <h3 className="text-lg font-semibold mb-3">Tournament Chat</h3>
+
+            <div
+              ref={chatRef}
+              className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1 mb-3 bg-slate-800/50 rounded p-2"
+            >
+              {chatMessages.length === 0 && (
+                <div className="opacity-60 text-center py-4">
+                  No messages yet
+                </div>
+              )}
+              {chatMessages.map((m, i) => (
+                <div key={i} className="opacity-90">
+                  <span className="font-medium text-emerald-400">{m.from}</span>
+                  : {m.content}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Type a message to tournament participants"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && tournamentSocket) {
+                    sendChatMessage();
+                  }
+                }}
+                disabled={!tournamentSocket}
+              />
+              <button
+                className="rounded bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={sendChatMessage}
+                disabled={!tournamentSocket || !chatInput.trim()}
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tournament Completion Celebration Modal */}
+        {showCompletionModal &&
+          tournament.status === "completed" &&
+          statistics?.standings &&
+          myStanding && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl border-2 border-emerald-500/50 p-8 w-full max-w-2xl shadow-2xl">
+                {/* Celebration Header */}
+                <div className="text-center mb-6">
+                  <div className="text-6xl mb-4">
+                    {myStanding.rank === 1
+                      ? "🏆"
+                      : myStanding.rank === 2
+                      ? "🥈"
+                      : myStanding.rank === 3
+                      ? "🥉"
+                      : "🎯"}
+                  </div>
+                  <h2 className="text-3xl font-bold text-white mb-2">
+                    {myStanding.rank === 1
+                      ? "Victory!"
+                      : "Tournament Complete!"}
+                  </h2>
+                  <p className="text-slate-300">{tournament.name}</p>
+                </div>
+
+                {/* Player Stats */}
+                <div className="bg-slate-800/50 rounded-lg p-6 mb-6">
+                  <div className="text-center mb-4">
+                    <div className="text-5xl font-bold text-emerald-400 mb-2">
+                      #{myStanding.rank}
+                    </div>
+                    <div className="text-xl text-slate-300">
+                      {myStanding.rank === 1
+                        ? "1st Place"
+                        : myStanding.rank === 2
+                        ? "2nd Place"
+                        : myStanding.rank === 3
+                        ? "3rd Place"
+                        : `${myStanding.rank}th Place`}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 mt-6">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-white">
+                        {myStanding.matchPoints}
+                      </div>
+                      <div className="text-sm text-slate-400">Match Points</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-white">
+                        {myStanding.wins}-{myStanding.losses}-{myStanding.draws}
+                      </div>
+                      <div className="text-sm text-slate-400">Record</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-white">
+                        {myStanding.gameWinPercentage
+                          ? `${(myStanding.gameWinPercentage * 100).toFixed(
+                              0
+                            )}%`
+                          : "0%"}
+                      </div>
+                      <div className="text-sm text-slate-400">Game Win %</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top 3 Standings */}
+                {statistics.standings.length > 1 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-white mb-3">
+                      Final Standings
+                    </h3>
+                    <div className="space-y-2">
+                      {statistics.standings.slice(0, 3).map((standing, idx) => {
+                        const isMe = standing.playerId === session?.user?.id;
+                        return (
+                          <div
+                            key={standing.playerId}
+                            className={`flex items-center justify-between p-3 rounded-lg ${
+                              isMe
+                                ? "bg-emerald-900/30 border border-emerald-500/50"
+                                : "bg-slate-800/30"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="text-2xl">
+                                {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
+                              </div>
+                              <div>
+                                <div className="text-white font-semibold">
+                                  {standing.playerName}{" "}
+                                  {isMe && (
+                                    <span className="text-emerald-400 text-sm">
+                                      (You)
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-slate-400">
+                                  {standing.wins}-{standing.losses}-
+                                  {standing.draws}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-white">
+                                {standing.matchPoints} pts
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setActiveTab("standings");
+                      setShowCompletionModal(false);
+                    }}
+                    className="flex-1 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+                  >
+                    View Full Standings
+                  </button>
+                  <button
+                    onClick={() => setShowCompletionModal(false)}
+                    className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
         {/* Card Preview Overlay */}
         <CardPreview card={hoveredCard} />

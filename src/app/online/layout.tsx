@@ -1,3 +1,5 @@
+  // NOTE: Do NOT render tournament overlays here to avoid coupling; they are rendered in
+  // /tournaments/layout.tsx and in specific pages (draft/editor) instead.
 "use client";
 
 import Link from "next/link";
@@ -13,6 +15,7 @@ import type {
   VoiceRequestPeer,
 } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
+import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { useGameStore } from "@/lib/game/store";
 import type {
@@ -27,6 +30,7 @@ import type {
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
+import dynamic from "next/dynamic";
 
 
 
@@ -39,8 +43,11 @@ export default function OnlineLayout({
   const isMatchPage =
     pathname?.includes("/online/play/") && pathname !== "/online/play";
   const isLobbyPage = pathname?.startsWith("/online/lobby");
+  const isDraftSessionPage = pathname?.startsWith("/online/draft/");
 
   const { data: session, status: sessionStatus } = useSession();
+  const tournamentsCtx = useRealtimeTournamentsOptional();
+  const tournamentPresence = tournamentsCtx?.tournamentPresence || [];
   const [connected, setConnected] = useState<boolean>(false);
   const [lobby, setLobby] = useState<LobbyInfo | null>(null);
   const [match, setMatch] = useState<MatchInfo | null>(null);
@@ -60,6 +67,7 @@ export default function OnlineLayout({
   const [availablePlayersError, setAvailablePlayersError] = useState<string | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
   const socialErrorTimer = useRef<number | null>(null);
+  const [connToast, setConnToast] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
@@ -85,6 +93,41 @@ export default function OnlineLayout({
     if (!transportRef.current) transportRef.current = new SocketTransport();
     return transportRef.current;
   }, []);
+
+  // Poll socket connection and update connected flag; show a toast on disconnect
+  useEffect(() => {
+    if (!transport) return;
+    let mounted = true;
+    const readConnected = () => {
+      try {
+        const anyT = transport as unknown as { isConnected?: () => boolean; getConnectionState?: () => string };
+        if (anyT?.isConnected) return !!anyT.isConnected();
+        if (anyT?.getConnectionState) return anyT.getConnectionState() === 'connected';
+        return false;
+      } catch {
+        return false;
+      }
+    };
+    let prev = readConnected();
+    const tick = () => {
+      if (!mounted) return;
+      const now = readConnected();
+      if (now !== prev) {
+        prev = now;
+        setConnected(now);
+        if (!now) {
+          setConnToast('Lost connection to the server');
+          window.setTimeout(() => setConnToast(null), 4000);
+        }
+      }
+    };
+    const id = window.setInterval(tick, 1000);
+    try { tick(); } catch {}
+    return () => {
+      mounted = false;
+      window.clearInterval(id);
+    };
+  }, [transport]);
 
   // Resolve the HTTP origin for the Socket server (for REST-like endpoints)
   const getSocketHttpOrigin = useCallback((): string => {
@@ -1050,115 +1093,12 @@ export default function OnlineLayout({
 
   return (
     <OnlineContext.Provider value={ctxValue}>
-      {isMatchPage ? (
-        // Full-screen match page without layout constraints
-        children
-      ) : (
-        // Regular online layout for lobby and other pages
-        <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100">
-          <div className="max-w-5xl mx-auto p-6 space-y-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold font-fantaisie">
-                  Online Play
-                </h1>
-                {match?.id && (
-                  <Link
-                    className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                    href={`/online/play/${encodeURIComponent(match.id)}`}
-                  >
-                    Go to Match
-                  </Link>
-                )}
-                <Link
-                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                  href="/"
-                >
-                  Home
-                </Link>
-                <Link
-                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                  href="/online/lobby"
-                >
-                  Lobby
-                </Link>
-                <Link
-                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                  href="/decks"
-                >
-                  Decks
-                </Link>
-                <Link
-                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                  href="/replay"
-                >
-                  Replays
-                </Link>
-                {isLobbyPage && (
-                  <Link
-                    className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                    href="/tournaments"
-                  >
-                    Tournaments
-                  </Link>
-                )}
-                <Link
-                  className="ml-2 text-xs underline text-slate-300/80 hover:text-slate-200"
-                  href="/leaderboard"
-                >
-                  Leaderboard
-                </Link>
-              </div>
-              <UserBadge />
-              {!isLobbyPage && (
-                <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-                  <div className="text-sm font-semibold opacity-90">
-                    Game State (live)
-                  </div>
-                  <div className="mt-3 text-sm space-y-2">
-                    <div>
-                      <span className="opacity-70">Phase:</span> {gamePhase}
-                    </div>
-                    <div>
-                      <span className="opacity-70">Current Player:</span> P
-                      {currentPlayer}
-                    </div>
-                    <div>
-                      <span className="opacity-70">Events:</span> {eventSeq}
-                    </div>
-                    <div>
-                      <span className="opacity-70">Last Server t:</span>{" "}
-                      {lastServerTs || 0}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="opacity-70">Pending patches:</span>{" "}
-                      {pendingCount}
-                      <button
-                        className="px-2 py-0.5 text-xs rounded bg-white/10 hover:bg-white/20 disabled:opacity-40"
-                        onClick={() => flushPending()}
-                        disabled={!connected || pendingCount === 0}
-                      >
-                        Flush
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Disable browser context menu on lobby pages for the content area (not the top nav above) */}
-            {isLobbyPage ? (
-              <div
-                onContextMenu={(e) => {
-                  // Prevent default right-click menu across the lobby content area
-                  e.preventDefault();
-                }}
-              >
-                {children}
-              </div>
-            ) : (
-              children
-            )}
-          </div>
+      <div className="min-h-screen bg-slate-900">
+        {children}
+      </div>
+      {connToast && (
+        <div className="fixed top-3 right-3 z-[3000] bg-red-600/90 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20">
+          {connToast}
         </div>
       )}
     </OnlineContext.Provider>

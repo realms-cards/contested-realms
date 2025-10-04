@@ -63,19 +63,38 @@ export default function TournamentDraftPage() {
     return () => clearInterval(id);
   }, [tournamentId, joinDraft]);
 
-  const proceedToDeckBuild = useCallback(() => {
-    // Redirect to dedicated tournament draft session page
-    if (session?.id) {
-      window.location.href = `/online/draft/${session.id}`;
-    }
-  }, [session?.id]);
+  const proceedToDeckBuild = useCallback(async () => {
+    if (!session?.id) return;
+    // Seed editor with authoritative picks from the server if available
+    try {
+      const res = await fetch(`/api/draft-sessions/${session.id}/state`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.myPicks)) {
+          try { localStorage.setItem(`draftedCards_${session.id}`, JSON.stringify(data.myPicks)); } catch {}
+        }
+      }
+    } catch {}
+    const params = new URLSearchParams({
+      draft: 'true',
+      tournament: tournamentId,
+      matchName: 'Draft',
+      sessionId: session.id,
+    });
+    window.location.href = `/decks/editor-3d?${params.toString()}`;
+  }, [session?.id, tournamentId]);
 
-  // Auto-redirect to draft editor when session becomes active
+  // Auto-redirect to deck editor when session is completed; otherwise go to draft UI when active
   useEffect(() => {
-    if (session?.status === "active") {
-      proceedToDeckBuild();
+    if (session?.status === 'completed') {
+      void proceedToDeckBuild();
+      return;
     }
-  }, [session?.status, proceedToDeckBuild]);
+    if (session?.status === 'active') {
+      // Route to the real-time draft UI; it will redirect to editor upon completion
+      if (session?.id) window.location.href = `/online/draft/${session.id}`;
+    }
+  }, [session?.status, session?.id, proceedToDeckBuild]);
 
   if (status === "loading" || loading) {
     return (
@@ -134,7 +153,7 @@ export default function TournamentDraftPage() {
           {session?.status === "completed" && (
             <button
               className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm"
-              onClick={proceedToDeckBuild}
+              onClick={() => { void proceedToDeckBuild(); }}
               title="Proceed to deck construction"
             >
               Proceed to Deck Construction

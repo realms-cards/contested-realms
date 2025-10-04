@@ -207,6 +207,7 @@ async function flushPersistBuffer(matchId, reason = 'manual') {
       create: { id: matchId, ...data },
       update: data,
     });
+
     // Batch actions if any
     if (actions.length > 0) {
       const rows = actions.map((a) => ({
@@ -1150,6 +1151,7 @@ try {
 
 // Match control pub/sub channel
 const MATCH_CONTROL_CHANNEL = 'match:control';
+const DRAFT_STATE_CHANNEL = 'draft:session:update';
 const MATCH_CLEANUP_DELAY_MS = Number(process.env.MATCH_CLEANUP_DELAY_MS || 60000); // 60s default
 const STALE_WAITING_MS = Number(process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000); // 10 min default
 const LOBBY_CONTROL_CHANNEL = 'lobby:control';
@@ -1165,6 +1167,9 @@ if (storeSub) {
     });
     storeSub.subscribe(LOBBY_STATE_CHANNEL, (err) => {
       if (err) try { console.warn(`[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
+    });
+    storeSub.subscribe(DRAFT_STATE_CHANNEL, (err) => {
+      if (err) try { console.warn(`[store] subscribe ${DRAFT_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
     });
     storeSub.on('message', async (channel, message) => {
       if (!clusterStateReady) return;
@@ -1210,6 +1215,17 @@ if (storeSub) {
           }
         } catch (e) {
           try { console.warn('[match:control] handler error:', e?.message || e); } catch {}
+        }
+        return;
+      }
+      if (channel === DRAFT_STATE_CHANNEL) {
+        // Forward tournament draft session updates to room subscribers
+        try {
+          const { sessionId, draftState } = msg || {};
+          if (!sessionId) return;
+          io.to(`draft:${sessionId}`).emit('draftUpdate', draftState);
+        } catch (e) {
+          try { console.warn('[draft] failed to forward state:', e?.message || e); } catch {}
         }
         return;
       }
@@ -1554,6 +1570,81 @@ const rtcParticipants = new Map();
 const participantDetails = new Map();
 /** @type {Map<string, { id: string, from: string, to: string, lobbyId: string|null, matchId: string|null, createdAt: number }>} */
 const pendingVoiceRequests = new Map();
+
+// Draft session presence: sessionId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
+/** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
+const draftPresence = new Map();
+
+// Tournament presence: tournamentId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
+/** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
+const tournamentPresence = new Map();
+
+function getDraftPresenceList(sessionId) {
+  const m = draftPresence.get(sessionId);
+  if (!m) return [];
+  return Array.from(m.values());
+}
+
+function upsertDraftPresence(sessionId, playerId, playerName, isConnected) {
+  let m = draftPresence.get(sessionId);
+  if (!m) { m = new Map(); draftPresence.set(sessionId, m); }
+  const prev = m.get(playerId) || { playerId, playerName: playerName || `Player ${playerId.slice(-4)}`, isConnected: false, lastActivity: 0 };
+  const rec = { playerId, playerName: playerName || prev.playerName, isConnected: !!isConnected, lastActivity: Date.now() };
+  m.set(playerId, rec);
+  return getDraftPresenceList(sessionId);
+}
+
+/**
+ * Cluster-wide draft presence using Redis (if available)
+ * Maintains per-session per-player connection counts and a canonical state hash.
+ * Falls back to in-memory map when Redis is unavailable.
+ */
+async function updateDraftPresence(sessionId, playerId, playerName, isConnected) {
+  if (storeRedis) {
+    try {
+      const countsKey = `draft:presence:counts:${sessionId}`;
+      const namesKey = `draft:presence:names:${sessionId}`;
+      const stateKey = `draft:presence:state:${sessionId}`;
+      if (playerName) { await storeRedis.hset(namesKey, playerId, playerName); }
+      if (isConnected === true) {
+        await storeRedis.hincrby(countsKey, playerId, 1);
+      } else if (isConnected === false) {
+        await storeRedis.hincrby(countsKey, playerId, -1);
+      }
+      let cntRaw = await storeRedis.hget(countsKey, playerId);
+      let cnt = Number(cntRaw || 0);
+      if (!Number.isFinite(cnt) || cnt < 0) cnt = 0;
+      const name = (await storeRedis.hget(namesKey, playerId)) || playerName || `Player ${String(playerId).slice(-4)}`;
+      const rec = { playerId, playerName: name, isConnected: cnt > 0, lastActivity: Date.now() };
+      await storeRedis.hset(stateKey, playerId, JSON.stringify(rec));
+      const raw = await storeRedis.hgetall(stateKey);
+      const list = [];
+      for (const k of Object.keys(raw || {})) {
+        try { list.push(JSON.parse(raw[k])); } catch {}
+      }
+      return list;
+    } catch (e) {
+      try { console.warn('[store] draft presence redis failed:', e?.message || e); } catch {}
+    }
+  }
+  // Fallback to local process memory
+  return upsertDraftPresence(sessionId, playerId, playerName, isConnected);
+}
+
+function getTournamentPresenceList(tournamentId) {
+  const m = tournamentPresence.get(tournamentId);
+  if (!m) return [];
+  return Array.from(m.values());
+}
+
+function upsertTournamentPresence(tournamentId, playerId, playerName, isConnected) {
+  let m = tournamentPresence.get(tournamentId);
+  if (!m) { m = new Map(); tournamentPresence.set(tournamentId, m); }
+  const prev = m.get(playerId) || { playerId, playerName: playerName || `Player ${playerId.slice(-4)}`, isConnected: false, lastActivity: 0 };
+  const rec = { playerId, playerName: playerName || prev.playerName, isConnected: !!isConnected, lastActivity: Date.now() };
+  m.set(playerId, rec);
+  return getTournamentPresenceList(tournamentId);
+}
 
 function getVoiceRoomIdForPlayer(player) {
   if (!player) return null;
@@ -3741,6 +3832,11 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   let authed = false;
   let authUser = null;
+  // Track current draft session room for this socket (if any)
+  let currentDraftSessionId = null;
+  // Track tournament rooms this socket has joined
+  /** @type {Set<string>} */
+  let currentTournamentIds = new Set();
 
   // Read auth result from middleware (fallback to soft-allow if not required)
   if (socket.data && socket.data.authUser) {
@@ -3828,6 +3924,7 @@ io.on("connection", (socket) => {
 
     console.log(`[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`);
     await socket.join(`tournament:${tournamentId}`);
+    currentTournamentIds.add(tournamentId);
 
     // Acknowledge the join
     try {
@@ -3835,6 +3932,17 @@ io.on("connection", (socket) => {
     } catch (err) {
       console.error("[Tournament] Error sending join acknowledgment:", err);
     }
+
+    // Presence update (server-authoritative)
+    try {
+      const player = getPlayerBySocket(socket);
+      const pid = player?.id || playerIdBySocket.get(socket.id);
+      const name = player?.displayName || null;
+      if (pid) {
+        const list = upsertTournamentPresence(tournamentId, pid, name, true);
+        io.to(`tournament:${tournamentId}`).emit('tournament:presence', { tournamentId, players: list });
+      }
+    } catch {}
   });
 
   socket.on("tournament:leave", async (payload) => {
@@ -3843,12 +3951,63 @@ io.on("connection", (socket) => {
 
     console.log(`[Tournament] Player ${socket.id} leaving tournament room: tournament:${tournamentId}`);
     await socket.leave(`tournament:${tournamentId}`);
+    try { currentTournamentIds.delete(tournamentId); } catch {}
 
     // Acknowledge the leave
     try {
       socket.emit("tournament:left", { tournamentId });
     } catch (err) {
       console.error("[Tournament] Error sending leave acknowledgment:", err);
+    }
+
+    // Presence update (mark disconnected for this tournament)
+    try {
+      const pid = playerIdBySocket.get(socket.id);
+      if (pid) {
+        const list = upsertTournamentPresence(tournamentId, pid, players.get(pid)?.displayName || null, false);
+        io.to(`tournament:${tournamentId}`).emit('tournament:presence', { tournamentId, players: list });
+      }
+    } catch {}
+  });
+
+  // --- Tournament Draft session rooms + presence ---
+  socket.on('draft:session:join', async (payload = {}) => {
+    if (!authed) return;
+    const sessionId = payload?.sessionId;
+    if (!sessionId) return;
+    try {
+      await socket.join(`draft:${sessionId}`);
+      currentDraftSessionId = sessionId;
+      // Ack
+      try { socket.emit('draft:session:joined', { sessionId }); } catch {}
+      // Presence update
+      try {
+        const pid = playerIdBySocket.get(socket.id);
+        const p = pid ? players.get(pid) : null;
+        const list = await updateDraftPresence(sessionId, pid || 'unknown', p?.displayName || null, true);
+        io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+        // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
+        try { setTimeout(() => { try { io.to(socket.id).emit('draft:session:presence', { sessionId, players: list }); } catch {} }, 25); } catch {}
+      } catch {}
+    } catch (e) {
+      try { socket.emit('draft:error', { errorCode: 'join_failed', errorMessage: String(e?.message || e) }); } catch {}
+    }
+  });
+
+  socket.on('draft:session:leave', async (payload = {}) => {
+    const sessionId = payload?.sessionId || currentDraftSessionId;
+    if (!sessionId) return;
+    try {
+      await socket.leave(`draft:${sessionId}`);
+    } finally {
+      if (currentDraftSessionId === sessionId) currentDraftSessionId = null;
+      try {
+        const pid = playerIdBySocket.get(socket.id);
+        if (pid) {
+          const list = await updateDraftPresence(sessionId, pid, players.get(pid)?.displayName || null, false);
+          io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+        }
+      } catch {}
     }
   });
 
@@ -5431,6 +5590,27 @@ io.on("connection", (socket) => {
     if (!pid) return;
     const player = players.get(pid);
     playerIdBySocket.delete(socket.id);
+
+    // Update draft presence on disconnect (cluster-aware)
+    try {
+      if (currentDraftSessionId) {
+        updateDraftPresence(currentDraftSessionId, pid, players.get(pid)?.displayName || null, false)
+          .then((list) => {
+            try { io.to(`draft:${currentDraftSessionId}`).emit('draft:session:presence', { sessionId: currentDraftSessionId, players: list }); } catch {}
+          })
+          .catch(() => {});
+      }
+    } catch {}
+
+    // Update tournament presence on disconnect for all tournaments this socket joined
+    try {
+      if (currentTournamentIds && currentTournamentIds.size > 0) {
+        for (const tid of Array.from(currentTournamentIds)) {
+          const list = upsertTournamentPresence(tid, pid, players.get(pid)?.displayName || null, false);
+          io.to(`tournament:${tid}`).emit('tournament:presence', { tournamentId: tid, players: list });
+        }
+      }
+    } catch {}
 
     for (const [requestId, request] of Array.from(pendingVoiceRequests.entries())) {
       if (request.from === pid || request.to === pid) {
