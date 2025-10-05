@@ -14,9 +14,10 @@ function isGameView(pathname: string | null | undefined): boolean {
     "/draft-3d",
     "/editor-3d",
     "/decks/editor-3d",
+    "/replay/",
     "/sealed",
   ];
-  return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  return prefixes.some((p) => pathname.startsWith(p));
 }
 
 export default function ThemeScope({

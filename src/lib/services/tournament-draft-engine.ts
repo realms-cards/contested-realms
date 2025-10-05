@@ -184,7 +184,8 @@ export class TournamentDraftEngine {
 
     console.log(`[TournamentDraftEngine] Generating all packs for ${totalRounds} rounds...`);
     // Pre-generate packs for all rounds per player with uniqueness per round
-    const playerCount = this.session.participants.length;
+    const participants = this.session.participants;
+    const playerCount = participants.length;
     this.allGeneratedPacks = Array.from({ length: playerCount }, () => [] as DraftCard[][]);
     for (let r = 0; r < totalRounds; r++) {
       const setName = setSequence[r];
@@ -202,9 +203,13 @@ export class TournamentDraftEngine {
       return Array.isArray(source) ? source.map((card) => ({ ...card })) : [];
     });
     const waitingFor = currentPacks
-      .map((pack, idx) => (Array.isArray(pack) && pack.length > 0 ? this.session!.participants[idx].playerId : null))
+      .map((pack, idx) => {
+        const participant = participants[idx];
+        if (!participant || !Array.isArray(pack) || pack.length === 0) return null;
+        return participant.playerId ?? null;
+      })
       .filter((id): id is string => Boolean(id));
-    const packChoice = this.session.participants.map((_, idx) => {
+    const packChoice = participants.map((_participant, idx) => {
       const source = this.allGeneratedPacks?.[idx]?.[roundIdx] ?? [];
       if (Array.isArray(source) && source.length > 0) {
         return source[0]?.setName || fallbackSet;
@@ -245,7 +250,8 @@ export class TournamentDraftEngine {
   private async generatePacksForRound(roundIndex: number): Promise<DraftCard[][]> {
     if (!this.session) throw new Error('Session not initialized');
 
-    const playerCount = this.session.participants.length;
+    const participants = this.session.participants;
+    const playerCount = participants.length;
     const packConfig = this.session.packConfiguration;
     const packSize = 15;
 
@@ -624,15 +630,20 @@ export class TournamentDraftEngine {
     const newDirection = this.draftState.packDirection === 'left' ? 'right' : 'left';
     const sequence = this.computeSetSequence();
     const fallbackSet = sequence[nextRoundIndex] || sequence[0] || 'Beta';
-    const playerCount = this.session.participants.length;
+    const participants = this.session.participants;
+    const playerCount = participants.length;
     const currentPacks: DraftCard[][] = Array.from({ length: playerCount }, (_, idx) => {
       const source = this.allGeneratedPacks?.[idx]?.[nextRoundIndex] ?? [];
       return Array.isArray(source) ? source.map((card) => ({ ...card })) : [];
     });
     const waitingFor = currentPacks
-      .map((pack, idx) => (Array.isArray(pack) && pack.length > 0 ? this.session!.participants[idx].playerId : null))
+      .map((pack, idx) => {
+        const participant = participants[idx];
+        if (!participant || !Array.isArray(pack) || pack.length === 0) return null;
+        return participant.playerId ?? null;
+      })
       .filter((id): id is string => Boolean(id));
-    const packChoice = this.session.participants.map((_, idx) => {
+    const packChoice = participants.map((_participant, idx) => {
       const source = this.allGeneratedPacks?.[idx]?.[nextRoundIndex] ?? [];
       if (Array.isArray(source) && source.length > 0) {
         return source[0]?.setName || fallbackSet;
@@ -833,6 +844,8 @@ export class TournamentDraftEngine {
    * Swaps chosen pack into the current round index, records choice, and when all chosen, distributes packs and enters picking.
    */
   async choosePack(playerId: string, opts: { packIndex?: number; setChoice?: string }): Promise<DraftState> {
+    void playerId;
+    void opts;
     if (!this.draftState || !this.session) {
       await this.loadSessionAndState();
       if (!this.draftState || !this.session) throw new Error('Draft not initialized');

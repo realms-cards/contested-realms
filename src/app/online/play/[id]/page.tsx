@@ -42,13 +42,15 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
-import {
-  useGameStore,
-  type PlayerKey,
-  type RemoteCursorState,
-} from "@/lib/game/store";
-import type { RemoteCursorDragMeta } from "@/lib/game/store/remoteCursor";
+import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
+import {
+  useBoardPingListener,
+  useMatchPlayerNames,
+  usePlayerIdentity,
+  usePlayerNameMap,
+  useRemoteCursorTelemetry,
+} from "./matchHooks";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -70,8 +72,6 @@ export default function OnlineMatchPage() {
 
   const setActorKey = useGameStore((s) => s.setActorKey);
   const setLocalPlayerId = useGameStore((s) => s.setLocalPlayerId);
-  const setRemoteCursor = useGameStore((s) => s.setRemoteCursor);
-  const localPlayerId = useGameStore((s) => s.localPlayerId);
 
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
@@ -93,43 +93,13 @@ export default function OnlineMatchPage() {
     voice,
   } = useOnline();
 
-  // Determine which player this client is (support for 2-8 players)
-  const myPlayerId = me?.id;
-  const orderedPlayerIds = useMemo(() => {
-    const pids = match?.playerIds;
-    if (Array.isArray(pids) && pids.length > 0) {
-      return pids;
-    }
-    const players = match?.players;
-    if (Array.isArray(players)) {
-      return players.map((p) => p.id).filter(Boolean);
-    }
-    return [] as string[];
-  }, [match?.playerIds, match?.players]);
-
-  const myPlayerIndex = useMemo(() => {
-    if (!myPlayerId) return -1;
-    return orderedPlayerIds.indexOf(myPlayerId);
-  }, [orderedPlayerIds, myPlayerId]);
-  const myPlayerNumber = myPlayerIndex >= 0 ? myPlayerIndex + 1 : null;
-  const myPlayerKey =
-    myPlayerIndex >= 0 && myPlayerIndex < 2
-      ? ((myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey)
-      : null;
-
-  // Derive opponent identifiers (2-player engine)
-  const opponentSeat: PlayerKey | null = useMemo(() => {
-    if (!myPlayerKey) return null;
-    return myPlayerKey === "p1" ? "p2" : "p1";
-  }, [myPlayerKey]);
-  const opponentPlayerId: string | null = useMemo(() => {
-    if (myPlayerIndex < 0) return null;
-    if (orderedPlayerIds.length < 2) return null;
-    const opponentIndex = myPlayerIndex === 0 ? 1 : 0;
-    const opponentId = orderedPlayerIds[opponentIndex] || null;
-    if (!opponentId) return null;
-    return opponentId;
-  }, [orderedPlayerIds, myPlayerIndex]);
+  const {
+    myPlayerId,
+    myPlayerNumber,
+    myPlayerKey,
+    opponentSeat,
+    opponentPlayerId,
+  } = usePlayerIdentity(match, me);
 
   // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {
@@ -141,80 +111,8 @@ export default function OnlineMatchPage() {
     };
   }, [setActorKey, setLocalPlayerId, myPlayerKey, myPlayerId]);
 
-  // Subscribe to remote cursor telemetry
-  useEffect(() => {
-    if (!transport?.on) return;
-
-    const parseDragging = (raw: unknown): RemoteCursorDragMeta | null => {
-      if (!raw || typeof raw !== "object") return null;
-      const d = raw as Record<string, unknown>;
-      const kind = d.kind;
-      if (kind === "permanent") {
-        const meta: RemoteCursorDragMeta = { kind: "permanent" };
-        if (typeof d.from === "string") meta.from = d.from;
-        if (Number.isFinite(d.index)) meta.index = Number(d.index);
-        return meta;
-      }
-      if (kind === "hand") return { kind: "hand" };
-      if (kind === "token") return { kind: "token" };
-      if (kind === "pile") {
-        const meta: RemoteCursorDragMeta = { kind: "pile" };
-        if (typeof d.source === "string") meta.source = d.source;
-        return meta;
-      }
-      if (kind === "avatar") {
-        const meta: RemoteCursorDragMeta = { kind: "avatar" };
-        if (d.who === "p1" || d.who === "p2") meta.who = d.who;
-        return meta;
-      }
-      return null;
-    };
-
-    const parseHighlight = (raw: unknown): { slug: string | null; cardId: number | null } | null => {
-      if (!raw || typeof raw !== "object") return null;
-      const src = raw as Record<string, unknown>;
-      const slug = typeof src.slug === "string" ? src.slug : null;
-      const cardId = typeof src.cardId === "number" && Number.isFinite(src.cardId) ? (src.cardId as number) : null;
-      if (slug === null && cardId === null) return null;
-      return { slug, cardId };
-    };
-
-    const handler = (payload: RemoteCursorState) => {
-      if (!payload || typeof payload !== "object") return;
-      const pid = typeof payload.playerId === "string" ? payload.playerId : null;
-      if (!pid || pid === localPlayerId) return;
-      const px = payload.position?.x;
-      const pz = payload.position?.z;
-      const position =
-        typeof px === "number" && Number.isFinite(px) &&
-        typeof pz === "number" && Number.isFinite(pz)
-          ? { x: px, z: pz }
-          : null;
-      const dragging = parseDragging(payload.dragging);
-      const highlight = parseHighlight(payload.highlight);
-      const ts = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
-
-      setRemoteCursor({
-        playerId: pid,
-        playerKey:
-          payload.playerKey === "p1" || payload.playerKey === "p2"
-            ? payload.playerKey
-            : null,
-        position,
-        dragging,
-        highlight,
-        ts,
-        displayName: null,
-      });
-    };
-
-    const off = transport.on("boardCursor", handler);
-    return () => {
-      try {
-        off?.();
-      } catch {}
-    };
-  }, [transport, localPlayerId, setRemoteCursor]);
+  useRemoteCursorTelemetry(transport);
+  useBoardPingListener(transport);
 
   const rtc = voice?.rtc ?? null;
   const matchOverlayTargetId = useMemo(() => {
@@ -237,9 +135,7 @@ export default function OnlineMatchPage() {
   const joinAttemptedForRef = useRef<string | null>(null);
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
-  // Track if this page initiated a tournament bootstrap for the current route id
-  const hasBootstrapRef = useRef<boolean>(false);
-  const bootstrapTournamentIdRef = useRef<string | null>(null);
+  const tournamentDeckSubmittedRef = useRef<string | null>(null);
   // Guard to ensure we only reset local game state once per match in this page session,
   // even if the socket briefly disconnects/reconnects or status changes.
   const resetDoneForRef = useRef<string | null>(null);
@@ -248,36 +144,8 @@ export default function OnlineMatchPage() {
   const [localDraftSubmitted, setLocalDraftSubmitted] = useState(false);
 
   // Get player nicknames (constrained to 2 players for game engine compatibility)
-  const playerNames = useMemo(() => {
-    const names: { p1: string; p2: string } = {
-      p1: "Player 1",
-      p2: "Player 2",
-    };
-
-    if (match?.players) {
-      // Only use first 2 players for the game engine
-      if (match.players[0]) {
-        names.p1 = match.players[0].displayName || "Player 1";
-      }
-      if (match.players[1]) {
-        names.p2 = match.players[1].displayName || "Player 2";
-      }
-    }
-
-    return names;
-  }, [match?.players]);
-
-  const playerNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-    if (!match || !Array.isArray(match.players)) return map;
-    for (const p of match.players) {
-      if (!p || typeof p !== "object") continue;
-      const id = p.id;
-      if (!id) continue;
-      map[id] = p.displayName || id;
-    }
-    return map;
-  }, [match]);
+  const playerNames = useMatchPlayerNames(match);
+  const playerNameById = usePlayerNameMap(match);
 
   // Set screen type for video overlay - this is a game page so use game-3d
   useEffect(() => {
@@ -287,52 +155,6 @@ export default function OnlineMatchPage() {
 
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
-    // If we were navigated from tournament matches, ensure the match exists on the socket server
-    if (connected && matchId && transport) {
-      try {
-        const key = `tournamentMatchBootstrap_${matchId}`;
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const payload = JSON.parse(raw) as {
-            players?: string[];
-            matchType?: "constructed" | "sealed" | "draft";
-            lobbyName?: string;
-            tournamentId?: string;
-            sealedConfig?: {
-              packCount?: number;
-              setMix?: string[];
-              timeLimit?: number;
-              constructionStartTime?: number;
-              packCounts?: Record<string, number>;
-              replaceAvatars?: boolean;
-            } | null;
-            draftConfig?: {
-              setMix?: string[];
-              packCount?: number;
-              packSize?: number;
-              packCounts?: Record<string, number>;
-            } | null;
-          };
-          // Fire-and-forget: instruct server to create/ensure match exists with the given roster and configs
-          transport.emit("startTournamentMatch", {
-            matchId,
-            playerIds: Array.isArray(payload?.players) ? payload.players : [],
-            matchType: payload?.matchType || "constructed",
-            lobbyName: payload?.lobbyName,
-            tournamentId: payload?.tournamentId,
-            sealedConfig: payload?.sealedConfig || null,
-            draftConfig: payload?.draftConfig || null,
-          });
-          // Capture tournament id for potential auto deck submission
-          bootstrapTournamentIdRef.current = payload?.tournamentId || null;
-          // Mark bootstrap so we allow joining the route id immediately below
-          hasBootstrapRef.current = true;
-          // Clear bootstrap to avoid duplicates on refresh/reconnect
-          localStorage.removeItem(key);
-        }
-      } catch {}
-    }
-
     if (!connected || !matchId) return;
 
     // If server reports a different match, force a one-time hard redirect to the server-authoritative id
@@ -371,12 +193,12 @@ export default function OnlineMatchPage() {
     try {
       console.debug("[online] joinMatch ->", {
         matchId,
-        because: hasBootstrapRef.current ? "bootstrap" : "direct",
+        because: "direct",
       });
     } catch {}
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
-  }, [connected, match?.id, matchId, joinMatch, transport]);
+  }, [connected, match?.id, matchId, joinMatch]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -389,48 +211,6 @@ export default function OnlineMatchPage() {
     lastConnectedRef.current = connected;
   }, [connected]);
 
-  // Subscribe to lightweight messages for board pings and other signals
-  useEffect(() => {
-    if (!transport) return;
-    const off = transport.on("message", (m) => {
-      const type = (m &&
-        typeof m === "object" &&
-        (m as Record<string, unknown>).type) as string | undefined;
-      if (type !== "boardPing") return;
-      const msg = m as unknown as {
-        id?: string;
-        position?: { x?: number; z?: number };
-        playerKey?: PlayerKey | null;
-        ts?: number;
-      };
-      const id =
-        typeof msg.id === "string"
-          ? msg.id
-          : `ping_${Math.random()
-              .toString(36)
-              .slice(2, 8)}_${Date.now().toString(36)}`;
-      const x = Number(msg.position?.x);
-      const z = Number(msg.position?.z);
-      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-      try {
-        useGameStore.getState().pushBoardPing({
-          id,
-          position: { x, z },
-          playerId: null,
-          playerKey:
-            msg.playerKey === "p1" || msg.playerKey === "p2"
-              ? msg.playerKey
-              : null,
-          ts: typeof msg.ts === "number" ? msg.ts : Date.now(),
-        });
-      } catch {}
-    });
-    return () => {
-      try {
-        off?.();
-      } catch {}
-    };
-  }, [transport]);
 
   // Also reset one-shot guards if we are no longer in this match (e.g., user left)
   useEffect(() => {
@@ -550,182 +330,178 @@ export default function OnlineMatchPage() {
     }
   }, [matchId, match?.playerDecks, me?.id, localDraftSubmitted]);
 
-  // Determine if this match is part of a tournament (server or bootstrap)
-  const isTournamentMatch = !!(
-    (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId ||
-    bootstrapTournamentIdRef.current
-  );
-
-  // Track constructed deck submission for tournament matches
-  const hasSubmittedConstructedDeck = useMemo(() => {
-    if (!matchId || match?.matchType !== "constructed") return false;
-    if (isTournamentMatch) return true;
-    const myId = me?.id;
-    if (
-      myId &&
-      match?.playerDecks &&
-      (match.playerDecks as Record<string, unknown>)[myId]
-    ) {
-      return true;
-    }
-    try {
-      return (
-        localStorage.getItem(`constructed_submitted_${matchId}`) === "true"
-      );
-    } catch {
-      return false;
-    }
-  }, [matchId, match?.playerDecks, match?.matchType, me?.id, isTournamentMatch]);
-
-  // Auto-load constructed deck for tournament matches and skip to next phase
-  useEffect(() => {
-    if (!hasSubmittedConstructedDeck || prepared) return;
-    if (!me?.id || !myPlayerKey) return;
-    // Wait until seat ownership is registered in the store to avoid unknown-actor zone patches
-    if (storeActorKey !== myPlayerKey) return;
-
-    const tryLoadFromMatch = async () => {
-      const decks = match?.playerDecks as Record<string, unknown> | undefined;
-      const myDeckData = decks?.[me.id];
-      if (!myDeckData) return false;
-      const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
-      const ok = await loadSealedDeckFor(
-        myPlayerKey as "p1" | "p2",
-        myDeckData,
-        (error) => console.error("[Tournament] Deck load error:", error)
-      );
-      return ok;
-    };
-
-    const tryLoadFromTournament = async () => {
-      const tId = (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId || bootstrapTournamentIdRef.current;
-      if (!tId) return false;
-      try {
-        const res = await fetch(`/api/tournaments/${encodeURIComponent(String(tId))}`);
-        if (!res.ok) throw new Error("Failed to load tournament detail");
-        const detail = await res.json();
-        const list: Array<{ cardId: string; quantity: number }> | undefined = detail?.viewerDeck;
-        if (!Array.isArray(list) || list.length === 0) return false;
-        const ids = Array.from(new Set(list.map((it) => Number(it.cardId)).filter((n) => Number.isFinite(n) && n > 0)));
-        const resMeta = await fetch(`/api/cards/by-id?ids=${encodeURIComponent(ids.join(','))}`);
-        if (!resMeta.ok) throw new Error('Failed to load card meta');
-        const metas = (await resMeta.json()) as Array<{ cardId: number; name: string; slug: string; setName: string; type?: string | null }>;
-        const byId = new Map<number, { name: string; slug: string; setName: string; type: string | null }>();
-        for (const m of metas) byId.set(Number(m.cardId), { name: m.name, slug: m.slug, setName: m.setName, type: m.type || null });
-        const deck: Array<Record<string, unknown>> = [];
-        for (const entry of list) {
-          const idNum = Number(entry.cardId);
-          const meta = byId.get(idNum);
-          if (!meta) continue;
-          const q = Math.max(1, Number(entry.quantity) || 0);
-          for (let i = 0; i < q; i++) {
-            deck.push({
-              id: String(idNum),
-              cardId: idNum,
-              name: meta.name,
-              slug: meta.slug,
-              set: meta.setName,
-              type: meta.type || '',
-            });
-          }
-        }
-        if (deck.length === 0) return false;
-        const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
-        const ok = await loadSealedDeckFor(
-          myPlayerKey as "p1" | "p2",
-          deck,
-          (error) => console.error("[Tournament] Deck load error:", error)
-        );
-        return ok;
-      } catch (e) {
-        console.warn('[Tournament] Fallback deck load failed:', e);
-        return false;
-      }
-    };
-
-    (async () => {
-      const hasMatchDeck =
-        !!(match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
-      if (!hasMatchDeck && isTournamentMatch) {
-        // Wait for the server to attach decks to the match record
-        return;
-      }
-
-      const fromMatch = await tryLoadFromMatch();
-      if (fromMatch) {
-        console.log("[Tournament] Deck loaded -> Setup phase");
-        useGameStore.getState().setPhase("Setup");
-        setPrepared(true);
-        return;
-      }
-
-      if (isTournamentMatch) {
-        // If we're in a tournament and the match deck isn't ready yet, keep waiting
-        return;
-      }
-
-      const fallback = await tryLoadFromTournament();
-      if (fallback) {
-        console.log("[Tournament] Fallback tournament deck loaded -> Setup phase");
-        useGameStore.getState().setPhase("Setup");
-        setPrepared(true);
-      } else {
-        console.error("[Tournament] Could not load deck for constructed match");
-      }
-    })();
-  }, [
-    hasSubmittedConstructedDeck,
-    prepared,
-    match,
-    match?.playerDecks,
-    match?.id,
-    me?.id,
-    myPlayerKey,
-    storeActorKey,
-    isTournamentMatch,
-  ]);
-
-  // Auto-load tournament decks for sealed/draft when server deck data is present (no overlay)
-  useEffect(() => {
-    if (!isTournamentMatch) return;
-    if (prepared) return;
-    if (match?.matchType !== "sealed" && match?.matchType !== "draft") return;
-    if (!match?.playerDecks || !me?.id) return;
-    if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
-
-    const myDeckData = match.playerDecks[me.id];
-    if (!myDeckData) return;
-
-    (async () => {
-      try {
-        const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
-        const success = await loadSealedDeckFor(
-          myPlayerKey as "p1" | "p2",
-          myDeckData,
-          (error) => console.error("[Tournament] Deck load error:", error)
-        );
-        if (success) {
-          console.log("[Tournament] Deck loaded (", match.matchType, ") advancing to Setup");
-          useGameStore.getState().setPhase("Setup");
-          setPrepared(true);
-        }
-      } catch (error) {
-        console.error("[Tournament] Failed to auto-load tournament deck:", error);
-      }
-    })();
-  }, [isTournamentMatch, prepared, match?.matchType, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
-
   // Track draft state and completion
   const [draftCompleted, setDraftCompleted] = useState(false);
   const isDraftMatch = match?.matchType === "draft";
-  const [autoSubmittingFromTournament, setAutoSubmittingFromTournament] = useState(false);
   const isDraftActive =
     isDraftMatch && match?.status === "waiting" && !draftCompleted;
   const isDraftDeckConstruction =
     isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
 
   // Prevent showing draft component again once it's completed or if we already submitted a deck
-  const shouldShowDraft = !isTournamentMatch && isDraftActive && !hasSubmittedDraftDeck;
+  const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
+
+  const tournamentId =
+    (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId ||
+    null;
+
+  // Auto-load any deck that the match server has already attached to us (sealed/draft/tournament rebuilt decks)
+  useEffect(() => {
+    if (prepared) return;
+    if (!match?.playerDecks || !me?.id) return;
+    if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
+
+    const rawDeck = (match.playerDecks as Record<string, unknown>)[me.id];
+    if (!rawDeck) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+        const ok = await loadSealedDeckFor(
+          myPlayerKey as "p1" | "p2",
+          rawDeck,
+          (error) => console.error("[match] Deck load error:", error)
+        );
+        if (!ok || cancelled) return;
+        useGameStore.getState().setPhase("Setup");
+        setPrepared(true);
+      } catch (error) {
+        console.error("[match] Failed to auto-load deck from match data:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prepared, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
+
+  // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
+  useEffect(() => {
+    if (!tournamentId) return;
+    if (!transport?.submitDeck) return;
+    if (!matchId || match?.id !== matchId) return;
+    if (match?.matchType !== "constructed") return;
+    if (match?.status !== "waiting" && match?.status !== "deck_construction") return;
+    if (!me?.id || !myPlayerKey) return;
+
+    const currentDeck =
+      (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
+    if (currentDeck) {
+      tournamentDeckSubmittedRef.current = tournamentId;
+      return;
+    }
+
+    if (tournamentDeckSubmittedRef.current === tournamentId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`
+        );
+        if (!res.ok) throw new Error("Failed to load tournament detail");
+        const detail = await res.json();
+        const list: Array<{ cardId: string; quantity: number }> | undefined =
+          detail?.viewerDeck;
+        if (!Array.isArray(list) || list.length === 0) return;
+
+        const ids = Array.from(
+          new Set(
+            list
+              .map((entry) => Number(entry.cardId))
+              .filter((n) => Number.isFinite(n) && n > 0)
+          )
+        );
+        if (ids.length === 0) return;
+
+        const resMeta = await fetch(
+          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`
+        );
+        if (!resMeta.ok) throw new Error("Failed to load card meta");
+        const metas = (await resMeta.json()) as Array<{
+          cardId: number;
+          name: string;
+          slug: string;
+          setName: string;
+          type?: string | null;
+        }>;
+        const byId = new Map<
+          number,
+          { name: string; slug: string; setName: string; type: string | null }
+        >();
+        for (const meta of metas) {
+          byId.set(Number(meta.cardId), {
+            name: meta.name,
+            slug: meta.slug,
+            setName: meta.setName,
+            type: meta.type || null,
+          });
+        }
+
+        const deck: Array<Record<string, unknown>> = [];
+        for (const entry of list) {
+          const idNum = Number(entry.cardId);
+          const meta = byId.get(idNum);
+          if (!meta) continue;
+          const quantity = Math.max(1, Number(entry.quantity) || 0);
+          for (let i = 0; i < quantity; i++) {
+            deck.push({
+              id: String(idNum),
+              cardId: idNum,
+              name: meta.name,
+              slug: meta.slug,
+              set: meta.setName,
+              type: meta.type || "",
+            });
+          }
+        }
+
+        if (deck.length === 0 || cancelled) return;
+
+        transport.submitDeck(deck);
+        tournamentDeckSubmittedRef.current = tournamentId;
+
+        if (storeActorKey === myPlayerKey && !prepared) {
+          try {
+            const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+            const ok = await loadSealedDeckFor(
+              myPlayerKey as "p1" | "p2",
+              deck,
+              (error) =>
+                console.error("[match] Tournament deck load error:", error)
+            );
+            if (ok && !cancelled) {
+              useGameStore.getState().setPhase("Setup");
+              setPrepared(true);
+            }
+          } catch (error) {
+            console.warn("[match] Tournament deck local load failed:", error);
+          }
+        }
+      } catch (error) {
+        console.warn("[match] Tournament deck submission failed:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    tournamentId,
+    transport,
+    matchId,
+    match?.id,
+    match?.matchType,
+    match?.playerDecks,
+    match?.status,
+    me?.id,
+    myPlayerKey,
+    storeActorKey,
+    prepared,
+  ]);
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
@@ -735,22 +511,11 @@ export default function OnlineMatchPage() {
 
     // Auto-redirect to sealed editor when joining sealed match during deck construction
     // But only if we haven't submitted a deck yet (prefer server-confirmed check).
-    // If this page was bootstrapped from a tournament, skip redirect and auto-submit the existing deck instead.
     if (
       match.status === "deck_construction" &&
       match.matchType === "sealed" &&
       !hasSubmittedSealedDeck
     ) {
-      // Check if this is a tournament match (either from bootstrap or match.tournamentId)
-      const tournamentId = (match as unknown as { tournamentId?: string })?.tournamentId || bootstrapTournamentIdRef.current;
-      if (tournamentId) {
-        // We'll auto-submit the saved tournament deck (see effect below) and avoid opening the editor.
-        // Update ref to ensure auto-submit effect can access it
-        if (!bootstrapTournamentIdRef.current && tournamentId) {
-          bootstrapTournamentIdRef.current = tournamentId;
-        }
-        return;
-      }
       // Clear game state before opening sealed editor
       useGameStore.getState().resetGameState();
 
@@ -790,9 +555,7 @@ export default function OnlineMatchPage() {
     }
 
     // Auto-redirect to deck editor when draft is completed and in deck construction
-    // Skip if this is a tournament match with deck already submitted
-    const tournamentIdForDraft = (match as unknown as { tournamentId?: string })?.tournamentId || bootstrapTournamentIdRef.current;
-    if (isDraftDeckConstruction && !hasSubmittedDraftDeck && !autoSubmittingFromTournament && !tournamentIdForDraft) {
+    if (isDraftDeckConstruction && !hasSubmittedDraftDeck) {
       // Clear game state before opening deck editor
       useGameStore.getState().resetGameState();
 
@@ -835,66 +598,7 @@ export default function OnlineMatchPage() {
     hasSubmittedDraftDeck,
     me?.id,
     myPlayerId,
-    autoSubmittingFromTournament,
   ]);
-
-  // If this tournament match was bootstrapped from a tournament and we already submitted a deck to the tournament,
-  // auto-submit that saved deck to the match server to avoid re-opening the editor.
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!connected || !matchId || match?.id !== matchId) return;
-        if (!transport) return;
-        // Support sealed and constructed tournament matches
-        if (match?.matchType !== 'sealed' && match?.matchType !== 'constructed') return;
-        if (hasSubmittedSealedDeck) return; // already submitted to match
-        if (match?.status !== 'deck_construction') return;
-        const tId = bootstrapTournamentIdRef.current;
-        if (!tId) return;
-        setAutoSubmittingFromTournament(true);
-        // Fetch viewer deck from tournament
-        const res = await fetch(`/api/tournaments/${encodeURIComponent(String(tId))}`);
-        if (!res.ok) throw new Error('Failed to load tournament deck');
-        const detail = await res.json();
-        const list: Array<{ cardId: string; quantity: number }> | undefined = detail?.viewerDeck;
-        if (!Array.isArray(list) || list.length === 0) throw new Error('No submitted deck');
-        const ids = Array.from(new Set(list.map((it) => Number(it.cardId)).filter((n) => Number.isFinite(n) && n > 0)));
-        const resMeta = await fetch(`/api/cards/by-id?ids=${encodeURIComponent(ids.join(','))}`);
-        if (!resMeta.ok) throw new Error('Failed to load card meta');
-        const metas = (await resMeta.json()) as Array<{ cardId: number; name: string; slug: string; setName: string; type?: string | null }>;
-        const byId = new Map<number, { name: string; slug: string; setName: string; type: string | null }>();
-        for (const m of metas) byId.set(Number(m.cardId), { name: m.name, slug: m.slug, setName: m.setName, type: m.type || null });
-        // Expand quantities into a flat array of card records expected by the server
-        const deck: Array<Record<string, unknown>> = [];
-        for (const entry of list) {
-          const idNum = Number(entry.cardId);
-          const meta = byId.get(idNum);
-          if (!meta) continue;
-          const q = Math.max(1, Number(entry.quantity) || 0);
-          for (let i = 0; i < q; i++) {
-            deck.push({
-              id: String(idNum),
-              cardId: idNum,
-              name: meta.name,
-              slug: meta.slug,
-              set: meta.setName,
-              type: meta.type || '',
-            });
-          }
-        }
-        if (deck.length > 0) {
-          transport.submitDeck?.(deck);
-          try { localStorage.setItem(`sealed_submitted_${matchId}`, 'true'); } catch {}
-          setLocalSealedSubmitted(true);
-        }
-      } catch (e) {
-        // If anything fails, fall back to normal editor flow
-        console.warn('[tournament] auto-submit deck to match failed:', e);
-      } finally {
-        setAutoSubmittingFromTournament(false);
-      }
-    })();
-  }, [connected, match?.id, match?.status, match?.matchType, matchId, hasSubmittedSealedDeck, transport]);
 
   // Listen for sealed deck submissions via postMessage (when editor opened in a new window)
   useEffect(() => {
@@ -1005,35 +709,40 @@ export default function OnlineMatchPage() {
       desired = false;
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
-    } else if (isTournamentMatch && !prepared) {
-      // Keep overlay open while tournament deck autoload/validation runs
-      desired = true;
-    } else if (isTournamentMatch && prepared && serverPhase !== "Main") {
-      // Keep overlay open for D20/Mulligan until server reaches Main
+    } else if (!prepared) {
       desired = true;
     } else if (serverPhase === "Main") {
       desired = false;
     }
 
     if (desired !== setupOpen) setSetupOpen(desired);
-  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, isTournamentMatch, prepared, serverPhase, setupOpen]);
+  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen]);
 
   
 
   // Reset setup wizard when entering a different match (fresh waiting match)
+  const lastResetMatchRef = useRef<string | null>(null);
   useEffect(() => {
-    // When match id changes, restart the setup steps so we don't skip phases
+    if (!matchId) return;
+
+    const serverMatchId = match?.id ?? null;
+    const effectiveMatchId = serverMatchId ?? matchId;
+
+    // Avoid repeated resets for the same match context
+    if (lastResetMatchRef.current === effectiveMatchId) return;
+    lastResetMatchRef.current = effectiveMatchId;
+
     setPrepared(false);
     setD20RollingComplete(false);
 
-    // Clear submission flag when entering a different match
-    if (matchId) {
+    // Clear submission flag when entering a truly different match
+    try {
       const submittedKey = `sealed_submitted_${matchId}`;
-      // Only clear if this is actually a new match (not a status change on same match)
-      if (match?.id && match.id !== matchId) {
+      if (serverMatchId && serverMatchId !== matchId) {
         localStorage.removeItem(submittedKey);
       }
-    }
+    } catch {}
+
     // Also reset local submission flags for safety when navigating to a different match
     setLocalSealedSubmitted(false);
     setLocalDraftSubmitted(false);
@@ -1049,20 +758,15 @@ export default function OnlineMatchPage() {
   }, [matchId, match]);
 
   // Reset game state only when match transitions to "in_progress" (once per match)
-  // IMPORTANT: For tournament matches, do NOT reset here — hands/decks were loaded locally during setup.
   useEffect(() => {
     if (
       match?.status === "in_progress" &&
       prevMatchStatusRef.current !== "in_progress"
     ) {
-      if (!isTournamentMatch) {
-        console.log("[game] Match started - resetting game state (non-tournament)");
-        useGameStore.getState().resetGameState();
-      } else {
-        console.log("[game] Match started (tournament) - preserving local deck/hand state");
-      }
+      console.log("[game] Match started - resetting game state");
+      useGameStore.getState().resetGameState();
     }
-  }, [match?.status, isTournamentMatch]);
+  }, [match?.status]);
 
   
 
@@ -1080,48 +784,6 @@ export default function OnlineMatchPage() {
   // Store selectors for match end state and winner must be declared before effects that depend on them
   const matchEnded = useGameStore((s) => s.matchEnded);
   const winner = useGameStore((s) => s.winner);
-
-  // When a tournament match ends, report the result to advance the tournament flow
-  const resultReportedForRef = useRef<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!matchId || match?.id !== matchId) return;
-        const ended = matchEnded || match?.status === 'ended';
-        if (!ended) return;
-        if (resultReportedForRef.current === matchId) return;
-        // Determine winner/loser
-        let winnerId: string | null = null;
-        let loserId: string | null = null;
-        const matchWithWinner = match as { winnerId?: string | null } | undefined;
-        if (typeof matchWithWinner?.winnerId === 'string') {
-          winnerId = matchWithWinner.winnerId;
-          loserId = match?.players?.find((p) => p.id !== winnerId)?.id || null;
-        } else if (winner === 'p1' || winner === 'p2') {
-          const idx = winner === 'p1' ? 0 : 1;
-          const otherIdx = winner === 'p1' ? 1 : 0;
-          winnerId = match?.players?.[idx]?.id || null;
-          loserId = match?.players?.[otherIdx]?.id || null;
-        }
-        const isDraw = winnerId == null;
-        const body: Record<string, unknown> = { isDraw };
-        if (!isDraw) {
-          body.winnerId = winnerId;
-          body.loserId = loserId;
-        }
-        const res = await fetch(`/api/tournaments/matches/${encodeURIComponent(matchId)}/result`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          resultReportedForRef.current = matchId;
-        }
-      } catch {
-        // Ignore failures; host can trigger next round if needed
-      }
-    })();
-  }, [matchId, match, matchEnded, winner]);
 
   // Frozen context for the match end overlay so results don't change if roster updates
   const [finalEndContext, setFinalEndContext] = useState<
@@ -1591,19 +1253,6 @@ export default function OnlineMatchPage() {
                   </div>
                 </div>
               )
-            ) : hasSubmittedConstructedDeck ? (
-              // Tournament constructed matches - auto skip deck selector
-              <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
-                <div className="text-center">
-                  <h2 className="text-2xl font-bold text-white mb-4">
-                    Loading Tournament Deck
-                  </h2>
-                  <div className="text-slate-300 mb-4">
-                    Your tournament deck is being loaded...
-                  </div>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto" />
-                </div>
-              </div>
             ) : (
               <OnlineDeckSelector
                 myPlayerKey={myPlayerKey}
@@ -1757,15 +1406,9 @@ export default function OnlineMatchPage() {
             }}
             onLeaveLobby={() => {
               leaveLobby();
-              const tId = (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId || bootstrapTournamentIdRef.current;
-              if (tId) {
-                router.push(`/tournaments/${encodeURIComponent(String(tId))}`);
-              } else {
-                // Fallback: if no tournament context is known, go to tournaments list
-                router.push("/tournaments");
-              }
+              router.push("/online/lobby");
             }}
-            leaveLabel={(match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId || bootstrapTournamentIdRef.current ? "Leave Match & Return to Tournament" : undefined}
+            leaveLabel={undefined}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}

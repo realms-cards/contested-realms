@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/online/lobby", label: "Lobby" },
   { href: "/decks", label: "Decks" },
+  { href: "/tournaments", label: "Tournaments" },
   { href: "/replay", label: "Replays" },
   { href: "/leaderboard", label: "Leaderboard" },
 ];
@@ -28,14 +29,29 @@ export default function OnlinePageShell({
     className ? ` ${className}` : ""
   }`;
 
+  // Get the current route title based on pathname
+  const getRouteTitle = (path: string) => {
+    for (const link of NAV_LINKS) {
+      if (path === link.href || path.startsWith(`${link.href}/`)) {
+        return link.label;
+      }
+    }
+    return "Online Play"; // fallback
+  };
+
+  // Filter out the current page from navigation links
+  const visibleNavLinks = NAV_LINKS.filter(link =>
+    !((pathname || "") === link.href || (pathname || "").startsWith(`${link.href}/`))
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100">
       <div className={containerClassName}>
         {showNav && (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold font-fantaisie">Online Play</h1>
-              {NAV_LINKS.map((link, index) => {
+              <h1 className="text-xl font-semibold font-fantaisie">{getRouteTitle(pathname || "")}</h1>
+              {visibleNavLinks.map((link, index) => {
                 const active = pathname ? pathname === link.href || pathname.startsWith(`${link.href}/`) : false;
                 return (
                   <Link
