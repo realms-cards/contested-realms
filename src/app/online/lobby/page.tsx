@@ -9,6 +9,7 @@ import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { useRealtimeTournaments, RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import type { TournamentInfo as ProtocolTournamentInfo, SealedConfig, DraftConfig } from "@/lib/net/protocol";
+import OnlinePageShell from "@/components/online/OnlinePageShell";
  
 
 // Map context TournamentInfo to protocol TournamentInfo  
@@ -435,6 +436,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   // removed startSealedMatch helper; start is confirmed via modal action
 
   return (
+    <OnlinePageShell>
     <div className="space-y-6">
       {/* Match Controls - show when a match exists in context */}
       {match && (
@@ -1139,6 +1141,7 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
 
       {/* end Social and Chat row */}
     </div>
+    </OnlinePageShell>
   );
 }
 
