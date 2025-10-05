@@ -755,14 +755,15 @@ export default function TournamentDetailsPage() {
           const tSettings =
             (tournament as unknown as { settings?: Record<string, unknown> })
               .settings || {};
-          const matchType =
+          const tournamentFormat =
             (tournament.format as "constructed" | "sealed" | "draft") ||
             "constructed";
+          const matchType =
+            tournamentFormat === "sealed" ? "sealed" : "constructed";
           // Try to include sealed/draft configs
           let sealedConfig =
             (tSettings as { sealedConfig?: unknown }).sealedConfig || null;
-          let draftConfig =
-            (tSettings as { draftConfig?: unknown }).draftConfig || null;
+          let draftConfig = null;
           if (!sealedConfig && !draftConfig) {
             try {
               const detailRes = await fetch(
@@ -775,19 +776,11 @@ export default function TournamentDetailsPage() {
               }
             } catch {}
           }
-          if (matchType === "sealed" && !sealedConfig) {
+          if (tournamentFormat === "sealed" && !sealedConfig) {
             sealedConfig = {
               packCounts: { Beta: 6 },
               timeLimit: 40,
               replaceAvatars: false,
-            };
-          }
-          if (matchType === "draft" && !draftConfig) {
-            draftConfig = {
-              setMix: ["Beta"],
-              packCount: 3,
-              packSize: 15,
-              packCounts: { Beta: 3 },
             };
           }
           const payload = {

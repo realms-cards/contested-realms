@@ -113,6 +113,7 @@ export const TOURNAMENT_SOCKET_EVENTS = {
   STATISTICS_UPDATED: 'tournament:statistics:updated',
   PLAYER_JOINED: 'tournament:player:joined',
   PLAYER_LEFT: 'tournament:player:left',
+  DRAFT_READY: 'tournament:draft:ready',
   PRESENCE_UPDATED: 'tournament:presence',
   ERROR: 'tournament:error'
 } as const;

@@ -55,12 +55,12 @@ export default function TournamentPresenceOverlay({ tournamentId, draftSessionId
     return map;
   }, [tournamentsCtx?.statistics?.matches]);
 
-  const presence = useMemo(() => {
+  const presence = (() => {
     const id = tournamentId || tournamentsCtx?.currentTournament?.id || null;
     const getter = (tournamentsCtx as unknown as { getPresenceFor?: (id: string | null) => Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }> })?.getPresenceFor;
     if (getter) return getter(id);
     return tournamentsCtx?.tournamentPresence ?? [];
-  }, [tournamentsCtx, tournamentsCtx?.tournamentPresence, tournamentsCtx?.currentTournament?.id, tournamentId]);
+  })();
   const presenceMap = useMemo(() => {
     const m = new Map<string, { playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>();
     for (const p of presence) m.set(p.playerId, p);

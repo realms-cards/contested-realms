@@ -1505,6 +1505,12 @@ server.on("request", async (req, res) => {
                 broadcastPlayerLeft(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
               }
               break;
+            case 'DRAFT_READY':
+              if (data.tournamentId && data.draftSessionId) {
+                const { tournamentId, ...rest } = data;
+                broadcastDraftReady(tournamentId, rest);
+              }
+              break;
             case 'UPDATE_PREPARATION':
               if (data.tournamentId) {
                 broadcastPreparationUpdate(data.tournamentId, data.playerId, data.preparationStatus, data.readyPlayerCount, data.totalPlayerCount, data.deckSubmitted);
@@ -3209,6 +3215,82 @@ function normalizeSealedConfig(config) {
   };
 }
 
+function normalizeDraftConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  const asObj = config;
+  const packConfiguration = Array.isArray(asObj.packConfiguration)
+    ? asObj.packConfiguration
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const setId = typeof entry.setId === 'string' ? entry.setId : String(entry.setId || '').trim();
+          const packCount = Number(entry.packCount);
+          if (!setId) return null;
+          return {
+            setId,
+            packCount: Number.isFinite(packCount) && packCount > 0 ? Math.floor(packCount) : 0,
+          };
+        })
+        .filter((entry) => entry !== null)
+    : null;
+
+  const packCounts = {};
+  if (packConfiguration && packConfiguration.length > 0) {
+    for (const entry of packConfiguration) {
+      if (!entry) continue;
+      packCounts[entry.setId] = (packCounts[entry.setId] || 0) + entry.packCount;
+    }
+  }
+  if (asObj.packCounts && typeof asObj.packCounts === 'object') {
+    for (const [setIdRaw, countRaw] of Object.entries(asObj.packCounts)) {
+      const setId = String(setIdRaw || '').trim();
+      const count = Number(countRaw);
+      if (!setId) continue;
+      packCounts[setId] = (packCounts[setId] || 0) + (Number.isFinite(count) && count > 0 ? Math.floor(count) : 0);
+    }
+  }
+
+  let setMix = Array.isArray(asObj.setMix)
+    ? asObj.setMix.map((setId) => String(setId || '').trim()).filter(Boolean)
+    : [];
+  if (setMix.length === 0) {
+    setMix = Object.keys(packCounts);
+  }
+  if (setMix.length === 0 && packConfiguration && packConfiguration.length > 0) {
+    setMix = packConfiguration.map((entry) => entry.setId).filter(Boolean);
+  }
+  if (setMix.length === 0) {
+    setMix = ['Beta'];
+  }
+
+  const packCountSum = Object.values(packCounts).reduce((sum, value) => sum + (Number.isFinite(value) ? Number(value) : 0), 0);
+  const packCount = packCountSum > 0
+    ? packCountSum
+    : Number.isFinite(Number(asObj.packCount)) && Number(asObj.packCount) > 0
+      ? Math.floor(Number(asObj.packCount))
+      : setMix.length;
+
+  const packSize = Number.isFinite(Number(asObj.packSize)) && Number(asObj.packSize) > 0
+    ? Math.floor(Number(asObj.packSize))
+    : 15;
+
+  const normalized = {
+    setMix,
+    packCount,
+    packSize,
+    packCounts: Object.keys(packCounts).length > 0 ? packCounts : undefined,
+    packConfiguration: packConfiguration && packConfiguration.length > 0 ? packConfiguration : undefined,
+  };
+
+  if (Number.isFinite(Number(asObj.timePerPick))) {
+    normalized.timePerPick = Number(asObj.timePerPick);
+  }
+  if (Number.isFinite(Number(asObj.deckBuildingTime))) {
+    normalized.deckBuildingTime = Number(asObj.deckBuildingTime);
+  }
+
+  return normalized;
+}
+
 function getMatchInfo(match) {
   return {
     id: match.id,
@@ -3222,7 +3304,7 @@ function getMatchInfo(match) {
     winnerId: match.winnerId ?? null,
     matchType: match.matchType || "constructed",
     sealedConfig: match.sealedConfig ? normalizeSealedConfig(match.sealedConfig) : null,
-    draftConfig: match.draftConfig,
+    draftConfig: match.draftConfig ? normalizeDraftConfig(match.draftConfig) : null,
     deckSubmissions: match.playerDecks
       ? Array.from(match.playerDecks.keys())
       : [],
@@ -3233,6 +3315,34 @@ function getMatchInfo(match) {
     draftState: match.draftState || undefined,
   };
 
+}
+
+async function hydrateMatchFromDatabase(matchId, match) {
+  try {
+    const dbMatch = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        playerDecks: true,
+      },
+    });
+    if (dbMatch) {
+      if (dbMatch.playerDecks && typeof dbMatch.playerDecks === 'object') {
+        try {
+          match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
+        } catch {}
+      }
+    }
+    if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
+      match.playerDecks = new Map();
+    }
+    if (!match.sealedConfig && match.matchType === 'sealed') {
+      match.sealedConfig = normalizeSealedConfig({ packCount: 6, setMix: ['Alpha'], timeLimit: 40, replaceAvatars: false });
+    }
+  } catch (err) {
+    try {
+      console.warn(`[Tournament] Failed to hydrate match ${matchId} from database:`, err?.message || err);
+    } catch {}
+  }
 }
 
 // Deep merge that replaces arrays and merges plain objects.
@@ -3726,6 +3836,15 @@ function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, r
   io.emit("UPDATE_PREPARATION", payload);
 }
 
+function broadcastDraftReady(tournamentId, payload) {
+  const message = {
+    tournamentId,
+    ...payload,
+  };
+  io.to(`tournament:${tournamentId}`).emit("DRAFT_READY", message);
+  io.emit("DRAFT_READY", message);
+}
+
 function broadcastStatisticsUpdate(tournamentId, statistics) {
   io.to(`tournament:${tournamentId}`).emit("STATISTICS_UPDATED", {
     tournamentId,
@@ -3985,6 +4104,16 @@ io.on("connection", (socket) => {
         const pid = playerIdBySocket.get(socket.id);
         const p = pid ? players.get(pid) : null;
         const list = await updateDraftPresence(sessionId, pid || 'unknown', p?.displayName || null, true);
+        if (pid) {
+          try {
+            await prisma.draftParticipant.updateMany({
+              where: { draftSessionId: sessionId, playerId: pid },
+              data: { status: 'active' },
+            });
+          } catch (err) {
+            try { console.warn('[draft] failed to mark participant active', err?.message || err); } catch {}
+          }
+        }
         io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
         // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
         try { setTimeout(() => { try { io.to(socket.id).emit('draft:session:presence', { sessionId, players: list }); } catch {} }, 25); } catch {}
@@ -4006,6 +4135,14 @@ io.on("connection", (socket) => {
         if (pid) {
           const list = await updateDraftPresence(sessionId, pid, players.get(pid)?.displayName || null, false);
           io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+          try {
+            await prisma.draftParticipant.updateMany({
+              where: { draftSessionId: sessionId, playerId: pid },
+              data: { status: 'disconnected' },
+            });
+          } catch (err) {
+            try { console.warn('[draft] failed to mark participant disconnected', err?.message || err); } catch {}
+          }
         }
       } catch {}
     }
@@ -4293,12 +4430,24 @@ io.on("connection", (socket) => {
     if (!authed) return;
     const matchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
     const playerIds = Array.isArray(payload && payload.playerIds) ? payload.playerIds.filter(Boolean).map(String) : [];
-    const matchType = (payload && payload.matchType) || 'constructed';
+    const requestedMatchType = (payload && payload.matchType) || 'constructed';
     const lobbyName = (payload && payload.lobbyName) || null;
     const tournamentId = payload && payload.tournamentId ? String(payload.tournamentId) : null;
     const sealedConfig = payload && payload.sealedConfig ? payload.sealedConfig : null;
-    const draftConfig = payload && payload.draftConfig ? payload.draftConfig : null;
     if (!matchId || playerIds.length < 1) return;
+
+    const actualMatchType = requestedMatchType === 'sealed'
+      ? 'sealed'
+      : 'constructed';
+    const normalizedSealedConfig = actualMatchType === 'sealed'
+      ? (() => {
+          const base = normalizeSealedConfig(sealedConfig || {});
+          if (base && !base.constructionStartTime) {
+            base.constructionStartTime = Date.now();
+          }
+          return base;
+        })()
+      : null;
 
     let match = matches.get(matchId);
     if (!match) {
@@ -4309,46 +4458,23 @@ io.on("connection", (socket) => {
         lobbyName,
         tournamentId,
         playerIds: [...new Set(playerIds)],
-        status:
-          matchType === 'sealed' ? 'deck_construction' :
-          matchType === 'draft' ? 'waiting' : 'waiting',
+        status: actualMatchType === 'sealed' ? 'deck_construction' : 'waiting',
         seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
         turn: playerIds[0] || null,
         winnerId: null,
-        matchType,
-        sealedConfig: matchType === 'sealed' ? { ...sealedConfig, constructionStartTime: Date.now() } : null,
-        draftConfig: matchType === 'draft' ? draftConfig : null,
-        playerDecks: matchType === 'sealed' || matchType === 'draft' ? new Map() : null,
-        draftState: matchType === 'draft' ? {
-          phase: 'waiting', packIndex: 0, pickNumber: 1,
-          currentPacks: null, picks: playerIds.map(() => []),
-          playerReady: { p1: false, p2: false }, packDirection: 'left', packChoice: playerIds.map(() => null), waitingFor: []
-        } : null,
+        matchType: actualMatchType,
+        sealedConfig: normalizedSealedConfig,
+        playerDecks: new Map(),
         game: {},
         lastTs: 0,
         interactionRequests: new Map(),
         interactionGrants: new Map(),
       };
 
-      // For constructed tournaments, load playerDecks from database
-      if (matchType === 'constructed' && tournamentId) {
-        try {
-          const dbMatch = await prisma.match.findUnique({
-            where: { id: matchId },
-            select: { playerDecks: true }
-          });
-          if (dbMatch && dbMatch.playerDecks && typeof dbMatch.playerDecks === 'object') {
-            match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
-            console.log(`[Tournament] Loaded playerDecks for match ${matchId}:`, Object.keys(dbMatch.playerDecks));
-          }
-        } catch (err) {
-          console.error(`[Tournament] Failed to load playerDecks for match ${matchId}:`, err);
-        }
-      }
-
       matches.set(matchId, match);
       // Begin recording
       startMatchRecording(match);
+      await hydrateMatchFromDatabase(matchId, match);
     } else {
       // Ensure provided players are present
       for (const pid of playerIds) {
@@ -4358,6 +4484,13 @@ io.on("connection", (socket) => {
       if (!match.tournamentId && tournamentId) {
         match.tournamentId = tournamentId;
       }
+      if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
+        match.playerDecks = new Map();
+      }
+      if (actualMatchType === 'sealed') {
+        match.sealedConfig = normalizedSealedConfig || normalizeSealedConfig(match.sealedConfig);
+      }
+      await hydrateMatchFromDatabase(matchId, match);
     }
 
     // Join all currently connected sockets for provided players (cross-instance)

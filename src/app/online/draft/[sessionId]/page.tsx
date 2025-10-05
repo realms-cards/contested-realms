@@ -26,18 +26,6 @@ type DraftSession = {
   startedAt: string | null;
 };
 
-type DraftCard = {
-  id: string;
-  name: string;
-  cardName?: string;
-  slug: string;
-  type?: string;
-  cost?: string;
-  rarity?: string;
-  setName?: string;
-  [k: string]: unknown;
-};
-
 export default function TournamentDraftSessionPage() {
   const params = useParams();
   const router = useRouter();
@@ -100,10 +88,18 @@ export default function TournamentDraftSessionPage() {
           // Attempt to stash picks for editor if provided
           try {
             if (Array.isArray(data?.myPicks)) {
+              const playerId = session.user.id;
+              const storageSuffix = playerId ? `${sessionId}_${playerId}` : sessionId;
               localStorage.setItem(
-                `draftedCards_${sessionId}`,
+                `draftedCards_${storageSuffix}`,
                 JSON.stringify(data.myPicks)
               );
+              if (playerId) {
+                localStorage.setItem(
+                  `draftedCards_${sessionId}`,
+                  JSON.stringify(data.myPicks)
+                );
+              }
             }
           } catch {}
           const params = new URLSearchParams({
@@ -111,6 +107,7 @@ export default function TournamentDraftSessionPage() {
             tournament: draftSession?.tournamentId || "",
             matchName: "Draft",
             sessionId,
+            playerId: session.user.id,
           });
           router.push(`/decks/editor-3d?${params.toString()}`);
         }
@@ -126,7 +123,7 @@ export default function TournamentDraftSessionPage() {
   }, [sessionId, session?.user, draftSession?.tournamentId, router]);
 
   // Handle draft completion
-  const handleDraftComplete = (_draftedCards: DraftCard[]) => {
+  const handleDraftComplete = () => {
     // Navigate to deck construction
     if (draftSession) {
       const params = new URLSearchParams({
@@ -134,6 +131,7 @@ export default function TournamentDraftSessionPage() {
         tournament: draftSession.tournamentId,
         matchName: "Draft",
         sessionId: draftSession.id,
+        playerId: session?.user.id ?? "",
       });
       router.push(`/decks/editor-3d?${params.toString()}`);
     }
@@ -271,15 +269,29 @@ export default function TournamentDraftSessionPage() {
                       : undefined;
                     const myIdx =
                       typeof mySeat === "number" && mySeat > 0 ? mySeat - 1 : 0;
-                    const mine = Array.isArray(state?.picks?.[myIdx])
-                      ? (state!.picks![myIdx] as DraftCard[])
+                    const seatPicks =
+                      state && Array.isArray(state.picks)
+                        ? state.picks[myIdx]
+                        : null;
+                    const mine = Array.isArray(seatPicks)
+                      ? (seatPicks as DraftCard[])
                       : [];
                     if (mine.length) {
                       try {
+                        const playerId = session?.user?.id || "";
+                        const storageSuffix = playerId
+                          ? `${draftSession.id}_${playerId}`
+                          : draftSession.id;
                         localStorage.setItem(
-                          `draftedCards_${draftSession.id}`,
+                          `draftedCards_${storageSuffix}`,
                           JSON.stringify(mine)
                         );
+                        if (playerId) {
+                          localStorage.setItem(
+                            `draftedCards_${draftSession.id}`,
+                            JSON.stringify(mine)
+                          );
+                        }
                       } catch {}
                     }
                   }

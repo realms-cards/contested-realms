@@ -217,6 +217,10 @@ export default function OnlineMatchPage() {
   }, [transport, localPlayerId, setRemoteCursor]);
 
   const rtc = voice?.rtc ?? null;
+  const matchOverlayTargetId = useMemo(() => {
+    return match?.players?.find((p) => p.id && p.id !== myPlayerId)?.id ?? null;
+  }, [match?.players, myPlayerId]);
+  const voiceRequestConnection = voice?.enabled ? voice.requestConnection : undefined;
 
   // Do not auto-join WebRTC. Users must click the Join control to request mic access and connect.
 
@@ -557,7 +561,6 @@ export default function OnlineMatchPage() {
     if (!matchId || match?.matchType !== "constructed") return false;
     if (isTournamentMatch) return true;
     const myId = me?.id;
-    // Check if deck exists in match.playerDecks (server-confirmed)
     if (
       myId &&
       match?.playerDecks &&
@@ -565,11 +568,13 @@ export default function OnlineMatchPage() {
     ) {
       return true;
     }
-    // For tournament matches, check if there's a tournamentId - deck should be pre-submitted
-    if (bootstrapTournamentIdRef.current) {
-      return true; // Tournament decks are submitted during preparation
+    try {
+      return (
+        localStorage.getItem(`constructed_submitted_${matchId}`) === "true"
+      );
+    } catch {
+      return false;
     }
-    return false;
   }, [matchId, match?.playerDecks, match?.matchType, me?.id, isTournamentMatch]);
 
   // Auto-load constructed deck for tournament matches and skip to next phase
@@ -580,7 +585,8 @@ export default function OnlineMatchPage() {
     if (storeActorKey !== myPlayerKey) return;
 
     const tryLoadFromMatch = async () => {
-      const myDeckData = (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
+      const decks = match?.playerDecks as Record<string, unknown> | undefined;
+      const myDeckData = decks?.[me.id];
       if (!myDeckData) return false;
       const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
       const ok = await loadSealedDeckFor(
@@ -638,17 +644,46 @@ export default function OnlineMatchPage() {
     };
 
     (async () => {
-      // Prefer server-attached deck on the match; otherwise fallback to viewerDeck
-      const loaded = (await tryLoadFromMatch()) || (await tryLoadFromTournament());
-      if (loaded) {
+      const hasMatchDeck =
+        !!(match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
+      if (!hasMatchDeck && isTournamentMatch) {
+        // Wait for the server to attach decks to the match record
+        return;
+      }
+
+      const fromMatch = await tryLoadFromMatch();
+      if (fromMatch) {
         console.log("[Tournament] Deck loaded -> Setup phase");
         useGameStore.getState().setPhase("Setup");
         setPrepared(true);
+        return;
+      }
+
+      if (isTournamentMatch) {
+        // If we're in a tournament and the match deck isn't ready yet, keep waiting
+        return;
+      }
+
+      const fallback = await tryLoadFromTournament();
+      if (fallback) {
+        console.log("[Tournament] Fallback tournament deck loaded -> Setup phase");
+        useGameStore.getState().setPhase("Setup");
+        setPrepared(true);
       } else {
-        console.error("[Tournament] Could not load deck for tournament constructed match");
+        console.error("[Tournament] Could not load deck for constructed match");
       }
     })();
-  }, [hasSubmittedConstructedDeck, prepared, match, match?.playerDecks, match?.id, me?.id, myPlayerKey, storeActorKey]);
+  }, [
+    hasSubmittedConstructedDeck,
+    prepared,
+    match,
+    match?.playerDecks,
+    match?.id,
+    me?.id,
+    myPlayerKey,
+    storeActorKey,
+    isTournamentMatch,
+  ]);
 
   // Auto-load tournament decks for sealed/draft when server deck data is present (no overlay)
   useEffect(() => {
@@ -690,7 +725,7 @@ export default function OnlineMatchPage() {
     isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
 
   // Prevent showing draft component again once it's completed or if we already submitted a deck
-  const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
+  const shouldShowDraft = !isTournamentMatch && isDraftActive && !hasSubmittedDraftDeck;
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
@@ -1942,30 +1977,15 @@ export default function OnlineMatchPage() {
         {/* Floating user badge (top-right) with presence + volume control */}
         <UserBadge variant="floating" />
         {/* Video overlay (avatar hidden to avoid duplicate badge) */}
-        {(() => {
-          const targetId = match?.players?.find((p) => p.id !== myPlayerId)?.id ?? null;
-          const callback = voice?.requestConnection;
-
-          console.debug('[OnlineMatchPage] Rendering GlobalVideoOverlay', {
-            hasVoice: !!voice,
-            hasRequestConnection: !!callback,
-            targetPlayerId: targetId,
-            myPlayerId,
-            matchPlayers: match?.players?.map(p => p.id),
-            voiceEnabled: voice?.enabled,
-            voiceKeys: voice ? Object.keys(voice) : []
-          });
-
-          return (
-            <GlobalVideoOverlay
-              position="top-right"
-              showUserAvatar={false}
-              rtc={rtc}
-              onRequestConnection={callback}
-              targetPlayerId={targetId}
-            />
-          );
-        })()}
+        {voice?.enabled && (
+          <GlobalVideoOverlay
+            position="top-right"
+            showUserAvatar={false}
+            rtc={rtc}
+            onRequestConnection={voiceRequestConnection}
+            targetPlayerId={matchOverlayTargetId}
+          />
+        )}
       </div>
   );
 }

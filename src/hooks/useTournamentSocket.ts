@@ -12,6 +12,7 @@ const SERVER_EVENT_ALIASES: Partial<Record<string, string[]>> = {
   [TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED]: ['MATCH_ASSIGNED'],
   [TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED]: ['STATISTICS_UPDATED'],
   [TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION]: ['UPDATE_PREPARATION'],
+  [TOURNAMENT_SOCKET_EVENTS.DRAFT_READY]: ['DRAFT_READY'],
   [TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED]: ['PRESENCE_UPDATED'],
   [TOURNAMENT_SOCKET_EVENTS.ERROR]: ['TOURNAMENT_ERROR'],
 };
@@ -67,6 +68,11 @@ interface TournamentSocketEvents {
     deckSubmitted: boolean; 
     readyPlayerCount: number; 
     totalPlayerCount: number; 
+  }) => void;
+  onDraftReady?: (data: {
+    tournamentId: string;
+    draftSessionId: string;
+    totalPlayers?: number;
   }) => void;
   // Presence events
   onPresenceUpdated?: (data: {
@@ -200,6 +206,14 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       eventsRef.current.onPreparationUpdate?.(data);
     };
 
+    const handleDraftReady = (data: {
+      tournamentId: string;
+      draftSessionId: string;
+      totalPlayers?: number;
+    }) => {
+      eventsRef.current.onDraftReady?.(data);
+    };
+
     const handlePresenceUpdated = (data: {
       tournamentId: string;
       players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
@@ -227,6 +241,7 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       registerEvent(TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED, (data: unknown) => handleMatchAssigned(data as { tournamentId: string; matchId: string; opponentId: string | null; opponentName: string | null; lobbyName: string })),
       registerEvent(TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED, (data: unknown) => handleStatisticsUpdated(data as { tournamentId: string; [key: string]: unknown })),
       registerEvent(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, (data: unknown) => handlePreparationUpdate(data as { tournamentId: string; playerId: string; preparationStatus: string; deckSubmitted: boolean; readyPlayerCount: number; totalPlayerCount: number })),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.DRAFT_READY, (data: unknown) => handleDraftReady(data as { tournamentId: string; draftSessionId: string; totalPlayers?: number })),
       registerEvent(TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED, (data: unknown) => handlePresenceUpdated(data as { tournamentId: string; players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>; })),
       // Also listen to legacy/lowercase server event used by our Socket.IO server
       registerEvent('tournament:presence', (data: unknown) => handlePresenceUpdated(data as { tournamentId: string; players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>; })),
