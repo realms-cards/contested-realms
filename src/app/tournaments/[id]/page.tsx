@@ -7,10 +7,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import CardPreview from "@/components/game/CardPreview";
-import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
-import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import { NumberBadge } from "@/components/game/manacost";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
 
 const TournamentPresenceOverlay = dynamic(
   () => import("@/components/tournament/TournamentPresenceOverlay"),
@@ -50,7 +50,6 @@ export default function TournamentDetailsPage() {
     setCurrentTournament,
     setCurrentTournamentById,
     joinTournament: rtJoinTournament,
-    leaveTournament: rtLeaveTournament,
     startTournament: rtStartTournament,
     endTournament: rtEndTournament,
     statistics: rtStatistics,
@@ -62,7 +61,6 @@ export default function TournamentDetailsPage() {
   } = useRealtimeTournaments();
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const [leaving, setLeaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardPreviewData | null>(null);
@@ -493,7 +491,6 @@ export default function TournamentDetailsPage() {
   // Detect tournament completion and show celebration modal
   useEffect(() => {
     if (!tournament || !isRegistered) return;
-    const prevStatus = prevTournamentStatusRef.current;
     const currentStatus = tournament.status;
     // Only celebrate if at least one round has occurred
     const hasAnyRound = Array.isArray(rounds) && rounds.length > 0;
@@ -855,27 +852,6 @@ export default function TournamentDetailsPage() {
       );
     } finally {
       setJoining(false);
-    }
-  };
-
-  const handleLeaveTournament = async () => {
-    if (!session || !tournament) return;
-
-    setLeaving(true);
-    setError(null);
-
-    try {
-      await rtLeaveTournament(tournamentId);
-    } catch (err) {
-      console.error("Failed to leave tournament:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to leave tournament"
-      );
-    } finally {
-      setLeaving(false);
-      try {
-        router.push("/tournaments");
-      } catch {}
     }
   };
 
