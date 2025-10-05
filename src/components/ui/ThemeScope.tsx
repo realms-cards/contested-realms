@@ -14,13 +14,16 @@ function isGameView(pathname: string | null | undefined): boolean {
     "/draft-3d",
     "/editor-3d",
     "/decks/editor-3d",
-    "/replay",
     "/sealed",
   ];
   return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-export default function ThemeScope({ children }: { children: React.ReactNode }) {
+export default function ThemeScope({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { mode } = useTheme();
   const pathname = usePathname();
   const exempt = isGameView(pathname);
@@ -34,6 +37,8 @@ export default function ThemeScope({ children }: { children: React.ReactNode }) 
   if (mode === "colorful" && !exempt) classNames.push("color-dim");
 
   return (
-    <div className={classNames.length ? classNames.join(" ") : undefined}>{children}</div>
+    <div className={classNames.length ? classNames.join(" ") : undefined}>
+      {children}
+    </div>
   );
 }
