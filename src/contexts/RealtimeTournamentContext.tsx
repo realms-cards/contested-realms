@@ -434,6 +434,25 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     onDraftReady: handleDraftReady,
     onError: handleSocketError
   });
+  // Ensure tournament socket identifies the user for presence mapping
+  useEffect(() => {
+    if (!socket) return;
+    const sendHello = () => {
+      const playerId = sessionData?.user?.id || null;
+      const displayName = ((sessionData?.user?.name ?? '') || 'Player').slice(0, 40);
+      try {
+        socket.emit('hello', { displayName, playerId });
+        // Re-join current tournament to trigger a fresh presence broadcast if needed
+        const tid = activeTournamentId;
+        if (tid) {
+          socket.emit('tournament:join', { tournamentId: tid });
+        }
+      } catch {}
+    };
+    socket.on('connect', sendHello);
+    if (socket.connected) sendHello();
+    return () => { socket.off('connect', sendHello); };
+  }, [socket, sessionData?.user?.id, sessionData?.user?.name, activeTournamentId]);
   const preparation = useTournamentPreparation(preparationId, { isConnected });
   const statistics = useTournamentStatistics(preparationId, { isConnected });
   const phases = useTournamentPhases(preparationId, currentTournament?.status, { isConnected });

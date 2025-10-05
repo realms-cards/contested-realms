@@ -8,6 +8,7 @@ import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
 import ThemeScope from "@/components/ui/ThemeScope";
+import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
 import { SoundProvider } from "@/lib/contexts/SoundContext";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
@@ -47,7 +48,9 @@ export default async function RootLayout({
             <AuthProvider session={session}>
               <ThemeScope>
                 <OnlineProvider>
-                  <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                  <RealtimeTournamentProvider>
+                    <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                  </RealtimeTournamentProvider>
                 </OnlineProvider>
               </ThemeScope>
               {/* Floating user badge on all non-online pages */}
