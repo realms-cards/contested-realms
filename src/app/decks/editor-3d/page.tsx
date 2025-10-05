@@ -752,6 +752,7 @@ function AuthenticatedDeckEditor() {
     const draft = searchParams?.get("draft");
     const matchId = searchParams?.get("matchId");
     const sessionId = searchParams?.get("sessionId"); // Tournament draft session
+    const playerIdParam = searchParams?.get("playerId") || searchParams?.get("player") || null;
     const draftId = matchId || sessionId; // Support both match-based and tournament drafts
     if (draft !== "true" || !draftId) return;
     if (draftInitDone) return;
@@ -759,8 +760,12 @@ function AuthenticatedDeckEditor() {
     setIsDraftMode(true);
 
     let raw: string | null = null;
+    const storageSuffix = playerIdParam ? `${draftId}_${playerIdParam}` : draftId;
     try {
-      raw = localStorage.getItem(`draftedCards_${draftId}`);
+      raw = localStorage.getItem(`draftedCards_${storageSuffix}`);
+      if (!raw && playerIdParam) {
+        raw = localStorage.getItem(`draftedCards_${draftId}`);
+      }
     } catch (e) {
       console.warn("Failed to read drafted cards from localStorage:", e);
     }
@@ -833,14 +838,20 @@ function AuthenticatedDeckEditor() {
 
     // Fast path: use resolved picks if present to avoid any network lookups
     try {
-      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${draftId}`);
+      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${storageSuffix}`) ?? (playerIdParam ? localStorage.getItem(`draftedCardsResolved_${draftId}`) : null);
       if (resolvedRaw) {
         const resolvedParsed = JSON.parse(resolvedRaw) as unknown;
         const resolvedList = Array.isArray(resolvedParsed)
           ? (resolvedParsed as SearchResult[])
           : [];
         const allPositiveIds = resolvedList.every((r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0);
-        if (resolvedList.length > 0 && allPositiveIds && resolvedList.length === drafted.length) {
+        if (resolvedList.length > 0 && allPositiveIds) {
+          if (resolvedList.length !== drafted.length) {
+            console.warn('[Draft Init] Resolved card cache length mismatch', {
+              cached: resolvedList.length,
+              drafted: drafted.length,
+            });
+          }
           setPicks((prev) => {
             const next = { ...prev } as Record<PickKey, PickItem>;
             for (const r of resolvedList) {
@@ -1062,11 +1073,15 @@ function AuthenticatedDeckEditor() {
 
         // Cache resolved results for future reloads (preserves duplicate counts)
         try {
-          if (matchId && expandedResolved.length > 0) {
-            localStorage.setItem(
-              `draftedCardsResolved_${matchId}`,
-              JSON.stringify(expandedResolved)
-            );
+          if (expandedResolved.length > 0) {
+            const resolvedKey = `draftedCardsResolved_${storageSuffix}`;
+            localStorage.setItem(resolvedKey, JSON.stringify(expandedResolved));
+            if (playerIdParam) {
+              localStorage.setItem(
+                `draftedCardsResolved_${draftId}`,
+                JSON.stringify(expandedResolved)
+              );
+            }
           }
         } catch (storageError) {
           console.warn("[Draft Init] Unable to cache resolved draft cards", storageError);

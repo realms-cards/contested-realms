@@ -162,6 +162,16 @@ export async function broadcastPreparationUpdate(
   });
 }
 
+export async function broadcastDraftReady(
+  tournamentId: string,
+  payload: { draftSessionId: string; totalPlayers?: number }
+) {
+  await broadcastToSocket('DRAFT_READY', {
+    tournamentId,
+    ...payload,
+  });
+}
+
 export async function broadcastStatisticsUpdate(
   tournamentId: string,
   statistics: Record<string, unknown>
@@ -198,6 +208,7 @@ export const tournamentSocketService = {
   broadcastPlayerJoined,
   broadcastPlayerLeft,
   broadcastPreparationUpdate,
+  broadcastDraftReady,
   broadcastStatisticsUpdate,
   broadcastMatchAssigned
 };

@@ -32,19 +32,7 @@ import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import { useDraft3DPlayers } from "@/lib/stores/draft-3d-online";
-
-// Card shape used by tournament draft
-type DraftCard = {
-  id: string;
-  name: string;
-  cardName?: string;
-  slug: string;
-  type?: string;
-  cost?: string;
-  rarity?: string;
-  setName?: string;
-  [k: string]: unknown;
-};
+import type { DraftCard } from "@/types/draft";
 
 type DraftParticipant = {
   playerId: string;
@@ -170,6 +158,23 @@ export default function TournamentDraft3DScreen({
           window.clearTimeout(joinAckTimeoutRef.current);
           joinAckTimeoutRef.current = null;
         }
+        // Safety net: if we haven't received a draftUpdate yet and are still "waiting",
+        // fetch a snapshot once to advance the UI. This avoids being stuck on the loading overlay
+        // in case the join raced with the first broadcast.
+        try {
+          setTimeout(async () => {
+            if (!mounted) return;
+            if (draftStateRef.current?.phase !== 'waiting') return;
+            try {
+              const res = await fetch(`/api/draft-sessions/${draftSessionId}/state`, { cache: 'no-store' });
+              if (!res.ok) return;
+              const data = await res.json();
+              if (data?.draftState) {
+                setDraftState(data.draftState as DraftState);
+              }
+            } catch {}
+          }, 50);
+        } catch {}
       }
     };
     let offJoined: (() => void) | null = null;
@@ -276,10 +281,30 @@ export default function TournamentDraft3DScreen({
     return undefined;
   }, [updateScreenType]);
 
-  // Auto-start draft exactly once per session
+  // Presence state from draft transport
+  const { playerStates } = useDraft3DPlayers();
+  const presence = useMemo(() => {
+    return participants.map((p) => {
+      const ps = playerStates.get(p.playerId);
+      return {
+        id: p.playerId,
+        name: p.playerName,
+        seat: p.seatNumber,
+        connected: !!ps?.isConnected,
+      };
+    });
+  }, [participants, playerStates]);
+
+  const allPlayersConnected = useMemo(() => {
+    if (participants.length === 0) return false;
+    return presence.every((p) => p.connected);
+  }, [participants, presence]);
+
+  // Auto-start draft exactly once per session when everyone is connected
   useEffect(() => {
     if (startedRef.current) return;
     if (!draftSessionId) return;
+    if (!allPlayersConnected) return;
     startedRef.current = true;
     (async () => {
       try {
@@ -294,7 +319,7 @@ export default function TournamentDraft3DScreen({
         console.error('[TournamentDraft3D] Error starting draft:', err);
       }
     })();
-  }, [draftSessionId]);
+  }, [draftSessionId, allPlayersConnected, myPlayerId]);
 
   // Poll for state only when socket is disconnected and tab is visible
   useEffect(() => {
@@ -419,21 +444,6 @@ export default function TournamentDraft3DScreen({
         setError(String(error));
       },
     });
-
-  // Presence UI data
-  const { playerStates } = useDraft3DPlayers();
-  const presence = useMemo(() => {
-    const rows = participants.map((p) => {
-      const ps = playerStates.get(p.playerId);
-      return {
-        id: p.playerId,
-        name: p.playerName,
-        seat: p.seatNumber,
-        connected: !!ps?.isConnected,
-      };
-    });
-    return rows;
-  }, [participants, playerStates]);
 
   // Centralize network sending of hover preview
   useEffect(() => {
@@ -859,10 +869,17 @@ export default function TournamentDraft3DScreen({
 
         try {
           if (draftSessionId) {
+            const storageSuffix = myPlayerId ? `${draftSessionId}_${myPlayerId}` : draftSessionId;
             localStorage.setItem(
-              `draftedCards_${draftSessionId}`,
+              `draftedCards_${storageSuffix}`,
               JSON.stringify(mine)
             );
+            if (myPlayerId) {
+              localStorage.setItem(
+                `draftedCards_${draftSessionId}`,
+                JSON.stringify(mine)
+              );
+            }
             const resolved: SearchResult[] = mine.map((c) => ({
               variantId: 0,
               slug: c.slug,
@@ -878,9 +895,15 @@ export default function TournamentDraft3DScreen({
               rarity: (c.rarity as SearchResult["rarity"]) || null,
             }));
             localStorage.setItem(
-              `draftedCardsResolved_${draftSessionId}`,
+              `draftedCardsResolved_${storageSuffix}`,
               JSON.stringify(resolved)
             );
+            if (myPlayerId) {
+              localStorage.setItem(
+                `draftedCardsResolved_${draftSessionId}`,
+                JSON.stringify(resolved)
+              );
+            }
           }
         } catch (err) {
           console.error(
@@ -904,7 +927,7 @@ export default function TournamentDraft3DScreen({
         console.warn("Error cleaning up transport listeners:", err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete, draftSessionId, slugToCardId]);
+  }, [transport, myPlayerIndex, onDraftComplete, draftSessionId, slugToCardId, myPlayerId]);
 
   // Fetch metadata for picked cards
   useEffect(() => {
@@ -945,6 +968,7 @@ export default function TournamentDraft3DScreen({
   const commitPickAndPass = useCallback(
     (cardIdx: number, wx: number, wz: number) => {
       if (!amPicker) return;
+      if (pickInFlightRef.current) return;
 
       const card = myPack[cardIdx];
       if (!card) return;
@@ -957,8 +981,9 @@ export default function TournamentDraft3DScreen({
 
       // Add picked card to 3D board display immediately
       const boosterCard = draftCardToBoosterCard(card);
+      const optimisticPickId = nextPickId;
       const newPick: Pick3D = {
-        id: nextPickId,
+        id: optimisticPickId,
         card: boosterCard,
         x: wx,
         z: wz,
@@ -966,6 +991,9 @@ export default function TournamentDraft3DScreen({
       };
       setPick3D((prev) => [...prev, newPick]);
       setNextPickId((prev) => prev + 1);
+      const revertOptimisticPick = () => {
+        setPick3D((prev) => prev.filter((p) => p.id !== optimisticPickId));
+      };
 
       // Optimistically remove the picked card from our local pack and remove us from waitingFor
       setDraftState((prev) => {
@@ -1021,6 +1049,8 @@ export default function TournamentDraft3DScreen({
             return;
           }
           console.warn('[TournamentDraft3D] makeDraftPick failed:', err?.error || res.status);
+          revertOptimisticPick();
+          setReady(false);
           // Revert optimistic removal if rejected
           setDraftState((prev) => {
             if (prev.phase !== "picking") return prev;
@@ -1038,12 +1068,19 @@ export default function TournamentDraft3DScreen({
               : prev.waitingFor;
             return { ...prev, currentPacks: packs, waitingFor: waiting };
           });
+          pickInFlightRef.current = null;
         };
         attemptPick(1).catch((err) => {
           console.error(`[TournamentDraft3D] makeDraftPick network error:`, err);
+          revertOptimisticPick();
+          setReady(false);
+          pickInFlightRef.current = null;
         });
       } catch (err) {
         console.error(`[TournamentDraft3D] makeDraftPick error:`, err);
+        revertOptimisticPick();
+        setReady(false);
+        pickInFlightRef.current = null;
       }
 
       // Clear staged state

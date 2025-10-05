@@ -2,7 +2,8 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
 
 type DraftParticipant = { playerId: string; playerName: string; seatNumber: number; status: string };
 type DraftSession = {
@@ -15,14 +16,16 @@ type DraftSession = {
 export default function TournamentDraftPage() {
   const params = useParams();
   const router = useRouter();
-  const { status } = useSession();
+  const { status, data: sessionData } = useSession();
   const tournamentId = String(params?.id || "");
+  const tournamentsCtx = useRealtimeTournamentsOptional();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<DraftSession | null>(null);
   const [playersJoined, setPlayersJoined] = useState(0);
   const [totalPlayers, setTotalPlayers] = useState(0);
+  const redirectedRef = useRef(false);
 
   const joinDraft = useCallback(async () => {
     if (!tournamentId) return;
@@ -57,6 +60,11 @@ export default function TournamentDraftPage() {
 
   useEffect(() => {
     if (!tournamentId) return;
+    tournamentsCtx?.setCurrentTournamentById?.(tournamentId);
+  }, [tournamentsCtx, tournamentId]);
+
+  useEffect(() => {
+    if (!tournamentId) return;
     const id = setInterval(() => {
       void joinDraft();
     }, 3000);
@@ -71,7 +79,14 @@ export default function TournamentDraftPage() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data?.myPicks)) {
-          try { localStorage.setItem(`draftedCards_${session.id}`, JSON.stringify(data.myPicks)); } catch {}
+          const playerId = sessionData?.user?.id;
+          const storageSuffix = playerId ? `${session.id}_${playerId}` : session.id;
+          try {
+            localStorage.setItem(`draftedCards_${storageSuffix}`, JSON.stringify(data.myPicks));
+            if (playerId) {
+              localStorage.setItem(`draftedCards_${session.id}`, JSON.stringify(data.myPicks));
+            }
+          } catch {}
         }
       }
     } catch {}
@@ -80,21 +95,27 @@ export default function TournamentDraftPage() {
       tournament: tournamentId,
       matchName: 'Draft',
       sessionId: session.id,
+      playerId: sessionData?.user?.id || '',
     });
     window.location.href = `/decks/editor-3d?${params.toString()}`;
-  }, [session?.id, tournamentId]);
+  }, [session?.id, tournamentId, sessionData?.user?.id]);
 
-  // Auto-redirect to deck editor when session is completed; otherwise go to draft UI when active
   useEffect(() => {
-    if (session?.status === 'completed') {
+    if (redirectedRef.current) return;
+    if (!session?.id) return;
+
+    if (session.status === 'completed') {
+      redirectedRef.current = true;
       void proceedToDeckBuild();
       return;
     }
-    if (session?.status === 'active') {
-      // Route to the real-time draft UI; it will redirect to editor upon completion
-      if (session?.id) window.location.href = `/online/draft/${session.id}`;
+
+    if (session.status === 'waiting' || session.status === 'active') {
+      redirectedRef.current = true;
+      const playerId = sessionData?.user?.id || '';
+      router.replace(`/online/draft/${session.id}?tournament=${tournamentId}&playerId=${playerId}`);
     }
-  }, [session?.status, session?.id, proceedToDeckBuild]);
+  }, [session?.id, session?.status, router, tournamentId, sessionData?.user?.id, proceedToDeckBuild]);
 
   if (status === "loading" || loading) {
     return (
@@ -164,4 +185,3 @@ export default function TournamentDraftPage() {
     </div>
   );
 }
-

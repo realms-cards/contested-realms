@@ -13,10 +13,12 @@ export default function GlobalUserBadge() {
   const isOnlineSection = pathname?.startsWith("/online");
   if (isOnlineSection) return null;
 
+  // Hide on a few static sections where the floating badge is distracting
   if (pathname && (pathname.startsWith("/replay") || pathname.startsWith("/leaderboard") || pathname.startsWith("/decks"))) {
     return null;
   }
 
+  // Previously: only show presence on editor-3d routes when outside /online
   const wantsPresence = Boolean(pathname && pathname.includes("editor-3d"));
 
   return <UserBadge variant="floating" showPresence={wantsPresence} />;

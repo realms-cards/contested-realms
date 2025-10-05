@@ -3,18 +3,7 @@ import { generateBooster } from '@/lib/booster';
 import type { DraftState } from '@/lib/net/transport';
 import { prisma } from '@/lib/prisma';
 import { publish } from '@/lib/redis';
-
-type DraftCard = {
-  id: string;
-  name: string;
-  cardName?: string;
-  slug: string;
-  type?: string | null;
-  cost?: string | null;
-  rarity?: string | null;
-  setName?: string;
-  [k: string]: unknown;
-};
+import type { DraftCard } from '@/types/draft';
 
 interface DraftStateExtended extends DraftState {
   allGeneratedPacks?: DraftCard[][][];
@@ -206,24 +195,48 @@ export class TournamentDraftEngine {
     }
     console.log(`[TournamentDraftEngine] Generated ${playerCount} x ${totalRounds} unique packs (per round)`);
 
-    // Seed initial draft state and immediately distribute packs for round 1
+    const roundIdx = 0;
+    const fallbackSet = setSequence[roundIdx] || setSequence[0] || 'Beta';
+    const currentPacks: DraftCard[][] = Array.from({ length: playerCount }, (_, idx) => {
+      const source = this.allGeneratedPacks?.[idx]?.[roundIdx] ?? [];
+      return Array.isArray(source) ? source.map((card) => ({ ...card })) : [];
+    });
+    const waitingFor = currentPacks
+      .map((pack, idx) => (Array.isArray(pack) && pack.length > 0 ? this.session!.participants[idx].playerId : null))
+      .filter((id): id is string => Boolean(id));
+    const packChoice = this.session.participants.map((_, idx) => {
+      const source = this.allGeneratedPacks?.[idx]?.[roundIdx] ?? [];
+      if (Array.isArray(source) && source.length > 0) {
+        return source[0]?.setName || fallbackSet;
+      }
+      return fallbackSet;
+    });
+
     this.draftState = {
-      phase: 'pack_selection',
-      packIndex: 0,
+      phase: 'picking',
+      packIndex: roundIdx,
       pickNumber: 1,
-      currentPacks: [],
+      currentPacks,
       picks: this.session.participants.map(() => [] as unknown[]) as unknown[][],
       packDirection: 'left',
-      packChoice: this.session.participants.map(() => null),
-      waitingFor: [],
+      packChoice,
+      waitingFor,
     } as DraftStateExtended;
     (this.draftState as DraftStateExtended).allGeneratedPacks = this.allGeneratedPacks ?? undefined;
 
-    const distributed = await this.autoDistributeCurrentRound({ setStatusActive: true, setStartedAt: true });
+    {
+      const data: PrismaClientNS.DraftSessionUpdateArgs['data'] = {
+        status: 'active',
+        draftState: JSON.parse(JSON.stringify(this.draftState)) as PrismaClientNS.InputJsonValue,
+        startedAt: new Date(),
+      };
+      await prisma.draftSession.update({ where: { id: this.sessionId }, data });
+    }
 
-    console.log(`[TournamentDraftEngine] Draft state initialized, phase=${distributed.phase}, waitingFor=${distributed.waitingFor.length}`);
+    console.log(`[TournamentDraftEngine] Draft state initialized, phase=${this.draftState.phase}, waitingFor=${this.draftState.waitingFor.length}`);
 
-    return distributed;
+    const clientState = await this.sanitizeStateForClients(this.draftState);
+    return clientState ?? this.draftState;
   }
 
   /**
@@ -285,10 +298,9 @@ export class TournamentDraftEngine {
     }));
   }
 
-  private computeSetSequence(): string[] {
-    if (!this.session) return [];
+  private static buildSetSequenceFromConfig(packConfig: Array<{ setId: string; packCount: number }>): string[] {
     const sequence: string[] = [];
-    for (const cfg of this.session.packConfiguration) {
+    for (const cfg of packConfig) {
       const count = Math.max(0, Number(cfg.packCount) || 0);
       for (let i = 0; i < count; i++) {
         sequence.push(cfg.setId);
@@ -297,123 +309,11 @@ export class TournamentDraftEngine {
     return sequence;
   }
 
-  private async ensureGeneratedPacks(): Promise<void> {
-    if (this.allGeneratedPacks) return;
-    const dsx = this.draftState as DraftStateExtended | null;
-    if (dsx?.allGeneratedPacks) {
-      this.allGeneratedPacks = dsx.allGeneratedPacks;
-      return;
-    }
-    if (!this.session) {
-      await this.loadSessionAndState();
-    }
-    if (!this.session) {
-      throw new Error('Draft session not initialized');
-    }
-    const setSequence = this.computeSetSequence();
-    const totalRounds = setSequence.length;
-    const playerCount = this.session.participants.length;
-    this.allGeneratedPacks = Array.from({ length: playerCount }, () => [] as DraftCard[][]);
-    for (let r = 0; r < totalRounds; r++) {
-      const setName = setSequence[r] || setSequence[0] || 'Beta';
-      const roundPacks = await this.generateUniqueRoundPacks(setName, playerCount, 15);
-      for (let pi = 0; pi < playerCount; pi++) {
-        (this.allGeneratedPacks[pi] as DraftCard[][])[r] = roundPacks[pi];
-      }
-    }
+  private computeSetSequence(): string[] {
+    if (!this.session) return [];
+    return TournamentDraftEngine.buildSetSequenceFromConfig(this.session.packConfiguration);
   }
 
-  private async autoDistributeCurrentRound(options: { setStatusActive?: boolean; setStartedAt?: boolean } = {}): Promise<DraftState> {
-    if (!this.session || !this.draftState) {
-      await this.loadSessionAndState();
-    }
-    if (!this.session || !this.draftState) {
-      throw new Error('Draft session not initialized');
-    }
-
-    await this.ensureGeneratedPacks();
-
-    const roundIdx = Math.max(0, Number(this.draftState.packIndex) || 0);
-    const playerCount = this.session.participants.length;
-    const picksMatrix = Array.isArray(this.draftState.picks)
-      ? this.draftState.picks as unknown[][]
-      : this.session.participants.map(() => [] as unknown[]);
-
-    const setSequence = this.computeSetSequence();
-    const defaultSet = setSequence[roundIdx] || setSequence[0] || 'Beta';
-
-    const packChoice = this.session.participants.map((_, idx) => {
-      const pack = this.allGeneratedPacks?.[idx]?.[roundIdx] ?? [];
-      return Array.isArray(pack) && pack.length > 0
-        ? (pack[0]?.setName || defaultSet)
-        : defaultSet;
-    });
-
-    const seen = new Set<string>();
-    for (let idx = 0; idx < playerCount; idx++) {
-      let pack = this.allGeneratedPacks?.[idx]?.[roundIdx];
-      const chosenSet = packChoice[idx] || defaultSet;
-      if (!Array.isArray(pack) || pack.length === 0) {
-        pack = await this.generatePack(chosenSet, 15);
-        if (!this.allGeneratedPacks) {
-          this.allGeneratedPacks = Array.from({ length: playerCount }, () => [] as DraftCard[][]);
-        }
-        (this.allGeneratedPacks[idx] as DraftCard[][])[roundIdx] = pack;
-      }
-      let sig = this.packSignature(pack);
-      let attempts = 0;
-      while (seen.has(sig) && attempts < 30) {
-        pack = await this.generatePack(chosenSet, 15);
-        sig = this.packSignature(pack);
-        attempts++;
-      }
-      seen.add(sig);
-      if (this.allGeneratedPacks) {
-        (this.allGeneratedPacks[idx] as DraftCard[][])[roundIdx] = pack;
-      }
-      if (!packChoice[idx]) {
-        packChoice[idx] = pack[0]?.setName || chosenSet;
-      }
-    }
-
-    const distribute = this.session.participants.map((_, idx) => {
-      const pack = this.allGeneratedPacks?.[idx]?.[roundIdx] ?? [];
-      return Array.isArray(pack) ? [...pack] : [];
-    });
-
-    const waitingFor = distribute
-      .map((pack, idx) => (Array.isArray(pack) && pack.length > 0 ? this.session!.participants[idx].playerId : null))
-      .filter((id): id is string => Boolean(id));
-
-    const nextState: DraftStateExtended = {
-      ...this.draftState,
-      phase: 'picking',
-      packIndex: roundIdx,
-      pickNumber: 1,
-      currentPacks: distribute,
-      waitingFor,
-      packChoice,
-      picks: picksMatrix,
-      packDirection: this.draftState.packDirection || 'left',
-    } as DraftStateExtended;
-    nextState.allGeneratedPacks = this.allGeneratedPacks ?? undefined;
-
-    this.draftState = nextState;
-
-    const data: PrismaClientNS.DraftSessionUpdateArgs['data'] = {
-      draftState: JSON.parse(JSON.stringify(nextState)) as PrismaClientNS.InputJsonValue,
-    };
-    if (options.setStatusActive) {
-      data.status = 'active';
-    }
-    if (options.setStartedAt) {
-      data.startedAt = new Date();
-    }
-
-    await prisma.draftSession.update({ where: { id: this.sessionId }, data });
-
-    return this.draftState;
-  }
 
   /**
    * Process a player's pick
@@ -544,19 +444,42 @@ export class TournamentDraftEngine {
               waitingFor: [],
             } as DraftStateExtended;
           } else {
-            // Advance to next round's pack selection
+            // Advance to next round and immediately distribute packs
             const newDirection = base.packDirection === 'left' ? 'right' : 'left';
+            const dsx = base as DraftStateExtended;
+            const generated = (Array.isArray(dsx.allGeneratedPacks)
+              ? dsx.allGeneratedPacks
+              : Array.isArray(this.allGeneratedPacks)
+                ? this.allGeneratedPacks
+                : []) as DraftCard[][][];
+            const sequence = TournamentDraftEngine.buildSetSequenceFromConfig(packConfig);
+            const fallbackSet = sequence[nextRoundIndex] || sequence[0] || 'Beta';
+            const nextCurrentPacks: DraftCard[][] = participants.map((_, idx) => {
+              const source = generated?.[idx]?.[nextRoundIndex] ?? [];
+              return Array.isArray(source) ? source.map((card) => ({ ...card })) : [];
+            });
+            const nextWaiting = nextCurrentPacks
+              .map((pack, idx) => (Array.isArray(pack) && pack.length > 0 ? participants[idx].playerId : null))
+              .filter((id): id is string => Boolean(id));
+            const nextPackChoice = participants.map((_, idx) => {
+              const source = generated?.[idx]?.[nextRoundIndex] ?? [];
+              if (Array.isArray(source) && source.length > 0) {
+                return source[0]?.setName || fallbackSet;
+              }
+              return fallbackSet;
+            });
             nextState = {
               ...base,
-              phase: 'pack_selection',
+              phase: 'picking',
               packIndex: nextRoundIndex,
               pickNumber: 1,
-              currentPacks: [],
+              currentPacks: nextCurrentPacks,
               picks: mergedPicks,
               packDirection: newDirection,
-              waitingFor: participants.map((p) => p.playerId),
-              packChoice: participants.map(() => null),
+              waitingFor: nextWaiting,
+              packChoice: nextPackChoice,
             } as DraftStateExtended;
+            (nextState as DraftStateExtended).allGeneratedPacks = generated;
           }
         } else {
           // Pass packs
@@ -621,12 +544,12 @@ export class TournamentDraftEngine {
     }, { isolationLevel: PrismaClientNS.TransactionIsolationLevel.Serializable });
 
     this.draftState = resultState;
-    if (this.draftState.phase === 'pack_selection') {
-      const distributed = await this.autoDistributeCurrentRound();
-      this.draftState = distributed;
-      return distributed;
+    const latestGenerated = (this.draftState as DraftStateExtended).allGeneratedPacks;
+    if (Array.isArray(latestGenerated)) {
+      this.allGeneratedPacks = latestGenerated;
     }
-    return resultState;
+    const safeState = await this.sanitizeStateForClients(resultState);
+    return safeState ?? resultState;
   }
 
   /**
@@ -698,22 +621,38 @@ export class TournamentDraftEngine {
       return;
     }
 
-    // Alternate direction each round; re-enter pack_selection to let players choose which pack to open this round
     const newDirection = this.draftState.packDirection === 'left' ? 'right' : 'left';
+    const sequence = this.computeSetSequence();
+    const fallbackSet = sequence[nextRoundIndex] || sequence[0] || 'Beta';
+    const playerCount = this.session.participants.length;
+    const currentPacks: DraftCard[][] = Array.from({ length: playerCount }, (_, idx) => {
+      const source = this.allGeneratedPacks?.[idx]?.[nextRoundIndex] ?? [];
+      return Array.isArray(source) ? source.map((card) => ({ ...card })) : [];
+    });
+    const waitingFor = currentPacks
+      .map((pack, idx) => (Array.isArray(pack) && pack.length > 0 ? this.session!.participants[idx].playerId : null))
+      .filter((id): id is string => Boolean(id));
+    const packChoice = this.session.participants.map((_, idx) => {
+      const source = this.allGeneratedPacks?.[idx]?.[nextRoundIndex] ?? [];
+      if (Array.isArray(source) && source.length > 0) {
+        return source[0]?.setName || fallbackSet;
+      }
+      return fallbackSet;
+    });
 
     this.draftState = {
       ...this.draftState,
-      phase: 'pack_selection',
+      phase: 'picking',
       packIndex: nextRoundIndex,
       pickNumber: 1,
-      currentPacks: [],
+      currentPacks,
       packDirection: newDirection,
-      waitingFor: [],
-      packChoice: this.session.participants.map(() => null),
+      waitingFor,
+      packChoice,
     } as DraftStateExtended;
     (this.draftState as DraftStateExtended).allGeneratedPacks = this.allGeneratedPacks ?? undefined;
 
-    await this.autoDistributeCurrentRound();
+    await this.saveState();
   }
 
   /**
@@ -882,7 +821,8 @@ export class TournamentDraftEngine {
         console.warn('[DraftEngine] waitingFor self-heal skipped:', healErr);
       }
 
-      return this.draftState;
+      const safeState = await this.sanitizeStateForClients(this.draftState);
+      return safeState ?? this.draftState;
     } catch {
       return null;
     }
@@ -897,56 +837,11 @@ export class TournamentDraftEngine {
       await this.loadSessionAndState();
       if (!this.draftState || !this.session) throw new Error('Draft not initialized');
     }
-    if (!this.allGeneratedPacks) {
-      const dsx = this.draftState as DraftStateExtended;
-      if (dsx.allGeneratedPacks) this.allGeneratedPacks = dsx.allGeneratedPacks;
+    const dsx = this.draftState as DraftStateExtended;
+    if (!this.allGeneratedPacks && dsx.allGeneratedPacks) {
+      this.allGeneratedPacks = dsx.allGeneratedPacks;
     }
-    if (!this.allGeneratedPacks) {
-      // Fallback: generate all packs now if missing
-      const totalRounds = this.session.packConfiguration.reduce((sum, cfg) => sum + (Number(cfg.packCount) || 0), 0);
-      const setSeq: string[] = [];
-      for (const cfg of this.session.packConfiguration) {
-        for (let i = 0; i < (Number(cfg.packCount) || 0); i++) setSeq.push(cfg.setId);
-      }
-      const playerCount = this.session.participants.length;
-      this.allGeneratedPacks = Array.from({ length: playerCount }, () => [] as DraftCard[][]);
-      for (let r = 0; r < totalRounds; r++) {
-        const roundPacks = await this.generateUniqueRoundPacks(setSeq[r], playerCount, 15);
-        for (let pi = 0; pi < playerCount; pi++) {
-          (this.allGeneratedPacks[pi] as DraftCard[][])[r] = roundPacks[pi];
-        }
-      }
-    }
-    // Idempotent: if we're no longer in pack_selection (e.g., user reloaded after distribution), just return current state
-    if (this.draftState.phase !== 'pack_selection') {
-      return this.draftState as DraftState;
-    }
-    const player = this.session.participants.find(p => p.playerId === playerId);
-    if (!player) throw new Error('Player not found');
-    const pIdx = player.seatNumber - 1;
-    const roundIdx = Math.max(0, Number(this.draftState.packIndex) || 0);
-    const playerPacks = this.allGeneratedPacks[pIdx] || [];
-    let chosenIdx = typeof opts.packIndex === 'number' ? Math.max(0, Math.min(opts.packIndex, playerPacks.length - 1)) : roundIdx;
-    if (opts.setChoice) {
-      const found = playerPacks.findIndex((pack) => Array.isArray(pack) && pack[0]?.setName === opts.setChoice);
-      if (found >= 0) chosenIdx = found;
-    }
-    if (chosenIdx !== roundIdx) {
-      const tmp = playerPacks[roundIdx];
-      playerPacks[roundIdx] = playerPacks[chosenIdx];
-      playerPacks[chosenIdx] = tmp;
-    }
-    const chosenPack = playerPacks[roundIdx] || [];
-    const chosenSet = chosenPack[0]?.setName || null;
-    const pc: (string | null)[] = Array.isArray((this.draftState as DraftStateExtended).packChoice)
-      ? [ ...(this.draftState as DraftStateExtended).packChoice ]
-      : this.session.participants.map(() => null);
-    pc[pIdx] = chosenSet;
-    (this.draftState as DraftStateExtended).packChoice = pc;
-
-    (this.draftState as DraftStateExtended).allGeneratedPacks = this.allGeneratedPacks ?? undefined;
-
-    return this.autoDistributeCurrentRound();
+    return this.draftState as DraftState;
   }
 
   /**
@@ -954,12 +849,32 @@ export class TournamentDraftEngine {
    * This should be called after any state change
    */
   async broadcastStateUpdate(): Promise<void> {
+    const safeState = await this.sanitizeStateForClients(this.draftState);
     try {
       await publish('draft:session:update', {
         sessionId: this.sessionId,
-        draftState: this.draftState,
+        draftState: safeState,
       });
     } catch {}
     try { console.log(`[TournamentDraftEngine] State updated for session ${this.sessionId}`); } catch {}
+  }
+
+  private async sanitizeStateForClients(state: DraftState | null): Promise<DraftState | null> {
+    if (!state) return state;
+    try {
+      const participants = await prisma.draftParticipant.findMany({
+        where: { draftSessionId: this.sessionId },
+        select: { status: true },
+      });
+      if (participants.length === 0) return state;
+      const shouldMask = participants.some((p) => p.status !== 'active');
+      if (!shouldMask) return state;
+      return {
+        ...state,
+        currentPacks: null,
+      };
+    } catch {
+      return state;
+    }
   }
 }

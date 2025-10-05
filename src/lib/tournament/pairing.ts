@@ -188,6 +188,8 @@ export async function createRoundMatches(
     }
   });
 
+  const tournamentFormat = tournament?.format || 'constructed';
+  const tournamentSettings = (tournament as unknown as { settings?: Record<string, unknown> })?.settings || {};
   // Build playerDecks map from registrations
   const playerDecksMap: Record<string, Prisma.JsonValue> = {};
   const deckCache = new Map<string, Prisma.JsonValue>();
@@ -275,7 +277,7 @@ export async function createRoundMatches(
       players: [
         { id: pairing.player1.playerId, displayName: pairing.player1.displayName },
         { id: pairing.player2.playerId, displayName: pairing.player2.displayName }
-      ]
+      ],
     };
 
     if (Object.keys(matchPlayerDecks).length > 0) {

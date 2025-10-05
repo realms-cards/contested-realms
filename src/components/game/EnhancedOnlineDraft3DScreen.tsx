@@ -36,19 +36,7 @@ import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
-
-// Card shape used by OnlineDraftScreen; keep compatible
-type DraftCard = {
-  id: string;
-  name: string;
-  cardName?: string;
-  slug: string;
-  type?: string;
-  cost?: string;
-  rarity?: string;
-  setName?: string;
-  [k: string]: unknown;
-};
+import type { DraftCard } from "@/types/draft";
 
 // Player ready message type
 type PlayerReadyMessage = CustomMessage & {
