@@ -160,6 +160,17 @@ export interface SessionLeaveEvent {
   playerId: string;
 }
 
+// Presence event for draft sessions (server-emitted)
+export interface SessionPresenceEvent {
+  sessionId: string;
+  players: Array<{
+    playerId: string;
+    playerName: string;
+    isConnected: boolean;
+    lastActivity: number;
+  }>;
+}
+
 // Error handling
 export interface Draft3DError {
   errorCode: string;
@@ -195,6 +206,8 @@ export interface Draft3DEventMap {
   'draft:session:join': SessionJoinEvent;
   'draft:session:joined': SessionJoinedEvent;
   'draft:session:leave': SessionLeaveEvent;
+  // Presence updates
+  'draft:session:presence': SessionPresenceEvent;
   
   // System events
   'draft:error': Draft3DError;

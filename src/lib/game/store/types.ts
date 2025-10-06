@@ -9,7 +9,7 @@ import type {
   InteractionResponseMessage,
   InteractionResultMessage,
 } from "@/lib/net/interactions";
-import type { CustomMessage, GameTransport } from "@/lib/net/transport";
+import type { GameTransport } from "@/lib/net/transport";
 import type {
   BurrowAbility,
   ContextMenuAction,
@@ -21,7 +21,7 @@ import type {
 import type { RemoteCursorState } from "./remoteCursor";
 export { REMOTE_CURSOR_TTL_MS } from "./remoteCursor";
 
-export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
+export type Phase = "Setup" | "Start" | "Draw" | "Main" | "End";
 export type PlayerKey = "p1" | "p2";
 
 export type Thresholds = {

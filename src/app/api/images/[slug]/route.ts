@@ -34,6 +34,19 @@ function suffixDirFromBasename(base: string): string | null {
   return `${a}_${b}`;
 }
 
+// Handle CORS preflight for KTX2 loader
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Range",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { slug: slugRaw } = await params;
@@ -87,6 +100,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
           Location: cdnUrl,
           // Allow the redirect to be cached by the browser/CDN
           "Cache-Control": "public, max-age=31536000, immutable",
+          // CORS headers for Three.js loaders
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
         },
       });
     }

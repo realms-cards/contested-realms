@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 
 const SubmitPreparationRequestSchema = z.object({
   preparationData: z.object({
@@ -30,6 +31,13 @@ const SubmitPreparationRequestSchema = z.object({
 });
 
 export const dynamic = 'force-dynamic';
+
+// Minimum total cards required for a limited deck (Avatar + 24 Spells + 12 Sites = 37)
+const MIN_DECK_CARDS = 37;
+
+function getTotalCards(deckList: Array<{ cardId: string; quantity: number }>) {
+  return deckList.reduce((sum, card) => sum + (Number(card.quantity) || 0), 0);
+}
 
 // POST /api/tournaments/[id]/preparation/submit
 // Submit preparation data (deck, draft picks, etc.)
@@ -87,7 +95,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
         
         const sealedData = preparationData.sealed;
-        isComplete = sealedData.packsOpened && sealedData.deckBuilt && sealedData.deckList.length >= 40;
+        {
+          const total = getTotalCards(sealedData.deckList);
+          isComplete = sealedData.packsOpened && sealedData.deckBuilt && total >= MIN_DECK_CARDS;
+        }
         deckSubmitted = isComplete;
         
         if (isComplete && !validateDeckList(sealedData.deckList)) {
@@ -101,7 +112,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
         
         const draftData = preparationData.draft;
-        isComplete = draftData.draftCompleted && draftData.deckBuilt && draftData.deckList.length >= 40;
+        {
+          const total = getTotalCards(draftData.deckList);
+          isComplete = draftData.draftCompleted && draftData.deckBuilt && total >= MIN_DECK_CARDS;
+        }
         deckSubmitted = isComplete;
         
         if (isComplete && !validateDeckList(draftData.deckList)) {
@@ -125,6 +139,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const updatedPrepData = {
       ...currentPrepData,
       ...preparationData,
+      // Mark ready for lobby list UX once a valid deck is submitted
+      ready: isComplete ? true : (currentPrepData as { ready?: boolean })?.ready ?? false,
       lastUpdated: new Date().toISOString(),
       isComplete
     };
@@ -143,7 +159,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     console.log(`Preparation updated for player ${session.user.id}: ${newStatus}, deckSubmitted: ${deckSubmitted}`);
 
-    // Check if all players are ready to start matches
+    // Broadcast preparation progress
+    try {
+      const [readyCount, totalCount] = await Promise.all([
+        prisma.tournamentRegistration.count({ where: { tournamentId: id, preparationStatus: 'completed', deckSubmitted: true } }),
+        prisma.tournamentRegistration.count({ where: { tournamentId: id } })
+      ]);
+      await tournamentSocketService.broadcastPreparationUpdate(
+        id,
+        session.user.id,
+        newStatus,
+        readyCount,
+        totalCount,
+        deckSubmitted
+      );
+    } catch (socketErr) {
+      console.warn('Failed to broadcast preparation update:', socketErr);
+    }
+
+    // Check if all players are ready to start matches; host will manually trigger rounds
     if (isComplete) {
       await checkAndTransitionToActivePhase(id);
     }
@@ -167,44 +201,52 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Helper function to validate deck list
 function validateDeckList(deckList: Array<{ cardId: string; quantity: number }>) {
-  if (deckList.length < 40) return false;
-  
-  const totalCards = deckList.reduce((sum, card) => sum + card.quantity, 0);
-  if (totalCards < 40) return false;
-  
-  // Check for invalid quantities (max 4 of any card except basic lands)
+  const totalCards = getTotalCards(deckList);
+  if (totalCards < MIN_DECK_CARDS) return false;
+  // Basic sanity checks: positive integer quantities
   for (const card of deckList) {
-    if (card.quantity > 4 && !isBasicLand(card.cardId)) {
-      return false;
-    }
+    if (!Number.isInteger(card.quantity) || card.quantity <= 0) return false;
   }
-  
+  // Detailed legality (copy limits, composition) is enforced by the deck editor and match server.
   return true;
-}
-
-// Helper function to check if a card is a basic land
-function isBasicLand(cardId: string) {
-  const basicLands = ['mountain', 'island', 'forest', 'plains', 'swamp'];
-  return basicLands.includes(cardId.toLowerCase());
 }
 
 // Helper function to check if tournament should transition to active phase
 async function checkAndTransitionToActivePhase(tournamentId: string) {
-  const allRegistrations = await prisma.tournamentRegistration.findMany({
-    where: { tournamentId },
-    select: { preparationStatus: true, deckSubmitted: true }
-  });
+  const [allRegistrations, tournament] = await Promise.all([
+    prisma.tournamentRegistration.findMany({
+      where: { tournamentId },
+      select: { preparationStatus: true, deckSubmitted: true }
+    }),
+    prisma.tournament.findUnique({ where: { id: tournamentId }, select: { status: true, name: true } })
+  ]);
+
+  if (!tournament) return false;
 
   const allComplete = allRegistrations.every(reg => 
     reg.preparationStatus === 'completed' && reg.deckSubmitted
   );
 
-  if (allComplete) {
-    await prisma.tournament.update({
-      where: { id: tournamentId },
-      data: { status: 'active' }
-    });
-
-    console.log(`Tournament ${tournamentId} transitioned to active phase - all players ready`);
+  if (!allComplete || tournament.status === 'active') {
+    return false;
   }
+
+  await prisma.tournament.update({
+    where: { id: tournamentId },
+    data: { status: 'active' }
+  });
+
+  console.log(`Tournament ${tournamentId} transitioned to active phase - host may start Round 1 manually`);
+
+  try {
+    await tournamentSocketService.broadcastPhaseChanged(tournamentId, 'active', {
+      previousStatus: 'preparing',
+      message: 'All players ready. Host can start the next round when ready.'
+    });
+    await tournamentSocketService.broadcastTournamentUpdateById(tournamentId);
+  } catch (socketError) {
+    console.warn('Failed to broadcast phase change:', socketError);
+  }
+
+  return true;
 }

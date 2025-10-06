@@ -1,9 +1,10 @@
-import { TournamentStatus as DBTournamentStatus, TournamentFormat as DBTournamentFormat, RoundStatus as DBRoundStatus } from '@prisma/client';
+import { TournamentStatus as DBTournamentStatus, TournamentFormat as DBTournamentFormat } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { tournamentSocketService } from '@/lib/services/tournament-socket-service';
-import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { TournamentDraftEngine } from '@/lib/services/tournament-draft-engine';
+import { deriveDraftSetupFromSettings } from '@/lib/tournament/draft-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,26 +35,126 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament already started' }), { status: 400 });
     }
 
-    if (tournament.registrations.length < 2) {
-      return new Response(JSON.stringify({ error: 'Need at least 2 players to start tournament' }), { status: 400 });
+    // Require all seats to be filled before starting
+    if (tournament.registrations.length !== tournament.maxPlayers) {
+      return new Response(
+        JSON.stringify({
+          error: `All players must join before starting (${tournament.registrations.length}/${tournament.maxPlayers})`,
+        }),
+        { status: 400 }
+      );
     }
 
-    // Check if all players are ready (stored in preparationData)
-    const unreadyPlayers = tournament.registrations.filter(reg => {
-      const prepData = reg.preparationData as Record<string, unknown> | null;
-      return !prepData?.ready;
-    });
-    if (unreadyPlayers.length > 0) {
-      return new Response(JSON.stringify({ 
-        error: `Cannot start tournament - ${unreadyPlayers.length} players not ready` 
-      }), { status: 400 });
+    let draftSessionId: string | null = null;
+
+    if (tournament.format === DBTournamentFormat.draft) {
+      const draftSetup = deriveDraftSetupFromSettings(tournament.settings);
+
+      let draftSession = await prisma.draftSession.findFirst({
+        where: { tournamentId: id },
+        include: { participants: true }
+      });
+
+      if (!draftSession) {
+        draftSession = await prisma.draftSession.create({
+          data: {
+            tournamentId: id,
+            status: 'waiting',
+            packConfiguration: JSON.parse(JSON.stringify(draftSetup.packConfiguration)),
+            settings: JSON.parse(JSON.stringify({
+              timePerPick: draftSetup.timePerPick,
+              deckBuildingTime: draftSetup.deckBuildingTime,
+            })),
+          },
+          include: { participants: true },
+        });
+      }
+
+      draftSessionId = draftSession.id;
+
+      const participantsByPlayer = new Map(draftSession.participants.map((p) => [p.playerId, p]));
+      const sortedRegistrations = [...tournament.registrations].sort((a, b) => {
+        const aTime = a.registeredAt?.getTime?.() ?? new Date(a.registeredAt ?? new Date(0)).getTime();
+        const bTime = b.registeredAt?.getTime?.() ?? new Date(b.registeredAt ?? new Date(0)).getTime();
+        return aTime - bTime;
+      });
+
+      const participantOps = [] as Parameters<typeof prisma.draftParticipant.update>[0][];
+      const participantCreates = [] as Parameters<typeof prisma.draftParticipant.create>[0][];
+      const registrationOps = [] as Parameters<typeof prisma.tournamentRegistration.update>[0][];
+
+      let seatNumber = 1;
+      for (const reg of sortedRegistrations) {
+        const existing = participantsByPlayer.get(reg.playerId);
+        if (existing) {
+          if (existing.seatNumber !== seatNumber || existing.status !== 'waiting') {
+            participantOps.push({
+              where: { id: existing.id },
+              data: { seatNumber, status: 'waiting' },
+            });
+          }
+        } else {
+          participantCreates.push({
+            data: {
+              draftSessionId: draftSession.id,
+              playerId: reg.playerId,
+              seatNumber,
+              status: 'waiting',
+            },
+          });
+        }
+
+        const currentPrep = (reg.preparationData as Record<string, unknown> | null) ?? {};
+        const nextDraftData = {
+          ...(currentPrep.draft as Record<string, unknown> | undefined ?? {}),
+          draftSessionId: draftSession.id,
+          seatNumber,
+          draftCompleted: false,
+          deckBuilt: false,
+        };
+
+        registrationOps.push({
+          where: { id: reg.id },
+          data: {
+            preparationStatus: 'inProgress',
+            deckSubmitted: false,
+            preparationData: JSON.parse(JSON.stringify({
+              ...currentPrep,
+              draft: nextDraftData,
+            })),
+          },
+        });
+
+        seatNumber += 1;
+      }
+
+      const txOps = [
+        ...participantCreates.map((args) => prisma.draftParticipant.create(args)),
+        ...participantOps.map((args) => prisma.draftParticipant.update(args)),
+        ...registrationOps.map((args) => prisma.tournamentRegistration.update(args)),
+      ];
+      if (txOps.length > 0) {
+        await prisma.$transaction(txOps);
+      }
+
+      if (draftSession.status === 'waiting') {
+        const engine = new TournamentDraftEngine(draftSession.id);
+        await engine.initialize();
+        await engine.broadcastStateUpdate();
+      }
     }
 
     // Determine next status based on format
-    let nextStatus: DBTournamentStatus = DBTournamentStatus.active;
+    // Change: constructed tournaments also enter 'preparing' so players can submit a deck used for ALL matches
+    let nextStatus: DBTournamentStatus = DBTournamentStatus.preparing;
     if (tournament.format === DBTournamentFormat.draft || tournament.format === DBTournamentFormat.sealed) {
       nextStatus = DBTournamentStatus.preparing;
+    } else {
+      // constructed
+      nextStatus = DBTournamentStatus.preparing;
     }
+
+    // We no longer support starting directly into 'active'. The tournament starts in 'preparing'.
 
     // Start tournament
     const updatedTournament = await prisma.tournament.update({
@@ -64,9 +165,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    // Broadcast phase change event via Socket.io
-    try {
-      await tournamentSocketService.broadcastPhaseChanged(
+    // Broadcast phase change event via Socket.io (fire-and-forget so API response is instant)
+    tournamentSocketService
+      .broadcastPhaseChanged(
         id,
         nextStatus,
         {
@@ -75,87 +176,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           format: tournament.format,
           totalPlayers: tournament.registrations.length
         }
-      );
-      // Also broadcast a full tournament snapshot so lists sync immediately
-      await tournamentSocketService.broadcastTournamentUpdateById(id);
-    } catch (socketError) {
-      console.warn('Failed to broadcast phase changed event:', socketError);
-      // Don't fail the request if socket broadcast fails
-    }
-
-    // If going straight to active (constructed), create first round with matches
-    if (nextStatus === DBTournamentStatus.active) {
-      // Create the round
-      const newRound = await prisma.tournamentRound.create({
-        data: {
-          tournamentId: id,
-          roundNumber: 1,
-          status: DBRoundStatus.pending
-        }
+      )
+      .catch((socketError) => {
+        console.warn('Failed to broadcast phase changed event:', socketError);
+      });
+    // Also broadcast a full tournament snapshot so lists sync immediately
+    tournamentSocketService
+      .broadcastTournamentUpdateById(id)
+      .catch((socketError) => {
+        console.warn('Failed to broadcast tournament update:', socketError);
       });
 
-      // Generate pairings for the first round
-      const pairings = await generatePairings(id);
-
-      // Create matches for the round
-      const matchIds = await createRoundMatches(id, newRound.id, pairings);
-
-      // Mark the round as active now that matches exist
-      await prisma.tournamentRound.update({
-        where: { id: newRound.id },
-        data: { status: DBRoundStatus.active, startedAt: new Date() }
-      });
-
-      // Build broadcast payload for ROUND_STARTED so clients refresh live without reload
-      try {
-        const createdMatches = await prisma.match.findMany({
-          where: { id: { in: matchIds } },
-          select: { id: true, players: true }
+    if (draftSessionId) {
+      tournamentSocketService
+        .broadcastDraftReady(id, {
+          draftSessionId,
+          totalPlayers: tournament.registrations.length,
+        })
+        .catch((socketError) => {
+          console.warn('Failed to broadcast draft ready event:', socketError);
         });
-        const broadcastMatches = createdMatches.map((m) => {
-          const players = (m.players as Array<{ id: string; displayName?: string; name?: string }>);
-          const p1 = players?.[0];
-          const p2 = players?.[1];
-          return {
-            id: m.id,
-            player1Id: p1?.id || '',
-            player1Name: (p1?.displayName || p1?.name || 'Player 1'),
-            player2Id: p2?.id || null,
-            player2Name: (p2?.displayName || p2?.name || null)
-          };
-        });
-        await tournamentSocketService.broadcastRoundStarted(id, 1, broadcastMatches);
-
-        // Additionally, send targeted MATCH_ASSIGNED events to each participant
-        const tournamentName = tournament.name;
-        for (const m of broadcastMatches) {
-          // Player 1 always present
-          await tournamentSocketService.broadcastMatchAssigned(id, m.player1Id, {
-            matchId: m.id,
-            opponentId: m.player2Id,
-            opponentName: m.player2Name,
-            lobbyName: tournamentName,
-          });
-          // Player 2 when present
-          if (m.player2Id) {
-            await tournamentSocketService.broadcastMatchAssigned(id, m.player2Id, {
-              matchId: m.id,
-              opponentId: m.player1Id,
-              opponentName: m.player1Name,
-              lobbyName: tournamentName,
-            });
-          }
-        }
-      } catch (socketErr) {
-        console.warn('Failed to broadcast ROUND_STARTED:', socketErr);
-      }
-
-      console.log(`Created ${matchIds.length} matches for tournament ${id}, round 1`);
     }
+
+    // If we ever reintroduce direct start into 'active', re-add round creation here.
 
     return new Response(JSON.stringify({
       success: true,
       tournamentId: id,
+      draftSessionId,
       status: updatedTournament.status,
       startedAt: updatedTournament.startedAt?.getTime()
     }), {

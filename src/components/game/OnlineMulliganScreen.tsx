@@ -2,8 +2,6 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useOnline } from "@/app/online/online-context";
-import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useGameStore } from "@/lib/game/store";
@@ -23,7 +21,6 @@ export default function OnlineMulliganScreen({
   finalizeLabel = "Start Game",
 }: OnlineMulliganScreenProps) {
   const { updateScreenType } = useVideoOverlay();
-  const { transport, match, me } = useOnline();
   const zones = useGameStore((s) => s.zones);
   const mulligans = useGameStore((s) => s.mulligans);
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
@@ -189,17 +186,6 @@ export default function OnlineMulliganScreen({
       <div className="mt-4 text-xs opacity-60 text-center">
         {submitted ? "You are ready. Waiting for other players to finish mulligans…" : "Other players are making their mulligan decisions..."}
       </div>
-
-      {/* Video Overlay */}
-      <GlobalVideoOverlay 
-        position="bottom-right"
-        showUserAvatar={true}
-        transport={transport}
-        myPlayerId={me?.id || null}
-        matchId={match?.id || null}
-        userDisplayName={me?.displayName || ''}
-        userAvatarUrl={undefined} // No avatar URL available yet
-      />
     </div>
   );
 }

@@ -2,25 +2,50 @@ import { TournamentFormat, TournamentStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/tournaments
 // Returns all active tournaments
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
   try {
-    console.log('Fetching tournaments...');
+    const url = new URL(req.url);
+    const sp = url.searchParams;
+    const statusParam = sp.get('status'); // e.g. 'completed', 'active', 'all', or 'registering,preparing,active,completed'
+    const q = (sp.get('q') || '').trim();
+    const includeCompleted = sp.get('includeCompleted') === 'true';
+    const limit = Math.max(1, Math.min(100, Number(sp.get('limit') || 50) || 50));
+    const offset = Math.max(0, Number(sp.get('offset') || 0) || 0);
+
+    // Default statuses: only active/open tournaments
+    let statuses: TournamentStatus[] | null = ['registering', 'preparing', 'active'] as TournamentStatus[];
+    if (statusParam) {
+      if (statusParam === 'all') {
+        statuses = null; // no status filter
+      } else {
+        const parts = statusParam.split(',').map(s => s.trim()).filter(Boolean);
+        const allowed = new Set(['registering','preparing','active','completed','cancelled']);
+        const parsed = parts.filter(p => allowed.has(p)) as TournamentStatus[];
+        statuses = parsed.length ? parsed : statuses;
+      }
+    } else if (includeCompleted) {
+      statuses = ['registering', 'preparing', 'active', 'completed'] as TournamentStatus[];
+    }
+
+    console.log('Fetching tournaments...', { statuses: statuses ?? 'ALL', limit, offset });
+
+    const where = {
+      ...(statuses ? { status: { in: statuses } } : {}),
+      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+    };
     const tournaments = await prisma.tournament.findMany({
-      where: {
-        status: {
-          in: ['registering', 'preparing', 'active'] as TournamentStatus[]
-        }
-      },
+      where,
       include: {
         registrations: {
           include: {
@@ -36,7 +61,9 @@ export async function GET() {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     });
 
     console.log('Found tournaments:', tournaments.length);
@@ -59,12 +86,14 @@ export async function GET() {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
+      currentPlayers: tournament.registrations.length,
       registeredPlayers: tournament.registrations.map(reg => {
         const prepData = reg.preparationData as Record<string, unknown> | null;
         return {
           id: reg.playerId,
           displayName: reg.player.name || 'Anonymous',
-          ready: Boolean(prepData?.ready)
+          ready: Boolean(prepData?.ready),
+          deckSubmitted: Boolean(reg.deckSubmitted)
         };
       }),
       standings: tournament.standings.map(standing => ({
@@ -87,7 +116,9 @@ export async function GET() {
         matches: round.matches.map(match => match.id)
       })),
       settings: tournament.settings,
-      createdAt: tournament.createdAt.getTime()
+      createdAt: tournament.createdAt.getTime(),
+      startedAt: tournament.startedAt ? tournament.startedAt.getTime() : undefined,
+      completedAt: tournament.completedAt ? tournament.completedAt.getTime() : undefined,
     }));
 
     return new Response(JSON.stringify(tournamentInfos), {
@@ -115,8 +146,14 @@ export async function POST(req: NextRequest) {
     const format = body?.format as TournamentFormat;
     const matchType = String(body?.matchType || 'sealed');
     const maxPlayers = Number(body?.maxPlayers || 8);
-    const sealedConfig = body?.sealedConfig || null;
-    const draftConfig = body?.draftConfig || null;
+    // Accept sealed/draft config from either top-level or nested in `settings`
+    const incomingSettings = (body?.settings as Record<string, unknown> | undefined) || {};
+    const sealedConfig = (body?.sealedConfig as unknown)
+      ?? (incomingSettings?.sealedConfig as unknown)
+      ?? null;
+    const draftConfig = (body?.draftConfig as unknown)
+      ?? (incomingSettings?.draftConfig as unknown)
+      ?? null;
 
     console.log("Creating tournament:", { name, format, matchType, maxPlayers, creatorId: session.user.id });
 
@@ -150,9 +187,24 @@ export async function POST(req: NextRequest) {
       }), { status: 400 });
     }
 
-    // Calculate optimal rounds based on player count (Swiss system)
-    const optimalRounds = Math.ceil(Math.log2(maxPlayers));
-    const totalRounds = Math.max(3, optimalRounds); // Minimum 3 rounds
+    // Use client-provided totalRounds if available, otherwise default to 3 for Swiss
+    // Swiss tournaments typically run 3-5 rounds regardless of player count
+    const clientTotalRounds = typeof incomingSettings?.totalRounds === 'number'
+      ? incomingSettings.totalRounds
+      : null;
+    const totalRounds = clientTotalRounds ?? 3; // Default 3 rounds for Swiss
+
+    // Merge provided arbitrary settings while enforcing server-calculated fields
+    // Tournament pairing format is always Swiss
+    const settingsOut: Record<string, unknown> = {
+      ...incomingSettings,
+      pairingFormat: 'swiss',
+      totalRounds,
+      roundTimeLimit: 50,
+      matchTimeLimit: 60,
+      sealedConfig,
+      draftConfig,
+    };
 
     const tournament = await prisma.tournament.create({
       data: {
@@ -161,13 +213,8 @@ export async function POST(req: NextRequest) {
         format,
         status: 'registering',
         maxPlayers,
-        settings: {
-          totalRounds,
-          roundTimeLimit: 50,
-          matchTimeLimit: 60,
-          sealedConfig,
-          draftConfig
-        }
+        // Ensure a Prisma-compatible JSON shape
+        settings: JSON.parse(JSON.stringify(settingsOut))
       }
     });
 
@@ -206,6 +253,13 @@ export async function POST(req: NextRequest) {
     } catch (autoRegError) {
       console.error("Error during auto-registration:", autoRegError);
       // Don't fail tournament creation if auto-registration fails
+    }
+
+    // Broadcast new tournament so lobby/tournaments lists auto-update
+    try {
+      await tournamentSocketService.broadcastTournamentUpdateById(tournament.id);
+    } catch (socketErr) {
+      console.warn('Failed to broadcast tournament creation:', socketErr);
     }
 
     return new Response(JSON.stringify({

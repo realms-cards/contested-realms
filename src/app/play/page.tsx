@@ -44,6 +44,7 @@ export default function PlayPage() {
   const selected = useGameStore((s) => s.selectedCard);
   const events = useGameStore((s) => s.events);
   const setPhase = useGameStore((s) => s.setPhase);
+  const phase = useGameStore((s) => s.phase);
   const placementDialog = useGameStore((s) => s.placementDialog);
   const closePlacementDialog = useGameStore((s) => s.closePlacementDialog);
   const searchDialog = useGameStore((s) => s.searchDialog);
@@ -64,6 +65,7 @@ export default function PlayPage() {
   const consentPlayerId = currentPlayerKey
     ? (`hotseat_${currentPlayerKey}` satisfies string)
     : "hotseat";
+  const showToolbox = phase !== "Setup";
 
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
@@ -385,13 +387,15 @@ export default function PlayPage() {
       />
 
       {/* Toolbox overlay (draw/peek/inspect/position tools) */}
-      <GameToolbox
-        myPlayerId={null}
-        mySeat={currentPlayerKey}
-        opponentPlayerId={null}
-        opponentSeat={currentPlayerKey === "p1" ? "p2" : "p1"}
-        matchId={null}
-      />
+      {showToolbox && (
+        <GameToolbox
+          myPlayerId={null}
+          mySeat={currentPlayerKey}
+          opponentPlayerId={null}
+          opponentSeat={currentPlayerKey === "p1" ? "p2" : "p1"}
+          matchId={null}
+        />
+      )}
 
       {/* HUD */}
       <StatusBar dragFromHand={dragFromHand} />

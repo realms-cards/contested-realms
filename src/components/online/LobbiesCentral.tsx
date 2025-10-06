@@ -4,6 +4,7 @@
 "use client";
 
 import { RefreshCw, Eye, EyeOff, Phone, Loader2, Check, X } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
@@ -249,6 +250,7 @@ function TournamentMatchesModal({
                                             lobbyName: (tObj?.name as string | undefined) || undefined,
                                             sealedConfig,
                                             draftConfig,
+                                            tournamentId: String(tObj?.id || ''),
                                           };
                                           localStorage.setItem(`tournamentMatchBootstrap_${m.id}`, JSON.stringify(payload));
                                           window.location.href = `/online/play/${encodeURIComponent(m.id)}`;
@@ -282,6 +284,17 @@ export type CreateTournamentConfig = {
   format: "swiss" | "elimination" | "round_robin";
   matchType: "constructed" | "sealed" | "draft";
   maxPlayers: number;
+  sealedConfig?: {
+    packCounts: Record<string, number>;
+    timeLimit: number;
+    replaceAvatars: boolean;
+  };
+  draftConfig?: {
+    setMix: string[];
+    packCount: number;
+    packSize: number;
+    packCounts: Record<string, number>;
+  };
 };
 
 export default function LobbiesCentral({
@@ -360,6 +373,12 @@ export default function LobbiesCentral({
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [matchesData, setMatchesData] = useState<TournamentMatchesResponse | null>(null);
+
+  // Pending states for tournament actions to prevent double clicks and show small loaders
+  const [pendingReady, setPendingReady] = useState<Record<string, boolean>>({});
+  const [pendingJoinT, setPendingJoinT] = useState<Record<string, boolean>>({});
+  const [pendingLeaveT, setPendingLeaveT] = useState<Record<string, boolean>>({});
+  const [pendingStartT, setPendingStartT] = useState<Record<string, boolean>>({});
   
   // Check if user is already engaged in a lobby or tournament
   // IMPORTANT: Use joinedLobbyId as the single source of truth for membership.
@@ -381,9 +400,19 @@ export default function LobbiesCentral({
   
   // Tournament creation state
   const [tournamentName, setTournamentName] = useState<string>("");
-  const [tournamentFormat, setTournamentFormat] = useState<"swiss" | "elimination" | "round_robin">("swiss");
+  // Tournament pairing format is always Swiss
+  const tournamentFormat = "swiss";
   const [tournamentMatchType, setTournamentMatchType] = useState<"constructed" | "sealed" | "draft">("sealed");
   const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
+  // Tournament pack settings
+  // New format: array of set names, one per booster
+  const [sealedBoosterCount, setSealedBoosterCount] = useState<number>(6);
+  const [sealedBoosters, setSealedBoosters] = useState<string[]>(["Beta", "Beta", "Beta", "Beta", "Beta", "Beta"]);
+  const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
+  const [sealedReplaceAvatars, setSealedReplaceAvatars] = useState<boolean>(false);
+  const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
+  const [draftBoosters, setDraftBoosters] = useState<string[]>(["Beta", "Arthurian Legends", "Arthurian Legends"]);
+  const [draftPackSize, setDraftPackSize] = useState<number>(15);
 
   // Generate a random name when overlay opens
   const handleOverlayOpen = () => {
@@ -564,15 +593,24 @@ export default function LobbiesCentral({
             Lobbies ({filtered.length})
           </button>
           {tournamentsEnabled && (
-            <button
-              className={`text-[11px] px-2 py-0.5 rounded ${
-                showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-              }`}
-              onClick={() => setShowTournaments(!showTournaments)}
-              title="Toggle tournaments"
-            >
-              Tournaments ({filteredTournaments.length})
-            </button>
+            <>
+              <button
+                className={`text-[11px] px-2 py-0.5 rounded ${
+                  showTournaments ? "bg-purple-600/80 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+                }`}
+                onClick={() => setShowTournaments(!showTournaments)}
+                title="Toggle tournaments"
+              >
+                Tournaments ({filteredTournaments.length})
+              </button>
+              <Link
+                href="/tournaments"
+                className="text-[11px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 transition-colors"
+                title="View all tournaments"
+              >
+                View All →
+              </Link>
+            </>
           )}
         </div>
         <label className="text-xs flex items-center gap-1 opacity-80">
@@ -874,6 +912,12 @@ export default function LobbiesCentral({
           const isRegistered = tournament.registeredPlayers.some(p => p.id === myId);
           const myRegistration = tournament.registeredPlayers.find(p => p.id === myId);
           const isReady = myRegistration?.ready || false;
+          // Consider a deck submitted when the API marks deckSubmitted (preferred) or when the player is ready
+          const hasSubmitted = (() => {
+            if (!myRegistration) return false;
+            const maybe = myRegistration as typeof myRegistration & { deckSubmitted?: boolean };
+            return Boolean(maybe.deckSubmitted || isReady);
+          })();
           const canJoin = tournament.status === "registering" && !isRegistered && tournament.registeredPlayers.length < tournament.maxPlayers && !isEngaged;
           const allPlayersReady = tournament.registeredPlayers.length >= 2 && tournament.registeredPlayers.every(p => p.ready);
           const canStart = tournament.creatorId === myId && tournament.status === "registering" && allPlayersReady;
@@ -921,18 +965,38 @@ export default function LobbiesCentral({
               <div className="flex items-center gap-2">
                 {canJoin && onJoinTournament && (
                   <button
-                    className="rounded bg-purple-600/80 hover:bg-purple-600 px-3 py-1 text-xs"
-                    onClick={() => onJoinTournament(tournament.id)}
+                    className={`rounded px-3 py-1 text-xs ${pendingJoinT[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-purple-600/80 hover:bg-purple-600'} text-white`}
+                    onClick={async () => {
+                      if (pendingJoinT[tournament.id]) return;
+                      setPendingJoinT((m) => ({ ...m, [tournament.id]: true }));
+                      try {
+                        await Promise.resolve(onJoinTournament(tournament.id));
+                        if (onRefresh) onRefresh();
+                      } finally {
+                        setPendingJoinT((m) => ({ ...m, [tournament.id]: false }));
+                      }
+                    }}
+                    disabled={pendingJoinT[tournament.id]}
                   >
-                    Join
+                    {pendingJoinT[tournament.id] ? 'Joining…' : 'Join'}
                   </button>
                 )}
                 {isRegistered && tournament.status === "registering" && onLeaveTournament && (
                   <button
-                    className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
-                    onClick={() => onLeaveTournament(tournament.id)}
+                    className={`rounded px-3 py-1 text-xs ${pendingLeaveT[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-red-600/80 hover:bg-red-600'} text-white`}
+                    onClick={async () => {
+                      if (pendingLeaveT[tournament.id]) return;
+                      setPendingLeaveT((m) => ({ ...m, [tournament.id]: true }));
+                      try {
+                        await Promise.resolve(onLeaveTournament(tournament.id));
+                        if (onRefresh) onRefresh();
+                      } finally {
+                        setPendingLeaveT((m) => ({ ...m, [tournament.id]: false }));
+                      }
+                    }}
+                    disabled={pendingLeaveT[tournament.id]}
                   >
-                    Leave
+                    {pendingLeaveT[tournament.id] ? 'Leaving…' : 'Leave'}
                   </button>
                 )}
                 {tournament.creatorId === myId && tournament.status === "registering" && onUpdateTournamentSettings && (
@@ -947,23 +1011,48 @@ export default function LobbiesCentral({
                   </button>
                 )}
                 {isRegistered && tournament.status === "registering" && onToggleTournamentReady && (
-                  <button
-                    className={`rounded px-3 py-1 text-xs ${
-                      isReady 
-                        ? "bg-yellow-600/80 hover:bg-yellow-600 text-yellow-100" 
-                        : "bg-green-600/80 hover:bg-green-600 text-green-100"
-                    }`}
-                    onClick={() => onToggleTournamentReady(tournament.id, !isReady)}
-                  >
-                    {isReady ? "Not Ready" : "Ready"}
-                  </button>
+                  isReady ? (
+                    <span
+                      className="rounded px-3 py-1 text-xs bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 cursor-not-allowed"
+                      title="You're marked as ready"
+                    >
+                      Ready ✓
+                    </span>
+                  ) : (
+                    <button
+                      className={`rounded px-3 py-1 text-xs ${pendingReady[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-green-600/80 hover:bg-green-600 text-green-100'}`}
+                      onClick={async () => {
+                        if (pendingReady[tournament.id]) return;
+                        setPendingReady((m) => ({ ...m, [tournament.id]: true }));
+                        try {
+                          await Promise.resolve(onToggleTournamentReady(tournament.id, true));
+                          if (onRefresh) onRefresh();
+                        } finally {
+                          setPendingReady((m) => ({ ...m, [tournament.id]: false }));
+                        }
+                      }}
+                      disabled={pendingReady[tournament.id]}
+                    >
+                      {pendingReady[tournament.id] ? 'Marking…' : 'Ready'}
+                    </button>
+                  )
                 )}
                 {canStart && onStartTournament && (
                   <button
-                    className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100 font-medium"
-                    onClick={() => onStartTournament(tournament.id)}
+                    className={`rounded px-3 py-1 text-xs text-white font-medium ${pendingStartT[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-blue-600/80 hover:bg-blue-600'}`}
+                    onClick={async () => {
+                      if (pendingStartT[tournament.id]) return;
+                      setPendingStartT((m) => ({ ...m, [tournament.id]: true }));
+                      try {
+                        await Promise.resolve(onStartTournament(tournament.id));
+                        if (onRefresh) onRefresh();
+                      } finally {
+                        setPendingStartT((m) => ({ ...m, [tournament.id]: false }));
+                      }
+                    }}
+                    disabled={pendingStartT[tournament.id]}
                   >
-                    Start Tournament
+                    {pendingStartT[tournament.id] ? 'Starting…' : 'Start Tournament'}
                   </button>
                 )}
                 {tournament.creatorId === myId && tournament.status !== "completed" && onEndTournament && (
@@ -977,18 +1066,59 @@ export default function LobbiesCentral({
                 {isRegistered && tournament.status === "draft_phase" && (
                   <button
                     className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
-                    onClick={() => window.location.href = `/online/play/tournament-${tournament.id}`}
+                    onClick={() => window.location.href = `/tournaments/${tournament.id}/draft`}
                   >
                     Enter Draft
                   </button>
                 )}
                 {isRegistered && tournament.status === "sealed_phase" && (
-                  <button
-                    className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs text-green-100"
-                    onClick={() => window.location.href = `/decks/editor-3d?mode=sealed&tournament=${tournament.id}`}
-                  >
-                    Build Deck
-                  </button>
+                  (hasSubmitted
+                    ? (
+                      <span
+                        className="rounded px-3 py-1 text-xs bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 cursor-not-allowed"
+                        title="Deck submitted to tournament"
+                      >
+                        Deck Submitted ✓
+                      </span>
+                    ) : (
+                      <button
+                        className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs text-green-100"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/tournaments/${encodeURIComponent(tournament.id)}/preparation/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data?.error || 'Failed to start preparation');
+                            // Persist generated packs for the editor (if provided)
+                            const packs = data?.preparationData?.sealed?.generatedPacks as Array<{ packId: string; setId: string; cards: unknown[] }> | undefined;
+                            if (Array.isArray(packs)) {
+                              const storePacks = packs.map(p => ({ id: p.packId, set: p.setId, cards: Array.isArray(p.cards) ? p.cards : [], opened: false }));
+                              try { localStorage.setItem(`sealedPacks_tournament_${tournament.id}`, JSON.stringify(storePacks)); } catch {}
+                            }
+                          } catch (e) {
+                            console.warn('Failed to start preparation:', e);
+                          }
+                          const cfg = (tournament as unknown as { settings?: { sealedConfig?: { packCounts?: Record<string, number>; timeLimit?: number; replaceAvatars?: boolean }}}).settings?.sealedConfig || {};
+                          const packCount = Object.values(cfg.packCounts || { Beta: 6 }).reduce((a, b) => a + (b || 0), 0) || 6;
+                          const setMix = Object.entries(cfg.packCounts || { Beta: 6 }).filter(([, c]) => (c || 0) > 0).map(([s]) => s);
+                          const timeLimit = cfg.timeLimit ?? 40;
+                          const replaceAvatars = cfg.replaceAvatars ?? false;
+                          const params = new URLSearchParams({
+                            sealed: 'true',
+                            tournament: tournament.id,
+                            packCount: String(packCount),
+                            setMix: setMix.join(','),
+                            timeLimit: String(timeLimit),
+                            constructionStartTime: String(Date.now()),
+                            replaceAvatars: String(replaceAvatars),
+                            matchName: tournament.name,
+                          });
+                          window.location.href = `/decks/editor-3d?${params.toString()}`;
+                        }}
+                      >
+                        Build Deck
+                      </button>
+                    )
+                  )
                 )}
                 {isRegistered && tournament.status === "playing" && (
                   <button
@@ -1149,26 +1279,6 @@ export default function LobbiesCentral({
                   </button>
                 </div>
               </div>
-              
-              <div>
-                <label className="block text-xs font-medium mb-2">Format</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {["swiss", "elimination", "round_robin"].map((format) => (
-                    <button
-                      key={format}
-                      className={`px-3 py-2 text-xs rounded transition-colors ${
-                        tournamentFormat === format
-                          ? "bg-blue-600/80 text-white"
-                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      }`}
-                      onClick={() => setTournamentFormat(format as "swiss" | "elimination" | "round_robin")}
-                    >
-                      {format === "swiss" ? "Swiss" : format === "elimination" ? "Elimination" : "Round Robin"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
               <div>
                 <label className="block text-xs font-medium mb-2">Match Type</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1187,6 +1297,142 @@ export default function LobbiesCentral({
                   ))}
                 </div>
               </div>
+              {tournamentMatchType === 'sealed' && (
+                <div className="space-y-3 mt-2">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-medium">Booster Count</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.max(1, sealedBoosterCount - 1);
+                          setSealedBoosterCount(newCount);
+                          setSealedBoosters(prev => prev.slice(0, newCount));
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center text-xs font-semibold">{sealedBoosterCount}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.min(10, sealedBoosterCount + 1);
+                          setSealedBoosterCount(newCount);
+                          setSealedBoosters(prev => [...prev, ...Array(newCount - prev.length).fill("Beta")]);
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {sealedBoosters.map((setName, idx) => (
+                      <div key={`sealed-booster-${idx}`} className="flex items-center gap-2">
+                        <div className="text-xs text-slate-400 w-16">Pack {idx + 1}</div>
+                        <select
+                          value={setName}
+                          onChange={(e) => {
+                            setSealedBoosters(prev => {
+                              const next = [...prev];
+                              next[idx] = e.target.value;
+                              return next;
+                            });
+                          }}
+                          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                        >
+                          <option value="Beta">Beta</option>
+                          <option value="Arthurian Legends">Arthurian Legends</option>
+                          <option value="Alpha">Alpha</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Time Limit (min)</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={90}
+                        value={sealedTimeLimit}
+                        onChange={(e) => setSealedTimeLimit(Math.max(10, Math.min(90, parseInt(e.target.value) || 40)))}
+                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs mt-5">
+                      <input type="checkbox" checked={sealedReplaceAvatars} onChange={(e) => setSealedReplaceAvatars(e.target.checked)} />
+                      Replace Avatars
+                    </label>
+                  </div>
+                </div>
+              )}
+              {tournamentMatchType === 'draft' && (
+                <div className="space-y-3 mt-2">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-medium">Booster Count</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.max(1, draftBoosterCount - 1);
+                          setDraftBoosterCount(newCount);
+                          setDraftBoosters(prev => prev.slice(0, newCount));
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center text-xs font-semibold">{draftBoosterCount}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.min(5, draftBoosterCount + 1);
+                          setDraftBoosterCount(newCount);
+                          setDraftBoosters(prev => [...prev, ...Array(newCount - prev.length).fill("Arthurian Legends")]);
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs opacity-80 mb-1">Pack Size</label>
+                    <input
+                      type="number"
+                      min={8}
+                      max={20}
+                      value={draftPackSize}
+                      onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
+                      className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {draftBoosters.map((setName, idx) => (
+                      <div key={`draft-booster-${idx}`} className="flex items-center gap-2">
+                        <div className="text-xs text-slate-400 w-16">Pack {idx + 1}</div>
+                        <select
+                          value={setName}
+                          onChange={(e) => {
+                            setDraftBoosters(prev => {
+                              const next = [...prev];
+                              next[idx] = e.target.value;
+                              return next;
+                            });
+                          }}
+                          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                        >
+                          <option value="Beta">Beta</option>
+                          <option value="Arthurian Legends">Arthurian Legends</option>
+                          <option value="Alpha">Alpha</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div>
                 <label className="block text-xs font-medium mb-2">Max Players</label>
@@ -1217,12 +1463,38 @@ export default function LobbiesCentral({
                 onClick={() => {
                   const trimmedName = tournamentName.trim();
                   if (trimmedName) {
-                    onCreateTournament({
+                    const payload: CreateTournamentConfig = {
                       name: trimmedName,
                       format: tournamentFormat,
                       matchType: tournamentMatchType,
-                      maxPlayers: tournamentMaxPlayers
-                    });
+                      maxPlayers: tournamentMaxPlayers,
+                    };
+                    if (tournamentMatchType === 'sealed') {
+                      // Convert booster array to packCounts format
+                      const packCounts: Record<string, number> = {};
+                      sealedBoosters.forEach(setName => {
+                        packCounts[setName] = (packCounts[setName] || 0) + 1;
+                      });
+                      payload.sealedConfig = {
+                        packCounts,
+                        timeLimit: sealedTimeLimit,
+                        replaceAvatars: sealedReplaceAvatars,
+                      };
+                    } else if (tournamentMatchType === 'draft') {
+                      // Convert booster array to packCounts format
+                      const packCounts: Record<string, number> = {};
+                      draftBoosters.forEach(setName => {
+                        packCounts[setName] = (packCounts[setName] || 0) + 1;
+                      });
+                      const mix = Object.keys(packCounts);
+                      payload.draftConfig = {
+                        setMix: mix.length ? mix : ['Beta'],
+                        packCount: draftBoosterCount,
+                        packSize: draftPackSize,
+                        packCounts,
+                      };
+                    }
+                    onCreateTournament(payload);
                     setTournamentOverlayOpen(false);
                   }
                 }}
@@ -1323,7 +1595,8 @@ function TournamentSettingsForm({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(tournament.name);
-  const [format, setFormat] = useState(tournament.format);
+  // Tournament pairing format is always Swiss
+  const format = "swiss";
   const [matchType, setMatchType] = useState(tournament.matchType);
   const [maxPlayers, setMaxPlayers] = useState(tournament.maxPlayers);
 
@@ -1334,18 +1607,18 @@ function TournamentSettingsForm({
       matchType?: "constructed" | "sealed" | "draft";
       maxPlayers?: number;
     } = {};
-    
+
     if (name !== tournament.name) settings.name = name;
-    if (format !== tournament.format) settings.format = format;
+    // Always ensure format is swiss
+    settings.format = "swiss";
     if (matchType !== tournament.matchType) settings.matchType = matchType;
     if (maxPlayers !== tournament.maxPlayers) settings.maxPlayers = maxPlayers;
-    
+
     onSave(settings);
   };
 
-  const hasChanges = 
+  const hasChanges =
     name !== tournament.name ||
-    format !== tournament.format ||
     matchType !== tournament.matchType ||
     maxPlayers !== tournament.maxPlayers;
 
@@ -1371,26 +1644,6 @@ function TournamentSettingsForm({
           >
             🎲
           </button>
-        </div>
-      </div>
-
-      {/* Tournament Format */}
-      <div>
-        <label className="block text-xs font-medium mb-2">Format</label>
-        <div className="grid grid-cols-3 gap-2">
-          {["swiss", "elimination", "round_robin"].map((formatOption) => (
-            <button
-              key={formatOption}
-              className={`px-3 py-2 text-xs rounded transition-colors ${
-                format === formatOption
-                  ? "bg-blue-600/80 text-white"
-                  : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-              }`}
-              onClick={() => setFormat(formatOption as "swiss" | "elimination" | "round_robin")}
-            >
-              {formatOption === "swiss" ? "Swiss" : formatOption === "elimination" ? "Elimination" : "Round Robin"}
-            </button>
-          ))}
         </div>
       </div>
 

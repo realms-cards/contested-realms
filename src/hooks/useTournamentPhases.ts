@@ -101,7 +101,8 @@ interface PhaseState {
 
 export function useTournamentPhases(
   tournamentId: string | null,
-  initialStatus?: TournamentStatus
+  initialStatus?: TournamentStatus,
+  options?: { isConnected?: boolean; pollIntervalMs?: number }
 ) {
   const status = initialStatus || 'registering';
   const [state, setState] = useState<PhaseState>(() => {
@@ -306,16 +307,30 @@ export function useTournamentPhases(
     return () => clearInterval(interval);
   }, []);
 
-  // Periodic condition checking
+  // Periodic condition checking (backup): avoid polling when socket is connected or tab hidden
   useEffect(() => {
-    if (tournamentId) {
-      checkConditions();
-      
-      const interval = setInterval(checkConditions, 10000); // Check every 10 seconds
-      return () => clearInterval(interval);
+    if (!tournamentId) return undefined;
+    if (options?.isConnected) {
+      return undefined;
     }
-    return undefined;
-  }, [checkConditions, tournamentId]);
+    checkConditions();
+    const pollMs = options?.pollIntervalMs ?? 20000;
+    let id: number | null = null;
+    const start = () => {
+      if (options?.isConnected) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (id != null) return;
+      id = window.setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        void checkConditions();
+      }, pollMs);
+    };
+    const stop = () => { if (id != null) { clearInterval(id); id = null; } };
+    start();
+    const onVis = () => { stop(); start(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+    return () => { stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis); };
+  }, [checkConditions, tournamentId, options?.isConnected, options?.pollIntervalMs]);
 
   return {
     ...state,

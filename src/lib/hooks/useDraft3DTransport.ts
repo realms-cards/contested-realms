@@ -18,6 +18,7 @@ import type {
   OperationData,
   UIUpdateData
 } from '@/types/draft-3d-events';
+import type { PlayerDraftState } from '@/types/draft-models';
 
 interface UseDraft3DTransportOptions {
   transport: GameTransport | null;
@@ -52,6 +53,53 @@ export const useDraft3DTransport = ({
   useEffect(() => {
     setConnectionStatus(!!transport);
   }, [transport, setConnectionStatus]);
+
+  // Monitor underlying socket connection and reflect into store; on disconnect, mark players offline
+  useEffect(() => {
+    if (!transport) return;
+    let mounted = true;
+    const readConnected = () => {
+      try {
+        const anyT = transport as unknown as { isConnected?: () => boolean; getConnectionState?: () => string };
+        if (anyT?.isConnected) return !!anyT.isConnected();
+        if (anyT?.getConnectionState) return anyT.getConnectionState() === 'connected';
+        return !!transport;
+      } catch {
+        return !!transport;
+      }
+    };
+    let prev = readConnected();
+    const tick = () => {
+      if (!mounted) return;
+      const now = readConnected();
+      if (now !== prev) {
+        prev = now;
+        setConnectionStatus(now);
+        if (!now) {
+          // Mark all players as disconnected for current session so presence pills turn red immediately
+          try {
+            const session = store.sessionId;
+            if (session) {
+              const players = store.stateManager.players.getSessionPlayers(session);
+              for (const p of players) {
+                store.stateManager.players.updatePlayerState(p.playerId, { isConnected: false });
+              }
+              store.updatePlayerStates();
+            }
+          } catch (e) {
+            console.warn('[Draft3D] failed to mark players offline on disconnect', e);
+          }
+        }
+      }
+    };
+    const id = window.setInterval(tick, 1000);
+    // Run once immediately
+    try { tick(); } catch {}
+    return () => {
+      mounted = false;
+      window.clearInterval(id);
+    };
+  }, [transport, setConnectionStatus, store]);
 
   // Set up event listeners when transport is available
   useEffect(() => {
@@ -173,7 +221,6 @@ export const useDraft3DTransport = ({
     unsubscribers.push(
       transport.on('draft:session:joined', (event: Draft3DEventMap['draft:session:joined']) => {
         if (event.sessionId !== sessionId) return;
-        
         // Update player states when someone joins
         if (event.playerState) {
           store.stateManager.players.updatePlayerState(
@@ -181,6 +228,39 @@ export const useDraft3DTransport = ({
             event.playerState
           );
           store.updatePlayerStates();
+        } else {
+          // Fallback: mark current player as connected immediately to avoid presence UI lag
+          if (playerId) {
+            store.stateManager.players.updatePlayerState(playerId, {
+              playerId,
+              isConnected: true,
+              sessionId,
+              lastActivity: Date.now(),
+            } as PlayerDraftState);
+            store.updatePlayerStates();
+          }
+        }
+      })
+    );
+
+    // Presence updates for the draft session
+    unsubscribers.push(
+      transport.on('draft:session:presence', (event: Draft3DEventMap['draft:session:presence']) => {
+        if (event.sessionId !== sessionId) return;
+        try {
+          for (const p of event.players) {
+            const updates: Partial<PlayerDraftState> = {
+              playerId: p.playerId,
+              playerName: p.playerName,
+              isConnected: p.isConnected,
+              sessionId,
+              lastActivity: p.lastActivity,
+            };
+            store.stateManager.players.updatePlayerState(p.playerId, updates);
+          }
+          store.updatePlayerStates();
+        } catch (e) {
+          console.warn('[Draft3D] presence update failed:', e);
         }
       })
     );

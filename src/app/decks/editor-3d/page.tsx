@@ -34,6 +34,10 @@ const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
 const BottomBar = dynamic(() => import("@/app/decks/editor-3d/BottomBar"), {
   ssr: false,
 });
+const TournamentPresenceOverlay = dynamic(
+  () => import("@/components/tournament/TournamentPresenceOverlay"),
+  { ssr: false }
+);
 
 // Lazy load the Canvas/three stack to trim initial JS and avoid SSR
 const EditorCanvas = dynamic(
@@ -88,6 +92,7 @@ type PickItem = {
 function AuthenticatedDeckEditor() {
   const { status } = useSession();
   const searchParams = useSearchParams();
+  const searchParamsKey = searchParams?.toString() ?? "";
   const router = useRouter();
 
   // Deck editor state (same as 2D version)
@@ -100,6 +105,24 @@ function AuthenticatedDeckEditor() {
   const [deckCreatorName, setDeckCreatorName] = useState<string | null>(null);
   const [setName, setSetName] = useState<string>("Beta");
   const [picks, setPicks] = useState<Record<PickKey, PickItem>>({});
+
+  // If the editor is launched with a tournament param, set the deck name to the tournament's name.
+  useEffect(() => {
+    const tournamentId = searchParams?.get("tournament");
+    if (!tournamentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(String(tournamentId))}`);
+        if (!res.ok) return;
+        const detail = await res.json();
+        if (!cancelled && detail?.name && typeof detail.name === 'string') {
+          setDeckName(detail.name);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [searchParams]);
 
   // Debug: Track picks changes
   // Runs once on initial picks change logging; intentionally omits deckName/setName
@@ -245,6 +268,7 @@ function AuthenticatedDeckEditor() {
     total: number;
     inProgress: boolean;
   }>({ processed: 0, total: 0, inProgress: false });
+  const draftInitRef = useRef(false);
 
   // Track which packs are opened so we can preserve UI state across server/local updates
   const openedByIdRef = useRef<Map<string, boolean>>(new Map());
@@ -617,11 +641,12 @@ function AuthenticatedDeckEditor() {
   useEffect(() => {
     const sealed = searchParams?.get("sealed");
     const matchId = searchParams?.get("matchId");
+    const tournamentId = searchParams?.get("tournament");
     const timeLimit = searchParams?.get("timeLimit");
     const constructionStartTime = searchParams?.get("constructionStartTime");
     const replaceAvatars = searchParams?.get("replaceAvatars") === "true";
 
-    if (sealed === "true" && matchId && !isSealed) {
+    if (sealed === "true" && (matchId || tournamentId) && !isSealed) {
       console.log("Initializing sealed mode...");
 
       // Clear any existing cards from previous sessions
@@ -660,18 +685,20 @@ function AuthenticatedDeckEditor() {
       }
       setPacks(generatedPacks);
     }
-  }, [searchParams, isSealed]); // Only initialize if not already sealed
+  }, [searchParamsKey, isSealed]); // Only initialize if not already sealed
 
   // If server-provided sealed packs were persisted, load them as the authoritative packs to open.
   // We do NOT pre-seed sideboard; players add cards to their pool by opening packs here.
   useEffect(() => {
     if (!isSealed || sealedInitDone) return;
     const matchId = searchParams?.get("matchId");
-    if (!matchId) return;
+    const tournamentId = searchParams?.get("tournament");
+    const idKey = matchId || (tournamentId ? `tournament_${tournamentId}` : null);
+    if (!idKey) return;
 
     let raw: string | null = null;
     try {
-      raw = localStorage.getItem(`sealedPacks_${matchId}`);
+      raw = localStorage.getItem(`sealedPacks_${idKey}`);
     } catch {
       raw = null;
     }
@@ -726,20 +753,71 @@ function AuthenticatedDeckEditor() {
   useEffect(() => {
     const draft = searchParams?.get("draft");
     const matchId = searchParams?.get("matchId");
-    if (draft !== "true" || !matchId) return;
-    if (draftInitDone) return;
+    const sessionId = searchParams?.get("sessionId"); // Tournament draft session
+    const playerIdParam = searchParams?.get("playerId") || searchParams?.get("player") || null;
+    const draftId = matchId || sessionId; // Support both match-based and tournament drafts
 
+    console.log('[Draft Init] useEffect run', { draft, draftId, draftInitDone });
+
+    if (draft !== "true" || !draftId) return;
+    if (draftInitDone) {
+      console.log('[Draft Init] Already initialized, skipping');
+      return;
+    }
+    if (draftInitRef.current) {
+      console.log('[Draft Init] Guard hit - initialization already running');
+      return;
+    }
+    draftInitRef.current = true;
+
+    console.log('[Draft Init] Initializing draft mode for', draftId);
     setIsDraftMode(true);
 
     let raw: string | null = null;
+    const storageSuffix = playerIdParam ? `${draftId}_${playerIdParam}` : draftId;
     try {
-      raw = localStorage.getItem(`draftedCards_${matchId}`);
+      raw = localStorage.getItem(`draftedCards_${storageSuffix}`);
+      if (!raw && playerIdParam) {
+        raw = localStorage.getItem(`draftedCards_${draftId}`);
+      }
     } catch (e) {
       console.warn("Failed to read drafted cards from localStorage:", e);
     }
 
+    // Fallback: fetch picks from server if sessionId is provided and no local data is present
     if (!raw) {
-      setError("No drafted cards found for this match.");
+      const sessionIdParam = searchParams?.get("sessionId");
+      if (sessionIdParam) {
+        (async () => {
+          try {
+            const res = await fetch(`/api/draft-sessions/${sessionIdParam}/state`, { cache: 'no-store' });
+            if (res.ok) {
+              const payload = await res.json();
+              const myPicks = Array.isArray(payload?.myPicks) ? (payload.myPicks as unknown[]) : [];
+              if (myPicks.length > 0) {
+                const json = JSON.stringify(myPicks);
+                try { localStorage.setItem(`draftedCards_${draftId}`, json); } catch {}
+                try { window.location.reload(); } catch {}
+              } else {
+                setError("No drafted cards found for this draft.");
+                setDraftInitDone(true);
+              }
+            } else {
+              setError("No drafted cards found for this draft.");
+              setDraftInitDone(true);
+            }
+          } catch (err) {
+            console.warn("Draft editor fallback fetch failed:", err);
+            setError("No drafted cards found for this draft.");
+            setDraftInitDone(true);
+          }
+        })();
+        return;
+      }
+    }
+
+    if (!raw) {
+      setError("No drafted cards found for this draft.");
       setDraftInitDone(true);
       return;
     }
@@ -774,20 +852,38 @@ function AuthenticatedDeckEditor() {
 
     // Fast path: use resolved picks if present to avoid any network lookups
     try {
-      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${matchId}`);
+      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${storageSuffix}`) ?? (playerIdParam ? localStorage.getItem(`draftedCardsResolved_${draftId}`) : null);
       if (resolvedRaw) {
         const resolvedParsed = JSON.parse(resolvedRaw) as unknown;
         const resolvedList = Array.isArray(resolvedParsed)
           ? (resolvedParsed as SearchResult[])
           : [];
         const allPositiveIds = resolvedList.every((r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0);
-        if (resolvedList.length > 0 && allPositiveIds && resolvedList.length === drafted.length) {
+        if (resolvedList.length > 0 && allPositiveIds) {
+          if (resolvedList.length !== drafted.length) {
+            console.warn('[Draft Init] Resolved card cache length mismatch', {
+              cached: resolvedList.length,
+              drafted: drafted.length,
+            });
+          }
+          console.log('[Draft Init] Loading', resolvedList.length, 'cards from resolved cache');
+
           setPicks((prev) => {
             const next = { ...prev } as Record<PickKey, PickItem>;
+            console.log('[Draft Init] Prev picks has', Object.keys(prev).length, 'items');
+
             for (const r of resolvedList) {
               const zone: Zone = "Sideboard";
               const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
               const exists = next[key];
+              if (exists) {
+                console.warn('[Draft Init] Card already exists in picks!', {
+                  cardId: r.cardId,
+                  name: r.cardName,
+                  existingCount: exists.count,
+                  key
+                });
+              }
               next[key] = exists
                 ? { ...exists, count: exists.count + 1 }
                 : {
@@ -801,6 +897,7 @@ function AuthenticatedDeckEditor() {
                     set: r.set,
                   };
             }
+            console.log('[Draft Init] After adding, picks has', Object.keys(next).length, 'items');
             return next;
           });
           // Infer default set from resolved cards
@@ -1003,11 +1100,15 @@ function AuthenticatedDeckEditor() {
 
         // Cache resolved results for future reloads (preserves duplicate counts)
         try {
-          if (matchId && expandedResolved.length > 0) {
-            localStorage.setItem(
-              `draftedCardsResolved_${matchId}`,
-              JSON.stringify(expandedResolved)
-            );
+          if (expandedResolved.length > 0) {
+            const resolvedKey = `draftedCardsResolved_${storageSuffix}`;
+            localStorage.setItem(resolvedKey, JSON.stringify(expandedResolved));
+            if (playerIdParam) {
+              localStorage.setItem(
+                `draftedCardsResolved_${draftId}`,
+                JSON.stringify(expandedResolved)
+              );
+            }
           }
         } catch (storageError) {
           console.warn("[Draft Init] Unable to cache resolved draft cards", storageError);
@@ -1401,9 +1502,9 @@ function AuthenticatedDeckEditor() {
     [deckId, status]
   );
 
-  // Submit sealed deck to match server
+  // Submit sealed deck to match server or tournament preparation when in tournament mode
   const submitSealedDeck = useCallback(async () => {
-    if (!isSealed || !searchParams?.get("matchId")) return;
+    if (!isSealed) return;
 
     try {
       setSaving(true);
@@ -1460,42 +1561,93 @@ function AuthenticatedDeckEditor() {
         : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
 
-      // Mark deck as submitted to prevent redirect loop
+      // Determine submission mode (match vs tournament)
       const matchId = searchParams?.get("matchId");
-      if (matchId) {
-        localStorage.setItem(`sealed_submitted_${matchId}`, "true");
-      }
+      const tournamentId = searchParams?.get("tournament");
 
-      // Submit to match server immediately; persist deck in background
-      if (window.opener) {
-        window.opener.postMessage(
-          {
-            type: "sealedDeckSubmission",
-            deck: deckCards,
-            matchId,
-          },
-          window.location.origin
-        );
+      if (tournamentId && !matchId) {
+        // Tournament submission workflow
+        // Group by cardId to build tournament deckList format
+        const counts = new Map<number, number>();
+        for (const c of deckCards) {
+          counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
+        }
+        const deckList = Array.from(counts.entries()).map(([cardId, quantity]) => ({ cardId: String(cardId), quantity }));
+
+        // Submit to tournament preparation API
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}/preparation/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            preparationData: {
+              sealed: {
+                packsOpened: true,
+                deckBuilt: true,
+                deckList
+              }
+            }
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || 'Failed to submit tournament sealed deck');
+        }
+
+        // Mark local submission for UX consistency
+        try { localStorage.setItem(`sealed_submitted_tournament_${tournamentId}`, 'true'); } catch {}
+      } else if (matchId) {
+        // Match-based submission workflow
+        // Mark deck as submitted to prevent redirect loop
+        try { localStorage.setItem(`sealed_submitted_${matchId}`, "true"); } catch {}
+
+        // Submit to match server using postMessage to parent window (online match page)
+        if (window.opener) {
+          window.opener.postMessage(
+            {
+              type: "sealedDeckSubmission",
+              deck: deckCards,
+              matchId,
+            },
+            window.location.origin
+          );
+        } else {
+          // Fallback: save to localStorage for the match page to pick up
+          localStorage.setItem(
+            `sealedDeck_${matchId}`,
+            JSON.stringify(deckCards)
+          );
+        }
       } else {
-        // Fallback: save to localStorage for the match page to pick up
-        localStorage.setItem(
-          `sealedDeck_${matchId}`,
-          JSON.stringify(deckCards)
-        );
+        throw new Error('Missing match ID or tournament ID for sealed submission');
       }
 
       // Save to account in the background (do not block submission UX)
       saveDeck().catch(() => {});
 
-      setSaveMsg("Sealed deck submitted successfully!");
+      setSaveMsg(tournamentId ? "Submitting deck to tournament…" : "Sealed deck submitted successfully!");
 
-      // Show waiting overlay and navigate back to the match page reliably
+      // Toast notification
+      try {
+        localStorage.setItem('app:toast', 'Sealed deck submitted!');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Sealed deck submitted!' } }));
+        }
+      } catch {}
+
+      // Show submission/waiting overlay for tournament or match coordination
       setWaitingForOtherPlayers(true);
 
-      // Attempt immediate navigation and schedule a couple of fallbacks
-      goBackToMatch(matchId);
-      window.setTimeout(() => goBackToMatch(matchId), 1200);
-      window.setTimeout(() => goBackToMatch(matchId), 3500);
+      // Navigate back to tournament or match page
+      if (tournamentId && !matchId) {
+        setTimeout(() => {
+          window.location.href = `/tournaments/${encodeURIComponent(tournamentId)}`;
+        }, 1200);
+      } else if (matchId) {
+        // Multiple attempts for match page navigation (handles popup window edge cases)
+        goBackToMatch(matchId);
+        window.setTimeout(() => goBackToMatch(matchId), 1200);
+        window.setTimeout(() => goBackToMatch(matchId), 3500);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1541,25 +1693,58 @@ function AuthenticatedDeckEditor() {
         : `Draft Deck (${today})`;
       setDeckName(draftDeckName);
 
-      // Mark deck as submitted to prevent redirect loop
       const matchId = searchParams?.get("matchId");
-      if (matchId) {
-        localStorage.setItem(`draft_submitted_${matchId}`, "true");
-      }
+      const tournamentId = searchParams?.get("tournament");
 
-      // Submit to match server immediately; persist deck in background (same as sealed)
-      if (window.opener) {
-        window.opener.postMessage(
-          {
-            type: "draftDeckSubmission",
-            deck: deckCards,
-            matchId,
-          },
-          window.location.origin
-        );
+      if (tournamentId && !matchId) {
+        // Tournament submission workflow
+        // Group by cardId to build tournament deckList format
+        const counts = new Map<number, number>();
+        for (const c of deckCards) {
+          counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
+        }
+        const deckList = Array.from(counts.entries()).map(([cardId, quantity]) => ({ cardId: String(cardId), quantity }));
+
+        // Submit to tournament preparation API (draft)
+        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}/preparation/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            preparationData: {
+              draft: {
+                draftCompleted: true,
+                deckBuilt: true,
+                deckList
+              }
+            }
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || 'Failed to submit tournament draft deck');
+        }
+        try { localStorage.setItem(`draft_submitted_tournament_${tournamentId}`, 'true'); } catch {}
+      } else if (matchId) {
+        // Match-based submission workflow
+        // Mark deck as submitted to prevent redirect loop
+        try { localStorage.setItem(`draft_submitted_${matchId}`, "true"); } catch {}
+
+        // Submit to match server using postMessage to parent window
+        if (window.opener) {
+          window.opener.postMessage(
+            {
+              type: "draftDeckSubmission",
+              deck: deckCards,
+              matchId,
+            },
+            window.location.origin
+          );
+        } else {
+          // Fallback: save to localStorage for the match page to pick up
+          localStorage.setItem(`draftDeck_${matchId}`, JSON.stringify(deckCards));
+        }
       } else {
-        // Fallback: save to localStorage for the match page to pick up
-        localStorage.setItem(`draftDeck_${matchId}`, JSON.stringify(deckCards));
+        throw new Error('Missing match ID or tournament ID for draft submission');
       }
 
       // Save to account in the background (do not block submission UX)
@@ -1567,15 +1752,30 @@ function AuthenticatedDeckEditor() {
         void saveDeck();
       } catch {}
 
-      setSaveMsg("Draft deck submitted successfully!");
+      setSaveMsg(tournamentId ? "Submitting draft deck to tournament…" : "Draft deck submitted successfully!");
 
-      // Show waiting overlay and navigate back to the match page reliably
+      // Toast notification
+      try {
+        localStorage.setItem('app:toast', 'Draft deck submitted!');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Draft deck submitted!' } }));
+        }
+      } catch {}
+
+      // Show waiting overlay
       setWaitingForOtherPlayers(true);
 
-      // Attempt immediate navigation and schedule a couple of fallbacks
-      goBackToMatch(matchId);
-      window.setTimeout(() => goBackToMatch(matchId), 1200);
-      window.setTimeout(() => goBackToMatch(matchId), 3500);
+      // Navigate back to tournament or match page
+      if (tournamentId && !matchId) {
+        setTimeout(() => {
+          window.location.href = `/tournaments/${encodeURIComponent(tournamentId)}`;
+        }, 1200);
+      } else if (matchId) {
+        // Multiple attempts for match page navigation (handles popup window edge cases)
+        goBackToMatch(matchId);
+        window.setTimeout(() => goBackToMatch(matchId), 1200);
+        window.setTimeout(() => goBackToMatch(matchId), 3500);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -2400,6 +2600,19 @@ function AuthenticatedDeckEditor() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
+      {/* Tournament presence overlay if launched from a tournament context */}
+      {(() => {
+        const tournamentId = searchParams?.get("tournament") || null;
+        const draftSessionId = searchParams?.get("sessionId") || null;
+        if (!tournamentId && !draftSessionId) return null;
+        return (
+          <TournamentPresenceOverlay
+            tournamentId={tournamentId}
+            draftSessionId={draftSessionId}
+            position="top-right"
+          />
+        );
+      })()}
       {/* Draft picks loading indicator */}
       {isDraftMode && !draftInitDone && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">

@@ -16,6 +16,9 @@ vi.mock('../../src/lib/prisma', () => ({
       updateMany: vi.fn(),
       update: vi.fn(),
     },
+    deck: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -34,6 +37,7 @@ const mockPrisma = vi.mocked(prisma);
 describe('Tournament Pairing Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.deck.findUnique.mockResolvedValue({ cards: [] });
   });
 
   afterEach(() => {
@@ -84,7 +88,7 @@ describe('Tournament Pairing Service', () => {
     it('should generate Swiss pairings for constructed format', async () => {
       mockPrisma.tournament.findUnique.mockResolvedValue(mockTournament);
 
-      const result = await generatePairings('tournament-1', 2);
+      const result = await generatePairings('tournament-1');
 
       expect(result).toBeDefined();
       expect(result.matches).toHaveLength(2);
@@ -111,7 +115,7 @@ describe('Tournament Pairing Service', () => {
 
       mockPrisma.tournament.findUnique.mockResolvedValue(oddPlayerTournament);
 
-      const result = await generatePairings('tournament-1', 2);
+      const result = await generatePairings('tournament-1');
 
       expect(result.matches).toHaveLength(1);
       expect(result.byes).toHaveLength(1);
@@ -132,7 +136,7 @@ describe('Tournament Pairing Service', () => {
 
       mockPrisma.tournament.findUnique.mockResolvedValue(tournamentWithHistory);
 
-      const result = await generatePairings('tournament-1', 2);
+      const result = await generatePairings('tournament-1');
 
       expect(result.matches).toHaveLength(2);
       
@@ -149,23 +153,28 @@ describe('Tournament Pairing Service', () => {
       expect(player1vs2).toBe(false);
     });
 
-    it('should throw error for unsupported tournament format', async () => {
-      const unsupportedTournament = {
+    it('should default to Swiss pairing for any tournament format', async () => {
+      // The pairing system now reads from settings.pairingFormat, not tournament.format
+      // Any format (sealed/draft/constructed) defaults to Swiss unless settings specify otherwise
+      const tournamentWithUnusualFormat = {
         ...mockTournament,
-        format: 'unsupported-format',
+        format: 'sealed', // format doesn't affect pairing anymore
+        settings: {}, // no pairingFormat specified, should default to swiss
       };
 
-      mockPrisma.tournament.findUnique.mockResolvedValue(unsupportedTournament);
+      mockPrisma.tournament.findUnique.mockResolvedValue(tournamentWithUnusualFormat);
 
-      await expect(generatePairings('tournament-1', 2)).rejects.toThrow(
-        'Unsupported tournament format: unsupported-format'
-      );
+      const result = await generatePairings('tournament-1');
+
+      // Should successfully generate Swiss pairings (2 matches for 4 players)
+      expect(result.matches).toHaveLength(2);
+      expect(result.byes).toHaveLength(0);
     });
 
     it('should throw error when tournament not found', async () => {
       mockPrisma.tournament.findUnique.mockResolvedValue(null);
 
-      await expect(generatePairings('tournament-1', 2)).rejects.toThrow(
+      await expect(generatePairings('tournament-1')).rejects.toThrow(
         'Tournament not found'
       );
     });
@@ -178,7 +187,7 @@ describe('Tournament Pairing Service', () => {
 
       mockPrisma.tournament.findUnique.mockResolvedValue(sealedTournament);
 
-      const result = await generatePairings('tournament-1', 2);
+      const result = await generatePairings('tournament-1');
 
       expect(result).toBeDefined();
       expect(result.matches).toHaveLength(2);
@@ -193,7 +202,7 @@ describe('Tournament Pairing Service', () => {
 
       mockPrisma.tournament.findUnique.mockResolvedValue(draftTournament);
 
-      const result = await generatePairings('tournament-1', 2);
+      const result = await generatePairings('tournament-1');
 
       expect(result).toBeDefined();
       expect(result.matches).toHaveLength(2);
@@ -244,17 +253,19 @@ describe('Tournament Pairing Service', () => {
       const result = await createRoundMatches('tournament-1', 'round-1', mockPairings);
 
       expect(result).toEqual(['match-1']);
-      expect(mockPrisma.match.create).toHaveBeenCalledWith({
-        data: {
-          tournamentId: 'tournament-1',
-          roundId: 'round-1',
-          status: 'pending',
-          players: [
-            { id: 'player-1', displayName: 'Player 1' },
-            { id: 'player-2', displayName: 'Player 2' },
-          ],
-        },
-      });
+      expect(mockPrisma.match.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tournamentId: 'tournament-1',
+            roundId: 'round-1',
+            status: 'pending',
+            players: [
+              { id: 'player-1', displayName: 'Player 1' },
+              { id: 'player-2', displayName: 'Player 2' },
+            ],
+          }),
+        })
+      );
     });
 
     it('should handle byes by giving automatic wins', async () => {
@@ -433,7 +444,7 @@ describe('Tournament Pairing Service', () => {
         matches: [],
       });
 
-      const result = await generatePairings('tournament-1', 1);
+      const result = await generatePairings('tournament-1');
       
       // Should have 2 matches for 4 players
       expect(result.matches).toHaveLength(2);
@@ -480,7 +491,7 @@ describe('Tournament Pairing Service', () => {
         matches: [],
       });
 
-      const result = await generatePairings('tournament-1', 1);
+      const result = await generatePairings('tournament-1');
 
       // Should create 1 match with 2 players
       expect(result.matches).toHaveLength(1);

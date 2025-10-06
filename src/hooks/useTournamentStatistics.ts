@@ -64,7 +64,10 @@ interface StatisticsState {
   error: string | null;
 }
 
-export function useTournamentStatistics(tournamentId: string | null) {
+export function useTournamentStatistics(
+  tournamentId: string | null,
+  options?: { isConnected?: boolean; pollIntervalMs?: number }
+) {
   const [state, setState] = useState<StatisticsState>({
     standings: [],
     matches: [],
@@ -319,13 +322,26 @@ export function useTournamentStatistics(tournamentId: string | null) {
     ]);
   }, [refreshStandings, refreshMatches, refreshRounds, refreshStatistics]);
 
-  // Auto-refresh statistics periodically
+  // Auto-refresh statistics periodically (backup). Do not poll when socket is connected, or tab is hidden
   useEffect(() => {
     refreshAll();
-    
-    const interval = setInterval(refreshAll, 30000); // Poll every 30 seconds
-    return () => clearInterval(interval);
-  }, [refreshAll]);
+    const pollMs = options?.pollIntervalMs ?? 60000; // back off to 60s
+    let id: number | null = null;
+    const start = () => {
+      if (options?.isConnected) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (id != null) return;
+      id = window.setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        void refreshAll();
+      }, pollMs);
+    };
+    const stop = () => { if (id != null) { clearInterval(id); id = null; } };
+    start();
+    const onVis = () => { stop(); start(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+    return () => { stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis); };
+  }, [refreshAll, options?.isConnected, options?.pollIntervalMs]);
 
   return {
     ...state,

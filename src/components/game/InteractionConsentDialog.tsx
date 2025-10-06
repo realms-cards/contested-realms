@@ -14,6 +14,7 @@ const KIND_LABEL: Record<string, string> = {
   inspectHand: "Inspect Hand",
   takeFromPile: "Look at Card From Pile",
   manipulatePermanent: "Manipulate Permanent",
+  tieGame: "Tie Game",
 };
 
 function describeGrant(grant?: InteractionGrantRequest | null): string | null {
