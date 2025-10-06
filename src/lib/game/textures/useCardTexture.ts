@@ -134,15 +134,15 @@ function normalizeTexture(
 // --- Soft eviction policy (keep-after-release) ---
 const EVICT_MS = (() => {
   const v = Number(process.env.NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS || "");
-  // Default to 10s for faster cleanup (draft churns cards quickly)
-  return Number.isFinite(v) && v > 0 ? v : 10_000;
+  // Default to 30s - balance between memory and reload performance
+  return Number.isFinite(v) && v > 0 ? v : 30_000;
 })();
 
 // Maximum cache size (number of textures) before forced LRU eviction
 const MAX_CACHE_SIZE = (() => {
   const v = Number(process.env.NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE || "");
-  // Default to 100 textures max
-  return Number.isFinite(v) && v > 0 ? v : 100;
+  // Default to 150 textures - enough for typical draft without overwhelming GPU
+  return Number.isFinite(v) && v > 0 ? v : 150;
 })();
 
 function cancelEviction(entry: CacheEntry) {

@@ -1418,14 +1418,14 @@ export default function TournamentDraft3DScreen({
   const showLoadingOverlay =
     draftState.phase === "waiting" && packAsBoosterCards.length === 0;
 
-  // Monitor WebGL context loss/restore and force cleanup on unmount
+  // Monitor WebGL context loss (informational only, no forced disposal)
   useEffect(() => {
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
     
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[TournamentDraft3D] WebGL context lost - disposing to free resources');
+      console.warn('[TournamentDraft3D] WebGL context lost - reduce texture cache size in .env');
     };
     
     const handleContextRestored = () => {
@@ -1438,16 +1438,6 @@ export default function TournamentDraft3DScreen({
     return () => {
       canvas.removeEventListener('webglcontextlost', handleContextLost);
       canvas.removeEventListener('webglcontextrestored', handleContextRestored);
-      
-      // Force context disposal on unmount to free resources for next page
-      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-      if (gl && 'getExtension' in gl) {
-        const loseContext = gl.getExtension('WEBGL_lose_context');
-        if (loseContext) {
-          console.log('[TournamentDraft3D] Disposing WebGL context on unmount');
-          loseContext.loseContext();
-        }
-      }
     };
   }, []);
 

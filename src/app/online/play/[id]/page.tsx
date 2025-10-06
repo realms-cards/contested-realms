@@ -266,14 +266,14 @@ export default function OnlineMatchPage() {
     sendChat,
   ]);
 
-  // Game store selectors needed for setup
-  const serverPhase = useGameStore((s) => s.phase);
-  const storeActorKey = useGameStore((s) => s.actorKey);
-  const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup";
-
   // Setup state (like offline play)
   // Default CLOSED to avoid flashing overlay on rejoin; we'll open it for new/waiting matches
   const [setupOpen, setSetupOpen] = useState<boolean>(false);
+
+  // Game store selectors needed for setup
+  const serverPhase = useGameStore((s) => s.phase);
+  const storeActorKey = useGameStore((s) => s.actorKey);
+  const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup" && !setupOpen;
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
 
@@ -339,6 +339,15 @@ export default function OnlineMatchPage() {
   // Auto-load any deck that the match server has already attached to us (sealed/draft/tournament rebuilt decks)
   useEffect(() => {
     if (prepared) return;
+    
+    // For matches already in progress, skip deck loading - the server snapshot contains all game state
+    // Only load decks during waiting/deck_construction phases
+    if (match?.status === "in_progress") {
+      console.log("[match] Match already in progress, skipping deck load (using server snapshot)");
+      setPrepared(true);
+      return;
+    }
+    
     if (!match?.playerDecks || !me?.id) return;
     if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
 
@@ -437,6 +446,64 @@ export default function OnlineMatchPage() {
           }
         }
 
+        // Ensure the deck includes an Avatar so validation succeeds during setup
+        if (Array.isArray(deckToLoad)) {
+          const hasAvatar = deckToLoad.some((card) => {
+            const type = typeof (card as Record<string, unknown>)?.type === "string"
+              ? ((card as Record<string, unknown>).type as string)
+              : "";
+            return type.toLowerCase().includes("avatar");
+          });
+
+          if (!hasAvatar) {
+            const avatarCard =
+              (match as unknown as {
+                game?: {
+                  avatars?: Record<string, { card?: Record<string, unknown> | null } | null>;
+                };
+              })?.game?.avatars?.[myPlayerKey]?.card;
+
+            if (avatarCard && typeof avatarCard === "object") {
+              const avatarCardId = Number(
+                (avatarCard as { cardId?: number | string; id?: number | string }).cardId ??
+                  (avatarCard as { cardId?: number | string; id?: number | string }).id ??
+                  0
+              );
+              if (Number.isFinite(avatarCardId) && avatarCardId > 0) {
+                deckToLoad = [
+                  ...deckToLoad,
+                  {
+                    id: String(avatarCardId),
+                    cardId: avatarCardId,
+                    name:
+                      (avatarCard as { name?: string; cardName?: string }).name ||
+                      (avatarCard as { name?: string; cardName?: string }).cardName ||
+                      "Avatar",
+                    slug: (avatarCard as { slug?: string }).slug || "",
+                    set:
+                      (avatarCard as { set?: string; setName?: string }).set ||
+                      (avatarCard as { set?: string; setName?: string }).setName ||
+                      "Beta",
+                    type:
+                      (avatarCard as { type?: string }).type &&
+                      String((avatarCard as { type?: string }).type).length > 0
+                        ? String((avatarCard as { type?: string }).type)
+                        : "Avatar",
+                    thresholds: (avatarCard as { thresholds?: Record<string, number> | null }).thresholds || null,
+                  },
+                ];
+                console.log("[match] Injected avatar into deck for auto-load", {
+                  cardId: avatarCardId,
+                  name:
+                    (avatarCard as { name?: string; cardName?: string }).name ||
+                    (avatarCard as { name?: string; cardName?: string }).cardName ||
+                    "Avatar",
+                });
+              }
+            }
+          }
+        }
+
         const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
         const ok = await loadSealedDeckFor(
           myPlayerKey as "p1" | "p2",
@@ -454,7 +521,7 @@ export default function OnlineMatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [prepared, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
+  }, [prepared, match, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
 
   // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
   useEffect(() => {

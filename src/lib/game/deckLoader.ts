@@ -161,14 +161,29 @@ export async function loadSealedDeckFor(
       console.warn("[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction");
     }
 
+    // More lenient validation for tournament/draft/sealed during deck construction
+    // The deck might not be fully configured yet, and the game will enforce rules during play
+    const totalNonAvatarCards = rawAtlas.length + spellbook.length;
+    
     if (rawAtlas.length < 12) {
-      setError("Sealed deck needs at least 12 sites");
-      return false;
+      // If we have enough total cards but they weren't classified as sites,
+      // it might be a type detection issue - allow it and log a warning
+      if (totalNonAvatarCards >= 36) {
+        console.warn(`[loadSealedDeckFor] Only ${rawAtlas.length} sites detected, but ${totalNonAvatarCards} total cards - proceeding anyway (type detection may be incomplete)`);
+      } else {
+        setError("Sealed deck needs at least 12 sites");
+        return false;
+      }
     }
 
     if (spellbook.length < 24) {
-      setError("Sealed deck needs at least 24 cards (excluding Avatar)");
-      return false;
+      // Similar lenient check for spellbook
+      if (totalNonAvatarCards >= 36) {
+        console.warn(`[loadSealedDeckFor] Only ${spellbook.length} spells detected, but ${totalNonAvatarCards} total cards - proceeding anyway (type detection may be incomplete)`);
+      } else {
+        setError("Sealed deck needs at least 24 cards (excluding Avatar)");
+        return false;
+      }
     }
 
     const {

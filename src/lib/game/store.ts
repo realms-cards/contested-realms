@@ -682,7 +682,7 @@ export type GameState = {
   setLocalPlayerId: (id: string | null) => void;
 };
 
-const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "Combat", "End"];
+const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "End"];
 
 const THRESHOLD_KEYS: (keyof Thresholds)[] = ["air", "water", "earth", "fire"];
 

@@ -9,26 +9,27 @@ The current architecture has **6 separate Canvas instances** across different pa
 
 ## Solutions Implemented
 
-### 1. Aggressive Cache Eviction
+### 1. Balanced Cache Eviction
 - **Old**: 60s TTL for unused textures
-- **New**: 10s TTL (configurable via `NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS`)
-- Cards that leave the draft are quickly cleaned up from memory
+- **New**: 30s TTL (configurable via `NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS`)
+- Balance between keeping textures available and freeing memory
+- ⚠️ **Warning**: Too aggressive (< 20s) causes slowdowns during Hot Module Reload
 
 ### 2. LRU Cache Size Limit
-- **Default**: 100 textures maximum (configurable via `NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE`)
+- **Default**: 150 textures maximum (configurable via `NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE`)
 - When cache is full, oldest unused textures are evicted
 - Prevents unlimited memory growth during long draft sessions
+- ⚠️ **Warning**: Too low (< 100) causes constant reloading
 
 ### 3. Reduced Anisotropic Filtering
 - **Old**: 8x anisotropy
 - **New**: 4x anisotropy
 - Maintains good card text readability while using less memory
 
-### 4. WebGL Context Disposal
-- Added `WEBGL_lose_context` extension call on component unmount
-- **Critically important**: When navigating away from a 3D page, the old context is forcibly disposed
-- This frees up the context slot for the next page
-- Prevents hitting browser's max context limit (8-16)
+### 4. WebGL Context Monitoring
+- Added listeners for `webglcontextlost` / `webglcontextrestored` events
+- Logs warnings when context is lost to help diagnose issues
+- **Note**: Forced context disposal was tested but caused worse performance in dev mode due to Hot Module Reload
 
 ### 5. Canvas Optimization
 - `powerPreference: "high-performance"` - prioritizes GPU over battery
@@ -40,11 +41,11 @@ The current architecture has **6 separate Canvas instances** across different pa
 Add these to `.env.local` to tune performance:
 
 ```bash
-# Texture cache TTL in milliseconds (default: 10000 = 10s)
-NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS=10000
+# Texture cache TTL in milliseconds (default: 30000 = 30s)
+NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS=30000
 
-# Maximum number of textures to keep in cache (default: 100)
-NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE=100
+# Maximum number of textures to keep in cache (default: 150)
+NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE=150
 
 # KTX2 retry delay after failure in milliseconds (default: 60000 = 60s)
 NEXT_PUBLIC_KTX2_RETRY_MS=60000
@@ -66,13 +67,20 @@ In development mode, you'll see console logs:
 
 ## Performance Tips
 
-### For Low-End GPUs
-- Reduce cache size: `NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE=50`
-- Faster eviction: `NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS=5000`
+### For Low-End GPUs (Integrated Graphics)
+- Reduce cache size: `NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE=100`
+- Faster eviction: `NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS=20000`
+- Consider using WebP instead of KTX2 by setting `preferRaster: true` in card components
 
-### For High-End GPUs
-- Increase cache: `NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE=200`
-- Longer TTL: `NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS=30000`
+### For High-End GPUs (Dedicated Graphics)
+- Increase cache: `NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE=300`
+- Longer TTL: `NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS=60000`
+
+### ⚠️ Development Mode Caveat
+During dev with Hot Module Reload, aggressive settings cause performance degradation:
+- HMR unmounts/remounts components frequently
+- Too aggressive eviction means textures reload on every code change
+- **Recommended dev settings**: TTL ≥ 30s, Cache Size ≥ 150
 
 ### Debugging Context Loss
 If you still see context loss:
