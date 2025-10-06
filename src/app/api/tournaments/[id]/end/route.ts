@@ -37,11 +37,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Update tournament status to completed
     const updatedTournament = await prisma.tournament.update({
       where: { id },
-      data: { 
+      data: {
         status: 'completed',
         completedAt: new Date()
       }
     });
+
+    // Mark all tournament matches as ended to prevent rejoin prompts
+    const endedMatches = await prisma.match.findMany({
+      where: {
+        tournamentId: id,
+        status: { not: 'ended' }
+      },
+      select: { id: true }
+    });
+
+    await prisma.match.updateMany({
+      where: {
+        tournamentId: id,
+        status: { not: 'ended' }
+      },
+      data: {
+        status: 'ended'
+      }
+    });
+
+    // Notify the socket server to clean up these matches
+    // This will remove player.matchId associations and prevent rejoin prompts
+    try {
+      for (const match of endedMatches) {
+        await tournamentSocketService.broadcastToMatch(match.id, 'matchEnded', {
+          matchId: match.id,
+          tournamentId: id,
+          reason: 'tournament_ended'
+        });
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup tournament matches:', cleanupError);
+    }
 
     // Broadcast tournament ended event via Socket.io
     try {

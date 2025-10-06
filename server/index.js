@@ -1525,6 +1525,23 @@ server.on("request", async (req, res) => {
               // For now, just log - MATCH_ASSIGNED needs player-specific routing
               console.log('[Tournament] MATCH_ASSIGNED broadcast received');
               break;
+            case 'matchEnded':
+              if (data.matchId) {
+                const match = matches.get(data.matchId);
+                if (match) {
+                  // Clear player associations
+                  for (const playerId of match.playerIds || []) {
+                    const player = players.get(playerId);
+                    if (player && player.matchId === data.matchId) {
+                      player.matchId = null;
+                    }
+                  }
+                  // Broadcast to match room
+                  io.to(`match:${data.matchId}`).emit('matchEnded', data);
+                  console.log(`[Match] Ended match ${data.matchId} due to ${data.reason}`);
+                }
+              }
+              break;
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
