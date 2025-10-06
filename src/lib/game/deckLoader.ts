@@ -161,29 +161,39 @@ export async function loadSealedDeckFor(
       console.warn("[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction");
     }
 
-    // More lenient validation for tournament/draft/sealed during deck construction
-    // The deck might not be fully configured yet, and the game will enforce rules during play
-    const totalNonAvatarCards = rawAtlas.length + spellbook.length;
-    
     if (rawAtlas.length < 12) {
-      // If we have enough total cards but they weren't classified as sites,
-      // it might be a type detection issue - allow it and log a warning
-      if (totalNonAvatarCards >= 36) {
-        console.warn(`[loadSealedDeckFor] Only ${rawAtlas.length} sites detected, but ${totalNonAvatarCards} total cards - proceeding anyway (type detection may be incomplete)`);
-      } else {
-        setError("Sealed deck needs at least 12 sites");
-        return false;
-      }
+      console.error("[loadSealedDeckFor] Validation failed: not enough sites", {
+        atlasCount: rawAtlas.length,
+        spellbookCount: spellbook.length,
+        avatarsCount: avatars.length,
+        totalCards: cards.length,
+        anyZonesProvided,
+        sampleAtlas: rawAtlas.slice(0, 3),
+        sampleSpellbook: spellbook.slice(0, 3).map(c => ({
+          name: c.name,
+          type: c.type,
+          cardId: (c as { cardId?: unknown }).cardId
+        })),
+        allCardsSample: cards.slice(0, 5).map(c => ({
+          name: c.name,
+          type: c.type,
+          cardId: (c as { cardId?: unknown }).cardId,
+          __zone: (c as { __zone?: unknown }).__zone
+        }))
+      });
+      setError("Sealed deck needs at least 12 sites");
+      return false;
     }
 
     if (spellbook.length < 24) {
-      // Similar lenient check for spellbook
-      if (totalNonAvatarCards >= 36) {
-        console.warn(`[loadSealedDeckFor] Only ${spellbook.length} spells detected, but ${totalNonAvatarCards} total cards - proceeding anyway (type detection may be incomplete)`);
-      } else {
-        setError("Sealed deck needs at least 24 cards (excluding Avatar)");
-        return false;
-      }
+      console.error("[loadSealedDeckFor] Validation failed: not enough spells", {
+        atlasCount: rawAtlas.length,
+        spellbookCount: spellbook.length,
+        avatarsCount: avatars.length,
+        totalCards: cards.length
+      });
+      setError("Sealed deck needs at least 24 cards (excluding Avatar)");
+      return false;
     }
 
     const {

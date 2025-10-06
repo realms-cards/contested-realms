@@ -88,7 +88,7 @@ export default function BottomBar(props: BottomBarProps) {
                       </svg>
                       {formatTime(timeRemaining)}
                     </div>
-                    <div className="flex flex-col gap-3 w-full">
+                    <div className="flex flex-col gap-3 flex-1">
                       {Object.entries(
                         packs
                           .filter((p) => !p.opened)
@@ -204,7 +204,7 @@ export default function BottomBar(props: BottomBarProps) {
                         </div>
                       )}
                     </div>
-                    <div className="ml-auto">
+                    <div className="flex justify-center">
                       <button
                         onClick={toggleTournamentControls}
                         className={`h-10 px-4 rounded font-medium transition-colors ${

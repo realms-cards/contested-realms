@@ -360,10 +360,10 @@ export default function OnlineConsole({
 
       {/* Toast notification for chat messages when console is collapsed or chat not active */}
       {showToast && (!consoleOpen || activeTab !== 'chat') && (
-        <div 
-          className="absolute top-[-70px] left-0 right-0 bg-gradient-to-r from-blue-600 to-green-600 border border-white/20 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out animate-bounce z-20"
+        <div
+          className="absolute top-[-70px] left-0 right-0 bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out z-20"
           style={{
-            animation: 'slideInUp 0.4s ease-out, pulse 2s infinite 0.4s'
+            animation: 'slideInUp 0.4s ease-out'
           }}
           onClick={() => {
             setConsoleOpen(true);
