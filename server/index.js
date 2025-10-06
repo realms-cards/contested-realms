@@ -2276,6 +2276,103 @@ async function finalizeMatch(match, options = {}) {
     : { winnerId, loserId };
 
   recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
+
+  // If this is a tournament match, persist result into Tournament Match and update round completion
+  try {
+    if (match.tournamentId) {
+      const nowIso = new Date().toISOString();
+      const tMatch = await prisma.match.findUnique({
+        where: { id: match.id },
+        include: { tournament: true, round: true },
+      });
+      if (tMatch) {
+        const gameResults = Array.isArray(match?.game?.results) ? match.game.results : [];
+        const matchResults = {
+          winnerId: winnerId || null,
+          loserId: loserId || null,
+          isDraw,
+          gameResults,
+          completedAt: nowIso,
+        };
+
+        // Idempotent completion: only update if not already completed
+        await prisma.match.updateMany({
+          where: { id: match.id, status: { not: 'completed' } },
+          data: { status: 'completed', results: matchResults, completedAt: new Date() },
+        });
+
+        // Update standings similar to API route logic
+        try {
+          const playersVal = Array.isArray(tMatch.players) ? tMatch.players : [];
+          const playerIds = playersVal
+            .map((p) => {
+              if (p && typeof p === 'object') {
+                const id = p.id || p.playerId || p.userId;
+                return typeof id === 'string' ? id : null;
+              }
+              return null;
+            })
+            .filter(Boolean);
+          if (playerIds.length === 2) {
+            const [p1, p2] = playerIds;
+            if (isDraw) {
+              await prisma.playerStanding.updateMany({
+                where: { tournamentId: tMatch.tournamentId || '', playerId: { in: [p1, p2] } },
+                data: { draws: { increment: 1 }, matchPoints: { increment: 1 }, currentMatchId: null },
+              });
+            } else if (winnerId && loserId) {
+              await prisma.playerStanding.update({
+                where: { tournamentId_playerId: { tournamentId: tMatch.tournamentId || '', playerId: winnerId } },
+                data: { wins: { increment: 1 }, matchPoints: { increment: 3 }, currentMatchId: null },
+              });
+              await prisma.playerStanding.update({
+                where: { tournamentId_playerId: { tournamentId: tMatch.tournamentId || '', playerId: loserId } },
+                data: { losses: { increment: 1 }, currentMatchId: null },
+              });
+            }
+          }
+        } catch {}
+
+        // If part of a round, possibly mark the round complete and (optionally) the tournament
+        if (tMatch.roundId) {
+          const pendingMatches = await prisma.match.count({
+            where: { roundId: tMatch.roundId, status: { in: ['pending', 'active'] } },
+          });
+          if (pendingMatches === 0) {
+            await prisma.tournamentRound.update({
+              where: { id: tMatch.roundId },
+              data: { status: 'completed', completedAt: new Date() },
+            });
+
+            // End tournament if this was the last configured round
+            if (tMatch.tournament && tMatch.round) {
+              const settings = (tMatch.tournament.settings || {});
+              const pairingFormat = (settings && typeof settings === 'object' && 'pairingFormat' in settings)
+                ? (settings.pairingFormat)
+                : 'swiss';
+              let totalRounds = (settings && typeof settings === 'object' && 'totalRounds' in settings)
+                ? Number(settings.totalRounds)
+                : 0;
+              if (!totalRounds) {
+                const playerCount = await prisma.playerStanding.count({ where: { tournamentId: tMatch.tournament.id } });
+                if (pairingFormat === 'round_robin') totalRounds = Math.max(0, playerCount - 1);
+                else if (pairingFormat === 'elimination') totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(playerCount, 1))));
+                else totalRounds = 3;
+              }
+              if (tMatch.round.roundNumber >= totalRounds) {
+                await prisma.tournament.update({
+                  where: { id: tMatch.tournament.id },
+                  data: { status: 'completed', completedAt: new Date() },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    try { console.warn('[tournament] failed to record result into rounds:', err?.message || err); } catch {}
+  }
 }
 
 // Bot lifecycle helpers moved into BotManager
@@ -2396,7 +2493,10 @@ async function getOrLoadMatch(matchId) {
           const cached = JSON.parse(raw);
           if (cached && cached.id === matchId) {
             const m = rehydrateMatch(cached);
-            if (m) { matches.set(matchId, m); return m; }
+            if (m) {
+              try { await hydrateMatchFromDatabase(matchId, m); } catch {}
+              matches.set(matchId, m); return m;
+            }
           }
         } catch {}
       }
@@ -2407,7 +2507,88 @@ async function getOrLoadMatch(matchId) {
     const row = await prisma.onlineMatchSession.findUnique({ where: { id: matchId } });
     if (row) {
       const m = rehydrateMatch(row);
-      if (m) { matches.set(matchId, m); return m; }
+      if (m) {
+        // Backfill tournament context/decks from Match table if available
+        try { await hydrateMatchFromDatabase(matchId, m); } catch {}
+        matches.set(matchId, m);
+        return m;
+      }
+    }
+  } catch {}
+  // Additional fallback: if no OnlineMatchSession, try to hydrate from tournament Match table
+  try {
+    const t = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: { tournament: { select: { format: true, name: true } } },
+    });
+    if (t) {
+      // Extract playerIds from flexible tournament match players JSON
+      const playersJson = t.players;
+      /** @type {string[]} */
+      let playerIds = [];
+      try {
+        /** @type {any[]} */
+        let arr = [];
+        if (Array.isArray(playersJson)) {
+          arr = playersJson;
+        } else if (playersJson && typeof playersJson === 'object') {
+          if (Array.isArray(playersJson.playerIds)) arr = playersJson.playerIds;
+          else if (Array.isArray(playersJson.players)) arr = playersJson.players;
+          else arr = [];
+        }
+        playerIds = Array.from(new Set(arr.map((it) => {
+          if (typeof it === 'string') return it;
+          if (it && typeof it === 'object') {
+            const v = it.id ?? it.playerId ?? it.userId;
+            return v ? String(v) : null;
+          }
+          return null;
+        }).filter(Boolean)));
+      } catch {}
+
+      // Map tournament format/status to session matchType/status
+      const tf = t?.tournament?.format;
+      const matchType = (tf === 'sealed' || tf === 'draft' || tf === 'constructed') ? tf : 'constructed';
+      let status = matchType === 'sealed' ? 'deck_construction' : 'waiting';
+      try {
+        const s = t.status;
+        if (s === 'active') status = 'in_progress';
+        else if (s === 'completed' || s === 'cancelled') status = 'ended';
+      } catch {}
+
+      // Build in-memory session from tournament Match, then persist as OnlineMatchSession
+      const match = {
+        id: matchId,
+        lobbyId: null,
+        lobbyName: (t?.tournament?.name || null),
+        tournamentId: t.tournamentId || null,
+        playerIds,
+        status,
+        seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        turn: playerIds[0] || null,
+        winnerId: null,
+        matchType,
+        sealedConfig: null,
+        draftConfig: null,
+        playerDecks: (() => {
+          try {
+            return t.playerDecks && typeof t.playerDecks === 'object'
+              ? new Map(Object.entries(t.playerDecks))
+              : new Map();
+          } catch { return new Map(); }
+        })(),
+        game: {},
+        lastTs: 0,
+        interactionRequests: new Map(),
+        interactionGrants: new Map(),
+      };
+
+      matches.set(matchId, match);
+      // Elect leadership for this match and persist the session so other instances can recover it
+      try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
+      try { await persistMatchCreated(match); } catch {}
+      try { await hydrateMatchFromDatabase(matchId, match); } catch {}
+      return match;
     }
   } catch {}
   return null;
@@ -2494,6 +2675,15 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
     ) {
       match.status = 'in_progress';
       io.to(matchRoom).emit('matchStarted', { match: getMatchInfo(match) });
+      // If this is a tournament match, mark DB match as active and set startedAt for rounds UI
+      try {
+        if (match.tournamentId) {
+          await prisma.match.updateMany({
+            where: { id: match.id, status: { in: ['pending', 'active'] } },
+            data: { status: 'active', startedAt: new Date() },
+          });
+        }
+      } catch {}
     }
     if (match && patch && typeof patch === 'object') {
       const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
@@ -3322,10 +3512,14 @@ async function hydrateMatchFromDatabase(matchId, match) {
     const dbMatch = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
+        tournamentId: true,
+        roundId: true,
         playerDecks: true,
       },
     });
     if (dbMatch) {
+      try { if (!match.tournamentId && dbMatch.tournamentId) match.tournamentId = dbMatch.tournamentId; } catch {}
+      try { if (!match.roundId && dbMatch.roundId) match.roundId = dbMatch.roundId; } catch {}
       if (dbMatch.playerDecks && typeof dbMatch.playerDecks === 'object') {
         try {
           match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
@@ -4472,6 +4666,9 @@ io.on("connection", (socket) => {
       };
 
       matches.set(matchId, match);
+      // Elect this instance as initial match leader and persist the session for cluster recovery
+      try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
+      try { await persistMatchCreated(match); } catch {}
       // Begin recording
       startMatchRecording(match);
       await hydrateMatchFromDatabase(matchId, match);

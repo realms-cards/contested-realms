@@ -4749,7 +4749,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   // Reset all game state to initial values (for new matches)
   resetGameState: () =>
-    set(() => {
+    set((state) => {
       console.log("[game] Resetting game state for new match");
       const reset: Partial<GameState> = {
         players: {
@@ -4772,7 +4772,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         lastLocalActionTs: 0,
         setupWinner: null,
         d20Rolls: { p1: null, p2: null },
-        actorKey: null,
+        actorKey: state.actorKey, // Preserve actorKey during reset
         matchEnded: false,
         winner: null,
         board: { size: { w: 5, h: 4 }, sites: {} },

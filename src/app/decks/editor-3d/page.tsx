@@ -754,9 +754,16 @@ function AuthenticatedDeckEditor() {
     const sessionId = searchParams?.get("sessionId"); // Tournament draft session
     const playerIdParam = searchParams?.get("playerId") || searchParams?.get("player") || null;
     const draftId = matchId || sessionId; // Support both match-based and tournament drafts
-    if (draft !== "true" || !draftId) return;
-    if (draftInitDone) return;
 
+    console.log('[Draft Init] useEffect run', { draft, draftId, draftInitDone });
+
+    if (draft !== "true" || !draftId) return;
+    if (draftInitDone) {
+      console.log('[Draft Init] Already initialized, skipping');
+      return;
+    }
+
+    console.log('[Draft Init] Initializing draft mode for', draftId);
     setIsDraftMode(true);
 
     let raw: string | null = null;
@@ -852,12 +859,24 @@ function AuthenticatedDeckEditor() {
               drafted: drafted.length,
             });
           }
+          console.log('[Draft Init] Loading', resolvedList.length, 'cards from resolved cache');
+
           setPicks((prev) => {
             const next = { ...prev } as Record<PickKey, PickItem>;
+            console.log('[Draft Init] Prev picks has', Object.keys(prev).length, 'items');
+
             for (const r of resolvedList) {
               const zone: Zone = "Sideboard";
               const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
               const exists = next[key];
+              if (exists) {
+                console.warn('[Draft Init] Card already exists in picks!', {
+                  cardId: r.cardId,
+                  name: r.cardName,
+                  existingCount: exists.count,
+                  key
+                });
+              }
               next[key] = exists
                 ? { ...exists, count: exists.count + 1 }
                 : {
@@ -871,6 +890,7 @@ function AuthenticatedDeckEditor() {
                     set: r.set,
                   };
             }
+            console.log('[Draft Init] After adding, picks has', Object.keys(next).length, 'items');
             return next;
           });
           // Infer default set from resolved cards
