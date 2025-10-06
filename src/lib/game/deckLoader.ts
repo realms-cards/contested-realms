@@ -148,16 +148,18 @@ export async function loadSealedDeckFor(
       spellbook = cards.filter((c: CardRef) => !isAvatar(c) && !isSite(c));
     }
 
-    if (avatars.length !== 1) {
-      setError(
-        avatars.length === 0
-          ? "Sealed deck requires exactly 1 Avatar"
-          : "Sealed deck has multiple Avatars. This shouldn't happen."
-      );
+    // For draft/sealed tournament matches, avatar might not be present yet (loaded separately or from sideboard)
+    // Allow loading without avatar for now - the game will handle it
+    let avatar: CardRef | null = null;
+    if (avatars.length > 1) {
+      setError("Sealed deck has multiple Avatars. This shouldn't happen.");
       return false;
     }
-
-    const avatar = avatars[0];
+    if (avatars.length === 1) {
+      avatar = avatars[0];
+    } else {
+      console.warn("[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction");
+    }
 
     if (rawAtlas.length < 12) {
       setError("Sealed deck needs at least 12 sites");
@@ -181,8 +183,13 @@ export async function loadSealedDeckFor(
     initLibraries(who, spellbook, rawAtlas);
     shuffleSpellbook(who);
     shuffleAtlas(who);
-    setAvatarCard(who, avatar);
-    placeAvatarAtStart(who);
+    
+    // Only set avatar if we have one (draft/sealed might not have avatar yet)
+    if (avatar) {
+      setAvatarCard(who, avatar);
+      placeAvatarAtStart(who);
+    }
+    
     drawOpening(who);
 
     return true;

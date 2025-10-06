@@ -6,7 +6,7 @@ import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentCon
 type Props = {
   tournamentId?: string | null;
   draftSessionId?: string | null;
-  position?: "top-right" | "bottom-left";
+  position?: "top-right" | "bottom-left" | "top-right-offset" | "top-left";
 };
 
 export default function TournamentPresenceOverlay({ tournamentId, draftSessionId, position = "top-right" }: Props) {
@@ -84,7 +84,9 @@ export default function TournamentPresenceOverlay({ tournamentId, draftSessionId
       const stName = (standings.find((s: { playerId: string; playerName?: string }) => s.playerId === id) as { playerName?: string } | undefined)?.playerName;
       const playerName = pr?.playerName || regName || stName || id.slice(-4);
       const seatNumber = seatByPlayerId[id] ?? statsSeatMap[id];
-      const isConnected = pr?.isConnected ?? false;
+      // If player has a seat in the draft session, assume connected unless presence explicitly says otherwise
+      const hasSeat = typeof seatNumber === 'number';
+      const isConnected = pr ? pr.isConnected : hasSeat;
       const lastActivity = pr?.lastActivity ?? 0;
       return { playerId: id, playerName, seatNumber, isConnected, lastActivity };
     });
@@ -99,14 +101,21 @@ export default function TournamentPresenceOverlay({ tournamentId, draftSessionId
   }, [presence, presenceMap, seatByPlayerId, statsSeatMap, tournamentsCtx?.statistics?.standings, tournamentsCtx?.currentTournament]);
 
   const expectedTotal = useMemo(() => {
+    // For draft sessions, use the roster size (includes all draft participants)
+    const seatCount = Object.keys(seatByPlayerId).length;
+    if (seatCount > 0) return seatCount;
+    
     // Trust live presence size; fallback to currentPlayers only when presence hasn't arrived
     if (presence.length > 0) return presence.length;
     const t = tournamentsCtx?.currentTournament as unknown as { currentPlayers?: number } | null;
     if (typeof t?.currentPlayers === 'number' && t.currentPlayers > 0) return t.currentPlayers;
     return 0;
-  }, [presence.length, tournamentsCtx?.currentTournament]);
+  }, [seatByPlayerId, presence.length, tournamentsCtx?.currentTournament]);
 
-  const connectedCount = useMemo(() => presence.reduce((s, p) => s + (p.isConnected ? 1 : 0), 0), [presence]);
+  const connectedCount = useMemo(() => {
+    // Count connections from the roster (includes all draft participants with seat data)
+    return roster.reduce((s, p) => s + (p.isConnected ? 1 : 0), 0);
+  }, [roster]);
   const allConnected = expectedTotal > 0 && connectedCount === expectedTotal && (tournamentsCtx?.isSocketConnected ?? true);
   const pillColor = allConnected ? "bg-green-500" : "bg-red-600";
 
@@ -116,6 +125,10 @@ export default function TournamentPresenceOverlay({ tournamentId, draftSessionId
 
   const posClass = position === "top-right"
     ? "top-3 right-3"
+    : position === "top-right-offset"
+    ? "top-3 right-[9.5rem]"
+    : position === "top-left"
+    ? "top-3 left-3"
     : "bottom-3 left-3";
 
   // Helper: offline since formatted string
@@ -141,31 +154,31 @@ export default function TournamentPresenceOverlay({ tournamentId, draftSessionId
       {/* Summary pill */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-md shadow ring-1 ring-white/15 text-white/90 backdrop-blur-sm bg-black/60 hover:bg-black/70`}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md shadow ring-1 ring-white/15 text-white/90 backdrop-blur-sm bg-black/60 hover:bg-black/70`}
         title="Show player connections"
         aria-label="Tournament presence"
         >
-        <span className={`inline-block w-2 h-2 rounded-full ${pillColor}`} />
-        <span className="text-sm whitespace-nowrap">
-          {connectedCount}/{expectedTotal} Connected
+        <span className={`inline-block w-1.5 h-1.5 rounded-full ${pillColor}`} />
+        <span className="text-[11px] whitespace-nowrap">
+          {connectedCount}/{expectedTotal}
         </span>
       </button>
       {/* Details popover */}
       {open && (
-        <div className={`mt-2 w-64 rounded-lg bg-black/85 ring-1 ring-white/15 shadow-xl p-2 text-white/90`}>
-          <div className="text-xs opacity-80 mb-2">Tournament Players</div>
-          <div className="grid gap-1.5 max-h-60 overflow-auto pr-1">
+        <div className={`mt-2 w-56 rounded-lg bg-black/85 ring-1 ring-white/15 shadow-xl p-2 text-white/90`}>
+          <div className="text-[10px] opacity-80 mb-1.5">Tournament Players</div>
+          <div className="grid gap-1 max-h-60 overflow-auto pr-1">
             {roster.map((p, i) => (
-              <div key={`${p.playerId}-${i}`} className="flex items-center justify-between gap-2 bg-white/5 rounded px-2 py-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`inline-block w-2 h-2 rounded-full ${p.isConnected ? 'bg-green-400' : 'bg-red-500'}`} />
-                  <span className="truncate text-sm">
+              <div key={`${p.playerId}-${i}`} className="flex items-center justify-between gap-2 bg-white/5 rounded px-1.5 py-0.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${p.isConnected ? 'bg-green-400' : 'bg-red-500'}`} />
+                  <span className="truncate text-[11px]">
                     {typeof p.seatNumber === 'number' ? `S${p.seatNumber} ` : ''}
                     {p.playerName}
                   </span>
                 </div>
                 {!p.isConnected && (
-                  <div className="text-[11px] text-white/70 whitespace-nowrap" title={new Date(p.lastActivity || 0).toLocaleString()}>
+                  <div className="text-[10px] text-white/70 whitespace-nowrap" title={new Date(p.lastActivity || 0).toLocaleString()}>
                     {`offline ${fmtSince(p.lastActivity)} ago`}
                   </div>
                 )}
