@@ -43,11 +43,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    // Mark all tournament matches as ended to prevent rejoin prompts
-    const endedMatches = await prisma.match.findMany({
+    // Mark all active tournament matches as completed to prevent rejoin prompts
+    const activeMatches = await prisma.match.findMany({
       where: {
         tournamentId: id,
-        status: { not: 'ended' }
+        status: 'active'
       },
       select: { id: true }
     });
@@ -55,17 +55,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.match.updateMany({
       where: {
         tournamentId: id,
-        status: { not: 'ended' }
+        status: 'active'
       },
       data: {
-        status: 'ended'
+        status: 'completed'
       }
     });
 
     // Notify the socket server to clean up these matches
     // This will remove player.matchId associations and prevent rejoin prompts
     try {
-      for (const match of endedMatches) {
+      for (const match of activeMatches) {
         await tournamentSocketService.broadcastToMatch(match.id, 'matchEnded', {
           matchId: match.id,
           tournamentId: id,
