@@ -155,17 +155,6 @@ function LifeCounter({
             </button>
           </div>
         )}
-
-        {/* Life state description */}
-        {lifeState !== "alive" && (
-          <div
-            className="text-xs opacity-80"
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {lifeState === "dd" && "Death's Door"}
-            {lifeState === "dead" && "Dead"}
-          </div>
-        )}
       </div>
 
       {/* Player name below counter (for lower player) */}
