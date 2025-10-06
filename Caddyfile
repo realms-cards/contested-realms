@@ -4,9 +4,7 @@
     header {
         -Server
     }
-    # Load balance across the Socket.IO server instances
-    reverse_proxy server1:3010 server2:3010 {
-        # Stick each client IP to the same backend to avoid bouncing between instances
-        lb_policy ip_hash
-    }
+    # Temporarily disable load balancing - send all traffic to server1
+    # TODO: Implement proper sticky sessions for Socket.IO
+    reverse_proxy server1:3010
 }

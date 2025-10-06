@@ -155,50 +155,40 @@ export default function OnlineMatchPage() {
 
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
-    if (!connected || !matchId) return;
-
-    // If server reports a different match, force a one-time hard redirect to the server-authoritative id
-    try {
-      if (match?.id && match?.id !== matchId) {
-        const serverMatchId = match.id;
-        const key = `force_reload_match_${serverMatchId}`;
-        if (!sessionStorage.getItem(key)) {
-          console.log(
-            "[game] Switching to different match - forcing page reload for clean state"
-          );
-          sessionStorage.setItem(key, "1");
-          // Clear the old param-based key to prevent stale data
-          const oldKey = `force_reload_match_${matchId}`;
-          sessionStorage.removeItem(oldKey);
-          // Redirect to the server-authoritative match id
-          window.location.replace(`/online/play/${serverMatchId}`);
-          return;
-        } else {
-          // If we've already forced a reload but still have wrong match, reset game state
-          console.log(
-            "[game] After reload still have wrong match - resetting game state"
-          );
-          useGameStore.getState().resetGameState();
-        }
-      }
-    } catch {}
+    console.log("[joinMatch effect] Checking conditions:", { connected, matchId, matchCurrentId: match?.id, joinAttempted: joinAttemptedForRef.current });
+    if (!connected || !matchId) {
+      console.log("[joinMatch effect] Bailing - not connected or no matchId");
+      return;
+    }
 
     if (match?.id === matchId) {
+      console.log("[joinMatch effect] Already in correct match");
       // Arrived or already in: clear join attempt flag
       if (joinAttemptedForRef.current === matchId)
         joinAttemptedForRef.current = null;
       return;
     }
-    if (joinAttemptedForRef.current === matchId) return;
-    try {
-      console.debug("[online] joinMatch ->", {
-        matchId,
-        because: "direct",
+    if (joinAttemptedForRef.current === matchId) {
+      console.log("[joinMatch effect] Already attempted join for this match");
+      return;
+    }
+
+    // If we're in a different match, leave it first
+    if (match?.id && match.id !== matchId) {
+      console.log("[online] Leaving wrong match before joining correct one:", {
+        currentMatch: match.id,
+        targetMatch: matchId,
       });
-    } catch {}
+      leaveMatch();
+    }
+
+    console.log("[online] joinMatch ->", {
+      matchId,
+      because: "direct",
+    });
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
-  }, [connected, match?.id, matchId, joinMatch]);
+  }, [connected, match?.id, matchId, joinMatch, leaveMatch]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -354,14 +344,102 @@ export default function OnlineMatchPage() {
     const rawDeck = (match.playerDecks as Record<string, unknown>)[me.id];
     if (!rawDeck) return;
 
+    console.log("[match] Auto-loading deck from match.playerDecks:", {
+      deckLength: Array.isArray(rawDeck) ? rawDeck.length : 'not an array',
+      sampleCards: Array.isArray(rawDeck) ? (rawDeck as Array<Record<string, unknown>>).slice(0, 3) : rawDeck
+    });
+
     let cancelled = false;
 
     (async () => {
       try {
+        let deckToLoad = rawDeck;
+
+        // Check if this is condensed tournament format {cardId, quantity}
+        // vs full card objects {cardId, name, type, ...}
+        if (Array.isArray(rawDeck) && rawDeck.length > 0) {
+          const firstCard = rawDeck[0] as Record<string, unknown>;
+          const isCondensedFormat = 'quantity' in firstCard && !('type' in firstCard);
+
+          if (isCondensedFormat) {
+            console.log("[match] Detected condensed tournament deck format, expanding to full cards...");
+
+            // Extract unique card IDs
+            const cardIds = Array.from(
+              new Set(
+                (rawDeck as Array<{ cardId: string; quantity: number }>)
+                  .map(entry => Number(entry.cardId))
+                  .filter(n => Number.isFinite(n) && n > 0)
+              )
+            );
+
+            if (cardIds.length > 0) {
+              // Fetch card metadata
+              const resMeta = await fetch(
+                `/api/cards/by-id?ids=${encodeURIComponent(cardIds.join(","))}`
+              );
+
+              if (resMeta.ok) {
+                const metas = (await resMeta.json()) as Array<{
+                  cardId: number;
+                  name: string;
+                  slug: string;
+                  setName: string;
+                  type?: string | null;
+                  cost?: number | null;
+                  thresholds?: Record<string, number> | null;
+                }>;
+
+                const byId = new Map(
+                  metas.map(m => [
+                    m.cardId,
+                    {
+                      name: m.name,
+                      slug: m.slug,
+                      setName: m.setName,
+                      type: m.type || null,
+                      cost: m.cost ?? null,
+                      thresholds: m.thresholds ?? null,
+                    }
+                  ])
+                );
+
+                // Expand condensed format to full cards
+                const expandedDeck: Array<Record<string, unknown>> = [];
+                for (const entry of rawDeck as Array<{ cardId: string; quantity: number }>) {
+                  const idNum = Number(entry.cardId);
+                  const meta = byId.get(idNum);
+                  if (!meta) {
+                    console.warn(`[match] Missing metadata for card ID ${idNum}`);
+                    continue;
+                  }
+                  const quantity = Math.max(1, Number(entry.quantity) || 0);
+                  for (let i = 0; i < quantity; i++) {
+                    expandedDeck.push({
+                      id: String(idNum),
+                      cardId: idNum,
+                      name: meta.name,
+                      slug: meta.slug,
+                      set: meta.setName,
+                      type: meta.type || "",
+                      thresholds: meta.thresholds || null,
+                    });
+                  }
+                }
+
+                console.log("[match] Expanded deck to", expandedDeck.length, "cards");
+                deckToLoad = expandedDeck;
+              } else {
+                console.error("[match] Failed to fetch card metadata for condensed deck");
+              }
+            }
+          }
+        }
+
         const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
         const ok = await loadSealedDeckFor(
           myPlayerKey as "p1" | "p2",
-          rawDeck,
+          deckToLoad,
           (error) => console.error("[match] Deck load error:", error)
         );
         if (!ok || cancelled) return;
@@ -428,24 +506,40 @@ export default function OnlineMatchPage() {
           setName: string;
           type?: string | null;
         }>;
+        console.log("[match] Fetched card metadata for", metas.length, "cards. Sample:", metas.slice(0, 3));
         const byId = new Map<
           number,
-          { name: string; slug: string; setName: string; type: string | null }
+          { name: string; slug: string; setName: string; type: string | null; cost: number | null; thresholds: Record<string, number> | null }
         >();
         for (const meta of metas) {
+          const cardType = meta.type || null;
           byId.set(Number(meta.cardId), {
             name: meta.name,
             slug: meta.slug,
             setName: meta.setName,
-            type: meta.type || null,
+            type: cardType,
+            cost: (meta as { cost?: number | null }).cost ?? null,
+            thresholds: (meta as { thresholds?: Record<string, number> | null }).thresholds ?? null,
           });
         }
+
+        console.log("[match] Building deck from list with", list.length, "unique cards");
+        console.log("[match] Metadata map has", byId.size, "entries");
+        console.log("[match] Sample list entry:", list[0]);
+        console.log("[match] Sample byId keys:", Array.from(byId.keys()).slice(0, 5));
 
         const deck: Array<Record<string, unknown>> = [];
         for (const entry of list) {
           const idNum = Number(entry.cardId);
           const meta = byId.get(idNum);
-          if (!meta) continue;
+          if (!meta) {
+            console.error(`[match] Missing metadata for card ID ${idNum} (type: ${typeof entry.cardId})`, {
+              entry,
+              hasInMap: byId.has(idNum),
+              mapKeys: Array.from(byId.keys())
+            });
+            continue;
+          }
           const quantity = Math.max(1, Number(entry.quantity) || 0);
           for (let i = 0; i < quantity; i++) {
             deck.push({
@@ -455,11 +549,16 @@ export default function OnlineMatchPage() {
               slug: meta.slug,
               set: meta.setName,
               type: meta.type || "",
+              thresholds: meta.thresholds || null,
             });
           }
         }
 
-        if (deck.length === 0 || cancelled) return;
+        console.log("[match] Built deck with", deck.length, "cards");
+        if (deck.length === 0 || cancelled) {
+          console.error("[match] Deck is empty, not submitting!");
+          return;
+        }
 
         transport.submitDeck(deck);
         tournamentDeckSubmittedRef.current = tournamentId;
@@ -1406,9 +1505,13 @@ export default function OnlineMatchPage() {
             }}
             onLeaveLobby={() => {
               leaveLobby();
-              router.push("/online/lobby");
+              if (tournamentId) {
+                router.push(`/tournaments/${tournamentId}`);
+              } else {
+                router.push("/online/lobby");
+              }
             }}
-            leaveLabel={undefined}
+            leaveLabel={tournamentId ? "Return to Tournament" : undefined}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}

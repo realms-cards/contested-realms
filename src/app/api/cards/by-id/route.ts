@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
                 cost: true,
                 thresholds: true,
                 setId: true,
+                type: true,
               }
             }
           }
@@ -51,7 +52,8 @@ export async function GET(req: NextRequest) {
           name: v.card.name,
           slug: v.slug,
           setName: v.set.name,
-          type: v.typeText || null,
+          // Prefer per-set metadata.type (authoritative) then fall back to variant.typeText
+          type: (metadata?.type as string | undefined) || v.typeText || null,
           cost: metadata?.cost ?? null,
           thresholds: metadata?.thresholds as Record<string, number> | null ?? null,
         });
@@ -76,6 +78,7 @@ export async function GET(req: NextRequest) {
                   cost: true,
                   thresholds: true,
                   setId: true,
+                  type: true,
                 }
               }
             }
@@ -92,7 +95,7 @@ export async function GET(req: NextRequest) {
             name: v.card.name,
             slug: v.slug,
             setName: v.set.name,
-            type: v.typeText || null,
+            type: (metadata?.type as string | undefined) || v.typeText || null,
             cost: metadata?.cost ?? null,
             thresholds: metadata?.thresholds as Record<string, number> | null ?? null,
           });

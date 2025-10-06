@@ -116,16 +116,31 @@ export async function loadSealedDeckFor(
     );
 
     // Separate cards by type
-    const isAvatar = (c: CardRef) =>
-      typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");
+    const isAvatar = (c: CardRef) => {
+      if (typeof c?.type !== "string" || c.type.length === 0) {
+        if (c.name && c.name.toLowerCase().includes("avatar")) {
+          console.warn("[loadSealedDeckFor] Card with 'avatar' in name but empty/null type:", { name: c.name, type: c.type });
+        }
+        return false;
+      }
+      return c.type.toLowerCase().includes("avatar");
+    };
     const isSite = (c: CardRef) =>
-      typeof c?.type === "string" && c.type.toLowerCase().includes("site");
+      typeof c?.type === "string" && c.type.length > 0 && c.type.toLowerCase().includes("site");
 
     // Prefer zone-based classification when zones are provided (constructed tournament decks)
     const anyZonesProvided = cards.some((c: CardRefWithZone) => !!c.__zone);
     let rawAtlas: CardRef[];
     let spellbook: CardRef[];
     const avatars = cards.filter(isAvatar);
+
+    if (avatars.length !== 1) {
+      console.error("[loadSealedDeckFor] Avatar validation failed:", {
+        avatarCount: avatars.length,
+        avatars: avatars.map(a => ({ name: a.name, type: a.type })),
+        allCards: cards.map(c => ({ name: c.name, type: c.type, typeType: typeof c.type }))
+      });
+    }
     if (anyZonesProvided) {
       const atlasZ: CardRefWithZone[] = cards.filter((c: CardRefWithZone) => c.__zone === "atlas");
       const spellZ: CardRefWithZone[] = cards.filter(

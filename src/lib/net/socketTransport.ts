@@ -159,22 +159,28 @@ export class SocketTransport implements GameTransport {
             playerId: opts.playerId,
           })
         );
-        if (!resolved) {
-          resolved = true;
-          resolve();
-        }
       };
       const onError = (err: unknown) => {
         if (!resolved) reject(err);
       };
 
+      const onWelcome = () => {
+        if (!resolved) {
+          resolved = true;
+          this.connectionState = 'connected';
+          resolve();
+        }
+      };
+
       // Send hello on every connect (initial and reconnects)
       socket.on("connect", () => {
-        this.connectionState = 'connected';
         this.reconnectionAttempts = 0;
         this.reconnectionDelay = 1000;
         sendHello();
       });
+
+      // Wait for welcome response before considering connection complete
+      socket.once("welcome", onWelcome);
       socket.once("connect_error", onError);
 
       // Wire server events
@@ -408,16 +414,26 @@ export class SocketTransport implements GameTransport {
   }
 
   async joinMatch(matchId: string): Promise<void> {
+    console.log("[Transport] joinMatch called for:", matchId);
     const s = this.requireSocket();
+    if (!s.connected) {
+      console.error("[Transport] Socket not connected!");
+      throw new Error("Socket not connected");
+    }
+
+    console.log("[Transport] Socket connected, emitting joinMatch");
     return new Promise((resolve) => {
       const onMatch = (payload: unknown) => {
+        console.log("[Transport] Received matchStarted:", payload);
         const parsed = Protocol.MatchStartedPayload.parse(payload);
         this.dispatch("matchStarted", parsed);
         s.off("matchStarted", onMatch);
         resolve();
       };
       s.on("matchStarted", onMatch);
-      s.emit("joinMatch", Protocol.JoinMatchPayload.parse({ matchId }));
+      const payload = Protocol.JoinMatchPayload.parse({ matchId });
+      console.log("[Transport] Emitting joinMatch with payload:", payload);
+      s.emit("joinMatch", payload);
     });
   }
 
