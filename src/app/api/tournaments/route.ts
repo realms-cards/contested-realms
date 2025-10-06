@@ -187,16 +187,18 @@ export async function POST(req: NextRequest) {
       }), { status: 400 });
     }
 
-    // Use client-provided totalRounds if available, otherwise calculate optimal rounds
-    const optimalRounds = Math.ceil(Math.log2(maxPlayers));
+    // Use client-provided totalRounds if available, otherwise default to 3 for Swiss
+    // Swiss tournaments typically run 3-5 rounds regardless of player count
     const clientTotalRounds = typeof incomingSettings?.totalRounds === 'number'
       ? incomingSettings.totalRounds
       : null;
-    const totalRounds = clientTotalRounds ?? Math.max(3, optimalRounds); // Minimum 3 rounds if not specified
+    const totalRounds = clientTotalRounds ?? 3; // Default 3 rounds for Swiss
 
-    // Merge provided arbitrary settings (e.g., pairingFormat) while enforcing server-calculated fields
+    // Merge provided arbitrary settings while enforcing server-calculated fields
+    // Tournament pairing format is always Swiss
     const settingsOut: Record<string, unknown> = {
       ...incomingSettings,
+      pairingFormat: 'swiss',
       totalRounds,
       roundTimeLimit: 50,
       matchTimeLimit: 60,

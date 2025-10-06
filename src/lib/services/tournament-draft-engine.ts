@@ -217,8 +217,9 @@ export class TournamentDraftEngine {
       return fallbackSet;
     });
 
+    // Start in pack_selection phase so players can choose which pack to open
     this.draftState = {
-      phase: 'picking',
+      phase: 'pack_selection',
       packIndex: roundIdx,
       pickNumber: 1,
       currentPacks,
@@ -474,9 +475,10 @@ export class TournamentDraftEngine {
               }
               return fallbackSet;
             });
+            // Start next round in pack_selection phase so players can choose packs
             nextState = {
               ...base,
-              phase: 'picking',
+              phase: 'pack_selection',
               packIndex: nextRoundIndex,
               pickNumber: 1,
               currentPacks: nextCurrentPacks,
@@ -651,9 +653,10 @@ export class TournamentDraftEngine {
       return fallbackSet;
     });
 
+    // Start new round in pack_selection phase so players can choose which pack to open
     this.draftState = {
       ...this.draftState,
-      phase: 'picking',
+      phase: 'pack_selection',
       packIndex: nextRoundIndex,
       pickNumber: 1,
       currentPacks,
@@ -844,16 +847,69 @@ export class TournamentDraftEngine {
    * Swaps chosen pack into the current round index, records choice, and when all chosen, distributes packs and enters picking.
    */
   async choosePack(playerId: string, opts: { packIndex?: number; setChoice?: string }): Promise<DraftState> {
-    void playerId;
-    void opts;
     if (!this.draftState || !this.session) {
       await this.loadSessionAndState();
       if (!this.draftState || !this.session) throw new Error('Draft not initialized');
     }
+
     const dsx = this.draftState as DraftStateExtended;
     if (!this.allGeneratedPacks && dsx.allGeneratedPacks) {
       this.allGeneratedPacks = dsx.allGeneratedPacks;
     }
+
+    // Find player's seat
+    const participant = this.session.participants.find(p => p.playerId === playerId);
+    if (!participant) throw new Error('Player not found in draft session');
+
+    const seatIndex = participant.seatNumber;
+    const { packIndex, setChoice } = opts;
+
+    // Validate phase
+    if (this.draftState.phase !== 'pack_selection') {
+      console.warn(`[choosePack] Player ${playerId} tried to choose pack but phase is ${this.draftState.phase}`);
+      return this.draftState as DraftState;
+    }
+
+    // Validate pack index if provided
+    if (typeof packIndex === 'number') {
+      if (!this.allGeneratedPacks || !this.allGeneratedPacks[seatIndex] || !this.allGeneratedPacks[seatIndex][packIndex]) {
+        console.warn(`[choosePack] Invalid packIndex ${packIndex} for seat ${seatIndex}`);
+        return this.draftState as DraftState;
+      }
+
+      // Update the current pack for this player
+      const chosenPack = this.allGeneratedPacks[seatIndex][packIndex];
+      if (this.draftState.currentPacks && Array.isArray(this.draftState.currentPacks[seatIndex])) {
+        this.draftState.currentPacks[seatIndex] = chosenPack;
+      }
+    }
+
+    // Update pack choice for this player
+    if (setChoice && Array.isArray(this.draftState.packChoice)) {
+      this.draftState.packChoice[seatIndex] = setChoice;
+    }
+
+    // Check if all players have chosen their packs
+    const allChosen = this.session.participants.every((p, idx) => {
+      return this.draftState?.packChoice && this.draftState.packChoice[idx] !== null;
+    });
+
+    // Transition to picking phase if everyone has chosen
+    if (allChosen) {
+      this.draftState.phase = 'picking';
+      console.log(`[choosePack] All players chose packs, transitioning to picking phase`);
+    }
+
+    // Save updated state
+    await prisma.draftSession.update({
+      where: { id: this.sessionId },
+      data: {
+        draftState: JSON.parse(JSON.stringify(this.draftState)) as PrismaClientNS.InputJsonValue,
+      },
+    });
+
+    console.log(`[choosePack] Player ${playerId} (seat ${seatIndex}) chose pack ${String(packIndex)} with set ${String(setChoice)}`);
+
     return this.draftState as DraftState;
   }
 
