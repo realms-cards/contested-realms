@@ -120,8 +120,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Packs already opened' }), { status: 400 });
     }
 
-    // Generate actual card pool from packs
-    const cardPool = await generateCardPoolFromPacks(packIds);
+    // Extract card pool from the generated packs
+    const generatedPacks = (sealedData.generatedPacks as Array<{ packId: string; cards: unknown[] }>) || [];
+    const cardPool = extractCardPoolFromPacks(generatedPacks, packIds);
 
     const updatedSealedData = {
       ...sealedData,
@@ -159,21 +160,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-// Helper function to generate card pool from pack IDs
-async function generateCardPoolFromPacks(packIds: string[]) {
-  // For now, return mock card pool
-  // In a real implementation, this would generate actual cards based on pack contents
-  const cardPool = [];
-  
+// Helper function to extract card pool from generated packs
+function extractCardPoolFromPacks(
+  generatedPacks: Array<{ packId: string; cards: unknown[] }>,
+  packIds: string[]
+) {
+  const cardPool: unknown[] = [];
+
   for (const packId of packIds) {
-    // Mock: generate 15 cards per pack
-    for (let i = 0; i < 15; i++) {
-      cardPool.push({
-        cardId: `${packId}_card_${i + 1}`,
-        name: `Mock Card ${i + 1}`,
-        manaCost: Math.floor(Math.random() * 8),
-        rarity: i < 10 ? 'common' : i < 13 ? 'uncommon' : i < 14 ? 'rare' : 'mythic'
-      });
+    const pack = generatedPacks.find(p => p.packId === packId);
+    if (pack && Array.isArray(pack.cards)) {
+      cardPool.push(...pack.cards);
     }
   }
 

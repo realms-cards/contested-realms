@@ -45,8 +45,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponseWithSoc
 // Configure Next.js to handle the Socket.IO upgrade
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '1mb',
-    },
+    // Disable body parser to allow raw upgrade handling for Socket.IO
+    bodyParser: false,
   },
 }

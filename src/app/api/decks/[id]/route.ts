@@ -27,7 +27,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const deck = await prisma.deck.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        format: true,
+        isPublic: true,
+        imported: true,
+        userId: true,
         cards: {
           include: {
             card: true,
@@ -35,9 +41,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             set: true,
           },
         },
-        user: {
-          select: { name: true }
-        }
+        user: { select: { name: true } },
       },
     });
 
@@ -172,21 +176,37 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       setId = set.id;
     }
 
-    // Update name/format/isPublic if provided
-    if (name || format || isPublic !== undefined) {
-      await prisma.deck.update({
-        where: { id },
-        data: {
-          name: name ?? undefined,
-          format: format ?? undefined,
-          isPublic: isPublic ?? undefined
-        }
-      });
+    // Helper to validate constructed composition from a flat list
+    async function validateConstructedOrThrow(flat: Array<{ cardId: number; setId: number | null; zone: string; count: number }>) {
+      const pairs = Array.from(new Set(
+        flat.filter(it => it.setId != null)
+            .map(it => `${it.cardId}:${it.setId as number}`)
+      ));
+      const orPairs = pairs.map(k => ({ cardId: Number(k.split(':')[0]), setId: Number(k.split(':')[1]) }));
+      const metaMap = new Map<string, string | null>();
+      if (orPairs.length) {
+        const metas = await prisma.cardSetMetadata.findMany({ where: { OR: orPairs }, select: { cardId: true, setId: true, type: true } });
+        for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
+      }
+      let avatarCount = 0; let spellbook = 0; let atlas = 0;
+      for (const it of flat) {
+        if (it.zone === 'Spellbook') spellbook += it.count;
+        if (it.zone === 'Atlas') atlas += it.count;
+        const type = (it.setId != null ? (metaMap.get(`${it.cardId}:${it.setId}`) || '') : '').toLowerCase();
+        if (type.includes('avatar')) avatarCount += it.count;
+      }
+      if (!(avatarCount === 1 && spellbook >= 50 && atlas >= 30)) {
+        throw new Error(`Constructed deck invalid: requires exactly 1 Avatar, >=50 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`);
+      }
     }
 
+    // If target format is or becomes 'constructed', validate rules against the proposed state
+    const targetFormat = (format ?? deck.format)?.toLowerCase();
+    const needsConstructedValidation = targetFormat === 'constructed';
+
+    // If updating cards: validate (if needed) then replace
     if (cards.length) {
       const allowedZones = new Set(['Spellbook', 'Atlas', 'Sideboard']);
-      // Aggregate by (cardId, zone, variantId?)
       const agg = new Map<string, { cardId: number; zone: string; count: number; variantId: number | null }>();
       for (const c of cards) {
         const cardId = Number(c.cardId);
@@ -199,20 +219,63 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const prev = agg.get(key);
         if (prev) prev.count += count; else agg.set(key, { cardId, zone, count, variantId });
       }
+      // Resolve setIds for items with variantId; otherwise fall back to setId from top-level 'set'
+      const variantIds = Array.from(new Set(Array.from(agg.values()).map(v => v.variantId).filter((id): id is number => id != null)));
+      const variants = variantIds.length
+        ? await prisma.variant.findMany({ where: { id: { in: variantIds } }, select: { id: true, setId: true } })
+        : [];
+      const setByVariant = new Map<number, number>();
+      for (const v of variants) setByVariant.set(v.id, v.setId);
 
-      // Replace deck cards in a transaction
+      if (needsConstructedValidation) {
+        const flat = Array.from(agg.values()).map(({ cardId, zone, count, variantId }) => ({
+          cardId, zone, count, setId: (variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null))
+        }));
+        try {
+          await validateConstructedOrThrow(flat);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Invalid constructed deck';
+          return new Response(JSON.stringify({ error: message }), { status: 400 });
+        }
+      }
+
       await prisma.$transaction(async (tx) => {
         await tx.deckCard.deleteMany({ where: { deckId: id } });
         const createData = Array.from(agg.values()).map(({ cardId, zone, count, variantId }) => ({
           deckId: id,
           cardId,
-          setId: setId ?? null,
+          setId: (variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null)),
           variantId: variantId ?? null,
           zone,
           count,
         }));
         if (createData.length) {
           await tx.deckCard.createMany({ data: createData });
+        }
+      });
+    } else if (needsConstructedValidation) {
+      // Validate using existing deck cards if only changing format/name/visibility
+      const deckWithCards = await prisma.deck.findUnique({
+        where: { id },
+        include: { cards: { select: { cardId: true, setId: true, zone: true, count: true } } }
+      });
+      const flat = (deckWithCards?.cards || []).map(dc => ({ cardId: dc.cardId, setId: dc.setId, zone: dc.zone, count: dc.count }));
+      try {
+        await validateConstructedOrThrow(flat);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Invalid constructed deck';
+        return new Response(JSON.stringify({ error: message }), { status: 400 });
+      }
+    }
+
+    // Update name/format/isPublic last so validation can block an invalid constructed deck
+    if (name || format || isPublic !== undefined) {
+      await prisma.deck.update({
+        where: { id },
+        data: {
+          name: name ?? undefined,
+          format: format ?? undefined,
+          isPublic: isPublic ?? undefined
         }
       });
     }
@@ -223,4 +286,5 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
+
 }

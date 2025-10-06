@@ -30,8 +30,8 @@ type CacheEntry = {
 const textureCache = new Map<string, CacheEntry>();
 // Pending loads by URL to dedupe concurrent requests.
 const pendingLoads = new Map<string, Promise<Texture>>();
-// One KTX2Loader per renderer to reuse workers/transcoder and internal caches.
-const ktx2LoaderByRenderer = new WeakMap<WebGLRenderer, KTX2Loader>();
+// Single KTX2Loader per app to reuse workers/transcoder and internal caches across all canvases.
+let globalKtx2Loader: KTX2Loader | null = null;
 // Remember KTX2 URLs that failed recently; retry after a cooldown.
 const ktx2FailureTimes = new Map<string, number>();
 const KTX2_RETRY_DELAY_MS = (() => {
@@ -45,9 +45,8 @@ const KTX2_RETRY_DELAY_MS = (() => {
 })();
 
 function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
-  let loader = ktx2LoaderByRenderer.get(gl);
-  if (!loader) {
-    loader = new KTX2Loader();
+  if (!globalKtx2Loader) {
+    const loader = new KTX2Loader();
     // Allow overriding transcoder path via env; default to self-hosted /ktx2/
     const envPath = process.env.NEXT_PUBLIC_KTX2_TRANSCODER_PATH;
     loader.setTranscoderPath(envPath && envPath.trim() ? envPath : "/ktx2/");
@@ -58,14 +57,15 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
         "anonymous"
       );
     } catch {}
-    try {
-      loader.detectSupport(gl);
-    } catch {
-      // ignore; loader will reject if unsupported
-    }
-    ktx2LoaderByRenderer.set(gl, loader);
+    globalKtx2Loader = loader;
   }
-  return loader;
+  // Detect/refresh support against the current renderer context (safe to call repeatedly)
+  try {
+    globalKtx2Loader.detectSupport(gl);
+  } catch {
+    // ignore; loader will reject if unsupported
+  }
+  return globalKtx2Loader;
 }
 
 type TextureWithDimensions = Texture & {
@@ -114,17 +114,17 @@ function normalizeTexture(
   t.offset.x = 0;
 
   // Keep flipY disabled to avoid GPU-driver specific flips.
-  // With current meshes/UVs we need the same vertical inversion for both KTX2 and raster.
   // Invert via UV: repeat.y = -1, offset.y = 1.
   t.flipY = false;
   t.repeat.y = -1;
   t.offset.y = 1;
 
-  // Improve readability of card text/details
+  // Improve readability of card text/details (use moderate anisotropy to save memory)
   if (gl) {
     try {
       const maxAniso = gl.capabilities.getMaxAnisotropy();
-      if (maxAniso && maxAniso > 1) t.anisotropy = Math.min(8, maxAniso);
+      // Reduce from 8 to 4 to save GPU memory
+      if (maxAniso && maxAniso > 1) t.anisotropy = Math.min(4, maxAniso);
     } catch {}
   }
 
@@ -134,8 +134,15 @@ function normalizeTexture(
 // --- Soft eviction policy (keep-after-release) ---
 const EVICT_MS = (() => {
   const v = Number(process.env.NEXT_PUBLIC_TEXTURE_CACHE_TTL_MS || "");
-  // Default to 60s if not provided or invalid
-  return Number.isFinite(v) && v > 0 ? v : 60_000;
+  // Default to 30s - balance between memory and reload performance
+  return Number.isFinite(v) && v > 0 ? v : 30_000;
+})();
+
+// Maximum cache size (number of textures) before forced LRU eviction
+const MAX_CACHE_SIZE = (() => {
+  const v = Number(process.env.NEXT_PUBLIC_TEXTURE_CACHE_MAX_SIZE || "");
+  // Default to 150 textures - enough for typical draft without overwhelming GPU
+  return Number.isFinite(v) && v > 0 ? v : 150;
 })();
 
 function cancelEviction(entry: CacheEntry) {
@@ -164,6 +171,31 @@ function scheduleEviction(url: string, entry: CacheEntry) {
   } catch {}
 }
 
+// Enforce cache size limit by evicting least recently used unreferenced textures
+function enforceCacheSizeLimit() {
+  if (textureCache.size <= MAX_CACHE_SIZE) return;
+  
+  // Find all unreferenced textures, sorted by lastUsed (oldest first)
+  const unreferenced = Array.from(textureCache.entries())
+    .filter(([, entry]) => entry.refs <= 0)
+    .sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+  
+  // Evict oldest unreferenced textures until we're under the limit
+  const toEvict = textureCache.size - MAX_CACHE_SIZE;
+  for (let i = 0; i < Math.min(toEvict, unreferenced.length); i++) {
+    const [url, entry] = unreferenced[i];
+    cancelEviction(entry);
+    try {
+      entry.texture.dispose();
+    } catch {}
+    textureCache.delete(url);
+  }
+  
+  if (process.env.NODE_ENV === "development" && toEvict > 0) {
+    console.log(`[texture-cache] Evicted ${Math.min(toEvict, unreferenced.length)} textures (cache: ${textureCache.size}/${MAX_CACHE_SIZE})`);
+  }
+}
+
 async function acquire(
   url: string,
   load: () => Promise<Texture>
@@ -187,6 +219,10 @@ async function acquire(
     }
     return tex;
   }
+  
+  // Enforce cache limit before loading new textures
+  enforceCacheSizeLimit();
+  
   const p = load()
     .then((t) => {
       textureCache.set(url, { texture: t, refs: 0, lastUsed: Date.now() });

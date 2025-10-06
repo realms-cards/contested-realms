@@ -11,6 +11,7 @@ interface MatchEndOverlayProps {
   onClose: () => void;
   onLeave?: () => void;
   onLeaveLobby?: () => void;
+  leaveLabel?: string;
 }
 
 export default function MatchEndOverlay({
@@ -20,7 +21,8 @@ export default function MatchEndOverlay({
   myPlayerKey,
   onClose,
   onLeave,
-  onLeaveLobby
+  onLeaveLobby,
+  leaveLabel
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -134,7 +136,7 @@ export default function MatchEndOverlay({
               onClick={handleLeaveMatch}
               className="w-full bg-red-700 hover:bg-red-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
             >
-              Leave Match & Return to Lobby
+              {leaveLabel || 'Leave Match & Return to Lobby'}
             </button>
           )}
         </div>

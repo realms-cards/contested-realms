@@ -1,8 +1,8 @@
 "use client";
 
 import { Star, Settings } from "lucide-react";
-import { useGameStore } from "@/lib/game/store";
 import { FEATURE_UNDO } from "@/lib/config/features";
+import { useGameStore } from "@/lib/game/store";
 
 interface OnlineStatusBarProps {
   dragFromHand: boolean;
@@ -45,13 +45,12 @@ export default function OnlineStatusBar({
           <Settings className="w-3.5 h-3.5" />
           Info
         </button>
-
         <div className="w-px h-4 bg-white/20" />
 
         {/* Game Status */}
         <Star className={`w-4 h-4 ${isMyTurn ? 'fill-green-400 text-green-400' : 'fill-yellow-400 text-yellow-400'}`} />
         <span className="opacity-80">{currentPlayerName}&apos;s Turn</span>
-        
+
         {/* Turn Controls - Only for current player */}
         {canControlTurn && (
           <button
@@ -62,6 +61,8 @@ export default function OnlineStatusBar({
             End Turn
           </button>
         )}
+
+        
         
         {FEATURE_UNDO && (
           <>

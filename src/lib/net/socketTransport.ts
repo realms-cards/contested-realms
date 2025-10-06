@@ -24,6 +24,69 @@ import type {
   UIUpdateEvent 
 } from "@/types/draft-3d-events";
 
+// --- Helper normalization: tolerate older servers or partial sealed config ---
+function normalizeSealedConfigClient(sc: unknown): unknown {
+  if (!sc || typeof sc !== 'object') return null;
+  const obj = sc as Record<string, unknown>;
+  const n = (v: unknown): number => {
+    const x = typeof v === 'string' ? Number(v) : (v as number);
+    return Number.isFinite(x) ? Number(x) : NaN;
+  };
+  const packCounts = obj.packCounts && typeof obj.packCounts === 'object' ? (obj.packCounts as Record<string, unknown>) : {};
+  let sum = 0;
+  const entries = Object.entries(packCounts);
+  for (const [, v] of entries) sum += Number(n(v)) || 0;
+  const rawPackCount = n(obj.packCount);
+  const packCount = Number.isFinite(rawPackCount) && rawPackCount > 0 ? Math.floor(rawPackCount) : (sum > 0 ? sum : 6);
+  let setMix: string[] = Array.isArray(obj.setMix) ? (obj.setMix as unknown[]).filter((s) => typeof s === 'string') as string[] : [];
+  if (setMix.length === 0) {
+    setMix = entries.filter(([, v]) => (Number(n(v)) || 0) > 0).map(([k]) => String(k));
+  }
+  if (setMix.length === 0) setMix = ['Beta'];
+  const rawTimeLimit = n(obj.timeLimit);
+  const timeLimit = Number.isFinite(rawTimeLimit) && rawTimeLimit > 0 ? Math.floor(rawTimeLimit) : 40;
+  const cstRaw = n(obj.constructionStartTime);
+  const constructionStartTime = Number.isFinite(cstRaw) && cstRaw > 0 ? Math.floor(cstRaw) : Date.now();
+  const replaceAvatars = !!obj.replaceAvatars;
+  // Keep original packCounts if it was an object; otherwise omit
+  const pcOut = Object.keys(packCounts).length ? Object.fromEntries(entries.map(([k, v]) => [String(k), Number(n(v)) || 0])) : undefined;
+  return { packCount, setMix, timeLimit, constructionStartTime, ...(pcOut ? { packCounts: pcOut } : {}), replaceAvatars };
+}
+
+function normalizeMatchStartedPayload(payload: unknown): unknown {
+  try {
+    if (!payload || typeof payload !== 'object') return payload;
+    const p = payload as { match?: Record<string, unknown> };
+    if (!p.match) return payload;
+    const m = p.match;
+    const sc = m.sealedConfig as unknown;
+    if (sc !== undefined) {
+      const fixed = normalizeSealedConfigClient(sc);
+      return { ...p, match: { ...m, sealedConfig: fixed } };
+    }
+    return payload;
+  } catch {
+    return payload;
+  }
+}
+
+function normalizeResyncResponsePayload(payload: unknown): unknown {
+  try {
+    if (!payload || typeof payload !== 'object') return payload;
+    const p = payload as { snapshot?: { match?: Record<string, unknown> } };
+    if (!p.snapshot || !p.snapshot.match) return payload;
+    const m = p.snapshot.match;
+    const sc = m.sealedConfig as unknown;
+    if (sc !== undefined) {
+      const fixed = normalizeSealedConfigClient(sc);
+      return { ...p, snapshot: { ...p.snapshot, match: { ...m, sealedConfig: fixed } } };
+    }
+    return payload;
+  } catch {
+    return payload;
+  }
+}
+
 export class SocketTransport implements GameTransport {
   private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
   private socket?: Socket;
@@ -96,22 +159,28 @@ export class SocketTransport implements GameTransport {
             playerId: opts.playerId,
           })
         );
-        if (!resolved) {
-          resolved = true;
-          resolve();
-        }
       };
       const onError = (err: unknown) => {
         if (!resolved) reject(err);
       };
 
+      const onWelcome = () => {
+        if (!resolved) {
+          resolved = true;
+          this.connectionState = 'connected';
+          resolve();
+        }
+      };
+
       // Send hello on every connect (initial and reconnects)
       socket.on("connect", () => {
-        this.connectionState = 'connected';
         this.reconnectionAttempts = 0;
         this.reconnectionDelay = 1000;
         sendHello();
       });
+
+      // Wait for welcome response before considering connection complete
+      socket.once("welcome", onWelcome);
       socket.once("connect_error", onError);
 
       // Wire server events
@@ -148,12 +217,10 @@ export class SocketTransport implements GameTransport {
           Protocol.LobbyInvitePayload.parse(payload)
         )
       );
-      socket.on("matchStarted", (payload) =>
-        this.dispatch(
-          "matchStarted",
-          Protocol.MatchStartedPayload.parse(payload)
-        )
-      );
+      socket.on("matchStarted", (payload) => {
+        const fixed = normalizeMatchStartedPayload(payload);
+        this.dispatch("matchStarted", Protocol.MatchStartedPayload.parse(fixed));
+      });
       socket.on("statePatch", (payload) =>
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
       );
@@ -191,9 +258,10 @@ export class SocketTransport implements GameTransport {
       socket.on("boardCursor", (payload) => {
         this.dispatch("boardCursor", payload as RemoteCursorState);
       });
-      socket.on("resyncResponse", (payload) =>
-        this.dispatch("resync", Protocol.ResyncResponsePayload.parse(payload))
-      );
+      socket.on("resyncResponse", (payload) => {
+        const fixed = normalizeResyncResponsePayload(payload);
+        this.dispatch("resync", Protocol.ResyncResponsePayload.parse(fixed));
+      });
       socket.on("error", (payload) =>
         this.dispatch("error", Protocol.ErrorPayload.parse(payload))
       );
@@ -233,6 +301,9 @@ export class SocketTransport implements GameTransport {
       );
       socket.on("draft:session:leave", (payload) =>
         this.dispatch("draft:session:leave", payload)
+      );
+      socket.on("draft:session:presence", (payload) =>
+        this.dispatch("draft:session:presence", payload as TransportEventMap["draft:session:presence"])
       );
       socket.on("draft:error", (payload) =>
         this.dispatch("draft:error", payload)
@@ -343,16 +414,26 @@ export class SocketTransport implements GameTransport {
   }
 
   async joinMatch(matchId: string): Promise<void> {
+    console.log("[Transport] joinMatch called for:", matchId);
     const s = this.requireSocket();
+    if (!s.connected) {
+      console.error("[Transport] Socket not connected!");
+      throw new Error("Socket not connected");
+    }
+
+    console.log("[Transport] Socket connected, emitting joinMatch");
     return new Promise((resolve) => {
       const onMatch = (payload: unknown) => {
+        console.log("[Transport] Received matchStarted:", payload);
         const parsed = Protocol.MatchStartedPayload.parse(payload);
         this.dispatch("matchStarted", parsed);
         s.off("matchStarted", onMatch);
         resolve();
       };
       s.on("matchStarted", onMatch);
-      s.emit("joinMatch", Protocol.JoinMatchPayload.parse({ matchId }));
+      const payload = Protocol.JoinMatchPayload.parse({ matchId });
+      console.log("[Transport] Emitting joinMatch with payload:", payload);
+      s.emit("joinMatch", payload);
     });
   }
 

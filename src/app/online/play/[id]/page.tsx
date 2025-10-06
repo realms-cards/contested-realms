@@ -42,13 +42,15 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
-import {
-  useGameStore,
-  type PlayerKey,
-  type RemoteCursorState,
-} from "@/lib/game/store";
-import type { RemoteCursorDragMeta } from "@/lib/game/store/remoteCursor";
+import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
+import {
+  useBoardPingListener,
+  useMatchPlayerNames,
+  usePlayerIdentity,
+  usePlayerNameMap,
+  useRemoteCursorTelemetry,
+} from "./matchHooks";
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -70,8 +72,6 @@ export default function OnlineMatchPage() {
 
   const setActorKey = useGameStore((s) => s.setActorKey);
   const setLocalPlayerId = useGameStore((s) => s.setLocalPlayerId);
-  const setRemoteCursor = useGameStore((s) => s.setRemoteCursor);
-  const localPlayerId = useGameStore((s) => s.localPlayerId);
 
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
@@ -93,41 +93,13 @@ export default function OnlineMatchPage() {
     voice,
   } = useOnline();
 
-  // Determine which player this client is (support for 2-8 players)
-  const myPlayerId = me?.id;
-  const orderedPlayerIds = useMemo(() => {
-    if (Array.isArray(match?.playerIds) && match.playerIds.length > 0) {
-      return match.playerIds;
-    }
-    if (Array.isArray(match?.players)) {
-      return match.players.map((p) => p.id).filter(Boolean);
-    }
-    return [] as string[];
-  }, [match?.playerIds, match?.players]);
-
-  const myPlayerIndex = useMemo(() => {
-    if (!myPlayerId) return -1;
-    return orderedPlayerIds.indexOf(myPlayerId);
-  }, [orderedPlayerIds, myPlayerId]);
-  const myPlayerNumber = myPlayerIndex >= 0 ? myPlayerIndex + 1 : null;
-  const myPlayerKey =
-    myPlayerIndex >= 0 && myPlayerIndex < 2
-      ? ((myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey)
-      : null;
-
-  // Derive opponent identifiers (2-player engine)
-  const opponentSeat: PlayerKey | null = useMemo(() => {
-    if (!myPlayerKey) return null;
-    return myPlayerKey === "p1" ? "p2" : "p1";
-  }, [myPlayerKey]);
-  const opponentPlayerId: string | null = useMemo(() => {
-    if (myPlayerIndex < 0) return null;
-    if (orderedPlayerIds.length < 2) return null;
-    const opponentIndex = myPlayerIndex === 0 ? 1 : 0;
-    const opponentId = orderedPlayerIds[opponentIndex] || null;
-    if (!opponentId) return null;
-    return opponentId;
-  }, [orderedPlayerIds, myPlayerIndex]);
+  const {
+    myPlayerId,
+    myPlayerNumber,
+    myPlayerKey,
+    opponentSeat,
+    opponentPlayerId,
+  } = usePlayerIdentity(match, me);
 
   // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {
@@ -139,82 +111,14 @@ export default function OnlineMatchPage() {
     };
   }, [setActorKey, setLocalPlayerId, myPlayerKey, myPlayerId]);
 
-  // Subscribe to remote cursor telemetry
-  useEffect(() => {
-    if (!transport?.on) return;
-
-    const parseDragging = (raw: unknown): RemoteCursorDragMeta | null => {
-      if (!raw || typeof raw !== "object") return null;
-      const d = raw as Record<string, unknown>;
-      const kind = d.kind;
-      if (kind === "permanent") {
-        const meta: RemoteCursorDragMeta = { kind: "permanent" };
-        if (typeof d.from === "string") meta.from = d.from;
-        if (Number.isFinite(d.index)) meta.index = Number(d.index);
-        return meta;
-      }
-      if (kind === "hand") return { kind: "hand" };
-      if (kind === "token") return { kind: "token" };
-      if (kind === "pile") {
-        const meta: RemoteCursorDragMeta = { kind: "pile" };
-        if (typeof d.source === "string") meta.source = d.source;
-        return meta;
-      }
-      if (kind === "avatar") {
-        const meta: RemoteCursorDragMeta = { kind: "avatar" };
-        if (d.who === "p1" || d.who === "p2") meta.who = d.who;
-        return meta;
-      }
-      return null;
-    };
-
-    const parseHighlight = (raw: unknown): { slug: string | null; cardId: number | null } | null => {
-      if (!raw || typeof raw !== "object") return null;
-      const src = raw as Record<string, unknown>;
-      const slug = typeof src.slug === "string" ? src.slug : null;
-      const cardId = typeof src.cardId === "number" && Number.isFinite(src.cardId) ? (src.cardId as number) : null;
-      if (slug === null && cardId === null) return null;
-      return { slug, cardId };
-    };
-
-    const handler = (payload: RemoteCursorState) => {
-      if (!payload || typeof payload !== "object") return;
-      const pid = typeof payload.playerId === "string" ? payload.playerId : null;
-      if (!pid || pid === localPlayerId) return;
-      const px = payload.position?.x;
-      const pz = payload.position?.z;
-      const position =
-        typeof px === "number" && Number.isFinite(px) &&
-        typeof pz === "number" && Number.isFinite(pz)
-          ? { x: px, z: pz }
-          : null;
-      const dragging = parseDragging(payload.dragging);
-      const highlight = parseHighlight(payload.highlight);
-      const ts = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
-
-      setRemoteCursor({
-        playerId: pid,
-        playerKey:
-          payload.playerKey === "p1" || payload.playerKey === "p2"
-            ? payload.playerKey
-            : null,
-        position,
-        dragging,
-        highlight,
-        ts,
-        displayName: null,
-      });
-    };
-
-    const off = transport.on("boardCursor", handler);
-    return () => {
-      try {
-        off?.();
-      } catch {}
-    };
-  }, [transport, localPlayerId, setRemoteCursor]);
+  useRemoteCursorTelemetry(transport);
+  useBoardPingListener(transport);
 
   const rtc = voice?.rtc ?? null;
+  const matchOverlayTargetId = useMemo(() => {
+    return match?.players?.find((p) => p.id && p.id !== myPlayerId)?.id ?? null;
+  }, [match?.players, myPlayerId]);
+  const voiceRequestConnection = voice?.enabled ? voice.requestConnection : undefined;
 
   // Do not auto-join WebRTC. Users must click the Join control to request mic access and connect.
 
@@ -231,8 +135,7 @@ export default function OnlineMatchPage() {
   const joinAttemptedForRef = useRef<string | null>(null);
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
-  // Track if this page initiated a tournament bootstrap for the current route id
-  const hasBootstrapRef = useRef<boolean>(false);
+  const tournamentDeckSubmittedRef = useRef<string | null>(null);
   // Guard to ensure we only reset local game state once per match in this page session,
   // even if the socket briefly disconnects/reconnects or status changes.
   const resetDoneForRef = useRef<string | null>(null);
@@ -241,36 +144,8 @@ export default function OnlineMatchPage() {
   const [localDraftSubmitted, setLocalDraftSubmitted] = useState(false);
 
   // Get player nicknames (constrained to 2 players for game engine compatibility)
-  const playerNames = useMemo(() => {
-    const names: { p1: string; p2: string } = {
-      p1: "Player 1",
-      p2: "Player 2",
-    };
-
-    if (match?.players) {
-      // Only use first 2 players for the game engine
-      if (match.players[0]) {
-        names.p1 = match.players[0].displayName || "Player 1";
-      }
-      if (match.players[1]) {
-        names.p2 = match.players[1].displayName || "Player 2";
-      }
-    }
-
-    return names;
-  }, [match?.players]);
-
-  const playerNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-    if (!match || !Array.isArray(match.players)) return map;
-    for (const p of match.players) {
-      if (!p || typeof p !== "object") continue;
-      const id = p.id;
-      if (!id) continue;
-      map[id] = p.displayName || id;
-    }
-    return map;
-  }, [match]);
+  const playerNames = useMatchPlayerNames(match);
+  const playerNameById = usePlayerNameMap(match);
 
   // Set screen type for video overlay - this is a game page so use game-3d
   useEffect(() => {
@@ -280,92 +155,40 @@ export default function OnlineMatchPage() {
 
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
-    // If we were navigated from tournament matches, ensure the match exists on the socket server
-    if (connected && matchId && transport) {
-      try {
-        const key = `tournamentMatchBootstrap_${matchId}`;
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const payload = JSON.parse(raw) as {
-            players?: string[];
-            matchType?: "constructed" | "sealed" | "draft";
-            lobbyName?: string;
-            sealedConfig?: {
-              packCount?: number;
-              setMix?: string[];
-              timeLimit?: number;
-              constructionStartTime?: number;
-              packCounts?: Record<string, number>;
-              replaceAvatars?: boolean;
-            } | null;
-            draftConfig?: {
-              setMix?: string[];
-              packCount?: number;
-              packSize?: number;
-              packCounts?: Record<string, number>;
-            } | null;
-          };
-          // Fire-and-forget: instruct server to create/ensure match exists with the given roster and configs
-          transport.emit("startTournamentMatch", {
-            matchId,
-            playerIds: Array.isArray(payload?.players) ? payload.players : [],
-            matchType: payload?.matchType || "constructed",
-            lobbyName: payload?.lobbyName,
-            sealedConfig: payload?.sealedConfig || null,
-            draftConfig: payload?.draftConfig || null,
-          });
-          // Mark bootstrap so we allow joining the route id immediately below
-          hasBootstrapRef.current = true;
-          // Clear bootstrap to avoid duplicates on refresh/reconnect
-          localStorage.removeItem(key);
-        }
-      } catch {}
+    console.log("[joinMatch effect] Checking conditions:", { connected, matchId, matchCurrentId: match?.id, joinAttempted: joinAttemptedForRef.current });
+    if (!connected || !matchId) {
+      console.log("[joinMatch effect] Bailing - not connected or no matchId");
+      return;
     }
 
-    if (!connected || !matchId) return;
-
-    // If server reports a different match, force a one-time hard redirect to the server-authoritative id
-    try {
-      if (match?.id && match?.id !== matchId) {
-        const serverMatchId = match.id;
-        const key = `force_reload_match_${serverMatchId}`;
-        if (!sessionStorage.getItem(key)) {
-          console.log(
-            "[game] Switching to different match - forcing page reload for clean state"
-          );
-          sessionStorage.setItem(key, "1");
-          // Clear the old param-based key to prevent stale data
-          const oldKey = `force_reload_match_${matchId}`;
-          sessionStorage.removeItem(oldKey);
-          // Redirect to the server-authoritative match id
-          window.location.replace(`/online/play/${serverMatchId}`);
-          return;
-        } else {
-          // If we've already forced a reload but still have wrong match, reset game state
-          console.log(
-            "[game] After reload still have wrong match - resetting game state"
-          );
-          useGameStore.getState().resetGameState();
-        }
-      }
-    } catch {}
-
     if (match?.id === matchId) {
+      console.log("[joinMatch effect] Already in correct match");
       // Arrived or already in: clear join attempt flag
       if (joinAttemptedForRef.current === matchId)
         joinAttemptedForRef.current = null;
       return;
     }
-    if (joinAttemptedForRef.current === matchId) return;
-    try {
-      console.debug("[online] joinMatch ->", {
-        matchId,
-        because: hasBootstrapRef.current ? "bootstrap" : "direct",
+    if (joinAttemptedForRef.current === matchId) {
+      console.log("[joinMatch effect] Already attempted join for this match");
+      return;
+    }
+
+    // If we're in a different match, leave it first
+    if (match?.id && match.id !== matchId) {
+      console.log("[online] Leaving wrong match before joining correct one:", {
+        currentMatch: match.id,
+        targetMatch: matchId,
       });
-    } catch {}
+      leaveMatch();
+    }
+
+    console.log("[online] joinMatch ->", {
+      matchId,
+      because: "direct",
+    });
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
-  }, [connected, match?.id, matchId, joinMatch, transport]);
+  }, [connected, match?.id, matchId, joinMatch, leaveMatch]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -378,48 +201,6 @@ export default function OnlineMatchPage() {
     lastConnectedRef.current = connected;
   }, [connected]);
 
-  // Subscribe to lightweight messages for board pings and other signals
-  useEffect(() => {
-    if (!transport) return;
-    const off = transport.on("message", (m) => {
-      const type = (m &&
-        typeof m === "object" &&
-        (m as Record<string, unknown>).type) as string | undefined;
-      if (type !== "boardPing") return;
-      const msg = m as unknown as {
-        id?: string;
-        position?: { x?: number; z?: number };
-        playerKey?: PlayerKey | null;
-        ts?: number;
-      };
-      const id =
-        typeof msg.id === "string"
-          ? msg.id
-          : `ping_${Math.random()
-              .toString(36)
-              .slice(2, 8)}_${Date.now().toString(36)}`;
-      const x = Number(msg.position?.x);
-      const z = Number(msg.position?.z);
-      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-      try {
-        useGameStore.getState().pushBoardPing({
-          id,
-          position: { x, z },
-          playerId: null,
-          playerKey:
-            msg.playerKey === "p1" || msg.playerKey === "p2"
-              ? msg.playerKey
-              : null,
-          ts: typeof msg.ts === "number" ? msg.ts : Date.now(),
-        });
-      } catch {}
-    });
-    return () => {
-      try {
-        off?.();
-      } catch {}
-    };
-  }, [transport]);
 
   // Also reset one-shot guards if we are no longer in this match (e.g., user left)
   useEffect(() => {
@@ -485,12 +266,14 @@ export default function OnlineMatchPage() {
     sendChat,
   ]);
 
-  // Game store selectors needed for setup
-  const serverPhase = useGameStore((s) => s.phase);
-
   // Setup state (like offline play)
   // Default CLOSED to avoid flashing overlay on rejoin; we'll open it for new/waiting matches
   const [setupOpen, setSetupOpen] = useState<boolean>(false);
+
+  // Game store selectors needed for setup
+  const serverPhase = useGameStore((s) => s.phase);
+  const storeActorKey = useGameStore((s) => s.actorKey);
+  const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup" && !setupOpen;
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
 
@@ -549,6 +332,344 @@ export default function OnlineMatchPage() {
   // Prevent showing draft component again once it's completed or if we already submitted a deck
   const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
 
+  const tournamentId =
+    (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId ||
+    null;
+
+  // Auto-load any deck that the match server has already attached to us (sealed/draft/tournament rebuilt decks)
+  useEffect(() => {
+    if (prepared) return;
+    
+    // For matches already in progress, skip deck loading - the server snapshot contains all game state
+    // Only load decks during waiting/deck_construction phases
+    if (match?.status === "in_progress") {
+      console.log("[match] Match already in progress, skipping deck load (using server snapshot)");
+      setPrepared(true);
+      return;
+    }
+    
+    if (!match?.playerDecks || !me?.id) return;
+    if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
+
+    const rawDeck = (match.playerDecks as Record<string, unknown>)[me.id];
+    if (!rawDeck) return;
+
+    console.log("[match] Auto-loading deck from match.playerDecks:", {
+      deckLength: Array.isArray(rawDeck) ? rawDeck.length : 'not an array',
+      sampleCards: Array.isArray(rawDeck) ? (rawDeck as Array<Record<string, unknown>>).slice(0, 3) : rawDeck
+    });
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let deckToLoad = rawDeck;
+
+        // Check if this is condensed tournament format {cardId, quantity}
+        // vs full card objects {cardId, name, type, ...}
+        if (Array.isArray(rawDeck) && rawDeck.length > 0) {
+          const firstCard = rawDeck[0] as Record<string, unknown>;
+          const isCondensedFormat = 'quantity' in firstCard && !('type' in firstCard);
+
+          if (isCondensedFormat) {
+            console.log("[match] Detected condensed tournament deck format, expanding to full cards...");
+
+            // Extract unique card IDs
+            const cardIds = Array.from(
+              new Set(
+                (rawDeck as Array<{ cardId: string; quantity: number }>)
+                  .map(entry => Number(entry.cardId))
+                  .filter(n => Number.isFinite(n) && n > 0)
+              )
+            );
+
+            if (cardIds.length > 0) {
+              // Fetch card metadata
+              const resMeta = await fetch(
+                `/api/cards/by-id?ids=${encodeURIComponent(cardIds.join(","))}`
+              );
+
+              if (resMeta.ok) {
+                const metas = (await resMeta.json()) as Array<{
+                  cardId: number;
+                  name: string;
+                  slug: string;
+                  setName: string;
+                  type?: string | null;
+                  cost?: number | null;
+                  thresholds?: Record<string, number> | null;
+                }>;
+
+                const byId = new Map(
+                  metas.map(m => [
+                    m.cardId,
+                    {
+                      name: m.name,
+                      slug: m.slug,
+                      setName: m.setName,
+                      type: m.type || null,
+                      cost: m.cost ?? null,
+                      thresholds: m.thresholds ?? null,
+                    }
+                  ])
+                );
+
+                // Expand condensed format to full cards
+                const expandedDeck: Array<Record<string, unknown>> = [];
+                for (const entry of rawDeck as Array<{ cardId: string; quantity: number }>) {
+                  const idNum = Number(entry.cardId);
+                  const meta = byId.get(idNum);
+                  if (!meta) {
+                    console.warn(`[match] Missing metadata for card ID ${idNum}`);
+                    continue;
+                  }
+                  const quantity = Math.max(1, Number(entry.quantity) || 0);
+                  for (let i = 0; i < quantity; i++) {
+                    expandedDeck.push({
+                      id: String(idNum),
+                      cardId: idNum,
+                      name: meta.name,
+                      slug: meta.slug,
+                      set: meta.setName,
+                      type: meta.type || "",
+                      thresholds: meta.thresholds || null,
+                    });
+                  }
+                }
+
+                console.log("[match] Expanded deck to", expandedDeck.length, "cards");
+                deckToLoad = expandedDeck;
+              } else {
+                console.error("[match] Failed to fetch card metadata for condensed deck");
+              }
+            }
+          }
+        }
+
+        // Ensure the deck includes an Avatar so validation succeeds during setup
+        if (Array.isArray(deckToLoad)) {
+          const hasAvatar = deckToLoad.some((card) => {
+            const type = typeof (card as Record<string, unknown>)?.type === "string"
+              ? ((card as Record<string, unknown>).type as string)
+              : "";
+            return type.toLowerCase().includes("avatar");
+          });
+
+          if (!hasAvatar) {
+            const avatarCard =
+              (match as unknown as {
+                game?: {
+                  avatars?: Record<string, { card?: Record<string, unknown> | null } | null>;
+                };
+              })?.game?.avatars?.[myPlayerKey]?.card;
+
+            if (avatarCard && typeof avatarCard === "object") {
+              const avatarCardId = Number(
+                (avatarCard as { cardId?: number | string; id?: number | string }).cardId ??
+                  (avatarCard as { cardId?: number | string; id?: number | string }).id ??
+                  0
+              );
+              if (Number.isFinite(avatarCardId) && avatarCardId > 0) {
+                deckToLoad = [
+                  ...deckToLoad,
+                  {
+                    id: String(avatarCardId),
+                    cardId: avatarCardId,
+                    name:
+                      (avatarCard as { name?: string; cardName?: string }).name ||
+                      (avatarCard as { name?: string; cardName?: string }).cardName ||
+                      "Avatar",
+                    slug: (avatarCard as { slug?: string }).slug || "",
+                    set:
+                      (avatarCard as { set?: string; setName?: string }).set ||
+                      (avatarCard as { set?: string; setName?: string }).setName ||
+                      "Beta",
+                    type:
+                      (avatarCard as { type?: string }).type &&
+                      String((avatarCard as { type?: string }).type).length > 0
+                        ? String((avatarCard as { type?: string }).type)
+                        : "Avatar",
+                    thresholds: (avatarCard as { thresholds?: Record<string, number> | null }).thresholds || null,
+                  },
+                ];
+                console.log("[match] Injected avatar into deck for auto-load", {
+                  cardId: avatarCardId,
+                  name:
+                    (avatarCard as { name?: string; cardName?: string }).name ||
+                    (avatarCard as { name?: string; cardName?: string }).cardName ||
+                    "Avatar",
+                });
+              }
+            }
+          }
+        }
+
+        const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+        const ok = await loadSealedDeckFor(
+          myPlayerKey as "p1" | "p2",
+          deckToLoad,
+          (error) => console.error("[match] Deck load error:", error)
+        );
+        if (!ok || cancelled) return;
+        useGameStore.getState().setPhase("Setup");
+        setPrepared(true);
+      } catch (error) {
+        console.error("[match] Failed to auto-load deck from match data:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prepared, match, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
+
+  // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
+  useEffect(() => {
+    if (!tournamentId) return;
+    if (!transport?.submitDeck) return;
+    if (!matchId || match?.id !== matchId) return;
+    if (match?.matchType !== "constructed") return;
+    if (match?.status !== "waiting" && match?.status !== "deck_construction") return;
+    if (!me?.id || !myPlayerKey) return;
+
+    const currentDeck =
+      (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
+    if (currentDeck) {
+      tournamentDeckSubmittedRef.current = tournamentId;
+      return;
+    }
+
+    if (tournamentDeckSubmittedRef.current === tournamentId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`
+        );
+        if (!res.ok) throw new Error("Failed to load tournament detail");
+        const detail = await res.json();
+        const list: Array<{ cardId: string; quantity: number }> | undefined =
+          detail?.viewerDeck;
+        if (!Array.isArray(list) || list.length === 0) return;
+
+        const ids = Array.from(
+          new Set(
+            list
+              .map((entry) => Number(entry.cardId))
+              .filter((n) => Number.isFinite(n) && n > 0)
+          )
+        );
+        if (ids.length === 0) return;
+
+        const resMeta = await fetch(
+          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`
+        );
+        if (!resMeta.ok) throw new Error("Failed to load card meta");
+        const metas = (await resMeta.json()) as Array<{
+          cardId: number;
+          name: string;
+          slug: string;
+          setName: string;
+          type?: string | null;
+        }>;
+        console.log("[match] Fetched card metadata for", metas.length, "cards. Sample:", metas.slice(0, 3));
+        const byId = new Map<
+          number,
+          { name: string; slug: string; setName: string; type: string | null; cost: number | null; thresholds: Record<string, number> | null }
+        >();
+        for (const meta of metas) {
+          const cardType = meta.type || null;
+          byId.set(Number(meta.cardId), {
+            name: meta.name,
+            slug: meta.slug,
+            setName: meta.setName,
+            type: cardType,
+            cost: (meta as { cost?: number | null }).cost ?? null,
+            thresholds: (meta as { thresholds?: Record<string, number> | null }).thresholds ?? null,
+          });
+        }
+
+        console.log("[match] Building deck from list with", list.length, "unique cards");
+        console.log("[match] Metadata map has", byId.size, "entries");
+        console.log("[match] Sample list entry:", list[0]);
+        console.log("[match] Sample byId keys:", Array.from(byId.keys()).slice(0, 5));
+
+        const deck: Array<Record<string, unknown>> = [];
+        for (const entry of list) {
+          const idNum = Number(entry.cardId);
+          const meta = byId.get(idNum);
+          if (!meta) {
+            console.error(`[match] Missing metadata for card ID ${idNum} (type: ${typeof entry.cardId})`, {
+              entry,
+              hasInMap: byId.has(idNum),
+              mapKeys: Array.from(byId.keys())
+            });
+            continue;
+          }
+          const quantity = Math.max(1, Number(entry.quantity) || 0);
+          for (let i = 0; i < quantity; i++) {
+            deck.push({
+              id: String(idNum),
+              cardId: idNum,
+              name: meta.name,
+              slug: meta.slug,
+              set: meta.setName,
+              type: meta.type || "",
+              thresholds: meta.thresholds || null,
+            });
+          }
+        }
+
+        console.log("[match] Built deck with", deck.length, "cards");
+        if (deck.length === 0 || cancelled) {
+          console.error("[match] Deck is empty, not submitting!");
+          return;
+        }
+
+        transport.submitDeck(deck);
+        tournamentDeckSubmittedRef.current = tournamentId;
+
+        if (storeActorKey === myPlayerKey && !prepared) {
+          try {
+            const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
+            const ok = await loadSealedDeckFor(
+              myPlayerKey as "p1" | "p2",
+              deck,
+              (error) =>
+                console.error("[match] Tournament deck load error:", error)
+            );
+            if (ok && !cancelled) {
+              useGameStore.getState().setPhase("Setup");
+              setPrepared(true);
+            }
+          } catch (error) {
+            console.warn("[match] Tournament deck local load failed:", error);
+          }
+        }
+      } catch (error) {
+        console.warn("[match] Tournament deck submission failed:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    tournamentId,
+    transport,
+    matchId,
+    match?.id,
+    match?.matchType,
+    match?.playerDecks,
+    match?.status,
+    me?.id,
+    myPlayerKey,
+    storeActorKey,
+    prepared,
+  ]);
+
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
   useEffect(() => {
@@ -556,7 +677,7 @@ export default function OnlineMatchPage() {
     if (!match) return;
 
     // Auto-redirect to sealed editor when joining sealed match during deck construction
-    // But only if we haven't submitted a deck yet (prefer server-confirmed check)
+    // But only if we haven't submitted a deck yet (prefer server-confirmed check).
     if (
       match.status === "deck_construction" &&
       match.matchType === "sealed" &&
@@ -739,49 +860,56 @@ export default function OnlineMatchPage() {
     } catch {}
   }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 
-  // Control setup overlay based on match status
+  // Canonical control for setup overlay (prevents ping-pong updates)
   useEffect(() => {
-    // Only react once we know we're in this specific match
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
-    // For draft matches, don't show setup overlay during active draft or if we've submitted a deck
-    if (shouldShowDraft) {
-      if (setupOpen) setSetupOpen(false);
-      return;
+    let desired = setupOpen;
+    const ended = match.status === "ended";
+
+    if (ended) {
+      desired = false;
+    } else if (resyncing) {
+      desired = true;
+    } else if (shouldShowDraft) {
+      desired = false;
+    } else if (match.status === "waiting" || match.status === "deck_construction") {
+      desired = true;
+    } else if (!prepared) {
+      desired = true;
+    } else if (serverPhase === "Main") {
+      desired = false;
     }
 
-    if (match.status === "waiting" || match.status === "deck_construction") {
-      // Keep overlay open during waiting and deck construction
-      if (!setupOpen) setSetupOpen(true);
-    } else if (match.status === "ended") {
-      // Close on end
-      if (setupOpen) setSetupOpen(false);
-    }
-    // Do not auto-close on "in_progress"; we'll close when serverPhase reaches Main
-  }, [matchId, match, match?.id, match?.status, setupOpen, shouldShowDraft]);
+    if (desired !== setupOpen) setSetupOpen(desired);
+  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen]);
 
-  useEffect(() => {
-    if (!match) return;
-    if (prepared && match.status === "in_progress") {
-      if (setupOpen) setSetupOpen(false);
-    }
-  }, [match, prepared, setupOpen]);
+  
 
   // Reset setup wizard when entering a different match (fresh waiting match)
+  const lastResetMatchRef = useRef<string | null>(null);
   useEffect(() => {
-    // When match id changes, restart the setup steps so we don't skip phases
+    if (!matchId) return;
+
+    const serverMatchId = match?.id ?? null;
+    const effectiveMatchId = serverMatchId ?? matchId;
+
+    // Avoid repeated resets for the same match context
+    if (lastResetMatchRef.current === effectiveMatchId) return;
+    lastResetMatchRef.current = effectiveMatchId;
+
     setPrepared(false);
     setD20RollingComplete(false);
 
-    // Clear submission flag when entering a different match
-    if (matchId) {
+    // Clear submission flag when entering a truly different match
+    try {
       const submittedKey = `sealed_submitted_${matchId}`;
-      // Only clear if this is actually a new match (not a status change on same match)
-      if (match?.id && match.id !== matchId) {
+      if (serverMatchId && serverMatchId !== matchId) {
         localStorage.removeItem(submittedKey);
       }
-    }
+    } catch {}
+
     // Also reset local submission flags for safety when navigating to a different match
     setLocalSealedSubmitted(false);
     setLocalDraftSubmitted(false);
@@ -807,12 +935,7 @@ export default function OnlineMatchPage() {
     }
   }, [match?.status]);
 
-  // Also close setup if server advances phase to Main (in case match.status races)
-  useEffect(() => {
-    if (setupOpen && serverPhase === "Main") {
-      setSetupOpen(false);
-    }
-  }, [serverPhase, setupOpen]);
+  
 
   // Chat
   const [chatInput, setChatInput] = useState("");
@@ -825,6 +948,9 @@ export default function OnlineMatchPage() {
     useState<boolean>(false);
   const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] =
     useState<boolean>(false);
+  // Store selectors for match end state and winner must be declared before effects that depend on them
+  const matchEnded = useGameStore((s) => s.matchEnded);
+  const winner = useGameStore((s) => s.winner);
 
   // Frozen context for the match end overlay so results don't change if roster updates
   const [finalEndContext, setFinalEndContext] = useState<
@@ -893,10 +1019,7 @@ export default function OnlineMatchPage() {
   const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
-  const matchEnded = useGameStore((s) => s.matchEnded);
-  const winner = useGameStore((s) => s.winner);
-  const DEFAULT_BOARD_SIZE = useMemo(() => ({ w: 5, h: 4 }), []);
-  const boardSize = useGameStore((s) => s.board?.size) ?? DEFAULT_BOARD_SIZE;
+  const boardSize = useGameStore((s) => s.board.size);
   // Compute playmat extents for camera baselines and clamps
   const baseGridW = boardSize.w * BASE_TILE_SIZE;
   const baseGridH = boardSize.h * BASE_TILE_SIZE;
@@ -1417,13 +1540,15 @@ export default function OnlineMatchPage() {
           )}
 
           {/* Toolbox overlay (draw/peek/inspect/position tools) */}
-          <GameToolbox
-            myPlayerId={myPlayerId || null}
-            mySeat={myPlayerKey}
-            opponentPlayerId={opponentPlayerId}
-            opponentSeat={opponentSeat}
-            matchId={match?.id || null}
-          />
+          {showToolbox && (
+            <GameToolbox
+              myPlayerId={myPlayerId || null}
+              mySeat={myPlayerKey}
+              opponentPlayerId={opponentPlayerId}
+              opponentSeat={opponentSeat}
+              matchId={match?.id || null}
+            />
+          )}
 
           {/* Match Info Popup */}
           <MatchInfoPopup
@@ -1450,8 +1575,13 @@ export default function OnlineMatchPage() {
             }}
             onLeaveLobby={() => {
               leaveLobby();
-              router.push("/online/lobby");
+              if (tournamentId) {
+                router.push(`/tournaments/${tournamentId}`);
+              } else {
+                router.push("/online/lobby");
+              }
             }}
+            leaveLabel={tournamentId ? "Return to Tournament" : undefined}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}
@@ -1480,7 +1610,7 @@ export default function OnlineMatchPage() {
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board enableBoardPings />
+                  <Board />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}
@@ -1630,10 +1760,10 @@ export default function OnlineMatchPage() {
                 <button
                   className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-medium"
                   onClick={() => {
-                    if (voice.respondToRequest) {
+                    if (voice.respondToRequest && voice.incomingRequest) {
                       voice.respondToRequest(
-                        voice.incomingRequest!.requestId,
-                        voice.incomingRequest!.from.id,
+                        voice.incomingRequest.requestId,
+                        voice.incomingRequest.from.id,
                         false
                       );
                     }
@@ -1644,10 +1774,10 @@ export default function OnlineMatchPage() {
                 <button
                   className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-medium"
                   onClick={() => {
-                    if (voice.respondToRequest) {
+                    if (voice.respondToRequest && voice.incomingRequest) {
                       voice.respondToRequest(
-                        voice.incomingRequest!.requestId,
-                        voice.incomingRequest!.from.id,
+                        voice.incomingRequest.requestId,
+                        voice.incomingRequest.from.id,
                         true
                       );
                     }
@@ -1663,30 +1793,15 @@ export default function OnlineMatchPage() {
         {/* Floating user badge (top-right) with presence + volume control */}
         <UserBadge variant="floating" />
         {/* Video overlay (avatar hidden to avoid duplicate badge) */}
-        {(() => {
-          const targetId = match?.players?.find((p) => p.id !== myPlayerId)?.id ?? null;
-          const callback = voice?.requestConnection;
-
-          console.debug('[OnlineMatchPage] Rendering GlobalVideoOverlay', {
-            hasVoice: !!voice,
-            hasRequestConnection: !!callback,
-            targetPlayerId: targetId,
-            myPlayerId,
-            matchPlayers: match?.players?.map(p => p.id),
-            voiceEnabled: voice?.enabled,
-            voiceKeys: voice ? Object.keys(voice) : []
-          });
-
-          return (
-            <GlobalVideoOverlay
-              position="top-right"
-              showUserAvatar={false}
-              rtc={rtc}
-              onRequestConnection={callback}
-              targetPlayerId={targetId}
-            />
-          );
-        })()}
+        {voice?.enabled && (
+          <GlobalVideoOverlay
+            position="top-right"
+            showUserAvatar={false}
+            rtc={rtc}
+            onRequestConnection={voiceRequestConnection}
+            targetPlayerId={matchOverlayTargetId}
+          />
+        )}
       </div>
   );
 }

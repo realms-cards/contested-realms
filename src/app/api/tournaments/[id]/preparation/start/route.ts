@@ -38,11 +38,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Not registered for this tournament' }), { status: 400 });
     }
 
+    // If preparation already started, return current status (idempotent)
     if (registration.preparationStatus !== 'notStarted') {
-      return new Response(JSON.stringify({ 
-        error: 'Preparation already started',
-        status: registration.preparationStatus 
-      }), { status: 400 });
+      return new Response(JSON.stringify({
+        success: true,
+        preparationStatus: registration.preparationStatus,
+        preparationData: registration.preparationData,
+        format: tournament.format,
+        message: 'Preparation already in progress'
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
     }
 
     // Initialize preparation based on format
@@ -52,17 +59,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     switch (tournament.format) {
       case 'sealed':
         // Generate sealed packs for the player
-        const sealedConfig = settings.sealed as Record<string, unknown> || {};
-        const packConfiguration = sealedConfig.packConfiguration as Array<{ setId: string; packCount: number }> || [
-          { setId: 'beta', packCount: 6 }
-        ];
+        const sealedConfig = (settings.sealedConfig as Record<string, unknown>)
+          || (settings.sealed as Record<string, unknown>)
+          || {};
+        // Prefer packCounts map { 'Beta': 6, ... } -> packConfiguration[]; fallback to existing packConfiguration
+        const packCounts = (sealedConfig.packCounts as Record<string, number>) || {};
+        let packConfiguration = (sealedConfig.packConfiguration as Array<{ setId: string; packCount: number }>) || [];
+        if (!Array.isArray(packConfiguration) || packConfiguration.length === 0) {
+          const entries = Object.entries(packCounts).filter(([, n]) => (n || 0) > 0);
+          if (entries.length) {
+            packConfiguration = entries.map(([setName, n]) => ({ setId: setName, packCount: Number(n) || 0 }));
+          } else {
+            packConfiguration = [{ setId: 'Beta', packCount: 6 }];
+          }
+        }
         
+        // Check if packs are already generated (from previous /start call)
+        const existingPrepData = registration.preparationData as Record<string, unknown> || {};
+        const existingSealed = existingPrepData.sealed as Record<string, unknown> || {};
+        const existingPacks = existingSealed.generatedPacks;
+
         initialPreparationData = {
           sealed: {
             packsOpened: false,
             deckBuilt: false,
             packConfiguration,
-            generatedPacks: await generateSealedPacks(packConfiguration),
+            // Reuse existing packs if available, otherwise generate new ones
+            generatedPacks: existingPacks || await generateSealedPacks(packConfiguration),
             deckList: []
           }
         };
@@ -117,16 +140,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Helper function to generate sealed packs
 async function generateSealedPacks(packConfiguration: Array<{ setId: string; packCount: number }>) {
-  // For now, return mock pack data
-  // In a real implementation, this would generate actual booster packs
+  const { generateBoosters } = await import('@/lib/booster');
   const packs = [];
-  
+
   for (const config of packConfiguration) {
-    for (let i = 0; i < config.packCount; i++) {
+    const boosters = await generateBoosters(config.setId, config.packCount);
+    for (let i = 0; i < boosters.length; i++) {
       packs.push({
         setId: config.setId,
         packId: `${config.setId}_pack_${i + 1}`,
-        cards: [] // Would contain actual card data
+        cards: boosters[i].map(card => ({
+          id: `${card.variantId}_${i}`,
+          cardId: card.cardId,
+          variantId: card.variantId,
+          name: card.cardName,
+          slug: card.slug,
+          rarity: card.rarity,
+          type: card.type,
+          finish: card.finish,
+          product: card.product
+        }))
       });
     }
   }

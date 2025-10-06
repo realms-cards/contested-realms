@@ -45,6 +45,7 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
   const colorClass = getLifeStateColor(lifeState);
   const canIncrease = lifeState !== 'dead' && life < 20;
   const canDecrease = lifeState !== 'dead';
+  const statusLabel = lifeState === 'dd' ? "Death's Door" : lifeState === 'dead' ? 'Dead' : null;
 
   return (
     <div 
@@ -53,11 +54,15 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
     >
       {/* Player name above counter (for upper player) */}
       {showNameAbove && (
-        <div 
-          className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300"
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          {playerName}
+        <div className="flex flex-col items-center gap-1" onContextMenu={(e) => e.preventDefault()}>
+          {statusLabel && (
+            <div className={`text-xs font-semibold ${colorClass} opacity-80`}>
+              {statusLabel}
+            </div>
+          )}
+          <div className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300">
+            {playerName}
+          </div>
         </div>
       )}
       
@@ -108,25 +113,19 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
           </button>
         </div>
         
-        {/* Life state description */}
-        {lifeState !== 'alive' && (
-          <div 
-            className="text-xs opacity-80"
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {lifeState === 'dd' && "Death's Door"}
-            {lifeState === 'dead' && "Dead"}
-          </div>
-        )}
       </div>
       
       {/* Player name below counter (for lower player) */}
       {!showNameAbove && (
-        <div 
-          className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300"
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          {playerName}
+        <div className="flex flex-col items-center gap-1" onContextMenu={(e) => e.preventDefault()}>
+          <div className="text-xs font-medium px-2 py-1 rounded-full bg-gray-500/20 text-gray-300">
+            {playerName}
+          </div>
+          {statusLabel && (
+            <div className={`text-xs font-semibold ${colorClass} opacity-80`}>
+              {statusLabel}
+            </div>
+          )}
         </div>
       )}
     </div>

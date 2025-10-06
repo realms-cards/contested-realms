@@ -467,3 +467,134 @@ Here are the commands to reset the database, apply migrations,
 ## Sync Textures
 
 s3cmd sync ./data-ktx2/ s3://contested-realms-cdn/data-ktx2/ --acl-public --guess-mime-type --add-header='Cache-Control: public, max-age=31536000, immutable'
+
+
+
+---
+
+I'll search the server for Redis client setup and current caching to see what can be reused and where to insert Redis-first persistence. This helps implement a write-behind approach with periodic snapshots and match-end flush.
+
+I'll search for Redis client initialization and usage in [server/index.js](cci:7://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:0:0-0:0) to understand existing Redis setup (pub/sub, caching) so I can switch persistence to Redis-first safely and reuse these clients.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Switched to Redis write-behind persistence
+
+I’ve implemented a Redis-first, write-behind strategy for online match persistence to eliminate Prisma connection pool timeouts. Hot-path updates now go to Redis immediately and buffer for periodic batched flushes to Postgres.
+
+# What changed
+
+- **[file]** [server/index.js](cci:7://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:0:0-0:0)
+  - **[strategy toggles]** Added env-driven persistence config:
+    - `PERSIST_STRATEGY` (default: `write_behind`)
+    - `PERSIST_FLUSH_INTERVAL_MS` (default: `3000`)
+    - `PERSIST_ACTION_BATCH_SIZE` (default: `200`)
+    - `PERSIST_MAX_WAIT_MS`, `PERSIST_TIMEOUT_MS` for DB fallbacks (non-write-behind)
+    - `MATCH_SESSION_TTL_SEC` (default: one day)
+  - **[Redis TTL]** [cacheSessionToRedis()](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:1467:0-1479:1) now uses `storeRedis || pubClient` and `MATCH_SESSION_TTL_SEC` TTL instead of hard-coded 24h.
+  - **[buffers]** New per-match buffers:
+    - `persistBuffers: Map<matchId, { latestData, actions[], timer, lastFlushAt }>`
+    - [bufferPersistUpdate(matchId, data, action?)](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:162:0-175:1) accumulates updates and actions.
+    - [schedulePersistFlush(matchId)](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:177:0-184:1) debounces flushes.
+    - [flushPersistBuffer(matchId, reason)](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:186:0-230:1) does `onlineMatchSession.upsert()` and batched `onlineMatchAction.createMany()` (fallback to single inserts if needed).
+  - **[hot path changes]**
+    - [persistMatchCreated()](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:1404:0-1423:1) and [persistMatchUpdate()](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:1419:0-1434:1) now:
+      - Always cache to Redis (`match:session:{id}`).
+      - If write-behind is enabled, buffer and schedule a DB flush (no immediate DB transaction).
+      - Otherwise, run the previous Prisma `$transaction` with `{ maxWait, timeout }`.
+    - [persistMatchEnded()](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:1524:0-1545:1):
+      - Forces a final flush of buffers and upserts the end state synchronously to DB.
+  - **[shutdown]** On SIGTERM/SIGINT, flushes all pending buffers before `prisma.$disconnect()` so nothing is lost.
+
+# How it works now
+
+- **During match**: [persistMatchUpdate()](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:1419:0-1434:1) writes to Redis and buffers. A timer flushes every `PERSIST_FLUSH_INTERVAL_MS` to Postgres, batching actions via `createMany`.
+- **On match end**: final buffer flush + DB upsert to guarantee the authoritative end state.
+- **On recovery**: [getOrLoadMatch()](cci:1://file:///Users/geleeroyale/CascadeProjects/sorcery-client/server/index.js:2078:0-2104:1) already prefers Redis (`match:session:{id}`), then DB.
+
+# Environment
+
+Add or confirm these in [.env](cci:7://file:///Users/geleeroyale/CascadeProjects/sorcery-client/example.env:0:0-0:0) or your deployment’s env:
+
+- **Required for write-behind**
+  - `REDIS_URL=redis://localhost:6379` (or your managed Redis)
+  - `PERSIST_STRATEGY=write_behind` (this is the default; explicit is fine)
+- **Optional tuning**
+  - `PERSIST_FLUSH_INTERVAL_MS=3000`
+  - `PERSIST_ACTION_BATCH_SIZE=200`
+  - `PERSIST_MAX_WAIT_MS=2000`
+  - `PERSIST_TIMEOUT_MS=2000`
+  - `MATCH_SESSION_TTL_SEC=86400`
+
+DB connection tuning (still recommended):
+- Use pooled endpoint for `DATABASE_URL`. Optionally add `connection_limit` and `pool_timeout` query params to keep each server under the pool cap.
+
+# Verify locally
+
+- Start Redis: `npm run redis:up`
+- Start server: `npm run server` (or via docker compose with redis)
+- Play a test match:
+  - Observe frequent state patches without Prisma pool timeouts.
+  - Check Redis keys: `match:session:{id}` exists and updates.
+  - Confirm periodic DB writes (reduced frequency). After match end, verify `OnlineMatchSession` row updated and `OnlineMatchAction` rows batched.
+
+# Notes
+
+- The old `$transaction` path remains if you set `PERSIST_STRATEGY` to something else; it now uses `{ maxWait, timeout }` for backpressure.
+- Actions are batched in chunks to avoid large single inserts. If `createMany` fails (e.g., payload edge cases), it falls back to individual inserts.
+
+# Summary
+
+- Implemented Redis write-behind for match persistence with periodic batched DB snapshots.
+- Eliminates pool timeouts from hot-path upserts while preserving durability at match end and shutdown.
+- Configurable via env; defaults are safe.
+
+If you want, I can add debug logs for flushes and buffer sizes or provide a simple metrics endpoint to monitor QPS/flushes.

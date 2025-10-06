@@ -7,6 +7,7 @@ export const InteractionRequestKinds = [
   "inspectHand",
   "takeFromPile",
   "manipulatePermanent",
+  "tieGame",
 ] as const;
 
 export type InteractionRequestKind =

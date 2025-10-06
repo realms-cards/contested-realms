@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.vitest.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["**/*"]
+}

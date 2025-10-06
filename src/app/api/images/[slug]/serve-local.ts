@@ -123,7 +123,9 @@ function detectContentType(ext: string): string {
     case "webp":
       return "image/webp";
     case "ktx2":
-      return "image/ktx2";
+      // KTX2 doesn't have an official MIME type; use application/octet-stream
+      // The KTX2Loader will handle it based on file extension/magic bytes
+      return "application/octet-stream";
     default:
       return "application/octet-stream";
   }
@@ -139,6 +141,11 @@ export async function serveLocalAsset(args: ServeLocalAssetArgs): Promise<Respon
   }
 
   if (!found) {
+    // Log missing asset in dev for debugging
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[serve-local] Asset not found: ${args.base} (suffix: ${args.suffix}, ktx2: ${args.wantKtx2}, set: ${args.primarySetDir})`);
+      console.log(`[serve-local] Tried paths:`, [...primaryCandidates.slice(0, 3), "..."]);
+    }
     return new Response("Not found", { status: 404 });
   }
 
@@ -146,10 +153,18 @@ export async function serveLocalAsset(args: ServeLocalAssetArgs): Promise<Respon
   const ext = path.extname(found).slice(1).toLowerCase();
   const contentType = detectContentType(ext);
 
+  // Log successful KTX2 serve in dev
+  if (process.env.NODE_ENV === "development" && ext === "ktx2") {
+    console.log(`[serve-local] ✓ Serving KTX2: ${path.basename(found)} (${(buffer.length / 1024).toFixed(1)}KB)`);
+  }
+
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
+      // Allow cross-origin requests for textures (needed for Three.js loaders)
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
     },
   });
 }

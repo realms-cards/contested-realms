@@ -6,7 +6,9 @@ import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
+import OnlineProvider from "@/components/providers/OnlineProvider";
 import ThemeScope from "@/components/ui/ThemeScope";
+import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
 import { SoundProvider } from "@/lib/contexts/SoundContext";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
@@ -45,7 +47,11 @@ export default async function RootLayout({
           <SoundProvider>
             <AuthProvider session={session}>
               <ThemeScope>
-                <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                <OnlineProvider>
+                  <RealtimeTournamentProvider>
+                    <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                  </RealtimeTournamentProvider>
+                </OnlineProvider>
               </ThemeScope>
               {/* Floating user badge on all non-online pages */}
               <GlobalUserBadge />
