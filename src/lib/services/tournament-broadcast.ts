@@ -200,6 +200,13 @@ export async function broadcastMatchAssigned(
 }
 
 // Create a tournamentSocketService object with the same interface for compatibility
+export async function broadcastToMatch(matchId: string, event: string, data: Record<string, unknown>) {
+  await broadcastToSocket(event, {
+    matchId,
+    ...data
+  });
+}
+
 export const tournamentSocketService = {
   broadcastTournamentUpdate,
   broadcastTournamentUpdateById,
@@ -210,5 +217,6 @@ export const tournamentSocketService = {
   broadcastPreparationUpdate,
   broadcastDraftReady,
   broadcastStatisticsUpdate,
-  broadcastMatchAssigned
+  broadcastMatchAssigned,
+  broadcastToMatch
 };

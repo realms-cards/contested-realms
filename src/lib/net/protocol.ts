@@ -358,6 +358,7 @@ export type ServerEventMap = {
   lobbyUpdated: LobbyUpdatedPayloadT;
   leftLobby: LeftLobbyPayloadT;
   matchStarted: MatchStartedPayloadT;
+  matchEnded: { matchId: string; tournamentId?: string; reason?: string };
   statePatch: StatePatchPayloadT;
   chat: ServerChatPayloadT;
   resyncResponse: ResyncResponsePayloadT;

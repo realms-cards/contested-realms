@@ -833,6 +833,14 @@ export default function OnlineProvider({
           }
         }
       }),
+      transport.on("matchEnded", (p) => {
+        console.log("[online] Match ended", p);
+        // Clear match state when server notifies match has ended
+        if (match && p.matchId === match.id) {
+          setMatch(null);
+          useGameStore.getState().log(`Match ended: ${p.reason || 'unknown reason'}`);
+        }
+      }),
       transport.on("error", (p) => {
         console.warn("server error", p);
         try {

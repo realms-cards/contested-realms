@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, MessageCircle, ScrollText } from "lucide-react";
+import { ChevronDown, ChevronUp, LogOut, MessageCircle, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
@@ -258,7 +258,7 @@ export default function OnlineConsole({
               }}
               onContextMenu={(e) => e.preventDefault()}
             >
-              {consoleOpen ? "Collapse" : "Expand"}
+              {consoleOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
             </button>
           </div>
         </div>
