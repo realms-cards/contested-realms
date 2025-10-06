@@ -500,9 +500,9 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     setError(null);
     setLoading(true);
     try {
-      // Include completed tournaments to ensure we can view them after finishing
-      // Limit to recent 50 tournaments to avoid performance issues
-      const response = await fetch('/api/tournaments?includeCompleted=true&limit=50');
+      // Only fetch active tournaments (registering, preparing, active)
+      // Limit to recent 6 tournaments to avoid loading all history
+      const response = await fetch('/api/tournaments?status=registering,preparing,active&limit=6');
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to fetch tournaments');

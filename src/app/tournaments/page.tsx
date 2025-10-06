@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { useState, useEffect } from 'react';
-import { useRealtimeTournaments } from '@/contexts/RealtimeTournamentContext';
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 
 interface Tournament {
   id: string;
   name: string;
-  format: 'sealed' | 'draft' | 'constructed';
-  status: 'registering' | 'preparing' | 'active' | 'completed' | 'cancelled';
+  format: "sealed" | "draft" | "constructed";
+  status: "registering" | "preparing" | "active" | "completed" | "cancelled";
   maxPlayers: number;
   currentPlayers: number;
   creatorId: string;
@@ -21,7 +21,7 @@ interface Tournament {
 
 interface CreateTournamentForm {
   name: string;
-  format: 'sealed' | 'draft' | 'constructed';
+  format: "sealed" | "draft" | "constructed";
   maxPlayers: number;
   settings: {
     totalRounds?: number;
@@ -33,59 +33,74 @@ interface CreateTournamentForm {
 export default function TournamentsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { 
+  const {
     tournaments,
     createTournament: rtCreateTournament,
     joinTournament: rtJoinTournament,
     loading: rtLoading,
-    error: rtError
+    error: rtError,
   } = useRealtimeTournaments();
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // View filter: default 'active' uses realtime context; other filters fetch via API
-  const [viewFilter, setViewFilter] = useState<'active' | 'completed' | 'all' | 'mine'>('active');
+  const [viewFilter, setViewFilter] = useState<
+    "active" | "completed" | "all" | "mine"
+  >("active");
   const [localTournaments, setLocalTournaments] = useState<Tournament[]>([]);
   const [loadingLocal, setLoadingLocal] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 12;
 
   const [form, setForm] = useState<CreateTournamentForm>({
-    name: '',
-    format: 'constructed',
+    name: "",
+    format: "constructed",
     maxPlayers: 8,
     settings: {
       totalRounds: 3,
       roundDuration: 60,
-      allowSpectators: true
-    }
+      allowSpectators: true,
+    },
   });
 
-  // Pairing format and pack configuration (pack size is fixed at 15; do not expose)
-  const [pairingFormat, setPairingFormat] = useState<'swiss' | 'elimination' | 'round_robin'>('swiss');
-  const [sealedPackCounts, setSealedPackCounts] = useState<Record<string, number>>({ Beta: 6, 'Arthurian Legends': 0 });
-  const [draftPackCounts, setDraftPackCounts] = useState<Record<string, number>>({ Beta: 3, 'Arthurian Legends': 0 });
-  const [draftPackCount, setDraftPackCount] = useState<number>(3);
+  // Pack configuration (pack size is fixed at 15; do not expose)
+  // Tournament pairing format is always Swiss
+  // New format: array of set names, one per booster
+  const [sealedBoosterCount, setSealedBoosterCount] = useState<number>(6);
+  const [sealedBoosters, setSealedBoosters] = useState<string[]>([
+    "Beta",
+    "Beta",
+    "Beta",
+    "Beta",
+    "Beta",
+    "Beta"
+  ]);
+  const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
+  const [draftBoosters, setDraftBoosters] = useState<string[]>([
+    "Beta",
+    "Arthurian Legends",
+    "Arthurian Legends"
+  ]);
 
   // Type guard helpers
   function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
+    return typeof value === "object" && value !== null;
   }
   function getCurrentPlayersCount(t: unknown): number {
     if (!isRecord(t)) return 0;
     const cp = t.currentPlayers;
-    if (typeof cp === 'number') return cp;
+    if (typeof cp === "number") return cp;
     const rp = (t as Record<string, unknown>).registeredPlayers;
     if (Array.isArray(rp)) return rp.length;
     return 0;
   }
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin?callbackUrl=/tournaments');
+    if (status === "unauthenticated") {
+      router.push("/auth/signin?callbackUrl=/tournaments");
     }
   }, [status, router]);
 
@@ -94,41 +109,46 @@ export default function TournamentsPage() {
   // Load completed/all/mine tournaments when requested
   useEffect(() => {
     (async () => {
-      if (viewFilter === 'active') return;
+      if (viewFilter === "active") return;
       setLoadingLocal(true);
       setLocalError(null);
       try {
         const params = new URLSearchParams();
-        if (viewFilter === 'completed') {
-          params.set('status', 'completed');
-          params.set('limit', String(pageSize));
-          params.set('offset', String((page - 1) * pageSize));
-          if (search.trim()) params.set('q', search.trim());
+        if (viewFilter === "completed") {
+          params.set("status", "completed");
+          params.set("limit", String(pageSize));
+          params.set("offset", String((page - 1) * pageSize));
+          if (search.trim()) params.set("q", search.trim());
           const res = await fetch(`/api/tournaments?${params.toString()}`);
           const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || 'Failed to fetch tournaments');
+          if (!res.ok)
+            throw new Error(data?.error || "Failed to fetch tournaments");
           setLocalTournaments(data as Tournament[]);
-        } else if (viewFilter === 'all') {
-          params.set('status', 'all');
-          params.set('limit', String(pageSize));
-          params.set('offset', String((page - 1) * pageSize));
-          if (search.trim()) params.set('q', search.trim());
+        } else if (viewFilter === "all") {
+          params.set("status", "all");
+          params.set("limit", String(pageSize));
+          params.set("offset", String((page - 1) * pageSize));
+          if (search.trim()) params.set("q", search.trim());
           const res = await fetch(`/api/tournaments?${params.toString()}`);
           const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || 'Failed to fetch tournaments');
+          if (!res.ok)
+            throw new Error(data?.error || "Failed to fetch tournaments");
           setLocalTournaments(data as Tournament[]);
-        } else if (viewFilter === 'mine') {
-          params.set('page', String(page));
-          params.set('pageSize', String(pageSize));
-          if (search.trim()) params.set('q', search.trim());
+        } else if (viewFilter === "mine") {
+          params.set("page", String(page));
+          params.set("pageSize", String(pageSize));
+          if (search.trim()) params.set("q", search.trim());
           // role=any returns both creator and participant
           const res = await fetch(`/api/tournaments/my?${params.toString()}`);
           const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || 'Failed to fetch my tournaments');
+          if (!res.ok)
+            throw new Error(data?.error || "Failed to fetch my tournaments");
           setLocalTournaments((data?.items || []) as Tournament[]);
         }
       } catch (e) {
-        setLocalError(e instanceof Error ? e.message : 'Failed to fetch tournaments');
+        setLocalError(
+          e instanceof Error ? e.message : "Failed to fetch tournaments"
+        );
         setLocalTournaments([]);
       } finally {
         setLoadingLocal(false);
@@ -144,17 +164,28 @@ export default function TournamentsPage() {
     setError(null);
 
     try {
-      // Build settings with pairing format and format-specific configuration
+      // Build settings with format-specific configuration
+      // Pairing format is always Swiss
       const settingsOut: Record<string, unknown> = {
         ...(form.settings as Record<string, unknown>),
-        pairingFormat,
+        pairingFormat: "swiss",
       };
-      if (form.format === 'sealed') {
-        settingsOut.sealedConfig = { packCounts: sealedPackCounts };
-      } else if (form.format === 'draft') {
+      if (form.format === "sealed") {
+        // Convert booster array to packCounts format for backend
+        const packCounts: Record<string, number> = {};
+        sealedBoosters.forEach(setName => {
+          packCounts[setName] = (packCounts[setName] || 0) + 1;
+        });
+        settingsOut.sealedConfig = { packCounts };
+      } else if (form.format === "draft") {
+        // Convert booster array to packCounts format for backend
+        const packCounts: Record<string, number> = {};
+        draftBoosters.forEach(setName => {
+          packCounts[setName] = (packCounts[setName] || 0) + 1;
+        });
         settingsOut.draftConfig = {
-          packCount: draftPackCount,
-          packCounts: draftPackCounts,
+          packCount: draftBoosterCount,
+          packCounts,
         };
       }
 
@@ -164,32 +195,34 @@ export default function TournamentsPage() {
         maxPlayers: form.maxPlayers,
         settings: settingsOut,
       });
-      
+
       // Add to local state immediately for better UX
       // Realtime context updates list; no manual setState needed
-      
+
       // Reset form and close modal
       setForm({
-        name: '',
-        format: 'constructed',
+        name: "",
+        format: "constructed",
         maxPlayers: 8,
         settings: {
           totalRounds: 3,
           roundDuration: 60,
-          allowSpectators: true
-        }
+          allowSpectators: true,
+        },
       });
-      setPairingFormat('swiss');
-      setSealedPackCounts({ Beta: 6, 'Arthurian Legends': 0 });
-      setDraftPackCounts({ Beta: 3, 'Arthurian Legends': 0 });
-      setDraftPackCount(3);
+      setSealedBoosterCount(6);
+      setSealedBoosters(["Beta", "Beta", "Beta", "Beta", "Beta", "Beta"]);
+      setDraftBoosterCount(3);
+      setDraftBoosters(["Beta", "Arthurian Legends", "Arthurian Legends"]);
       setShowCreateForm(false);
-      
+
       // Navigate to the new tournament
       router.push(`/tournaments/${newTournament.id}`);
     } catch (err) {
-      console.error('Failed to create tournament:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create tournament');
+      console.error("Failed to create tournament:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to create tournament"
+      );
     } finally {
       setCreating(false);
     }
@@ -204,42 +237,44 @@ export default function TournamentsPage() {
       // Navigate to tournament page
       router.push(`/tournaments/${tournamentId}`);
     } catch (err) {
-      console.error('Failed to join tournament:', err);
-      setError(err instanceof Error ? err.message : 'Failed to join tournament');
+      console.error("Failed to join tournament:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to join tournament"
+      );
     }
   };
 
-  const getStatusBadgeColor = (status: Tournament['status']) => {
+  const getStatusBadgeColor = (status: Tournament["status"]) => {
     switch (status) {
-      case 'registering':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'preparing':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'active':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'completed':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800 border-red-200';
+      case "registering":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "preparing":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "active":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      case "completed":
+        return "bg-gray-100 text-gray-800 border-gray-200";
+      case "cancelled":
+        return "bg-red-100 text-red-800 border-red-200";
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
 
-  const getFormatIcon = (format: Tournament['format']) => {
+  const getFormatIcon = (format: Tournament["format"]) => {
     switch (format) {
-      case 'sealed':
-        return '📦';
-      case 'draft':
-        return '🎯';
-      case 'constructed':
-        return '⚔️';
+      case "sealed":
+        return "📦";
+      case "draft":
+        return "🎯";
+      case "constructed":
+        return "⚔️";
       default:
-        return '🏆';
+        return "🏆";
     }
   };
 
-  if (status === 'loading' || rtLoading) {
+  if (status === "loading" || rtLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournaments...</div>
@@ -263,8 +298,12 @@ export default function TournamentsPage() {
             >
               ← Back to Lobby
             </Link>
-            <h1 className="text-3xl font-bold text-white mb-2">Tournaments</h1>
-            <p className="text-slate-400">Join or create competitive tournaments</p>
+            <h1 className="text-3xl font-fantaisie text-white mb-2">
+              Tournaments
+            </h1>
+            <p className="text-slate-400">
+              Join or create competitive tournaments
+            </p>
           </div>
           <button
             onClick={() => setShowCreateForm(true)}
@@ -277,37 +316,61 @@ export default function TournamentsPage() {
         {/* View Filter */}
         <div className="flex items-center gap-2 mb-6">
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'active' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
-            onClick={() => setViewFilter('active')}
+            className={`px-3 py-1.5 rounded-md text-sm border ${
+              viewFilter === "active"
+                ? "bg-blue-600 text-white border-blue-500"
+                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
+            }`}
+            onClick={() => setViewFilter("active")}
           >
             Active
           </button>
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'completed' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
-            onClick={() => setViewFilter('completed')}
+            className={`px-3 py-1.5 rounded-md text-sm border ${
+              viewFilter === "completed"
+                ? "bg-blue-600 text-white border-blue-500"
+                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
+            }`}
+            onClick={() => setViewFilter("completed")}
           >
             Completed
           </button>
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'all' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
-            onClick={() => setViewFilter('all')}
+            className={`px-3 py-1.5 rounded-md text-sm border ${
+              viewFilter === "all"
+                ? "bg-blue-600 text-white border-blue-500"
+                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
+            }`}
+            onClick={() => setViewFilter("all")}
           >
             All
           </button>
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${viewFilter === 'mine' ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700'}`}
-            onClick={() => { setViewFilter('mine'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-md text-sm border ${
+              viewFilter === "mine"
+                ? "bg-blue-600 text-white border-blue-500"
+                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
+            }`}
+            onClick={() => {
+              setViewFilter("mine");
+              setPage(1);
+            }}
           >
             My Tournaments
           </button>
-          {viewFilter !== 'active' && (
-            <span className="text-xs text-slate-400 ml-2">Showing {viewFilter} tournaments</span>
+          {viewFilter !== "active" && (
+            <span className="text-xs text-slate-400 ml-2">
+              Showing {viewFilter} tournaments
+            </span>
           )}
-          {viewFilter !== 'active' && (
+          {viewFilter !== "active" && (
             <div className="ml-auto flex items-center gap-2">
               <input
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search…"
                 className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -319,8 +382,16 @@ export default function TournamentsPage() {
         {(error || rtError || localError) && (
           <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
             <div className="flex items-center">
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
               </svg>
               {error || rtError || localError}
             </div>
@@ -328,7 +399,7 @@ export default function TournamentsPage() {
         )}
 
         {/* Pagination for non-active views */}
-        {viewFilter !== 'active' && (
+        {viewFilter !== "active" && (
           <div className="mt-6 flex items-center justify-center gap-2">
             <button
               className="px-3 py-1.5 rounded-md text-sm bg-slate-800 text-slate-200 border border-slate-600 disabled:opacity-50"
@@ -349,96 +420,119 @@ export default function TournamentsPage() {
         )}
 
         {/* Tournaments Grid */}
-        {(viewFilter === 'active' ? tournaments.length === 0 : (loadingLocal ? false : localTournaments.length === 0)) ? (
+        {(
+          viewFilter === "active"
+            ? tournaments.length === 0
+            : loadingLocal
+            ? false
+            : localTournaments.length === 0
+        ) ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🏆</div>
-            <h2 className="text-2xl font-semibold text-slate-300 mb-2">No tournaments found</h2>
-            {viewFilter === 'active' ? (
+            <h2 className="text-2xl font-semibold text-slate-300 mb-2">
+              No tournaments found
+            </h2>
+            {viewFilter === "active" ? (
               <>
-                <p className="text-slate-500 mb-6">Be the first to create a tournament!</p>
+                <br />
                 <button
                   onClick={() => setShowCreateForm(true)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                 >
-                  Create First Tournament
+                  Create Tournament
                 </button>
               </>
             ) : (
-              <p className="text-slate-500">Try switching filters or check back later.</p>
+              <p className="text-slate-500">
+                Try switching filters or check back later.
+              </p>
             )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(viewFilter === 'active' ? tournaments : localTournaments).map((tournament) => (
-              <div
-                key={tournament.id}
-                className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-2xl">{getFormatIcon(tournament.format)}</span>
-                    <div>
-                      <h3 className="font-semibold text-lg text-white truncate">
-                        {tournament.name}
-                      </h3>
-                      <p className="text-slate-400 text-sm capitalize">
-                        {tournament.format}
-                      </p>
+            {(viewFilter === "active" ? tournaments : localTournaments).map(
+              (tournament) => (
+                <div
+                  key={tournament.id}
+                  className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-2xl">
+                        {getFormatIcon(tournament.format)}
+                      </span>
+                      <div>
+                        <h3 className="font-semibold text-lg text-white truncate">
+                          {tournament.name}
+                        </h3>
+                        <p className="text-slate-400 text-sm capitalize">
+                          {tournament.format}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(tournament.status)}`}
-                  >
-                    {tournament.status}
-                  </span>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Players:</span>
-                    <span className="text-white">
-                      {getCurrentPlayersCount(tournament)}/{tournament.maxPlayers}
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
+                        tournament.status
+                      )}`}
+                    >
+                      {tournament.status}
                     </span>
                   </div>
-                  
-                  <div className="w-full bg-slate-700 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{
-                        width: `${Math.min((getCurrentPlayersCount(tournament) / tournament.maxPlayers) * 100, 100)}%`
-                      }}
-                    />
-                  </div>
 
-                  {tournament.startedAt && (
+                  <div className="space-y-2 mb-4">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Started:</span>
+                      <span className="text-slate-400">Players:</span>
                       <span className="text-white">
-                        {new Date(tournament.startedAt).toLocaleDateString()}
+                        {getCurrentPlayersCount(tournament)}/
+                        {tournament.maxPlayers}
                       </span>
                     </div>
-                  )}
-                </div>
 
-                <div className="flex space-x-2">
-                  <Link
-                    href={`/tournaments/${tournament.id}`}
-                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-center px-4 py-2 rounded text-sm font-medium transition-colors"
-                  >
-                    View Details
-                  </Link>
-                  
-                  {tournament.status === 'registering' && tournament.currentPlayers < tournament.maxPlayers && (
-                    <button
-                      onClick={() => handleJoinTournament(tournament.id)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                    <div className="w-full bg-slate-700 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(
+                            (getCurrentPlayersCount(tournament) /
+                              tournament.maxPlayers) *
+                              100,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+
+                    {tournament.startedAt && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Started:</span>
+                        <span className="text-white">
+                          {new Date(tournament.startedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <Link
+                      href={`/tournaments/${tournament.id}`}
+                      className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-center px-4 py-2 rounded text-sm font-medium transition-colors"
                     >
-                      Join
-                    </button>
-                  )}
+                      View Details
+                    </Link>
+
+                    {tournament.status === "registering" &&
+                      tournament.currentPlayers < tournament.maxPlayers && (
+                        <button
+                          onClick={() => handleJoinTournament(tournament.id)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                        >
+                          Join
+                        </button>
+                      )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         )}
 
@@ -447,7 +541,9 @@ export default function TournamentsPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-white">Create Tournament</h2>
+                <h2 className="text-xl font-semibold text-white">
+                  Create Tournament
+                </h2>
                 <button
                   onClick={() => setShowCreateForm(false)}
                   className="text-slate-400 hover:text-white"
@@ -464,7 +560,9 @@ export default function TournamentsPage() {
                   <input
                     type="text"
                     value={form.name}
-                    onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
                     className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter tournament name"
                     required
@@ -473,28 +571,20 @@ export default function TournamentsPage() {
 
                 {/* Pairing Format */}
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">Pairing Format</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['swiss','elimination','round_robin'] as const).map((fmt) => (
-                      <button
-                        key={fmt}
-                        type="button"
-                        className={`px-3 py-2 rounded text-sm transition-colors ${pairingFormat === fmt ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
-                        onClick={() => setPairingFormat(fmt)}
-                      >
-                        {fmt === 'swiss' ? 'Swiss' : fmt === 'elimination' ? 'Elimination' : 'Round Robin'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
                   <label className="block text-slate-300 text-sm font-medium mb-2">
                     Format
                   </label>
                   <select
                     value={form.format}
-                    onChange={(e) => setForm(prev => ({ ...prev, format: e.target.value as 'sealed' | 'draft' | 'constructed' }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        format: e.target.value as
+                          | "sealed"
+                          | "draft"
+                          | "constructed",
+                      }))
+                    }
                     className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="constructed">Constructed</option>
@@ -503,74 +593,138 @@ export default function TournamentsPage() {
                   </select>
                 </div>
 
-                {/* Sealed Set Mix */}
-                {form.format === 'sealed' && (
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-2">Sealed Pack Mix</label>
+                {/* Sealed Booster Configuration */}
+                {form.format === "sealed" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <label className="block text-slate-300 text-sm font-medium">
+                        Booster Count
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCount = Math.max(1, sealedBoosterCount - 1);
+                            setSealedBoosterCount(newCount);
+                            setSealedBoosters(prev => prev.slice(0, newCount));
+                          }}
+                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="w-12 text-center text-white font-semibold">
+                          {sealedBoosterCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCount = Math.min(10, sealedBoosterCount + 1);
+                            setSealedBoosterCount(newCount);
+                            setSealedBoosters(prev => [
+                              ...prev,
+                              ...Array(newCount - prev.length).fill("Beta")
+                            ]);
+                          }}
+                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-2">
-                      {Object.keys(sealedPackCounts).map((setName) => (
-                        <div key={`sealed-${setName}`} className="flex items-center justify-between gap-2">
-                          <div className="text-slate-200 text-sm">{setName}</div>
-                          <input
-                            type="number"
-                            min={0}
-                            max={10}
-                            value={sealedPackCounts[setName] || 0}
+                      {sealedBoosters.map((setName, idx) => (
+                        <div
+                          key={`sealed-booster-${idx}`}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="text-slate-300 text-sm w-24">
+                            Booster {idx + 1}
+                          </div>
+                          <select
+                            value={setName}
                             onChange={(e) => {
-                              const n = Math.max(0, Math.min(10, parseInt(e.target.value) || 0));
-                              setSealedPackCounts((prev) => ({ ...prev, [setName]: n }));
+                              setSealedBoosters(prev => {
+                                const next = [...prev];
+                                next[idx] = e.target.value;
+                                return next;
+                              });
                             }}
-                            className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
-                          />
+                            className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                          >
+                            <option value="Beta">Beta</option>
+                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Alpha">Alpha</option>
+                          </select>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Draft Set Mix */}
-                {form.format === 'draft' && (
+                {/* Draft Booster Configuration */}
+                {form.format === "draft" && (
                   <div className="space-y-3">
-                    <div>
-                      <label className="block text-slate-300 text-sm font-medium mb-2">Packs per Player</label>
-                      <input
-                        type="number"
-                        min={2}
-                        max={5}
-                        value={draftPackCount}
-                        onChange={(e) => setDraftPackCount(Math.max(2, Math.min(5, parseInt(e.target.value) || 3)))}
-                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
-                      />
-                    </div>
-                    <div>
-                      <div className="block text-slate-300 text-sm font-medium mb-2">Draft Pack Mix</div>
-                      <div className="space-y-2">
-                        {Object.keys(draftPackCounts).map((setName) => (
-                          <div key={`draft-${setName}`} className="flex items-center justify-between gap-2">
-                            <div className="text-slate-200 text-sm">{setName}</div>
-                            <input
-                              type="number"
-                              min={0}
-                              max={5}
-                              value={draftPackCounts[setName] || 0}
-                              onChange={(e) => {
-                                const n = Math.max(0, Math.min(5, parseInt(e.target.value) || 0));
-                                setDraftPackCounts((prev) => ({ ...prev, [setName]: n }));
-                              }}
-                              className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
-                            />
-                          </div>
-                        ))}
+                    <div className="flex items-center gap-3">
+                      <label className="block text-slate-300 text-sm font-medium">
+                        Booster Count
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCount = Math.max(1, draftBoosterCount - 1);
+                            setDraftBoosterCount(newCount);
+                            setDraftBoosters(prev => prev.slice(0, newCount));
+                          }}
+                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="w-12 text-center text-white font-semibold">
+                          {draftBoosterCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCount = Math.min(5, draftBoosterCount + 1);
+                            setDraftBoosterCount(newCount);
+                            setDraftBoosters(prev => [
+                              ...prev,
+                              ...Array(newCount - prev.length).fill("Arthurian Legends")
+                            ]);
+                          }}
+                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                        >
+                          +
+                        </button>
                       </div>
-                      {(() => {
-                        const total = Object.values(draftPackCounts).reduce((s, n) => s + (n || 0), 0);
-                        const ok = total === draftPackCount;
-                        return (
-                          <div className={`text-xs mt-1 ${ok ? 'text-emerald-300' : 'text-amber-300'}`}>
-                            Pack mix total: {total}/{draftPackCount} {ok ? '✓' : '(adjust to match)'}
+                    </div>
+                    <div className="space-y-2">
+                      {draftBoosters.map((setName, idx) => (
+                        <div
+                          key={`draft-booster-${idx}`}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="text-slate-300 text-sm w-24">
+                            Booster {idx + 1}
                           </div>
-                        );
-                      })()}
+                          <select
+                            value={setName}
+                            onChange={(e) => {
+                              setDraftBoosters(prev => {
+                                const next = [...prev];
+                                next[idx] = e.target.value;
+                                return next;
+                              });
+                            }}
+                            className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                          >
+                            <option value="Beta">Beta</option>
+                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Alpha">Alpha</option>
+                          </select>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -581,7 +735,12 @@ export default function TournamentsPage() {
                   </label>
                   <select
                     value={form.maxPlayers}
-                    onChange={(e) => setForm(prev => ({ ...prev, maxPlayers: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        maxPlayers: parseInt(e.target.value),
+                      }))
+                    }
                     className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value={2}>2 Players</option>
@@ -599,10 +758,15 @@ export default function TournamentsPage() {
                   </label>
                   <select
                     value={form.settings.totalRounds || 3}
-                    onChange={(e) => setForm(prev => ({ 
-                      ...prev, 
-                      settings: { ...prev.settings, totalRounds: parseInt(e.target.value) }
-                    }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        settings: {
+                          ...prev.settings,
+                          totalRounds: parseInt(e.target.value),
+                        },
+                      }))
+                    }
                     className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value={2}>2 Rounds</option>
@@ -626,7 +790,7 @@ export default function TournamentsPage() {
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={creating}
                   >
-                    {creating ? 'Creating...' : 'Create Tournament'}
+                    {creating ? "Creating..." : "Create Tournament"}
                   </button>
                 </div>
               </form>

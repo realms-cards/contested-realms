@@ -57,22 +57,7 @@ export async function generatePairings(
     isEliminated: standing.isEliminated
   }));
 
-  // Determine pairing structure from settings (default: swiss)
-  const settings = (tournament as unknown as { settings?: Record<string, unknown> }).settings || {};
-  const pairingFormat = (settings.pairingFormat as 'swiss' | 'elimination' | 'round_robin' | undefined) || 'swiss';
-
-  if (pairingFormat === 'elimination') {
-    return generateEliminationPairings(activePlayers);
-  }
-
-  if (pairingFormat === 'round_robin') {
-    return generateRoundRobinPairings(
-      activePlayers,
-      tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>
-    );
-  }
-
-  // swiss (default)
+  // Tournament pairing is always Swiss
   return generateSwissPairings(
     activePlayers,
     tournament.matches as unknown as Array<{ players: Array<{ id: string }> }>
@@ -80,30 +65,8 @@ export async function generatePairings(
 }
 
 /**
- * Elimination pairing - bracket style tournament
- */
-function generateEliminationPairings(
-  players: PlayerPairing[]
-): TournamentPairingResult {
-  // TODO: Implement elimination bracket pairing
-  // For now, fall back to Swiss
-  return generateSwissPairings(players, []);
-}
-
-/**
- * Round-robin pairing - everyone plays everyone
- */
-function generateRoundRobinPairings(
-  players: PlayerPairing[],
-  previousMatches: Array<{ players: Array<{ id: string }> }>
-): TournamentPairingResult {
-  // TODO: Implement round-robin pairing
-  // For now, fall back to Swiss
-  return generateSwissPairings(players, previousMatches);
-}
-
-/**
  * Swiss system pairing - players with similar records play each other
+ * This is the only pairing system currently supported.
  */
 function generateSwissPairings(
   players: PlayerPairing[],

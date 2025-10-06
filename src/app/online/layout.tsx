@@ -1,7 +1,5 @@
 "use client";
 
-import UserBadge from "@/components/auth/UserBadge";
-
 export default function OnlineLayout({
   children,
 }: {

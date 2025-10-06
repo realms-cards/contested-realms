@@ -400,15 +400,18 @@ export default function LobbiesCentral({
   
   // Tournament creation state
   const [tournamentName, setTournamentName] = useState<string>("");
-  const [tournamentFormat, setTournamentFormat] = useState<"swiss" | "elimination" | "round_robin">("swiss");
+  // Tournament pairing format is always Swiss
+  const tournamentFormat = "swiss";
   const [tournamentMatchType, setTournamentMatchType] = useState<"constructed" | "sealed" | "draft">("sealed");
   const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
   // Tournament pack settings
-  const [sealedPackCounts, setSealedPackCounts] = useState<Record<string, number>>({ Beta: 6, "Arthurian Legends": 0 });
+  // New format: array of set names, one per booster
+  const [sealedBoosterCount, setSealedBoosterCount] = useState<number>(6);
+  const [sealedBoosters, setSealedBoosters] = useState<string[]>(["Beta", "Beta", "Beta", "Beta", "Beta", "Beta"]);
   const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
   const [sealedReplaceAvatars, setSealedReplaceAvatars] = useState<boolean>(false);
-  const [draftPackCounts, setDraftPackCounts] = useState<Record<string, number>>({ Beta: 3, "Arthurian Legends": 0 });
-  const [draftPackCount, setDraftPackCount] = useState<number>(3);
+  const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
+  const [draftBoosters, setDraftBoosters] = useState<string[]>(["Beta", "Arthurian Legends", "Arthurian Legends"]);
   const [draftPackSize, setDraftPackSize] = useState<number>(15);
 
   // Generate a random name when overlay opens
@@ -1276,26 +1279,6 @@ export default function LobbiesCentral({
                   </button>
                 </div>
               </div>
-              
-              <div>
-                <label className="block text-xs font-medium mb-2">Format</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {["swiss", "elimination", "round_robin"].map((format) => (
-                    <button
-                      key={format}
-                      className={`px-3 py-2 text-xs rounded transition-colors ${
-                        tournamentFormat === format
-                          ? "bg-blue-600/80 text-white"
-                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      }`}
-                      onClick={() => setTournamentFormat(format as "swiss" | "elimination" | "round_robin")}
-                    >
-                      {format === "swiss" ? "Swiss" : format === "elimination" ? "Elimination" : "Round Robin"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
               <div>
                 <label className="block text-xs font-medium mb-2">Match Type</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1316,23 +1299,56 @@ export default function LobbiesCentral({
               </div>
               {tournamentMatchType === 'sealed' && (
                 <div className="space-y-3 mt-2">
-                  <div className="text-xs font-medium">Sealed Pack Mix</div>
-                  {Object.keys(sealedPackCounts).map((setName) => (
-                    <div key={`sealed-${setName}`} className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-slate-300">{setName}</div>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={sealedPackCounts[setName] || 0}
-                        onChange={(e) => {
-                          const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0));
-                          setSealedPackCounts(prev => ({ ...prev, [setName]: val }));
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-medium">Booster Count</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.max(1, sealedBoosterCount - 1);
+                          setSealedBoosterCount(newCount);
+                          setSealedBoosters(prev => prev.slice(0, newCount));
                         }}
-                        className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                      />
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center text-xs font-semibold">{sealedBoosterCount}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.min(10, sealedBoosterCount + 1);
+                          setSealedBoosterCount(newCount);
+                          setSealedBoosters(prev => [...prev, ...Array(newCount - prev.length).fill("Beta")]);
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        +
+                      </button>
                     </div>
-                  ))}
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {sealedBoosters.map((setName, idx) => (
+                      <div key={`sealed-booster-${idx}`} className="flex items-center gap-2">
+                        <div className="text-xs text-slate-400 w-16">Pack {idx + 1}</div>
+                        <select
+                          value={setName}
+                          onChange={(e) => {
+                            setSealedBoosters(prev => {
+                              const next = [...prev];
+                              next[idx] = e.target.value;
+                              return next;
+                            });
+                          }}
+                          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                        >
+                          <option value="Beta">Beta</option>
+                          <option value="Arthurian Legends">Arthurian Legends</option>
+                          <option value="Alpha">Alpha</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs opacity-80 mb-1">Time Limit (min)</label>
@@ -1354,56 +1370,67 @@ export default function LobbiesCentral({
               )}
               {tournamentMatchType === 'draft' && (
                 <div className="space-y-3 mt-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs opacity-80 mb-1">Packs per Player</label>
-                      <input
-                        type="number"
-                        min={2}
-                        max={5}
-                        value={draftPackCount}
-                        onChange={(e) => setDraftPackCount(Math.max(2, Math.min(5, parseInt(e.target.value) || 3)))}
-                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs opacity-80 mb-1">Pack Size</label>
-                      <input
-                        type="number"
-                        min={8}
-                        max={20}
-                        value={draftPackSize}
-                        onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
-                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                      />
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-medium">Booster Count</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.max(1, draftBoosterCount - 1);
+                          setDraftBoosterCount(newCount);
+                          setDraftBoosters(prev => prev.slice(0, newCount));
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center text-xs font-semibold">{draftBoosterCount}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.min(5, draftBoosterCount + 1);
+                          setDraftBoosterCount(newCount);
+                          setDraftBoosters(prev => [...prev, ...Array(newCount - prev.length).fill("Arthurian Legends")]);
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
-                  <div className="text-xs font-medium">Draft Pack Mix</div>
-                  {Object.keys(draftPackCounts).map((setName) => (
-                    <div key={`draft-${setName}`} className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-slate-300">{setName}</div>
-                      <input
-                        type="number"
-                        min={0}
-                        max={5}
-                        value={draftPackCounts[setName] || 0}
-                        onChange={(e) => {
-                          const val = Math.max(0, Math.min(5, parseInt(e.target.value) || 0));
-                          setDraftPackCounts(prev => ({ ...prev, [setName]: val }));
-                        }}
-                        className="w-20 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                      />
-                    </div>
-                  ))}
-                  {(() => {
-                    const total = Object.values(draftPackCounts).reduce((s, n) => s + (n || 0), 0);
-                    const ok = total === draftPackCount;
-                    return (
-                      <div className={`text-[11px] ${ok ? 'text-emerald-300' : 'text-amber-300'}`}>
-                        Pack mix total: {total}/{draftPackCount} {ok ? '✓' : '(adjust to match)'}
+                  <div>
+                    <label className="block text-xs opacity-80 mb-1">Pack Size</label>
+                    <input
+                      type="number"
+                      min={8}
+                      max={20}
+                      value={draftPackSize}
+                      onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
+                      className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {draftBoosters.map((setName, idx) => (
+                      <div key={`draft-booster-${idx}`} className="flex items-center gap-2">
+                        <div className="text-xs text-slate-400 w-16">Pack {idx + 1}</div>
+                        <select
+                          value={setName}
+                          onChange={(e) => {
+                            setDraftBoosters(prev => {
+                              const next = [...prev];
+                              next[idx] = e.target.value;
+                              return next;
+                            });
+                          }}
+                          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                        >
+                          <option value="Beta">Beta</option>
+                          <option value="Arthurian Legends">Arthurian Legends</option>
+                          <option value="Alpha">Alpha</option>
+                        </select>
                       </div>
-                    );
-                  })()}
+                    ))}
+                  </div>
                 </div>
               )}
               
@@ -1443,18 +1470,28 @@ export default function LobbiesCentral({
                       maxPlayers: tournamentMaxPlayers,
                     };
                     if (tournamentMatchType === 'sealed') {
+                      // Convert booster array to packCounts format
+                      const packCounts: Record<string, number> = {};
+                      sealedBoosters.forEach(setName => {
+                        packCounts[setName] = (packCounts[setName] || 0) + 1;
+                      });
                       payload.sealedConfig = {
-                        packCounts: sealedPackCounts,
+                        packCounts,
                         timeLimit: sealedTimeLimit,
                         replaceAvatars: sealedReplaceAvatars,
                       };
                     } else if (tournamentMatchType === 'draft') {
-                      const mix = Object.entries(draftPackCounts).filter(([, c]) => (c || 0) > 0).map(([s]) => s);
+                      // Convert booster array to packCounts format
+                      const packCounts: Record<string, number> = {};
+                      draftBoosters.forEach(setName => {
+                        packCounts[setName] = (packCounts[setName] || 0) + 1;
+                      });
+                      const mix = Object.keys(packCounts);
                       payload.draftConfig = {
                         setMix: mix.length ? mix : ['Beta'],
-                        packCount: draftPackCount,
+                        packCount: draftBoosterCount,
                         packSize: draftPackSize,
-                        packCounts: draftPackCounts,
+                        packCounts,
                       };
                     }
                     onCreateTournament(payload);
@@ -1558,7 +1595,8 @@ function TournamentSettingsForm({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(tournament.name);
-  const [format, setFormat] = useState(tournament.format);
+  // Tournament pairing format is always Swiss
+  const format = "swiss";
   const [matchType, setMatchType] = useState(tournament.matchType);
   const [maxPlayers, setMaxPlayers] = useState(tournament.maxPlayers);
 
@@ -1569,18 +1607,18 @@ function TournamentSettingsForm({
       matchType?: "constructed" | "sealed" | "draft";
       maxPlayers?: number;
     } = {};
-    
+
     if (name !== tournament.name) settings.name = name;
-    if (format !== tournament.format) settings.format = format;
+    // Always ensure format is swiss
+    settings.format = "swiss";
     if (matchType !== tournament.matchType) settings.matchType = matchType;
     if (maxPlayers !== tournament.maxPlayers) settings.maxPlayers = maxPlayers;
-    
+
     onSave(settings);
   };
 
-  const hasChanges = 
+  const hasChanges =
     name !== tournament.name ||
-    format !== tournament.format ||
     matchType !== tournament.matchType ||
     maxPlayers !== tournament.maxPlayers;
 
@@ -1606,26 +1644,6 @@ function TournamentSettingsForm({
           >
             🎲
           </button>
-        </div>
-      </div>
-
-      {/* Tournament Format */}
-      <div>
-        <label className="block text-xs font-medium mb-2">Format</label>
-        <div className="grid grid-cols-3 gap-2">
-          {["swiss", "elimination", "round_robin"].map((formatOption) => (
-            <button
-              key={formatOption}
-              className={`px-3 py-2 text-xs rounded transition-colors ${
-                format === formatOption
-                  ? "bg-blue-600/80 text-white"
-                  : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-              }`}
-              onClick={() => setFormat(formatOption as "swiss" | "elimination" | "round_robin")}
-            >
-              {formatOption === "swiss" ? "Swiss" : formatOption === "elimination" ? "Elimination" : "Round Robin"}
-            </button>
-          ))}
         </div>
       </div>
 
