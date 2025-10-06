@@ -269,6 +269,7 @@ export default function OnlineMatchPage() {
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
   const storeActorKey = useGameStore((s) => s.actorKey);
+  const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup";
 
   // Setup state (like offline play)
   // Default CLOSED to avoid flashing overlay on rejoin; we'll open it for new/waiting matches
@@ -1472,13 +1473,15 @@ export default function OnlineMatchPage() {
           )}
 
           {/* Toolbox overlay (draw/peek/inspect/position tools) */}
-          <GameToolbox
-            myPlayerId={myPlayerId || null}
-            mySeat={myPlayerKey}
-            opponentPlayerId={opponentPlayerId}
-            opponentSeat={opponentSeat}
-            matchId={match?.id || null}
-          />
+          {showToolbox && (
+            <GameToolbox
+              myPlayerId={myPlayerId || null}
+              mySeat={myPlayerKey}
+              opponentPlayerId={opponentPlayerId}
+              opponentSeat={opponentSeat}
+              matchId={match?.id || null}
+            />
+          )}
 
           {/* Match Info Popup */}
           <MatchInfoPopup

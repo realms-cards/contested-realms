@@ -85,7 +85,9 @@ export default function TournamentDraft3DScreen({
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [ready, setReady] = useState(false);
   const [usedPacks, setUsedPacks] = useState<number[]>([]);
-  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<number | null>(null);
+  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<
+    number | null
+  >(null);
   const [packSequence, setPackSequence] = useState<string[]>([]); // tournament-configured sets per round
 
   // Enhanced hand and HUD state
@@ -100,11 +102,19 @@ export default function TournamentDraft3DScreen({
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [sortMode, setSortMode] = useState<"mana" | "element">("mana");
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
-  const [layoutMetaByCardId, setLayoutMetaByCardId] = useState<Record<number, CardMeta>>({});
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
+    {}
+  );
+  const [layoutMetaByCardId, setLayoutMetaByCardId] = useState<
+    Record<number, CardMeta>
+  >({});
   const [slugToCardId, setSlugToCardId] = useState<Record<string, number>>({});
   // Keep track of an in-flight pick to avoid server poll briefly re-adding the picked card
-  const pickInFlightRef = useRef<{ packIndex: number; pickNumber: number; cardId: string } | null>(null);
+  const pickInFlightRef = useRef<{
+    packIndex: number;
+    pickNumber: number;
+    cardId: string;
+  } | null>(null);
 
   // Enhanced preview and hover state
   const [hoverPreview, setHoverPreview] = useState<{
@@ -142,12 +152,19 @@ export default function TournamentDraft3DScreen({
     let mounted = true;
     const canSend = () => {
       try {
-        const anyT = transport as unknown as { isConnected?: () => boolean; getConnectionState?: () => string };
-        const connected = (anyT?.isConnected?.() === true) || (anyT?.getConnectionState?.() === 'connected');
+        const anyT = transport as unknown as {
+          isConnected?: () => boolean;
+          getConnectionState?: () => string;
+        };
+        const connected =
+          anyT?.isConnected?.() === true ||
+          anyT?.getConnectionState?.() === "connected";
         // require a stable player id so server presence doesn't record 'unknown'
         const haveMe = !!me?.id;
         return connected && haveMe;
-      } catch { return false; }
+      } catch {
+        return false;
+      }
     };
     const handleJoined = (payload: unknown) => {
       const p = payload as { sessionId?: string } | null;
@@ -164,9 +181,12 @@ export default function TournamentDraft3DScreen({
         try {
           setTimeout(async () => {
             if (!mounted) return;
-            if (draftStateRef.current?.phase !== 'waiting') return;
+            if (draftStateRef.current?.phase !== "waiting") return;
             try {
-              const res = await fetch(`/api/draft-sessions/${draftSessionId}/state`, { cache: 'no-store' });
+              const res = await fetch(
+                `/api/draft-sessions/${draftSessionId}/state`,
+                { cache: "no-store" }
+              );
               if (!res.ok) return;
               const data = await res.json();
               if (data?.draftState) {
@@ -178,27 +198,30 @@ export default function TournamentDraft3DScreen({
       }
     };
     let offJoined: (() => void) | null = null;
-    try { offJoined = transport.on('draft:session:joined', handleJoined); } catch {}
+    try {
+      offJoined = transport.on("draft:session:joined", handleJoined);
+    } catch {}
 
     const tryJoin = () => {
       if (!mounted || joinSentRef.current) return;
       if (!canSend()) return;
       try {
-        transport.emit('draft:session:join', {
+        transport.emit("draft:session:join", {
           sessionId: draftSessionId,
           playerId: myPlayerId,
-          playerName: me?.displayName || '',
+          playerName: me?.displayName || "",
           reconnection: false,
         });
         // Wait for server ack; retry if not received within 3s
-        if (joinAckTimeoutRef.current) window.clearTimeout(joinAckTimeoutRef.current);
+        if (joinAckTimeoutRef.current)
+          window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = window.setTimeout(() => {
           if (!joinSentRef.current) {
             tryJoin();
           }
         }, 3000);
       } catch (e) {
-        console.warn('[TournamentDraft3D] failed to join draft room', e);
+        console.warn("[TournamentDraft3D] failed to join draft room", e);
       }
     };
     // Poll until connected and we have my id; then attempt join and keep retrying until ack
@@ -217,10 +240,15 @@ export default function TournamentDraft3DScreen({
         joinAckTimeoutRef.current = null;
       }
       if (offJoined) {
-        try { offJoined(); } catch {}
+        try {
+          offJoined();
+        } catch {}
       }
       try {
-        transport.emit('draft:session:leave', { sessionId: draftSessionId, playerId: myPlayerId });
+        transport.emit("draft:session:leave", {
+          sessionId: draftSessionId,
+          playerId: myPlayerId,
+        });
       } catch {}
     };
   }, [transport, draftSessionId, myPlayerId, me?.displayName, me?.id]);
@@ -228,13 +256,25 @@ export default function TournamentDraft3DScreen({
   // At the start of each pack/round, show a pack opening overlay when server is in pack_selection.
   useEffect(() => {
     // Show overlay as soon as we enter pack_selection (only once per round)
-    if (draftState.phase === "pack_selection" && shownPackOverlayForRound !== draftState.packIndex) {
+    if (
+      draftState.phase === "pack_selection" &&
+      shownPackOverlayForRound !== draftState.packIndex
+    ) {
       setPackChoiceOverlay(true);
       setShownPackOverlayForRound(draftState.packIndex);
       return;
     }
     // When server jumps straight to picking for next round, we will auto-choose below; avoid showing overlay here.
-  }, [draftState.phase, draftState.pickNumber, draftState.packIndex, draftState.currentPacks, draftState.waitingFor, myPlayerId, myPlayerIndex, shownPackOverlayForRound]);
+  }, [
+    draftState.phase,
+    draftState.pickNumber,
+    draftState.packIndex,
+    draftState.currentPacks,
+    draftState.waitingFor,
+    myPlayerId,
+    myPlayerIndex,
+    shownPackOverlayForRound,
+  ]);
 
   // Track if we've sent choose-pack for a given round
   const chosenPackForRoundRef = useRef<Set<number>>(new Set());
@@ -245,27 +285,38 @@ export default function TournamentDraft3DScreen({
   useEffect(() => {
     const round = draftState.packIndex;
     const inPackSelection = draftState.phase === "pack_selection";
-    const inNextRoundPicking = draftState.phase === "picking" && draftState.pickNumber === 1;
+    const inNextRoundPicking =
+      draftState.phase === "picking" && draftState.pickNumber === 1;
     if (!inPackSelection && !inNextRoundPicking) return;
     if (chosenPackForRoundRef.current.has(round)) return;
     chosenPackForRoundRef.current.add(round);
     fetch(`/api/draft-sessions/${draftSessionId}/choose-pack`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ packIndex: round }),
-    }).then(async (res) => {
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({} as { error?: string }));
-        console.warn('[TournamentDraft3D] choose-pack failed:', err?.error || res.status);
-      }
-      // If we were already in picking (fallback path), proactively close overlay if open
-      if (inNextRoundPicking) {
-        setPackChoiceOverlay(false);
-      }
-    }).catch((err) => {
-      console.warn('[TournamentDraft3D] choose-pack network error:', err);
-    });
-  }, [draftState.phase, draftState.pickNumber, draftState.packIndex, draftSessionId]);
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({} as { error?: string }));
+          console.warn(
+            "[TournamentDraft3D] choose-pack failed:",
+            err?.error || res.status
+          );
+        }
+        // If we were already in picking (fallback path), proactively close overlay if open
+        if (inNextRoundPicking) {
+          setPackChoiceOverlay(false);
+        }
+      })
+      .catch((err) => {
+        console.warn("[TournamentDraft3D] choose-pack network error:", err);
+      });
+  }, [
+    draftState.phase,
+    draftState.pickNumber,
+    draftState.packIndex,
+    draftSessionId,
+  ]);
   const autoPickTimerRef = useRef<number | null>(null);
 
   // Close the pack overlay as soon as we enter picking
@@ -308,15 +359,17 @@ export default function TournamentDraft3DScreen({
     startedRef.current = true;
     (async () => {
       try {
-        const res = await fetch(`/api/draft-sessions/${draftSessionId}/start`, { method: 'POST' });
+        const res = await fetch(`/api/draft-sessions/${draftSessionId}/start`, {
+          method: "POST",
+        });
         if (!res.ok) {
           const error = await res.json().catch(() => ({}));
-          if (!String(error?.error || '').includes('already started')) {
-            console.error('[TournamentDraft3D] Error starting draft:', error);
+          if (!String(error?.error || "").includes("already started")) {
+            console.error("[TournamentDraft3D] Error starting draft:", error);
           }
         }
       } catch (err) {
-        console.error('[TournamentDraft3D] Error starting draft:', err);
+        console.error("[TournamentDraft3D] Error starting draft:", err);
       }
     })();
   }, [draftSessionId, allPlayersConnected, myPlayerId]);
@@ -328,19 +381,30 @@ export default function TournamentDraft3DScreen({
 
     const shouldPoll = () => {
       try {
-        const anyT = transport as unknown as { isConnected?: () => boolean; getConnectionState?: () => string };
-        const connected = (anyT?.isConnected?.() === true) || (anyT?.getConnectionState?.() === 'connected');
+        const anyT = transport as unknown as {
+          isConnected?: () => boolean;
+          getConnectionState?: () => string;
+        };
+        const connected =
+          anyT?.isConnected?.() === true ||
+          anyT?.getConnectionState?.() === "connected";
         if (connected) return false;
       } catch {}
-      if (draftStateRef.current?.phase === 'complete') return false;
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return false;
+      if (draftStateRef.current?.phase === "complete") return false;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return false;
       return true;
     };
 
     const pollDraftState = async () => {
       if (!mounted || !shouldPoll()) return;
       try {
-        const res = await fetch(`/api/draft-sessions/${draftSessionId}/state`, { cache: 'no-store' });
+        const res = await fetch(`/api/draft-sessions/${draftSessionId}/state`, {
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (!mounted) return;
@@ -349,46 +413,64 @@ export default function TournamentDraft3DScreen({
           const inflight = pickInFlightRef.current;
           if (
             inflight &&
-            s.phase === 'picking' &&
+            s.phase === "picking" &&
             s.packIndex === inflight.packIndex &&
             s.pickNumber === inflight.pickNumber &&
             Array.isArray(s.currentPacks)
           ) {
             const cp = [...s.currentPacks];
             const seatPack = (cp[myPlayerIndex] || []) as DraftCard[];
-            cp[myPlayerIndex] = seatPack.filter((c) => c.id !== inflight.cardId);
+            cp[myPlayerIndex] = seatPack.filter(
+              (c) => c.id !== inflight.cardId
+            );
             const waiting = Array.isArray(s.waitingFor)
               ? s.waitingFor.filter((pid) => pid !== myPlayerId)
               : s.waitingFor;
             s = { ...s, currentPacks: cp, waitingFor: waiting } as DraftState;
           }
           setDraftState(s);
-          if (s.phase !== 'waiting') everOutOfWaitingRef.current = true;
-          if (s.phase === 'complete' && !completionHandledRef.current) {
+          if (s.phase !== "waiting") everOutOfWaitingRef.current = true;
+          if (s.phase === "complete" && !completionHandledRef.current) {
             const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
             try {
               if (draftSessionId) {
-                localStorage.setItem(`draftedCards_${draftSessionId}`, JSON.stringify(mine));
+                localStorage.setItem(
+                  `draftedCards_${draftSessionId}`,
+                  JSON.stringify(mine)
+                );
                 const resolved: SearchResult[] = mine.map((c) => ({
                   variantId: 0,
                   slug: c.slug,
-                  finish: 'Standard',
-                  product: 'Draft',
-                  cardId: (typeof c.slug === 'string' && slugToCardId[c.slug]) ? slugToCardId[c.slug] : (Number(c.id) || 0),
+                  finish: "Standard",
+                  product: "Draft",
+                  cardId:
+                    typeof c.slug === "string" && slugToCardId[c.slug]
+                      ? slugToCardId[c.slug]
+                      : Number(c.id) || 0,
                   cardName: c.cardName || c.name,
-                  set: c.setName || 'Beta',
+                  set: c.setName || "Beta",
                   type: c.type || null,
-                  rarity: (c.rarity as SearchResult['rarity']) || null,
+                  rarity: (c.rarity as SearchResult["rarity"]) || null,
                 }));
-                localStorage.setItem(`draftedCardsResolved_${draftSessionId}`, JSON.stringify(resolved));
+                localStorage.setItem(
+                  `draftedCardsResolved_${draftSessionId}`,
+                  JSON.stringify(resolved)
+                );
               }
-            } catch (err) { console.error('[TournamentDraft3D] Failed to save draft data (poll path):', err); }
+            } catch (err) {
+              console.error(
+                "[TournamentDraft3D] Failed to save draft data (poll path):",
+                err
+              );
+            }
             completionHandledRef.current = true;
-            setTimeout(() => { onDraftComplete(mine); }, 600);
+            setTimeout(() => {
+              onDraftComplete(mine);
+            }, 600);
           }
         }
       } catch (err) {
-        console.error('[TournamentDraft3D] Error polling state:', err);
+        console.error("[TournamentDraft3D] Error polling state:", err);
       }
     };
 
@@ -397,13 +479,34 @@ export default function TournamentDraft3DScreen({
       pollInterval = setInterval(pollDraftState, 2500);
       void pollDraftState();
     };
-    const stop = () => { if (pollInterval) { clearInterval(pollInterval); pollInterval = null; } };
+    const stop = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
 
     start();
-    const onVis = () => { stop(); start(); };
-    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
-    return () => { mounted = false; stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis); };
-  }, [draftSessionId, myPlayerId, myPlayerIndex, onDraftComplete, slugToCardId, transport]);
+    const onVis = () => {
+      stop();
+      start();
+    };
+    if (typeof document !== "undefined")
+      document.addEventListener("visibilitychange", onVis);
+    return () => {
+      mounted = false;
+      stop();
+      if (typeof document !== "undefined")
+        document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [
+    draftSessionId,
+    myPlayerId,
+    myPlayerIndex,
+    onDraftComplete,
+    slugToCardId,
+    transport,
+  ]);
 
   // Load tournament packConfiguration to display all booster packs (usually 3)
   useEffect(() => {
@@ -413,17 +516,21 @@ export default function TournamentDraft3DScreen({
         const res = await fetch(`/api/draft-sessions/${draftSessionId}`);
         if (!res.ok) return;
         const j = await res.json();
-        const cfg = Array.isArray(j?.packConfiguration) ? j.packConfiguration : [];
+        const cfg = Array.isArray(j?.packConfiguration)
+          ? j.packConfiguration
+          : [];
         const seq: string[] = [];
         for (const entry of cfg) {
-          const setId = typeof entry?.setId === 'string' ? entry.setId : 'Beta';
+          const setId = typeof entry?.setId === "string" ? entry.setId : "Beta";
           const count = Number(entry?.packCount) || 0;
           for (let i = 0; i < count; i++) seq.push(setId);
         }
         if (mounted) setPackSequence(seq);
       } catch {}
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [draftSessionId]);
 
   // Render order counter for stacking
@@ -619,13 +726,12 @@ export default function TournamentDraft3DScreen({
       for (const p of pick3D) {
         const id = p.card.cardId;
         if (id && !next[id]) {
-          next[id] =
-            metaByCardId[id] ?? {
-              cost: 0,
-              attack: null,
-              defence: null,
-              thresholds: null,
-            };
+          next[id] = metaByCardId[id] ?? {
+            cost: 0,
+            attack: null,
+            defence: null,
+            thresholds: null,
+          };
           changed = true;
         }
       }
@@ -670,7 +776,8 @@ export default function TournamentDraft3DScreen({
       };
 
       // Slugs from current pack (my seat) – high priority
-      const curPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+      const curPack = (draftState.currentPacks?.[myPlayerIndex] ||
+        []) as DraftCard[];
       for (const c of curPack) {
         if (!c?.slug) continue;
         if (!needsMeta(c.slug)) continue;
@@ -738,7 +845,8 @@ export default function TournamentDraft3DScreen({
             return {
               cardId: Number(r.cardId) || 0,
               cost: r.cost ?? null,
-              thresholds: (r.thresholds as Record<string, number> | null) ?? null,
+              thresholds:
+                (r.thresholds as Record<string, number> | null) ?? null,
               attack: r.attack ?? null,
               defence: r.defence ?? null,
             } satisfies ApiCardMetaRow;
@@ -789,7 +897,13 @@ export default function TournamentDraft3DScreen({
         inflightMetaAbortRef.current.abort();
       }
     };
-  }, [draftState.currentPacks, myPlayerIndex, pick3D, slugToCardId, metaByCardId]);
+  }, [
+    draftState.currentPacks,
+    myPlayerIndex,
+    pick3D,
+    slugToCardId,
+    metaByCardId,
+  ]);
 
   // When server (via polling) indicates it's our turn again, clear local ready guard
   useEffect(() => {
@@ -802,7 +916,8 @@ export default function TournamentDraft3DScreen({
   // Rebuild/augment local pick3D from server state picks so reload continues seamlessly
   useEffect(() => {
     if (!Array.isArray(draftState.picks)) return;
-    const serverSeatPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
+    const serverSeatPicks = (draftState.picks[myPlayerIndex] ||
+      []) as DraftCard[];
     if (serverSeatPicks.length === 0) return;
 
     // Count local picks by slug
@@ -840,7 +955,13 @@ export default function TournamentDraft3DScreen({
       return [...prev, ...added];
     });
     setNextPickId((n) => n + toAppend.length);
-  }, [draftState.picks, myPlayerIndex, pick3D, nextPickId, draftCardToBoosterCard]);
+  }, [
+    draftState.picks,
+    myPlayerIndex,
+    pick3D,
+    nextPickId,
+    draftCardToBoosterCard,
+  ]);
 
   // Listen for server draft updates (this would come from tournament draft socket events)
   useEffect(() => {
@@ -869,7 +990,9 @@ export default function TournamentDraft3DScreen({
 
         try {
           if (draftSessionId) {
-            const storageSuffix = myPlayerId ? `${draftSessionId}_${myPlayerId}` : draftSessionId;
+            const storageSuffix = myPlayerId
+              ? `${draftSessionId}_${myPlayerId}`
+              : draftSessionId;
             localStorage.setItem(
               `draftedCards_${storageSuffix}`,
               JSON.stringify(mine)
@@ -886,9 +1009,9 @@ export default function TournamentDraft3DScreen({
               finish: "Standard",
               product: "Draft",
               cardId:
-                (typeof c.slug === "string" && slugToCardId[c.slug])
+                typeof c.slug === "string" && slugToCardId[c.slug]
                   ? slugToCardId[c.slug]
-                  : (Number(c.id) || 0),
+                  : Number(c.id) || 0,
               cardName: c.cardName || c.name,
               set: c.setName || "Beta",
               type: c.type || null,
@@ -906,10 +1029,7 @@ export default function TournamentDraft3DScreen({
             }
           }
         } catch (err) {
-          console.error(
-            `[TournamentDraft3D] Failed to save draft data:`,
-            err
-          );
+          console.error(`[TournamentDraft3D] Failed to save draft data:`, err);
         }
 
         setTimeout(() => {
@@ -927,7 +1047,14 @@ export default function TournamentDraft3DScreen({
         console.warn("Error cleaning up transport listeners:", err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete, draftSessionId, slugToCardId, myPlayerId]);
+  }, [
+    transport,
+    myPlayerIndex,
+    onDraftComplete,
+    draftSessionId,
+    slugToCardId,
+    myPlayerId,
+  ]);
 
   // Fetch metadata for picked cards
   useEffect(() => {
@@ -973,9 +1100,7 @@ export default function TournamentDraft3DScreen({
       const card = myPack[cardIdx];
       if (!card) return;
 
-      console.log(
-        `[TournamentDraft3D] commitPickAndPass -> cardId=${card.id}`
-      );
+      console.log(`[TournamentDraft3D] commitPickAndPass -> cardId=${card.id}`);
 
       setReady(true);
 
@@ -998,7 +1123,9 @@ export default function TournamentDraft3DScreen({
       // Optimistically remove the picked card from our local pack and remove us from waitingFor
       setDraftState((prev) => {
         if (prev.phase !== "picking") return prev;
-        const packs = Array.isArray(prev.currentPacks) ? [...prev.currentPacks] : prev.currentPacks;
+        const packs = Array.isArray(prev.currentPacks)
+          ? [...prev.currentPacks]
+          : prev.currentPacks;
         if (Array.isArray(packs)) {
           const seatPack = (packs[myPlayerIndex] || []) as DraftCard[];
           packs[myPlayerIndex] = seatPack.filter((c) => c.id !== card.id);
@@ -1025,15 +1152,18 @@ export default function TournamentDraft3DScreen({
 
       try {
         const attemptPick = async (attempt: number) => {
-          const res = await fetch(`/api/draft-sessions/${draftSessionId}/pick`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              cardId: card.id,
-              packIndex: draftState.packIndex,
-              pickNumber: draftState.pickNumber,
-            }),
-          });
+          const res = await fetch(
+            `/api/draft-sessions/${draftSessionId}/pick`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                cardId: card.id,
+                packIndex: draftState.packIndex,
+                pickNumber: draftState.pickNumber,
+              }),
+            }
+          );
           if (res.ok) {
             // Server acknowledged; clear in-flight marker
             pickInFlightRef.current = null;
@@ -1041,20 +1171,29 @@ export default function TournamentDraft3DScreen({
           }
           const err = await res.json().catch(() => ({} as { error?: string }));
           const msg = String(err?.error || "");
-          const isConflict = res.status === 409 || msg.includes('could not serialize access due to concurrent update');
+          const isConflict =
+            res.status === 409 ||
+            msg.includes("could not serialize access due to concurrent update");
           if (isConflict && attempt < 4) {
             // Small jittered backoff then retry
             const delay = 100 + Math.floor(Math.random() * 150);
-            setTimeout(() => { attemptPick(attempt + 1).catch(() => {}); }, delay);
+            setTimeout(() => {
+              attemptPick(attempt + 1).catch(() => {});
+            }, delay);
             return;
           }
-          console.warn('[TournamentDraft3D] makeDraftPick failed:', err?.error || res.status);
+          console.warn(
+            "[TournamentDraft3D] makeDraftPick failed:",
+            err?.error || res.status
+          );
           revertOptimisticPick();
           setReady(false);
           // Revert optimistic removal if rejected
           setDraftState((prev) => {
             if (prev.phase !== "picking") return prev;
-            const packs = Array.isArray(prev.currentPacks) ? [...prev.currentPacks] : prev.currentPacks;
+            const packs = Array.isArray(prev.currentPacks)
+              ? [...prev.currentPacks]
+              : prev.currentPacks;
             if (Array.isArray(packs)) {
               const seatPack = (packs[myPlayerIndex] || []) as DraftCard[];
               // If the card is missing due to our optimistic removal, put it back
@@ -1064,14 +1203,19 @@ export default function TournamentDraft3DScreen({
             }
             // Put us back into waitingFor
             const waiting = Array.isArray(prev.waitingFor)
-              ? (prev.waitingFor.includes(myPlayerId) ? prev.waitingFor : [...prev.waitingFor, myPlayerId])
+              ? prev.waitingFor.includes(myPlayerId)
+                ? prev.waitingFor
+                : [...prev.waitingFor, myPlayerId]
               : prev.waitingFor;
             return { ...prev, currentPacks: packs, waitingFor: waiting };
           });
           pickInFlightRef.current = null;
         };
         attemptPick(1).catch((err) => {
-          console.error(`[TournamentDraft3D] makeDraftPick network error:`, err);
+          console.error(
+            `[TournamentDraft3D] makeDraftPick network error:`,
+            err
+          );
           revertOptimisticPick();
           setReady(false);
           pickInFlightRef.current = null;
@@ -1157,7 +1301,7 @@ export default function TournamentDraft3DScreen({
       const m = layoutMetaByCardId[p.card.cardId];
       const th = (m?.thresholds || {}) as Record<string, number>;
       const order = ["air", "water", "earth", "fire"] as const;
-      let best: typeof order[number] | null = null;
+      let best: (typeof order)[number] | null = null;
       let bestN = 0;
       for (const k of order) {
         const v = Number(th[k] || 0);
@@ -1284,17 +1428,27 @@ export default function TournamentDraft3DScreen({
         window.clearTimeout(autoPickTimerRef.current);
       }
       autoPickTimerRef.current = null;
-    }, 500);
+    }, 5_000);
     return () => {
       if (autoPickTimerRef.current) {
         window.clearTimeout(autoPickTimerRef.current);
         autoPickTimerRef.current = null;
       }
     };
-  }, [draftState.phase, amPicker, myPack, staged, packChoiceOverlay, ready, commitPickAndPass, STAGE_CLICK_POS]);
+  }, [
+    draftState.phase,
+    amPicker,
+    myPack,
+    staged,
+    packChoiceOverlay,
+    ready,
+    commitPickAndPass,
+    STAGE_CLICK_POS,
+  ]);
 
   // Skip the waiting phase - show draft UI with loading overlay
-  const showLoadingOverlay = draftState.phase === "waiting" && packAsBoosterCards.length === 0;
+  const showLoadingOverlay =
+    draftState.phase === "waiting" && packAsBoosterCards.length === 0;
 
   // Main 3D draft UI (similar to EnhancedOnlineDraft3DScreen but adapted)
   return (
@@ -1302,10 +1456,19 @@ export default function TournamentDraft3DScreen({
       {/* Presence strip */}
       <div className="absolute top-2 left-2 right-2 z-[2000] flex gap-2 flex-wrap text-xs text-white/90">
         {presence.map((p) => (
-          <div key={p.id} className={`px-2 py-1 rounded bg-black/50 ring-1 ring-white/10 flex items-center gap-2`}>
-            <span className={`inline-block w-2 h-2 rounded-full ${p.connected ? 'bg-green-400' : 'bg-red-500'}`} />
+          <div
+            key={p.id}
+            className={`px-2 py-1 rounded bg-black/50 ring-1 ring-white/10 flex items-center gap-2`}
+          >
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                p.connected ? "bg-green-400" : "bg-red-500"
+              }`}
+            />
             <span className="opacity-80">S{p.seat}</span>
-            <span className="truncate max-w-[10rem]">{p.name || p.id.slice(-4)}</span>
+            <span className="truncate max-w-[10rem]">
+              {p.name || p.id.slice(-4)}
+            </span>
           </div>
         ))}
       </div>
@@ -1363,14 +1526,20 @@ export default function TournamentDraft3DScreen({
                 }}
                 onDragMove={(idx, wx, wz) => {
                   if (!amPicker || ready) return;
-                  const d = Math.hypot(wx - PICK_CENTER_POS.x, wz - PICK_CENTER_POS.z);
+                  const d = Math.hypot(
+                    wx - PICK_CENTER_POS.x,
+                    wz - PICK_CENTER_POS.z
+                  );
                   if (d > PICK_RADIUS) setReadyIdx(idx);
                   else if (readyIdx === idx) setReadyIdx(null);
                 }}
                 onRelease={(idx, wx, wz) => {
                   if (!amPicker || ready) return;
 
-                  const d = Math.hypot(wx - PICK_CENTER_POS.x, wz - PICK_CENTER_POS.z);
+                  const d = Math.hypot(
+                    wx - PICK_CENTER_POS.x,
+                    wz - PICK_CENTER_POS.z
+                  );
                   if (d > PICK_RADIUS) {
                     setStaged({ idx, x: wx, z: wz });
                     setSelectedRowIndex(null);
@@ -1424,7 +1593,11 @@ export default function TournamentDraft3DScreen({
               x={staged.x}
               z={staged.z}
               cardId={packAsBoosterCards[staged.idx]?.cardId}
-              cardName={packAsBoosterCards[staged.idx]?.cardName ?? packAsBoosterCards[staged.idx]?.slug ?? ""}
+              cardName={
+                packAsBoosterCards[staged.idx]?.cardName ??
+                packAsBoosterCards[staged.idx]?.slug ??
+                ""
+              }
               cardType={packAsBoosterCards[staged.idx]?.type ?? null}
               onDrop={(wx, wz) => {
                 if (!amPicker) return;
@@ -1446,7 +1619,10 @@ export default function TournamentDraft3DScreen({
               }}
               onRelease={(wx, wz) => {
                 if (!amPicker || ready) return;
-                const d = Math.hypot(wx - PICK_CENTER_POS.x, wz - PICK_CENTER_POS.z);
+                const d = Math.hypot(
+                  wx - PICK_CENTER_POS.x,
+                  wz - PICK_CENTER_POS.z
+                );
                 if (d <= PICK_RADIUS) {
                   setStaged(null);
                   hideCardPreview();
@@ -1567,7 +1743,9 @@ export default function TournamentDraft3DScreen({
                 </button>
                 {isSortingEnabled && (
                   <button
-                    onClick={() => setSortMode((m) => (m === "mana" ? "element" : "mana"))}
+                    onClick={() =>
+                      setSortMode((m) => (m === "mana" ? "element" : "mana"))
+                    }
                     title={
                       sortMode === "mana"
                         ? "Group by element thresholds"
@@ -1603,14 +1781,24 @@ export default function TournamentDraft3DScreen({
                 </button>
               )}
               <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
-                Pack {draftState.packIndex + 1} • Pick{" "}
-                {draftState.pickNumber}
+                Pack {draftState.packIndex + 1} • Pick {draftState.pickNumber}
               </div>
-              {draftState.phase === "picking" && draftState.waitingFor.length > 0 && (
-                <div className="mt-0.5 text-[11px] text-white/50 pointer-events-none">
-                  Waiting for {draftState.waitingFor.filter((id) => id !== myPlayerId).length} player{draftState.waitingFor.filter((id) => id !== myPlayerId).length === 1 ? "" : "s"} to pick & pass…
-                </div>
-              )}
+              {draftState.phase === "picking" &&
+                draftState.waitingFor.length > 0 && (
+                  <div className="mt-0.5 text-[11px] text-white/50 pointer-events-none">
+                    Waiting for{" "}
+                    {
+                      draftState.waitingFor.filter((id) => id !== myPlayerId)
+                        .length
+                    }{" "}
+                    player
+                    {draftState.waitingFor.filter((id) => id !== myPlayerId)
+                      .length === 1
+                      ? ""
+                      : "s"}{" "}
+                    to pick & pass…
+                  </div>
+                )}
             </div>
           )}
         </div>
@@ -1703,7 +1891,10 @@ export default function TournamentDraft3DScreen({
                                             width={12}
                                             height={12}
                                             className="pointer-events-none select-none"
-                                            style={{ width: 'auto', height: 'auto' }}
+                                            style={{
+                                              width: "auto",
+                                              height: "auto",
+                                            }}
                                             priority={false}
                                           />
                                         )
@@ -1764,13 +1955,25 @@ export default function TournamentDraft3DScreen({
                 Choose a pack to open (Round {draftState.packIndex + 1})
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {(packSequence.length > 0 ? packSequence : ["Booster","Booster","Booster"]).map((setName, packIdx) => {
+                {(packSequence.length > 0
+                  ? packSequence
+                  : ["Booster", "Booster", "Booster"]
+                ).map((setName, packIdx) => {
                   const s = (setName || "").toLowerCase();
-                  const assetName = s.includes("arthur") ? "arthurian-booster.png" : "alphabeta-booster.png";
-                  const isAlreadyUsed = usedPacks.includes(packIdx) || packIdx < draftState.packIndex;
+                  const assetName = s.includes("arthur")
+                    ? "arthurian-booster.png"
+                    : "alphabeta-booster.png";
+                  const isAlreadyUsed =
+                    usedPacks.includes(packIdx) ||
+                    packIdx < draftState.packIndex;
                   const isUpcoming = packIdx > draftState.packIndex;
                   return (
-                    <div key={`pack-${packIdx}`} className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left select-none ${isAlreadyUsed ? 'opacity-50' : ''}`}>
+                    <div
+                      key={`pack-${packIdx}`}
+                      className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left select-none ${
+                        isAlreadyUsed ? "opacity-50" : ""
+                      }`}
+                    >
                       <div className="relative w-full h-44 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 group-hover:ring-white/30">
                         <Image
                           src={`/api/assets/${assetName}`}
@@ -1785,10 +1988,14 @@ export default function TournamentDraft3DScreen({
                           {setName}
                         </div>
                         {isAlreadyUsed && (
-                          <div className="absolute top-1 right-1 text-[10px] px-2 py-0.5 rounded bg-emerald-600/80">Opened</div>
+                          <div className="absolute top-1 right-1 text-[10px] px-2 py-0.5 rounded bg-emerald-600/80">
+                            Opened
+                          </div>
                         )}
                         {isUpcoming && (
-                          <div className="absolute top-1 right-1 text-[10px] px-2 py-0.5 rounded bg-slate-600/80">Upcoming</div>
+                          <div className="absolute top-1 right-1 text-[10px] px-2 py-0.5 rounded bg-slate-600/80">
+                            Upcoming
+                          </div>
                         )}
                       </div>
                       <div className="mt-3 flex justify-center">
@@ -1796,33 +2003,66 @@ export default function TournamentDraft3DScreen({
                           onClick={async () => {
                             if (isAlreadyUsed) return;
                             // Optimistic UI: mark opened and close overlay immediately for instant feedback
-                            setUsedPacks((prev) => prev.includes(packIdx) ? prev : [...prev, packIdx]);
-                            try { chosenPackForRoundRef.current.add(draftState.packIndex); } catch {}
+                            setUsedPacks((prev) =>
+                              prev.includes(packIdx) ? prev : [...prev, packIdx]
+                            );
+                            try {
+                              chosenPackForRoundRef.current.add(
+                                draftState.packIndex
+                              );
+                            } catch {}
                             setPackChoiceOverlay(false);
                             try {
-                              const res = await fetch(`/api/draft-sessions/${draftSessionId}/choose-pack`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ packIndex: packIdx, setChoice: setName }),
-                              });
+                              const res = await fetch(
+                                `/api/draft-sessions/${draftSessionId}/choose-pack`,
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    packIndex: packIdx,
+                                    setChoice: setName,
+                                  }),
+                                }
+                              );
                               if (!res.ok) {
                                 // Revert optimistic UI on failure and reopen overlay
-                                setUsedPacks((prev) => prev.filter((i) => i !== packIdx));
-                                try { chosenPackForRoundRef.current.delete(draftState.packIndex); } catch {}
+                                setUsedPacks((prev) =>
+                                  prev.filter((i) => i !== packIdx)
+                                );
+                                try {
+                                  chosenPackForRoundRef.current.delete(
+                                    draftState.packIndex
+                                  );
+                                } catch {}
                                 setPackChoiceOverlay(true);
                               }
                             } catch (e) {
-                              console.warn('[TournamentDraft3D] choose-pack failed', e);
+                              console.warn(
+                                "[TournamentDraft3D] choose-pack failed",
+                                e
+                              );
                               // Network failure: revert optimistic UI and reopen overlay
-                              setUsedPacks((prev) => prev.filter((i) => i !== packIdx));
-                              try { chosenPackForRoundRef.current.delete(draftState.packIndex); } catch {}
+                              setUsedPacks((prev) =>
+                                prev.filter((i) => i !== packIdx)
+                              );
+                              try {
+                                chosenPackForRoundRef.current.delete(
+                                  draftState.packIndex
+                                );
+                              } catch {}
                               setPackChoiceOverlay(true);
                             }
                           }}
                           disabled={isAlreadyUsed}
-                          className={`px-4 py-2 rounded-lg font-semibold transition-colors select-none ${!isAlreadyUsed ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-slate-700 text-slate-300 cursor-not-allowed'}`}
+                          className={`px-4 py-2 rounded-lg font-semibold transition-colors select-none ${
+                            !isAlreadyUsed
+                              ? "bg-purple-600 hover:bg-purple-700 text-white"
+                              : "bg-slate-700 text-slate-300 cursor-not-allowed"
+                          }`}
                         >
-                          {!isAlreadyUsed ? 'Open Pack' : 'Opened'}
+                          {!isAlreadyUsed ? "Open Pack" : "Opened"}
                         </button>
                       </div>
                     </div>

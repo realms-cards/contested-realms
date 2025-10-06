@@ -76,6 +76,9 @@ export default function OnlineProvider({
   useEffect(() => {
     if (!transport) return;
     let mounted = true;
+    let disconnectedSince: number | null = null;
+    let toastTimerId: number | null = null;
+    
     const readConnected = () => {
       try {
         const anyT = transport as unknown as { isConnected?: () => boolean; getConnectionState?: () => string };
@@ -94,8 +97,23 @@ export default function OnlineProvider({
         prev = now;
         setConnected(now);
         if (!now) {
-          setConnToast('Lost connection to the server');
-          window.setTimeout(() => setConnToast(null), 4000);
+          // Connection lost - start grace period timer
+          if (disconnectedSince === null) {
+            disconnectedSince = Date.now();
+            // Show toast after 3 seconds if still disconnected
+            toastTimerId = window.setTimeout(() => {
+              if (!mounted || prev) return; // Reconnected in the meantime
+              setConnToast('Lost connection to the server');
+              window.setTimeout(() => setConnToast(null), 4000);
+            }, 3000);
+          }
+        } else {
+          // Reconnected - clear grace period timer
+          if (toastTimerId !== null) {
+            window.clearTimeout(toastTimerId);
+            toastTimerId = null;
+          }
+          disconnectedSince = null;
         }
       }
     };
@@ -104,6 +122,9 @@ export default function OnlineProvider({
     return () => {
       mounted = false;
       window.clearInterval(id);
+      if (toastTimerId !== null) {
+        window.clearTimeout(toastTimerId);
+      }
     };
   }, [transport]);
 

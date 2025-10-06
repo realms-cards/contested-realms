@@ -358,12 +358,13 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
     console.log('Statistics updated:', data);
 
-    // Refresh statistics if it's for our current tournament (this includes rounds data)
     if (currentTournament?.id === data.tournamentId) {
       const statsActions = statsHookRef.current?.actions;
       if (statsActions) {
         void statsActions.refreshStatistics();
         void statsActions.refreshStandings();
+        void statsActions.refreshMatches();
+        void statsActions.refreshRounds();
       }
     }
   }, [currentTournament]);
