@@ -3,6 +3,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MOUSE } from "three";
@@ -31,8 +32,12 @@ import { CARD_LONG } from "@/lib/game/constants";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
-import { useDraft3DPlayers } from "@/lib/stores/draft-3d-online";
 import type { DraftCard } from "@/types/draft";
+
+const TournamentPresenceOverlay = dynamic(
+  () => import("@/components/tournament/TournamentPresenceOverlay"),
+  { ssr: false }
+);
 
 type DraftParticipant = {
   playerId: string;
@@ -56,6 +61,7 @@ interface TournamentDraft3DScreenProps {
 
 export default function TournamentDraft3DScreen({
   draftSessionId,
+  tournamentId,
   myPlayerId,
   mySeatNumber,
   participants,
@@ -146,7 +152,6 @@ export default function TournamentDraft3DScreen({
   // Join the server room for this tournament draft session to receive real-time updates
   const joinSentRef = useRef(false);
   const joinAckTimeoutRef = useRef<number | null>(null);
-  const startedRef = useRef(false);
   useEffect(() => {
     if (!transport || !draftSessionId || joinSentRef.current) return;
     let mounted = true;
@@ -332,47 +337,10 @@ export default function TournamentDraft3DScreen({
     return undefined;
   }, [updateScreenType]);
 
-  // Presence state from draft transport
-  const { playerStates } = useDraft3DPlayers();
-  const presence = useMemo(() => {
-    return participants.map((p) => {
-      const ps = playerStates.get(p.playerId);
-      return {
-        id: p.playerId,
-        name: p.playerName,
-        seat: p.seatNumber,
-        connected: !!ps?.isConnected,
-      };
-    });
-  }, [participants, playerStates]);
-
-  const allPlayersConnected = useMemo(() => {
-    if (participants.length === 0) return false;
-    return presence.every((p) => p.connected);
-  }, [participants, presence]);
+  // Note: Presence tracking is handled by TournamentPresenceOverlay component
 
   // Auto-start draft exactly once per session when everyone is connected
-  useEffect(() => {
-    if (startedRef.current) return;
-    if (!draftSessionId) return;
-    if (!allPlayersConnected) return;
-    startedRef.current = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/draft-sessions/${draftSessionId}/start`, {
-          method: "POST",
-        });
-        if (!res.ok) {
-          const error = await res.json().catch(() => ({}));
-          if (!String(error?.error || "").includes("already started")) {
-            console.error("[TournamentDraft3D] Error starting draft:", error);
-          }
-        }
-      } catch (err) {
-        console.error("[TournamentDraft3D] Error starting draft:", err);
-      }
-    })();
-  }, [draftSessionId, allPlayersConnected, myPlayerId]);
+  // Note: Draft auto-start is handled by the tournament system
 
   // Poll for state only when socket is disconnected and tab is visible
   useEffect(() => {
@@ -1453,25 +1421,6 @@ export default function TournamentDraft3DScreen({
   // Main 3D draft UI (similar to EnhancedOnlineDraft3DScreen but adapted)
   return (
     <div className="fixed inset-0 w-screen h-screen">
-      {/* Presence strip */}
-      <div className="absolute top-2 left-2 right-2 z-[2000] flex gap-2 flex-wrap text-xs text-white/90">
-        {presence.map((p) => (
-          <div
-            key={p.id}
-            className={`px-2 py-1 rounded bg-black/50 ring-1 ring-white/10 flex items-center gap-2`}
-          >
-            <span
-              className={`inline-block w-2 h-2 rounded-full ${
-                p.connected ? "bg-green-400" : "bg-red-500"
-              }`}
-            />
-            <span className="opacity-80">S{p.seat}</span>
-            <span className="truncate max-w-[10rem]">
-              {p.name || p.id.slice(-4)}
-            </span>
-          </div>
-        ))}
-      </div>
       <div className="absolute inset-0 w-full h-full">
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}
@@ -1715,6 +1664,13 @@ export default function TournamentDraft3DScreen({
           />
         </Canvas>
       </div>
+
+      {/* Presence overlay - positioned outside pointer-events-none for hover to work */}
+      <TournamentPresenceOverlay
+        tournamentId={tournamentId}
+        draftSessionId={draftSessionId}
+        position="top-left"
+      />
 
       {/* Overlays */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">

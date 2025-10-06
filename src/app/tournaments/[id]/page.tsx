@@ -505,7 +505,6 @@ export default function TournamentDetailsPage() {
     prevTournamentStatusRef.current = currentStatus;
   }, [tournament, tournament?.status, isRegistered, rounds]);
 
-
   // Load constructed deck choices when in preparing + constructed
   useEffect(() => {
     (async () => {
@@ -1243,46 +1242,58 @@ export default function TournamentDetailsPage() {
             </div>
             {isRegistered && (
               <div className="flex items-center gap-2">
-                {tournament.format === "draft" && (() => {
-                  const meId = session?.user?.id;
-                  const rp = (
-                    tournament as unknown as {
-                      registeredPlayers?: Array<{ id: string; deckSubmitted?: boolean }>;
+                {tournament.format === "draft" &&
+                  (() => {
+                    const meId = session?.user?.id;
+                    const rp =
+                      (
+                        tournament as unknown as {
+                          registeredPlayers?: Array<{
+                            id: string;
+                            deckSubmitted?: boolean;
+                          }>;
+                        }
+                      ).registeredPlayers || [];
+                    const mine = rp.find((p) => p.id === meId);
+                    // Consider server flag and optimistic client flag to reduce flicker
+                    let optimisticSubmitted = false;
+                    try {
+                      optimisticSubmitted =
+                        localStorage.getItem(
+                          `draft_submitted_tournament_${tournament.id}`
+                        ) === "true";
+                    } catch {}
+                    const submitted =
+                      Boolean(
+                        (mine as { deckSubmitted?: boolean })?.deckSubmitted
+                      ) ||
+                      optimisticSubmitted ||
+                      viewerDeckCards.length > 0;
+                    if (submitted) {
+                      return (
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm"
+                            title="Deck submitted"
+                          >
+                            Draft Deck submitted!
+                          </span>
+                        </div>
+                      );
                     }
-                  ).registeredPlayers || [];
-                  const mine = rp.find((p) => p.id === meId);
-                  // Consider server flag and optimistic client flag to reduce flicker
-                  let optimisticSubmitted = false;
-                  try {
-                    optimisticSubmitted =
-                      localStorage.getItem(`draft_submitted_tournament_${tournament.id}`) === "true";
-                  } catch {}
-                  const submitted = Boolean((mine as { deckSubmitted?: boolean })?.deckSubmitted) || optimisticSubmitted || viewerDeckCards.length > 0;
-                  if (submitted) {
                     return (
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm"
-                          title="Deck submitted"
-                        >
-                          Draft Deck submitted!
-                        </span>
-                      </div>
+                      <button
+                        onClick={() => {
+                          try {
+                            window.location.href = `/tournaments/${tournament.id}/draft`;
+                          } catch {}
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
+                      >
+                        Enter Draft
+                      </button>
                     );
-                  }
-                  return (
-                    <button
-                      onClick={() => {
-                        try {
-                          window.location.href = `/tournaments/${tournament.id}/draft`;
-                        } catch {}
-                      }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
-                    >
-                      Enter Draft
-                    </button>
-                  );
-                })()}
+                  })()}
                 {tournament.format === "sealed" &&
                   (() => {
                     const meId = session?.user?.id;
@@ -1573,20 +1584,27 @@ export default function TournamentDetailsPage() {
             if (!mid) return null;
             // Check if this match is completed
             const globalMatches = statistics?.matches || [];
-            const myMatch = globalMatches.find((m) => String(m.id) === String(mid));
+            const myMatch = globalMatches.find(
+              (m) => String(m.id) === String(mid)
+            );
             const isCompleted =
-              myMatch && (myMatch.status === "completed" || myMatch.completedAt);
+              myMatch &&
+              (myMatch.status === "completed" || myMatch.completedAt);
             if (isCompleted) {
               const pendingInRound = globalMatches.filter((m) => {
                 if (String(m.id) === String(mid)) return false;
-                if (activeRoundNumber != null && m.roundNumber !== activeRoundNumber)
+                if (
+                  activeRoundNumber != null &&
+                  m.roundNumber !== activeRoundNumber
+                )
                   return false;
                 return m.status !== "completed" && !m.completedAt;
               });
               if (pendingInRound.length > 0) {
                 return (
                   <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/60 p-4 text-slate-200">
-                    Your match is finished. Waiting for other matches in this round to complete.
+                    Your match is finished. Waiting for other matches in this
+                    round to complete.
                   </div>
                 );
               }
@@ -1646,7 +1664,7 @@ export default function TournamentDetailsPage() {
                         id: string;
                         status?: string;
                         completedAt?: string | null;
-                        players?: Array<{ id: string; name: string }>
+                        players?: Array<{ id: string; name: string }>;
                       }) => {
                         const players = Array.isArray(m.players)
                           ? m.players
@@ -1657,7 +1675,8 @@ export default function TournamentDetailsPage() {
                             ? String(m.id) === String(myAssignedMatchId)
                             : false) ||
                           players.some((p) => p.id === session?.user?.id);
-                        const isCompleted = m.status === 'completed' || m.completedAt;
+                        const isCompleted =
+                          m.status === "completed" || m.completedAt;
                         return (
                           <div
                             key={m.id}
