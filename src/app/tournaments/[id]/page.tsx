@@ -946,8 +946,11 @@ export default function TournamentDetailsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white relative">
       {/* Presence overlay (hover to open) */}
-      <div className="absolute top-3 right-3 z-[3000]">
-        <TournamentPresenceOverlay tournamentId={tournamentId} />
+      <div className="absolute bottom-3 right-3 z-[3000]">
+        <TournamentPresenceOverlay
+          tournamentId={tournamentId}
+          position="bottom-right"
+        />
       </div>
       {/* Toast overlay */}
       {toast && (

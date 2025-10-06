@@ -6,6 +6,18 @@ import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 
+// Random name generation (same as lobby)
+const PREDICATES = ["Eternal", "Ancient", "Forgotten", "Sacred", "Cursed", "Divine"];
+const ADJECTIVES = ["Mystic", "Shadow", "Crystal", "Storm", "Fire", "Ice"];
+const SUBJECTS = ["Dragons", "Wizards", "Knights", "Realms", "Legends", "Heroes"];
+
+function generateTournamentName(): string {
+  const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
+  const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
+  return `${predicate} ${adjective} ${subject}`;
+}
+
 interface Tournament {
   id: string;
   name: string;
@@ -43,6 +55,12 @@ export default function TournamentsPage() {
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-generate tournament name when form opens
+  const handleShowCreateForm = () => {
+    setForm(prev => ({ ...prev, name: generateTournamentName() }));
+    setShowCreateForm(true);
+  };
 
   // View filter: default 'active' uses realtime context; other filters fetch via API
   const [viewFilter, setViewFilter] = useState<
@@ -306,8 +324,8 @@ export default function TournamentsPage() {
             </p>
           </div>
           <button
-            onClick={() => setShowCreateForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            onClick={handleShowCreateForm}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             Create Tournament
           </button>
@@ -436,7 +454,7 @@ export default function TournamentsPage() {
               <>
                 <br />
                 <button
-                  onClick={() => setShowCreateForm(true)}
+                  onClick={handleShowCreateForm}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                 >
                   Create Tournament
@@ -557,16 +575,26 @@ export default function TournamentsPage() {
                   <label className="block text-slate-300 text-sm font-medium mb-2">
                     Tournament Name
                   </label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, name: e.target.value }))
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter tournament name"
-                    required
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                      className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter tournament name"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm(prev => ({ ...prev, name: generateTournamentName() }))}
+                      className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+                      title="Generate random name"
+                    >
+                      🎲
+                    </button>
+                  </div>
                 </div>
 
                 {/* Pairing Format */}
