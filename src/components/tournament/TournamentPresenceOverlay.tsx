@@ -6,7 +6,12 @@ import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentCon
 type Props = {
   tournamentId?: string | null;
   draftSessionId?: string | null;
-  position?: "top-right" | "bottom-left" | "top-right-offset" | "top-left";
+  position?:
+    | "top-right"
+    | "top-right-offset"
+    | "top-left"
+    | "bottom-right"
+    | "bottom-left";
 };
 
 export default function TournamentPresenceOverlay({ tournamentId, draftSessionId, position = "top-right" }: Props) {
@@ -123,13 +128,22 @@ export default function TournamentPresenceOverlay({ tournamentId, draftSessionId
   const shouldRender = Boolean(tournamentsCtx && (tournamentsCtx.currentTournament || tournamentId));
   if (!shouldRender) return null;
 
-  const posClass = position === "top-right"
-    ? "top-3 right-3"
-    : position === "top-right-offset"
-    ? "top-3 right-[9.5rem]"
-    : position === "top-left"
-    ? "top-3 left-3"
-    : "bottom-3 left-3";
+  const posClass = (() => {
+    switch (position) {
+      case "top-right":
+        return "top-3 right-3";
+      case "top-right-offset":
+        return "top-3 right-[9.5rem]";
+      case "top-left":
+        return "top-3 left-3";
+      case "bottom-right":
+        return "bottom-3 right-3";
+      case "bottom-left":
+        return "bottom-3 left-3";
+      default:
+        return "top-3 right-3";
+    }
+  })();
 
   // Helper: offline since formatted string
   const fmtSince = (ts: number) => {

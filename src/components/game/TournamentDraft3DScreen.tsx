@@ -1418,6 +1418,39 @@ export default function TournamentDraft3DScreen({
   const showLoadingOverlay =
     draftState.phase === "waiting" && packAsBoosterCards.length === 0;
 
+  // Monitor WebGL context loss/restore and force cleanup on unmount
+  useEffect(() => {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+    
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('[TournamentDraft3D] WebGL context lost - disposing to free resources');
+    };
+    
+    const handleContextRestored = () => {
+      console.log('[TournamentDraft3D] WebGL context restored');
+    };
+    
+    canvas.addEventListener('webglcontextlost', handleContextLost);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored);
+    
+    return () => {
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+      
+      // Force context disposal on unmount to free resources for next page
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (gl && 'getExtension' in gl) {
+        const loseContext = gl.getExtension('WEBGL_lose_context');
+        if (loseContext) {
+          console.log('[TournamentDraft3D] Disposing WebGL context on unmount');
+          loseContext.loseContext();
+        }
+      }
+    };
+  }, []);
+
   // Main 3D draft UI (similar to EnhancedOnlineDraft3DScreen but adapted)
   return (
     <div className="fixed inset-0 w-screen h-screen">
@@ -1425,7 +1458,17 @@ export default function TournamentDraft3DScreen({
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
-          gl={{ preserveDrawingBuffer: false, antialias: true, alpha: false }}
+          gl={{ 
+            preserveDrawingBuffer: false, 
+            antialias: true, 
+            alpha: false,
+            powerPreference: "high-performance",
+            // Prevent context loss by limiting memory
+            failIfMajorPerformanceCaveat: false,
+          }}
+          dpr={[1, 1.5]}
+          // Use always for interactive content
+          frameloop="always"
         >
           <color attach="background" args={["#0b0b0c"]} />
           <ambientLight intensity={0.8} />
