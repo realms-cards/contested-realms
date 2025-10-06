@@ -41,6 +41,11 @@ html, body, #__next {
   user-select: none;
 }
 
+*, *::before, *::after {
+  -webkit-user-select: inherit;
+  user-select: inherit;
+}
+
 /* Allow selection in inputs, editable areas, and elements opting in */
 input, textarea, select, button,
 [role="textbox"], [contenteditable="true"],

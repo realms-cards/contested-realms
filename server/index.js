@@ -1742,7 +1742,13 @@ async function persistMatchUpdate(match, patch, playerId, ts) {
       metricsInc('persist.update', 1);
       if (patch) metricsInc('persist.update.withPatch', 1);
     } catch {}
-    if (PERSIST_IS_WRITE_BEHIND) {
+    
+    // Force immediate persistence for tournament matches (no write-behind buffer)
+    // Tournament players may reload at any time and need state preserved immediately
+    const isTournament = Boolean(match.tournamentId);
+    const forceImmediate = isTournament;
+    
+    if (PERSIST_IS_WRITE_BEHIND && !forceImmediate) {
       // Buffer and schedule a batched flush
       bufferPersistUpdate(match.id, data, patch ? { playerId: playerId || 'system', timestamp: Number(ts || Date.now()), patch } : null);
     } else {
