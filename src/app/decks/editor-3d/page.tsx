@@ -92,6 +92,7 @@ type PickItem = {
 function AuthenticatedDeckEditor() {
   const { status } = useSession();
   const searchParams = useSearchParams();
+  const searchParamsKey = searchParams?.toString() ?? "";
   const router = useRouter();
 
   // Deck editor state (same as 2D version)
@@ -267,6 +268,7 @@ function AuthenticatedDeckEditor() {
     total: number;
     inProgress: boolean;
   }>({ processed: 0, total: 0, inProgress: false });
+  const draftInitRef = useRef(false);
 
   // Track which packs are opened so we can preserve UI state across server/local updates
   const openedByIdRef = useRef<Map<string, boolean>>(new Map());
@@ -683,7 +685,7 @@ function AuthenticatedDeckEditor() {
       }
       setPacks(generatedPacks);
     }
-  }, [searchParams, isSealed]); // Only initialize if not already sealed
+  }, [searchParamsKey, isSealed]); // Only initialize if not already sealed
 
   // If server-provided sealed packs were persisted, load them as the authoritative packs to open.
   // We do NOT pre-seed sideboard; players add cards to their pool by opening packs here.
@@ -762,6 +764,11 @@ function AuthenticatedDeckEditor() {
       console.log('[Draft Init] Already initialized, skipping');
       return;
     }
+    if (draftInitRef.current) {
+      console.log('[Draft Init] Guard hit - initialization already running');
+      return;
+    }
+    draftInitRef.current = true;
 
     console.log('[Draft Init] Initializing draft mode for', draftId);
     setIsDraftMode(true);

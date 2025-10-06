@@ -2,8 +2,6 @@
 
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
-import { useOnline } from "@/app/online/online-context";
-import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
@@ -21,7 +19,6 @@ export default function OnlineD20Screen({
   onRollingComplete,
 }: OnlineD20ScreenProps) {
   const { updateScreenType } = useVideoOverlay();
-  const { transport, match, me } = useOnline();
   const d20Rolls = useGameStore((s) => s.d20Rolls);
   const rollD20 = useGameStore((s) => s.rollD20);
   const setupWinner = useGameStore((s) => s.setupWinner);
@@ -258,7 +255,6 @@ export default function OnlineD20Screen({
             )}
           </div>
         )}
-
         {choiceMade && setupWinner && (
           <div className="text-center text-sm text-green-400">
             {playerNames[setupWinner]} chose{" "}
@@ -266,17 +262,6 @@ export default function OnlineD20Screen({
             game...
           </div>
         )}
-
-        {/* Video Overlay */}
-        <GlobalVideoOverlay 
-          position="bottom-right"
-          showUserAvatar={true}
-          transport={transport}
-          myPlayerId={me?.id || null}
-          matchId={match?.id || null}
-          userDisplayName={me?.displayName || ''}
-          userAvatarUrl={undefined} // No avatar URL available yet
-        />
       </div>
     </div>
   );

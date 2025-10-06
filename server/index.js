@@ -1822,11 +1822,16 @@ async function recoverActiveMatches() {
     for (const r of rows) {
       if (matches.has(r.id)) continue;
       const m = rehydrateMatch(r);
-      if (m) { matches.set(m.id, m); count++; }
+      if (m) {
+        // Backfill tournament context for recovered matches
+        try { await hydrateMatchFromDatabase(m.id, m); } catch {}
+        matches.set(m.id, m);
+        count++;
+      }
     }
     try { console.log(`[persist] recovered ${count} active match(es) from DB`); } catch {}
   } catch (e) {
-    try { console.warn(`[persist] recovery error:`, e?.message || e); } catch {}
+    try { console.warn(`[persist] recover active matches failed:`, e?.message || e); } catch {}
   }
 }
 
@@ -1842,7 +1847,11 @@ async function findActiveMatchForPlayer(playerId) {
     if (!r) return null;
     if (matches.has(r.id)) return matches.get(r.id);
     const m = rehydrateMatch(r);
-    if (m) { matches.set(m.id, m); }
+    if (m) {
+      // Backfill tournament context if applicable
+      try { await hydrateMatchFromDatabase(m.id, m); } catch {}
+      matches.set(m.id, m);
+    }
     return m;
   } catch {
     return null;
@@ -2557,6 +2566,14 @@ async function getOrLoadMatch(matchId) {
       } catch {}
 
       // Build in-memory session from tournament Match, then persist as OnlineMatchSession
+      // IMPORTANT: This fallback should only be used for new matches. If status is 'active',
+      // it means an OnlineMatchSession was lost and game state will be reset.
+      if (status === 'in_progress') {
+        try {
+          console.warn(`[match] WARNING: Creating tournament match ${matchId} from Match table with status in_progress. This indicates OnlineMatchSession was lost and game state will be reset. This should not happen with cleanup protection.`);
+        } catch {}
+      }
+      
       const match = {
         id: matchId,
         lobbyId: null,
@@ -2625,6 +2642,20 @@ async function leaderJoinMatch(matchId, playerId, socketId) {
 async function cleanupMatchNow(matchId, reason, force = false) {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
+  
+  // Protect active tournament matches and in-progress matches from cleanup (but allow ended matches to be cleaned)
+  if (match.status === 'in_progress' || match.status === 'waiting' || match.status === 'deck_construction') {
+    if (match.tournamentId) {
+      try { console.log(`[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`); } catch {}
+      return;
+    }
+    // Also protect any in-progress match (tournament or not) to preserve game state for reconnects
+    if (match.status === 'in_progress') {
+      try { console.log(`[match] cleanup blocked for in-progress match ${matchId}`); } catch {}
+      return;
+    }
+  }
+  
   // Check roster empty condition
   const rosterEmpty = !Array.isArray(match.playerIds) || match.playerIds.length === 0;
   // Check room occupancy across cluster (requires Redis adapter)

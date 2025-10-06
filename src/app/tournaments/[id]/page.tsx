@@ -117,11 +117,6 @@ export default function TournamentDetailsPage() {
   >("overview");
   // Round/match flow helpers
   const [startingRound, setStartingRound] = useState(false);
-  const [joinPrompt, setJoinPrompt] = useState<{
-    open: boolean;
-    matchId: string | null;
-  }>({ open: false, matchId: null });
-  const prevMyMatchIdRef = useRef<string | null>(null);
 
   // Tournament completion celebration
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -510,41 +505,6 @@ export default function TournamentDetailsPage() {
     prevTournamentStatusRef.current = currentStatus;
   }, [tournament, tournament?.status, isRegistered, rounds]);
 
-  // Ping players when a new match assignment appears for them (only for active rounds, not completed)
-  useEffect(() => {
-    if (!tournament) return;
-    if (tournament.status !== "active") return;
-    const curr = myAssignedMatchId ?? myMatchId ?? null;
-    const prev = prevMyMatchIdRef.current;
-    // Only prompt if match is new AND there's an active round (not completed round)
-    if (curr && curr !== prev && activeRound) {
-      // Check if this match is in the active round
-      const matches =
-        (activeRound as unknown as { matches?: Array<{ id: string }> })
-          ?.matches || [];
-      const isActiveRoundMatch = matches.some(
-        (m) => String(m.id) === String(curr)
-      );
-      if (isActiveRoundMatch) {
-        setJoinPrompt({ open: true, matchId: curr });
-        try {
-          localStorage.setItem("app:toast", "Your tournament match is ready");
-          window.dispatchEvent(
-            new CustomEvent("app:toast", {
-              detail: { message: "Your tournament match is ready" },
-            })
-          );
-        } catch {}
-      }
-    }
-    prevMyMatchIdRef.current = curr;
-  }, [
-    tournament,
-    tournament?.status,
-    myAssignedMatchId,
-    myMatchId,
-    activeRound,
-  ]);
 
   // Load constructed deck choices when in preparing + constructed
   useEffect(() => {
@@ -1611,6 +1571,27 @@ export default function TournamentDetailsPage() {
           (() => {
             const mid = myAssignedMatchId ?? myMatchId;
             if (!mid) return null;
+            // Check if this match is completed
+            const globalMatches = statistics?.matches || [];
+            const myMatch = globalMatches.find((m) => String(m.id) === String(mid));
+            const isCompleted =
+              myMatch && (myMatch.status === "completed" || myMatch.completedAt);
+            if (isCompleted) {
+              const pendingInRound = globalMatches.filter((m) => {
+                if (String(m.id) === String(mid)) return false;
+                if (activeRoundNumber != null && m.roundNumber !== activeRoundNumber)
+                  return false;
+                return m.status !== "completed" && !m.completedAt;
+              });
+              if (pendingInRound.length > 0) {
+                return (
+                  <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/60 p-4 text-slate-200">
+                    Your match is finished. Waiting for other matches in this round to complete.
+                  </div>
+                );
+              }
+              return null;
+            }
             return (
               <div className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20 p-4 flex items-center justify-between">
                 <div className="text-slate-200">
@@ -1663,7 +1644,9 @@ export default function TournamentDetailsPage() {
                     {list.map(
                       (m: {
                         id: string;
-                        players?: Array<{ id: string; name: string }>;
+                        status?: string;
+                        completedAt?: string | null;
+                        players?: Array<{ id: string; name: string }>
                       }) => {
                         const players = Array.isArray(m.players)
                           ? m.players
@@ -1674,6 +1657,7 @@ export default function TournamentDetailsPage() {
                             ? String(m.id) === String(myAssignedMatchId)
                             : false) ||
                           players.some((p) => p.id === session?.user?.id);
+                        const isCompleted = m.status === 'completed' || m.completedAt;
                         return (
                           <div
                             key={m.id}
@@ -1685,13 +1669,18 @@ export default function TournamentDetailsPage() {
                           >
                             <div className="text-sm text-slate-200">
                               {names || m.id}
-                              {isMine && (
+                              {isMine && !isCompleted && (
                                 <span className="text-emerald-400 text-xs ml-2">
                                   (Your match)
                                 </span>
                               )}
+                              {isCompleted && (
+                                <span className="text-slate-400 text-xs ml-2">
+                                  (Completed)
+                                </span>
+                              )}
                             </div>
-                            {isMine && (
+                            {isMine && !isCompleted && (
                               <button
                                 onClick={() => startJoinMatch(String(m.id))}
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
@@ -2423,37 +2412,6 @@ export default function TournamentDetailsPage() {
               </div>
             </div>
           )}
-        {/* Join Prompt Overlay */}
-        {joinPrompt.open && joinPrompt.matchId && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-md shadow-xl">
-              <div className="text-white text-lg font-semibold mb-2">
-                Your match is ready
-              </div>
-              <div className="text-slate-300 mb-4">
-                Round {activeRound?.roundNumber ?? ""} has been paired. Join
-                your match when ready.
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setJoinPrompt({ open: false, matchId: null })}
-                  className="px-4 py-2 rounded-md bg-slate-700 text-white"
-                >
-                  Later
-                </button>
-                <button
-                  onClick={() => {
-                    void startJoinMatch(String(joinPrompt.matchId));
-                    setJoinPrompt({ open: false, matchId: null });
-                  }}
-                  className="px-4 py-2 rounded-md bg-emerald-600 text-white"
-                >
-                  Join Now
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Tournament Chat */}
         {isRegistered && (

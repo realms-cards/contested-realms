@@ -134,13 +134,6 @@ export async function loadSealedDeckFor(
     let spellbook: CardRef[];
     const avatars = cards.filter(isAvatar);
 
-    if (avatars.length !== 1) {
-      console.error("[loadSealedDeckFor] Avatar validation failed:", {
-        avatarCount: avatars.length,
-        avatars: avatars.map(a => ({ name: a.name, type: a.type })),
-        allCards: cards.map(c => ({ name: c.name, type: c.type, typeType: typeof c.type }))
-      });
-    }
     if (anyZonesProvided) {
       const atlasZ: CardRefWithZone[] = cards.filter((c: CardRefWithZone) => c.__zone === "atlas");
       const spellZ: CardRefWithZone[] = cards.filter(
