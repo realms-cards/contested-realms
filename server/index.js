@@ -3154,12 +3154,17 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
 async function leaderHandleMulliganDone(matchId, playerId) {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
-  if (match.status !== "waiting") return; // Only relevant during setup
+  // Accept mulligans during "waiting", "deck_construction", or "in_progress"
+  if (match.status !== "waiting" && match.status !== "deck_construction" && match.status !== "in_progress") return;
+  // If already in Main phase, mulligans are no longer relevant
+  if (match.game && match.game.phase === "Main") return;
 
   // Track per-player mulligan completion for this match
   if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
     match.mulliganDone = new Set();
   }
+  
+  const wasAlreadyDone = match.mulliganDone.has(playerId);
   match.mulliganDone.add(playerId);
 
   try {
@@ -3169,14 +3174,24 @@ async function leaderHandleMulliganDone(matchId, playerId) {
       ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
       : [];
     const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
-    console.log(`[Setup] mulliganDone <= ${playerId}. ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
+    console.log(`[Setup] mulliganDone <= ${playerId}${wasAlreadyDone ? ' (duplicate)' : ''}. ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
   } catch {}
 
   // If all current players have finished mulligans, start the game
   const allDone =
     Array.isArray(match.playerIds) &&
     match.playerIds.every((pid) => match.mulliganDone.has(pid));
-  if (!allDone) return;
+  if (!allDone) {
+    // Even if this player was already done, send them current state to ensure they're synced
+    if (wasAlreadyDone) {
+      const room = `match:${match.id}`;
+      try { 
+        console.log(`[Setup] Player ${playerId} resubmitted mulligan - sending current game state`);
+        io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+      } catch {}
+    }
+    return;
+  }
 
   const room = `match:${match.id}`;
   // Flip match status and broadcast updated match info for strict sync
@@ -3435,9 +3450,9 @@ function normalizeSealedConfig(config) {
       : ['Alpha'],
     timeLimit: Number(config.timeLimit) || 0,
     constructionStartTime: Number(config.constructionStartTime) || Date.now(),
-    packCounts: config.packCounts && typeof config.packCounts === 'object' 
-      ? config.packCounts 
-      : null,
+    packCounts: config.packCounts && typeof config.packCounts === 'object'
+      ? config.packCounts
+      : undefined,
     replaceAvatars: Boolean(config.replaceAvatars)
   };
 }
@@ -3832,7 +3847,12 @@ async function startMatchFromLobby(
       matchType === "sealed" || matchType === "draft" ? new Map() : null,
     draftState: null, // Will be initialized after match creation
     // Server-side aggregated game snapshot and timestamp
-    game: {},
+    game: {
+      phase: "Setup",
+      mulligans: { p1: 1, p2: 1 },
+      d20Rolls: { p1: null, p2: null },
+      setupWinner: null,
+    },
     lastTs: 0,
     interactionRequests: new Map(),
     interactionGrants: new Map(),
@@ -4696,7 +4716,12 @@ io.on("connection", (socket) => {
         matchType: actualMatchType,
         sealedConfig: normalizedSealedConfig,
         playerDecks: new Map(),
-        game: {},
+        game: {
+          phase: "Setup",
+          mulligans: { p1: 1, p2: 1 },
+          d20Rolls: { p1: null, p2: null },
+          setupWinner: null,
+        },
         lastTs: 0,
         interactionRequests: new Map(),
         interactionGrants: new Map(),
@@ -5094,6 +5119,8 @@ io.on("connection", (socket) => {
             if ("board" in g) return true;
             if ("permanents" in g) return true;
             if ("currentPlayer" in g) return true;
+            // Setup phase with mulligans is meaningful - needed for tournament sealed matches
+            if (g.phase === "Setup" && "mulligans" in g) return true;
             // Consider avatars meaningful when at least one seat has a card or position
             try {
               const a = g.avatars || {};

@@ -63,11 +63,66 @@ export default function OnlineSealedDeckLoader({
         return;
       }
 
+      // Expand condensed tournament deck format if needed
+      const expandDeckIfNeeded = async (rawDeck: unknown) => {
+        if (!Array.isArray(rawDeck) || rawDeck.length === 0) return rawDeck;
+        const firstCard = rawDeck[0] as Record<string, unknown>;
+        const isCondensedFormat = 'quantity' in firstCard && !('type' in firstCard);
+        
+        if (!isCondensedFormat) return rawDeck;
+        
+        console.debug("[Sealed] Expanding condensed tournament deck format");
+        const cardIds = Array.from(
+          new Set(
+            (rawDeck as Array<{ cardId: string; quantity: number }>)
+              .map(entry => Number(entry.cardId))
+              .filter(n => Number.isFinite(n) && n > 0)
+          )
+        );
+        
+        if (cardIds.length === 0) return rawDeck;
+        
+        const resMeta = await fetch(`/api/cards/by-id?ids=${encodeURIComponent(cardIds.join(","))}`);
+        if (!resMeta.ok) return rawDeck;
+        
+        const metas = await resMeta.json() as Array<{
+          cardId: number;
+          name: string;
+          slug: string;
+          setName: string;
+          type?: string | null;
+        }>;
+        
+        const byId = new Map(metas.map(m => [m.cardId, m]));
+        const expandedDeck: Array<Record<string, unknown>> = [];
+        
+        for (const entry of rawDeck as Array<{ cardId: string; quantity: number }>) {
+          const idNum = Number(entry.cardId);
+          const meta = byId.get(idNum);
+          if (!meta) continue;
+          const quantity = Math.max(1, Number(entry.quantity) || 0);
+          for (let i = 0; i < quantity; i++) {
+            expandedDeck.push({
+              id: String(idNum),
+              cardId: idNum,
+              name: meta.name,
+              slug: meta.slug,
+              set: meta.setName,
+              type: meta.type || "",
+            });
+          }
+        }
+        
+        console.debug("[Sealed] Expanded deck to", expandedDeck.length, "cards");
+        return expandedDeck;
+      };
+
       // Load my deck
       tStep = mark("pre my load", tStep);
+      const myExpandedDeck = await expandDeckIfNeeded(myDeckData);
       const mySuccess = await loadSealedDeckFor(
         myPlayerKey as "p1" | "p2",
-        myDeckData,
+        myExpandedDeck,
         setDeckError
       );
       tStep = mark("after my load", tStep);
@@ -87,9 +142,10 @@ export default function OnlineSealedDeckLoader({
           typeof performance !== "undefined" && performance.now
             ? performance.now()
             : Date.now();
+        const expandedPlayerDeck = await expandDeckIfNeeded(playerDeckData);
         const ok = await loadSealedDeckFor(
           playerKey as "p1" | "p2",
-          playerDeckData,
+          expandedPlayerDeck,
           setDeckError
         );
         const tEnd =

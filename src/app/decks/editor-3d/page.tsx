@@ -685,7 +685,7 @@ function AuthenticatedDeckEditor() {
       }
       setPacks(generatedPacks);
     }
-  }, [searchParamsKey, isSealed]); // Only initialize if not already sealed
+  }, [searchParamsKey, isSealed, searchParams]); // Only initialize if not already sealed
 
   // If server-provided sealed packs were persisted, load them as the authoritative packs to open.
   // We do NOT pre-seed sideboard; players add cards to their pool by opening packs here.

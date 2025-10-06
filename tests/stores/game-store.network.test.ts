@@ -36,7 +36,7 @@ describe("game store network sanitiser", () => {
     state.setActorKey(null);
   });
 
-  it("allows zone updates when actor seat not yet known", () => {
+  it("drops zone updates when actor seat not yet known (safety measure)", () => {
     const sent: any[] = [];
     const transport = createMockTransport(sent);
     const store = useGameStore.getState();
@@ -53,13 +53,27 @@ describe("game store network sanitiser", () => {
       zones: {
         p1: {
           hand: [card],
+          spellbook: [],
+          atlas: [],
+          graveyard: [],
+          battlefield: [],
+          banished: [],
+        },
+        p2: {
+          hand: [],
+          spellbook: [],
+          atlas: [],
+          graveyard: [],
+          battlefield: [],
+          banished: [],
         },
       },
     });
 
+    // Zones should be dropped when actorKey is not set to prevent cross-seat data corruption
     expect(sent).toHaveLength(1);
     const payload = sent[0] as { zones?: Record<string, { hand: CardRef[] }> };
-    expect(payload?.zones?.p1?.hand).toEqual([card]);
+    expect(payload?.zones).toBeUndefined();
 
     // Cleanup
     store.setTransport(null);
@@ -81,8 +95,8 @@ describe("game store network sanitiser", () => {
 
     store.trySendPatch({
       zones: {
-        p1: { hand: [card] },
-        p2: { hand: [card] },
+        p1: { hand: [card], spellbook: [], atlas: [], graveyard: [], battlefield: [], banished: [] },
+        p2: { hand: [card], spellbook: [], atlas: [], graveyard: [], battlefield: [], banished: [] },
       },
     });
 

@@ -316,7 +316,6 @@ export default function LobbiesCentral({
   onJoinTournament,
   onLeaveTournament,
   onUpdateTournamentSettings,
-  onToggleTournamentReady,
   onStartTournament,
   onEndTournament,
   onRefresh,
@@ -375,7 +374,6 @@ export default function LobbiesCentral({
   const [matchesData, setMatchesData] = useState<TournamentMatchesResponse | null>(null);
 
   // Pending states for tournament actions to prevent double clicks and show small loaders
-  const [pendingReady, setPendingReady] = useState<Record<string, boolean>>({});
   const [pendingJoinT, setPendingJoinT] = useState<Record<string, boolean>>({});
   const [pendingLeaveT, setPendingLeaveT] = useState<Record<string, boolean>>({});
   const [pendingStartT, setPendingStartT] = useState<Record<string, boolean>>({});
@@ -1010,32 +1008,14 @@ export default function LobbiesCentral({
                     Settings
                   </button>
                 )}
-                {isRegistered && tournament.status === "registering" && onToggleTournamentReady && (
-                  isReady ? (
-                    <span
-                      className="rounded px-3 py-1 text-xs bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 cursor-not-allowed"
-                      title="You're marked as ready"
-                    >
-                      Ready ✓
-                    </span>
-                  ) : (
-                    <button
-                      className={`rounded px-3 py-1 text-xs ${pendingReady[tournament.id] ? 'bg-slate-600/60 cursor-not-allowed' : 'bg-green-600/80 hover:bg-green-600 text-green-100'}`}
-                      onClick={async () => {
-                        if (pendingReady[tournament.id]) return;
-                        setPendingReady((m) => ({ ...m, [tournament.id]: true }));
-                        try {
-                          await Promise.resolve(onToggleTournamentReady(tournament.id, true));
-                          if (onRefresh) onRefresh();
-                        } finally {
-                          setPendingReady((m) => ({ ...m, [tournament.id]: false }));
-                        }
-                      }}
-                      disabled={pendingReady[tournament.id]}
-                    >
-                      {pendingReady[tournament.id] ? 'Marking…' : 'Ready'}
-                    </button>
-                  )
+                {isRegistered && tournament.status === "registering" && (
+                  <Link
+                    href={`/tournaments/${tournament.id}`}
+                    className="rounded px-3 py-1 text-xs bg-blue-600/80 hover:bg-blue-600 text-white font-medium transition-colors"
+                    title="Go to tournament page to see details and participate in drafts"
+                  >
+                    View Tournament →
+                  </Link>
                 )}
                 {canStart && onStartTournament && (
                   <button

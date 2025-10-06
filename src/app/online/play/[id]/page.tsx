@@ -341,10 +341,29 @@ export default function OnlineMatchPage() {
     if (prepared) return;
     
     // For matches already in progress, skip deck loading - the server snapshot contains all game state
-    // Only load decks during waiting/deck_construction phases
-    if (match?.status === "in_progress") {
-      console.log("[match] Match already in progress, skipping deck load (using server snapshot)");
+    // Check both status AND game phase to detect if gameplay has started
+    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
+    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
+    
+    // Only skip deck loading if we have in_progress status AND Main phase
+    // "Start" phase is still setup (mulligan), so we need to load decks
+    const gameStarted = match?.status === "in_progress" && gamePhase === "Main";
+    
+    if (gameStarted) {
+      console.log("[match] Match already in progress with valid phase, skipping deck load (using server snapshot)", {
+        status: match?.status,
+        phase: gamePhase,
+        hasGameState
+      });
       setPrepared(true);
+      return;
+    }
+    
+    // If match has game state with Setup phase AND is not waiting/deck_construction,
+    // wait for the phase to advance (reconnecting to an in-progress match)
+    if (hasGameState && gamePhase === "Setup" && 
+        match?.status !== "waiting" && match?.status !== "deck_construction") {
+      console.log("[match] Match has game state in Setup phase (reconnecting) - waiting for server snapshot");
       return;
     }
     
@@ -521,7 +540,7 @@ export default function OnlineMatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [prepared, match, match?.playerDecks, me?.id, myPlayerKey, storeActorKey]);
+  }, [prepared, match, match?.playerDecks, me?.id, myPlayerKey, storeActorKey, tournamentId]);
 
   // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
   useEffect(() => {
@@ -867,6 +886,11 @@ export default function OnlineMatchPage() {
 
     let desired = setupOpen;
     const ended = match.status === "ended";
+    // Check game phase from server snapshot to detect if gameplay has started
+    // Only "Main" phase means game started - "Start" is still setup (mulligan phase)
+    // Ignore match.status for this check - sealed tournaments transition to "in_progress" early
+    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
+    const gameActuallyStarted = gamePhase === "Main";
 
     if (ended) {
       desired = false;
@@ -874,6 +898,12 @@ export default function OnlineMatchPage() {
       desired = true;
     } else if (shouldShowDraft) {
       desired = false;
+    } else if (gameActuallyStarted) {
+      // Match already in Main phase - skip setup overlay entirely
+      desired = false;
+      // Mark setup steps as complete so we don't get stuck in the setup flow
+      if (!prepared) setPrepared(true);
+      if (!d20RollingComplete) setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
     } else if (!prepared) {
@@ -883,7 +913,7 @@ export default function OnlineMatchPage() {
     }
 
     if (desired !== setupOpen) setSetupOpen(desired);
-  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen]);
+  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen, setPrepared, d20RollingComplete, setD20RollingComplete]);
 
   
 
