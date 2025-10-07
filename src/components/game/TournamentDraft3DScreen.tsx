@@ -665,11 +665,13 @@ export default function TournamentDraft3DScreen({
 
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
-    return (
+    const result = (
       draftState.phase === "picking" &&
       draftState.waitingFor.includes(myPlayerId)
     );
-  }, [draftState.phase, draftState.waitingFor, myPlayerId]);
+    console.log(`[TournamentDraft3D] amPicker=${result} phase=${draftState.phase} waitingFor=${JSON.stringify(draftState.waitingFor)} myPlayerId=${myPlayerId} myPack.length=${myPack.length}`);
+    return result;
+  }, [draftState.phase, draftState.waitingFor, myPlayerId, myPack.length]);
 
   const myPack = useMemo(
     () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
