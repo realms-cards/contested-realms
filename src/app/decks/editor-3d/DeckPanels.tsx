@@ -175,7 +175,6 @@ export default function DeckPanels(props: DeckPanelsProps) {
 
         {/* Validation status and submit actions */}
         <div className="ml-auto flex items-center gap-3">
-          <UserBadge className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/80 hover:text-white hover:bg-white/10" showPresence={false} />
           <DeckValidation
             avatarCount={avatarCount}
             atlasCount={atlasCount}
@@ -227,6 +226,13 @@ export default function DeckPanels(props: DeckPanelsProps) {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="pointer-events-auto absolute top-4 right-4 sm:top-5 sm:right-6">
+        <UserBadge
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/80 hover:text-white hover:bg-white/10"
+          showPresence={false}
+        />
       </div>
 
       {helpOpen && (
