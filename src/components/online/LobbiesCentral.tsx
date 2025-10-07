@@ -8,86 +8,13 @@ import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
+import { generateLobbyName } from "@/lib/random-name-generator";
 
 // Check if CPU bots are enabled via environment variable
 function isCpuBotsEnabled(): boolean {
   const enabled = process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED;
   return enabled === "1" || enabled === "true";
 }
-
-// Fantasy-themed word lists for generating lobby names in format: "$Predicate of $adjective $subjects"
-
-// Forms of contest, conflict, confrontation
-const PREDICATES = [
-  "Tournament", "Championship", "Contest", "Challenge", "Trial", "Confrontation",
-  "Battle", "Combat", "Duel", "Clash", "Conflict", "War", "Siege", "Skirmish",
-  "Conquest", "Campaign", "Crusade", "Expedition", "Quest", "Hunt", "Pursuit",
-  "Gathering", "Assembly", "Conclave", "Summit", "Council", "Meeting", "Convergence",
-  "Ritual", "Ceremony", "Rite", "Festival", "Celebration", "Games", "Trials"
-];
-
-// Colors, dark themes, and funny adjectives
-const ADJECTIVES = [
-  // Colors
-  "Crimson", "Scarlet", "Ruby", "Golden", "Amber", "Silver", "Platinum", "Azure", 
-  "Sapphire", "Emerald", "Jade", "Violet", "Obsidian", "Onyx", "Pearl", "Ivory",
-  "Copper", "Bronze", "Steel", "Iron", "Ebony", "Alabaster", "Coral", "Turquoise",
-  
-  // Dark themes
-  "Shadow", "Dark", "Black", "Cursed", "Doomed", "Fallen", "Corrupt", "Twisted",
-  "Wicked", "Sinister", "Malevolent", "Grim", "Dire", "Ominous", "Haunted", "Forsaken",
-  "Lost", "Forgotten", "Hidden", "Secret", "Ancient", "Elder", "Primordial",
-  
-  // Funny/quirky
-  "Confused", "Sleepy", "Grumpy", "Dizzy", "Wobbly", "Giggly", "Sneaky", "Clumsy",
-  "Bouncy", "Fluffy", "Squeaky", "Wiggly", "Ticklish", "Peculiar", "Absurd", "Silly",
-  "Bumbling", "Fumbling", "Stumbling", "Mumbling", "Rambling", "Scrambling",
-  
-  // Traditional fantasy
-  "Mystic", "Arcane", "Enchanted", "Sacred", "Divine", "Celestial", "Ethereal",
-  "Legendary", "Mythical", "Fabled", "Noble", "Royal", "Imperial", "Majestic",
-  "Mighty", "Fierce", "Wild", "Primal", "Elemental", "Eternal", "Infinite"
-];
-
-// Subjects from card names and flavor text
-const SUBJECTS = [
-  // Dragons and creatures from cards
-  "Dragons", "Wyrms", "Drakes", "Wyverns", "Phoenix", "Griffins", "Chimeras",
-  "Basilisks", "Hydras", "Manticores", "Sphinxes", "Unicorns", "Pegasi",
-  
-  // Sorcerers and people
-  "Sorcerers", "Wizards", "Mages", "Archmages", "Scholars", "Artificers", "Alchemists",
-  "Knights", "Warriors", "Guardians", "Sentinels", "Champions", "Heroes", "Legends",
-  "Prophets", "Seers", "Oracles", "Mystics", "Cultists", "Disciples", "Acolytes",
-  
-  // Places and structures
-  "Spires", "Towers", "Citadels", "Bastions", "Sanctuaries", "Temples", "Shrines",
-  "Ruins", "Dungeons", "Caverns", "Crypts", "Vaults", "Chambers", "Halls",
-  "Gardens", "Groves", "Forests", "Meadows", "Valleys", "Mountains", "Peaks",
-  
-  // Magical items and concepts
-  "Artifacts", "Relics", "Treasures", "Gems", "Crystals", "Orbs", "Scepters",
-  "Crowns", "Rings", "Amulets", "Talismans", "Charms", "Runes", "Scrolls",
-  "Tomes", "Grimoires", "Codices", "Mysteries", "Secrets", "Whispers",
-  
-  // Elements and forces
-  "Flames", "Embers", "Sparks", "Storms", "Tempests", "Gales", "Zephyrs",
-  "Shadows", "Echoes", "Dreams", "Visions", "Omens", "Portents", "Signs",
-  "Stars", "Moons", "Suns", "Comets", "Meteors", "Auroras", "Eclipses",
-  
-  // Abstract concepts
-  "Destinies", "Fates", "Fortunes", "Curses", "Blessings", "Wishes", "Hopes",
-  "Fears", "Doubts", "Truths", "Lies", "Oaths", "Vows", "Promises", "Bonds"
-];
-
-function generateLobbyName(): string {
-  const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
-  const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
-  return `${predicate} of ${adjective} ${subject}`;
-}
-
-//
 
 export type CreateLobbyConfig = {
   name: string;

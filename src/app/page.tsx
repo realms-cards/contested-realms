@@ -76,45 +76,13 @@ export default function Home() {
           </AsciiPanel>
           <AsciiPanel>
             <Link
-              href="/decks/editor-3d"
+              href="/cubes"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >
               <div className="flex items-center justify-center py-4">
-                <h4 className="text-lg font-semibold tracking-wide">
-                  Deck Editor
-                </h4>
+                <h4 className="text-lg font-semibold tracking-wide">Cubes</h4>
               </div>
             </Link>
-          </AsciiPanel>
-        </div>
-
-        {/* Support Links */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
-          <AsciiPanel>
-            <a
-              href="https://github.com/realms-cards/issues/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group block hover:scale-[1.02] transition-transform duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
-              aria-label="Report an issue on GitHub"
-            >
-              <div className="flex items-center justify-center py-4">
-                <h4 className="text-lg font-semibold tracking-wide">
-                  Report an Issue
-                </h4>
-              </div>
-            </a>
-          </AsciiPanel>
-          <AsciiPanel>
-            <a
-              href="mailto:kingofthe@realms.cards"
-              className="group block hover:scale-[1.02] transition-transform duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
-              aria-label="Email the Realms team"
-            >
-              <div className="flex items-center justify-center py-4">
-                <h4 className="text-lg font-semibold tracking-wide">Email Us</h4>
-              </div>
-            </a>
           </AsciiPanel>
         </div>
 
@@ -147,12 +115,31 @@ export default function Home() {
           </p>
           <p />
         </div>
+
+        <div className="mt-6 text-xs text-orange-200/80 flex flex-row items-center gap-1">
+          <a
+            href="https://github.com/realms-cards/issues/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+            aria-label="Report an issue on GitHub"
+          >
+            Report an Issue
+          </a>
+          <a
+            href="mailto:kingofthe@realms.cards"
+            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+            aria-label="Email the Realms team"
+          >
+            Email Us
+          </a>
+        </div>
       </div>
       {/* Bottom ASCII art background */}
       <AsciiBottomArt
         opacityClass="text-white/12"
         maxVh={null}
-        bottomOffsetPx={16}
+        bottomOffsetPx={0}
       />
     </div>
   );

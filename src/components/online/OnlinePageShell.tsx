@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/online/lobby", label: "Lobby" },
   { href: "/decks", label: "Decks" },
+  { href: "/cubes", label: "Cubes" },
   { href: "/tournaments", label: "Tournaments" },
   { href: "/replay", label: "Replays" },
   { href: "/leaderboard", label: "Leaderboard" },

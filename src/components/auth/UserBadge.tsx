@@ -433,7 +433,7 @@ export default function UserBadge({
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 z-[75] min-w-[220px]">
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-[75] min-w-[220px] origin-top-right">
           <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 shadow-xl p-2 text-sm">
             <div className="px-2 py-1.5 flex items-center gap-2">
               {avatar}
@@ -601,6 +601,17 @@ export default function UserBadge({
                 className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
               >
                 Decks
+              </button>
+            </div>
+            <div className="px-2 py-1.5">
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  router.push("/cubes");
+                }}
+                className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+              >
+                Cubes
               </button>
             </div>
             <div className="px-2 py-1.5">

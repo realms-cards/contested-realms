@@ -7,9 +7,23 @@ import { useState, useEffect } from "react";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 
 // Random name generation (same as lobby)
-const PREDICATES = ["Eternal", "Ancient", "Forgotten", "Sacred", "Cursed", "Divine"];
+const PREDICATES = [
+  "Eternal",
+  "Ancient",
+  "Forgotten",
+  "Sacred",
+  "Cursed",
+  "Divine",
+];
 const ADJECTIVES = ["Mystic", "Shadow", "Crystal", "Storm", "Fire", "Ice"];
-const SUBJECTS = ["Dragons", "Wizards", "Knights", "Realms", "Legends", "Heroes"];
+const SUBJECTS = [
+  "Dragons",
+  "Wizards",
+  "Knights",
+  "Realms",
+  "Legends",
+  "Heroes",
+];
 
 function generateTournamentName(): string {
   const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
@@ -17,7 +31,6 @@ function generateTournamentName(): string {
   const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
   return `${predicate} of ${adjective} ${subject}`;
 }
-
 interface Tournament {
   id: string;
   name: string;
@@ -58,7 +71,7 @@ export default function TournamentsPage() {
 
   // Auto-generate tournament name when form opens
   const handleShowCreateForm = () => {
-    setForm(prev => ({ ...prev, name: generateTournamentName() }));
+    setForm((prev) => ({ ...prev, name: generateTournamentName() }));
     setShowCreateForm(true);
   };
 
@@ -94,14 +107,19 @@ export default function TournamentsPage() {
     "Beta",
     "Beta",
     "Beta",
-    "Beta"
+    "Beta",
   ]);
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
   const [draftBoosters, setDraftBoosters] = useState<string[]>([
     "Beta",
     "Arthurian Legends",
-    "Arthurian Legends"
+    "Arthurian Legends",
   ]);
+
+  // Cube draft support
+  const [useCube, setUseCube] = useState(false);
+  const [cubeId, setCubeId] = useState<string>("");
+  const [cubes, setCubes] = useState<Array<{ id: string; name: string }>>([]);
 
   // Type guard helpers
   function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,6 +139,33 @@ export default function TournamentsPage() {
       router.push("/auth/signin?callbackUrl=/tournaments");
     }
   }, [status, router]);
+
+  // Fetch available cubes for cube draft option
+  useEffect(() => {
+    async function loadCubes() {
+      try {
+        const resp = await fetch("/api/cubes");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const allCubes = [
+          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({
+            id: c.id,
+            name: c.name,
+          })),
+          ...(data.publicCubes || []).map(
+            (c: { id: string; name: string }) => ({ id: c.id, name: c.name })
+          ),
+        ];
+        setCubes(allCubes);
+        if (allCubes.length > 0) {
+          setCubeId(allCubes[0].id);
+        }
+      } catch (e) {
+        console.warn("Failed to load cubes:", e);
+      }
+    }
+    loadCubes();
+  }, []);
 
   // Polling removed; realtime provider handles live updates
 
@@ -191,20 +236,28 @@ export default function TournamentsPage() {
       if (form.format === "sealed") {
         // Convert booster array to packCounts format for backend
         const packCounts: Record<string, number> = {};
-        sealedBoosters.forEach(setName => {
+        sealedBoosters.forEach((setName) => {
           packCounts[setName] = (packCounts[setName] || 0) + 1;
         });
         settingsOut.sealedConfig = { packCounts };
       } else if (form.format === "draft") {
-        // Convert booster array to packCounts format for backend
-        const packCounts: Record<string, number> = {};
-        draftBoosters.forEach(setName => {
-          packCounts[setName] = (packCounts[setName] || 0) + 1;
-        });
-        settingsOut.draftConfig = {
-          packCount: draftBoosterCount,
-          packCounts,
-        };
+        if (useCube && cubeId) {
+          // Cube draft mode
+          settingsOut.draftConfig = {
+            cubeId,
+            packCount: draftBoosterCount,
+          };
+        } else {
+          // Regular set-based draft
+          const packCounts: Record<string, number> = {};
+          draftBoosters.forEach((setName) => {
+            packCounts[setName] = (packCounts[setName] || 0) + 1;
+          });
+          settingsOut.draftConfig = {
+            packCount: draftBoosterCount,
+            packCounts,
+          };
+        }
       }
 
       const newTournament = await rtCreateTournament({
@@ -232,6 +285,10 @@ export default function TournamentsPage() {
       setSealedBoosters(["Beta", "Beta", "Beta", "Beta", "Beta", "Beta"]);
       setDraftBoosterCount(3);
       setDraftBoosters(["Beta", "Arthurian Legends", "Arthurian Legends"]);
+      setUseCube(false);
+      if (cubes.length > 0) {
+        setCubeId(cubes[0].id);
+      }
       setShowCreateForm(false);
 
       // Navigate to the new tournament
@@ -588,7 +645,12 @@ export default function TournamentsPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => setForm(prev => ({ ...prev, name: generateTournamentName() }))}
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          name: generateTournamentName(),
+                        }))
+                      }
                       className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
                       title="Generate random name"
                     >
@@ -632,9 +694,14 @@ export default function TournamentsPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            const newCount = Math.max(1, sealedBoosterCount - 1);
+                            const newCount = Math.max(
+                              1,
+                              sealedBoosterCount - 1
+                            );
                             setSealedBoosterCount(newCount);
-                            setSealedBoosters(prev => prev.slice(0, newCount));
+                            setSealedBoosters((prev) =>
+                              prev.slice(0, newCount)
+                            );
                           }}
                           className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
                         >
@@ -646,11 +713,14 @@ export default function TournamentsPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            const newCount = Math.min(10, sealedBoosterCount + 1);
+                            const newCount = Math.min(
+                              10,
+                              sealedBoosterCount + 1
+                            );
                             setSealedBoosterCount(newCount);
-                            setSealedBoosters(prev => [
+                            setSealedBoosters((prev) => [
                               ...prev,
-                              ...Array(newCount - prev.length).fill("Beta")
+                              ...Array(newCount - prev.length).fill("Beta"),
                             ]);
                           }}
                           className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
@@ -671,7 +741,7 @@ export default function TournamentsPage() {
                           <select
                             value={setName}
                             onChange={(e) => {
-                              setSealedBoosters(prev => {
+                              setSealedBoosters((prev) => {
                                 const next = [...prev];
                                 next[idx] = e.target.value;
                                 return next;
@@ -680,7 +750,9 @@ export default function TournamentsPage() {
                             className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
                           >
                             <option value="Beta">Beta</option>
-                            <option value="Arthurian Legends">Arthurian Legends</option>
+                            <option value="Arthurian Legends">
+                              Arthurian Legends
+                            </option>
                             <option value="Alpha">Alpha</option>
                           </select>
                         </div>
@@ -692,68 +764,121 @@ export default function TournamentsPage() {
                 {/* Draft Booster Configuration */}
                 {form.format === "draft" && (
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <label className="block text-slate-300 text-sm font-medium">
-                        Booster Count
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newCount = Math.max(1, draftBoosterCount - 1);
-                            setDraftBoosterCount(newCount);
-                            setDraftBoosters(prev => prev.slice(0, newCount));
-                          }}
-                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                    {/* Cube draft toggle */}
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={useCube}
+                        onChange={(e) => setUseCube(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span className="text-slate-300 text-sm">
+                        Use Cube for draft
+                      </span>
+                    </label>
+
+                    {useCube ? (
+                      /* Cube selector */
+                      <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-2">
+                          Select Cube
+                        </label>
+                        <select
+                          value={cubeId}
+                          onChange={(e) => setCubeId(e.target.value)}
+                          disabled={cubes.length === 0}
+                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white disabled:opacity-50"
                         >
-                          -
-                        </button>
-                        <span className="w-12 text-center text-white font-semibold">
-                          {draftBoosterCount}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newCount = Math.min(5, draftBoosterCount + 1);
-                            setDraftBoosterCount(newCount);
-                            setDraftBoosters(prev => [
-                              ...prev,
-                              ...Array(newCount - prev.length).fill("Arthurian Legends")
-                            ]);
-                          }}
-                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                        >
-                          +
-                        </button>
+                          {cubes.length === 0 ? (
+                            <option value="">No cubes available</option>
+                          ) : (
+                            cubes.map((cube) => (
+                              <option key={cube.id} value={cube.id}>
+                                {cube.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      {draftBoosters.map((setName, idx) => (
-                        <div
-                          key={`draft-booster-${idx}`}
-                          className="flex items-center gap-2"
-                        >
-                          <div className="text-slate-300 text-sm w-24">
-                            Booster {idx + 1}
+                    ) : (
+                      /* Set-based booster configuration */
+                      <>
+                        <div className="flex items-center gap-3">
+                          <label className="block text-slate-300 text-sm font-medium">
+                            Booster Count
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCount = Math.max(
+                                  1,
+                                  draftBoosterCount - 1
+                                );
+                                setDraftBoosterCount(newCount);
+                                setDraftBoosters((prev) =>
+                                  prev.slice(0, newCount)
+                                );
+                              }}
+                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                            >
+                              -
+                            </button>
+                            <span className="w-12 text-center text-white font-semibold">
+                              {draftBoosterCount}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCount = Math.min(
+                                  5,
+                                  draftBoosterCount + 1
+                                );
+                                setDraftBoosterCount(newCount);
+                                setDraftBoosters((prev) => [
+                                  ...prev,
+                                  ...Array(newCount - prev.length).fill(
+                                    "Arthurian Legends"
+                                  ),
+                                ]);
+                              }}
+                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
+                            >
+                              +
+                            </button>
                           </div>
-                          <select
-                            value={setName}
-                            onChange={(e) => {
-                              setDraftBoosters(prev => {
-                                const next = [...prev];
-                                next[idx] = e.target.value;
-                                return next;
-                              });
-                            }}
-                            className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
-                          >
-                            <option value="Beta">Beta</option>
-                            <option value="Arthurian Legends">Arthurian Legends</option>
-                            <option value="Alpha">Alpha</option>
-                          </select>
                         </div>
-                      ))}
-                    </div>
+                        <div className="space-y-2">
+                          {draftBoosters.map((setName, idx) => (
+                            <div
+                              key={`draft-booster-${idx}`}
+                              className="flex items-center gap-2"
+                            >
+                              <div className="text-slate-300 text-sm w-24">
+                                Booster {idx + 1}
+                              </div>
+                              <select
+                                value={setName}
+                                onChange={(e) => {
+                                  setDraftBoosters((prev) => {
+                                    const next = [...prev];
+                                    next[idx] = e.target.value;
+                                    return next;
+                                  });
+                                }}
+                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                              >
+                                <option value="Beta">Beta</option>
+                                <option value="Arthurian Legends">
+                                  Arthurian Legends
+                                </option>
+                                <option value="Alpha">Alpha</option>
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 

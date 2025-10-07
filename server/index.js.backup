@@ -54,6 +54,7 @@ const INTERACTION_REQUEST_KINDS = new Set([
   'inspectHand',
   'takeFromPile',
   'manipulatePermanent',
+  'tieGame',
 ]);
 const INTERACTION_DECISIONS = new Set(['approved', 'declined', 'cancelled']);
 
@@ -157,6 +158,89 @@ function collectInteractionRequirements(patch, actorSeat) {
   return {
     needsOpponentZoneWrite: detectOpponentZoneMutation(patch, actorSeat),
   };
+}
+
+function bufferPersistUpdate(matchId, data, action) {
+  if (!PERSIST_IS_WRITE_BEHIND) return;
+  const buf = persistBuffers.get(matchId) || { latestData: null, actions: [], timer: null, lastFlushAt: 0 };
+  buf.latestData = data;
+  if (action) {
+    buf.actions.push(action);
+    if (buf.actions.length > PERSIST_ACTION_BATCH_SIZE * 2) {
+      // prevent unbounded growth
+      buf.actions = buf.actions.slice(-PERSIST_ACTION_BATCH_SIZE * 2);
+    }
+    try { metricsInc('persist.buffer.action', 1); } catch {}
+  }
+  try { metricsInc('persist.buffer.update', 1); } catch {}
+  persistBuffers.set(matchId, buf);
+  schedulePersistFlush(matchId);
+}
+
+function schedulePersistFlush(matchId, dataOverride = null) {
+  if (!PERSIST_IS_WRITE_BEHIND) return;
+  const buf = persistBuffers.get(matchId) || { latestData: null, actions: [], timer: null, lastFlushAt: 0 };
+  if (dataOverride) buf.latestData = dataOverride;
+  if (buf.timer) return; // already scheduled
+  buf.timer = setTimeout(() => flushPersistBuffer(matchId, 'timer'), PERSIST_FLUSH_INTERVAL_MS);
+  persistBuffers.set(matchId, buf);
+  try { metricsInc('persist.flush.scheduled', 1); } catch {}
+}
+
+async function flushPersistBuffer(matchId, reason = 'manual') {
+  const buf = persistBuffers.get(matchId);
+  if (!buf || !buf.latestData) return;
+  // Capture and clear timer first to avoid overlap
+  if (buf.timer) {
+    try { clearTimeout(buf.timer); } catch {}
+    buf.timer = null;
+  }
+  const data = buf.latestData;
+  const actions = buf.actions.splice(0, PERSIST_ACTION_BATCH_SIZE);
+  persistBuffers.set(matchId, buf);
+  try {
+    const t0 = Date.now();
+    try { metricsInc('persist.flush.attempt', 1); } catch {}
+    // Upsert session row
+    await prisma.onlineMatchSession.upsert({
+      where: { id: matchId },
+      create: { id: matchId, ...data },
+      update: data,
+    });
+
+    // Batch actions if any
+    if (actions.length > 0) {
+      const rows = actions.map((a) => ({
+        matchId,
+        playerId: a.playerId || 'system',
+        timestamp: BigInt(Number(a.timestamp || Date.now())),
+        patch: a.patch,
+      }));
+      try {
+        await prisma.onlineMatchAction.createMany({ data: rows });
+        try { metricsInc('persist.actions.createMany.ok', rows.length); } catch {}
+      } catch (e) {
+        // Fallback to individual inserts if createMany fails (e.g., JSON size issues)
+        for (const r of rows) {
+          try { await prisma.onlineMatchAction.create({ data: r }); } catch {}
+        }
+        try { metricsInc('persist.actions.createMany.fallback', rows.length); } catch {}
+      }
+    }
+    try {
+      metricsInc('persist.flush.success', 1);
+      metricsObserveMs('persist.flush.ms', Date.now() - t0);
+    } catch {}
+  } catch (e) {
+    try { console.warn(`[persist] flush failed for ${matchId} (${reason}):`, e?.message || e); } catch {}
+    try { metricsInc('persist.flush.failure', 1); } catch {}
+  } finally {
+    buf.lastFlushAt = Date.now();
+    // If more actions remain, schedule another quick flush
+    if (buf.actions.length > 0) {
+      schedulePersistFlush(matchId);
+    }
+  }
 }
 
 function usePermitForRequirement(match, playerId, actorSeat, requirement, now) {
@@ -361,6 +445,43 @@ function applyPendingAction(match, entry, now) {
       },
     };
   }
+  if (kind === 'tieGame') {
+    try {
+      const g = match.game || {};
+      const players = g.players && typeof g.players === 'object' ? g.players : {};
+      const p1 = players.p1 || {};
+      const p2 = players.p2 || {};
+      const p1LS = typeof p1.lifeState === 'string' ? p1.lifeState : null;
+      const p2LS = typeof p2.lifeState === 'string' ? p2.lifeState : null;
+      const eligible = p1LS === 'dd' && p2LS === 'dd' && !(g && g.matchEnded);
+      if (!eligible) {
+        return { ...resultBase, success: false, message: 'Tie not eligible: both players must be at Death\'s Door and match not ended' };
+      }
+      // Apply authoritative patch
+      const patch = {
+        players: {
+          p1: { ...p1, life: 0, lifeState: 'dead' },
+          p2: { ...p2, life: 0, lifeState: 'dead' },
+        },
+        matchEnded: true,
+        winner: null,
+      };
+      match.game = deepMergeReplaceArrays(match.game || {}, patch);
+      match.lastTs = now;
+      const room = `match:${match.id}`;
+      io.to(room).emit('statePatch', { patch, t: now });
+      // Finalize as draw (fire-and-forget)
+      try { finalizeMatch(match, { isDraw: true }); } catch {}
+      return {
+        ...resultBase,
+        success: true,
+        payload: { requestedBy: pendingAction.requestedBy || null },
+        message: 'Tie declared: both players died simultaneously.',
+      };
+    } catch (e) {
+      return { ...resultBase, success: false, message: 'Failed to apply tie' };
+    }
+  }
   return { ...resultBase, success: false, message: 'Unsupported pending action kind' };
 }
 async function leaderDraftPlayerReady(matchId, playerId, ready) {
@@ -419,52 +540,68 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
       };
     } catch {}
   }
-  // Normalize setMix
+  // Check if using cube - cubes don't need set-based normalization
+  const usingCube = Boolean(dc.cubeId);
+
+  // Normalize setMix (skip for cubes)
   const setMix = Array.isArray(dc.setMix) && dc.setMix.length > 0 ? dc.setMix : ['Beta'];
   // Normalize packCount/packSize
   const packCount = Math.max(1, Number(dc.packCount) || 3);
   const packSize = Math.max(8, Number(dc.packSize) || 15);
+
   // Normalize packCounts: ensure it sums exactly to packCount; if not, generate even distribution across setMix
+  // Skip this for cubes - they don't use set-based pack counts
   let packCounts = dc && typeof dc.packCounts === 'object' ? { ...dc.packCounts } : undefined;
-  const sumPackCounts = (obj) =>
-    obj ? Object.values(obj).reduce((a, b) => a + (Math.max(0, Number(b) || 0)), 0) : 0;
-  if (!packCounts || sumPackCounts(packCounts) !== packCount) {
-    const counts = {};
-    const n = setMix.length;
-    for (const s of setMix) counts[s] = 0;
-    const base = Math.floor(packCount / n);
-    const rem = packCount % n;
-    setMix.forEach((s, i) => {
-      counts[s] = base + (i < rem ? 1 : 0);
-    });
-    packCounts = counts;
+  if (!usingCube) {
+    const sumPackCounts = (obj) =>
+      obj ? Object.values(obj).reduce((a, b) => a + (Math.max(0, Number(b) || 0)), 0) : 0;
+    if (!packCounts || sumPackCounts(packCounts) !== packCount) {
+      const counts = {};
+      const n = setMix.length;
+      for (const s of setMix) counts[s] = 0;
+      const base = Math.floor(packCount / n);
+      const rem = packCount % n;
+      setMix.forEach((s, i) => {
+        counts[s] = base + (i < rem ? 1 : 0);
+      });
+      packCounts = counts;
+    }
   }
   // Persist normalized config back to match (so followers/clients see canonical config)
-  match.draftConfig = { setMix, packCount, packSize, packCounts };
+  match.draftConfig = { ...dc, setMix, packCount, packSize, packCounts };
   try {
-    // Build set sequence from exact packCounts
+    // Build set sequence from exact packCounts (not needed for cubes)
     let setSequence = [];
-    if (packCounts && typeof packCounts === 'object') {
-      for (const [name, cnt] of Object.entries(packCounts)) {
-        const c = Math.max(0, Number(cnt) || 0);
-        for (let i = 0; i < c; i++) setSequence.push(name);
+    if (!usingCube) {
+      if (packCounts && typeof packCounts === 'object') {
+        for (const [name, cnt] of Object.entries(packCounts)) {
+          const c = Math.max(0, Number(cnt) || 0);
+          for (let i = 0; i < c; i++) setSequence.push(name);
+        }
       }
-    }
-    if (setSequence.length !== packCount) {
-      console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
-      // Notify requester if available
-      try {
-        if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: `Draft configuration error: pack counts must sum to ${packCount}` });
-      } catch {}
-      return;
+      if (setSequence.length !== packCount) {
+        console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
+        // Notify requester if available
+        try {
+          if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: `Draft configuration error: pack counts must sum to ${packCount}` });
+        } catch {}
+        return;
+      }
     }
     const currentPacks = [];
     for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
       const playerPacks = [];
       for (let packIdx = 0; packIdx < packCount; packIdx++) {
-        const setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
         const rng = createRngFromString(`${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`);
-        const picks = await generateBoosterDeterministic(setName, rng, false);
+        // Use cube booster generation if cubeId is present, otherwise use set-based generation
+        let picks;
+        let setName = 'Beta'; // Default for regular sets
+        if (usingCube) {
+          picks = await generateCubeBoosterDeterministic(dc.cubeId, rng, packSize);
+        } else {
+          setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
+          picks = await generateBoosterDeterministic(setName, rng, false);
+        }
         const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
           id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[playerIdx].slice(-4)}`,
           name: p.cardName || '',
@@ -473,7 +610,9 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
           cost: String(p.cost || ''),
           rarity: p.rarity || 'common',
           element: p.element || [],
-          setName,
+          // For cubes, use the actual setName from the pick (allows mixed-set packs)
+          // For regular sets, use the setName variable
+          setName: usingCube ? (p.setName || "Unknown") : setName,
         }));
         playerPacks.push(cards);
       }
@@ -556,13 +695,16 @@ async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickN
       draftState.pickNumber++;
       draftState.phase = 'passing';
       const temp = [...draftState.currentPacks];
+      const n = temp.length;
       if (draftState.packDirection === 'left') {
-        for (let i = 0; i < temp.length; i++) {
-          draftState.currentPacks[(i + 1) % temp.length] = temp[i];
+        // Rotate left: pack i goes to (i+1) mod n
+        for (let i = 0; i < n; i++) {
+          draftState.currentPacks[(i + 1) % n] = temp[i];
         }
       } else {
-        for (let i = 0; i < temp.length; i++) {
-          draftState.currentPacks[i] = temp[(i + 1) % temp.length];
+        // Rotate right: pack i goes to (i-1+n) mod n
+        for (let i = 0; i < n; i++) {
+          draftState.currentPacks[(i - 1 + n) % n] = temp[i];
         }
       }
       draftState.phase = 'picking';
@@ -842,6 +984,7 @@ const Redis = require("ioredis");
 const {
   createRngFromString,
   generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
 } = require("./booster");
 const { BotManager } = require("./botManager");
 const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
@@ -867,6 +1010,7 @@ const RULES_HELPERS_ENABLED = !(
   (process.env.RULES_HELPERS_ENABLED || '').toLowerCase() === 'false'
 );
 
+
 const server = http.createServer();
 // Allow multiple origins via env to support localhost and LAN IPs in dev
 const CORS_ORIGINS = (process.env.SOCKET_CORS_ORIGIN || "http://localhost:3000")
@@ -882,6 +1026,119 @@ const io = new Server(server, {
   pingInterval: Number(process.env.SOCKET_PING_INTERVAL_MS || 15000),
   pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT_MS || 30000),
 });
+
+// Persistence strategy: default to Redis write-behind to avoid DB pool pressure
+const PERSIST_STRATEGY = (process.env.PERSIST_STRATEGY || 'write_behind').toLowerCase();
+const PERSIST_IS_WRITE_BEHIND = (
+  PERSIST_STRATEGY === 'write_behind' ||
+  PERSIST_STRATEGY === 'redis' ||
+  PERSIST_STRATEGY === 'redis_writebehind'
+);
+const PERSIST_FLUSH_INTERVAL_MS = Number(process.env.PERSIST_FLUSH_INTERVAL_MS || 3000);
+const PERSIST_MAX_WAIT_MS = Number(process.env.PERSIST_MAX_WAIT_MS || 2000);
+const PERSIST_TIMEOUT_MS = Number(process.env.PERSIST_TIMEOUT_MS || 2000);
+const PERSIST_ACTION_BATCH_SIZE = Number(process.env.PERSIST_ACTION_BATCH_SIZE || 200);
+const REDIS_SESSION_TTL_SEC = Number(process.env.MATCH_SESSION_TTL_SEC || 60 * 60 * 24);
+
+// Simple in-memory metrics registry (process lifetime)
+const METRICS = {
+  counters: new Map(), // key -> number
+  hist: new Map(), // key -> { sum:number, count:number }
+};
+function metricsInc(key, delta = 1) {
+  METRICS.counters.set(key, (METRICS.counters.get(key) || 0) + delta);
+}
+function metricsGet(key) {
+  return METRICS.counters.get(key) || 0;
+}
+function metricsObserveMs(key, ms) {
+  const cur = METRICS.hist.get(key) || { sum: 0, count: 0 };
+  cur.sum += ms;
+  cur.count += 1;
+  METRICS.hist.set(key, cur);
+}
+
+function promSafe(name) {
+  return String(name).replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+function getBufferedActionsCount() {
+  try {
+    let total = 0;
+    for (const buf of persistBuffers.values()) {
+      if (buf && Array.isArray(buf.actions)) total += buf.actions.length;
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+function collectMetricsSnapshot() {
+  const now = Date.now();
+  const counters = {};
+  for (const [k, v] of METRICS.counters.entries()) counters[k] = v;
+  const hist = {};
+  for (const [k, v] of METRICS.hist.entries()) hist[k] = { sum: v.sum, count: v.count, avg: v.count > 0 ? v.sum / v.count : 0 };
+  const sockets = (() => { try { return io.of('/').sockets.size; } catch { return 0; } })();
+  const mem = process.memoryUsage();
+  const bufferedActions = getBufferedActionsCount();
+  return {
+    time: now,
+    uptimeSec: Math.floor(process.uptime()),
+    matchesCached: typeof matches !== 'undefined' && matches ? matches.size : 0,
+    persistBuffers: persistBuffers.size,
+    bufferedActions,
+    socketsConnected: sockets,
+    dbReady: !!isReady,
+    redisAdapterStatus: pubClient ? pubClient.status : 'none',
+    storeRedisStatus: storeRedis ? storeRedis.status : 'none',
+    memory: { rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal, external: mem.external },
+    counters,
+    hist,
+  };
+}
+
+function buildPromMetrics() {
+  const snap = collectMetricsSnapshot();
+  const lines = [];
+  const pushGauge = (name, value, help) => {
+    const n = `sorcery_${promSafe(name)}`;
+    if (help) lines.push(`# HELP ${n} ${help}`);
+    lines.push(`# TYPE ${n} gauge`);
+    lines.push(`${n} ${Number(value)}`);
+  };
+  const pushCounter = (name, value, help) => {
+    const n = `sorcery_${promSafe(name)}_total`;
+    if (help) lines.push(`# HELP ${n} ${help}`);
+    lines.push(`# TYPE ${n} counter`);
+    lines.push(`${n} ${Number(value)}`);
+  };
+  const pushSummary = (name, sum, count, help) => {
+    const base = `sorcery_${promSafe(name)}`;
+    if (help) lines.push(`# HELP ${base} ${help}`);
+    lines.push(`# TYPE ${base} summary`);
+    lines.push(`${base}_sum ${Number(sum)}`);
+    lines.push(`${base}_count ${Number(count)}`);
+  };
+  // Gauges
+  pushGauge('matches_cached', snap.matchesCached, 'Number of matches in memory');
+  pushGauge('persist_buffers', snap.persistBuffers, 'Number of write-behind buffers');
+  pushGauge('persist_buffered_actions', snap.bufferedActions, 'Queued actions in buffers');
+  pushGauge('sockets_connected', snap.socketsConnected, 'Connected WebSocket clients');
+  pushGauge('uptime_seconds', snap.uptimeSec, 'Process uptime in seconds');
+  pushGauge('process_heap_used_bytes', snap.memory.heapUsed, 'Node.js heap used');
+  pushGauge('process_rss_bytes', snap.memory.rss, 'Resident set size');
+  // Counters
+  for (const [k, v] of Object.entries(snap.counters)) {
+    pushCounter(k.replace(/\./g, '_'), v, `Counter ${k}`);
+  }
+  // Summaries
+  for (const [k, v] of Object.entries(snap.hist)) {
+    pushSummary(`${k.replace(/\./g, '_')}_ms`, v.sum, v.count, `Summary ${k}`);
+  }
+  return lines.join('\n') + '\n';
+}
 
 // Socket.IO Redis adapter (horizontal scaling)
 let pubClient = null;
@@ -913,6 +1170,7 @@ try {
 
 // Match control pub/sub channel
 const MATCH_CONTROL_CHANNEL = 'match:control';
+const DRAFT_STATE_CHANNEL = 'draft:session:update';
 const MATCH_CLEANUP_DELAY_MS = Number(process.env.MATCH_CLEANUP_DELAY_MS || 60000); // 60s default
 const STALE_WAITING_MS = Number(process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000); // 10 min default
 const LOBBY_CONTROL_CHANNEL = 'lobby:control';
@@ -928,6 +1186,9 @@ if (storeSub) {
     });
     storeSub.subscribe(LOBBY_STATE_CHANNEL, (err) => {
       if (err) try { console.warn(`[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
+    });
+    storeSub.subscribe(DRAFT_STATE_CHANNEL, (err) => {
+      if (err) try { console.warn(`[store] subscribe ${DRAFT_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
     });
     storeSub.on('message', async (channel, message) => {
       if (!clusterStateReady) return;
@@ -976,6 +1237,17 @@ if (storeSub) {
         }
         return;
       }
+      if (channel === DRAFT_STATE_CHANNEL) {
+        // Forward tournament draft session updates to room subscribers
+        try {
+          const { sessionId, draftState } = msg || {};
+          if (!sessionId) return;
+          io.to(`draft:${sessionId}`).emit('draftUpdate', draftState);
+        } catch (e) {
+          try { console.warn('[draft] failed to forward state:', e?.message || e); } catch {}
+        }
+        return;
+      }
       if (channel === LOBBY_CONTROL_CHANNEL) {
         if (!msg || !msg.type) return;
         try {
@@ -1016,7 +1288,7 @@ server.on("request", async (req, res) => {
     };
     const allowCorsForOptions = () => {
       allowCors();
-      res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     };
 
@@ -1033,6 +1305,26 @@ server.on("request", async (req, res) => {
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       res.end(body);
+      return;
+    }
+
+    // Metrics endpoints
+    if (pathname === "/metrics" && method === "GET") {
+      allowCors();
+      try { metricsInc('http.metrics.requests', 1); } catch {}
+      const text = buildPromMetrics();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+      res.end(text);
+      return;
+    }
+    if (pathname === "/metrics.json" && method === "GET") {
+      allowCors();
+      try { metricsInc('http.metrics_json.requests', 1); } catch {}
+      const snap = collectMetricsSnapshot();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(snap));
       return;
     }
 
@@ -1194,6 +1486,101 @@ server.on("request", async (req, res) => {
       return;
     }
 
+    // Handle tournament broadcast requests from Next.js API routes
+    if (pathname === "/tournament/broadcast" && method === "POST") {
+      allowCors();
+
+      // Collect request body
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          const body = Buffer.concat(chunks).toString();
+          const { event, data } = JSON.parse(body);
+
+          // Call the appropriate broadcast function
+          switch (event) {
+            case 'TOURNAMENT_UPDATED':
+              if (data.id) broadcastTournamentUpdate(data.id, data);
+              break;
+            case 'PHASE_CHANGED':
+              if (data.tournamentId && data.newPhase) {
+                const { tournamentId, newPhase, ...additionalData } = data;
+                broadcastPhaseChanged(tournamentId, newPhase, additionalData);
+              }
+              break;
+            case 'ROUND_STARTED':
+              if (data.tournamentId && data.roundNumber && data.matches) {
+                broadcastRoundStarted(data.tournamentId, data.roundNumber, data.matches);
+              }
+              break;
+            case 'PLAYER_JOINED':
+              if (data.tournamentId) {
+                broadcastPlayerJoined(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
+              }
+              break;
+            case 'PLAYER_LEFT':
+              if (data.tournamentId) {
+                broadcastPlayerLeft(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
+              }
+              break;
+            case 'DRAFT_READY':
+              if (data.tournamentId && data.draftSessionId) {
+                const { tournamentId, ...rest } = data;
+                broadcastDraftReady(tournamentId, rest);
+              }
+              break;
+            case 'UPDATE_PREPARATION':
+              if (data.tournamentId) {
+                broadcastPreparationUpdate(data.tournamentId, data.playerId, data.preparationStatus, data.readyPlayerCount, data.totalPlayerCount, data.deckSubmitted);
+              }
+              break;
+            case 'STATISTICS_UPDATED':
+              if (data.tournamentId) {
+                broadcastStatisticsUpdate(data.tournamentId, data);
+              }
+              break;
+            case 'MATCH_ASSIGNED':
+              // For now, just log - MATCH_ASSIGNED needs player-specific routing
+              console.log('[Tournament] MATCH_ASSIGNED broadcast received');
+              break;
+            case 'matchEnded':
+              if (data.matchId) {
+                const match = matches.get(data.matchId);
+                if (match) {
+                  // Clear player associations
+                  for (const playerId of match.playerIds || []) {
+                    const player = players.get(playerId);
+                    if (player && player.matchId === data.matchId) {
+                      player.matchId = null;
+                    }
+                  }
+                  // Broadcast to match room
+                  io.to(`match:${data.matchId}`).emit('matchEnded', data);
+                  console.log(`[Match] Ended match ${data.matchId} due to ${data.reason}`);
+                }
+              }
+              break;
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (err) {
+          console.error('[Tournament] Broadcast error:', err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid request', details: err.message }));
+        }
+      });
+
+      req.on('error', (err) => {
+        console.error('[Tournament] Request error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Server error' }));
+      });
+
+      return;
+    }
+
     // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
     return;
   } catch (e) {
@@ -1226,6 +1613,81 @@ const participantDetails = new Map();
 /** @type {Map<string, { id: string, from: string, to: string, lobbyId: string|null, matchId: string|null, createdAt: number }>} */
 const pendingVoiceRequests = new Map();
 
+// Draft session presence: sessionId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
+/** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
+const draftPresence = new Map();
+
+// Tournament presence: tournamentId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
+/** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
+const tournamentPresence = new Map();
+
+function getDraftPresenceList(sessionId) {
+  const m = draftPresence.get(sessionId);
+  if (!m) return [];
+  return Array.from(m.values());
+}
+
+function upsertDraftPresence(sessionId, playerId, playerName, isConnected) {
+  let m = draftPresence.get(sessionId);
+  if (!m) { m = new Map(); draftPresence.set(sessionId, m); }
+  const prev = m.get(playerId) || { playerId, playerName: playerName || `Player ${playerId.slice(-4)}`, isConnected: false, lastActivity: 0 };
+  const rec = { playerId, playerName: playerName || prev.playerName, isConnected: !!isConnected, lastActivity: Date.now() };
+  m.set(playerId, rec);
+  return getDraftPresenceList(sessionId);
+}
+
+/**
+ * Cluster-wide draft presence using Redis (if available)
+ * Maintains per-session per-player connection counts and a canonical state hash.
+ * Falls back to in-memory map when Redis is unavailable.
+ */
+async function updateDraftPresence(sessionId, playerId, playerName, isConnected) {
+  if (storeRedis) {
+    try {
+      const countsKey = `draft:presence:counts:${sessionId}`;
+      const namesKey = `draft:presence:names:${sessionId}`;
+      const stateKey = `draft:presence:state:${sessionId}`;
+      if (playerName) { await storeRedis.hset(namesKey, playerId, playerName); }
+      if (isConnected === true) {
+        await storeRedis.hincrby(countsKey, playerId, 1);
+      } else if (isConnected === false) {
+        await storeRedis.hincrby(countsKey, playerId, -1);
+      }
+      let cntRaw = await storeRedis.hget(countsKey, playerId);
+      let cnt = Number(cntRaw || 0);
+      if (!Number.isFinite(cnt) || cnt < 0) cnt = 0;
+      const name = (await storeRedis.hget(namesKey, playerId)) || playerName || `Player ${String(playerId).slice(-4)}`;
+      const rec = { playerId, playerName: name, isConnected: cnt > 0, lastActivity: Date.now() };
+      await storeRedis.hset(stateKey, playerId, JSON.stringify(rec));
+      const raw = await storeRedis.hgetall(stateKey);
+      const list = [];
+      for (const k of Object.keys(raw || {})) {
+        try { list.push(JSON.parse(raw[k])); } catch {}
+      }
+      return list;
+    } catch (e) {
+      try { console.warn('[store] draft presence redis failed:', e?.message || e); } catch {}
+    }
+  }
+  // Fallback to local process memory
+  return upsertDraftPresence(sessionId, playerId, playerName, isConnected);
+}
+
+function getTournamentPresenceList(tournamentId) {
+  const m = tournamentPresence.get(tournamentId);
+  if (!m) return [];
+  return Array.from(m.values());
+}
+
+function upsertTournamentPresence(tournamentId, playerId, playerName, isConnected) {
+  let m = tournamentPresence.get(tournamentId);
+  if (!m) { m = new Map(); tournamentPresence.set(tournamentId, m); }
+  const prev = m.get(playerId) || { playerId, playerName: playerName || `Player ${playerId.slice(-4)}`, isConnected: false, lastActivity: 0 };
+  const rec = { playerId, playerName: playerName || prev.playerName, isConnected: !!isConnected, lastActivity: Date.now() };
+  m.set(playerId, rec);
+  return getTournamentPresenceList(tournamentId);
+}
+
 function getVoiceRoomIdForPlayer(player) {
   if (!player) return null;
   if (player.lobbyId) return `lobby:${player.lobbyId}`;
@@ -1235,6 +1697,13 @@ function getVoiceRoomIdForPlayer(player) {
 /** @type {Map<string, NodeJS.Timeout>} */
 const draftStartWatchdogs = new Map();
 clusterStateReady = true;
+
+/**
+ * Redis write-behind buffers per match
+ * matchId -> { latestData, actions: [{playerId, timestamp:number, patch}], timer: Timeout|null, lastFlushAt?: number }
+ */
+/** @type {Map<string, { latestData: any, actions: Array<{ playerId: string, timestamp: number, patch: any }>, timer?: NodeJS.Timeout|null, lastFlushAt?: number }>} */
+const persistBuffers = new Map();
 
 // -----------------------------
 // Persistence helpers (PostgreSQL via Prisma) and Redis cache
@@ -1266,28 +1735,36 @@ function matchToSessionUpsertData(match) {
 
 async function cacheSessionToRedis(sessionData) {
   try {
-    if (!pubClient) return;
+    const client = storeRedis || pubClient;
+    if (!client) return;
     const key = `match:session:${sessionData.id}`;
-    await pubClient.set(
+    await client.set(
       key,
       JSON.stringify(sessionData, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)),
       'EX',
-      60 * 60 * 24
+      REDIS_SESSION_TTL_SEC
     );
+    try { metricsInc('persist.redis.cache.set', 1); } catch {}
   } catch {}
 }
 
 async function persistMatchCreated(match) {
   try {
     const data = matchToSessionUpsertData(match);
-    const createData = { id: match.id, ...data };
-    const updateData = { ...data };
-    await prisma.onlineMatchSession.upsert({
-      where: { id: match.id },
-      update: updateData,
-      create: createData,
-    });
     await cacheSessionToRedis({ ...data, id: match.id });
+    try { metricsInc('persist.created', 1); } catch {}
+    if (PERSIST_IS_WRITE_BEHIND) {
+      // Schedule an initial snapshot to DB soon after creation
+      try { schedulePersistFlush(match.id, data); } catch {}
+    } else {
+      const createData = { id: match.id, ...data };
+      const updateData = { ...data };
+      await prisma.onlineMatchSession.upsert({
+        where: { id: match.id },
+        update: updateData,
+        create: createData,
+      });
+    }
   } catch (e) {
     try { console.warn(`[persist] create session failed for ${match.id}:`, e?.message || e); } catch {}
   }
@@ -1296,15 +1773,30 @@ async function persistMatchCreated(match) {
 async function persistMatchUpdate(match, patch, playerId, ts) {
   try {
     const data = matchToSessionUpsertData(match);
-    await prisma.$transaction([
-      prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        create: { id: match.id, ...data },
-        update: data
-      }),
-      ...(patch ? [prisma.onlineMatchAction.create({ data: { matchId: match.id, playerId: playerId || 'system', timestamp: BigInt(Number(ts || Date.now())), patch } })] : []),
-    ]);
     await cacheSessionToRedis({ ...data, id: match.id });
+    try {
+      metricsInc('persist.update', 1);
+      if (patch) metricsInc('persist.update.withPatch', 1);
+    } catch {}
+    
+    // Force immediate persistence for tournament matches (no write-behind buffer)
+    // Tournament players may reload at any time and need state preserved immediately
+    const isTournament = Boolean(match.tournamentId);
+    const forceImmediate = isTournament;
+    
+    if (PERSIST_IS_WRITE_BEHIND && !forceImmediate) {
+      // Buffer and schedule a batched flush
+      bufferPersistUpdate(match.id, data, patch ? { playerId: playerId || 'system', timestamp: Number(ts || Date.now()), patch } : null);
+    } else {
+      await prisma.$transaction([
+        prisma.onlineMatchSession.upsert({
+          where: { id: match.id },
+          create: { id: match.id, ...data },
+          update: data
+        }),
+        ...(patch ? [prisma.onlineMatchAction.create({ data: { matchId: match.id, playerId: playerId || 'system', timestamp: BigInt(Number(ts || Date.now())), patch } })] : []),
+      ], { maxWait: PERSIST_MAX_WAIT_MS, timeout: PERSIST_TIMEOUT_MS });
+    }
   } catch (e) {
     try { console.warn(`[persist] update session failed for ${match.id}:`, e?.message || e); } catch {}
   }
@@ -1313,11 +1805,22 @@ async function persistMatchUpdate(match, patch, playerId, ts) {
 async function persistMatchEnded(match) {
   try {
     const endData = { status: 'ended', winnerId: match.winnerId || null, lastTs: BigInt(Number(match.lastTs || Date.now())) };
-    await prisma.onlineMatchSession.upsert({
-      where: { id: match.id },
-      create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
-      update: endData
-    });
+    try { metricsInc('persist.ended', 1); } catch {}
+    if (PERSIST_IS_WRITE_BEHIND) {
+      // Force-flush any buffered updates first, then write the final end state synchronously
+      try { await flushPersistBuffer(match.id, 'match_end'); } catch {}
+      await prisma.onlineMatchSession.upsert({
+        where: { id: match.id },
+        create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
+        update: endData
+      });
+    } else {
+      await prisma.onlineMatchSession.upsert({
+        where: { id: match.id },
+        create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
+        update: endData
+      });
+    }
   } catch (e) {
     try { console.warn(`[persist] end session failed for ${match.id}:`, e?.message || e); } catch {}
   }
@@ -1361,11 +1864,16 @@ async function recoverActiveMatches() {
     for (const r of rows) {
       if (matches.has(r.id)) continue;
       const m = rehydrateMatch(r);
-      if (m) { matches.set(m.id, m); count++; }
+      if (m) {
+        // Backfill tournament context for recovered matches
+        try { await hydrateMatchFromDatabase(m.id, m); } catch {}
+        matches.set(m.id, m);
+        count++;
+      }
     }
     try { console.log(`[persist] recovered ${count} active match(es) from DB`); } catch {}
   } catch (e) {
-    try { console.warn(`[persist] recovery error:`, e?.message || e); } catch {}
+    try { console.warn(`[persist] recover active matches failed:`, e?.message || e); } catch {}
   }
 }
 
@@ -1381,7 +1889,11 @@ async function findActiveMatchForPlayer(playerId) {
     if (!r) return null;
     if (matches.has(r.id)) return matches.get(r.id);
     const m = rehydrateMatch(r);
-    if (m) { matches.set(m.id, m); }
+    if (m) {
+      // Backfill tournament context if applicable
+      try { await hydrateMatchFromDatabase(m.id, m); } catch {}
+      matches.set(m.id, m);
+    }
     return m;
   } catch {
     return null;
@@ -1815,6 +2327,103 @@ async function finalizeMatch(match, options = {}) {
     : { winnerId, loserId };
 
   recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
+
+  // If this is a tournament match, persist result into Tournament Match and update round completion
+  try {
+    if (match.tournamentId) {
+      const nowIso = new Date().toISOString();
+      const tMatch = await prisma.match.findUnique({
+        where: { id: match.id },
+        include: { tournament: true, round: true },
+      });
+      if (tMatch) {
+        const gameResults = Array.isArray(match?.game?.results) ? match.game.results : [];
+        const matchResults = {
+          winnerId: winnerId || null,
+          loserId: loserId || null,
+          isDraw,
+          gameResults,
+          completedAt: nowIso,
+        };
+
+        // Idempotent completion: only update if not already completed
+        await prisma.match.updateMany({
+          where: { id: match.id, status: { not: 'completed' } },
+          data: { status: 'completed', results: matchResults, completedAt: new Date() },
+        });
+
+        // Update standings similar to API route logic
+        try {
+          const playersVal = Array.isArray(tMatch.players) ? tMatch.players : [];
+          const playerIds = playersVal
+            .map((p) => {
+              if (p && typeof p === 'object') {
+                const id = p.id || p.playerId || p.userId;
+                return typeof id === 'string' ? id : null;
+              }
+              return null;
+            })
+            .filter(Boolean);
+          if (playerIds.length === 2) {
+            const [p1, p2] = playerIds;
+            if (isDraw) {
+              await prisma.playerStanding.updateMany({
+                where: { tournamentId: tMatch.tournamentId || '', playerId: { in: [p1, p2] } },
+                data: { draws: { increment: 1 }, matchPoints: { increment: 1 }, currentMatchId: null },
+              });
+            } else if (winnerId && loserId) {
+              await prisma.playerStanding.update({
+                where: { tournamentId_playerId: { tournamentId: tMatch.tournamentId || '', playerId: winnerId } },
+                data: { wins: { increment: 1 }, matchPoints: { increment: 3 }, currentMatchId: null },
+              });
+              await prisma.playerStanding.update({
+                where: { tournamentId_playerId: { tournamentId: tMatch.tournamentId || '', playerId: loserId } },
+                data: { losses: { increment: 1 }, currentMatchId: null },
+              });
+            }
+          }
+        } catch {}
+
+        // If part of a round, possibly mark the round complete and (optionally) the tournament
+        if (tMatch.roundId) {
+          const pendingMatches = await prisma.match.count({
+            where: { roundId: tMatch.roundId, status: { in: ['pending', 'active'] } },
+          });
+          if (pendingMatches === 0) {
+            await prisma.tournamentRound.update({
+              where: { id: tMatch.roundId },
+              data: { status: 'completed', completedAt: new Date() },
+            });
+
+            // End tournament if this was the last configured round
+            if (tMatch.tournament && tMatch.round) {
+              const settings = (tMatch.tournament.settings || {});
+              const pairingFormat = (settings && typeof settings === 'object' && 'pairingFormat' in settings)
+                ? (settings.pairingFormat)
+                : 'swiss';
+              let totalRounds = (settings && typeof settings === 'object' && 'totalRounds' in settings)
+                ? Number(settings.totalRounds)
+                : 0;
+              if (!totalRounds) {
+                const playerCount = await prisma.playerStanding.count({ where: { tournamentId: tMatch.tournament.id } });
+                if (pairingFormat === 'round_robin') totalRounds = Math.max(0, playerCount - 1);
+                else if (pairingFormat === 'elimination') totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(playerCount, 1))));
+                else totalRounds = 3;
+              }
+              if (tMatch.round.roundNumber >= totalRounds) {
+                await prisma.tournament.update({
+                  where: { id: tMatch.tournament.id },
+                  data: { status: 'completed', completedAt: new Date() },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    try { console.warn('[tournament] failed to record result into rounds:', err?.message || err); } catch {}
+  }
 }
 
 // Bot lifecycle helpers moved into BotManager
@@ -1935,7 +2544,10 @@ async function getOrLoadMatch(matchId) {
           const cached = JSON.parse(raw);
           if (cached && cached.id === matchId) {
             const m = rehydrateMatch(cached);
-            if (m) { matches.set(matchId, m); return m; }
+            if (m) {
+              try { await hydrateMatchFromDatabase(matchId, m); } catch {}
+              matches.set(matchId, m); return m;
+            }
           }
         } catch {}
       }
@@ -1946,7 +2558,96 @@ async function getOrLoadMatch(matchId) {
     const row = await prisma.onlineMatchSession.findUnique({ where: { id: matchId } });
     if (row) {
       const m = rehydrateMatch(row);
-      if (m) { matches.set(matchId, m); return m; }
+      if (m) {
+        // Backfill tournament context/decks from Match table if available
+        try { await hydrateMatchFromDatabase(matchId, m); } catch {}
+        matches.set(matchId, m);
+        return m;
+      }
+    }
+  } catch {}
+  // Additional fallback: if no OnlineMatchSession, try to hydrate from tournament Match table
+  try {
+    const t = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: { tournament: { select: { format: true, name: true } } },
+    });
+    if (t) {
+      // Extract playerIds from flexible tournament match players JSON
+      const playersJson = t.players;
+      /** @type {string[]} */
+      let playerIds = [];
+      try {
+        /** @type {any[]} */
+        let arr = [];
+        if (Array.isArray(playersJson)) {
+          arr = playersJson;
+        } else if (playersJson && typeof playersJson === 'object') {
+          if (Array.isArray(playersJson.playerIds)) arr = playersJson.playerIds;
+          else if (Array.isArray(playersJson.players)) arr = playersJson.players;
+          else arr = [];
+        }
+        playerIds = Array.from(new Set(arr.map((it) => {
+          if (typeof it === 'string') return it;
+          if (it && typeof it === 'object') {
+            const v = it.id ?? it.playerId ?? it.userId;
+            return v ? String(v) : null;
+          }
+          return null;
+        }).filter(Boolean)));
+      } catch {}
+
+      // Map tournament format/status to session matchType/status
+      const tf = t?.tournament?.format;
+      const matchType = (tf === 'sealed' || tf === 'draft' || tf === 'constructed') ? tf : 'constructed';
+      let status = matchType === 'sealed' ? 'deck_construction' : 'waiting';
+      try {
+        const s = t.status;
+        if (s === 'active') status = 'in_progress';
+        else if (s === 'completed' || s === 'cancelled') status = 'ended';
+      } catch {}
+
+      // Build in-memory session from tournament Match, then persist as OnlineMatchSession
+      // IMPORTANT: This fallback should only be used for new matches. If status is 'active',
+      // it means an OnlineMatchSession was lost and game state will be reset.
+      if (status === 'in_progress') {
+        try {
+          console.warn(`[match] WARNING: Creating tournament match ${matchId} from Match table with status in_progress. This indicates OnlineMatchSession was lost and game state will be reset. This should not happen with cleanup protection.`);
+        } catch {}
+      }
+      
+      const match = {
+        id: matchId,
+        lobbyId: null,
+        lobbyName: (t?.tournament?.name || null),
+        tournamentId: t.tournamentId || null,
+        playerIds,
+        status,
+        seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        turn: playerIds[0] || null,
+        winnerId: null,
+        matchType,
+        sealedConfig: null,
+        draftConfig: null,
+        playerDecks: (() => {
+          try {
+            return t.playerDecks && typeof t.playerDecks === 'object'
+              ? new Map(Object.entries(t.playerDecks))
+              : new Map();
+          } catch { return new Map(); }
+        })(),
+        game: {},
+        lastTs: 0,
+        interactionRequests: new Map(),
+        interactionGrants: new Map(),
+      };
+
+      matches.set(matchId, match);
+      // Elect leadership for this match and persist the session so other instances can recover it
+      try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
+      try { await persistMatchCreated(match); } catch {}
+      try { await hydrateMatchFromDatabase(matchId, match); } catch {}
+      return match;
     }
   } catch {}
   return null;
@@ -1963,7 +2664,12 @@ async function leaderJoinMatch(matchId, playerId, socketId) {
   try { p.matchId = matchId; } catch {}
   // Join the socket (works cluster-wide with Redis adapter)
   const room = `match:${matchId}`;
-  try { await io.in(socketId).socketsJoin(room); } catch {}
+  try {
+    await io.in(socketId).socketsJoin(room);
+    console.log('[joinMatch] Socket joined room', { socketId, room, playerId });
+  } catch (e) {
+    console.error('[joinMatch] Failed to join room', { socketId, room, playerId, error: e?.message });
+  }
   // Send match info directly to the joiner to avoid any race, then broadcast to the room
   try { if (socketId) io.to(socketId).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
   try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
@@ -1983,6 +2689,20 @@ async function leaderJoinMatch(matchId, playerId, socketId) {
 async function cleanupMatchNow(matchId, reason, force = false) {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
+  
+  // Protect active tournament matches and in-progress matches from cleanup (but allow ended matches to be cleaned)
+  if (match.status === 'in_progress' || match.status === 'waiting' || match.status === 'deck_construction') {
+    if (match.tournamentId) {
+      try { console.log(`[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`); } catch {}
+      return;
+    }
+    // Also protect any in-progress match (tournament or not) to preserve game state for reconnects
+    if (match.status === 'in_progress') {
+      try { console.log(`[match] cleanup blocked for in-progress match ${matchId}`); } catch {}
+      return;
+    }
+  }
+  
   // Check roster empty condition
   const rosterEmpty = !Array.isArray(match.playerIds) || match.playerIds.length === 0;
   // Check room occupancy across cluster (requires Redis adapter)
@@ -2033,6 +2753,15 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
     ) {
       match.status = 'in_progress';
       io.to(matchRoom).emit('matchStarted', { match: getMatchInfo(match) });
+      // If this is a tournament match, mark DB match as active and set startedAt for rounds UI
+      try {
+        if (match.tournamentId) {
+          await prisma.match.updateMany({
+            where: { id: match.id, status: { in: ['pending', 'active'] } },
+            data: { status: 'active', startedAt: new Date() },
+          });
+        }
+      } catch {}
     }
     if (match && patch && typeof patch === 'object') {
       const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
@@ -2113,6 +2842,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           }
         } else {
           patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
+          try { console.log('[d20] partial roll - waiting for second player', { merged: mergedD20, matchId }); } catch {}
         }
       }
       if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
@@ -2434,6 +3164,23 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       } catch {}
       match.lastTs = now;
       recordMatchAction(matchId, patchToApply, playerId);
+      if (patchToApply && patchToApply.d20Rolls) {
+        try {
+          // Check who's in the room
+          io.in(matchRoom).fetchSockets().then(sockets => {
+            console.log('[d20] broadcasting patch to room', {
+              matchId,
+              room: matchRoom,
+              socketsInRoom: sockets.length,
+              socketIds: sockets.map(s => s.id).join(', '),
+              d20Rolls: patchToApply.d20Rolls,
+              setupWinner: patchToApply.setupWinner
+            });
+          });
+        } catch (e) {
+          console.log('[d20] broadcasting patch', { matchId, d20Rolls: patchToApply.d20Rolls, setupWinner: patchToApply.setupWinner });
+        }
+      }
       io.to(matchRoom).emit('statePatch', { patch: patchToApply, t: now });
       if (isSnapshot) {
         try {
@@ -2466,12 +3213,17 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
 async function leaderHandleMulliganDone(matchId, playerId) {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
-  if (match.status !== "waiting") return; // Only relevant during setup
+  // Accept mulligans during "waiting", "deck_construction", or "in_progress"
+  if (match.status !== "waiting" && match.status !== "deck_construction" && match.status !== "in_progress") return;
+  // If already in Main phase, mulligans are no longer relevant
+  if (match.game && match.game.phase === "Main") return;
 
   // Track per-player mulligan completion for this match
   if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
     match.mulliganDone = new Set();
   }
+  
+  const wasAlreadyDone = match.mulliganDone.has(playerId);
   match.mulliganDone.add(playerId);
 
   try {
@@ -2481,14 +3233,24 @@ async function leaderHandleMulliganDone(matchId, playerId) {
       ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
       : [];
     const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
-    console.log(`[Setup] mulliganDone <= ${playerId}. ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
+    console.log(`[Setup] mulliganDone <= ${playerId}${wasAlreadyDone ? ' (duplicate)' : ''}. ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
   } catch {}
 
   // If all current players have finished mulligans, start the game
   const allDone =
     Array.isArray(match.playerIds) &&
     match.playerIds.every((pid) => match.mulliganDone.has(pid));
-  if (!allDone) return;
+  if (!allDone) {
+    // Even if this player was already done, send them current state to ensure they're synced
+    if (wasAlreadyDone) {
+      const room = `match:${match.id}`;
+      try { 
+        console.log(`[Setup] Player ${playerId} resubmitted mulligan - sending current game state`);
+        io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+      } catch {}
+    }
+    return;
+  }
 
   const room = `match:${match.id}`;
   // Flip match status and broadcast updated match info for strict sync
@@ -2747,11 +3509,87 @@ function normalizeSealedConfig(config) {
       : ['Alpha'],
     timeLimit: Number(config.timeLimit) || 0,
     constructionStartTime: Number(config.constructionStartTime) || Date.now(),
-    packCounts: config.packCounts && typeof config.packCounts === 'object' 
-      ? config.packCounts 
-      : null,
+    packCounts: config.packCounts && typeof config.packCounts === 'object'
+      ? config.packCounts
+      : undefined,
     replaceAvatars: Boolean(config.replaceAvatars)
   };
+}
+
+function normalizeDraftConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  const asObj = config;
+  const packConfiguration = Array.isArray(asObj.packConfiguration)
+    ? asObj.packConfiguration
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const setId = typeof entry.setId === 'string' ? entry.setId : String(entry.setId || '').trim();
+          const packCount = Number(entry.packCount);
+          if (!setId) return null;
+          return {
+            setId,
+            packCount: Number.isFinite(packCount) && packCount > 0 ? Math.floor(packCount) : 0,
+          };
+        })
+        .filter((entry) => entry !== null)
+    : null;
+
+  const packCounts = {};
+  if (packConfiguration && packConfiguration.length > 0) {
+    for (const entry of packConfiguration) {
+      if (!entry) continue;
+      packCounts[entry.setId] = (packCounts[entry.setId] || 0) + entry.packCount;
+    }
+  }
+  if (asObj.packCounts && typeof asObj.packCounts === 'object') {
+    for (const [setIdRaw, countRaw] of Object.entries(asObj.packCounts)) {
+      const setId = String(setIdRaw || '').trim();
+      const count = Number(countRaw);
+      if (!setId) continue;
+      packCounts[setId] = (packCounts[setId] || 0) + (Number.isFinite(count) && count > 0 ? Math.floor(count) : 0);
+    }
+  }
+
+  let setMix = Array.isArray(asObj.setMix)
+    ? asObj.setMix.map((setId) => String(setId || '').trim()).filter(Boolean)
+    : [];
+  if (setMix.length === 0) {
+    setMix = Object.keys(packCounts);
+  }
+  if (setMix.length === 0 && packConfiguration && packConfiguration.length > 0) {
+    setMix = packConfiguration.map((entry) => entry.setId).filter(Boolean);
+  }
+  if (setMix.length === 0) {
+    setMix = ['Beta'];
+  }
+
+  const packCountSum = Object.values(packCounts).reduce((sum, value) => sum + (Number.isFinite(value) ? Number(value) : 0), 0);
+  const packCount = packCountSum > 0
+    ? packCountSum
+    : Number.isFinite(Number(asObj.packCount)) && Number(asObj.packCount) > 0
+      ? Math.floor(Number(asObj.packCount))
+      : setMix.length;
+
+  const packSize = Number.isFinite(Number(asObj.packSize)) && Number(asObj.packSize) > 0
+    ? Math.floor(Number(asObj.packSize))
+    : 15;
+
+  const normalized = {
+    setMix,
+    packCount,
+    packSize,
+    packCounts: Object.keys(packCounts).length > 0 ? packCounts : undefined,
+    packConfiguration: packConfiguration && packConfiguration.length > 0 ? packConfiguration : undefined,
+  };
+
+  if (Number.isFinite(Number(asObj.timePerPick))) {
+    normalized.timePerPick = Number(asObj.timePerPick);
+  }
+  if (Number.isFinite(Number(asObj.deckBuildingTime))) {
+    normalized.deckBuildingTime = Number(asObj.deckBuildingTime);
+  }
+
+  return normalized;
 }
 
 function getMatchInfo(match) {
@@ -2767,7 +3605,7 @@ function getMatchInfo(match) {
     winnerId: match.winnerId ?? null,
     matchType: match.matchType || "constructed",
     sealedConfig: match.sealedConfig ? normalizeSealedConfig(match.sealedConfig) : null,
-    draftConfig: match.draftConfig,
+    draftConfig: match.draftConfig ? normalizeDraftConfig(match.draftConfig) : null,
     deckSubmissions: match.playerDecks
       ? Array.from(match.playerDecks.keys())
       : [],
@@ -2778,6 +3616,38 @@ function getMatchInfo(match) {
     draftState: match.draftState || undefined,
   };
 
+}
+
+async function hydrateMatchFromDatabase(matchId, match) {
+  try {
+    const dbMatch = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        tournamentId: true,
+        roundId: true,
+        playerDecks: true,
+      },
+    });
+    if (dbMatch) {
+      try { if (!match.tournamentId && dbMatch.tournamentId) match.tournamentId = dbMatch.tournamentId; } catch {}
+      try { if (!match.roundId && dbMatch.roundId) match.roundId = dbMatch.roundId; } catch {}
+      if (dbMatch.playerDecks && typeof dbMatch.playerDecks === 'object') {
+        try {
+          match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
+        } catch {}
+      }
+    }
+    if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
+      match.playerDecks = new Map();
+    }
+    if (!match.sealedConfig && match.matchType === 'sealed') {
+      match.sealedConfig = normalizeSealedConfig({ packCount: 6, setMix: ['Alpha'], timeLimit: 40, replaceAvatars: false });
+    }
+  } catch (err) {
+    try {
+      console.warn(`[Tournament] Failed to hydrate match ${matchId} from database:`, err?.message || err);
+    } catch {}
+  }
 }
 
 // Deep merge that replaces arrays and merges plain objects.
@@ -3036,7 +3906,12 @@ async function startMatchFromLobby(
       matchType === "sealed" || matchType === "draft" ? new Map() : null,
     draftState: null, // Will be initialized after match creation
     // Server-side aggregated game snapshot and timestamp
-    game: {},
+    game: {
+      phase: "Setup",
+      mulligans: { p1: 1, p2: 1 },
+      d20Rolls: { p1: null, p2: null },
+      setupWinner: null,
+    },
     lastTs: 0,
     interactionRequests: new Map(),
     interactionGrants: new Map(),
@@ -3209,6 +4084,84 @@ function broadcastLobbies() {
   })();
 }
 
+// Tournament broadcast helpers
+function broadcastTournamentUpdate(tournamentId, data) {
+  io.to(`tournament:${tournamentId}`).emit("TOURNAMENT_UPDATED", data);
+  // Also broadcast globally so lobby lists update
+  io.emit("TOURNAMENT_UPDATED", data);
+}
+
+function broadcastPhaseChanged(tournamentId, newPhase, additionalData = {}) {
+  const payload = {
+    tournamentId,
+    newPhase,
+    newStatus: newPhase,
+    timestamp: new Date().toISOString(),
+    ...additionalData
+  };
+  io.to(`tournament:${tournamentId}`).emit("PHASE_CHANGED", payload);
+  io.emit("PHASE_CHANGED", payload);
+}
+
+function broadcastRoundStarted(tournamentId, roundNumber, matches) {
+  io.to(`tournament:${tournamentId}`).emit("ROUND_STARTED", {
+    tournamentId,
+    roundNumber,
+    matches
+  });
+}
+
+function broadcastPlayerJoined(tournamentId, playerId, playerName, currentPlayerCount) {
+  const payload = {
+    tournamentId,
+    playerId,
+    playerName,
+    currentPlayerCount
+  };
+  io.to(`tournament:${tournamentId}`).emit("PLAYER_JOINED", payload);
+  io.emit("PLAYER_JOINED", payload);
+}
+
+function broadcastPlayerLeft(tournamentId, playerId, playerName, currentPlayerCount) {
+  const payload = {
+    tournamentId,
+    playerId,
+    playerName,
+    currentPlayerCount
+  };
+  io.to(`tournament:${tournamentId}`).emit("PLAYER_LEFT", payload);
+  io.emit("PLAYER_LEFT", payload);
+}
+
+function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted = false) {
+  const payload = {
+    tournamentId,
+    playerId,
+    preparationStatus,
+    readyPlayerCount,
+    totalPlayerCount,
+    deckSubmitted
+  };
+  io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", payload);
+  io.emit("UPDATE_PREPARATION", payload);
+}
+
+function broadcastDraftReady(tournamentId, payload) {
+  const message = {
+    tournamentId,
+    ...payload,
+  };
+  io.to(`tournament:${tournamentId}`).emit("DRAFT_READY", message);
+  io.emit("DRAFT_READY", message);
+}
+
+function broadcastStatisticsUpdate(tournamentId, statistics) {
+  io.to(`tournament:${tournamentId}`).emit("STATISTICS_UPDATED", {
+    tournamentId,
+    ...statistics
+  });
+}
+
 function broadcastPlayers() {
   io.emit("playerList", { players: playersArray() });
 }
@@ -3308,6 +4261,11 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   let authed = false;
   let authUser = null;
+  // Track current draft session room for this socket (if any)
+  let currentDraftSessionId = null;
+  // Track tournament rooms this socket has joined
+  /** @type {Set<string>} */
+  let currentTournamentIds = new Set();
 
   // Read auth result from middleware (fallback to soft-allow if not required)
   if (socket.data && socket.data.authUser) {
@@ -3386,6 +4344,140 @@ io.on("connection", (socket) => {
         }
       } catch {}
     }
+  });
+
+  // Tournament room join/leave handlers (matches constants.ts event names)
+  socket.on("tournament:join", async (payload) => {
+    const tournamentId = payload?.tournamentId;
+    if (!tournamentId) return;
+
+    console.log(`[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`);
+    await socket.join(`tournament:${tournamentId}`);
+    currentTournamentIds.add(tournamentId);
+
+    // Acknowledge the join
+    try {
+      socket.emit("tournament:joined", { tournamentId });
+    } catch (err) {
+      console.error("[Tournament] Error sending join acknowledgment:", err);
+    }
+
+    // Presence update (server-authoritative)
+    try {
+      const player = getPlayerBySocket(socket);
+      const pid = player?.id || playerIdBySocket.get(socket.id);
+      const name = player?.displayName || null;
+      if (pid) {
+        const list = upsertTournamentPresence(tournamentId, pid, name, true);
+        io.to(`tournament:${tournamentId}`).emit('tournament:presence', { tournamentId, players: list });
+      }
+    } catch {}
+  });
+
+  socket.on("tournament:leave", async (payload) => {
+    const tournamentId = payload?.tournamentId;
+    if (!tournamentId) return;
+
+    console.log(`[Tournament] Player ${socket.id} leaving tournament room: tournament:${tournamentId}`);
+    await socket.leave(`tournament:${tournamentId}`);
+    try { currentTournamentIds.delete(tournamentId); } catch {}
+
+    // Acknowledge the leave
+    try {
+      socket.emit("tournament:left", { tournamentId });
+    } catch (err) {
+      console.error("[Tournament] Error sending leave acknowledgment:", err);
+    }
+
+    // Presence update (mark disconnected for this tournament)
+    try {
+      const pid = playerIdBySocket.get(socket.id);
+      if (pid) {
+        const list = upsertTournamentPresence(tournamentId, pid, players.get(pid)?.displayName || null, false);
+        io.to(`tournament:${tournamentId}`).emit('tournament:presence', { tournamentId, players: list });
+      }
+    } catch {}
+  });
+
+  // --- Tournament Draft session rooms + presence ---
+  socket.on('draft:session:join', async (payload = {}) => {
+    if (!authed) return;
+    const sessionId = payload?.sessionId;
+    if (!sessionId) return;
+    try {
+      await socket.join(`draft:${sessionId}`);
+      currentDraftSessionId = sessionId;
+      // Ack
+      try { socket.emit('draft:session:joined', { sessionId }); } catch {}
+      // Presence update
+      try {
+        const pid = playerIdBySocket.get(socket.id);
+        const p = pid ? players.get(pid) : null;
+        const list = await updateDraftPresence(sessionId, pid || 'unknown', p?.displayName || null, true);
+        if (pid) {
+          try {
+            await prisma.draftParticipant.updateMany({
+              where: { draftSessionId: sessionId, playerId: pid },
+              data: { status: 'active' },
+            });
+          } catch (err) {
+            try { console.warn('[draft] failed to mark participant active', err?.message || err); } catch {}
+          }
+        }
+        io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+        // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
+        try { setTimeout(() => { try { io.to(socket.id).emit('draft:session:presence', { sessionId, players: list }); } catch {} }, 25); } catch {}
+      } catch {}
+    } catch (e) {
+      try { socket.emit('draft:error', { errorCode: 'join_failed', errorMessage: String(e?.message || e) }); } catch {}
+    }
+  });
+
+  socket.on('draft:session:leave', async (payload = {}) => {
+    const sessionId = payload?.sessionId || currentDraftSessionId;
+    if (!sessionId) return;
+    try {
+      await socket.leave(`draft:${sessionId}`);
+    } finally {
+      if (currentDraftSessionId === sessionId) currentDraftSessionId = null;
+      try {
+        const pid = playerIdBySocket.get(socket.id);
+        if (pid) {
+          const list = await updateDraftPresence(sessionId, pid, players.get(pid)?.displayName || null, false);
+          io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+          try {
+            await prisma.draftParticipant.updateMany({
+              where: { draftSessionId: sessionId, playerId: pid },
+              data: { status: 'disconnected' },
+            });
+          } catch (err) {
+            try { console.warn('[draft] failed to mark participant disconnected', err?.message || err); } catch {}
+          }
+        }
+      } catch {}
+    }
+  });
+
+  // Tournament chat
+  socket.on("TOURNAMENT_CHAT", async (payload) => {
+    const tournamentId = payload?.tournamentId;
+    const content = payload?.content;
+    const timestamp = payload?.timestamp || Date.now();
+
+    if (!tournamentId || !content) return;
+
+    const player = getPlayerBySocket(socket);
+    const from = player?.displayName || "Anonymous";
+
+    console.log(`[Tournament Chat] ${from} in ${tournamentId}: ${content}`);
+
+    // Broadcast to all players in tournament room
+    io.to(`tournament:${tournamentId}`).emit("TOURNAMENT_CHAT", {
+      tournamentId,
+      from,
+      content,
+      timestamp
+    });
   });
 
   // Per-player mulligan completion. When all players are done, advance to Main.
@@ -3648,12 +4740,24 @@ io.on("connection", (socket) => {
     if (!authed) return;
     const matchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
     const playerIds = Array.isArray(payload && payload.playerIds) ? payload.playerIds.filter(Boolean).map(String) : [];
-    const matchType = (payload && payload.matchType) || 'constructed';
+    const requestedMatchType = (payload && payload.matchType) || 'constructed';
     const lobbyName = (payload && payload.lobbyName) || null;
     const tournamentId = payload && payload.tournamentId ? String(payload.tournamentId) : null;
     const sealedConfig = payload && payload.sealedConfig ? payload.sealedConfig : null;
-    const draftConfig = payload && payload.draftConfig ? payload.draftConfig : null;
     if (!matchId || playerIds.length < 1) return;
+
+    const actualMatchType = requestedMatchType === 'sealed'
+      ? 'sealed'
+      : 'constructed';
+    const normalizedSealedConfig = actualMatchType === 'sealed'
+      ? (() => {
+          const base = normalizeSealedConfig(sealedConfig || {});
+          if (base && !base.constructionStartTime) {
+            base.constructionStartTime = Date.now();
+          }
+          return base;
+        })()
+      : null;
 
     let match = matches.get(matchId);
     if (!match) {
@@ -3664,29 +4768,31 @@ io.on("connection", (socket) => {
         lobbyName,
         tournamentId,
         playerIds: [...new Set(playerIds)],
-        status:
-          matchType === 'sealed' ? 'deck_construction' :
-          matchType === 'draft' ? 'waiting' : 'waiting',
+        status: actualMatchType === 'sealed' ? 'deck_construction' : 'waiting',
         seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
         turn: playerIds[0] || null,
         winnerId: null,
-        matchType,
-        sealedConfig: matchType === 'sealed' ? { ...sealedConfig, constructionStartTime: Date.now() } : null,
-        draftConfig: matchType === 'draft' ? draftConfig : null,
-        playerDecks: matchType === 'sealed' || matchType === 'draft' ? new Map() : null,
-        draftState: matchType === 'draft' ? {
-          phase: 'waiting', packIndex: 0, pickNumber: 1,
-          currentPacks: null, picks: playerIds.map(() => []),
-          playerReady: { p1: false, p2: false }, packDirection: 'left', packChoice: playerIds.map(() => null), waitingFor: []
-        } : null,
-        game: {},
+        matchType: actualMatchType,
+        sealedConfig: normalizedSealedConfig,
+        playerDecks: new Map(),
+        game: {
+          phase: "Setup",
+          mulligans: { p1: 1, p2: 1 },
+          d20Rolls: { p1: null, p2: null },
+          setupWinner: null,
+        },
         lastTs: 0,
         interactionRequests: new Map(),
         interactionGrants: new Map(),
       };
+
       matches.set(matchId, match);
+      // Elect this instance as initial match leader and persist the session for cluster recovery
+      try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
+      try { await persistMatchCreated(match); } catch {}
       // Begin recording
       startMatchRecording(match);
+      await hydrateMatchFromDatabase(matchId, match);
     } else {
       // Ensure provided players are present
       for (const pid of playerIds) {
@@ -3696,6 +4802,13 @@ io.on("connection", (socket) => {
       if (!match.tournamentId && tournamentId) {
         match.tournamentId = tournamentId;
       }
+      if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
+        match.playerDecks = new Map();
+      }
+      if (actualMatchType === 'sealed') {
+        match.sealedConfig = normalizedSealedConfig || normalizeSealedConfig(match.sealedConfig);
+      }
+      await hydrateMatchFromDatabase(matchId, match);
     }
 
     // Join all currently connected sockets for provided players (cross-instance)
@@ -4065,6 +5178,8 @@ io.on("connection", (socket) => {
             if ("board" in g) return true;
             if ("permanents" in g) return true;
             if ("currentPlayer" in g) return true;
+            // Setup phase with mulligans is meaningful - needed for tournament sealed matches
+            if (g.phase === "Setup" && "mulligans" in g) return true;
             // Consider avatars meaningful when at least one seat has a card or position
             try {
               const a = g.avatars || {};
@@ -4072,13 +5187,35 @@ io.on("connection", (socket) => {
               const p2Has = !!(a.p2 && (a.p2.card || (Array.isArray(a.p2.pos) && a.p2.pos.length === 2)));
               if (p1Has || p2Has) return true;
             } catch {}
-            // Do not include d20 rolls alone; only meaningful with core state (already handled above)
+            // D20 rolls are meaningful during Setup phase - needed for player seat selection
+            if ("d20Rolls" in g && g.d20Rolls && typeof g.d20Rolls === "object") {
+              const rolls = g.d20Rolls;
+              if (rolls.p1 !== null && rolls.p1 !== undefined) return true;
+              if (rolls.p2 !== null && rolls.p2 !== undefined) return true;
+            }
           }
           return false;
         })();
         if (hasMeaningfulGame) {
           snap.game = match.game;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
+          try {
+            console.log('[resync] sending game state with d20Rolls:', {
+              matchId: match.id,
+              d20Rolls: match.game?.d20Rolls,
+              setupWinner: match.game?.setupWinner,
+              phase: match.game?.phase,
+              hasMeaningfulGame
+            });
+          } catch {}
+        } else {
+          try {
+            console.log('[resync] NOT sending game state', {
+              matchId: match?.id,
+              gameKeys: match.game ? Object.keys(match.game) : [],
+              hasMeaningfulGame
+            });
+          } catch {}
         }
         socket.emit("resyncResponse", { snapshot: snap });
         // If a draft is in progress, proactively sync draft state to this socket
@@ -4584,6 +5721,7 @@ io.on("connection", (socket) => {
     const room = `match:${match.id}`;
     const dc = match.draftConfig || { setMix: ["Beta"], packCount: 3, packSize: 15 };
     const { setMix, packCount, packSize } = dc;
+    const usingCube = Boolean(dc.cubeId);
     console.log(
       `[Draft] startDraft ${
         requestingPlayer
@@ -4592,37 +5730,47 @@ io.on("connection", (socket) => {
       } in match ${match.id}. phase=${match.draftState?.phase}, config=${JSON.stringify(dc)}`
     );
     try {
-      // Build set sequence per pack index: ALWAYS use exact counts
+      // Build set sequence per pack index: ALWAYS use exact counts (skip for cubes)
       /** @type {string[]} */
       let setSequence = [];
-      if (dc.packCounts && typeof dc.packCounts === 'object') {
-        for (const [name, cnt] of Object.entries(dc.packCounts)) {
-          const c = Math.max(0, Number(cnt) || 0);
-          for (let i = 0; i < c; i++) setSequence.push(name);
+      if (!usingCube) {
+        if (dc.packCounts && typeof dc.packCounts === 'object') {
+          for (const [name, cnt] of Object.entries(dc.packCounts)) {
+            const c = Math.max(0, Number(cnt) || 0);
+            for (let i = 0; i < c; i++) setSequence.push(name);
+          }
         }
-      }
-      if (setSequence.length !== packCount) {
-        // Error: packCounts must match packCount exactly
-        console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
-        const s = requestingPlayer
-          ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
-          : null;
-        if (s) s.emit("error", { message: `Draft configuration error: pack counts must sum to ${packCount}` });
-        return;
+        if (setSequence.length !== packCount) {
+          // Error: packCounts must match packCount exactly
+          console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
+          const s = requestingPlayer
+            ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
+            : null;
+          if (s) s.emit("error", { message: `Draft configuration error: pack counts must sum to ${packCount}` });
+          return;
+        }
       }
 
       console.log(
-        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setSeq=${setSequence.join(',')}`
+        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setSeq=${usingCube ? 'cube' : setSequence.join(',')}`
       );
       const currentPacks = [];
       for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
         const playerPacks = [];
         for (let packIdx = 0; packIdx < packCount; packIdx++) {
-          const setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
           const rng = createRngFromString(
             `${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`
           );
-          const picks = await generateBoosterDeterministic(setName, rng, false);
+          // Use cube booster generation if cubeId is present, otherwise use set-based generation
+          let picks;
+          let setName = 'Beta'; // Default for regular sets
+          if (usingCube) {
+            picks = await generateCubeBoosterDeterministic(dc.cubeId, rng, packSize);
+          } else {
+            setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
+            picks = await generateBoosterDeterministic(setName, rng, false);
+          }
+          const displaySet = usingCube ? (dc.cubeName || "Cube") : setName;
           const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
             id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[
               playerIdx
@@ -4633,7 +5781,7 @@ io.on("connection", (socket) => {
             cost: String(p.cost || ""),
             rarity: p.rarity || "common",
             element: p.element || [],
-            setName: setName, // Include set information for proper card resolution
+            setName: displaySet, // Include set or cube information for proper card resolution
           }));
           playerPacks.push(cards);
         }
@@ -4823,11 +5971,132 @@ io.on("connection", (socket) => {
     try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
   });
 
+  // ==========================================
+  // TOURNAMENT SOCKET EVENTS  
+  // ==========================================
+  
+  // Join tournament room for real-time updates
+  socket.on("joinTournament", async (payload) => {
+    const { tournamentId } = payload || {};
+    if (!tournamentId) return;
+    
+    const pid = playerIdBySocket.get(socket.id);
+    if (!pid) return;
+    
+    // Join the tournament room
+    socket.join(`tournament:${tournamentId}`);
+    console.log(`[Tournament] Socket ${socket.id} (player ${pid}) joined tournament ${tournamentId}`);
+    
+    // Send current tournament state
+    try {
+      const tournament = await prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        include: { registrations: true }
+      });
+      if (tournament) {
+        socket.emit("TOURNAMENT_UPDATED", {
+          id: tournament.id,
+          name: tournament.name,
+          format: tournament.format,
+          status: tournament.status,
+          maxPlayers: tournament.maxPlayers,
+          currentPlayers: tournament.registrations.length,
+          creatorId: tournament.creatorId,
+          settings: tournament.settings,
+          createdAt: tournament.createdAt.toISOString(),
+          startedAt: tournament.startedAt?.toISOString() || null,
+          completedAt: tournament.completedAt?.toISOString() || null
+        });
+      }
+    } catch (err) {
+      console.error("[Tournament] Failed to send initial state:", err);
+    }
+  });
+
+  // Leave tournament room
+  socket.on("leaveTournament", (payload) => {
+    const { tournamentId } = payload || {};
+    if (!tournamentId) return;
+    
+    socket.leave(`tournament:${tournamentId}`);
+    console.log(`[Tournament] Socket ${socket.id} left tournament ${tournamentId}`);
+  });
+
+  // Update preparation status (sealed/draft/constructed)
+  socket.on("UPDATE_PREPARATION", async (payload) => {
+    const { tournamentId, preparationData } = payload || {};
+    if (!tournamentId) return;
+    
+    const pid = playerIdBySocket.get(socket.id);
+    if (!pid) return;
+    
+    try {
+      const registration = await prisma.tournamentRegistration.findUnique({
+        where: {
+          tournamentId_playerId: {
+            tournamentId,
+            playerId: pid
+          }
+        }
+      });
+      
+      if (!registration) return;
+      
+      await prisma.tournamentRegistration.update({
+        where: { id: registration.id },
+        data: {
+          preparationData: JSON.parse(JSON.stringify(preparationData)),
+          preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
+          deckSubmitted: Boolean(preparationData.deckSubmitted)
+        }
+      });
+      
+      // Broadcast preparation update
+      const [readyCount, totalCount] = await Promise.all([
+        prisma.tournamentRegistration.count({
+          where: { tournamentId, preparationStatus: 'completed', deckSubmitted: true }
+        }),
+        prisma.tournamentRegistration.count({ where: { tournamentId } })
+      ]);
+      
+      io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", {
+        tournamentId,
+        playerId: pid,
+        preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
+        deckSubmitted: Boolean(preparationData.deckSubmitted),
+        readyPlayerCount: readyCount,
+        totalPlayerCount: totalCount
+      });
+    } catch (err) {
+      console.error("[Tournament] Preparation update failed:", err);
+    }
+  });
   socket.on("disconnect", () => {
     const pid = playerIdBySocket.get(socket.id);
     if (!pid) return;
     const player = players.get(pid);
     playerIdBySocket.delete(socket.id);
+
+    // Update draft presence on disconnect (cluster-aware)
+    try {
+      if (currentDraftSessionId) {
+        updateDraftPresence(currentDraftSessionId, pid, players.get(pid)?.displayName || null, false)
+          .then((list) => {
+            try { io.to(`draft:${currentDraftSessionId}`).emit('draft:session:presence', { sessionId: currentDraftSessionId, players: list }); } catch {}
+          })
+          .catch(() => {});
+      }
+    } catch {}
+
+    // Update tournament presence on disconnect for all tournaments this socket joined
+    try {
+      if (currentTournamentIds && currentTournamentIds.size > 0) {
+        for (const tid of Array.from(currentTournamentIds)) {
+          const list = upsertTournamentPresence(tid, pid, players.get(pid)?.displayName || null, false);
+          io.to(`tournament:${tid}`).emit('tournament:presence', { tournamentId: tid, players: list });
+        }
+      }
+    } catch {}
 
     for (const [requestId, request] of Array.from(pendingVoiceRequests.entries())) {
       if (request.from === pid || request.to === pid) {
@@ -5008,6 +6277,14 @@ async function shutdown() {
   try { await new Promise((resolve) => server.close(() => resolve())); } catch {}
   try { if (pubClient) await pubClient.quit(); } catch {}
   try { if (subClient) await subClient.quit(); } catch {}
+  // Flush any buffered persists before disconnecting from DB
+  try {
+    if (PERSIST_IS_WRITE_BEHIND && persistBuffers.size > 0) {
+      for (const matchId of persistBuffers.keys()) {
+        try { await flushPersistBuffer(matchId, 'shutdown'); } catch {}
+      }
+    }
+  } catch {}
   try { await prisma.$disconnect(); } catch {}
   clearTimeout(timer);
   process.exit(0);
