@@ -64,6 +64,8 @@ export default function OnlineProvider({
   const meRef = useRef<PlayerInfo | null>(null);
   // Track latest lobby across event handlers
   const lobbyRef = useRef<LobbyInfo | null>(null);
+  // Track latest match across event handlers
+  const matchRef = useRef<MatchInfo | null>(null);
 
 
   const transportRef = useRef<SocketTransport | null>(null);
@@ -612,6 +614,10 @@ export default function OnlineProvider({
   }, [lobby]);
 
   useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+
+  useEffect(() => {
     // Only connect if the user is authenticated and has a display name (previous behavior)
     if (sessionStatus !== "authenticated" || !session?.user?.name) {
       return;
@@ -850,7 +856,8 @@ export default function OnlineProvider({
       transport.on("matchEnded", (p) => {
         console.log("[online] Match ended", p);
         // Clear match state when server notifies match has ended
-        if (match && p.matchId === match.id) {
+        const currMatch = matchRef.current;
+        if (currMatch && p.matchId === currMatch.id) {
           setMatch(null);
           useGameStore.getState().log(`Match ended: ${p.reason || 'unknown reason'}`);
         }

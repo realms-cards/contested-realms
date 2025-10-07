@@ -1,5 +1,5 @@
 import { Prisma as PrismaClientNS } from '@prisma/client';
-import { generateBooster } from '@/lib/booster';
+import { generateBooster, generateCubeBoosters } from '@/lib/booster';
 import type { DraftState } from '@/lib/net/transport';
 import { prisma } from '@/lib/prisma';
 import { publish } from '@/lib/redis';
@@ -17,6 +17,7 @@ type DraftSessionData = {
   settings: {
     timePerPick?: number;
     deckBuildingTime?: number;
+    cubeId?: string;
   };
   participants: Array<{
     id: string;
@@ -50,6 +51,29 @@ export class TournamentDraftEngine {
 
   // Generate N packs for a round ensuring all packs are different (by signature)
   private async generateUniqueRoundPacks(setName: string, playerCount: number, packSize: number): Promise<DraftCard[][]> {
+    // Check if this is a cube draft
+    const cubeId = this.session?.settings?.cubeId;
+    if (cubeId) {
+      // Use cube booster generation
+      console.log(`[TournamentDraftEngine] Generating ${playerCount} cube packs from cube ${cubeId}`);
+      const boosterPacks = await generateCubeBoosters(cubeId, playerCount, packSize, prisma);
+
+      // Convert BoosterCard format to DraftCard format
+      return boosterPacks.map((pack, packIdx) =>
+        pack.map((card, cardIdx) => ({
+          id: `${card.variantId}_${packIdx}_${cardIdx}`,
+          name: card.cardName || '',
+          cardName: card.cardName || '',
+          slug: card.slug,
+          type: card.type,
+          cost: null,
+          rarity: card.rarity,
+          setName: card.setName,
+        }))
+      );
+    }
+
+    // Regular set-based pack generation with uniqueness check
     const result: DraftCard[][] = [];
     const seen = new Set<string>();
     for (let i = 0; i < playerCount; i++) {
@@ -95,6 +119,7 @@ export class TournamentDraftEngine {
       settings: {
         timePerPick: typeof settings.timePerPick === 'number' ? settings.timePerPick : 60,
         deckBuildingTime: typeof settings.deckBuildingTime === 'number' ? settings.deckBuildingTime : 30,
+        cubeId: typeof settings.cubeId === 'string' ? settings.cubeId : undefined,
       },
       participants: session.participants.map((p) => ({
         id: p.id,
@@ -161,6 +186,7 @@ export class TournamentDraftEngine {
       settings: {
         timePerPick: typeof settings.timePerPick === 'number' ? settings.timePerPick : 60,
         deckBuildingTime: typeof settings.deckBuildingTime === 'number' ? settings.deckBuildingTime : 30,
+        cubeId: typeof settings.cubeId === 'string' ? settings.cubeId : undefined,
       },
       participants: session.participants.map(p => ({
         id: p.id,
