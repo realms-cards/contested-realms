@@ -3619,6 +3619,7 @@ function getMatchInfo(match) {
 }
 
 async function hydrateMatchFromDatabase(matchId, match) {
+  console.log('[hydrateMatchFromDatabase] Called for match:', { matchId, matchType: match.matchType, tournamentId: match.tournamentId });
   try {
     const dbMatch = await prisma.match.findUnique({
       where: { id: matchId },
@@ -3642,6 +3643,40 @@ async function hydrateMatchFromDatabase(matchId, match) {
     }
     if (!match.sealedConfig && match.matchType === 'sealed') {
       match.sealedConfig = normalizeSealedConfig({ packCount: 6, setMix: ['Alpha'], timeLimit: 40, replaceAvatars: false });
+    }
+    // Load DraftSession config for tournament draft matches to get cubeId
+    if (match.matchType === 'draft' && match.tournamentId) {
+      console.log('[hydrateMatchFromDatabase] Loading DraftSession for tournament draft:', { matchId, tournamentId: match.tournamentId });
+      try {
+        const draftSession = await prisma.draftSession.findFirst({
+          where: { tournamentId: match.tournamentId },
+          select: { settings: true, packConfiguration: true },
+        });
+        if (draftSession) {
+          // Extract cubeId from DraftSession settings
+          const settings = draftSession.settings || {};
+          const cubeId = settings.cubeId;
+          
+          // Build draftConfig from DraftSession
+          const packConfig = draftSession.packConfiguration || [];
+          const packCounts = {};
+          for (const entry of packConfig) {
+            const setId = entry.setId || 'Beta';
+            packCounts[setId] = (packCounts[setId] || 0) + (entry.packCount || 0);
+          }
+          
+          match.draftConfig = {
+            cubeId: cubeId || undefined,
+            packCounts,
+            packCount: Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
+            packSize: 15,
+          };
+          
+          console.log('[Tournament Draft] Loaded draftConfig from DraftSession:', { matchId, cubeId, packCount: match.draftConfig.packCount });
+        }
+      } catch (err) {
+        console.warn('[Tournament Draft] Failed to load DraftSession:', err?.message || err);
+      }
     }
   } catch (err) {
     try {
