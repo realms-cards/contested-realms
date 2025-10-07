@@ -2057,6 +2057,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.d20Rolls = replaceKeys.has("d20Rolls")
           ? p.d20Rolls
           : deepMergeReplaceArrays(s.d20Rolls, p.d20Rolls);
+        console.log("[applyServerPatch] Applied d20Rolls:", { prev: s.d20Rolls, new: next.d20Rolls, isReplace: replaceKeys.has("d20Rolls") });
       }
       const patchHasSetupWinner =
         p.setupWinner !== undefined ||

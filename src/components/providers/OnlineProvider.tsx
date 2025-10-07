@@ -714,6 +714,14 @@ export default function OnlineProvider({
       }),
       // Apply incremental game state patches into the Zustand store
       transport.on("statePatch", (p) => {
+        const patch = p.patch as Record<string, unknown>;
+        console.log("[statePatch] Received patch:", {
+          hasD20Rolls: !!patch.d20Rolls,
+          d20Rolls: patch.d20Rolls,
+          setupWinner: patch.setupWinner,
+          phase: patch.phase,
+          keys: Object.keys(patch)
+        });
         queueServerPatch(p.patch, p.t);
       }),
       transport.on("chat", (p) =>
@@ -787,12 +795,18 @@ export default function OnlineProvider({
         // Apply full game snapshot if provided and allowed
         if (allowApplyGame && snap?.game) {
           try {
-            // Reset game state before applying server snapshot to ensure clean merge
-            console.log("[game] Applying server snapshot - resetting game state first");
-            useGameStore.getState().resetGameState();
-            
+            // Apply server snapshot as a full replacement using __replaceKeys
+            // This avoids race conditions where patches arrive between reset and apply
+            console.log("[game] Applying server snapshot with full replacement");
+            const gameSnapshot = snap.game as Record<string, unknown>;
+            const replaceKeys = Object.keys(gameSnapshot);
+            const snapshotWithReplace = {
+              ...gameSnapshot,
+              __replaceKeys: replaceKeys
+            };
+
             queueServerPatch(
-              snap.game,
+              snapshotWithReplace,
               typeof snap.t === "number" ? snap.t : undefined
             );
           } catch (e) {

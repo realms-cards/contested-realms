@@ -480,7 +480,7 @@ export default function TournamentsPage() {
                         {getFormatIcon(tournament.format)}
                       </span>
                       <div>
-                        <h3 className="font-semibold text-lg text-white truncate">
+                        <h3 className="font-fantaisie text-lg text-white truncate">
                           {tournament.name}
                         </h3>
                         <p className="text-slate-400 text-sm capitalize">

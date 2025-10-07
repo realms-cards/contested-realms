@@ -36,6 +36,19 @@ export default function OnlineD20Screen({
   const opponentRoll = d20Rolls[opponentKey];
   const opponentName = playerNames[opponentKey];
 
+  // Debug logging for d20 state
+  useEffect(() => {
+    console.log("[OnlineD20Screen] State update:", {
+      myPlayerKey,
+      myRoll,
+      opponentKey,
+      opponentRoll,
+      d20Rolls,
+      setupWinner,
+      phase
+    });
+  }, [myPlayerKey, myRoll, opponentKey, opponentRoll, d20Rolls, setupWinner, phase]);
+
   const bothRolled = myRoll !== null && opponentRoll !== null;
   const canChoose = setupWinner === myPlayerKey;
   const isTie =

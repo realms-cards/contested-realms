@@ -136,6 +136,8 @@ export default function OnlineMatchPage() {
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
   const tournamentDeckSubmittedRef = useRef<string | null>(null);
+  // Track if this page initiated a tournament bootstrap for the current route id
+  const hasBootstrapRef = useRef<boolean>(false);
   // Guard to ensure we only reset local game state once per match in this page session,
   // even if the socket briefly disconnects/reconnects or status changes.
   const resetDoneForRef = useRef<string | null>(null);
@@ -156,10 +158,62 @@ export default function OnlineMatchPage() {
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
     console.log("[joinMatch effect] Checking conditions:", { connected, matchId, matchCurrentId: match?.id, joinAttempted: joinAttemptedForRef.current });
+
+    // If we were navigated from tournament matches, ensure the match exists on the socket server
+    if (connected && matchId && transport) {
+      try {
+        const key = `tournamentMatchBootstrap_${matchId}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const payload = JSON.parse(raw) as {
+            players?: string[];
+            matchType?: "constructed" | "sealed" | "draft";
+            lobbyName?: string;
+            sealedConfig?: unknown;
+            draftConfig?: unknown;
+            tournamentId?: string | null;
+          };
+          transport.emit("startTournamentMatch", {
+            matchId,
+            playerIds: Array.isArray(payload?.players) ? payload.players : [],
+            matchType: payload?.matchType || "constructed",
+            lobbyName: payload?.lobbyName,
+            sealedConfig: payload?.sealedConfig || null,
+            draftConfig: payload?.draftConfig || null,
+            tournamentId: payload?.tournamentId || null,
+          });
+          hasBootstrapRef.current = true;
+          localStorage.removeItem(key);
+        }
+      } catch {}
+    }
+
     if (!connected || !matchId) {
       console.log("[joinMatch effect] Bailing - not connected or no matchId");
       return;
     }
+
+    // If server reports a different match, force a one-time hard redirect to the server-authoritative id
+    try {
+      if (match?.id && match?.id !== matchId) {
+        const serverMatchId = match.id;
+        const key = `force_reload_match_${serverMatchId}`;
+        if (!sessionStorage.getItem(key)) {
+          console.log("[game] Switching to different match - forcing page reload for clean state");
+          sessionStorage.setItem(key, "1");
+          // Clear the old param-based key to prevent stale data
+          const oldKey = `force_reload_match_${matchId}`;
+          sessionStorage.removeItem(oldKey);
+          // Redirect to the server-authoritative match id
+          window.location.replace(`/online/play/${serverMatchId}`);
+          return;
+        } else {
+          // If we've already forced a reload but still have wrong match, reset game state
+          console.log("[game] After reload still have wrong match - resetting game state");
+          useGameStore.getState().resetGameState();
+        }
+      }
+    } catch {}
 
     if (match?.id === matchId) {
       console.log("[joinMatch effect] Already in correct match");
@@ -173,22 +227,13 @@ export default function OnlineMatchPage() {
       return;
     }
 
-    // If we're in a different match, leave it first
-    if (match?.id && match.id !== matchId) {
-      console.log("[online] Leaving wrong match before joining correct one:", {
-        currentMatch: match.id,
-        targetMatch: matchId,
-      });
-      leaveMatch();
-    }
-
     console.log("[online] joinMatch ->", {
       matchId,
-      because: "direct",
+      because: hasBootstrapRef.current ? "bootstrap" : "direct",
     });
     joinAttemptedForRef.current = matchId;
     void joinMatch(matchId);
-  }, [connected, match?.id, matchId, joinMatch, leaveMatch]);
+  }, [connected, match?.id, matchId, joinMatch, leaveMatch, transport]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -221,8 +266,10 @@ export default function OnlineMatchPage() {
 
     // Perform local reset/resync only once per match for this page session.
     if (resetDoneForRef.current !== matchId) {
-      console.log("[game] Joining match - resetting game state before resync");
-      useGameStore.getState().resetGameState();
+      console.log("[game] Joining match - requesting resync (will reset state when snapshot arrives)");
+      // DON'T reset game state here - let the resync snapshot replace it cleanly
+      // Resetting here causes a race: if we reset, then a patch arrives, then snapshot arrives,
+      // the patch gets lost. Instead, the OnlineProvider will reset when applying the snapshot.
       try {
         console.debug("[online] resync ->", {
           matchId,
@@ -887,10 +934,13 @@ export default function OnlineMatchPage() {
     let desired = setupOpen;
     const ended = match.status === "ended";
     // Check game phase from server snapshot to detect if gameplay has started
-    // Only "Main" phase means game started - "Start" is still setup (mulligan phase)
-    // Ignore match.status for this check - sealed tournaments transition to "in_progress" early
+    // "Main" phase means game started
+    // "Start" phase means D20 rolling complete, in mulligan phase
+    // "Setup" phase means D20 rolling OR waiting for players
     const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
+    const setupWinner = (match as unknown as { game?: { setupWinner?: string } })?.game?.setupWinner;
     const gameActuallyStarted = gamePhase === "Main";
+    const d20Complete = gamePhase === "Start" || gamePhase === "Main" || setupWinner != null;
 
     if (ended) {
       desired = false;
@@ -904,6 +954,9 @@ export default function OnlineMatchPage() {
       // Mark setup steps as complete so we don't get stuck in the setup flow
       if (!prepared) setPrepared(true);
       if (!d20RollingComplete) setD20RollingComplete(true);
+    } else if (d20Complete && !d20RollingComplete) {
+      // D20 rolling already complete on server - skip the D20 screen
+      setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
     } else if (!prepared) {
@@ -954,16 +1007,15 @@ export default function OnlineMatchPage() {
     }
   }, [matchId, match]);
 
-  // Reset game state only when match transitions to "in_progress" (once per match)
-  useEffect(() => {
-    if (
-      match?.status === "in_progress" &&
-      prevMatchStatusRef.current !== "in_progress"
-    ) {
-      console.log("[game] Match started - resetting game state");
-      useGameStore.getState().resetGameState();
-    }
-  }, [match?.status]);
+  // NOTE: Game state reset for joining/switching matches is handled by the joinMatch
+  // effect (lines 219-236), which calls resetGameState() once per match before requesting
+  // a resync. The resync handler in OnlineProvider (line 792) also resets before applying
+  // server snapshots to ensure clean state.
+  //
+  // We explicitly DO NOT reset when match status changes (e.g., waiting → in_progress)
+  // because that would wipe active game state (dice rolls, mulligans, etc.) and cause the
+  // D20 screen to reappear mid-game. Status transitions are cosmetic; the server sends
+  // incremental patches via statePatch events to update the actual game state.
 
   
 

@@ -2645,7 +2645,12 @@ async function leaderJoinMatch(matchId, playerId, socketId) {
   try { p.matchId = matchId; } catch {}
   // Join the socket (works cluster-wide with Redis adapter)
   const room = `match:${matchId}`;
-  try { await io.in(socketId).socketsJoin(room); } catch {}
+  try {
+    await io.in(socketId).socketsJoin(room);
+    console.log('[joinMatch] Socket joined room', { socketId, room, playerId });
+  } catch (e) {
+    console.error('[joinMatch] Failed to join room', { socketId, room, playerId, error: e?.message });
+  }
   // Send match info directly to the joiner to avoid any race, then broadcast to the room
   try { if (socketId) io.to(socketId).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
   try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
@@ -2818,6 +2823,7 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           }
         } else {
           patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
+          try { console.log('[d20] partial roll - waiting for second player', { merged: mergedD20, matchId }); } catch {}
         }
       }
       if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
@@ -3139,6 +3145,23 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       } catch {}
       match.lastTs = now;
       recordMatchAction(matchId, patchToApply, playerId);
+      if (patchToApply && patchToApply.d20Rolls) {
+        try {
+          // Check who's in the room
+          io.in(matchRoom).fetchSockets().then(sockets => {
+            console.log('[d20] broadcasting patch to room', {
+              matchId,
+              room: matchRoom,
+              socketsInRoom: sockets.length,
+              socketIds: sockets.map(s => s.id).join(', '),
+              d20Rolls: patchToApply.d20Rolls,
+              setupWinner: patchToApply.setupWinner
+            });
+          });
+        } catch (e) {
+          console.log('[d20] broadcasting patch', { matchId, d20Rolls: patchToApply.d20Rolls, setupWinner: patchToApply.setupWinner });
+        }
+      }
       io.to(matchRoom).emit('statePatch', { patch: patchToApply, t: now });
       if (isSnapshot) {
         try {
@@ -5145,13 +5168,35 @@ io.on("connection", (socket) => {
               const p2Has = !!(a.p2 && (a.p2.card || (Array.isArray(a.p2.pos) && a.p2.pos.length === 2)));
               if (p1Has || p2Has) return true;
             } catch {}
-            // Do not include d20 rolls alone; only meaningful with core state (already handled above)
+            // D20 rolls are meaningful during Setup phase - needed for player seat selection
+            if ("d20Rolls" in g && g.d20Rolls && typeof g.d20Rolls === "object") {
+              const rolls = g.d20Rolls;
+              if (rolls.p1 !== null && rolls.p1 !== undefined) return true;
+              if (rolls.p2 !== null && rolls.p2 !== undefined) return true;
+            }
           }
           return false;
         })();
         if (hasMeaningfulGame) {
           snap.game = match.game;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
+          try {
+            console.log('[resync] sending game state with d20Rolls:', {
+              matchId: match.id,
+              d20Rolls: match.game?.d20Rolls,
+              setupWinner: match.game?.setupWinner,
+              phase: match.game?.phase,
+              hasMeaningfulGame
+            });
+          } catch {}
+        } else {
+          try {
+            console.log('[resync] NOT sending game state', {
+              matchId: match?.id,
+              gameKeys: match.game ? Object.keys(match.game) : [],
+              hasMeaningfulGame
+            });
+          } catch {}
         }
         socket.emit("resyncResponse", { snapshot: snap });
         // If a draft is in progress, proactively sync draft state to this socket
