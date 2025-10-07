@@ -15,7 +15,7 @@ function generateTournamentName(): string {
   const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
   const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
   const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
-  return `${predicate} ${adjective} ${subject}`;
+  return `${predicate} of ${adjective} ${subject}`;
 }
 
 interface Tournament {
