@@ -64,6 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             settings: JSON.parse(JSON.stringify({
               timePerPick: draftSetup.timePerPick,
               deckBuildingTime: draftSetup.deckBuildingTime,
+              cubeId: draftSetup.cubeId, // Include cube ID for cube drafts
             })),
           },
           include: { participants: true },

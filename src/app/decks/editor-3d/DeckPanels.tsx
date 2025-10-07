@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { HelpCircle, Shuffle, SlidersHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
 import DeckTopBarActions from "@/app/decks/editor-3d/DeckTopBarActions";
+import UserBadge from "@/components/auth/UserBadge";
 import { DeckValidation } from "@/components/deck-editor";
 
 type DeckPanelsProps = {
@@ -42,6 +44,17 @@ type DeckPanelsProps = {
 export default function DeckPanels(props: DeckPanelsProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const iconButtonStyles = useMemo(
+    () => ({
+      base:
+        "h-9 w-9 grid place-items-center rounded-full border border-white/15 bg-white/5 text-white/70 transition-colors duration-150 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+      active:
+        "bg-emerald-500/80 text-black border-emerald-400 hover:bg-emerald-400 focus-visible:ring-emerald-300",
+      toggled:
+        "bg-white/15 text-white border-white/30 hover:bg-white/20",
+    }),
+    []
+  );
   const {
     isDraftMode,
     isSealed,
@@ -85,11 +98,11 @@ export default function DeckPanels(props: DeckPanelsProps) {
           </div>
           <button
             onClick={() => setHelpOpen(true)}
-            className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
+            className={`${iconButtonStyles.base} text-blue-200 hover:text-blue-100 hover:bg-blue-500/20 border-blue-300/30 focus-visible:ring-blue-200/50`}
             title="How to use the editor"
             aria-label="How to use the editor"
           >
-            <span className="font-fantaisie text-xl font-bold">?</span>
+            <HelpCircle className="h-5 w-5" strokeWidth={2.5} />
           </button>
           {pick3DLength > 0 && (
             <button
@@ -104,43 +117,25 @@ export default function DeckPanels(props: DeckPanelsProps) {
                   ? "Disable auto-stacking"
                   : "Enable auto-stacking"
               }
-              className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
-                isSortingEnabled
-                  ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
-                  : "bg-white/10 text-white ring-white/20 hover:bg-white/20"
+              className={`${iconButtonStyles.base} ${
+                isSortingEnabled ? iconButtonStyles.active : ""
               }`}
             >
-              {/* Shuffle/stack icon */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
-                <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z" />
-              </svg>
+              <Shuffle className="h-5 w-5" strokeWidth={2.5} />
             </button>
           )}
           <div className="relative">
             <button
               onClick={() => setControlsOpen((v) => !v)}
-              className={`h-9 w-9 grid place-items-center rounded-full ${
-                controlsOpen ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
-              } text-white/80 hover:text-white`}
+              className={`${iconButtonStyles.base} ${
+                controlsOpen ? iconButtonStyles.toggled : ""
+              }`}
               title={controlsOpen ? "Hide deck controls" : "Show deck controls"}
               aria-label={
                 controlsOpen ? "Hide deck controls" : "Show deck controls"
               }
             >
-              {/* Sliders icon */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
-                <path d="M4 6h8v2H4V6zm12 0h4v2h-4V6zM9 11h11v2H9v-2zM4 11h3v2H4v-2zm0 5h8v2H4v-2zm12 0h4v2h-4v-2z" />
-              </svg>
+              <SlidersHorizontal className="h-5 w-5" strokeWidth={2.5} />
             </button>
             {controlsOpen && (
               <div className="absolute top-full left-0 mt-2 z-[60] pointer-events-auto">
@@ -180,6 +175,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
 
         {/* Validation status and submit actions */}
         <div className="ml-auto flex items-center gap-3">
+          <UserBadge className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/80 hover:text-white hover:bg-white/10" showPresence={false} />
           <DeckValidation
             avatarCount={avatarCount}
             atlasCount={atlasCount}
