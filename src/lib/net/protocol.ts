@@ -126,6 +126,7 @@ export const DraftStateSchema = z.object({
   packDirection: z.enum(["left", "right"]),
   packChoice: z.array(z.string().nullable()),
   waitingFor: z.array(z.string()),
+  playerReady: z.object({ p1: z.boolean(), p2: z.boolean() }).optional(),
 });
 export type DraftStateType = z.infer<typeof DraftStateSchema>;
 
