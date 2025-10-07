@@ -28,6 +28,7 @@ export interface DraftSettings {
     setId: string;
     packCount: number;
   }>;
+  cubeId?: string; // Optional cube ID for cube drafts
   draftTimeLimit: number;
   deckBuildingTimeLimit: number;
 }

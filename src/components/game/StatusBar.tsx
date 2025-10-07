@@ -31,18 +31,18 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
         
         {phase === "Setup" ? (
           !setupWinner ? (
-              <>
-                <span className="opacity-80">Roll D20 to determine starting player</span>
-                <div className="flex items-center gap-2">
-                  {d20Rolls.p1 !== null && (
-                    <span className="text-blue-400">P1: {d20Rolls.p1}</span>
-                  )}
-                  {d20Rolls.p2 !== null && (
-                    <span className="text-red-400">P2: {d20Rolls.p2}</span>
-                  )}
-                </div>
-                <span className="text-sm opacity-70">Click the dice on the board to roll!</span>
-              </>
+            <>
+              <span className="opacity-80">Roll D20 to determine starting player</span>
+              <div className="flex items-center gap-2">
+                {d20Rolls.p1 !== null && (
+                  <span className="text-blue-400">P1: {d20Rolls.p1}</span>
+                )}
+                {d20Rolls.p2 !== null && (
+                  <span className="text-red-400">P2: {d20Rolls.p2}</span>
+                )}
+              </div>
+              <span className="text-sm opacity-70">Click the dice on the board to roll!</span>
+            </>
           ) : (
             <>
               <span className="opacity-80">

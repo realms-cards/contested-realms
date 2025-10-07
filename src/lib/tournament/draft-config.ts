@@ -4,6 +4,7 @@ type PackConfigurationEntry = { setId: string; packCount: number };
 
 type DraftSetup = {
   packConfiguration: PackConfigurationEntry[];
+  cubeId?: string; // Optional cube ID for cube drafts
   timePerPick: number;
   deckBuildingTime: number;
 };
@@ -38,12 +39,14 @@ export function deriveDraftSetupFromSettings(settings: unknown): DraftSetup {
 
   const timePerPick = toNumber(draftConfig.draftTimeLimit, 90);
   const deckBuildingTime = toNumber(draftConfig.deckBuildingTimeLimit, 30);
+  const cubeId = typeof draftConfig.cubeId === 'string' ? draftConfig.cubeId : undefined;
 
   return {
     packConfiguration: packConfiguration.map((entry) => ({
       setId: entry.setId || 'Beta',
       packCount: Math.max(0, Number(entry.packCount) || 0),
     })),
+    cubeId,
     timePerPick,
     deckBuildingTime,
   };
