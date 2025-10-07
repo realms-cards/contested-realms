@@ -598,3 +598,13 @@ DB connection tuning (still recommended):
 - Configurable via env; defaults are safe.
 
 If you want, I can add debug logs for flushes and buffer sizes or provide a simple metrics endpoint to monitor QPS/flushes.
+
+
+
+
+
+
+
+## Migrations on production server
+
+`docker compose -f docker-compose.prod.yml run --rm   -e DIRECT_URL="postgresql://doadmin:AVNS_IcIjUrat2_FmMnsWd8q@contested-realms-pg-do-user-3176178-0.h.db.ondigitalocean.com:25060/sorcery?sslmode=require&schema=public"   server1 npx prisma migrate deploy`

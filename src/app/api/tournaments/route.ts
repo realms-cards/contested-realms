@@ -55,11 +55,8 @@ export async function GET(req: NextRequest) {
           }
         },
         standings: true,
-        rounds: {
-          include: {
-            matches: true
-          }
-        }
+        // Note: Removed rounds/matches include for performance - they're not used in the list view
+        // Individual tournament pages load rounds separately when needed
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -108,13 +105,8 @@ export async function GET(req: NextRequest) {
         isEliminated: standing.isEliminated,
         currentMatchId: standing.currentMatchId
       })),
-      currentRound: tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map(r => r.roundNumber)) : 0,
+      // Rounds are loaded separately by individual tournament pages for performance
       totalRounds: ((tournament.settings as Record<string, unknown>)?.totalRounds as number) || 3,
-      rounds: tournament.rounds.map(round => ({
-        roundNumber: round.roundNumber,
-        status: round.status,
-        matches: round.matches.map(match => match.id)
-      })),
       settings: tournament.settings,
       createdAt: tournament.createdAt.getTime(),
       startedAt: tournament.startedAt ? tournament.startedAt.getTime() : undefined,
