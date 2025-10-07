@@ -39,6 +39,7 @@ export type DraftState = {
   packDirection: "left" | "right"; // Pack passing direction
   packChoice: (string | null)[]; // Pack selection for this round [p1_choice, p2_choice]
   waitingFor: string[]; // Player IDs who haven't made their pick yet
+  playerReady?: { p1: boolean; p2: boolean }; // Ready states for each player (persisted on server)
 };
 
 // Generic custom message payload for ad-hoc features (e.g., draft ready)

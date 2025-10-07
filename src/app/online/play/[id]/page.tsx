@@ -373,10 +373,16 @@ export default function OnlineMatchPage() {
   // Track draft state and completion
   const [draftCompleted, setDraftCompleted] = useState(false);
   const isDraftMatch = match?.matchType === "draft";
+  // Draft is active during "waiting" status AND while the draft phase is not "complete"
+  // This ensures the draft UI stays visible during pack_selection and picking phases
+  const draftPhase = match?.draftState?.phase;
   const isDraftActive =
-    isDraftMatch && match?.status === "waiting" && !draftCompleted;
+    isDraftMatch &&
+    match?.status === "waiting" &&
+    !draftCompleted &&
+    (!draftPhase || draftPhase !== "complete");
   const isDraftDeckConstruction =
-    isDraftMatch && (match?.status === "deck_construction" || draftCompleted);
+    isDraftMatch && (match?.status === "deck_construction" || draftCompleted || draftPhase === "complete");
 
   // Prevent showing draft component again once it's completed or if we already submitted a deck
   const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
@@ -964,15 +970,13 @@ export default function OnlineMatchPage() {
       // Mark setup steps as complete so we don't get stuck in the setup flow
       if (!prepared) setPrepared(true);
       if (!d20RollingComplete) setD20RollingComplete(true);
-    } else if (d20Complete && !d20RollingComplete) {
-      // D20 rolling already complete on server - skip the D20 screen
+    } else if (d20Complete && !d20RollingComplete && serverPhase === "Start") {
+      // D20 rolling AND seat selection complete on server (phase moved to Start) - skip the D20 screen
       setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
     } else if (!prepared) {
       desired = true;
-    } else if (serverPhase === "Main") {
-      desired = false;
     }
 
     if (desired !== setupOpen) setSetupOpen(desired);

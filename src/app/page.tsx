@@ -76,6 +76,16 @@ export default function Home() {
           </AsciiPanel>
           <AsciiPanel>
             <Link
+              href="/cubes"
+              className="group block hover:scale-[1.02] transition-transform duration-200"
+            >
+              <div className="flex items-center justify-center py-4">
+                <h4 className="text-lg font-semibold tracking-wide">Cubes</h4>
+              </div>
+            </Link>
+          </AsciiPanel>
+          <AsciiPanel>
+            <Link
               href="/decks/editor-3d"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >

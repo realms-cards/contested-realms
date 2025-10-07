@@ -314,8 +314,113 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
   return picks;
 }
 
+async function generateCubeBoosterDeterministic(cubeId, rng, packSize) {
+  const cube = await prisma.cube.findUnique({
+    where: { id: cubeId },
+    include: {
+      cards: {
+        include: {
+          card: { select: { name: true, elements: true } },
+          variant: { select: { id: true, slug: true, finish: true, product: true, cardId: true } },
+          set: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  if (!cube) {
+    throw new Error(`Cube not found for id=${cubeId}`);
+  }
+  if (!cube.cards.length) {
+    return [];
+  }
+
+  const metaPairs = cube.cards
+    .filter((entry) => entry.setId != null)
+    .map((entry) => ({ cardId: entry.cardId, setId: entry.setId }));
+
+  const metaMap = new Map();
+  if (metaPairs.length) {
+    const metas = await prisma.cardSetMetadata.findMany({
+      where: { OR: metaPairs },
+      select: { cardId: true, setId: true, type: true, rarity: true, cost: true },
+    });
+    for (const meta of metas) {
+      metaMap.set(`${meta.cardId}:${meta.setId}`, {
+        type: meta.type ?? null,
+        rarity: meta.rarity ?? null,
+        cost: meta.cost ?? null,
+      });
+    }
+  }
+
+  const workingPool = cube.cards
+    .map((entry) => {
+      const variant = entry.variant;
+      const metaKey = entry.setId ? `${entry.cardId}:${entry.setId}` : null;
+      const meta = metaKey ? metaMap.get(metaKey) : null;
+      const cardName = entry.card?.name || "";
+      const elements = entry.card?.elements || null;
+      const setName = entry.set?.name || "Unknown";
+      return {
+        cardId: entry.cardId,
+        variantId: variant?.id ?? null,
+        slug: variant?.slug ?? null,
+        finish: variant?.finish ?? "Standard",
+        product: variant?.product ?? "Cube",
+        rarity: meta?.rarity ?? null,
+        type: meta?.type ?? null,
+        cost: meta?.cost ?? null,
+        cardName,
+        element: elements,
+        setName,
+        remaining: Math.max(0, Number(entry.count) || 0),
+      };
+    })
+    .filter((entry) => entry.remaining > 0);
+
+  const picks = [];
+  for (let i = 0; i < packSize && workingPool.length; i++) {
+    const total = workingPool.reduce((sum, entry) => sum + entry.remaining, 0);
+    if (total <= 0) break;
+    let roll = rng() * total;
+    let chosenIndex = -1;
+    for (let idx = 0; idx < workingPool.length; idx++) {
+      const candidate = workingPool[idx];
+      if (roll < candidate.remaining) {
+        chosenIndex = idx;
+        break;
+      }
+      roll -= candidate.remaining;
+    }
+    if (chosenIndex === -1) {
+      chosenIndex = workingPool.length - 1;
+    }
+    const chosen = workingPool[chosenIndex];
+    picks.push({
+      variantId: chosen.variantId,
+      slug: chosen.slug,
+      finish: chosen.finish,
+      product: chosen.product,
+      rarity: chosen.rarity,
+      type: chosen.type,
+      cardId: chosen.cardId,
+      cardName: chosen.cardName,
+      cost: chosen.cost,
+      element: chosen.element,
+      setName: chosen.setName,
+    });
+    chosen.remaining -= 1;
+    if (chosen.remaining <= 0) {
+      workingPool.splice(chosenIndex, 1);
+    }
+  }
+
+  return picks;
+}
+
 module.exports = {
   createRngFromString,
   generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
   prisma,
 };

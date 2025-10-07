@@ -11,11 +11,11 @@ interface OnlineStatusBarProps {
   onOpenMatchInfo: () => void;
 }
 
-export default function OnlineStatusBar({ 
-  dragFromHand, 
-  myPlayerNumber, 
-  playerNames, 
-  onOpenMatchInfo
+export default function OnlineStatusBar({
+  dragFromHand,
+  myPlayerNumber,
+  playerNames,
+  onOpenMatchInfo,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const endTurn = useGameStore((s) => s.endTurn);
