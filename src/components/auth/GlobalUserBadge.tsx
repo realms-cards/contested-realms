@@ -14,7 +14,13 @@ export default function GlobalUserBadge() {
   if (isOnlineSection) return null;
 
   // Hide on a few static sections where the floating badge is distracting
-  if (pathname && (pathname.startsWith("/replay") || pathname.startsWith("/leaderboard") || pathname.startsWith("/decks"))) {
+  if (
+    pathname &&
+    (pathname.startsWith("/replay") ||
+      pathname.startsWith("/leaderboard") ||
+      pathname.startsWith("/decks") ||
+      pathname.startsWith("/cubes"))
+  ) {
     return null;
   }
 

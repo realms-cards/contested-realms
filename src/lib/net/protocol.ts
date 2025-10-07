@@ -88,6 +88,8 @@ export const DraftConfigSchema = z.object({
   packSize: z.number().int().min(12).max(18),
   // Optional exact per-set pack counts (must sum to packCount if provided)
   packCounts: z.record(z.string(), z.number().int().min(0)).optional(),
+  cubeId: z.string().optional().nullable(),
+  cubeName: z.string().optional().nullable(),
 });
 export type DraftConfig = z.infer<typeof DraftConfigSchema>;
 
@@ -124,6 +126,7 @@ export const DraftStateSchema = z.object({
   packDirection: z.enum(["left", "right"]),
   packChoice: z.array(z.string().nullable()),
   waitingFor: z.array(z.string()),
+  playerReady: z.object({ p1: z.boolean(), p2: z.boolean() }).optional(),
 });
 export type DraftStateType = z.infer<typeof DraftStateSchema>;
 

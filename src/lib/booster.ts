@@ -39,6 +39,7 @@ export type BoosterCard = {
   type: string | null;
   cardId: number;
   cardName: string;
+  setName?: string; // Optional: which set the card came from
 };
 
 function choice<T>(arr: T[]): T | null {
@@ -274,5 +275,98 @@ export async function generateBoosters(setName: string, count: number, client: P
   for (let i = 0; i < count; i++) {
     packs.push(await generateBooster(setName, client, replaceAvatars));
   }
+  return packs;
+}
+
+/**
+ * Generate multiple boosters from a cube (random sampling without replacement per pack)
+ */
+export async function generateCubeBoosters(cubeId: string, count: number, packSize = 15, client: PrismaClient = defaultPrisma) {
+  // Fetch cube with all cards
+  const cube = await client.cube.findUnique({
+    where: { id: cubeId },
+    include: {
+      cards: {
+        include: {
+          card: {
+            select: {
+              name: true,
+              elements: true,
+              meta: {
+                select: {
+                  setId: true,
+                  type: true,
+                },
+              },
+            },
+          },
+          variant: {
+            select: {
+              id: true,
+              slug: true,
+              finish: true,
+              product: true,
+              cardId: true,
+              typeText: true,
+            },
+          },
+          set: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  if (!cube) {
+    throw new Error(`Cube not found: ${cubeId}`);
+  }
+
+  // Build working pool with card counts
+  const workingPool: BoosterCard[] = cube.cards.flatMap((entry) => {
+    const count = Math.max(0, Number(entry.count) || 0);
+    if (count === 0 || !entry.variantId) return [];
+
+    const resolvedType = (() => {
+      const variantType = entry.variant?.typeText?.trim();
+      if (variantType) return variantType;
+      const setId = entry.set?.id ?? entry.setId ?? null;
+      if (!setId) return null;
+      const meta = entry.card?.meta?.find((m) => m.setId === setId);
+      return meta?.type ?? null;
+    })();
+
+    return Array.from({ length: count }, (): BoosterCard => ({
+      variantId: entry.variantId as number,
+      cardId: entry.cardId,
+      slug: entry.variant?.slug || '',
+      finish: (entry.variant?.finish as Finish) || 'Standard',
+      product: entry.variant?.product || 'Booster',
+      setName: entry.set?.name || 'Unknown',
+      cardName: entry.card?.name || '',
+      rarity: 'Ordinary',
+      type: resolvedType,
+    }));
+  });
+
+  if (workingPool.length === 0) {
+    throw new Error(`Cube ${cubeId} has no cards`);
+  }
+
+  // Generate packs by randomly sampling without replacement
+  const packs: BoosterCard[][] = [];
+  const shuffled = [...workingPool].sort(() => Math.random() - 0.5);
+
+  for (let i = 0; i < count; i++) {
+    const pack: BoosterCard[] = [];
+    const startIdx = (i * packSize) % shuffled.length;
+
+    for (let j = 0; j < packSize; j++) {
+      const idx = (startIdx + j) % shuffled.length;
+      const card = shuffled[idx];
+      if (card) pack.push(card);
+    }
+
+    packs.push(pack);
+  }
+
   return packs;
 }

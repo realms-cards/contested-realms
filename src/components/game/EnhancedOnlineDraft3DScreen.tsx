@@ -460,11 +460,34 @@ export default function EnhancedOnlineDraft3DScreen({
     }
   }, [match?.draftState, myPlayerIndex, draftCardToBoosterCard]);
 
+  // Initialize playerReadyStates from server-persisted state
+  useEffect(() => {
+    if (!match?.draftState?.playerReady) return;
+    const serverReady = match.draftState.playerReady;
+    setPlayerReadyStates((prev) => {
+      // Only update if different to avoid unnecessary re-renders
+      if (prev.p1 === serverReady.p1 && prev.p2 === serverReady.p2) return prev;
+      console.log(
+        "[EnhancedOnlineDraft3D] Initializing ready states from server:",
+        serverReady
+      );
+      return {
+        p1: !!serverReady.p1,
+        p2: !!serverReady.p2,
+      };
+    });
+  }, [match?.draftState?.playerReady]);
+
   // Client-side fallback: if both players are ready and we remain in 'waiting', auto-request start after ~1.1s
   useEffect(() => {
     if (!transport || !match) return;
     if (draftState.phase !== "waiting") return;
     if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
+
+    console.log(
+      "[EnhancedOnlineDraft3D] Both players ready, auto-starting draft in 1.1s"
+    );
+
     const t = window.setTimeout(() => {
       try {
         const baseCfg = match.draftConfig ?? {
@@ -472,13 +495,21 @@ export default function EnhancedOnlineDraft3DScreen({
           packCount: 3,
           packSize: 15,
         };
+        console.log(
+          "[EnhancedOnlineDraft3D] Calling startDraft with config:",
+          baseCfg
+        );
         transport.startDraft?.({ matchId: match.id, draftConfig: baseCfg });
-      } catch {}
+      } catch (err) {
+        console.error("[EnhancedOnlineDraft3D] Failed to start draft:", err);
+      }
     }, 1100);
     return () => window.clearTimeout(t);
   }, [
     transport,
     match,
+    match?.id,
+    match?.draftConfig,
     draftState.phase,
     playerReadyStates.p1,
     playerReadyStates.p2,
@@ -522,9 +553,9 @@ export default function EnhancedOnlineDraft3DScreen({
               finish: "Standard",
               product: "Draft",
               cardId:
-                (typeof c.slug === "string" && slugToCardId[c.slug])
+                typeof c.slug === "string" && slugToCardId[c.slug]
                   ? slugToCardId[c.slug]
-                  : (Number(c.id) || 0),
+                  : Number(c.id) || 0,
               cardName: c.cardName || c.name,
               set: c.setName || "Beta",
               type: c.type || null,
@@ -542,13 +573,16 @@ export default function EnhancedOnlineDraft3DScreen({
           );
         }
 
+        // Call onDraftComplete first to let parent component handle cleanup
+        onDraftComplete(mine);
+
+        // Delay navigation to allow cleanup
         setTimeout(() => {
           if (matchId) {
-            router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
+            // Use replace instead of push to avoid back-button issues
+            router.replace(`/decks/editor-3d?draft=true&matchId=${matchId}`);
           }
-        }, 600);
-
-        onDraftComplete(mine);
+        }, 1000);
       }
     };
 
@@ -573,7 +607,14 @@ export default function EnhancedOnlineDraft3DScreen({
         console.warn("Error cleaning up transport listeners:", err);
       }
     };
-  }, [transport, myPlayerIndex, onDraftComplete, matchId, router, slugToCardId]);
+  }, [
+    transport,
+    myPlayerIndex,
+    onDraftComplete,
+    matchId,
+    router,
+    slugToCardId,
+  ]);
 
   // Fetch metadata for picked cards (for enhanced sorting and stats)
   useEffect(() => {
@@ -1520,11 +1561,15 @@ export default function EnhancedOnlineDraft3DScreen({
 
             <div className="bg-slate-800 rounded-lg p-6">
               <h3 className="text-xl font-semibold text-white mb-4">
-                Enhanced Draft Settings
+                Draft Settings
               </h3>
               <div className="space-y-2 text-slate-300">
                 <div>
-                  Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}
+                  {match?.draftConfig?.cubeId
+                    ? `Cube: ${match?.draftConfig?.cubeName ?? "Custom Cube"}`
+                    : `Sets: ${(match?.draftConfig?.setMix ?? ["Beta"]).join(
+                        ", "
+                      )}`}
                 </div>
                 <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
                 <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
@@ -1545,10 +1590,10 @@ export default function EnhancedOnlineDraft3DScreen({
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             {loading
-              ? "Starting Enhanced Draft..."
+              ? "Starting Draft..."
               : !playerReadyStates.p1 || !playerReadyStates.p2
               ? "Waiting for both players to be ready..."
-              : "Start Enhanced Draft"}
+              : "Start Draft"}
           </button>
         </div>
       </div>
@@ -1712,7 +1757,11 @@ export default function EnhancedOnlineDraft3DScreen({
               x={staged.x}
               z={staged.z}
               cardId={packAsBoosterCards[staged.idx]?.cardId}
-              cardName={packAsBoosterCards[staged.idx]?.cardName ?? packAsBoosterCards[staged.idx]?.slug ?? ""}
+              cardName={
+                packAsBoosterCards[staged.idx]?.cardName ??
+                packAsBoosterCards[staged.idx]?.slug ??
+                ""
+              }
               cardType={packAsBoosterCards[staged.idx]?.type ?? null}
               onDrop={(wx, wz) => {
                 // Only allow moving staged cards when it's the player's turn
@@ -1842,12 +1891,12 @@ export default function EnhancedOnlineDraft3DScreen({
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
             <div className="text-3xl font-fantaisie text-white">
-              Enhanced Draft
+              Online Draft
             </div>
             <button
               onClick={() => setHelpOpen(true)}
               className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
-              title="Enhanced Draft controls"
+              title="Draft controls"
             >
               <span className="font-fantaisie text-xl font-bold">?</span>
             </button>

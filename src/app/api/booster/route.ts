@@ -1,11 +1,24 @@
 import { NextRequest } from 'next/server';
-import { generateBoosters } from '@/lib/booster';
+import { generateBoosters, generateCubeBoosters } from '@/lib/booster';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const cubeId = searchParams.get('cube');
+    const count = Math.max(1, Math.min(36, Number(searchParams.get('count') || '1')));
+
+    // Cube draft mode
+    if (cubeId) {
+      const packs = await generateCubeBoosters(cubeId, count);
+      return new Response(JSON.stringify({ cubeId, count, packs }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // Regular set-based draft mode
     const set = searchParams.get('set') || 'Alpha';
     // Enforce draft exclusion for Dragonlord mini-set at the API level.
     // Draft UIs already omit Dragonlord, but this prevents manual/API misuse.
@@ -16,7 +29,6 @@ export async function GET(req: NextRequest) {
         headers: { 'content-type': 'application/json' },
       });
     }
-    const count = Math.max(1, Math.min(36, Number(searchParams.get('count') || '1')));
     const replaceAvatars = searchParams.get('replaceAvatars') === 'true';
 
     const packs = await generateBoosters(set, count, undefined, replaceAvatars);

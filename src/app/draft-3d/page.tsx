@@ -47,6 +47,33 @@ export default function Draft3DPage() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cube draft support
+  const [useCube, setUseCube] = useState(false);
+  const [cubeId, setCubeId] = useState<string>("");
+  const [cubes, setCubes] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Fetch available cubes on mount
+  useEffect(() => {
+    async function loadCubes() {
+      try {
+        const resp = await fetch('/api/cubes');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const allCubes = [
+          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
+          ...(data.publicCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
+        ];
+        setCubes(allCubes);
+        if (allCubes.length > 0) {
+          setCubeId(allCubes[0].id);
+        }
+      } catch (e) {
+        console.warn('Failed to load cubes:', e);
+      }
+    }
+    loadCubes();
+  }, []);
+
   const [seatPacks, setSeatPacks] = useState<BoosterCard[][][]>([]); // [seat][packIndex][cards]
   const [currentPacks, setCurrentPacks] = useState<BoosterCard[][]>([]); // [seat][cards]
   const [packIndex, setPackIndex] = useState(0); // 0..2
@@ -104,6 +131,14 @@ export default function Draft3DPage() {
       setStarting(true);
       setError(null);
       setSaveMsg(null);
+
+      // Validate cube selection if cube mode is enabled
+      if (useCube && !cubeId) {
+        setError('Please select a cube for cube draft mode');
+        setStarting(false);
+        return;
+      }
+
       setYourPicks([]);
       setPick3D([]);
       setNextPickId(1);
@@ -114,58 +149,75 @@ export default function Draft3DPage() {
       setPickNumber(1);
       setPackChoice([null, null, null]);
 
-      // Generate packs per selected set (one column per round)
-      const [setA, setB, setC] = setNames;
-      const avatarParam = replaceAvatars ? "&replaceAvatars=true" : "";
-      const [respA, respB, respC] = await Promise.all([
-        fetch(
-          `/api/booster?set=${encodeURIComponent(
-            setA
-          )}&count=${players}${avatarParam}`
-        ),
-        fetch(
-          `/api/booster?set=${encodeURIComponent(
-            setB
-          )}&count=${players}${avatarParam}`
-        ),
-        fetch(
-          `/api/booster?set=${encodeURIComponent(
-            setC
-          )}&count=${players}${avatarParam}`
-        ),
-      ]);
-      const [dataA, dataB, dataC] = await Promise.all([
-        respA.json(),
-        respB.json(),
-        respC.json(),
-      ]);
-      if (!respA.ok)
-        throw new Error(
-          dataA?.error || `Failed to generate boosters for ${setA}`
-        );
-      if (!respB.ok)
-        throw new Error(
-          dataB?.error || `Failed to generate boosters for ${setB}`
-        );
-      if (!respC.ok)
-        throw new Error(
-          dataC?.error || `Failed to generate boosters for ${setC}`
-        );
+      let packsA: BoosterCard[][], packsB: BoosterCard[][], packsC: BoosterCard[][];
 
-      const packsA: BoosterCard[][] = (dataA.packs || []).map(
-        (pack: BoosterCard[]) =>
-          (pack || []).map((c) => ({ ...c, setName: setA }))
-      );
-      const packsB: BoosterCard[][] = (dataB.packs || []).map(
-        (pack: BoosterCard[]) =>
-          (pack || []).map((c) => ({ ...c, setName: setB }))
-      );
-      const packsC: BoosterCard[][] = (dataC.packs || []).map(
-        (pack: BoosterCard[]) =>
-          (pack || []).map((c) => ({ ...c, setName: setC }))
-      );
+      // Cube draft mode - generate all packs from the same cube
+      if (useCube && cubeId) {
+        const resp = await fetch(`/api/booster?cube=${encodeURIComponent(cubeId)}&count=${players * 3}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data?.error || 'Failed to generate cube boosters');
+        }
 
-      // Assign 3 packs per seat, preserving per-column sets
+        const allPacks: BoosterCard[][] = data.packs || [];
+        // Split into 3 rounds
+        packsA = allPacks.slice(0, players);
+        packsB = allPacks.slice(players, players * 2);
+        packsC = allPacks.slice(players * 2, players * 3);
+      } else {
+        // Regular set-based draft mode
+        const [setA, setB, setC] = setNames;
+        const avatarParam = replaceAvatars ? "&replaceAvatars=true" : "";
+        const [respA, respB, respC] = await Promise.all([
+          fetch(
+            `/api/booster?set=${encodeURIComponent(
+              setA
+            )}&count=${players}${avatarParam}`
+          ),
+          fetch(
+            `/api/booster?set=${encodeURIComponent(
+              setB
+            )}&count=${players}${avatarParam}`
+          ),
+          fetch(
+            `/api/booster?set=${encodeURIComponent(
+              setC
+            )}&count=${players}${avatarParam}`
+          ),
+        ]);
+        const [dataA, dataB, dataC] = await Promise.all([
+          respA.json(),
+          respB.json(),
+          respC.json(),
+        ]);
+        if (!respA.ok)
+          throw new Error(
+            dataA?.error || `Failed to generate boosters for ${setA}`
+          );
+        if (!respB.ok)
+          throw new Error(
+            dataB?.error || `Failed to generate boosters for ${setB}`
+          );
+        if (!respC.ok)
+          throw new Error(
+            dataC?.error || `Failed to generate boosters for ${setC}`
+          );
+
+        packsA = (dataA.packs || []).map(
+          (pack: BoosterCard[]) =>
+            (pack || []).map((c) => ({ ...c, setName: setA }))
+        );
+        packsB = (dataB.packs || []).map(
+          (pack: BoosterCard[]) =>
+            (pack || []).map((c) => ({ ...c, setName: setB }))
+        );
+        packsC = (dataC.packs || []).map(
+          (pack: BoosterCard[]) =>
+            (pack || []).map((c) => ({ ...c, setName: setC }))
+        );
+      }
+
+      // Assign 3 packs per seat
       const seats: BoosterCard[][][] = Array.from({ length: players }, () => [
         [],
         [],
@@ -1053,30 +1105,62 @@ export default function Draft3DPage() {
           )}
           {!inProgress && (
             <>
-              <div className="flex flex-wrap items-end gap-3 text-white">
-                {[0, 1, 2].map((i) => (
-                  <label key={`set-${i}`} className="flex flex-col gap-1">
-                    <span className="text-xs opacity-80">Pack {i + 1} Set</span>
-                    <select
-                      value={setNames[i]}
-                      onChange={(e) =>
-                        setSetNames((prev) => {
-                          const next = [...prev];
-                          next[i] = e.target.value;
-                          return next;
-                        })
-                      }
-                      className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
-                    >
-                      <option value="Alpha">Alpha</option>
-                      <option value="Beta">Beta</option>
-                      <option value="Arthurian Legends">
-                        Arthurian Legends
-                      </option>
-                    </select>
-                  </label>
-                ))}
-              </div>
+              <label className="flex items-center gap-2 text-white">
+                <input
+                  type="checkbox"
+                  checked={useCube}
+                  onChange={(e) => setUseCube(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm">Use Cube for draft</span>
+              </label>
+
+              {useCube ? (
+                <label className="flex flex-col gap-1 text-white">
+                  <span className="text-xs opacity-80">Select Cube</span>
+                  <select
+                    value={cubeId}
+                    onChange={(e) => setCubeId(e.target.value)}
+                    disabled={cubes.length === 0}
+                    className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur disabled:opacity-50"
+                  >
+                    {cubes.length === 0 ? (
+                      <option value="">No cubes available</option>
+                    ) : (
+                      cubes.map((cube) => (
+                        <option key={cube.id} value={cube.id}>
+                          {cube.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+              ) : (
+                <div className="flex flex-wrap items-end gap-3 text-white">
+                  {[0, 1, 2].map((i) => (
+                    <label key={`set-${i}`} className="flex flex-col gap-1">
+                      <span className="text-xs opacity-80">Pack {i + 1} Set</span>
+                      <select
+                        value={setNames[i]}
+                        onChange={(e) =>
+                          setSetNames((prev) => {
+                            const next = [...prev];
+                            next[i] = e.target.value;
+                            return next;
+                          })
+                        }
+                        className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
+                      >
+                        <option value="Alpha">Alpha</option>
+                        <option value="Beta">Beta</option>
+                        <option value="Arthurian Legends">
+                          Arthurian Legends
+                        </option>
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              )}
 
               <label className="flex flex-col gap-1 text-white">
                 <span className="text-xs opacity-80">Players</span>
