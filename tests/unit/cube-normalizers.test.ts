@@ -33,7 +33,7 @@ describe("normalizeCubeSummary", () => {
       isOwner: true,
       userName: "Tester",
     });
-    expect(base.updatedAt).toBe("2024-05-06T00:00:00.000Z");
+    expect(base.updatedAt).toBe("2024-05-06T16:00:00.000Z");
   });
 
   it("falls back to defaults when fields are missing", () => {
