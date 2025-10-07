@@ -319,6 +319,8 @@ export default function OnlineMatchPage() {
 
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
+  const storeSetupWinner = useGameStore((s) => s.setupWinner);
+  const storeD20Rolls = useGameStore((s) => s.d20Rolls);
   const storeActorKey = useGameStore((s) => s.actorKey);
   const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup" && !setupOpen;
   const [prepared, setPrepared] = useState<boolean>(false);
@@ -933,14 +935,22 @@ export default function OnlineMatchPage() {
 
     let desired = setupOpen;
     const ended = match.status === "ended";
-    // Check game phase from server snapshot to detect if gameplay has started
+    // Check game phase from game store (which gets updated from resync)
     // "Main" phase means game started
     // "Start" phase means D20 rolling complete, in mulligan phase
     // "Setup" phase means D20 rolling OR waiting for players
-    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
-    const setupWinner = (match as unknown as { game?: { setupWinner?: string } })?.game?.setupWinner;
-    const gameActuallyStarted = gamePhase === "Main";
-    const d20Complete = gamePhase === "Start" || gamePhase === "Main" || setupWinner != null;
+    const gameActuallyStarted = serverPhase === "Main";
+    const d20Complete = serverPhase === "Start" || serverPhase === "Main" || storeSetupWinner != null;
+
+    console.log("[setupOpen logic]", {
+      serverPhase,
+      storeSetupWinner,
+      storeD20Rolls,
+      d20Complete,
+      d20RollingComplete,
+      matchStatus: match.status,
+      resyncing
+    });
 
     if (ended) {
       desired = false;
@@ -966,7 +976,7 @@ export default function OnlineMatchPage() {
     }
 
     if (desired !== setupOpen) setSetupOpen(desired);
-  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen, setPrepared, d20RollingComplete, setD20RollingComplete]);
+  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen, setPrepared, d20RollingComplete, setD20RollingComplete, storeSetupWinner, storeD20Rolls]);
 
   
 
