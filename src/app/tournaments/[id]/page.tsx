@@ -1000,7 +1000,7 @@ export default function TournamentDetailsPage() {
                 {getFormatIcon(tournament.format)}
               </span>
               <div>
-                <h1 className="text-3xl font-bold text-white">
+                <h1 className="text-3xl font-fantaisie text-white">
                   {tournament.name}
                 </h1>
                 <div className="flex items-center space-x-4 mt-1">
