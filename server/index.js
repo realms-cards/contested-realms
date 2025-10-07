@@ -540,52 +540,68 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
       };
     } catch {}
   }
-  // Normalize setMix
+  // Check if using cube - cubes don't need set-based normalization
+  const usingCube = Boolean(dc.cubeId);
+
+  // Normalize setMix (skip for cubes)
   const setMix = Array.isArray(dc.setMix) && dc.setMix.length > 0 ? dc.setMix : ['Beta'];
   // Normalize packCount/packSize
   const packCount = Math.max(1, Number(dc.packCount) || 3);
   const packSize = Math.max(8, Number(dc.packSize) || 15);
+
   // Normalize packCounts: ensure it sums exactly to packCount; if not, generate even distribution across setMix
+  // Skip this for cubes - they don't use set-based pack counts
   let packCounts = dc && typeof dc.packCounts === 'object' ? { ...dc.packCounts } : undefined;
-  const sumPackCounts = (obj) =>
-    obj ? Object.values(obj).reduce((a, b) => a + (Math.max(0, Number(b) || 0)), 0) : 0;
-  if (!packCounts || sumPackCounts(packCounts) !== packCount) {
-    const counts = {};
-    const n = setMix.length;
-    for (const s of setMix) counts[s] = 0;
-    const base = Math.floor(packCount / n);
-    const rem = packCount % n;
-    setMix.forEach((s, i) => {
-      counts[s] = base + (i < rem ? 1 : 0);
-    });
-    packCounts = counts;
+  if (!usingCube) {
+    const sumPackCounts = (obj) =>
+      obj ? Object.values(obj).reduce((a, b) => a + (Math.max(0, Number(b) || 0)), 0) : 0;
+    if (!packCounts || sumPackCounts(packCounts) !== packCount) {
+      const counts = {};
+      const n = setMix.length;
+      for (const s of setMix) counts[s] = 0;
+      const base = Math.floor(packCount / n);
+      const rem = packCount % n;
+      setMix.forEach((s, i) => {
+        counts[s] = base + (i < rem ? 1 : 0);
+      });
+      packCounts = counts;
+    }
   }
   // Persist normalized config back to match (so followers/clients see canonical config)
-  match.draftConfig = { setMix, packCount, packSize, packCounts };
+  match.draftConfig = { ...dc, setMix, packCount, packSize, packCounts };
   try {
-    // Build set sequence from exact packCounts
+    // Build set sequence from exact packCounts (not needed for cubes)
     let setSequence = [];
-    if (packCounts && typeof packCounts === 'object') {
-      for (const [name, cnt] of Object.entries(packCounts)) {
-        const c = Math.max(0, Number(cnt) || 0);
-        for (let i = 0; i < c; i++) setSequence.push(name);
+    if (!usingCube) {
+      if (packCounts && typeof packCounts === 'object') {
+        for (const [name, cnt] of Object.entries(packCounts)) {
+          const c = Math.max(0, Number(cnt) || 0);
+          for (let i = 0; i < c; i++) setSequence.push(name);
+        }
       }
-    }
-    if (setSequence.length !== packCount) {
-      console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
-      // Notify requester if available
-      try {
-        if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: `Draft configuration error: pack counts must sum to ${packCount}` });
-      } catch {}
-      return;
+      if (setSequence.length !== packCount) {
+        console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
+        // Notify requester if available
+        try {
+          if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: `Draft configuration error: pack counts must sum to ${packCount}` });
+        } catch {}
+        return;
+      }
     }
     const currentPacks = [];
     for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
       const playerPacks = [];
       for (let packIdx = 0; packIdx < packCount; packIdx++) {
-        const setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
         const rng = createRngFromString(`${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`);
-        const picks = await generateBoosterDeterministic(setName, rng, false);
+        // Use cube booster generation if cubeId is present, otherwise use set-based generation
+        let picks;
+        let setName = 'Beta'; // Default for regular sets
+        if (usingCube) {
+          picks = await generateCubeBoosterDeterministic(dc.cubeId, rng, packSize);
+        } else {
+          setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
+          picks = await generateBoosterDeterministic(setName, rng, false);
+        }
         const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
           id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[playerIdx].slice(-4)}`,
           name: p.cardName || '',
@@ -594,7 +610,9 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
           cost: String(p.cost || ''),
           rarity: p.rarity || 'common',
           element: p.element || [],
-          setName,
+          // For cubes, use the actual setName from the pick (allows mixed-set packs)
+          // For regular sets, use the setName variable
+          setName: usingCube ? (p.setName || "Unknown") : setName,
         }));
         playerPacks.push(cards);
       }
@@ -966,6 +984,7 @@ const Redis = require("ioredis");
 const {
   createRngFromString,
   generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
 } = require("./booster");
 const { BotManager } = require("./botManager");
 const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
@@ -5702,6 +5721,7 @@ io.on("connection", (socket) => {
     const room = `match:${match.id}`;
     const dc = match.draftConfig || { setMix: ["Beta"], packCount: 3, packSize: 15 };
     const { setMix, packCount, packSize } = dc;
+    const usingCube = Boolean(dc.cubeId);
     console.log(
       `[Draft] startDraft ${
         requestingPlayer
@@ -5710,37 +5730,47 @@ io.on("connection", (socket) => {
       } in match ${match.id}. phase=${match.draftState?.phase}, config=${JSON.stringify(dc)}`
     );
     try {
-      // Build set sequence per pack index: ALWAYS use exact counts
+      // Build set sequence per pack index: ALWAYS use exact counts (skip for cubes)
       /** @type {string[]} */
       let setSequence = [];
-      if (dc.packCounts && typeof dc.packCounts === 'object') {
-        for (const [name, cnt] of Object.entries(dc.packCounts)) {
-          const c = Math.max(0, Number(cnt) || 0);
-          for (let i = 0; i < c; i++) setSequence.push(name);
+      if (!usingCube) {
+        if (dc.packCounts && typeof dc.packCounts === 'object') {
+          for (const [name, cnt] of Object.entries(dc.packCounts)) {
+            const c = Math.max(0, Number(cnt) || 0);
+            for (let i = 0; i < c; i++) setSequence.push(name);
+          }
         }
-      }
-      if (setSequence.length !== packCount) {
-        // Error: packCounts must match packCount exactly
-        console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
-        const s = requestingPlayer
-          ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
-          : null;
-        if (s) s.emit("error", { message: `Draft configuration error: pack counts must sum to ${packCount}` });
-        return;
+        if (setSequence.length !== packCount) {
+          // Error: packCounts must match packCount exactly
+          console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
+          const s = requestingPlayer
+            ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
+            : null;
+          if (s) s.emit("error", { message: `Draft configuration error: pack counts must sum to ${packCount}` });
+          return;
+        }
       }
 
       console.log(
-        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setSeq=${setSequence.join(',')}`
+        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setSeq=${usingCube ? 'cube' : setSequence.join(',')}`
       );
       const currentPacks = [];
       for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
         const playerPacks = [];
         for (let packIdx = 0; packIdx < packCount; packIdx++) {
-          const setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
           const rng = createRngFromString(
             `${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`
           );
-          const picks = await generateBoosterDeterministic(setName, rng, false);
+          // Use cube booster generation if cubeId is present, otherwise use set-based generation
+          let picks;
+          let setName = 'Beta'; // Default for regular sets
+          if (usingCube) {
+            picks = await generateCubeBoosterDeterministic(dc.cubeId, rng, packSize);
+          } else {
+            setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
+            picks = await generateBoosterDeterministic(setName, rng, false);
+          }
+          const displaySet = usingCube ? (dc.cubeName || "Cube") : setName;
           const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
             id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[
               playerIdx
@@ -5751,7 +5781,7 @@ io.on("connection", (socket) => {
             cost: String(p.cost || ""),
             rarity: p.rarity || "common",
             element: p.element || [],
-            setName: setName, // Include set information for proper card resolution
+            setName: displaySet, // Include set or cube information for proper card resolution
           }));
           playerPacks.push(cards);
         }

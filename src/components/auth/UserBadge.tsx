@@ -605,6 +605,17 @@ export default function UserBadge({
             </div>
             <div className="px-2 py-1.5">
               <button
+                onClick={() => {
+                  setOpen(false);
+                  router.push("/cubes");
+                }}
+                className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+              >
+                Cubes
+              </button>
+            </div>
+            <div className="px-2 py-1.5">
+              <button
                 onClick={async () => {
                   try {
                     await signOut({ callbackUrl: "/" });

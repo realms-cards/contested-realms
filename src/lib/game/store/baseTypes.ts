@@ -1,4 +1,4 @@
-export type Phase = "Setup" | "Start" | "Draw" | "Main" | "Combat" | "End";
+export type Phase = "Setup" | "Start" | "Draw" | "Main" | "End";
 
 export type PlayerKey = "p1" | "p2";
 

@@ -34,6 +34,7 @@ model Set {
   variants    Variant[]
   packConfig  PackConfig?
   deckCards   DeckCard[] @relation("DeckCardSet")
+  cubeCards   CubeCard[] @relation("CubeCardSet")
 
   @@index([name])
 }
@@ -49,6 +50,7 @@ model Card {
   meta       CardSetMetadata[]
   variants   Variant[]
   deckCards  DeckCard[]
+  cubeCards  CubeCard[]
 
   @@index([name])
 }
@@ -90,6 +92,7 @@ model Variant {
   card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
   set  Set  @relation(fields: [setId], references: [id], onDelete: Cascade)
   deckCards DeckCard[] @relation("DeckCardVariant")
+  cubeCards CubeCard[] @relation("CubeCardVariant")
 
   @@index([setId])
   @@index([cardId])
@@ -150,6 +153,41 @@ model DeckCard {
   @@index([cardId])
 }
 
+// Cubes are draftable card pools managed by users
+model Cube {
+  id        String   @id @default(cuid())
+  name      String
+  description String? @db.Text
+  isPublic  Boolean  @default(false)
+  imported  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards CubeCard[]
+
+  @@index([userId])
+  @@index([isPublic, createdAt])
+}
+
+model CubeCard {
+  id        Int     @id @default(autoincrement())
+  cubeId    String
+  cardId    Int
+  setId     Int?
+  variantId Int?
+  count     Int
+
+  cube    Cube    @relation(fields: [cubeId], references: [id], onDelete: Cascade)
+  card    Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set     Set?    @relation("CubeCardSet", fields: [setId], references: [id])
+  variant Variant? @relation("CubeCardVariant", fields: [variantId], references: [id])
+
+  @@index([cubeId])
+  @@index([cardId])
+}
+
 // Auth models
 model Account {
   id                String  @id @default(cuid())
@@ -192,6 +230,7 @@ model User {
   accounts              Account[]
   sessions              Session[]
   decks                 Deck[]
+  cubes                 Cube[]
   createdTournaments    Tournament[]
   tournamentRegistrations TournamentRegistration[]
   standings             PlayerStanding[]
