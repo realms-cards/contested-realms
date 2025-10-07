@@ -5,18 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
-
-// Random name generation (same as lobby)
-const PREDICATES = ["Eternal", "Ancient", "Forgotten", "Sacred", "Cursed", "Divine"];
-const ADJECTIVES = ["Mystic", "Shadow", "Crystal", "Storm", "Fire", "Ice"];
-const SUBJECTS = ["Dragons", "Wizards", "Knights", "Realms", "Legends", "Heroes"];
-
-function generateTournamentName(): string {
-  const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
-  const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
-  return `${predicate} ${adjective} ${subject}`;
-}
+import { generateTournamentName } from "@/lib/random-name-generator";
 
 interface Tournament {
   id: string;
@@ -103,6 +92,11 @@ export default function TournamentsPage() {
     "Arthurian Legends"
   ]);
 
+  // Cube draft support
+  const [useCube, setUseCube] = useState(false);
+  const [cubeId, setCubeId] = useState<string>("");
+  const [cubes, setCubes] = useState<Array<{ id: string; name: string }>>([]);
+
   // Type guard helpers
   function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -121,6 +115,28 @@ export default function TournamentsPage() {
       router.push("/auth/signin?callbackUrl=/tournaments");
     }
   }, [status, router]);
+
+  // Fetch available cubes for cube draft option
+  useEffect(() => {
+    async function loadCubes() {
+      try {
+        const resp = await fetch('/api/cubes');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const allCubes = [
+          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
+          ...(data.publicCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
+        ];
+        setCubes(allCubes);
+        if (allCubes.length > 0) {
+          setCubeId(allCubes[0].id);
+        }
+      } catch (e) {
+        console.warn('Failed to load cubes:', e);
+      }
+    }
+    loadCubes();
+  }, []);
 
   // Polling removed; realtime provider handles live updates
 
@@ -196,15 +212,23 @@ export default function TournamentsPage() {
         });
         settingsOut.sealedConfig = { packCounts };
       } else if (form.format === "draft") {
-        // Convert booster array to packCounts format for backend
-        const packCounts: Record<string, number> = {};
-        draftBoosters.forEach(setName => {
-          packCounts[setName] = (packCounts[setName] || 0) + 1;
-        });
-        settingsOut.draftConfig = {
-          packCount: draftBoosterCount,
-          packCounts,
-        };
+        if (useCube && cubeId) {
+          // Cube draft mode
+          settingsOut.draftConfig = {
+            cubeId,
+            packCount: draftBoosterCount,
+          };
+        } else {
+          // Regular set-based draft
+          const packCounts: Record<string, number> = {};
+          draftBoosters.forEach(setName => {
+            packCounts[setName] = (packCounts[setName] || 0) + 1;
+          });
+          settingsOut.draftConfig = {
+            packCount: draftBoosterCount,
+            packCounts,
+          };
+        }
       }
 
       const newTournament = await rtCreateTournament({
@@ -232,6 +256,10 @@ export default function TournamentsPage() {
       setSealedBoosters(["Beta", "Beta", "Beta", "Beta", "Beta", "Beta"]);
       setDraftBoosterCount(3);
       setDraftBoosters(["Beta", "Arthurian Legends", "Arthurian Legends"]);
+      setUseCube(false);
+      if (cubes.length > 0) {
+        setCubeId(cubes[0].id);
+      }
       setShowCreateForm(false);
 
       // Navigate to the new tournament
@@ -692,11 +720,48 @@ export default function TournamentsPage() {
                 {/* Draft Booster Configuration */}
                 {form.format === "draft" && (
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <label className="block text-slate-300 text-sm font-medium">
-                        Booster Count
-                      </label>
-                      <div className="flex items-center gap-2">
+                    {/* Cube draft toggle */}
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={useCube}
+                        onChange={(e) => setUseCube(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span className="text-slate-300 text-sm">Use Cube for draft</span>
+                    </label>
+
+                    {useCube ? (
+                      /* Cube selector */
+                      <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-2">
+                          Select Cube
+                        </label>
+                        <select
+                          value={cubeId}
+                          onChange={(e) => setCubeId(e.target.value)}
+                          disabled={cubes.length === 0}
+                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white disabled:opacity-50"
+                        >
+                          {cubes.length === 0 ? (
+                            <option value="">No cubes available</option>
+                          ) : (
+                            cubes.map((cube) => (
+                              <option key={cube.id} value={cube.id}>
+                                {cube.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                    ) : (
+                      /* Set-based booster configuration */
+                      <>
+                        <div className="flex items-center gap-3">
+                          <label className="block text-slate-300 text-sm font-medium">
+                            Booster Count
+                          </label>
+                          <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -754,6 +819,8 @@ export default function TournamentsPage() {
                         </div>
                       ))}
                     </div>
+                      </>
+                    )}
                   </div>
                 )}
 
