@@ -43,6 +43,96 @@ npm run typecheck        # TypeScript compilation check
 scripts/validate-type-safety.sh  # Validate type safety configuration
 ```
 
+## Server Module Architecture ✅
+
+**Modular Socket.IO Server**: The monolithic `server/index.js` (6,329 lines) has been refactored into focused, testable modules:
+
+### Extracted Modules
+
+**`server/modules/tournament/broadcast.js`** - Event Broadcasting Layer
+- **Purpose**: Room-scoped Socket.IO event emission for tournaments
+- **Key Features**:
+  - Event deduplication (5-second window to prevent duplicate broadcasts)
+  - Audit logging to `TournamentBroadcastEvent` table
+  - All events broadcast to tournament rooms only (no global broadcasts)
+- **Exports**: `emitPhaseChanged`, `emitTournamentUpdate`, `emitRoundStarted`, `emitMatchesReady`, `emitDraftReady`, `emitPlayerJoined`, `emitPlayerLeft`, `emitPreparationUpdate`, `emitStatisticsUpdate`, `setPrismaClient`
+- **Usage**: `tournamentBroadcast.emitPhaseChanged(io, tournamentId, newPhase, additionalData)`
+
+**`server/modules/draft/config.js`** - Draft Configuration Service
+- **Purpose**: Unified draft configuration loading for matches
+- **Key Features**:
+  - Hydrates tournament drafts from `DraftSession` table
+  - Prevents cube draft failures by ensuring `cubeId` loaded before pack generation
+  - Falls back to match config for casual drafts
+- **Exports**: `getDraftConfig`, `loadCubeConfiguration`, `ensureConfigLoaded`
+- **Usage**: `await draftConfig.ensureConfigLoaded(prisma, matchId, match, hydrateMatchFromDatabase)`
+
+**`server/modules/tournament/standings.js`** - Standings Management
+- **Purpose**: Atomic standings updates with transaction guarantees
+- **Key Features**:
+  - Wraps winner/loser updates in `prisma.$transaction([])`
+  - Automatic retry with 100ms backoff on transaction conflicts
+  - Calculates game win percentage (GWP) and opponent win percentage (OWP) tiebreakers
+  - Validates standings integrity (matchPoints = wins * 3 + draws)
+- **Exports**: `recordMatchResult`, `getStandings`, `recalculateTiebreakers`, `validateStandings`
+- **Usage**: `await standingsService.recordMatchResult(prisma, tournamentId, winnerId, loserId, isDraw)`
+
+### Database Monitoring Tables
+
+**`TournamentBroadcastEvent`** - Audit log for all tournament broadcasts
+- Tracks: `tournamentId`, `eventType`, `payload`, `timestamp`, `emittedBy`, `roomTarget`
+- Indexed by: `(tournamentId, timestamp DESC)`, `eventType`
+
+**`SocketBroadcastHealth`** - Health monitoring for broadcast requests
+- Tracks: `eventType`, `success`, `latencyMs`, `statusCode`, `errorMessage`, `retryCount`
+- Indexed by: `timestamp DESC`, `success`, `eventType`
+- Enables observability of socket server connectivity issues
+
+**`PlayerStanding`** - Enhanced with check constraint
+- Constraint: `CHECK (matchPoints = (wins * 3) + draws)`
+- Prevents invalid standings from being saved to database
+
+### Client-Side Improvements
+
+**Event Deduplication** (`src/hooks/useTournamentSocket.ts`)
+- Tracks last 100 event IDs with LRU-style eviction
+- Prevents duplicate `PHASE_CHANGED`, `ROUND_STARTED`, `DRAFT_READY` events
+- Reduces unnecessary re-renders and API calls
+
+**Exponential Backoff Retry** (`src/components/game/TournamentDraft3DScreen.tsx`)
+- Replaced 500ms polling with exponential backoff (100ms → 200ms → 400ms → 800ms → 1600ms)
+- Max 5 retry attempts for draft join
+- Eliminates request loops that caused production issues
+
+**Health Monitoring** (`src/lib/services/tournament-broadcast.ts`)
+- Logs all broadcast successes/failures to `SocketBroadcastHealth` table
+- Automatic retry with exponential backoff (100ms, 200ms)
+- 5-second timeout for all broadcast requests
+
+### Critical Bug Fixes (Spec 009-audit-transport-and) ✅
+
+**Production Issue Resolution**: Fixed 4 critical bugs causing tournament flow issues:
+
+1. **Global Broadcast Antipattern** (T014)
+   - **Issue**: All tournament events broadcast globally causing request loops
+   - **Fix**: Removed 5 `io.emit()` calls, kept only `io.to(room)` broadcasts
+   - **Impact**: Eliminated phase transition reload loops
+
+2. **Standings Race Conditions** (T015)
+   - **Issue**: Concurrent match completions caused data loss
+   - **Fix**: Wrapped both player updates in `prisma.$transaction([])`
+   - **Impact**: Atomic updates prevent standings corruption
+
+3. **Cube Draft Production Failure** (T016)
+   - **Issue**: Cube drafts worked locally but failed in production
+   - **Fix**: Force hydration from `DraftSession` before pack generation
+   - **Impact**: Cube drafts now work consistently in all environments
+
+4. **Manual Reload Required for Drafts**
+   - **Root Cause**: Global broadcasts + lack of config hydration + race conditions
+   - **Fix**: Combination of fixes T014-T016
+   - **Impact**: Drafts start automatically without page reload
+
 ## Recent Changes - Tournament MVP Implementation Complete ✅
 
 ### Phase 3.10 & 3.11 Complete: Tournament System MVP ✅
@@ -165,7 +255,7 @@ scripts/validate-type-safety.sh  # Validate type safety configuration
 - Real-time statistics and live tournament updates
 - Sub-millisecond performance for all core operations
 
-**Last updated**: 2025-01-11 (Tournament MVP Complete)
+**Last updated**: 2025-10-08 (Tournament Transport Audit & Module Refactoring Complete)
 
 ---
 
