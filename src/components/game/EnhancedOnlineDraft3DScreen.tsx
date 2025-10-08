@@ -479,40 +479,38 @@ export default function EnhancedOnlineDraft3DScreen({
   }, [match?.draftState?.playerReady]);
 
   // Client-side fallback: if both players are ready and we remain in 'waiting', auto-request start after ~1.1s
+  const hasStartedAutoStartRef = useRef(false);
   useEffect(() => {
-    if (!transport || !match) return;
+    if (!transport || !matchId) return;
     if (draftState.phase !== "waiting") return;
     if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
+    if (hasStartedAutoStartRef.current) return; // Only attempt once
 
     console.log(
       "[EnhancedOnlineDraft3D] Both players ready, auto-starting draft in 1.1s"
     );
+    hasStartedAutoStartRef.current = true;
 
     const t = window.setTimeout(() => {
-      try {
-        const baseCfg = match.draftConfig ?? {
-          setMix: ["Beta"],
-          packCount: 3,
-          packSize: 15,
-        };
-        console.log(
-          "[EnhancedOnlineDraft3D] Calling startDraft with config:",
-          baseCfg
-        );
-        transport.startDraft?.({ matchId: match.id, draftConfig: baseCfg });
-      } catch (err) {
-        console.error("[EnhancedOnlineDraft3D] Failed to start draft:", err);
-      }
+      const baseCfg = match?.draftConfig ?? {
+        setMix: ["Beta"],
+        packCount: 3,
+        packSize: 15,
+      };
+      console.log(
+        "[EnhancedOnlineDraft3D] Calling startDraft with config:",
+        baseCfg
+      );
+      transport.startDraft?.({ matchId, draftConfig: baseCfg });
     }, 1100);
     return () => window.clearTimeout(t);
   }, [
     transport,
-    match,
-    match?.id,
-    match?.draftConfig,
+    matchId,
     draftState.phase,
     playerReadyStates.p1,
     playerReadyStates.p2,
+    match?.draftConfig,
   ]);
 
   // Listen for server draft updates
@@ -1514,10 +1512,11 @@ export default function EnhancedOnlineDraft3DScreen({
 
   if (draftState.phase === "waiting") {
     return (
-      <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8 relative">
-        <UserBadge variant="floating" />
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
+      <div className="min-h-screen w-full bg-gradient-to-b from-slate-950 to-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl bg-slate-900/95 backdrop-blur-sm rounded-xl p-8 ring-1 ring-white/10 shadow-2xl relative">
+          <UserBadge variant="floating" />
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="bg-slate-800 rounded-lg p-6">
@@ -1595,6 +1594,7 @@ export default function EnhancedOnlineDraft3DScreen({
               ? "Waiting for both players to be ready..."
               : "Start Draft"}
           </button>
+        </div>
         </div>
       </div>
     );
