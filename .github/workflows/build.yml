@@ -75,28 +75,48 @@ jobs:
       - name: Run database migrations
         run: npx prisma migrate deploy
 
+      - name: Build Next.js application
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+
       - name: Start Socket.IO server in background
         run: |
           node server/index.js &
           echo $! > socket-server.pid
-          sleep 10
+          sleep 5
         env:
           DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
           DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
           SOCKET_PORT: 3010
 
-      - name: Wait for socket server to be ready
+      - name: Start Next.js server in background
         run: |
-          timeout 30 bash -c 'until curl -f http://localhost:3010/health 2>/dev/null; do sleep 1; done' || true
+          npm run start &
+          echo $! > nextjs-server.pid
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          PORT: 3000
+
+      - name: Wait for servers to be ready
+        run: |
+          timeout 30 bash -c 'until curl -f http://localhost:3010/health 2>/dev/null; do sleep 1; done' || echo "Socket server not ready"
+          timeout 30 bash -c 'until curl -f http://localhost:3000 2>/dev/null; do sleep 1; done' || echo "Next.js server not ready"
 
       - name: Run integration tests
         run: npm run test:integration
 
-      - name: Stop socket server
+      - name: Stop servers
         if: always()
         run: |
           if [ -f socket-server.pid ]; then
             kill $(cat socket-server.pid) || true
+          fi
+          if [ -f nextjs-server.pid ]; then
+            kill $(cat nextjs-server.pid) || true
           fi
 
   build:
