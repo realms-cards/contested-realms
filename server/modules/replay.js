@@ -20,10 +20,16 @@ async function listRecordings(prisma, opts = {}) {
     : [];
   const sessionById = new Map(sessionsForResults.map((s) => [s.id, s]));
 
-  // Count actions per finished match
-  const finishedCounts = await Promise.all(
-    finishedIds.map((id) => prisma.onlineMatchAction.count({ where: { matchId: id } }))
-  );
+  // Count actions per finished match with a single groupBy
+  let finishedCountsById = new Map();
+  if (finishedIds.length) {
+    const grouped = await prisma.onlineMatchAction.groupBy({
+      by: ['matchId'],
+      where: { matchId: { in: finishedIds } },
+      _count: { _all: true },
+    });
+    finishedCountsById = new Map(grouped.map((g) => [g.matchId, g._count._all]));
+  }
 
   const finishedSummaries = results.map((mr, i) => {
     const session = sessionById.get(mr.matchId);
@@ -49,7 +55,7 @@ async function listRecordings(prisma, opts = {}) {
       startTime,
       endTime,
       duration: endTime && startTime ? endTime - startTime : undefined,
-      actionCount: finishedCounts[i] || 0,
+      actionCount: Number(finishedCountsById.get(mr.matchId) || 0),
       matchType,
       playerIds,
     };
@@ -76,9 +82,16 @@ async function listRecordings(prisma, opts = {}) {
     : [];
   const nameById = new Map(users.map((u) => [u.id, u.name || u.id]));
 
-  const fallbackCounts = await Promise.all(
-    fallbackSessions.map((s) => prisma.onlineMatchAction.count({ where: { matchId: s.id } }))
-  );
+  let fallbackCountsById = new Map();
+  if (fallbackSessions.length) {
+    const ids = fallbackSessions.map((s) => s.id);
+    const grouped = await prisma.onlineMatchAction.groupBy({
+      by: ['matchId'],
+      where: { matchId: { in: ids } },
+      _count: { _all: true },
+    });
+    fallbackCountsById = new Map(grouped.map((g) => [g.matchId, g._count._all]));
+  }
 
   const fallbackSummaries = fallbackSessions.map((s, i) => {
     const playerIds = Array.isArray(s.playerIds) ? s.playerIds : [];
@@ -92,7 +105,7 @@ async function listRecordings(prisma, opts = {}) {
       startTime,
       endTime,
       duration: endTime && startTime ? endTime - startTime : undefined,
-      actionCount: fallbackCounts[i] || 0,
+      actionCount: Number(fallbackCountsById.get(s.id) || 0),
       matchType,
       playerIds,
     };
@@ -197,3 +210,38 @@ function findSetupStartIndex(actions) {
 }
 
 module.exports = { listRecordings, loadRecording };
+
+// ---------------- Retention policy (optional enhancement) -----------------
+
+function setupReplayRetentionPruner(prisma, options = {}) {
+  const days = Number(process.env.REPLAY_RETENTION_DAYS || options.days || 14);
+  if (!Number.isFinite(days) || days <= 0) return;
+  const intervalMs = 24 * 60 * 60 * 1000; // daily
+
+  async function pruneOnce() {
+    try {
+      const thresholdDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      // Find completed matches older than threshold
+      const oldResults = await prisma.matchResult.findMany({
+        where: { completedAt: { lt: thresholdDate } },
+        select: { matchId: true },
+      });
+      const ids = oldResults.map((r) => r.matchId);
+      if (!ids.length) return;
+
+      // Delete actions for those matchIds
+      await prisma.onlineMatchAction.deleteMany({ where: { matchId: { in: ids } } });
+      // Optionally delete session rows that are stale
+      await prisma.onlineMatchSession.deleteMany({ where: { id: { in: ids }, updatedAt: { lt: thresholdDate } } });
+    } catch (e) {
+      try { console.warn('[replay] retention prune failed:', e?.message || e); } catch {}
+    }
+  }
+
+  // Initial delayed run to avoid startup thundering herd
+  setTimeout(pruneOnce, 10_000);
+  // Schedule daily
+  setInterval(pruneOnce, intervalMs).unref?.();
+}
+
+module.exports.setupReplayRetentionPruner = setupReplayRetentionPruner;

@@ -1018,6 +1018,8 @@ const { buildMatchInfo } = require("./matchInfo");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 const prisma = new PrismaClient();
+// Optional: start periodic pruning of old replay actions/sessions
+try { replay.setupReplayRetentionPruner?.(prisma); } catch {}
 const REDIS_URL = process.env.REDIS_URL || process.env.SOCKET_REDIS_URL || "redis://localhost:6379";
 const ENABLE_REDIS_ADAPTER = !(
   process.env.SOCKET_REDIS_DISABLED === '1' ||
