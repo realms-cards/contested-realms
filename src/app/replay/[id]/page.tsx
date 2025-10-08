@@ -60,8 +60,8 @@ export default function ReplayViewerPage() {
     setTransport(socketTransport);
 
     const handleConnect = () => {
-      if (!isMounted) return;
-      setConnected(true);
+      // Do not mark as connected here to avoid race with server auth (hello/welcome).
+      // We'll flip `connected` to true once connect() resolves after 'welcome'.
     };
     const handleDisconnect = () => {
       if (!isMounted) return;
@@ -78,6 +78,10 @@ export default function ReplayViewerPage() {
       .connect({
         displayName,
         playerId,
+      })
+      .then(() => {
+        if (!isMounted) return;
+        setConnected(true);
       })
       .catch((error) => {
         if (!isMounted) return;
@@ -101,7 +105,6 @@ export default function ReplayViewerPage() {
   // Load the recording
   useEffect(() => {
     if (!connected || !transport || !matchId) return;
-    if (!transport.isConnected()) return;
 
     const handleRecording = (payload: unknown) => {
       const data = payload as { recording?: MatchRecording; error?: string };
