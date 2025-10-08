@@ -195,6 +195,7 @@ export default function TournamentDetailsPage() {
     fallbackLoading,
     fallbackTournament,
     setCurrentTournamentById,
+    setCurrentTournament,
   ]);
 
   // Derive tournament from realtime context or fallback
@@ -961,7 +962,7 @@ export default function TournamentDetailsPage() {
 
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         {/* Creator Controls: Start next round banner at top */}
-        {tournament.status === "active" && isCreator && !activeRound && (
+        {tournament.status === "active" && isCreator && !activeRound && maxRoundNumber < (tournament.settings.totalRounds || 3) && (
           <div className="mb-6 rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
             <div className="text-indigo-100 text-sm">
               {rounds.length > 0 ? (

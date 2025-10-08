@@ -955,7 +955,7 @@ export default function TournamentDraft3DScreen({
         setReady(false);
       }
 
-      if (s.phase === "complete") {
+      if (s.phase === "complete" && !completionHandledRef.current) {
         const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
         console.log(
           `[TournamentDraft3D] Draft complete! Picked ${mine.length} cards`
@@ -1005,6 +1005,8 @@ export default function TournamentDraft3DScreen({
           console.error(`[TournamentDraft3D] Failed to save draft data:`, err);
         }
 
+        completionHandledRef.current = true;
+        console.log(`[TournamentDraft3D] Calling onDraftComplete callback...`);
         setTimeout(() => {
           onDraftComplete(mine);
         }, 600);
