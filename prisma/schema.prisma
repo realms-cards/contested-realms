@@ -597,3 +597,35 @@ model Friendship {
   @@index([ownerUserId])
   @@index([targetUserId])
 }
+
+// T027: Audit logging for tournament broadcast events
+model TournamentBroadcastEvent {
+  id           String   @id @default(cuid())
+  tournamentId String
+  eventType    String   // PHASE_CHANGED, ROUND_STARTED, etc.
+  payload      Json     // Complete event payload
+  timestamp    DateTime @default(now())
+  emittedBy    String?  // Server ID or process identifier
+  roomTarget   String   // Socket.IO room (e.g., "tournament:xyz")
+
+  @@index([tournamentId, timestamp(sort: Desc)])
+  @@index([eventType])
+}
+
+// T028: Health monitoring for socket broadcast requests
+model SocketBroadcastHealth {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  eventType    String   // Event being broadcast
+  tournamentId String?  // Tournament ID if applicable
+  targetUrl    String   // Full URL of broadcast endpoint
+  success      Boolean  // Whether broadcast succeeded
+  statusCode   Int?     // HTTP status code
+  errorMessage String?  // Error message if failed
+  retryCount   Int      @default(0) // Number of retries attempted
+  latencyMs    Int      // Latency in milliseconds
+
+  @@index([timestamp(sort: Desc)])
+  @@index([success])
+  @@index([eventType])
+}

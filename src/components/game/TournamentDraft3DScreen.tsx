@@ -207,9 +207,19 @@ export default function TournamentDraft3DScreen({
       offJoined = transport.on("draft:session:joined", handleJoined);
     } catch {}
 
+    // T025: Exponential backoff retry with max 5 attempts
+    let attemptCount = 0;
+    const maxAttempts = 5;
+
     const tryJoin = () => {
       if (!mounted || joinSentRef.current) return;
       if (!canSend()) return;
+      if (attemptCount >= maxAttempts) {
+        console.error('[TournamentDraft3D] Max join attempts exceeded');
+        setError('Failed to join draft session after 5 attempts. Please refresh the page.');
+        return;
+      }
+
       try {
         transport.emit("draft:session:join", {
           sessionId: draftSessionId,
@@ -217,29 +227,38 @@ export default function TournamentDraft3DScreen({
           playerName: me?.displayName || "",
           reconnection: false,
         });
-        // Wait for server ack; retry if not received within 3s
+
+        attemptCount++;
+        console.log(`[TournamentDraft3D] Join attempt ${attemptCount}/${maxAttempts}`);
+
+        // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+        const backoff = Math.min(100 * Math.pow(2, attemptCount - 1), 1600);
         if (joinAckTimeoutRef.current)
           window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = window.setTimeout(() => {
           if (!joinSentRef.current) {
             tryJoin();
           }
-        }, 3000);
+        }, backoff);
       } catch (e) {
         console.warn("[TournamentDraft3D] failed to join draft room", e);
+        attemptCount++;
+        // Retry on error with backoff
+        const backoff = Math.min(100 * Math.pow(2, attemptCount - 1), 1600);
+        if (joinAckTimeoutRef.current)
+          window.clearTimeout(joinAckTimeoutRef.current);
+        joinAckTimeoutRef.current = window.setTimeout(() => {
+          if (!joinSentRef.current) {
+            tryJoin();
+          }
+        }, backoff);
       }
     };
-    // Poll until connected and we have my id; then attempt join and keep retrying until ack
-    const id = window.setInterval(() => {
-      if (joinSentRef.current) {
-        window.clearInterval(id);
-        return;
-      }
-      tryJoin();
-    }, 500);
+
+    // T025: Initial attempt (no polling, just exponential backoff)
+    tryJoin();
     return () => {
       mounted = false;
-      window.clearInterval(id);
       if (joinAckTimeoutRef.current) {
         window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = null;
