@@ -1,0 +1,49 @@
+# Docker Compose for Integration Tests
+# Usage: docker-compose -f docker-compose.test.yml up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database for tests
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: sorcery-test-db
+    environment:
+      POSTGRES_DB: sorcery_test
+      POSTGRES_USER: sorcery_test
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sorcery_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Socket.IO Server for tests
+  socket-server-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.socket
+    container_name: sorcery-test-socket
+    environment:
+      DATABASE_URL: postgresql://sorcery_test:test_password@postgres-test:5432/sorcery_test
+      SOCKET_PORT: 3010
+      NODE_ENV: test
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3010:3010"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres-test-data:

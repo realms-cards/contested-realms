@@ -53,9 +53,9 @@ function getKTX2Loader(gl: WebGLRenderer): KTX2Loader {
     // Ensure cross-origin requests (after CDN redirect) are made with anonymous CORS
     try {
       // KTX2Loader extends Loader, which supports setCrossOrigin
-      (loader as unknown as { setCrossOrigin?: (v: string) => void }).setCrossOrigin?.(
-        "anonymous"
-      );
+      (
+        loader as unknown as { setCrossOrigin?: (v: string) => void }
+      ).setCrossOrigin?.("anonymous");
     } catch {}
     globalKtx2Loader = loader;
   }
@@ -174,12 +174,12 @@ function scheduleEviction(url: string, entry: CacheEntry) {
 // Enforce cache size limit by evicting least recently used unreferenced textures
 function enforceCacheSizeLimit() {
   if (textureCache.size <= MAX_CACHE_SIZE) return;
-  
+
   // Find all unreferenced textures, sorted by lastUsed (oldest first)
   const unreferenced = Array.from(textureCache.entries())
     .filter(([, entry]) => entry.refs <= 0)
     .sort((a, b) => a[1].lastUsed - b[1].lastUsed);
-  
+
   // Evict oldest unreferenced textures until we're under the limit
   const toEvict = textureCache.size - MAX_CACHE_SIZE;
   for (let i = 0; i < Math.min(toEvict, unreferenced.length); i++) {
@@ -190,9 +190,14 @@ function enforceCacheSizeLimit() {
     } catch {}
     textureCache.delete(url);
   }
-  
+
   if (process.env.NODE_ENV === "development" && toEvict > 0) {
-    console.log(`[texture-cache] Evicted ${Math.min(toEvict, unreferenced.length)} textures (cache: ${textureCache.size}/${MAX_CACHE_SIZE})`);
+    console.log(
+      `[texture-cache] Evicted ${Math.min(
+        toEvict,
+        unreferenced.length
+      )} textures (cache: ${textureCache.size}/${MAX_CACHE_SIZE})`
+    );
   }
 }
 
@@ -219,10 +224,10 @@ async function acquire(
     }
     return tex;
   }
-  
+
   // Enforce cache limit before loading new textures
   enforceCacheSizeLimit();
-  
+
   const p = load()
     .then((t) => {
       textureCache.set(url, { texture: t, refs: 0, lastUsed: Date.now() });
@@ -254,7 +259,11 @@ function release(url: string | null) {
 
 // Attempts to load a KTX2 texture first (when URL is /api/images/*),
 // and falls back to loading the raster image when unsupported or unavailable.
-export function useCardTexture({ slug, textureUrl, preferRaster }: UseCardTextureOptions) {
+export function useCardTexture({
+  slug,
+  textureUrl,
+  preferRaster,
+}: UseCardTextureOptions) {
   const { gl } = useThree();
   const [tex, setTex] = useState<Texture | null>(null);
   // Track which cache key (URL) we currently hold a ref for.

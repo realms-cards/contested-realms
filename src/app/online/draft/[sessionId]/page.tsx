@@ -124,6 +124,7 @@ export default function TournamentDraftSessionPage() {
 
   // Handle draft completion
   const handleDraftComplete = () => {
+    console.log("[DraftSessionPage] handleDraftComplete called, navigating to deck editor");
     // Navigate to deck construction
     if (draftSession) {
       const params = new URLSearchParams({
@@ -133,7 +134,10 @@ export default function TournamentDraftSessionPage() {
         sessionId: draftSession.id,
         playerId: session?.user.id ?? "",
       });
+      console.log("[DraftSessionPage] Pushing to:", `/decks/editor-3d?${params.toString()}`);
       router.push(`/decks/editor-3d?${params.toString()}`);
+    } else {
+      console.warn("[DraftSessionPage] handleDraftComplete called but draftSession is null");
     }
   };
 

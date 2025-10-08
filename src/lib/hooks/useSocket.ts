@@ -41,6 +41,10 @@ const DEFAULT_OPTIONS: UseSocketOptions = (() => {
   } as UseSocketOptions;
 })();
 
+// Global singleton socket instance - prevents reconnections on page navigation
+let globalSocket: Socket | null = null;
+let globalSocketRefCount = 0;
+
 /**
  * useSocket hook provides Socket.io connection management
  * Returns the socket instance and connection state
@@ -58,6 +62,15 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
     let cancelled = false;
 
     async function init() {
+      // Return existing global socket if available
+      if (globalSocket) {
+        console.log(`[useSocket] Reusing existing socket connection (refCount: ${globalSocketRefCount + 1})`);
+        globalSocketRefCount++;
+        socketRef.current = globalSocket;
+        setSocket(globalSocket);
+        return;
+      }
+
       console.log(`[useSocket] Initializing socket connection to ${opts.url}`);
       // Fetch short-lived auth token from app API (signed by NEXTAUTH_SECRET)
       let token: string | undefined = undefined;
@@ -84,6 +97,8 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
         auth: token ? { token } : undefined,
       });
 
+      globalSocket = socketInstance;
+      globalSocketRefCount = 1;
       socketRef.current = socketInstance;
       setSocket(socketInstance);
 
@@ -137,20 +152,29 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
         } catch {}
       });
 
-    // Cleanup function
+    // Cleanup function - use reference counting
     return () => {
-      console.log('[useSocket] Cleaning up socket connection');
+      if (!socketInstance) return;
 
-      socketInstance.off('connect', handleConnect);
-      socketInstance.off('disconnect', handleDisconnect);
-      socketInstance.off('connecting', handleConnecting);
-      socketInstance.off('connect_error', handleConnectError);
-      socketInstance.off('reconnect', handleReconnect);
-      socketInstance.off('reconnect_attempt', handleReconnectAttempt);
-      socketInstance.off('reconnect_error', handleReconnectError);
-      socketInstance.off('reconnect_failed', handleReconnectFailed);
+      globalSocketRefCount = Math.max(0, globalSocketRefCount - 1);
+      console.log(`[useSocket] Cleanup (refCount: ${globalSocketRefCount})`);
 
-      socketInstance.disconnect();
+      // Only disconnect when all components have unmounted
+      if (globalSocketRefCount === 0 && globalSocket) {
+        console.log('[useSocket] Last reference removed, disconnecting socket');
+        socketInstance.off('connect', handleConnect);
+        socketInstance.off('disconnect', handleDisconnect);
+        socketInstance.off('connecting', handleConnecting);
+        socketInstance.off('connect_error', handleConnectError);
+        socketInstance.off('reconnect', handleReconnect);
+        socketInstance.off('reconnect_attempt', handleReconnectAttempt);
+        socketInstance.off('reconnect_error', handleReconnectError);
+        socketInstance.off('reconnect_failed', handleReconnectFailed);
+
+        socketInstance.disconnect();
+        globalSocket = null;
+      }
+
       setSocket(null);
       socketRef.current = null;
       };

@@ -1,10 +1,10 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-# Type Safety Regression Prevention
-# This pre-commit hook enforces the type safety improvements made in Phase 3.5
+# Pre-commit Quality Checks
+# Enforces type safety and test coverage before commits
 
-echo "🔍 Running type safety checks..."
+echo "🔍 Running pre-commit checks..."
 
 # Run TypeScript compilation check
 echo "📝 Checking TypeScript compilation..."
@@ -21,4 +21,12 @@ npm run lint || {
   exit 1
 }
 
-echo "✅ All type safety checks passed!"
+# Run unit/contract tests (fast, ~15s)
+echo "🧪 Running unit and contract tests..."
+npm run test:ci || {
+  echo "❌ Tests failed. Please fix failing tests before committing."
+  echo "💡 Run 'npm test' to see detailed test output."
+  exit 1
+}
+
+echo "✅ All pre-commit checks passed!"

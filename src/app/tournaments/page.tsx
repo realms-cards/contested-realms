@@ -5,32 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
-
-// Random name generation (same as lobby)
-const PREDICATES = [
-  "Eternal",
-  "Ancient",
-  "Forgotten",
-  "Sacred",
-  "Cursed",
-  "Divine",
-];
-const ADJECTIVES = ["Mystic", "Shadow", "Crystal", "Storm", "Fire", "Ice"];
-const SUBJECTS = [
-  "Dragons",
-  "Wizards",
-  "Knights",
-  "Realms",
-  "Legends",
-  "Heroes",
-];
-
-function generateTournamentName(): string {
-  const predicate = PREDICATES[Math.floor(Math.random() * PREDICATES.length)];
-  const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
-  return `${predicate} of ${adjective} ${subject}`;
-}
+import { generateTournamentName } from "@/lib/random-name-generator";
 interface Tournament {
   id: string;
   name: string;

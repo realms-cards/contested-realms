@@ -11,7 +11,7 @@ interface MouseTrackerProps {
 
 // Component to track mouse position and perform raycasting for card detection
 export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
-  const { camera, scene, raycaster, pointer } = useThree();
+  const { camera, scene, raycaster, pointer, gl } = useThree();
   const lastHoveredSlug = useRef<string | null>(null);
 
   const interactableObjects = useMemo(() => {
@@ -89,16 +89,15 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
     };
     
     // Add event listener to the canvas
-    const canvas = document.querySelector('canvas');
-    if (canvas) {
-      canvas.addEventListener('mousemove', handleMouseMove);
-      return () => {
-        canvas.removeEventListener('mousemove', handleMouseMove);
-        lastHoveredSlug.current = null;
-      };
-    }
-    return undefined;
-  }, [camera, scene, raycaster, pointer, cards, interactableObjects, onHover]);
+    const canvas = gl?.domElement ?? null;
+    if (!canvas) return undefined;
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      lastHoveredSlug.current = null;
+    };
+  }, [camera, scene, raycaster, pointer, gl, cards, interactableObjects, onHover]);
   
   return null; // This component doesn't render anything
 }

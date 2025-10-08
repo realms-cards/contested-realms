@@ -12,7 +12,6 @@ import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import {
   useRealtimeTournaments,
-  RealtimeTournamentProvider,
 } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import { normalizeCubeSummary, type CubeSummaryInput } from "@/lib/cubes/normalizers";
@@ -1611,10 +1610,10 @@ function LobbyPageWithTournaments() {
 
 export default function LobbyPage() {
   const tournamentsEnabled = tournamentFeatures.isEnabled();
+  // RealtimeTournamentProvider is already provided at root level in app/layout.tsx
+  // No need to nest providers here - it causes duplicate socket connections
   return tournamentsEnabled ? (
-    <RealtimeTournamentProvider>
-      <LobbyPageWithTournaments />
-    </RealtimeTournamentProvider>
+    <LobbyPageWithTournaments />
   ) : (
     <LobbyPageContent />
   );

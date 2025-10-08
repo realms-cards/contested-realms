@@ -1,39 +1,330 @@
-import wordData from "../../data/random-name-words.json";
+const PREDICATES = [
+  "Confrontation",
+  "Engagement",
+  "Encounter",
+  "Exchange",
+  "Dialogue",
+  "Parley",
+  "Debate",
+  "Discussion",
+  "Conference",
+  "Colloquy",
+  "Council",
+  "Summit",
+  "Symposium",
+  "Forum",
+  "Assembly",
+  "Conclave",
+  "Roundtable",
+  "Meetup",
+  "Negotiation",
+  "Treaty",
+  "Arbitration",
+  "Mediation",
+  "Skirmish",
+  "Showdown",
+  "Duel",
+  "Faceoff",
+  "Scrimmage",
+  "Standoff",
+  "Convergence",
+  "Rendezvous",
+  "Coalition",
+  "Alliance",
+  "Collaboration",
+  "Cooperative",
+  "Convocation",
+  "Gathering",
+  "Campaign",
+  "Expedition",
+  "Mission",
+  "Operation",
+  "Initiative",
+  "Quest",
+  "Symbiosis",
+  "Caucus",
+  "Convoy",
+];
 
-type RandomNameWordBuckets = {
-  predicates: string[];
-  adjectives: string[];
-  subjects: string[];
-  metadata?: {
-    source?: string;
-    generatedAt?: string;
-    counts?: {
-      predicates?: number;
-      adjectives?: number;
-      subjects?: number;
-    };
-  };
+const ADJECTIVES = [
+  "Ordinary",
+  "Burrowed",
+  "Arcane",
+  "Mystic",
+  "Ancient",
+  "Shadowed",
+  "Ablaze",
+  "Twisted",
+  "Wild",
+  "Majestic",
+  "Elemental",
+  "Feral",
+  "Enchanted",
+  "Forgotten",
+  "Slumbering",
+  "Thunderous",
+  "Tempestuous",
+  "Mighty",
+  "Stalwart",
+  "Burly",
+  "Grim",
+  "Silvery",
+  "Golden",
+  "Runic",
+  "Ethereal",
+  "Celestial",
+  "Primeval",
+  "Luminous",
+  "Ravenous",
+  "Voracious",
+  "Volcanic",
+  "Frozen",
+  "Stormbound",
+  "Torrential",
+  "Brutal",
+  "Serpentine",
+  "Emerald",
+  "Obsidian",
+  "Scarlet",
+  "Sable",
+  "Verdant",
+  "Searing",
+  "Crumbling",
+  "Harrowing",
+  "Radiant",
+  "Cursed",
+  "Flickering",
+  "Pale",
+  "Shimmering",
+  "Crystalline",
+  "Reckless",
+  "Whistling",
+  "Reborn",
+  "Ghastly",
+  "Spectral",
+  "Tempestuous",
+  "Burrowing",
+  "Resolute",
+  "Zealous",
+  "Ancillary",
+  "Arcadian",
+];
+
+const SUBJECTS = [
+  "Acolytes",
+  "Adventurers",
+  "Aeromancers",
+  "Aetherborn",
+  "Alchemists",
+  "Ambassadors",
+  "Ancients",
+  "Angels",
+  "Animists",
+  "Apparitions",
+  "Arbalests",
+  "Arcanists",
+  "Archers",
+  "Architects",
+  "Argonauts",
+  "Artificers",
+  "Assassins",
+  "Astromancers",
+  "Avengers",
+  "Banshees",
+  "Barbarians",
+  "Basilisks",
+  "Beastmasters",
+  "Behemoths",
+  "Berserkers",
+  "Blackguards",
+  "Blademasters",
+  "Bloodletters",
+  "Bonecasters",
+  "Brigadiers",
+  "Bruisers",
+  "Buccaneers",
+  "Caretakers",
+  "Cartographers",
+  "Centaurs",
+  "Champions",
+  "Chronomancers",
+  "Clansmen",
+  "Commanders",
+  "Conjurors",
+  "Corsairs",
+  "Crossbowmen",
+  "Cryptkeepers",
+  "Cultists",
+  "Cutthroats",
+  "Defenders",
+  "Direwolves",
+  "Dragons",
+  "Drakes",
+  "Dreamwalkers",
+  "Druids",
+  "Dryads",
+  "Dwarves",
+  "Elders",
+  "Elementals",
+  "Emissaries",
+  "Enchanters",
+  "Envoys",
+  "Fae",
+  "Faeries",
+  "Fatesingers",
+  "Fiends",
+  "Firesworn",
+  "Flamekeepers",
+  "Fleetwings",
+  "Frostborn",
+  "Gargoyles",
+  "Gatekeepers",
+  "Geomancers",
+  "Giants",
+  "Gladiators",
+  "Goblins",
+  "Goldenhearts",
+  "Gorgons",
+  "Guardians",
+  "Harbingers",
+  "Harpies",
+  "Hellions",
+  "Heralds",
+  "Highborn",
+  "Hinterfolk",
+  "Hounds",
+  "Hydras",
+  "Illuminators",
+  "Illusionists",
+  "Inquisitors",
+  "Invokers",
+  "Jadeborn",
+  "Juggernauts",
+  "Kelpies",
+  "Kin",
+  "Knaves",
+  "Knights",
+  "Legates",
+  "Legionnaires",
+  "Leviathans",
+  "Lorekeepers",
+  "Longbowmen",
+  "Lycanthropes",
+  "Magi",
+  "Magisters",
+  "Marauders",
+  "Mercenaries",
+  "Merfolk",
+  "Mesmerists",
+  "Minotaurs",
+  "Mystics",
+  "Naiads",
+  "Necromancers",
+  "Nomads",
+  "Oathbreakers",
+  "Ogres",
+  "Oracles",
+  "Outriders",
+  "Paladins",
+  "Phalanxes",
+  "Phoenixes",
+  "Pikemen",
+  "Pirates",
+  "Plainswalkers",
+  "Prophets",
+  "Pufferfish",
+  "Raiders",
+  "Rangers",
+  "Reavers",
+  "Sentinels",
+  "Seers",
+  "Shadeborn",
+  "Shamans",
+  "Sharpshooters",
+  "Shieldbearers",
+  "Siegebreakers",
+  "Silksworn",
+  "Sirens",
+  "Skalds",
+  "Skirmishers",
+  "Skybreakers",
+  "Sorcerers",
+  "Spellbinders",
+  "Spellwrights",
+  "Specters",
+  "Spellweavers",
+  "Sprites",
+  "Stormcallers",
+  "Stormriders",
+  "Summoners",
+  "Swashbucklers",
+  "Sylvan",
+  "Tempests",
+  "Thaumaturges",
+  "Thieves",
+  "Titans",
+  "Trackers",
+  "Tricksters",
+  "Trolls",
+  "Tuskers",
+  "Ultronauts",
+  "Undines",
+  "Valkyries",
+  "Vanguard",
+  "Vermin",
+  "Vessels",
+  "Vikings",
+  "Warbringers",
+  "Wardens",
+  "Warmages",
+  "Warrior-Priests",
+  "Warriors",
+  "Watchers",
+  "Wayfarers",
+  "Witches",
+  "Wizards",
+  "Wolves",
+  "Wraiths",
+  "Wyrms",
+  "Zealots",
+  "Zephyrs",
+  "Zombies",
+  "Zoologists",
+];
+
+const IRREGULAR_PLURALS = new Set(
+  SUBJECTS.filter((word) => !word.toLowerCase().endsWith("s"))
+);
+
+const isPluralWord = (word: string) => {
+  if (!word) return false;
+  return IRREGULAR_PLURALS.has(word) || /s$/i.test(word.trim());
 };
 
-const FALLBACK_WORDS = {
-  predicates: ["Gathering", "Contest", "Conclave"],
-  adjectives: ["Arcane", "Ancient", "Mystic"],
-  subjects: ["Sorcerers", "Legends", "Realms"],
+const ensurePluralSubjects = (words: string[]) => {
+  const list = words.filter(isPluralWord);
+  return list.length ? list : SUBJECTS;
 };
 
-const buckets = (wordData as RandomNameWordBuckets) ?? FALLBACK_WORDS;
-
-const pick = (words: string[] | undefined, fallback: string[]) => {
-  const list = words && words.length ? words : fallback;
-  return list[Math.floor(Math.random() * list.length)] ?? fallback[0];
-};
+const pick = (list: string[]) =>
+  list[Math.floor(Math.random() * list.length)] ?? list[0];
 
 export type RandomNameFormat = "of" | "space";
 
-export function generateRandomName(format: RandomNameFormat = "of"): string {
-  const predicate = pick(buckets.predicates, FALLBACK_WORDS.predicates);
-  const adjective = pick(buckets.adjectives, FALLBACK_WORDS.adjectives);
-  const subject = pick(buckets.subjects, FALLBACK_WORDS.subjects);
+export function generateRandomName(
+  format: RandomNameFormat = "of",
+  options?: {
+    predicateWords?: string[];
+    subjectWords?: string[];
+  }
+): string {
+  const predicates = options?.predicateWords ?? PREDICATES;
+  const adjective = pick(ADJECTIVES);
+  const subjectPool = ensurePluralSubjects(
+    options?.subjectWords ?? SUBJECTS
+  );
+  const subject = pick(subjectPool);
+  const predicate = pick(predicates);
 
   if (format === "space") {
     return `${predicate} ${adjective} ${subject}`;
@@ -43,4 +334,4 @@ export function generateRandomName(format: RandomNameFormat = "of"): string {
 
 export const generateLobbyName = () => generateRandomName("of");
 
-export const generateTournamentName = () => generateRandomName("space");
+export const generateTournamentName = () => generateRandomName("of");
