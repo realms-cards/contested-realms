@@ -35,6 +35,7 @@ jobs:
       CI: "true"
       NEXT_TELEMETRY_DISABLED: "1"
       DATABASE_URL: postgresql://sorcery_test:test_password@postgres:5432/sorcery_test
+      DIRECT_URL: postgresql://sorcery_test:test_password@postgres:5432/sorcery_test
       SOCKET_SERVER_URL: http://socket-server:3010
       NEXT_PUBLIC_WS_URL: http://localhost:3010
       NEXT_PUBLIC_APP_URL: http://localhost:3000
