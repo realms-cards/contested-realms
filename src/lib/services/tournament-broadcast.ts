@@ -8,15 +8,80 @@ import { prisma } from '@/lib/prisma';
 // Use the same URL as WebSocket connections, but for HTTP broadcast endpoint
 const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010';
 
-async function broadcastToSocket(event: string, data: Record<string, unknown>) {
+// T026: Broadcast with health monitoring and retry logic
+async function broadcastToSocket(event: string, data: Record<string, unknown>, retryCount = 0) {
+  const maxRetries = 2;
+  const start = Date.now();
+
   try {
-    await fetch(`${SOCKET_SERVER_URL}/tournament/broadcast`, {
+    const response = await fetch(`${SOCKET_SERVER_URL}/tournament/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event, data })
+      body: JSON.stringify({ event, data }),
+      signal: AbortSignal.timeout(5000), // 5 second timeout
     });
+
+    const latency = Date.now() - start;
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    console.log('[Broadcast] Success:', { event, latency, retryCount });
+
+    // T031: Record health data to monitoring table
+    try {
+      await prisma.socketBroadcastHealth.create({
+        data: {
+          eventType: event,
+          tournamentId: typeof data === 'object' && data !== null && 'tournamentId' in data ? String(data.tournamentId) : null,
+          targetUrl: `${SOCKET_SERVER_URL}/tournament/broadcast`,
+          success: true,
+          statusCode: response.status,
+          retryCount,
+          latencyMs: latency,
+          timestamp: new Date(),
+        }
+      });
+    } catch (healthErr) {
+      // Don't fail broadcast on health logging error
+      console.warn('[Broadcast] Failed to log health data:', healthErr instanceof Error ? healthErr.message : String(healthErr));
+    }
   } catch (err) {
-    console.warn(`Tournament broadcast failed for ${event}:`, err);
+    const latency = Date.now() - start;
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('[Broadcast] Failed:', { event, latency, retryCount, error: errorMessage });
+
+    // T031: Record failure to monitoring table
+    try {
+      await prisma.socketBroadcastHealth.create({
+        data: {
+          eventType: event,
+          tournamentId: typeof data === 'object' && data !== null && 'tournamentId' in data ? String(data.tournamentId) : null,
+          targetUrl: `${SOCKET_SERVER_URL}/tournament/broadcast`,
+          success: false,
+          statusCode: null,
+          errorMessage,
+          retryCount,
+          latencyMs: latency,
+          timestamp: new Date(),
+        }
+      });
+    } catch (healthErr) {
+      // Don't block retry on health logging error
+      console.warn('[Broadcast] Failed to log health data:', healthErr instanceof Error ? healthErr.message : String(healthErr));
+    }
+
+    // T026: Retry with exponential backoff (100ms, 200ms)
+    if (retryCount < maxRetries) {
+      const backoff = 100 * Math.pow(2, retryCount);
+      console.log(`[Broadcast] Retrying in ${backoff}ms...`, { event, attempt: retryCount + 1 });
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return broadcastToSocket(event, data, retryCount + 1);
+    }
+
+    // Max retries exceeded, log and continue
+    console.warn(`[Broadcast] Max retries exceeded for ${event}:`, errorMessage);
   }
 }
 

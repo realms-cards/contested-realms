@@ -4,6 +4,14 @@
 // Load environment variables (.env, .env.local) for standalone server runs
 try { require('dotenv').config(); } catch {}
 
+// T019: Import extracted modules
+const tournamentBroadcast = require('./modules/tournament/broadcast');
+const replay = require('./modules/replay');
+// T021: Import draft config service
+const draftConfig = require('./modules/draft/config');
+// T023: Import standings service
+const standingsService = require('./modules/tournament/standings');
+
 // -----------------------------
 // Leader-aware Draft helpers (match-level)
 // -----------------------------
@@ -528,9 +536,26 @@ async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraf
   if (match.draftState.phase !== 'waiting') return;
   if (match.draftState.__startingDraft) return;
   match.draftState.__startingDraft = true;
+
+  // FIXED T016/T021: Use draft config service for tournament drafts
+  // This ensures cubeId is loaded before pack generation (fixes production bug)
+  if (match.tournamentId && match.matchType === 'draft') {
+    try {
+      await draftConfig.ensureConfigLoaded(prisma, matchId, match, hydrateMatchFromDatabase);
+    } catch (err) {
+      console.warn('[Draft] Failed to ensure config loaded:', err?.message || err);
+    }
+  }
+
   const room = `match:${match.id}`;
   // Start with match config; allow client override from leader-approved request
-  let dc = match.draftConfig || { setMix: ['Beta'], packCount: 3, packSize: 15 };
+  let dc;
+  try {
+    dc = await draftConfig.getDraftConfig(prisma, matchId, match);
+  } catch (err) {
+    console.warn('[Draft] Failed to get draft config, using default:', err?.message || err);
+    dc = { setMix: ['Beta'], packCount: 3, packSize: 15 };
+  }
   if (overrideDraftConfig && typeof overrideDraftConfig === 'object') {
     try {
       // Merge and normalize: prefer explicit override fields
@@ -993,6 +1018,8 @@ const { buildMatchInfo } = require("./matchInfo");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
 const prisma = new PrismaClient();
+// Optional: start periodic pruning of old replay actions/sessions
+try { replay.setupReplayRetentionPruner?.(prisma); } catch {}
 const REDIS_URL = process.env.REDIS_URL || process.env.SOCKET_REDIS_URL || "redis://localhost:6379";
 const ENABLE_REDIS_ADAPTER = !(
   process.env.SOCKET_REDIS_DISABLED === '1' ||
@@ -2352,7 +2379,7 @@ async function finalizeMatch(match, options = {}) {
           data: { status: 'completed', results: matchResults, completedAt: new Date() },
         });
 
-        // Update standings similar to API route logic
+        // FIXED T015/T023: Use standings service for atomic updates
         try {
           const playersVal = Array.isArray(tMatch.players) ? tMatch.players : [];
           const playerIds = playersVal
@@ -2366,23 +2393,17 @@ async function finalizeMatch(match, options = {}) {
             .filter(Boolean);
           if (playerIds.length === 2) {
             const [p1, p2] = playerIds;
-            if (isDraw) {
-              await prisma.playerStanding.updateMany({
-                where: { tournamentId: tMatch.tournamentId || '', playerId: { in: [p1, p2] } },
-                data: { draws: { increment: 1 }, matchPoints: { increment: 1 }, currentMatchId: null },
-              });
-            } else if (winnerId && loserId) {
-              await prisma.playerStanding.update({
-                where: { tournamentId_playerId: { tournamentId: tMatch.tournamentId || '', playerId: winnerId } },
-                data: { wins: { increment: 1 }, matchPoints: { increment: 3 }, currentMatchId: null },
-              });
-              await prisma.playerStanding.update({
-                where: { tournamentId_playerId: { tournamentId: tMatch.tournamentId || '', playerId: loserId } },
-                data: { losses: { increment: 1 }, currentMatchId: null },
-              });
+            const w = isDraw ? p1 : winnerId;
+            const l = isDraw ? p2 : loserId;
+            if (w && l) {
+              await standingsService.recordMatchResult(prisma, tMatch.tournamentId || '', w, l, isDraw);
             }
           }
-        } catch {}
+        } catch (err) {
+          // Standings service handles retry logic internally
+          console.error('[Match] Failed to update standings:', err && typeof err === 'object' && 'message' in err ? err.message : err);
+          throw err; // Re-throw to prevent marking match as complete
+        }
 
         // If part of a round, possibly mark the round complete and (optionally) the tournament
         if (tMatch.roundId) {
@@ -4119,82 +4140,37 @@ function broadcastLobbies() {
   })();
 }
 
-// Tournament broadcast helpers
+// T019: Tournament broadcast helpers - now use extracted module
 function broadcastTournamentUpdate(tournamentId, data) {
-  io.to(`tournament:${tournamentId}`).emit("TOURNAMENT_UPDATED", data);
-  // Also broadcast globally so lobby lists update
-  io.emit("TOURNAMENT_UPDATED", data);
+  tournamentBroadcast.emitTournamentUpdate(io, tournamentId, data);
 }
 
 function broadcastPhaseChanged(tournamentId, newPhase, additionalData = {}) {
-  const payload = {
-    tournamentId,
-    newPhase,
-    newStatus: newPhase,
-    timestamp: new Date().toISOString(),
-    ...additionalData
-  };
-  io.to(`tournament:${tournamentId}`).emit("PHASE_CHANGED", payload);
-  io.emit("PHASE_CHANGED", payload);
+  tournamentBroadcast.emitPhaseChanged(io, tournamentId, newPhase, additionalData);
 }
 
 function broadcastRoundStarted(tournamentId, roundNumber, matches) {
-  io.to(`tournament:${tournamentId}`).emit("ROUND_STARTED", {
-    tournamentId,
-    roundNumber,
-    matches
-  });
+  tournamentBroadcast.emitRoundStarted(io, tournamentId, roundNumber, matches);
 }
 
 function broadcastPlayerJoined(tournamentId, playerId, playerName, currentPlayerCount) {
-  const payload = {
-    tournamentId,
-    playerId,
-    playerName,
-    currentPlayerCount
-  };
-  io.to(`tournament:${tournamentId}`).emit("PLAYER_JOINED", payload);
-  io.emit("PLAYER_JOINED", payload);
+  tournamentBroadcast.emitPlayerJoined(io, tournamentId, playerId, playerName, currentPlayerCount);
 }
 
 function broadcastPlayerLeft(tournamentId, playerId, playerName, currentPlayerCount) {
-  const payload = {
-    tournamentId,
-    playerId,
-    playerName,
-    currentPlayerCount
-  };
-  io.to(`tournament:${tournamentId}`).emit("PLAYER_LEFT", payload);
-  io.emit("PLAYER_LEFT", payload);
+  tournamentBroadcast.emitPlayerLeft(io, tournamentId, playerId, playerName, currentPlayerCount);
 }
 
 function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted = false) {
-  const payload = {
-    tournamentId,
-    playerId,
-    preparationStatus,
-    readyPlayerCount,
-    totalPlayerCount,
-    deckSubmitted
-  };
-  io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", payload);
-  io.emit("UPDATE_PREPARATION", payload);
+  tournamentBroadcast.emitPreparationUpdate(io, tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted);
 }
 
 function broadcastDraftReady(tournamentId, payload) {
-  const message = {
-    tournamentId,
-    ...payload,
-  };
-  io.to(`tournament:${tournamentId}`).emit("DRAFT_READY", message);
-  io.emit("DRAFT_READY", message);
+  tournamentBroadcast.emitDraftReady(io, tournamentId, payload);
 }
 
 function broadcastStatisticsUpdate(tournamentId, statistics) {
-  io.to(`tournament:${tournamentId}`).emit("STATISTICS_UPDATED", {
-    tournamentId,
-    ...statistics
-  });
+  tournamentBroadcast.emitStatisticsUpdate(io, tournamentId, statistics);
 }
 
 function broadcastPlayers() {
@@ -5710,38 +5686,39 @@ io.on("connection", (socket) => {
     socket.emit("pong", { t });
   });
 
-  // Match recording endpoints
-  socket.on("getMatchRecordings", () => {
+  // Match recording endpoints (DB-backed)
+  socket.on("getMatchRecordings", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    console.log(
-      `[Recording] Request for recordings from ${
-        player?.displayName || "unknown"
-      }, found ${matchRecordings.size} recordings`
-    );
-    const recordings = Array.from(matchRecordings.values()).map((r) => ({
-      matchId: r.matchId,
-      playerNames: r.playerNames,
-      startTime: r.startTime,
-      endTime: r.endTime,
-      duration: r.endTime ? r.endTime - r.startTime : null,
-      actionCount: r.actions.length,
-      matchType: r.initialState?.matchType || "constructed",
-      playerIds: r.initialState?.playerIds || [],
-    }));
-    socket.emit("matchRecordingsResponse", { recordings });
+    try {
+      const recordings = await replay.listRecordings(prisma, { limit: 200 });
+      try {
+        console.log(
+          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries`
+        );
+      } catch {}
+      socket.emit("matchRecordingsResponse", { recordings });
+    } catch (e) {
+      try { console.warn('[Recording] listRecordings failed:', e?.message || e); } catch {}
+      socket.emit("matchRecordingsResponse", { recordings: [] });
+    }
   });
 
-  socket.on("getMatchRecording", (payload) => {
+  socket.on("getMatchRecording", async (payload) => {
     if (!authed) return;
     const matchId = payload?.matchId;
     if (!matchId) return;
-    const recording = matchRecordings.get(matchId);
-    if (!recording) {
+    try {
+      const recording = await replay.loadRecording(prisma, matchId);
+      if (!recording) {
+        socket.emit("matchRecordingResponse", { error: "Recording not found" });
+        return;
+      }
+      socket.emit("matchRecordingResponse", { recording });
+    } catch (e) {
+      try { console.warn('[Recording] loadRecording failed:', e?.message || e); } catch {}
       socket.emit("matchRecordingResponse", { error: "Recording not found" });
-      return;
     }
-    socket.emit("matchRecordingResponse", { recording });
   });
 
   // Helper: start a draft for a match if in waiting phase

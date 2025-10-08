@@ -38,6 +38,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const maxRound = tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map(r => r.roundNumber)) : 0;
     const nextRoundNumber = maxRound + 1;
 
+    // Check if we've already completed all rounds
+    const totalRounds = (tournament.settings as { totalRounds?: number })?.totalRounds || 3;
+    if (nextRoundNumber > totalRounds) {
+      return new Response(JSON.stringify({
+        error: `Cannot start round ${nextRoundNumber}. Tournament is configured for ${totalRounds} round${totalRounds === 1 ? '' : 's'}.`
+      }), { status: 400 });
+    }
+
     // Check if current round is complete (if any)
     if (tournament.rounds.length > 0) {
       const currentRound = tournament.rounds[0];

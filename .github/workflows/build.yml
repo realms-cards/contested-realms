@@ -4,11 +4,14 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Run Tests
+  unit-tests:
+    name: Unit & Contract Tests
     runs-on: ubuntu-latest
     container:
       image: node:20-bookworm
@@ -22,13 +25,105 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run test suite
-        run: npm test
+      - name: Run unit and contract tests
+        run: npm run test:ci
+
+  integration-tests:
+    name: Integration & Performance Tests (Skipped)
+    if: false
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+      DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+      SOCKET_SERVER_URL: http://socket-server:3010
+      NEXT_PUBLIC_WS_URL: http://localhost:3010
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: sorcery_test
+          POSTGRES_USER: sorcery_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+
+      - name: Build Next.js application
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+
+      - name: Start Socket.IO server in background
+        run: |
+          node server/index.js &
+          echo $! > socket-server.pid
+          sleep 5
+        env:
+          DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          SOCKET_PORT: 3010
+
+      - name: Start Next.js server in background
+        run: |
+          npm run start &
+          echo $! > nextjs-server.pid
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          DIRECT_URL: postgresql://sorcery_test:test_password@localhost:5432/sorcery_test
+          PORT: 3000
+
+      - name: Wait for servers to be ready
+        run: |
+          timeout 30 bash -c 'until curl -f http://localhost:3010/health 2>/dev/null; do sleep 1; done' || echo "Socket server not ready"
+          timeout 30 bash -c 'until curl -f http://localhost:3000 2>/dev/null; do sleep 1; done' || echo "Next.js server not ready"
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Stop servers
+        if: always()
+        run: |
+          if [ -f socket-server.pid ]; then
+            kill $(cat socket-server.pid) || true
+          fi
+          if [ -f nextjs-server.pid ]; then
+            kill $(cat nextjs-server.pid) || true
+          fi
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: test
+    needs: [unit-tests]
     container:
       image: node:20-bookworm
     env:

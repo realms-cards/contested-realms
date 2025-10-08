@@ -207,39 +207,42 @@ export default function TournamentDraft3DScreen({
       offJoined = transport.on("draft:session:joined", handleJoined);
     } catch {}
 
+    // Join draft session once - server will respond with draft:session:joined
     const tryJoin = () => {
       if (!mounted || joinSentRef.current) return;
       if (!canSend()) return;
       try {
+        console.log("[TournamentDraft3D] Attempting to join draft session:", draftSessionId);
         transport.emit("draft:session:join", {
           sessionId: draftSessionId,
           playerId: myPlayerId,
           playerName: me?.displayName || "",
           reconnection: false,
         });
-        // Wait for server ack; retry if not received within 3s
+        // Set timeout to retry if no response received within 5s
         if (joinAckTimeoutRef.current)
           window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = window.setTimeout(() => {
-          if (!joinSentRef.current) {
+          if (!joinSentRef.current && mounted) {
+            console.warn("[TournamentDraft3D] No join response after 5s, retrying once");
             tryJoin();
           }
-        }, 3000);
+        }, 5000);
       } catch (e) {
         console.warn("[TournamentDraft3D] failed to join draft room", e);
       }
     };
-    // Poll until connected and we have my id; then attempt join and keep retrying until ack
-    const id = window.setInterval(() => {
-      if (joinSentRef.current) {
-        window.clearInterval(id);
-        return;
+
+    // Wait briefly for transport to be ready, then join once
+    const readyCheckId = window.setTimeout(() => {
+      if (canSend() && !joinSentRef.current) {
+        tryJoin();
       }
-      tryJoin();
-    }, 500);
+    }, 100);
+
     return () => {
       mounted = false;
-      window.clearInterval(id);
+      window.clearTimeout(readyCheckId);
       if (joinAckTimeoutRef.current) {
         window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = null;
@@ -663,6 +666,11 @@ export default function TournamentDraft3DScreen({
   const PICK_RADIUS = CARD_LONG * 0.6;
   const STAGE_CLICK_POS = useMemo(() => ({ x: 0, z: 1.7 }), []);
 
+  const myPack = useMemo(
+    () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
+    [draftState.currentPacks, myPlayerIndex]
+  );
+
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
     const result = (
@@ -672,11 +680,6 @@ export default function TournamentDraft3DScreen({
     console.log(`[TournamentDraft3D] amPicker=${result} phase=${draftState.phase} waitingFor=${JSON.stringify(draftState.waitingFor)} myPlayerId=${myPlayerId} myPack.length=${myPack.length}`);
     return result;
   }, [draftState.phase, draftState.waitingFor, myPlayerId, myPack.length]);
-
-  const myPack = useMemo(
-    () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
-    [draftState.currentPacks, myPlayerIndex]
-  );
 
   // Convert pack to BoosterCard format
   const packAsBoosterCards = useMemo(() => {
@@ -952,7 +955,7 @@ export default function TournamentDraft3DScreen({
         setReady(false);
       }
 
-      if (s.phase === "complete") {
+      if (s.phase === "complete" && !completionHandledRef.current) {
         const mine = (s.picks[myPlayerIndex] || []) as DraftCard[];
         console.log(
           `[TournamentDraft3D] Draft complete! Picked ${mine.length} cards`
@@ -1002,6 +1005,8 @@ export default function TournamentDraft3DScreen({
           console.error(`[TournamentDraft3D] Failed to save draft data:`, err);
         }
 
+        completionHandledRef.current = true;
+        console.log(`[TournamentDraft3D] Calling onDraftComplete callback...`);
         setTimeout(() => {
           onDraftComplete(mine);
         }, 600);
@@ -1420,23 +1425,25 @@ export default function TournamentDraft3DScreen({
   const showLoadingOverlay =
     draftState.phase === "waiting" && packAsBoosterCards.length === 0;
 
-  // Monitor WebGL context loss (informational only, no forced disposal)
+  // Monitor WebGL context loss and automatically restore
   useEffect(() => {
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
-    
+
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[TournamentDraft3D] WebGL context lost - reduce texture cache size in .env');
+      console.warn('[TournamentDraft3D] WebGL context lost - attempting recovery');
     };
-    
+
     const handleContextRestored = () => {
-      console.log('[TournamentDraft3D] WebGL context restored');
+      console.log('[TournamentDraft3D] WebGL context restored successfully');
+      // Force re-render to reload textures
+      window.location.reload();
     };
-    
+
     canvas.addEventListener('webglcontextlost', handleContextLost);
     canvas.addEventListener('webglcontextrestored', handleContextRestored);
-    
+
     return () => {
       canvas.removeEventListener('webglcontextlost', handleContextLost);
       canvas.removeEventListener('webglcontextrestored', handleContextRestored);
@@ -1450,16 +1457,14 @@ export default function TournamentDraft3DScreen({
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
-          gl={{ 
-            preserveDrawingBuffer: false, 
-            antialias: true, 
+          gl={{
+            preserveDrawingBuffer: false,
+            antialias: false, // Disable AA to reduce GPU memory pressure
             alpha: false,
             powerPreference: "high-performance",
-            // Prevent context loss by limiting memory
             failIfMajorPerformanceCaveat: false,
           }}
-          dpr={[1, 1.5]}
-          // Use always for interactive content
+          dpr={1} // Force DPR=1 for cube drafts to reduce texture memory
           frameloop="always"
         >
           <color attach="background" args={["#0b0b0c"]} />

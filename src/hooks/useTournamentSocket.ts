@@ -111,11 +111,32 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
   const currentTournamentRef = useRef<string | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(socket?.connected ?? false);
   const eventsRef = useRef(events);
+  // T024: Event deduplication - track last 100 event IDs
+  const lastEventIds = useRef<Set<string>>(new Set());
 
   // Update events ref when events change
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
+
+  // T024: Helper to check for duplicate events and track them
+  const isDuplicateEvent = useCallback((eventId: string): boolean => {
+    if (lastEventIds.current.has(eventId)) {
+      console.debug('[useTournamentSocket] Ignoring duplicate event:', eventId);
+      return true;
+    }
+
+    // Add to set and maintain max 100 entries
+    lastEventIds.current.add(eventId);
+    if (lastEventIds.current.size > 100) {
+      const first = lastEventIds.current.values().next().value;
+      if (first !== undefined) {
+        lastEventIds.current.delete(first);
+      }
+    }
+
+    return false;
+  }, []);
 
   // Set up event listeners
   useEffect(() => {
@@ -138,12 +159,16 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       eventsRef.current.onTournamentUpdated?.(data);
     };
 
-    const handlePhaseChanged = (data: { 
-      tournamentId: string; 
-      newPhase: string; 
-      newStatus: string; 
-      timestamp: string; 
+    const handlePhaseChanged = (data: {
+      tournamentId: string;
+      newPhase: string;
+      newStatus: string;
+      timestamp: string;
     }) => {
+      // T024: Check for duplicate events
+      const eventId = `${data.tournamentId}:PHASE_CHANGED:${data.newPhase}:${data.timestamp}`;
+      if (isDuplicateEvent(eventId)) return;
+
       eventsRef.current.onPhaseChanged?.(data);
     };
 
@@ -166,17 +191,21 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
     };
 
     // Match events
-    const handleRoundStarted = (data: { 
-      tournamentId: string; 
-      roundNumber: number; 
+    const handleRoundStarted = (data: {
+      tournamentId: string;
+      roundNumber: number;
       matches: Array<{
         id: string;
         player1Id: string;
         player1Name: string;
         player2Id: string | null;
         player2Name: string | null;
-      }>; 
+      }>;
     }) => {
+      // T024: Check for duplicate events
+      const eventId = `${data.tournamentId}:ROUND_STARTED:${data.roundNumber}`;
+      if (isDuplicateEvent(eventId)) return;
+
       eventsRef.current.onRoundStarted?.(data);
     };
 
@@ -211,6 +240,10 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       draftSessionId: string;
       totalPlayers?: number;
     }) => {
+      // T024: Check for duplicate events
+      const eventId = `${data.tournamentId}:DRAFT_READY:${data.draftSessionId}`;
+      if (isDuplicateEvent(eventId)) return;
+
       eventsRef.current.onDraftReady?.(data);
     };
 
@@ -281,6 +314,9 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       socket.off('disconnect');
       socket.off('connect_error');
     };
+    // Note: isDuplicateEvent is intentionally excluded from deps to prevent effect re-runs
+    // It only uses lastEventIds.current (ref) which doesn't require re-initialization
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   useEffect(() => {
@@ -293,8 +329,12 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
 
   // Tournament actions
   const joinTournament = useCallback((tournamentId: string) => {
-    if (!socket) return;
+    if (!socket) {
+      console.warn('[useTournamentSocket] Cannot join tournament - socket not connected');
+      return;
+    }
 
+    console.log('[useTournamentSocket] Joining tournament room:', tournamentId);
     currentTournamentRef.current = tournamentId;
     socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, { tournamentId });
   }, [socket]);
