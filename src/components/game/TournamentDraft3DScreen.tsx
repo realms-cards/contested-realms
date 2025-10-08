@@ -207,58 +207,42 @@ export default function TournamentDraft3DScreen({
       offJoined = transport.on("draft:session:joined", handleJoined);
     } catch {}
 
-    // T025: Exponential backoff retry with max 5 attempts
-    let attemptCount = 0;
-    const maxAttempts = 5;
-
+    // Join draft session once - server will respond with draft:session:joined
     const tryJoin = () => {
       if (!mounted || joinSentRef.current) return;
       if (!canSend()) return;
-      if (attemptCount >= maxAttempts) {
-        console.error('[TournamentDraft3D] Max join attempts exceeded');
-        setError('Failed to join draft session after 5 attempts. Please refresh the page.');
-        return;
-      }
-
       try {
+        console.log("[TournamentDraft3D] Attempting to join draft session:", draftSessionId);
         transport.emit("draft:session:join", {
           sessionId: draftSessionId,
           playerId: myPlayerId,
           playerName: me?.displayName || "",
           reconnection: false,
         });
-
-        attemptCount++;
-        console.log(`[TournamentDraft3D] Join attempt ${attemptCount}/${maxAttempts}`);
-
-        // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
-        const backoff = Math.min(100 * Math.pow(2, attemptCount - 1), 1600);
+        // Set timeout to retry if no response received within 5s
         if (joinAckTimeoutRef.current)
           window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = window.setTimeout(() => {
-          if (!joinSentRef.current) {
+          if (!joinSentRef.current && mounted) {
+            console.warn("[TournamentDraft3D] No join response after 5s, retrying once");
             tryJoin();
           }
-        }, backoff);
+        }, 5000);
       } catch (e) {
         console.warn("[TournamentDraft3D] failed to join draft room", e);
-        attemptCount++;
-        // Retry on error with backoff
-        const backoff = Math.min(100 * Math.pow(2, attemptCount - 1), 1600);
-        if (joinAckTimeoutRef.current)
-          window.clearTimeout(joinAckTimeoutRef.current);
-        joinAckTimeoutRef.current = window.setTimeout(() => {
-          if (!joinSentRef.current) {
-            tryJoin();
-          }
-        }, backoff);
       }
     };
 
-    // T025: Initial attempt (no polling, just exponential backoff)
-    tryJoin();
+    // Wait briefly for transport to be ready, then join once
+    const readyCheckId = window.setTimeout(() => {
+      if (canSend() && !joinSentRef.current) {
+        tryJoin();
+      }
+    }, 100);
+
     return () => {
       mounted = false;
+      window.clearTimeout(readyCheckId);
       if (joinAckTimeoutRef.current) {
         window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = null;

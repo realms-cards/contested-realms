@@ -116,6 +116,13 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   const setCurrentTournament = useCallback((tournament: TournamentInfo | null) => {
     setRequestedTournamentId(tournament?.id ?? null);
     setCurrentTournamentState(tournament);
+    // If setting a tournament that's not in the list, add it
+    if (tournament) {
+      setTournaments(prev => {
+        if (prev.some(t => t.id === tournament.id)) return prev;
+        return [...prev, tournament];
+      });
+    }
   }, []);
 
   const activeTournamentId = currentTournament?.id ?? requestedTournamentId ?? null;
@@ -482,7 +489,11 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     if (!isConnected) return;
     const id = activeTournamentId;
     if (!id) return;
-    if (joinedTournamentIdRef.current === id) return;
+    if (joinedTournamentIdRef.current === id) {
+      console.log('[RealtimeTournamentContext] Already joined tournament:', id);
+      return;
+    }
+    console.log('[RealtimeTournamentContext] Auto-joining tournament:', id);
     joinedTournamentIdRef.current = id;
     socketJoinTournament(id);
   }, [isConnected, activeTournamentId, socketJoinTournament]);
@@ -804,11 +815,12 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     }
   }, [isConnected, refreshTournamentsDebounced]);
 
-  // Auto-fetch tournaments on mount
+  // Auto-fetch tournaments on mount and when socket connects
   useEffect(() => {
     // Initial load only once; subsequent updates come from socket events
     void refreshTournaments();
-  }, [isConnected, refreshTournamentsDebounced, refreshTournaments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]); // Only re-fetch when socket connection status changes
 
   const contextValue: RealtimeTournamentContextValue = {
     tournaments,
