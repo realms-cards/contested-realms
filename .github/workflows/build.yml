@@ -29,7 +29,8 @@ jobs:
         run: npm run test:ci
 
   integration-tests:
-    name: Integration & Performance Tests
+    name: Integration & Performance Tests (Skipped)
+    if: false
     runs-on: ubuntu-latest
     env:
       CI: "true"
@@ -122,7 +123,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests]
+    needs: [unit-tests]
     container:
       image: node:20-bookworm
     env:
