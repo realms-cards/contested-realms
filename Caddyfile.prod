@@ -37,11 +37,14 @@ ws.realms.cards {
     route {
         # Allowed metrics (whitelist)
         handle @metrics-allowlist {
-            reverse_proxy server1:3010 server2:3010 {
-                lb_policy ip_hash
+            reverse_proxy {
+                to server1:3010
+                to server2:3010
+                lb_policy cookie sorcery_node
                 transport http {
                     read_timeout 30s
                     write_timeout 30s
+                    versions h2c 1.1
                 }
             }
         }
@@ -51,11 +54,14 @@ ws.realms.cards {
         }
         # Default: WebSockets reverse proxy to Socket.IO servers
         handle {
-            reverse_proxy server1:3010 server2:3010 {
-                lb_policy ip_hash
+            reverse_proxy {
+                to server1:3010
+                to server2:3010
+                lb_policy cookie sorcery_node
                 transport http {
                     read_timeout 3m
                     write_timeout 3m
+                    versions h2c 1.1
                 }
                 health_uri /healthz
             }
