@@ -314,7 +314,10 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       socket.off('disconnect');
       socket.off('connect_error');
     };
-  }, [socket, isDuplicateEvent]);
+    // Note: isDuplicateEvent is intentionally excluded from deps to prevent effect re-runs
+    // It only uses lastEventIds.current (ref) which doesn't require re-initialization
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   useEffect(() => {
     if (!socket) {
@@ -326,8 +329,12 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
 
   // Tournament actions
   const joinTournament = useCallback((tournamentId: string) => {
-    if (!socket) return;
+    if (!socket) {
+      console.warn('[useTournamentSocket] Cannot join tournament - socket not connected');
+      return;
+    }
 
+    console.log('[useTournamentSocket] Joining tournament room:', tournamentId);
     currentTournamentRef.current = tournamentId;
     socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, { tournamentId });
   }, [socket]);

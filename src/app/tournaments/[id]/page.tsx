@@ -177,8 +177,8 @@ export default function TournamentDetailsPage() {
           if (res.ok) {
             const data = await res.json();
             setFallbackTournament(data as Tournament);
-            // Also set it in context
-            setCurrentTournamentById(tournamentId);
+            // Add tournament to context so event handlers can update it
+            setCurrentTournament(data as unknown as Parameters<typeof setCurrentTournament>[0]);
           }
         })
         .catch((err) => {

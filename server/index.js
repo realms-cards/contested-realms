@@ -6,6 +6,7 @@ try { require('dotenv').config(); } catch {}
 
 // T019: Import extracted modules
 const tournamentBroadcast = require('./modules/tournament/broadcast');
+const replay = require('./modules/replay');
 // T021: Import draft config service
 const draftConfig = require('./modules/draft/config');
 // T023: Import standings service
@@ -5683,38 +5684,39 @@ io.on("connection", (socket) => {
     socket.emit("pong", { t });
   });
 
-  // Match recording endpoints
-  socket.on("getMatchRecordings", () => {
+  // Match recording endpoints (DB-backed)
+  socket.on("getMatchRecordings", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
-    console.log(
-      `[Recording] Request for recordings from ${
-        player?.displayName || "unknown"
-      }, found ${matchRecordings.size} recordings`
-    );
-    const recordings = Array.from(matchRecordings.values()).map((r) => ({
-      matchId: r.matchId,
-      playerNames: r.playerNames,
-      startTime: r.startTime,
-      endTime: r.endTime,
-      duration: r.endTime ? r.endTime - r.startTime : null,
-      actionCount: r.actions.length,
-      matchType: r.initialState?.matchType || "constructed",
-      playerIds: r.initialState?.playerIds || [],
-    }));
-    socket.emit("matchRecordingsResponse", { recordings });
+    try {
+      const recordings = await replay.listRecordings(prisma, { limit: 200 });
+      try {
+        console.log(
+          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries`
+        );
+      } catch {}
+      socket.emit("matchRecordingsResponse", { recordings });
+    } catch (e) {
+      try { console.warn('[Recording] listRecordings failed:', e?.message || e); } catch {}
+      socket.emit("matchRecordingsResponse", { recordings: [] });
+    }
   });
 
-  socket.on("getMatchRecording", (payload) => {
+  socket.on("getMatchRecording", async (payload) => {
     if (!authed) return;
     const matchId = payload?.matchId;
     if (!matchId) return;
-    const recording = matchRecordings.get(matchId);
-    if (!recording) {
+    try {
+      const recording = await replay.loadRecording(prisma, matchId);
+      if (!recording) {
+        socket.emit("matchRecordingResponse", { error: "Recording not found" });
+        return;
+      }
+      socket.emit("matchRecordingResponse", { recording });
+    } catch (e) {
+      try { console.warn('[Recording] loadRecording failed:', e?.message || e); } catch {}
       socket.emit("matchRecordingResponse", { error: "Recording not found" });
-      return;
     }
-    socket.emit("matchRecordingResponse", { recording });
   });
 
   // Helper: start a draft for a match if in waiting phase
