@@ -663,6 +663,11 @@ export default function TournamentDraft3DScreen({
   const PICK_RADIUS = CARD_LONG * 0.6;
   const STAGE_CLICK_POS = useMemo(() => ({ x: 0, z: 1.7 }), []);
 
+  const myPack = useMemo(
+    () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
+    [draftState.currentPacks, myPlayerIndex]
+  );
+
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
     const result = (
@@ -672,11 +677,6 @@ export default function TournamentDraft3DScreen({
     console.log(`[TournamentDraft3D] amPicker=${result} phase=${draftState.phase} waitingFor=${JSON.stringify(draftState.waitingFor)} myPlayerId=${myPlayerId} myPack.length=${myPack.length}`);
     return result;
   }, [draftState.phase, draftState.waitingFor, myPlayerId, myPack.length]);
-
-  const myPack = useMemo(
-    () => (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[],
-    [draftState.currentPacks, myPlayerIndex]
-  );
 
   // Convert pack to BoosterCard format
   const packAsBoosterCards = useMemo(() => {
@@ -1420,23 +1420,25 @@ export default function TournamentDraft3DScreen({
   const showLoadingOverlay =
     draftState.phase === "waiting" && packAsBoosterCards.length === 0;
 
-  // Monitor WebGL context loss (informational only, no forced disposal)
+  // Monitor WebGL context loss and automatically restore
   useEffect(() => {
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
-    
+
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[TournamentDraft3D] WebGL context lost - reduce texture cache size in .env');
+      console.warn('[TournamentDraft3D] WebGL context lost - attempting recovery');
     };
-    
+
     const handleContextRestored = () => {
-      console.log('[TournamentDraft3D] WebGL context restored');
+      console.log('[TournamentDraft3D] WebGL context restored successfully');
+      // Force re-render to reload textures
+      window.location.reload();
     };
-    
+
     canvas.addEventListener('webglcontextlost', handleContextLost);
     canvas.addEventListener('webglcontextrestored', handleContextRestored);
-    
+
     return () => {
       canvas.removeEventListener('webglcontextlost', handleContextLost);
       canvas.removeEventListener('webglcontextrestored', handleContextRestored);
@@ -1450,16 +1452,14 @@ export default function TournamentDraft3DScreen({
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
-          gl={{ 
-            preserveDrawingBuffer: false, 
-            antialias: true, 
+          gl={{
+            preserveDrawingBuffer: false,
+            antialias: false, // Disable AA to reduce GPU memory pressure
             alpha: false,
             powerPreference: "high-performance",
-            // Prevent context loss by limiting memory
             failIfMajorPerformanceCaveat: false,
           }}
-          dpr={[1, 1.5]}
-          // Use always for interactive content
+          dpr={1} // Force DPR=1 for cube drafts to reduce texture memory
           frameloop="always"
         >
           <color attach="background" args={["#0b0b0c"]} />
