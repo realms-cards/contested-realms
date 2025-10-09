@@ -4270,7 +4270,7 @@ io.use((socket, next) => {
   }
 });
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   let authed = false;
   let authUser = null;
   // Track current draft session room for this socket (if any)
@@ -5902,6 +5902,10 @@ io.on("connection", (socket) => {
       await leaderChooseDraftPack(matchId, player.id, { setChoice, packIndex });
     } catch {}
   });
+
+  // Tournament draft handlers (extracted module)
+  const { registerTournamentDraftHandlers } = await import('./modules/tournament/draft-socket-handler.js');
+  registerTournamentDraftHandlers(socket, () => authed, getPlayerBySocket);
 
   // Submit draft deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {

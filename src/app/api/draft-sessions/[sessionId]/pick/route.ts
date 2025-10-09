@@ -8,9 +8,23 @@ export const dynamic = 'force-dynamic';
 // Record a player's pick in the tournament draft session
 export async function POST(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+
+  // Check for internal server-to-server call from socket handler
+  const isInternalCall = req.headers.get('X-Internal-Call') === 'true';
+  const internalUserId = req.headers.get('X-User-Id');
+
+  let userId: string;
+
+  if (isInternalCall && internalUserId) {
+    // Trust internal calls from socket server
+    userId = internalUserId;
+  } else {
+    // Regular HTTP call - require session
+    const session = await getServerAuthSession();
+    if (!session?.user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+    userId = session.user.id;
   }
 
   try {
@@ -20,8 +34,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ses
     if (!cardId) {
       return new Response(JSON.stringify({ error: 'Missing required field: cardId' }), { status: 400 });
     }
-
-    const userId = session.user.id;
 
     // Use draft engine to process the pick
     const engine = new TournamentDraftEngine(sessionId);
