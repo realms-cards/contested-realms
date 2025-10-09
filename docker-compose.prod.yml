@@ -34,8 +34,6 @@ services:
       - .env.production
     volumes:
       - redisdata:/data
-    environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
   # Socket.IO server instances (horizontal scaling via Redis adapter)
   server1:
