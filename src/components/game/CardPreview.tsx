@@ -1,10 +1,8 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
-import { Suspense, useEffect, useState } from "react";
+import Image from "next/image";
+import { useEffect, useState } from "react";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
-import CardPlane from "@/lib/game/components/CardPlane";
-import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 import { TOKEN_BY_KEY } from "@/lib/game/tokens";
 
 type Anchor = "top-right" | "bottom-right" | "top-left" | "bottom-left";
@@ -191,53 +189,26 @@ export default function CardPreview({
   })();
 
   const base = isSite
-    ? "aspect-[4/3] rounded-xl overflow-hidden"
-    : "aspect-[3/4] rounded-xl overflow-hidden";
+    ? "aspect-[4/3] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10"
+    : "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
 
-  const spriteScale = width / (isSite ? 320 : 240);
-  const maxScale = preferBottom ? 1.25 : isShort ? 1.45 : 1.6;
-  const previewScale = Math.max(0.95, Math.min(spriteScale * 1.02, maxScale));
-
-  // Match board conventions: use portrait plane and rotate sites -90deg
-  const planeWidth = CARD_SHORT * previewScale;
-  const planeHeight = CARD_LONG * previewScale;
-  const rotZ = isSite ? -Math.PI / 2 : 0;
-  const cameraZoom = 260 * previewScale;
-  const canvasKey = `${slug}:${isSite ? "land" : "port"}`;
-
-  // Future enhancement: when `preferBottom` is true we can switch to a tap-to-expand overlay
-  // instead of always showing the preview, ensuring ultra-small viewports remain usable.
-
+  // Use simple Image component instead of 3D Canvas to avoid WebGL context leaks
+  // The tournament draft was creating hundreds of WebGL contexts and crashing browsers
   return (
     <div
       className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
     >
       <div className="relative">
-        <div key={canvasKey} className={`relative ${base}`} style={{ width }}>
-          <Canvas
-            className="absolute inset-0"
-            orthographic
-            frameloop="demand"
-            camera={{ position: [0, 0, 5], zoom: cameraZoom }}
-            gl={{ alpha: true, antialias: true, preserveDrawingBuffer: false }}
-            dpr={[1, 2]}
-          >
-            <ambientLight intensity={1} />
-            <Suspense fallback={null}>
-              <CardPlane
-                slug={slug}
-                width={planeWidth}
-                height={planeHeight}
-                upright
-                rotationZ={rotZ}
-                depthWrite={false}
-                depthTest={false}
-                interactive={false}
-                elevation={0}
-                renderOrder={0}
-              />
-            </Suspense>
-          </Canvas>
+        <div className={`relative ${base}`} style={{ width }}>
+          <Image
+            src={`/api/images/${slug}`}
+            alt={card?.name || "Card preview"}
+            fill
+            className={`object-cover ${isSite ? "rotate-90" : ""}`}
+            sizes={`${Math.round(width)}px`}
+            priority
+            unoptimized
+          />
         </div>
       </div>
     </div>
