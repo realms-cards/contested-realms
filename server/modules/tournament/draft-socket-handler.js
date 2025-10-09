@@ -47,9 +47,14 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Socket/TournamentDraft] API error ${response.status}:`, errorText);
-        const error = errorText ? JSON.parse(errorText) : { error: 'Unknown error' };
-        throw new Error(error.error || `HTTP ${response.status}`);
+        console.error(`[Socket/TournamentDraft] API error ${response.status}:`, errorText.substring(0, 500));
+        try {
+          const error = JSON.parse(errorText);
+          throw new Error(error.error || `HTTP ${response.status}`);
+        } catch {
+          // Response wasn't JSON, throw the status and preview of response
+          throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        }
       }
 
       const result = await response.json();
