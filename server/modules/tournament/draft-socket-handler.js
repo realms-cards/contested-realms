@@ -20,10 +20,16 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
 
     try {
       // Call Next.js API route to process the pick (TournamentDraftEngine only exists in Next.js)
-      // In Docker, use host.docker.internal to reach host machine's Next.js
-      // Replace localhost with host.docker.internal for Docker networking
+      // In production, Next.js is on Vercel, so use NEXTAUTH_URL (https://realms.cards)
+      // In development, Next.js runs locally, so use localhost (or host.docker.internal in Docker)
       let apiUrl = process.env.NEXT_API_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
-      apiUrl = apiUrl.replace('localhost', 'host.docker.internal');
+
+      // Only replace localhost with host.docker.internal in development/Docker
+      // In production, NEXTAUTH_URL should be the full https://realms.cards URL
+      if (apiUrl.includes('localhost')) {
+        apiUrl = apiUrl.replace('localhost', 'host.docker.internal');
+      }
+
       const url = `${apiUrl}/api/draft-sessions/${sessionId}/pick`;
 
       console.log(`[Socket/TournamentDraft] Calling API: ${url}`);
