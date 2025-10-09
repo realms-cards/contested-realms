@@ -349,6 +349,7 @@ export default function TournamentDraft3DScreen({
   useEffect(() => {
     let pollInterval: ReturnType<typeof setInterval> | null = null;
     let mounted = true;
+    let isPolling = false; // Prevent concurrent polls
 
     const shouldPoll = () => {
       try {
@@ -371,12 +372,20 @@ export default function TournamentDraft3DScreen({
     };
 
     const pollDraftState = async () => {
-      if (!mounted || !shouldPoll()) return;
+      if (!mounted || !shouldPoll() || isPolling) return;
+      isPolling = true;
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
         const res = await fetch(`/api/draft-sessions/${draftSessionId}/state`, {
           cache: "no-store",
+          signal: controller.signal,
         });
-        if (!res.ok) return;
+        clearTimeout(timeout);
+        if (!res.ok) {
+          console.warn(`[TournamentDraft3D] Poll failed: ${res.status}`);
+          return;
+        }
         const data = await res.json();
         if (!mounted) return;
         if (data.draftState) {
@@ -441,13 +450,18 @@ export default function TournamentDraft3DScreen({
           }
         }
       } catch (err) {
-        console.error("[TournamentDraft3D] Error polling state:", err);
+        const isAbort = err instanceof Error && err.name === 'AbortError';
+        if (!isAbort) {
+          console.error("[TournamentDraft3D] Error polling state:", err);
+        }
+      } finally {
+        isPolling = false;
       }
     };
 
     const start = () => {
       if (!shouldPoll() || pollInterval) return;
-      pollInterval = setInterval(pollDraftState, 2500);
+      pollInterval = setInterval(pollDraftState, 5000); // Increased from 2.5s to 5s
       void pollDraftState();
     };
     const stop = () => {
