@@ -259,6 +259,35 @@ scripts/validate-type-safety.sh  # Validate type safety configuration
 
 ---
 
+## WebGL Context Management - Architectural Decision
+
+### The Problem
+The application creates multiple Canvas instances across screens. Browsers limit WebGL contexts to 8-16 per origin. We initially feared hitting this limit during navigation.
+
+### What We Tried: Global Canvas with View.Port
+**Approach**: Single Canvas with React Three Fiber's View API for multi-viewport rendering.
+
+**Why It Failed**:
+- drei's View.Port was designed for **simultaneous multi-view rendering** (split-screen games), not dynamic page-to-page navigation
+- View components MUST be in the **same React Three Fiber context tree** as View.Port
+- Registering Views dynamically from separate pages is **architecturally incompatible** with how drei works
+- Fighting the framework led to complexity without benefits
+
+### The Solution: Individual Canvas with Smart Lifecycle
+**Why This Works**:
+- ✅ Each screen/page has its own Canvas (clean, simple, works immediately)
+- ✅ Next.js automatically unmounts components on navigation (proper cleanup)
+- ✅ React Three Fiber properly disposes WebGL contexts on unmount
+- ✅ Users typically have 1-2 screens open simultaneously (well below 8-16 context limit)
+- ✅ In practice, we NEVER hit the context limit in normal usage
+
+**Key Insight**: The context limit is only a problem if contexts exist simultaneously WITHOUT cleanup. Next.js + R3F handle cleanup automatically.
+
+### Recommendation
+**Use individual Canvas per screen** - it's simple, works perfectly, and aligns with React Three Fiber's intended usage pattern. Don't fight the framework.
+
+---
+
 ## Previous Development: Draft-3D Online Integration (Branch: 004-i-want-to)
 
 **Feature**: Integrate improved UI, stack mechanics, and card preview system from single-player draft-3d into online multiplayer draft-3d, maintaining real-time synchronization via Socket.io.
