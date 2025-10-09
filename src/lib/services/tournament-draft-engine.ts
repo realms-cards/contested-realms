@@ -945,13 +945,29 @@ export class TournamentDraftEngine {
    */
   async broadcastStateUpdate(): Promise<void> {
     const safeState = await this.sanitizeStateForClients(this.draftState);
+
+    // Try direct Socket.IO emit first (works for local/single-server deployments)
+    try {
+      const { getSocket } = await import('@/lib/socket-server');
+      const io = getSocket();
+      if (io) {
+        io.to(`draft:${this.sessionId}`).emit('draftUpdate', safeState);
+        console.log(`[TournamentDraftEngine] Direct broadcast to draft:${this.sessionId}`);
+      }
+    } catch (e) {
+      // Socket.IO not available (expected in production with separate socket server)
+    }
+
+    // Also publish to Redis for distributed/production deployments
     try {
       await publish('draft:session:update', {
         sessionId: this.sessionId,
         draftState: safeState,
       });
-    } catch {}
-    try { console.log(`[TournamentDraftEngine] State updated for session ${this.sessionId}`); } catch {}
+      console.log(`[TournamentDraftEngine] Published to Redis for session ${this.sessionId}`);
+    } catch (e) {
+      console.warn(`[TournamentDraftEngine] Redis publish failed:`, e);
+    }
   }
 
   private async sanitizeStateForClients(state: DraftState | null): Promise<DraftState | null> {
