@@ -1200,6 +1200,7 @@ const MATCH_CONTROL_CHANNEL = 'match:control';
 const DRAFT_STATE_CHANNEL = 'draft:session:update';
 const MATCH_CLEANUP_DELAY_MS = Number(process.env.MATCH_CLEANUP_DELAY_MS || 60000); // 60s default
 const STALE_WAITING_MS = Number(process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000); // 10 min default
+const INACTIVE_MATCH_CLEANUP_MS = Number(process.env.INACTIVE_MATCH_CLEANUP_MS || 3 * 60 * 60 * 1000); // 3 hours default
 const LOBBY_CONTROL_CHANNEL = 'lobby:control';
 const LOBBY_STATE_CHANNEL = 'lobby:state';
 let clusterStateReady = false; // flip after maps are initialized
@@ -6226,35 +6227,88 @@ setInterval(() => {
   }
 }, 30 * 1000);
 
-// Periodic cleanup: remove long-idle waiting matches with no connected sockets.
+// Periodic cleanup: remove stale matches (waiting matches after 10min, any match inactive after configured timeout)
 setInterval(async () => {
   const now = Date.now();
+
   for (const match of matches.values()) {
     try {
-      if (!match || match.status !== 'waiting') continue;
+      if (!match) continue;
+
       const age = now - (Number(match.lastTs) || now);
-      if (age < STALE_WAITING_MS) continue;
-      const room = `match:${match.id}`;
-      let roomEmpty = true;
-      try {
-        if (typeof io.in(room).allSockets === 'function') {
-          const sockets = await io.in(room).allSockets();
-          roomEmpty = !sockets || sockets.size === 0;
-        }
-      } catch {}
-      if (!roomEmpty) continue;
-      // Coordinate via leader; followers request cleanup through pub/sub
-      try {
-        const leader = await getOrClaimMatchLeader(match.id);
-        if (leader && leader !== INSTANCE_ID) {
-          if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId: match.id, reason: 'stale_waiting', force: true }));
-          continue;
-        }
-        await cleanupMatchNow(match.id, 'stale_waiting', true);
-      } catch {}
+
+      // Rule 1: Cleanup waiting matches after 10 minutes (existing logic)
+      if (match.status === 'waiting' && age >= STALE_WAITING_MS) {
+        const room = `match:${match.id}`;
+        let roomEmpty = true;
+        try {
+          if (typeof io.in(room).allSockets === 'function') {
+            const sockets = await io.in(room).allSockets();
+            roomEmpty = !sockets || sockets.size === 0;
+          }
+        } catch {}
+        if (!roomEmpty) continue;
+
+        try {
+          const leader = await getOrClaimMatchLeader(match.id);
+          if (leader && leader !== INSTANCE_ID) {
+            if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId: match.id, reason: 'stale_waiting', force: true }));
+            continue;
+          }
+          await cleanupMatchNow(match.id, 'stale_waiting', true);
+        } catch {}
+        continue;
+      }
+
+      // Rule 2: Cleanup ANY match (including in_progress/deck_construction) inactive beyond configured timeout
+      if (age >= INACTIVE_MATCH_CLEANUP_MS) {
+        // Skip active tournament matches (they have their own lifecycle)
+        if (match.tournamentId) continue;
+
+        const room = `match:${match.id}`;
+        let roomEmpty = true;
+        try {
+          if (typeof io.in(room).allSockets === 'function') {
+            const sockets = await io.in(room).allSockets();
+            roomEmpty = !sockets || sockets.size === 0;
+          }
+        } catch {}
+        if (!roomEmpty) continue;
+
+        try {
+          const leader = await getOrClaimMatchLeader(match.id);
+          if (leader && leader !== INSTANCE_ID) {
+            if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId: match.id, reason: 'inactive_timeout', force: true }));
+            continue;
+          }
+          try { console.log(`[match] cleanup inactive match ${match.id} (status: ${match.status}, age: ${Math.round(age / 1000 / 60)}min)`); } catch {}
+          await cleanupMatchNow(match.id, 'inactive_timeout', true);
+        } catch {}
+      }
     } catch {}
   }
 }, 60 * 1000);
+
+// Database cleanup: remove old completed/cancelled/ended matches from database
+setInterval(async () => {
+  try {
+    const CLEANUP_THRESHOLD = new Date(Date.now() - INACTIVE_MATCH_CLEANUP_MS);
+
+    // Delete completed/cancelled/ended matches older than configured timeout
+    const result = await prisma.onlineMatchSession.deleteMany({
+      where: {
+        status: { in: ['completed', 'cancelled', 'ended'] },
+        updatedAt: { lt: CLEANUP_THRESHOLD },
+      },
+    });
+
+    if (result.count > 0) {
+      try { console.log(`[db] cleaned up ${result.count} old match(es) from database`); } catch {}
+    }
+  } catch (e) {
+    try { console.warn(`[db] cleanup failed:`, e?.message || e); } catch {}
+  }
+}, 5 * 60 * 1000); // Run every 5 minutes
 
 server.listen(PORT, () => {
   console.log(
