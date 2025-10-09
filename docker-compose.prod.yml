@@ -15,23 +15,17 @@ services:
     image: redis:7-alpine
     container_name: sorcery-redis
     restart: unless-stopped
-    command:
-      [
-        "redis-server",
-        "--appendonly",
-        "yes",
-        "--requirepass",
-        "${REDIS_PASSWORD}",
-      ]
+    env_file:
+      - .env.production
+    command: >
+      sh -c "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""
     ports:
       - "6380:6379" # Expose Redis on port 6380 for Vercel Next.js access
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "sh", "-c", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-    env_file:
-      - .env.production
     volumes:
       - redisdata:/data
 
