@@ -3,14 +3,6 @@
 }
 
 ws.realms.cards {
-    # Disable compression for WebSocket connections (causes issues)
-    encode {
-        match {
-            not path /socket.io/*
-        }
-        zstd gzip
-    }
-
     log {
         output file /var/log/caddy/access.log
         format json
