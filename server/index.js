@@ -1021,6 +1021,8 @@ const prisma = new PrismaClient();
 // Optional: start periodic pruning of old replay actions/sessions
 try { replay.setupReplayRetentionPruner?.(prisma); } catch {}
 const REDIS_URL = process.env.REDIS_URL || process.env.SOCKET_REDIS_URL || "redis://localhost:6379";
+const REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
+const REDIS_CONFIG = REDIS_PASSWORD ? { password: REDIS_PASSWORD } : {};
 const ENABLE_REDIS_ADAPTER = !(
   process.env.SOCKET_REDIS_DISABLED === '1' ||
   (process.env.SOCKET_REDIS_DISABLED || '').toLowerCase() === 'true'
@@ -1172,10 +1174,11 @@ let pubClient = null;
 let subClient = null;
 try {
   if (ENABLE_REDIS_ADAPTER) {
-    pubClient = new Redis(REDIS_URL);
+    pubClient = new Redis(REDIS_URL, REDIS_CONFIG);
     subClient = pubClient.duplicate();
     io.adapter(createAdapter(pubClient, subClient));
-    try { console.log(`[socket.io] Redis adapter enabled -> ${REDIS_URL}`); } catch {}
+    const redisUrlSafe = REDIS_PASSWORD ? REDIS_URL.replace(/redis:\/\//, 'redis://redacted@') : REDIS_URL;
+    try { console.log(`[socket.io] Redis adapter enabled -> ${redisUrlSafe}`); } catch {}
   } else {
     try { console.log("[socket.io] Redis adapter disabled by config"); } catch {}
   }
@@ -1188,9 +1191,10 @@ const INSTANCE_ID = process.env.INSTANCE_ID || `srv-${Math.random().toString(36)
 let storeRedis = null;
 let storeSub = null;
 try {
-  storeRedis = new Redis(REDIS_URL);
+  storeRedis = new Redis(REDIS_URL, REDIS_CONFIG);
   storeSub = storeRedis.duplicate();
-  try { console.log(`[store] Redis state connected -> ${REDIS_URL} (instance=${INSTANCE_ID})`); } catch {}
+  const redisUrlSafe = REDIS_PASSWORD ? REDIS_URL.replace(/redis:\/\//, 'redis://redacted@') : REDIS_URL;
+  try { console.log(`[store] Redis state connected -> ${redisUrlSafe} (instance=${INSTANCE_ID})`); } catch {}
 } catch (e) {
   try { console.warn(`[store] Redis state init failed:`, e?.message || e); } catch {}
 }
