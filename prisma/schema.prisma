@@ -447,6 +447,8 @@ enum OnlineMatchStatus {
   waiting
   deck_construction
   in_progress
+  completed
+  cancelled
   ended
 }
 
