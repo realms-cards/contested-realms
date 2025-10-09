@@ -964,6 +964,12 @@ export default function TournamentDraft3DScreen({
         `[TournamentDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
       );
 
+      // Clear in-flight pick marker when server confirms state update
+      if (pickInFlightRef.current) {
+        console.log(`[TournamentDraft3D] Clearing in-flight pick marker`);
+        pickInFlightRef.current = null;
+      }
+
       if (s.phase === "picking") {
         setStaged(null);
         setReady(false);
@@ -1139,78 +1145,26 @@ export default function TournamentDraft3DScreen({
         hasAnimation: true,
       });
 
+      // Use socket event (same pattern as lobby drafts) instead of HTTP fetch
       try {
-        const attemptPick = async (attempt: number) => {
-          const res = await fetch(
-            `/api/draft-sessions/${draftSessionId}/pick`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                cardId: card.id,
-                packIndex: draftState.packIndex,
-                pickNumber: draftState.pickNumber,
-              }),
-            }
-          );
-          if (res.ok) {
-            // Server acknowledged; clear in-flight marker
-            pickInFlightRef.current = null;
-            return;
-          }
-          const err = await res.json().catch(() => ({} as { error?: string }));
-          const msg = String(err?.error || "");
-          const isConflict =
-            res.status === 409 ||
-            msg.includes("could not serialize access due to concurrent update");
-          if (isConflict && attempt < 4) {
-            // Small jittered backoff then retry
-            const delay = 100 + Math.floor(Math.random() * 150);
-            setTimeout(() => {
-              attemptPick(attempt + 1).catch(() => {});
-            }, delay);
-            return;
-          }
-          console.warn(
-            "[TournamentDraft3D] makeDraftPick failed:",
-            err?.error || res.status
-          );
-          revertOptimisticPick();
-          setReady(false);
-          // Revert optimistic removal if rejected
-          setDraftState((prev) => {
-            if (prev.phase !== "picking") return prev;
-            const packs = Array.isArray(prev.currentPacks)
-              ? [...prev.currentPacks]
-              : prev.currentPacks;
-            if (Array.isArray(packs)) {
-              const seatPack = (packs[myPlayerIndex] || []) as DraftCard[];
-              // If the card is missing due to our optimistic removal, put it back
-              if (!seatPack.find((c) => c.id === card.id)) {
-                packs[myPlayerIndex] = [card as DraftCard, ...seatPack];
-              }
-            }
-            // Put us back into waitingFor
-            const waiting = Array.isArray(prev.waitingFor)
-              ? prev.waitingFor.includes(myPlayerId)
-                ? prev.waitingFor
-                : [...prev.waitingFor, myPlayerId]
-              : prev.waitingFor;
-            return { ...prev, currentPacks: packs, waitingFor: waiting };
-          });
-          pickInFlightRef.current = null;
-        };
-        attemptPick(1).catch((err) => {
-          console.error(
-            `[TournamentDraft3D] makeDraftPick network error:`,
-            err
-          );
+        if (!transport) {
+          console.error("[TournamentDraft3D] No transport available for pick");
           revertOptimisticPick();
           setReady(false);
           pickInFlightRef.current = null;
+          return;
+        }
+
+        // Emit socket event - server will handle via makeTournamentDraftPick handler
+        transport.emit("makeTournamentDraftPick", {
+          sessionId: draftSessionId,
+          cardId: card.id,
         });
+        console.log(`[TournamentDraft3D] Emitted makeTournamentDraftPick: session=${draftSessionId} cardId=${card.id}`);
+        // Pick will be acknowledged via socket broadcast (draftUpdate event)
+        // pickInFlightRef will be cleared when we receive the draftUpdate
       } catch (err) {
-        console.error(`[TournamentDraft3D] makeDraftPick error:`, err);
+        console.error("[TournamentDraft3D] Socket emit error:", err);
         revertOptimisticPick();
         setReady(false);
         pickInFlightRef.current = null;
@@ -1231,6 +1185,7 @@ export default function TournamentDraft3DScreen({
       draftSessionId,
       myPlayerId,
       myPlayerIndex,
+      transport,
     ]
   );
 

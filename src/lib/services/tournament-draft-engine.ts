@@ -954,7 +954,7 @@ export class TournamentDraftEngine {
         io.to(`draft:${this.sessionId}`).emit('draftUpdate', safeState);
         console.log(`[TournamentDraftEngine] Direct broadcast to draft:${this.sessionId}`);
       }
-    } catch (e) {
+    } catch {
       // Socket.IO not available (expected in production with separate socket server)
     }
 
