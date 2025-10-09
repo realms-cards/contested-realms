@@ -43,7 +43,6 @@ ws.realms.cards {
                 transport http {
                     read_timeout 30s
                     write_timeout 30s
-                    versions h2c 1.1
                 }
             }
         }
@@ -60,7 +59,6 @@ ws.realms.cards {
                 transport http {
                     read_timeout 3m
                     write_timeout 3m
-                    versions h2c 1.1
                 }
                 health_uri /healthz
                 # Explicitly flush responses for WebSocket
