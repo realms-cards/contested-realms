@@ -292,12 +292,12 @@ function validateAction(game, action, playerId, context) {
       for (const key of Object.keys(action.board.sites)) {
         const nextTile = action.board.sites[key];
         const prevTile = currentSites[key];
-        // If both have a card, then it's an overwrite attempt
-        if (nextTile && nextTile.card && prevTile && prevTile.card) {
-          const cellNum = getCellNumber(key, getBoardWidth(game));
-          const cellRef = cellNum ? `cell ${cellNum}` : `tile ${key}`;
-          return { ok: false, error: `Cannot place site on occupied ${cellRef}` };
-        }
+        // Allow placing sites on occupied cells (sites can stack/replace)
+        // if (nextTile && nextTile.card && prevTile && prevTile.card) {
+        //   const cellNum = getCellNumber(key, getBoardWidth(game));
+        //   const cellRef = cellNum ? `cell ${cellNum}` : `tile ${key}`;
+        //   return { ok: false, error: `Cannot place site on occupied ${cellRef}` };
+        // }
         // If adding a new site, enforce owner equals actor (when resolvable)
         if (nextTile && nextTile.card && meNum && Number(nextTile.owner) !== meNum) {
           return { ok: false, error: `Cannot place site owned by opponent` };
@@ -325,16 +325,21 @@ function validateAction(game, action, playerId, context) {
       }
     }
 
-    // Validate permanents placement must be onto a sited cell
+    // Removed: Permanents can now be placed on unsited cells (void)
+    // Avatars and voidwalk minions can exist on void (unsited cells)
+    // if (action.permanents && typeof action.permanents === 'object') {
+    //   const currentSites = (game && game.board && game.board.sites) || {};
+    //   for (const key of Object.keys(action.permanents)) {
+    //     if (!currentSites[key] || !currentSites[key].card) {
+    //       const cellNum = getCellNumber(key, getBoardWidth(game));
+    //       const cellRef = cellNum ? `cell ${cellNum}` : `cell ${key}`;
+    //       return { ok: false, error: `Cannot place permanent on unsited ${cellRef}` };
+    //     }
+    //   }
+    // }
+
+    // Validate permanents ownership and state changes
     if (action.permanents && typeof action.permanents === 'object') {
-      const currentSites = (game && game.board && game.board.sites) || {};
-      for (const key of Object.keys(action.permanents)) {
-        if (!currentSites[key] || !currentSites[key].card) {
-          const cellNum = getCellNumber(key, getBoardWidth(game));
-          const cellRef = cellNum ? `cell ${cellNum}` : `cell ${key}`;
-          return { ok: false, error: `Cannot place permanent on unsited ${cellRef}` };
-        }
-      }
       // Ownership guard for tapping opponent permanents: reject if patch toggles tapped on a non-owned permanent
       if (meNum) {
         const prevPer = (game && game.permanents) || {};
