@@ -1459,12 +1459,11 @@ export default function TournamentDraft3DScreen({
           shadows
           gl={{
             preserveDrawingBuffer: false,
-            antialias: false, // Disable AA to reduce GPU memory pressure
+            antialias: true,
             alpha: false,
             powerPreference: "high-performance",
             failIfMajorPerformanceCaveat: false,
           }}
-          dpr={1} // Force DPR=1 for cube drafts to reduce texture memory
           frameloop="always"
         >
           <color attach="background" args={["#0b0b0c"]} />
