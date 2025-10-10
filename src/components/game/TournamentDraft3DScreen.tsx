@@ -289,42 +289,28 @@ export default function TournamentDraft3DScreen({
 
   // Auto-select pack for this player so the server can distribute packs.
   // Trigger when entering pack_selection OR when the server immediately moves to picking at pick 1 of a new round.
-  // Server will auto-finalize remaining seats and ensure uniqueness per round.
+  // Use socket event to keep hot path on the socket server.
   useEffect(() => {
     const round = draftState.packIndex;
     const inPackSelection = draftState.phase === "pack_selection";
-    const inNextRoundPicking =
-      draftState.phase === "picking" && draftState.pickNumber === 1;
+    const inNextRoundPicking = draftState.phase === "picking" && draftState.pickNumber === 1;
     if (!inPackSelection && !inNextRoundPicking) return;
     if (chosenPackForRoundRef.current.has(round)) return;
     chosenPackForRoundRef.current.add(round);
-    fetch(`/api/draft-sessions/${draftSessionId}/choose-pack`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ packIndex: round }),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({} as { error?: string }));
-          console.warn(
-            "[TournamentDraft3D] choose-pack failed:",
-            err?.error || res.status
-          );
-        }
-        // If we were already in picking (fallback path), proactively close overlay if open
-        if (inNextRoundPicking) {
-          setPackChoiceOverlay(false);
-        }
-      })
-      .catch((err) => {
-        console.warn("[TournamentDraft3D] choose-pack network error:", err);
+    if (!transport) return;
+    try {
+      transport.emit("chooseTournamentDraftPack", {
+        sessionId: draftSessionId,
+        packIndex: round,
       });
-  }, [
-    draftState.phase,
-    draftState.pickNumber,
-    draftState.packIndex,
-    draftSessionId,
-  ]);
+    } catch (err) {
+      console.warn("[TournamentDraft3D] choose-pack emit error:", err);
+    }
+    // If we were already in picking (fallback path), proactively close overlay if open
+    if (inNextRoundPicking) {
+      setPackChoiceOverlay(false);
+    }
+  }, [draftState.phase, draftState.pickNumber, draftState.packIndex, draftSessionId, transport]);
   const autoPickTimerRef = useRef<number | null>(null);
 
   // Close the pack overlay as soon as we enter picking

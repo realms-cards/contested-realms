@@ -3,6 +3,8 @@
  * Handles real-time socket events for tournament draft sessions
  */
 
+import * as tourneyEngine from './engine.js';
+
 /**
  * Register tournament draft socket event handlers
  * @param {import('socket.io').Socket} socket - Socket.IO socket instance
@@ -19,88 +21,34 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
     if (!sessionId || !cardId) return;
 
     try {
-      // Call Next.js API route to process the pick (TournamentDraftEngine only exists in Next.js)
-      // In production, Next.js is on Vercel, so use NEXTAUTH_URL (https://realms.cards)
-      // In development, Next.js runs locally, so use localhost (or host.docker.internal in Docker)
-      let apiUrl = process.env.NEXT_API_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
-
-      // Only replace localhost with host.docker.internal in development/Docker
-      // In production, NEXTAUTH_URL should be the full https://realms.cards URL
-      if (apiUrl.includes('localhost')) {
-        apiUrl = apiUrl.replace('localhost', 'host.docker.internal');
-      }
-
-      const url = `${apiUrl}/api/draft-sessions/${sessionId}/pick`;
-
-      console.log(`[Socket/TournamentDraft] Calling API: ${url}`);
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Internal-Call': 'true',
-          'X-Internal-Key': process.env.INTERNAL_API_KEY || process.env.NEXTAUTH_SECRET || '',
-          'X-User-Id': player.id,
-        },
-        body: JSON.stringify({ cardId }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Socket/TournamentDraft] API error ${response.status}:`, errorText.substring(0, 500));
-        if (response.status === 409) {
-          try {
-            const stateUrl = `${apiUrl}/api/draft-sessions/${sessionId}/state`;
-            const stateRes = await fetch(stateUrl, {
-              method: 'GET',
-              headers: {
-                'X-Internal-Call': 'true',
-                'X-Internal-Key': process.env.INTERNAL_API_KEY || process.env.NEXTAUTH_SECRET || '',
-                'X-User-Id': player.id,
-              },
-            });
-            if (stateRes.ok) {
-              const j = await stateRes.json();
-              const draftState = j?.draftState;
-              if (draftState) {
-                try { socket.server.to(`draft:${sessionId}`).emit('draftUpdate', draftState); } catch {}
-                try { socket.emit('draftUpdate', draftState); } catch {}
-                console.warn('[Socket/TournamentDraft] Conflict 409 handled by state snapshot forwarding');
-                return;
-              }
-            }
-          } catch (snapErr) {
-            console.warn('[Socket/TournamentDraft] Conflict snapshot fetch failed:', snapErr);
-          }
-        }
-        try {
-          JSON.parse(errorText);
-          socket.emit('error', { message: `HTTP ${response.status}: ${errorText}` });
-        } catch {
-          socket.emit('error', { message: `HTTP ${response.status}: ${errorText.substring(0, 200)}` });
-        }
-        throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
-      }
-
-      const result = await response.json();
-      console.log(`
-        [Socket/TournamentDraft] session=${sessionId} user=${player.id} cardId=${cardId} -> pick successful`
-      );
-
-      // Best-effort fast-path: forward returned draftState
-      try {
-        const draftState = result && result.draftState ? result.draftState : null;
-        if (draftState) {
-          try { socket.server.to(`draft:${sessionId}`).emit('draftUpdate', draftState); } catch {}
-          try { socket.emit('draftUpdate', draftState); } catch {}
-        }
-      } catch {}
+      // Execute pick locally via tournament engine (fast-path)
+      const next = await tourneyEngine.makePick(sessionId, player.id, cardId);
+      // Engine already emits and publishes; also echo back to caller for immediate UX
+      try { socket.emit('draftUpdate', next); } catch {}
 
     } catch (e) {
       const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
       const stack = e instanceof Error ? e.stack : '';
       console.error('[Socket/TournamentDraft] Pick error:', message);
       console.error('[Socket/TournamentDraft] Error stack:', stack);
+      socket.emit('error', { message });
+    }
+  });
+
+  // Tournament draft choose-pack (start of each round)
+  socket.on("chooseTournamentDraftPack", async (payload = {}) => {
+    if (!isAuthed()) return;
+    const player = getPlayerBySocket(socket);
+    if (!player) return;
+    const sessionId = payload?.sessionId;
+    const packIndex = Number(payload?.packIndex || 0);
+    if (!sessionId) return;
+    try {
+      const next = await tourneyEngine.choosePack(sessionId, player.id, { packIndex });
+      try { socket.emit('draftUpdate', next); } catch {}
+    } catch (e) {
+      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+      console.error('[Socket/TournamentDraft] choose-pack error:', message);
       socket.emit('error', { message });
     }
   });
