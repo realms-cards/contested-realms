@@ -9,9 +9,24 @@ export const dynamic = 'force-dynamic';
 // Get current draft state
 export async function GET(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  // Internal S2S bypass (prod guard handled by middleware)
+  const flag = (req.headers.get('x-internal-call') || '').toLowerCase();
+  const isOn = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+  const uidHeader = req.headers.get('x-user-id') || '';
+  const isInternal = isOn || !!uidHeader;
+  let userId: string;
+  if (isInternal) {
+    const uid = uidHeader;
+    if (!uid) {
+      return new Response(JSON.stringify({ error: 'Missing X-User-Id for internal request' }), { status: 400 });
+    }
+    userId = uid;
+  } else {
+    const session = await getServerAuthSession();
+    if (!session?.user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+    userId = session.user.id;
   }
 
   try {
@@ -30,7 +45,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
       return new Response(JSON.stringify({ error: 'Draft session not found' }), { status: 404 });
     }
 
-    const userId = session.user.id;
     const isParticipant = draftSession.participants.some(p => p.playerId === userId);
     if (!isParticipant) {
       return new Response(JSON.stringify({ error: 'Not a participant in this draft session' }), { status: 403 });

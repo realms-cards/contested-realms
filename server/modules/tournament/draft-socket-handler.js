@@ -38,7 +38,6 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Pass through authentication - this is an internal server-to-server call
           'X-Internal-Call': 'true',
           'X-Internal-Key': process.env.INTERNAL_API_KEY || process.env.NEXTAUTH_SECRET || '',
           'X-User-Id': player.id,
@@ -49,31 +48,54 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Socket/TournamentDraft] API error ${response.status}:`, errorText.substring(0, 500));
-        try {
-          const error = JSON.parse(errorText);
-          throw new Error(error.error || `HTTP ${response.status}`);
-        } catch {
-          // Response wasn't JSON, throw the status and preview of response
-          throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        if (response.status === 409) {
+          try {
+            const stateUrl = `${apiUrl}/api/draft-sessions/${sessionId}/state`;
+            const stateRes = await fetch(stateUrl, {
+              method: 'GET',
+              headers: {
+                'X-Internal-Call': 'true',
+                'X-Internal-Key': process.env.INTERNAL_API_KEY || process.env.NEXTAUTH_SECRET || '',
+                'X-User-Id': player.id,
+              },
+            });
+            if (stateRes.ok) {
+              const j = await stateRes.json();
+              const draftState = j?.draftState;
+              if (draftState) {
+                try { socket.server.to(`draft:${sessionId}`).emit('draftUpdate', draftState); } catch {}
+                try { socket.emit('draftUpdate', draftState); } catch {}
+                console.warn('[Socket/TournamentDraft] Conflict 409 handled by state snapshot forwarding');
+                return;
+              }
+            }
+          } catch (snapErr) {
+            console.warn('[Socket/TournamentDraft] Conflict snapshot fetch failed:', snapErr);
+          }
         }
+        try {
+          JSON.parse(errorText);
+          socket.emit('error', { message: `HTTP ${response.status}: ${errorText}` });
+        } catch {
+          socket.emit('error', { message: `HTTP ${response.status}: ${errorText.substring(0, 200)}` });
+        }
+        throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
       const result = await response.json();
-      console.log(
-        `[Socket/TournamentDraft] session=${sessionId} user=${player.id} cardId=${cardId} -> pick successful`
+      console.log(`
+        [Socket/TournamentDraft] session=${sessionId} user=${player.id} cardId=${cardId} -> pick successful`
       );
 
-      // Best-effort fast-path: forward the returned draftState directly to the session room
-      // This complements the Redis pub/sub path and reduces perceived latency / missing updates.
+      // Best-effort fast-path: forward returned draftState
       try {
         const draftState = result && result.draftState ? result.draftState : null;
         if (draftState) {
-          // Emit to everyone in the draft room
           try { socket.server.to(`draft:${sessionId}`).emit('draftUpdate', draftState); } catch {}
-          // Also emit to the calling socket to avoid exclusion by .to()
           try { socket.emit('draftUpdate', draftState); } catch {}
         }
       } catch {}
+
     } catch (e) {
       const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
       const stack = e instanceof Error ? e.stack : '';
