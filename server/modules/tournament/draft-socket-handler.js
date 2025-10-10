@@ -40,6 +40,7 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
           'Content-Type': 'application/json',
           // Pass through authentication - this is an internal server-to-server call
           'X-Internal-Call': 'true',
+          'X-Internal-Key': process.env.INTERNAL_API_KEY || process.env.NEXTAUTH_SECRET || '',
           'X-User-Id': player.id,
         },
         body: JSON.stringify({ cardId }),

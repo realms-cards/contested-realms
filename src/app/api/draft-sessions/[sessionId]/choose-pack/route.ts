@@ -8,9 +8,27 @@ export const dynamic = 'force-dynamic';
 // Player chooses which pre-generated pack to open for the current round
 export async function POST(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+
+  // Internal S2S bypass
+  const flag = (req.headers.get('x-internal-call') || '').toLowerCase();
+  const key = req.headers.get('x-internal-key') || '';
+  const expectedKey = process.env.INTERNAL_API_KEY || '';
+  const isOn = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+  const isInternal = isOn && !!expectedKey && key === expectedKey;
+
+  let userId: string;
+  if (isInternal) {
+    const uid = req.headers.get('x-user-id') || '';
+    if (!uid) {
+      return new Response(JSON.stringify({ error: 'Missing X-User-Id for internal request' }), { status: 400 });
+    }
+    userId = uid;
+  } else {
+    const session = await getServerAuthSession();
+    if (!session?.user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+    userId = session.user.id;
   }
 
   try {
@@ -19,8 +37,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ses
     const setChoice = typeof body?.setChoice === 'string' ? body.setChoice : undefined;
 
     const engine = new TournamentDraftEngine(sessionId);
-    const updated = await engine.choosePack(session.user.id, { packIndex, setChoice });
-    console.log(`[API/choose-pack] session=${sessionId} user=${session.user.id} packIndex=${String(packIndex)} set=${String(setChoice)} phase=${updated.phase}`);
+    const updated = await engine.choosePack(userId, { packIndex, setChoice });
+    console.log(`[API/choose-pack] session=${sessionId} user=${userId} packIndex=${String(packIndex)} set=${String(setChoice)} phase=${updated.phase}`);
 
     await engine.broadcastStateUpdate();
 

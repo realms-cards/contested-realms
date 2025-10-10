@@ -33,6 +33,28 @@ export async function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
 
+  // Internal API bypass: allow trusted server-to-server calls to API routes
+  // Requires headers:
+  //  - x-internal-call: true
+  //  - x-internal-key: matches process.env.INTERNAL_API_KEY
+  if (pathname.startsWith('/api')) {
+    const flag = (req.headers.get('x-internal-call') || '').toLowerCase();
+    const key = req.headers.get('x-internal-key') || '';
+    const expectedKeys = [
+      process.env.INTERNAL_API_KEY || '',
+      process.env.NEXTAUTH_SECRET || '',
+    ].filter(Boolean);
+    const isOn = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+    const allowed = isOn && (
+      // Allow without key in non-production for local/dev
+      process.env.NODE_ENV !== 'production' ||
+      (expectedKeys.length > 0 && expectedKeys.includes(key))
+    );
+    if (allowed) {
+      return setLockdown(NextResponse.next(), 'internal');
+    }
+  }
+
   // Allow Next static assets and image optimizer without auth challenge for better DX
   if (
     pathname.startsWith('/_next/static') ||
