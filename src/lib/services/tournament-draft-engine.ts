@@ -353,7 +353,11 @@ export class TournamentDraftEngine {
    */
   async makePick(playerId: string, cardId: string): Promise<DraftState> {
     // Process pick atomically to prevent double-picks and premature passing
-    const resultState = await prisma.$transaction(async (tx) => {
+    const maxAttempts = 5;
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const resultState = await prisma.$transaction(async (tx) => {
       // Acquire a row lock for this DraftSession to serialize concurrent picks and prevent last-write-wins
       await tx.$queryRaw`SELECT id FROM "DraftSession" WHERE id = ${this.sessionId} FOR UPDATE`;
       // Load latest session + state inside the transaction
@@ -574,16 +578,31 @@ export class TournamentDraftEngine {
         },
       });
 
-      return nextState;
-    }, { isolationLevel: PrismaClientNS.TransactionIsolationLevel.Serializable });
+          return nextState;
+        }, { isolationLevel: PrismaClientNS.TransactionIsolationLevel.ReadCommitted });
 
-    this.draftState = resultState;
-    const latestGenerated = (this.draftState as DraftStateExtended).allGeneratedPacks;
-    if (Array.isArray(latestGenerated)) {
-      this.allGeneratedPacks = latestGenerated;
+        this.draftState = resultState;
+        const latestGenerated = (this.draftState as DraftStateExtended).allGeneratedPacks;
+        if (Array.isArray(latestGenerated)) {
+          this.allGeneratedPacks = latestGenerated;
+        }
+        const safeState = await this.sanitizeStateForClients(resultState);
+        return safeState ?? resultState;
+      } catch (e) {
+        lastErr = e;
+        const msg = (e as Error)?.message || '';
+        const transient = /could not serialize access due to concurrent update|deadlock detected|canceling statement due to statement timeout/i.test(msg);
+        if (transient && attempt < maxAttempts) {
+          // Small backoff with jitter
+          const delay = 20 * attempt + Math.floor(Math.random() * 30);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        throw e;
+      }
     }
-    const safeState = await this.sanitizeStateForClients(resultState);
-    return safeState ?? resultState;
+    // If we exhausted attempts, rethrow the last error
+    throw lastErr instanceof Error ? lastErr : new Error('Transaction failed');
   }
 
   /**
