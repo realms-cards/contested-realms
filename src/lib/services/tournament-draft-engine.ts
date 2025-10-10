@@ -973,6 +973,12 @@ export class TournamentDraftEngine {
   private async sanitizeStateForClients(state: DraftState | null): Promise<DraftState | null> {
     if (!state) return state;
     try {
+      // Do not mask packs during active draft phases; clients need currentPacks to proceed.
+      // Masking here caused packs to disappear when any participant wasn't marked 'active',
+      // which stalled passing in production when some players reconnected late.
+      if (state.phase === 'picking' || state.phase === 'pack_selection' || state.phase === 'passing') {
+        return state;
+      }
       const participants = await prisma.draftParticipant.findMany({
         where: { draftSessionId: this.sessionId },
         select: { status: true },

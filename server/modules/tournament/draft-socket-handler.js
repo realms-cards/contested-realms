@@ -63,7 +63,17 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
         `[Socket/TournamentDraft] session=${sessionId} user=${player.id} cardId=${cardId} -> pick successful`
       );
 
-      // Broadcast is handled by the API route via TournamentDraftEngine.broadcastStateUpdate()
+      // Best-effort fast-path: forward the returned draftState directly to the session room
+      // This complements the Redis pub/sub path and reduces perceived latency / missing updates.
+      try {
+        const draftState = result && result.draftState ? result.draftState : null;
+        if (draftState) {
+          // Emit to everyone in the draft room
+          try { socket.server.to(`draft:${sessionId}`).emit('draftUpdate', draftState); } catch {}
+          // Also emit to the calling socket to avoid exclusion by .to()
+          try { socket.emit('draftUpdate', draftState); } catch {}
+        }
+      } catch {}
     } catch (e) {
       const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
       const stack = e instanceof Error ? e.stack : '';
