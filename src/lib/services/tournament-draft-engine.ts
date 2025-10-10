@@ -906,7 +906,8 @@ export class TournamentDraftEngine {
     const participant = this.session.participants.find(p => p.playerId === playerId);
     if (!participant) throw new Error('Player not found in draft session');
 
-    const seatIndex = participant.seatNumber;
+    // Convert 1-based seatNumber to 0-based seat index for arrays
+    const seatIndex = Math.max(0, (participant.seatNumber || 1) - 1);
     const { packIndex, setChoice } = opts;
 
     // Validate phase
@@ -915,37 +916,69 @@ export class TournamentDraftEngine {
       return this.draftState as DraftState;
     }
 
-    // Validate pack index if provided
-    if (typeof packIndex === 'number') {
-      if (!this.allGeneratedPacks || !this.allGeneratedPacks[seatIndex] || !this.allGeneratedPacks[seatIndex][packIndex]) {
-        console.warn(`[choosePack] Invalid packIndex ${packIndex} for seat ${seatIndex}`);
-        return this.draftState as DraftState;
+    // Normalize: determine round index and chosen pack index for this player
+    const roundIndex = Math.max(0, Number(this.draftState.packIndex) || 0);
+    const chosenIndex = typeof packIndex === 'number' ? Math.max(0, packIndex) : roundIndex;
+    if (!this.allGeneratedPacks || !this.allGeneratedPacks[seatIndex] || !this.allGeneratedPacks[seatIndex][chosenIndex]) {
+      console.warn(`[choosePack] Invalid packIndex ${packIndex} for seat ${seatIndex}`);
+      return this.draftState as DraftState;
+    }
+    // Reorder this player's packs so their chosen pack sits at this round's index
+    try {
+      if (chosenIndex !== roundIndex) {
+        const seatPacks = this.allGeneratedPacks[seatIndex];
+        const tmp = seatPacks[roundIndex];
+        seatPacks[roundIndex] = seatPacks[chosenIndex];
+        seatPacks[chosenIndex] = tmp;
       }
+    } catch {}
 
-      // Update the current pack for this player
-      const chosenPack = this.allGeneratedPacks[seatIndex][packIndex];
-      if (this.draftState.currentPacks && Array.isArray(this.draftState.currentPacks[seatIndex])) {
-        this.draftState.currentPacks[seatIndex] = chosenPack;
-      }
+    // Update packChoice for this seat (use provided setChoice if any, otherwise infer from selected pack)
+    if (Array.isArray(this.draftState.packChoice)) {
+      const inferred = this.allGeneratedPacks[seatIndex][roundIndex]?.[0]?.setName || null;
+      this.draftState.packChoice[seatIndex] = setChoice || inferred;
     }
 
-    // Update pack choice for this player
-    if (setChoice && Array.isArray(this.draftState.packChoice)) {
-      this.draftState.packChoice[seatIndex] = setChoice;
-    }
-
-    // Check if all players have chosen their packs
-    const allChosen = this.session.participants.every((p, idx) => {
-      return this.draftState?.packChoice && this.draftState.packChoice[idx] !== null;
+    // Auto-finalize: distribute round packs to everyone and enter picking immediately
+    const playerCount = this.session.participants.length;
+    const nextCurrentPacks: DraftCard[][] = Array.from({ length: playerCount }, (_, idx) => {
+      const source = this.allGeneratedPacks?.[idx]?.[roundIndex] ?? [];
+      return Array.isArray(source) ? source.map((card) => ({ ...card })) : [];
     });
+    const ss = this.session;
+    const nextWaiting = nextCurrentPacks
+      .map((pack, idx) => {
+        if (Array.isArray(pack) && pack.length > 0) {
+          const pid = ss && Array.isArray(ss.participants)
+            ? ss.participants[idx]?.playerId
+            : null;
+          return typeof pid === 'string' ? pid : null;
+        }
+        return null;
+      })
+      .filter((id): id is string => Boolean(id));
+    const nextPackChoice = Array.isArray(this.draftState.packChoice)
+      ? this.draftState.packChoice.map((v, idx) => {
+          if (v) return v;
+          const src = this.allGeneratedPacks?.[idx]?.[roundIndex] ?? [];
+          return Array.isArray(src) && src.length > 0 ? src[0]?.setName || null : null;
+        })
+      : this.session.participants.map((_, idx) => {
+          const src = this.allGeneratedPacks?.[idx]?.[roundIndex] ?? [];
+          return Array.isArray(src) && src.length > 0 ? src[0]?.setName || null : null;
+        });
 
-    // Transition to picking phase if everyone has chosen
-    if (allChosen) {
-      this.draftState.phase = 'picking';
-      console.log(`[choosePack] All players chose packs, transitioning to picking phase`);
-    }
+    this.draftState = {
+      ...(this.draftState as DraftState),
+      phase: 'picking',
+      pickNumber: 1,
+      currentPacks: nextCurrentPacks,
+      waitingFor: nextWaiting,
+      packChoice: nextPackChoice as unknown as (string | null)[],
+    } as DraftStateExtended;
+    (this.draftState as DraftStateExtended).allGeneratedPacks = this.allGeneratedPacks ?? undefined;
 
-    // Save updated state
+    // Persist updated state
     await prisma.draftSession.update({
       where: { id: this.sessionId },
       data: {
@@ -953,7 +986,7 @@ export class TournamentDraftEngine {
       },
     });
 
-    console.log(`[choosePack] Player ${playerId} (seat ${seatIndex}) chose pack ${String(packIndex)} with set ${String(setChoice)}`);
+    console.log(`[choosePack] Player ${playerId} (seat ${seatIndex}) chose pack ${String(packIndex)}; entering picking`);
 
     return this.draftState as DraftState;
   }

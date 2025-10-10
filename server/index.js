@@ -1199,6 +1199,19 @@ try {
   try { console.warn(`[store] Redis state init failed:`, e?.message || e); } catch {}
 }
 
+// Wire tournament engine dependencies (Prisma, Socket.IO, Redis)
+(async () => {
+  try {
+    const mod = await import('./modules/tournament/engine.js');
+    if (mod && typeof mod.setDeps === 'function') {
+      mod.setDeps({ prismaClient: prisma, ioServer: io, storeRedisClient: storeRedis });
+      try { console.log('[tourney] engine dependencies injected'); } catch {}
+    }
+  } catch (e) {
+    try { console.warn('[tourney] engine init failed:', e?.message || e); } catch {}
+  }
+})();
+
 // Match control pub/sub channel
 const MATCH_CONTROL_CHANNEL = 'match:control';
 const DRAFT_STATE_CHANNEL = 'draft:session:update';
@@ -4443,6 +4456,16 @@ io.on("connection", async (socket) => {
         io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
         // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
         try { setTimeout(() => { try { io.to(socket.id).emit('draft:session:presence', { sessionId, players: list }); } catch {} }, 25); } catch {}
+        // Send current draft state snapshot to the joining socket (tournament draft engine)
+        try {
+          const mod = await import('./modules/tournament/engine.js');
+          if (mod && typeof mod.getState === 'function') {
+            const s = await mod.getState(sessionId);
+            if (s) {
+              try { io.to(socket.id).emit('draftUpdate', s); } catch {}
+            }
+          }
+        } catch {}
       } catch {}
     } catch (e) {
       try { socket.emit('draft:error', { errorCode: 'join_failed', errorMessage: String(e?.message || e) }); } catch {}
