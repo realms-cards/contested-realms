@@ -793,10 +793,82 @@ function AuthenticatedDeckEditor() {
             const res = await fetch(`/api/draft-sessions/${sessionIdParam}/state`, { cache: 'no-store' });
             if (res.ok) {
               const payload = await res.json();
-              const myPicks = Array.isArray(payload?.myPicks) ? (payload.myPicks as unknown[]) : [];
+              const myPicks = Array.isArray(payload?.myPicks) ? (payload.myPicks as Array<{ slug?: string; cardName?: string; name?: string; setName?: string; type?: string | null; rarity?: string | null }>) : [];
               if (myPicks.length > 0) {
                 const json = JSON.stringify(myPicks);
                 try { localStorage.setItem(`draftedCards_${draftId}`, json); } catch {}
+
+                // Pre-resolve to SearchResult[] by grouping slugs per set and using meta-by-variant
+                try {
+                  const bySet = new Map<string | null, Set<string>>();
+                  for (const c of myPicks) {
+                    const slug = typeof c.slug === 'string' ? c.slug : '';
+                    if (!slug) continue;
+                    const setName = (typeof c.setName === 'string' && c.setName) ? c.setName : null;
+                    let group = bySet.get(setName);
+                    if (!group) {
+                      group = new Set<string>();
+                      bySet.set(setName, group);
+                    }
+                    group.add(slug);
+                  }
+                  const requests: Promise<Array<{ slug: string; cardId: number }>>[] = [];
+                  for (const [setName, slugs] of bySet.entries()) {
+                    if (!slugs || slugs.size === 0) continue;
+                    const params = new URLSearchParams();
+                    params.set('slugs', Array.from(slugs).join(','));
+                    if (setName) params.set('set', setName);
+                    requests.push(
+                      fetch(`/api/cards/meta-by-variant?${params.toString()}`)
+                        .then((r) => r.json())
+                        .catch(() => [])
+                    );
+                  }
+                  const chunks = await Promise.all(requests);
+                  const rows = chunks.flat();
+                  if (Array.isArray(rows) && rows.length) {
+                    const idBySlug = new Map<string, number>();
+                    for (const r of rows) {
+                      const cid = Number((r as { cardId: number }).cardId) || 0;
+                      const slug = String((r as { slug: string }).slug || '');
+                      if (slug) idBySlug.set(slug, cid);
+                    }
+                    const resolved = myPicks
+                      .map((c) => {
+                        const slug = typeof c.slug === 'string' ? c.slug : '';
+                        const cardId = slug ? (idBySlug.get(slug) || 0) : 0;
+                        const name = (c.cardName || c.name) as string | undefined;
+                        const setName = (c.setName || 'Beta') as string;
+                        return cardId > 0 && slug && name
+                          ? {
+                              variantId: 0,
+                              slug,
+                              finish: 'Standard',
+                              product: 'Draft',
+                              cardId,
+                              cardName: name,
+                              set: setName,
+                              type: (c.type as string | null) || null,
+                              rarity: (c.rarity as string | null) || null,
+                            }
+                          : null;
+                      })
+                      .filter(Boolean);
+                    try {
+                      localStorage.setItem(
+                        `draftedCardsResolved_${storageSuffix}`,
+                        JSON.stringify(resolved)
+                      );
+                      if (playerIdParam) {
+                        localStorage.setItem(
+                          `draftedCardsResolved_${draftId}`,
+                          JSON.stringify(resolved)
+                        );
+                      }
+                    } catch {}
+                  }
+                } catch {}
+
                 try { window.location.reload(); } catch {}
               } else {
                 setError("No drafted cards found for this draft.");
