@@ -10,7 +10,7 @@ import { useSession } from "next-auth/react";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { MOUSE } from "three";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
-import CardPreview from "@/components/game/CardPreview";
+import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import Board from "@/lib/game/Board";
@@ -797,6 +797,10 @@ export default function Draft3DPage() {
               hiddenIndex={staged?.idx ?? null}
               onDragChange={setOrbitLocked}
               getTopRenderOrder={getTopRenderOrder}
+              transitionEnabled
+              transitionKey={`${packIndex}:${pickNumber}`}
+              passDirection={dir === 1 ? "right" : "left"}
+              transitionDurationMs={480}
               onHoverInfo={(info) => {
                 if (info) {
                   showCardPreview(info);
@@ -1450,10 +1454,10 @@ export default function Draft3DPage() {
           )}
         </div>
 
-        {/* Hover Preview Overlay (hidden while dragging) */}
-        {hoverPreview && !orbitLocked && (
-          <CardPreview card={hoverPreview} anchor="top-left" />
-        )}
+        {/* Card preview (hover) */}
+      {hoverPreview && !orbitLocked && (
+        <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
+      )}
 
         {/* Pack selection overlay at start of each round */}
         {needsPackChoice && (
