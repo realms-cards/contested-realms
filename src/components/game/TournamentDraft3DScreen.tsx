@@ -1736,17 +1736,15 @@ export default function TournamentDraft3DScreen({
               {draftState.phase === "picking" &&
                 draftState.waitingFor.length > 0 && (
                   <div className="mt-0.5 text-[11px] text-white/50 pointer-events-none">
-                    Waiting for{" "}
-                    {
-                      draftState.waitingFor.filter((id) => id !== myPlayerId)
-                        .length
-                    }{" "}
-                    player
-                    {draftState.waitingFor.filter((id) => id !== myPlayerId)
-                      .length === 1
-                      ? ""
-                      : "s"}{" "}
-                    to pick & pass…
+                    {amPicker ? (
+                      <>Your turn to pick & pass…</>
+                    ) : (
+                      <>
+                        Waiting for {draftState.waitingFor.length} player
+                        {draftState.waitingFor.length === 1 ? "" : "s"} to
+                        pick & pass…
+                      </>
+                    )}
                   </div>
                 )}
             </div>
