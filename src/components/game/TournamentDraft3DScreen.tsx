@@ -10,7 +10,7 @@ import { MOUSE } from "three";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
-import CardPreview from "@/components/game/CardPreview";
+import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
@@ -1207,89 +1207,11 @@ export default function TournamentDraft3DScreen({
     return counts;
   }, [pick3D, metaByCardId]);
 
-  // Create sorted stack positions (supports mana-cost or threshold element grouping)
+  // Create sorted stack positions using the editor-3d utility and frozen layout meta
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    if (sortMode === "mana") {
-      return computeStackPositions(pick3D, layoutMetaByCardId, true, true);
-    }
-    // Element grouping: columns per element, creatures above spells within each column, sort by cost asc
-    const positions = new Map<
-      number,
-      { x: number; z: number; stackIndex: number; isVisible: boolean }
-    >();
-
-    // Group picks by dominant element threshold (fallback: none)
-    const groups: Record<string, Pick3D[]> = {
-      air: [],
-      water: [],
-      earth: [],
-      fire: [],
-      none: [],
-    };
-    for (const p of pick3D) {
-      const m = layoutMetaByCardId[p.card.cardId];
-      const th = (m?.thresholds || {}) as Record<string, number>;
-      const order = ["air", "water", "earth", "fire"] as const;
-      let best: (typeof order)[number] | null = null;
-      let bestN = 0;
-      for (const k of order) {
-        const v = Number(th[k] || 0);
-        if (v > bestN) {
-          best = k;
-          bestN = v;
-        }
-      }
-      groups[best || "none"].push(p);
-    }
-
-    // Lay out columns left->right in the fixed order, skipping empty
-    const elementOrder = ["air", "water", "earth", "fire", "none"] as const;
-    const colWidth = 1.1;
-    const rowStep = 0.22;
-    let colIdx = 0;
-    for (const el of elementOrder) {
-      const arr = groups[el];
-      if (!arr.length) continue;
-      // creatures on top, then spells; each sorted by cost asc
-      const byCreature = (pp: Pick3D) => {
-        const m = layoutMetaByCardId[pp.card.cardId];
-        return m && (m.attack !== null || m.defence !== null);
-      };
-      const creatures = arr
-        .filter(byCreature)
-        .sort(
-          (a, b) =>
-            (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) -
-            (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
-        );
-      const spells = arr
-        .filter((pp) => !byCreature(pp))
-        .sort(
-          (a, b) =>
-            (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) -
-            (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
-        );
-      const column = [...creatures, ...spells];
-      const baseX = -2.2 + colIdx * colWidth;
-      const baseZ = 1.2;
-      let row = 0;
-      for (const pp of column) {
-        const x = baseX;
-        const z = baseZ + row * rowStep;
-        positions.set(pp.id, {
-          x,
-          z,
-          stackIndex: row,
-          isVisible: true,
-        });
-        row++;
-      }
-      colIdx++;
-    }
-
-    return positions;
-  }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
+    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled);
+  }, [pick3D, isSortingEnabled, layoutMetaByCardId]);
 
   // Calculate stack sizes for hitbox optimization
   const stackSizes = useMemo(() => {
@@ -1460,6 +1382,10 @@ export default function TournamentDraft3DScreen({
                 hiddenIndex={staged?.idx ?? null}
                 onDragChange={setOrbitLocked}
                 getTopRenderOrder={getTopRenderOrder}
+                transitionEnabled
+                transitionKey={`${draftState.packIndex}:${draftState.pickNumber}`}
+                passDirection={draftState.packDirection === "right" ? "right" : "left"}
+                transitionDurationMs={480}
                 onHoverInfo={(info) => {
                   if (info) {
                     showCardPreview(info);
@@ -1880,7 +1806,7 @@ export default function TournamentDraft3DScreen({
         </div>
 
         {hoverPreview && !orbitLocked && (
-          <CardPreview card={hoverPreview} anchor="top-left" />
+          <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
         )}
 
         {/* Loading overlay for waiting phase */}

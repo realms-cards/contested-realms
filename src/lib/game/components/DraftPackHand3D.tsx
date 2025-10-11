@@ -45,6 +45,11 @@ export interface DraftPackHand3DProps {
   onSelectIndex?: (index: number | null) => void;
   // Disable raycast to prevent interference with card hover
   noRaycast?: boolean;
+  // Animated pass transition support (pack replacement fly-out/in)
+  transitionKey?: string;
+  passDirection?: "left" | "right"; // direction the outgoing pack flies toward
+  transitionEnabled?: boolean;
+  transitionDurationMs?: number;
 }
 
 // A simple, anchored-to-camera row of cards for draft packs (no fan, fully visible)
@@ -63,10 +68,28 @@ export default function DraftPackHand3D({
   selectedIndex = null,
   onSelectIndex,
   noRaycast = false,
+  transitionKey,
+  passDirection = "left",
+  transitionEnabled = false,
+  transitionDurationMs = 450,
 }: DraftPackHand3DProps) {
   const rootRef = useRef<Group | null>(null);
   const worldLayerRef = useRef<Group | null>(null);
   const { camera, size } = useThree();
+  const inGroupRef = useRef<Group | null>(null);
+  const outGroupRef = useRef<Group | null>(null);
+  const prevCardsRef = useRef<BoosterCard[] | null>(cards);
+  const lastKeyRef = useRef<string | null>(transitionKey ?? null);
+  const [outCards, setOutCards] = useState<BoosterCard[] | null>(null);
+  const transitionRef = useRef<{
+    active: boolean;
+    t: number;
+    elapsed: number;
+    duration: number;
+    dir: "left" | "right";
+  }>({ active: false, t: 1, elapsed: 0, duration: transitionDurationMs, dir: passDirection });
+  const [shieldActive, setShieldActive] = useState(false);
+  const shieldTimerRef = useRef<number | null>(null);
 
   // (reserved) minimal hover state if needed later
   const focusIndexRef = useRef<number | null>(null);
@@ -111,6 +134,65 @@ export default function DraftPackHand3D({
   React.useEffect(() => {
     setFocusIndex(null);
   }, [cards, hiddenIndex]);
+
+  // Start a pass transition when transitionKey changes (and both prev & next have content)
+  React.useEffect(() => {
+    if (!transitionEnabled) {
+      prevCardsRef.current = cards;
+      lastKeyRef.current = transitionKey ?? null;
+      setOutCards(null);
+      transitionRef.current.active = false;
+      if (shieldTimerRef.current) {
+        window.clearTimeout(shieldTimerRef.current);
+        shieldTimerRef.current = null;
+      }
+      setShieldActive(false);
+      return;
+    }
+    const key = transitionKey ?? null;
+    if (key && key !== lastKeyRef.current) {
+      const prev = prevCardsRef.current || [];
+      const next = cards || [];
+      // Heuristic: only animate when the pack actually rotates, not on single-card pick
+      // Compute symmetric difference size via slug comparison
+      const prevSet = new Set(prev.map((c) => c?.slug).filter(Boolean));
+      const nextSet = new Set(next.map((c) => c?.slug).filter(Boolean));
+      let shared = 0;
+      for (const s of prevSet) if (nextSet.has(s)) shared += 1;
+      const diffCount = (prevSet.size - shared) + (nextSet.size - shared);
+      const looksLikePass = prev.length > 0 && next.length > 0 && diffCount > 2; // >2 changes suggests a new pack
+      const outOnly = prev.length > 0 && next.length === 0; // momentary empty next pack
+      if (looksLikePass || outOnly) {
+        setOutCards(prev);
+        transitionRef.current = {
+          active: true,
+          t: 0,
+          elapsed: 0,
+          duration: Math.max(200, transitionDurationMs),
+          dir: passDirection,
+        };
+        // Keep an invisible shield after pass to avoid board capturing during brief gaps
+        setShieldActive(true);
+        if (shieldTimerRef.current) window.clearTimeout(shieldTimerRef.current);
+        shieldTimerRef.current = window.setTimeout(() => {
+          setShieldActive(false);
+          shieldTimerRef.current = null;
+        }, Math.max(transitionDurationMs + 120, 650));
+      } else {
+        setOutCards(null);
+        transitionRef.current.active = false;
+        if (shieldTimerRef.current) {
+          window.clearTimeout(shieldTimerRef.current);
+          shieldTimerRef.current = null;
+        }
+        setShieldActive(false);
+      }
+      lastKeyRef.current = key;
+      prevCardsRef.current = cards;
+    } else {
+      prevCardsRef.current = cards;
+    }
+  }, [transitionKey, transitionEnabled, cards, passDirection, transitionDurationMs]);
 
   // Keyboard and wheel browsing (arrow keys or wheel in bottom zone)
   React.useEffect(() => {
@@ -213,6 +295,70 @@ export default function DraftPackHand3D({
     });
   }, [visibleIndices, camera, size.width, size.height]);
 
+  // Compute layout for outgoing (previous) pack if present
+  const outLayout = useMemo(() => {
+    const list = outCards || [];
+    const n = list.length;
+    if (n === 0) return [] as { index: number; x: number; z: number; scale: number }[];
+    const cam = camera as PerspectiveCamera;
+    const fov = (cam.fov * Math.PI) / 180;
+    const worldH = 2 * Math.tan(fov / 2) * HAND_DIST;
+    const aspect = size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+    const worldW = worldH * aspect * 0.85;
+    const gapFrac = 0.08;
+    const denom = CARD_SHORT * (n + (n - 1) * gapFrac);
+    const scale = Math.max(ROW_MIN_SCALE, Math.min(ROW_MAX_SCALE, denom > 0 ? worldW / denom : ROW_MIN_SCALE));
+    const cardW = CARD_SHORT * scale;
+    const realGap = CARD_SHORT * gapFrac * scale;
+    const total = n * cardW + (n - 1) * realGap;
+    const startX = -total / 2 + cardW / 2;
+    return new Array(n).fill(0).map((_, i) => ({ index: i, x: startX + i * (cardW + realGap), z: i * 0.001, scale }));
+  }, [outCards, camera, size.width, size.height]);
+
+  // Row widths for transition offset
+  const rowWidth = useMemo(() => {
+    if (!layout.length) return 0.0;
+    const xs = layout.map((e) => e.x);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const scale = layout[0]?.scale ?? ROW_MIN_SCALE;
+    const cardW = CARD_SHORT * scale;
+    return (maxX - minX) + cardW + 0.4;
+  }, [layout]);
+  const outRowWidth = useMemo(() => {
+    if (!outLayout.length) return 0.0;
+    const xs = outLayout.map((e) => e.x);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const scale = outLayout[0]?.scale ?? ROW_MIN_SCALE;
+    const cardW = CARD_SHORT * scale;
+    return (maxX - minX) + cardW + 0.4;
+  }, [outLayout]);
+
+  // Drive pass animation
+  useFrame((_, delta) => {
+    const tr = transitionRef.current;
+    if (!tr.active) return;
+    tr.elapsed += delta * 1000;
+    tr.t = Math.min(1, tr.elapsed / Math.max(1, tr.duration));
+    const ease = (p: number) => 1 - Math.pow(1 - p, 3);
+    const e = ease(tr.t);
+    const sign = tr.dir === "right" ? 1 : -1;
+    const shift = Math.max(rowWidth, outRowWidth) + 0.6;
+    const inX = -sign * (1 - e) * shift;
+    const outX = sign * e * shift;
+    if (inGroupRef.current) inGroupRef.current.position.x = inX;
+    if (outGroupRef.current) outGroupRef.current.position.x = outX;
+    if (tr.t >= 1) {
+      tr.active = false;
+      setOutCards(null);
+      if (inGroupRef.current) inGroupRef.current.position.x = 0;
+      if (outGroupRef.current) outGroupRef.current.position.x = 0;
+    }
+  });
+
+  const isTransitioning = transitionEnabled && transitionRef.current.active;
+
   return (
     <group>
       {/* World-space drag layer (identity transform) */}
@@ -225,18 +371,23 @@ export default function DraftPackHand3D({
             position={[0, -0.004, 0]}
             rotation-x={-Math.PI / 2}
             raycast={noRaycast ? () => [] : undefined}
-            onPointerMove={() => {
+            onPointerMove={(e) => {
+              e.stopPropagation();
               if (disabled) return;
               // Don't immediately clear - let hover timeout handle it
             }}
-            onPointerOver={() => {
+            onPointerOver={(e) => {
+              e.stopPropagation();
               if (disabled) return;
               // Don't immediately clear - let cards show their previews
             }}
-            onPointerOut={() => {
+            onPointerOut={(e) => {
+              e.stopPropagation();
               hoverAnyRef.current = false;
               // Don't immediately clear - let hover timeout handle it
             }}
+            onPointerDown={(e) => { e.stopPropagation(); }}
+            onPointerUp={(e) => { e.stopPropagation(); }}
           >
             {(() => {
               const xs = layout.map((e) => e.x);
@@ -245,66 +396,143 @@ export default function DraftPackHand3D({
               const scale = layout[0] ? layout[0].scale : ROW_MIN_SCALE;
               const cardW = CARD_SHORT * scale;
               const rowW = (maxX - minX) + cardW + 0.4; // add margin
+              // During pass animation, widen the intercept plane to cover the whole sweep path
+              const sweep = Math.max(rowWidth, outRowWidth) + 0.8;
+              const planeW = isTransitioning ? Math.max(rowW, sweep) : rowW;
               const rowD = CARD_LONG * scale * 1.6; // generous depth
               return (
                 <>
-                  <planeGeometry args={[rowW, rowD]} />
+                  <planeGeometry args={[planeW, rowD]} />
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
                 </>
               );
             })()}
           </mesh>
         )}
-        {layout.map((entry) => {
-          const { originalIndex, x, z, scale } = entry;
-          const c = cards[originalIndex] ?? cards[0];
-          const isSite = (c.type || "").toLowerCase().includes("site");
-          const key = c.variantId != null ? `v-${c.variantId}-${originalIndex}` : `c-${c.cardId}-${originalIndex}`;
-          return (
-            <PackCard3D
-              key={key}
-              index={originalIndex}
-              slug={c.slug}
-              name={c.cardName}
-              type={c.type}
-              isSite={isSite}
-              x={x}
-              z={z}
-              scale={scale}
-              disabled={disabled && !allowHoverWhenDisabled}
-              opacity={opacity}
-              onDragChange={disabled ? undefined : ((drag) => onDragChange?.(drag))}
-              onDragMove={disabled ? undefined : onDragMove}
-              onRelease={disabled ? undefined : onRelease}
-              getTopRenderOrder={getTopRenderOrder}
-              onHoverInfo={(info) => {
-                onHoverInfo?.(info);
-                if (info) {
-                  if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
-                  hoverClearTimerRef.current = null;
-                }
-              }}
-              onHoverIndexChange={(i) => {
-                hoverIndexRef.current = i;
-                hoverAnyRef.current = i != null;
-                if (i != null) {
-                  if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
-                  hoverClearTimerRef.current = null;
-                } else {
-                  // Don't clear preview immediately - let the parent handle it with its longer delay
-                  // This prevents flickering when moving between cards
-                }
-              }}
-              orbitLocked={orbitLocked}
-              rootRef={rootRef}
-              worldLayerRef={worldLayerRef}
-              selected={selectedIndex === originalIndex}
-              focused={focusIndex === originalIndex}
-              onSelectIndex={onSelectIndex}
-              noRaycast={noRaycast}
-            />
-          );
-        })}
+        {layout.length === 0 && (isTransitioning || shieldActive || (outCards && outCards.length > 0)) && (
+          <mesh
+            position={[0, -0.004, 0]}
+            rotation-x={-Math.PI / 2}
+            raycast={noRaycast ? () => [] : undefined}
+            onPointerMove={(e) => { e.stopPropagation(); }}
+            onPointerOver={(e) => { e.stopPropagation(); }}
+            onPointerOut={(e) => { e.stopPropagation(); }}
+            onPointerDown={(e) => { e.stopPropagation(); }}
+            onPointerUp={(e) => { e.stopPropagation(); }}
+          >
+            {(() => {
+              // Estimate available world width at HAND_DIST (85% of viewport width)
+              const cam = camera as PerspectiveCamera;
+              const fov = (cam.fov * Math.PI) / 180;
+              const worldH = 2 * Math.tan(fov / 2) * HAND_DIST;
+              const aspect = size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+              const worldW = worldH * aspect * 0.85;
+              const fallbackScale = ROW_MIN_SCALE;
+              const rowD = CARD_LONG * fallbackScale * 1.6;
+              const sweep = Math.max(rowWidth, outRowWidth) + 0.8;
+              const planeW = Math.max(worldW, sweep);
+              return (
+                <>
+                  <planeGeometry args={[planeW, rowD]} />
+                  <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
+                </>
+              );
+            })()}
+          </mesh>
+        )}
+        {/* Incoming/current pack (flies in from opposite side) */}
+        <group ref={inGroupRef}>
+          {layout.map((entry) => {
+            const { originalIndex, x, z, scale } = entry;
+            const c = cards[originalIndex] ?? cards[0];
+            const isSite = (c.type || "").toLowerCase().includes("site");
+            const key = c.variantId != null ? `v-${c.variantId}-${originalIndex}` : `c-${c.cardId}-${originalIndex}`;
+            return (
+              <PackCard3D
+                key={key}
+                index={originalIndex}
+                slug={c.slug}
+                name={c.cardName}
+                type={c.type}
+                isSite={isSite}
+                x={x}
+                z={z}
+                scale={scale}
+                disabled={(disabled && !allowHoverWhenDisabled)}
+                opacity={opacity}
+                onDragChange={disabled || isTransitioning ? undefined : ((drag) => onDragChange?.(drag))}
+                onDragMove={disabled || isTransitioning ? undefined : onDragMove}
+                onRelease={disabled ? undefined : onRelease}
+                getTopRenderOrder={getTopRenderOrder}
+                onHoverInfo={(info) => {
+                  onHoverInfo?.(info);
+                  if (info) {
+                    if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                    hoverClearTimerRef.current = null;
+                  }
+                }}
+                onHoverIndexChange={(i) => {
+                  hoverIndexRef.current = i;
+                  hoverAnyRef.current = i != null;
+                  if (i != null) {
+                    if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                    hoverClearTimerRef.current = null;
+                  } else {
+                    // Don't clear preview immediately - let the parent handle it with its longer delay
+                  }
+                }}
+                orbitLocked={orbitLocked}
+                rootRef={rootRef}
+                worldLayerRef={worldLayerRef}
+                selected={selectedIndex === originalIndex}
+                focused={focusIndex === originalIndex}
+                onSelectIndex={onSelectIndex}
+                noRaycast={noRaycast}
+              />
+            );
+          })}
+        </group>
+
+        {/* Outgoing/previous pack (flies toward passDirection) */}
+        {outCards && outCards.length > 0 && (
+          <group ref={outGroupRef}>
+            {outLayout.map((entry) => {
+              const { index, x, z, scale } = entry;
+              const base = (outCards && outCards.length > 0 ? outCards[0] : undefined) as BoosterCard | undefined;
+              const c = outCards[index] ?? base;
+              const isSite = (c.type || "").toLowerCase().includes("site");
+              const key = `out-${c?.cardId ?? 0}-${index}`;
+              return (
+                <PackCard3D
+                  key={key}
+                  index={index}
+                  slug={c?.slug ?? ""}
+                  name={c?.cardName ?? ""}
+                  type={c?.type ?? null}
+                  isSite={isSite}
+                  x={x}
+                  z={z}
+                  scale={scale}
+                  disabled={true}
+                  opacity={opacity}
+                  onDragChange={undefined}
+                  onDragMove={undefined}
+                  onRelease={undefined}
+                  getTopRenderOrder={getTopRenderOrder}
+                  onHoverInfo={undefined}
+                  onHoverIndexChange={undefined}
+                  orbitLocked={true}
+                  rootRef={rootRef}
+                  worldLayerRef={worldLayerRef}
+                  selected={false}
+                  focused={false}
+                  onSelectIndex={undefined}
+                  noRaycast={true}
+                />
+              );
+            })}
+          </group>
+        )}
       </group>
     </group>
   );
@@ -463,9 +691,9 @@ function PackCard3D({
         rotation-z={isSite ? -Math.PI / 2 : 0}
         raycast={noRaycast ? () => [] : undefined}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
-          e.stopPropagation();
           didInteractRef.current = true;
           onHoverInfo?.(null);
           dragStart.current = {
@@ -509,6 +737,7 @@ function PackCard3D({
           }
         }}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
           if (disabled) return;
           // If not dragging or holding for drag, refresh hover preview precisely
           if (!dragging.current && !dragStart.current) {
@@ -599,9 +828,9 @@ function PackCard3D({
           }
         }}
         onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
-          e.stopPropagation();
           const wasDragging = dragging.current;
           const hit = e.ray.intersectPlane(groundPlaneRef.current, tmpWorldRef.current);
           const wx = (hit?.x ?? e.point.x);
@@ -633,7 +862,8 @@ function PackCard3D({
           resetToRow();
           targetLocalRef.current = null;
         }}
-        onPointerOver={() => {
+        onPointerOver={(e) => {
+          e.stopPropagation();
           if (disabled) return;
           hoveringRef.current = true;
           if (getTopRenderOrder) {
@@ -643,7 +873,8 @@ function PackCard3D({
           onHoverInfo?.({ slug, name, type: type ?? null });
           onHoverIndexChange?.(index);
         }}
-        onPointerOut={() => {
+        onPointerOut={(e) => {
+          e.stopPropagation();
           hoveringRef.current = false;
           onHoverIndexChange?.(null);
           // Don't immediately clear hover info - let timeout mechanism handle it
