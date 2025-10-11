@@ -960,6 +960,77 @@ export default function TournamentDetailsPage() {
         </div>
       )}
 
+      {/* Completion/Victory modal */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 z-[4000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="w-full max-w-3xl bg-slate-900/95 rounded-2xl ring-1 ring-white/15 shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="text-3xl">🏆</div>
+                <div>
+                  <div className="text-lg font-semibold">Tournament Completed</div>
+                  <div className="text-sm text-white/70">{tournament.name}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCompletionModal(false)}
+                className="px-3 py-1.5 text-sm rounded bg-white/10 hover:bg-white/20"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+              {(() => {
+                const standings = (statistics?.standings || []) as Array<{ playerId: string; playerName: string; points?: number; omw?: number }>;
+                const top = standings.slice(0, 3);
+                const meId = session?.user?.id || '';
+                const myIdx = meId ? standings.findIndex((s) => s.playerId === meId) : -1;
+                const myRank = myIdx >= 0 ? myIdx + 1 : null;
+                const total = standings.length || getCurrentPlayersCount(tournament);
+                const champion = standings[0]?.playerName || "Champion";
+                return (
+                  <>
+                    <div className="md:col-span-2">
+                      <div className="text-xl font-bold mb-2">Champion</div>
+                      <div className="text-3xl font-fantaisie text-emerald-400">{champion}</div>
+                      <div className="mt-4 text-sm text-white/80">
+                        {myRank ? (
+                          <span>Your result: <span className="font-semibold text-white">#{myRank}</span> of {total}</span>
+                        ) : (
+                          <span>Final standings are available below.</span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold mb-2">Top Standings</div>
+                      <div className="space-y-2">
+                        {top.map((s, i) => (
+                          <div key={s.playerId} className="flex items-center justify-between rounded bg-white/5 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-white/10 grid place-items-center text-sm font-bold">{i + 1}</div>
+                              <div className="truncate max-w-[12rem]">{s.playerName}</div>
+                            </div>
+                            <div className="text-xs text-white/70">{typeof s.points === 'number' ? `${s.points} pts` : ''}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="p-4 border-t border-white/10 flex items-center justify-end">
+              <button
+                onClick={() => setShowCompletionModal(false)}
+                className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-black font-semibold"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         {/* Creator Controls: Start next round banner at top */}
         {tournament.status === "active" && isCreator && !activeRound && maxRoundNumber < (tournament.settings.totalRounds || 3) && (

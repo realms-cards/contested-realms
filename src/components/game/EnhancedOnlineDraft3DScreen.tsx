@@ -10,7 +10,7 @@ import { MOUSE } from "three";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
-import CardPreview from "@/components/game/CardPreview";
+import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
@@ -1157,103 +1157,11 @@ export default function EnhancedOnlineDraft3DScreen({
     return counts;
   }, [pick3D, metaByCardId]);
 
-  // Create sorted stack positions (supports mana-cost or threshold element grouping)
+  // Create sorted stack positions using the shared editor-3d logic
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    if (sortMode === "mana") {
-      return computeStackPositions(pick3D, layoutMetaByCardId, true, true);
-    }
-    // Element grouping: columns per element, creatures above spells within each column, sort by cost asc
-    const positions = new Map<
-      number,
-      { x: number; z: number; stackIndex: number; isVisible: boolean }
-    >();
-    const cardSpacing = 0.15;
-    const zStart = -2.0;
-    let xStart = -4;
-    const xSpacing = 0.8;
-    const elementOrder = [
-      "air",
-      "water",
-      "earth",
-      "fire",
-      "colorless",
-    ] as const;
-
-    type GroupKey = (typeof elementOrder)[number];
-    const groups: Record<GroupKey, Pick3D[]> = {
-      air: [],
-      water: [],
-      earth: [],
-      fire: [],
-      colorless: [],
-    };
-
-    const primaryElementOf = (cardId: number): GroupKey => {
-      const thresholds = layoutMetaByCardId[cardId]?.thresholds || null;
-      if (!thresholds) return "colorless";
-      let best: GroupKey = "colorless";
-      let bestVal = 0;
-      for (const el of elementOrder) {
-        const v = thresholds[el] || 0;
-        if (v > bestVal) {
-          bestVal = v;
-          best = el;
-        }
-      }
-      return bestVal > 0 ? best : "colorless";
-    };
-
-    for (const p of pick3D) {
-      const el = primaryElementOf(p.card.cardId);
-      groups[el].push(p);
-    }
-
-    for (const el of elementOrder) {
-      const arr = groups[el];
-      if (!arr.length) continue;
-      // creatures on top, then spells; each sorted by cost asc
-      const byCreature = (pp: Pick3D) => {
-        const m = layoutMetaByCardId[pp.card.cardId];
-        return m && (m.attack !== null || m.defence !== null);
-      };
-      const creatures = arr
-        .filter(byCreature)
-        .sort(
-          (a, b) =>
-            (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) -
-            (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
-        );
-      const spells = arr
-        .filter((pp) => !byCreature(pp))
-        .sort(
-          (a, b) =>
-            (layoutMetaByCardId[a.card.cardId]?.cost ?? 0) -
-            (layoutMetaByCardId[b.card.cardId]?.cost ?? 0)
-        );
-
-      creatures.forEach((card, index) => {
-        positions.set(card.id, {
-          x: xStart,
-          z: zStart + index * cardSpacing,
-          stackIndex: index,
-          isVisible: true,
-        });
-      });
-      const creatureCount = creatures.length;
-      spells.forEach((card, index) => {
-        positions.set(card.id, {
-          x: xStart,
-          z: zStart + (creatureCount + index + 0.5) * cardSpacing,
-          stackIndex: creatureCount + index,
-          isVisible: true,
-        });
-      });
-      xStart += xSpacing;
-    }
-
-    return positions;
-  }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
+    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled);
+  }, [pick3D, isSortingEnabled, layoutMetaByCardId]);
 
   // Calculate stack sizes for hitbox optimization (from single-player)
   const stackSizes = useMemo(() => {
@@ -1665,6 +1573,10 @@ export default function EnhancedOnlineDraft3DScreen({
                 hiddenIndex={staged?.idx ?? null}
                 onDragChange={setOrbitLocked}
                 getTopRenderOrder={getTopRenderOrder}
+                transitionEnabled
+                transitionKey={`${draftState.packIndex}:${draftState.pickNumber}`}
+                passDirection={draftState.packDirection === "right" ? "right" : "left"}
+                transitionDurationMs={480}
                 onHoverInfo={(info) => {
                   if (info) {
                     showCardPreview(info);
@@ -2233,7 +2145,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
         {/* Enhanced Hover Preview Overlay */}
         {hoverPreview && !orbitLocked && (
-          <CardPreview card={hoverPreview} anchor="top-left" />
+          <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
         )}
 
         {/* Enhanced help overlay */}

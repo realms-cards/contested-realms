@@ -1472,7 +1472,18 @@ export default function OnlineMatchPage() {
       {inThisMatch && setupOpen && myPlayerKey && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
-            match?.matchType === "sealed" ? (
+            // For tournament matches (any mode), never show deck loaders/selectors.
+            // Decks come from the tournament submission and are auto-loaded via match.playerDecks.
+            tournamentId ? (
+              <div className="w-full max-w-xl mx-auto bg-slate-900/95 rounded-xl p-6">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-white mb-3">Preparing Tournament Deck…</h2>
+                  <div className="text-slate-300">
+                    Waiting for the server to attach your submitted deck. This may take a moment.
+                  </div>
+                </div>
+              </div>
+            ) : match?.matchType === "sealed" ? (
               hasSubmittedSealedDeck ? (
                 <OnlineSealedDeckLoader
                   match={match}
@@ -1775,8 +1786,8 @@ export default function OnlineMatchPage() {
                     );
                   })()}
 
-                {/* Invisible texture cache for smooth loading */}
-                <TextureCache />
+                {/* Smart texture cache: own hand + top N of draw piles (background) */}
+                <TextureCache mode="smart" topN={5} />
 
                 <OrbitControls
                   ref={controlsRef}

@@ -75,10 +75,10 @@ export default function CardPreview({
         0
       );
 
-      const aspectWidthOverHeight = isSite ? 4 / 3 : 3 / 4;
+      const aspectWidthOverHeight = 3 / 4;
       const widthFromHeight = cappedHeight * aspectWidthOverHeight;
 
-      const baseVwFraction = isSite ? 0.34 : 0.21;
+      const baseVwFraction = 0.21; // unify across types for consistent scale
       const heightShortness = Math.max(
         0,
         Math.min(1, (780 - innerHeight) / 360)
@@ -94,10 +94,10 @@ export default function CardPreview({
       if (preferBottomNext) {
         vwFraction *= 0.82;
       }
-      vwFraction = Math.max(vwFraction, isSite ? 0.14 : 0.12);
+      vwFraction = Math.max(vwFraction, 0.12);
       const preferredWidth = innerWidth * vwFraction;
-      const minWidth = isSite ? 260 : 200;
-      const absoluteMaxWidth = isSite ? 460 : 345;
+      const minWidth = 200; // same bounds for sites and non-sites
+      const absoluteMaxWidth = 345;
 
       let maxWidth = Number.isFinite(widthFromHeight)
         ? Math.min(widthFromHeight, absoluteMaxWidth)
@@ -108,17 +108,11 @@ export default function CardPreview({
 
       // Ensure the preview does not overflow horizontal space
       const wideViewportRatio = Math.max(0, innerWidth - 1280) / 720;
-      const widthRatioBase = preferBottomNext
-        ? isSite
-          ? 0.34
-          : 0.29
-        : isSite
-        ? 0.5
-        : 0.38;
+      const widthRatioBase = preferBottomNext ? 0.29 : 0.38; // same across types
       const widthRatioDynamic = widthRatioBase * (1 - widthShortness * 0.45);
       const widthRatio = Math.max(
         widthRatioDynamic * (1 - wideViewportRatio * 0.45),
-        isSite ? 0.22 : 0.18
+        0.18
       );
       const horizontalCap = Math.min(
         Math.max(innerWidth - 72, 220),
@@ -144,8 +138,10 @@ export default function CardPreview({
       );
       width = Math.min(maxWidth, Math.max(minWidth, width * enlargeFactor));
 
+      const finalCssWidth = width;
+
       setLayout({
-        width,
+        width: finalCssWidth,
         isShort: isShortHeight,
         preferBottom: preferBottomNext,
       });
@@ -188,15 +184,16 @@ export default function CardPreview({
     }
   })();
 
-  const base = isSite
-    ? "aspect-[4/3] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10"
-    : "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
+  const base =
+    "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
 
   // Use simple Image component instead of 3D Canvas to avoid WebGL context leaks
   // The tournament draft was creating hundreds of WebGL contexts and crashing browsers
   return (
     <div
-      className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
+      className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className} ${
+        isSite ? "left-2 rotate-90" : "object-cover"
+      }`}
     >
       <div className="relative">
         <div className={`relative ${base}`} style={{ width }}>
@@ -204,7 +201,9 @@ export default function CardPreview({
             src={`/api/images/${slug}`}
             alt={card?.name || "Card preview"}
             fill
-            className={`object-cover ${isSite ? "rotate-90" : ""}`}
+            className={`${
+              isSite ? "object-contain origin-center" : "object-cover"
+            } object-center`}
             sizes={`${Math.round(width)}px`}
             priority
             unoptimized
