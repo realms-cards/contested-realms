@@ -1207,12 +1207,14 @@ export default function OnlineMatchPage() {
     // Wait for server 'matchStarted' and/or 'statePatch' to flip status/phase.
   }
 
-  // Show match end overlay when match ends (but only if not already dismissed)
+  // Show match end overlay when match ends (server status or local store), but only if not already dismissed
+  const endedByMatchStatus = match?.status === "ended";
   useEffect(() => {
-    if (matchEnded && !matchEndOverlayOpen && !matchEndOverlayDismissed) {
+    const ended = endedByMatchStatus || matchEnded;
+    if (ended && !matchEndOverlayOpen && !matchEndOverlayDismissed) {
       setMatchEndOverlayOpen(true);
     }
-  }, [matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
+  }, [endedByMatchStatus, matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
 
   // When the overlay first opens, snapshot the end-of-match context to keep it stable
   useEffect(() => {
