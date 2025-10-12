@@ -1220,7 +1220,7 @@ export default function TournamentDraft3DScreen({
   // Treat all picks as Deck to match editor-3d stacking behavior
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled, true);
+    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled, true, { sortMode });
   }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
   // Calculate stack sizes for hitbox optimization
@@ -1651,7 +1651,7 @@ export default function TournamentDraft3DScreen({
           </div>
 
           {draftState.phase !== "complete" && (
-            <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] pointer-events-auto text-center">
+            <div className="absolute left-1/2 -translate-x-1/2 top-12 z-[55] pointer-events-auto text-center">
               {staged && (
                 <button
                   onClick={() =>

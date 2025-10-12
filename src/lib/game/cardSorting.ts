@@ -188,7 +188,8 @@ export function computeStackPositions(
   picks: Pick3D[],
   metaByCardId: Record<number, CardMeta>,
   isSortingEnabled: boolean,
-  treatAllAsDeck: boolean = false
+  treatAllAsDeck: boolean = false,
+  options?: { sortMode?: "mana" | "element" }
 ): Map<number, StackPosition> | null {
   if (!isSortingEnabled) return null;
 
@@ -199,12 +200,53 @@ export function computeStackPositions(
   const deckCards = treatAllAsDeck ? picks : picks.filter((pick) => pick.zone === "Deck");
   const sideboardCards = treatAllAsDeck ? [] : picks.filter((pick) => pick.zone === "Sideboard");
 
-  // Categorize deck cards by mana cost and sites by element
+  // Sort mode selection (default: mana)
+  const sortMode = options?.sortMode === "element" ? "element" : "mana";
+
+  // Categorize deck cards based on mode
   const deckCategories = deckCards.reduce((acc, pick) => {
     const meta = metaByCardId[pick.card.cardId];
-    const category = categorizeCardByZone(pick.card, meta, "Deck");
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(pick);
+    if (sortMode === "mana") {
+      const category = categorizeCardByZone(pick.card, meta, "Deck");
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(pick);
+    } else {
+      // Element mode: separate non-site element stacks, site element stacks,
+      // artifacts (no thresholds), and avatars
+      const type = (pick.card.type || "").toLowerCase();
+      const isSite = type.includes("site");
+      const isAvatar = type.includes("avatar");
+
+      // Artifacts: no thresholds (null or all zeros), non-site, non-avatar
+      const thresholds = meta?.thresholds as Record<string, number> | undefined;
+      const totalThresh = thresholds
+        ? ["air", "water", "earth", "fire"].reduce((s, k) => s + (thresholds?.[k] || 0), 0)
+        : 0;
+      const isArtifact = !isSite && !isAvatar && (!thresholds || totalThresh === 0);
+
+      if (isAvatar) {
+        const k = "avatars";
+        if (!acc[k]) acc[k] = [];
+        acc[k].push(pick);
+      } else if (isArtifact) {
+        const k = "artifacts";
+        if (!acc[k]) acc[k] = [];
+        acc[k].push(pick);
+      } else {
+        // Determine primary element
+        const elements = ["air", "water", "earth", "fire"] as const;
+        let primary = "colorless";
+        if (thresholds) {
+          const maxEl = elements.reduce((max, el) =>
+            (thresholds[el] || 0) > (thresholds[max] || 0) ? el : max
+          );
+          if ((thresholds[maxEl] || 0) > 0) primary = maxEl;
+        }
+        const key = isSite ? `sites-${primary}` : `element-${primary}`;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(pick);
+      }
+    }
     return acc;
   }, {} as Record<string, Pick3D[]>);
 
@@ -218,8 +260,21 @@ export function computeStackPositions(
   }, {} as Record<string, Pick3D[]>);
 
   // Sort within each category
-  Object.values(deckCategories).forEach((cards) => {
-    cards.sort((a, b) => a.card.cardName.localeCompare(b.card.cardName));
+  Object.entries(deckCategories).forEach(([ _key, cards]) => {
+    if (sortMode === "mana") {
+      // Keep stable/alphabetical within the same bucket
+      cards.sort((a, b) => a.card.cardName.localeCompare(b.card.cardName));
+    } else {
+      // Element mode: sort by cost asc, then name
+      cards.sort((a, b) => {
+        const ma = metaByCardId[a.card.cardId];
+        const mb = metaByCardId[b.card.cardId];
+        const ca = ma?.cost ?? 0;
+        const cb = mb?.cost ?? 0;
+        if (ca !== cb) return ca - cb;
+        return a.card.cardName.localeCompare(b.card.cardName);
+      });
+    }
   });
 
   Object.values(sideboardCategories).forEach((cards) => {
@@ -232,25 +287,82 @@ export function computeStackPositions(
     });
   });
 
-  // Deck positioning - place on left side of board
-  const deckZStart = -2.0; // Left side of board
+  // Deck positioning - place on left side of board, top region (negative Z)
+  const deckZStart = -2.0;
   let deckXStart = -4; // Start from left
   const deckSpacing = 0.8;
 
-  // First, position mana cost stacks (creatures on top, spells below)
-  const manaCosts = Array.from(
-    new Set(
-      Object.keys(deckCategories)
-        .filter((key) => key.startsWith("mana-"))
-        .map((key) => parseInt(key.split("-")[1]))
-    )
-  ).sort((a, b) => a - b);
+  if (sortMode === "mana") {
+    // First, position mana cost stacks (creatures on top, spells below)
+    const manaCosts = Array.from(
+      new Set(
+        Object.keys(deckCategories)
+          .filter((key) => key.startsWith("mana-"))
+          .map((key) => parseInt(key.split("-")[1]))
+      )
+    ).sort((a, b) => a - b);
 
-  manaCosts.forEach((cost) => {
-    // Creatures first
-    const creatureKey = `mana-${cost}-creatures`;
-    if (deckCategories[creatureKey]) {
-      deckCategories[creatureKey].forEach((card, index) => {
+    manaCosts.forEach((cost) => {
+      // Creatures first
+      const creatureKey = `mana-${cost}-creatures`;
+      if (deckCategories[creatureKey]) {
+        deckCategories[creatureKey].forEach((card, index) => {
+          positions.set(card.id, {
+            x: deckXStart,
+            z: deckZStart + index * cardSpacing,
+            stackIndex: index,
+            isVisible: true,
+          });
+        });
+      }
+
+      // Spells below creatures
+      const spellKey = `mana-${cost}-spells`;
+      if (deckCategories[spellKey]) {
+        const creatureCount = deckCategories[creatureKey]?.length || 0;
+        deckCategories[spellKey].forEach((card, index) => {
+          positions.set(card.id, {
+            x: deckXStart,
+            z: deckZStart + (creatureCount + index + 0.5) * cardSpacing,
+            stackIndex: creatureCount + index,
+            isVisible: true,
+          });
+        });
+      }
+
+      // Only advance X if we actually placed cards
+      if (deckCategories[creatureKey] || deckCategories[spellKey]) {
+        deckXStart += deckSpacing;
+      }
+    });
+
+    // Then, position site stacks by element in deck
+    const siteElements = ["air", "water", "earth", "fire", "colorless"];
+    siteElements.forEach((element) => {
+      const siteKey = `sites-${element}`;
+      if (deckCategories[siteKey]) {
+        deckCategories[siteKey].forEach((card, index) => {
+          positions.set(card.id, {
+            x: deckXStart,
+            z: deckZStart + index * cardSpacing,
+            stackIndex: index,
+            isVisible: true,
+          });
+        });
+        deckXStart += deckSpacing;
+      }
+    });
+  } else {
+    // Element mode: columns ordered by element for non-sites, then site columns,
+    // followed by artifacts and avatars.
+    const elementOrder = ["air", "water", "earth", "fire", "colorless"];
+
+    // Non-site element columns
+    elementOrder.forEach((element) => {
+      const key = `element-${element}`;
+      const arr = deckCategories[key];
+      if (!arr || arr.length === 0) return;
+      arr.forEach((card, index) => {
         positions.set(card.id, {
           x: deckXStart,
           z: deckZStart + index * cardSpacing,
@@ -258,34 +370,28 @@ export function computeStackPositions(
           isVisible: true,
         });
       });
-    }
+      deckXStart += deckSpacing;
+    });
 
-    // Spells below creatures
-    const spellKey = `mana-${cost}-spells`;
-    if (deckCategories[spellKey]) {
-      const creatureCount = deckCategories[creatureKey]?.length || 0;
-      deckCategories[spellKey].forEach((card, index) => {
+    // Site columns by element
+    elementOrder.forEach((element) => {
+      const key = `sites-${element}`;
+      const arr = deckCategories[key];
+      if (!arr || arr.length === 0) return;
+      arr.forEach((card, index) => {
         positions.set(card.id, {
           x: deckXStart,
-          z: deckZStart + (creatureCount + index + 0.5) * cardSpacing,
-          stackIndex: creatureCount + index,
+          z: deckZStart + index * cardSpacing,
+          stackIndex: index,
           isVisible: true,
         });
       });
-    }
-
-    // Only advance X if we actually placed cards
-    if (deckCategories[creatureKey] || deckCategories[spellKey]) {
       deckXStart += deckSpacing;
-    }
-  });
+    });
 
-  // Then, position site stacks by element in deck
-  const siteElements = ["air", "water", "earth", "fire", "colorless"];
-  siteElements.forEach((element) => {
-    const siteKey = `sites-${element}`;
-    if (deckCategories[siteKey]) {
-      deckCategories[siteKey].forEach((card, index) => {
+    // Artifacts (single column)
+    if (deckCategories["artifacts"]) {
+      deckCategories["artifacts"].forEach((card, index) => {
         positions.set(card.id, {
           x: deckXStart,
           z: deckZStart + index * cardSpacing,
@@ -295,7 +401,20 @@ export function computeStackPositions(
       });
       deckXStart += deckSpacing;
     }
-  });
+
+    // Avatars (single column)
+    if (deckCategories["avatars"]) {
+      deckCategories["avatars"].forEach((card, index) => {
+        positions.set(card.id, {
+          x: deckXStart,
+          z: deckZStart + index * cardSpacing,
+          stackIndex: index,
+          isVisible: true,
+        });
+      });
+      deckXStart += deckSpacing;
+    }
+  }
 
   // Handle avatars in deck (should be rare but possible)
   if (deckCategories["avatars"]) {
