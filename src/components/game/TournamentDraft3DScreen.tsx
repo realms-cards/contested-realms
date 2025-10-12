@@ -1063,8 +1063,17 @@ export default function TournamentDraft3DScreen({
     });
 
     Promise.all(requests)
-      .then((chunks) => {
+      .then(async (chunks) => {
         const combined = chunks.flat();
+        const ids = Array.from(new Set(pick3D.map((p) => p.card.cardId)));
+        if (combined.length < ids.length) {
+          try {
+            const res = await fetch(`/api/cards/meta?ids=${ids.join(",")}`);
+            const rows = (await res.json()) as ApiCardMetaRow[];
+            setMetaByCardId(toCardMetaMap(rows));
+            return;
+          } catch {}
+        }
         setMetaByCardId(toCardMetaMap(combined));
       })
       .catch((err) => {
@@ -1208,10 +1217,11 @@ export default function TournamentDraft3DScreen({
   }, [pick3D, metaByCardId]);
 
   // Create sorted stack positions using the editor-3d utility and frozen layout meta
+  // Treat all picks as Deck to match editor-3d stacking behavior
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled);
-  }, [pick3D, isSortingEnabled, layoutMetaByCardId]);
+    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled, true, { sortMode });
+  }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
   // Calculate stack sizes for hitbox optimization
   const stackSizes = useMemo(() => {
@@ -1641,7 +1651,7 @@ export default function TournamentDraft3DScreen({
           </div>
 
           {draftState.phase !== "complete" && (
-            <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] pointer-events-auto text-center">
+            <div className="absolute left-1/2 -translate-x-1/2 top-12 z-[55] pointer-events-auto text-center">
               {staged && (
                 <button
                   onClick={() =>
