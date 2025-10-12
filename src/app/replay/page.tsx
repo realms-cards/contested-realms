@@ -23,6 +23,7 @@ export default function ReplayListPage() {
   const [loading, setLoading] = useState(true);
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);
+  const [socketReady, setSocketReady] = useState(false);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const { data: session } = useSession();
 
@@ -48,6 +49,7 @@ export default function ReplayListPage() {
     const handleDisconnect = () => {
       if (!isMounted) return;
       setConnected(false);
+      setSocketReady(false);
     };
 
     socketTransport.onGeneric("connect", handleConnect);
@@ -78,9 +80,18 @@ export default function ReplayListPage() {
     };
   }, [session]);
 
+  // Mark socket ready on 'welcome' (post-hello auth); request recordings then
   useEffect(() => {
-    if (!connected || !transport) return;
-    if (!transport.isConnected()) return;
+    if (!transport) return;
+    const onWelcome = () => setSocketReady(true);
+    transport.onGeneric("welcome", onWelcome);
+    return () => {
+      transport.offGeneric("welcome", onWelcome);
+    };
+  }, [transport]);
+
+  useEffect(() => {
+    if (!socketReady || !transport) return;
 
     const handleRecordings = (payload: unknown) => {
       const data = payload as { recordings: MatchRecordingSummary[] };
@@ -92,11 +103,9 @@ export default function ReplayListPage() {
     transport.emit("getMatchRecordings");
 
     return () => {
-      if (transport) {
-        transport.offGeneric("matchRecordingsResponse", handleRecordings);
-      }
+      transport.offGeneric("matchRecordingsResponse", handleRecordings);
     };
-  }, [connected, transport]);
+  }, [socketReady, transport]);
 
   const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);

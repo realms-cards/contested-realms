@@ -1160,8 +1160,8 @@ export default function EnhancedOnlineDraft3DScreen({
   // Create sorted stack positions using the shared editor-3d logic
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled);
-  }, [pick3D, isSortingEnabled, layoutMetaByCardId]);
+    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled, true, { sortMode });
+  }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
   // Calculate stack sizes for hitbox optimization (from single-player)
   const stackSizes = useMemo(() => {
@@ -1864,7 +1864,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
           {/* Enhanced draft status */}
           {draftState.phase !== "complete" && (
-            <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] pointer-events-auto text-center">
+            <div className="absolute left-1/2 -translate-x-1/2 top-10 z-[55] pointer-events-auto text-center">
               {/* Pick & Pass button - only show when a card is staged */}
               {staged && (
                 <button
