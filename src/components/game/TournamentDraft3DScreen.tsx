@@ -960,10 +960,21 @@ export default function TournamentDraft3DScreen({
     if (!transport) return;
 
     const handleDraftUpdate = (state: unknown) => {
-      const s = state as DraftState;
+      const s = state as DraftState & { _seq?: number };
       if (s?.phase && s.phase !== "waiting") {
         everOutOfWaitingRef.current = true;
       }
+
+      // Reject out-of-order updates using sequence number (pack*1000 + pick)
+      const currentSeq = (Number(draftStateRef.current?.packIndex) || 0) * 1000 +
+                         (Number(draftStateRef.current?.pickNumber) || 0);
+      const newSeq = (Number(s.packIndex) || 0) * 1000 + (Number(s.pickNumber) || 0);
+
+      if (draftStateRef.current?.phase === "picking" && s.phase === "picking" && newSeq < currentSeq) {
+        console.warn(`[TournamentDraft3D] Rejecting out-of-order update: currentSeq=${currentSeq} newSeq=${newSeq} (pack ${s.packIndex} pick ${s.pickNumber})`);
+        return;
+      }
+
       const inflight = pickInFlightRef.current;
 
       // Check if server has confirmed our pick before accepting the update
