@@ -788,6 +788,7 @@ function AuthenticatedDeckEditor() {
     if (!raw) {
       const sessionIdParam = searchParams?.get("sessionId");
       if (sessionIdParam) {
+        console.log('[Draft Init] No local data, fetching from server:', sessionIdParam);
         (async () => {
           try {
             const res = await fetch(`/api/draft-sessions/${sessionIdParam}/state`, { cache: 'no-store' });
@@ -799,6 +800,7 @@ function AuthenticatedDeckEditor() {
                 try { localStorage.setItem(`draftedCards_${draftId}`, json); } catch {}
 
                 // Pre-resolve to SearchResult[] by grouping slugs per set and using meta-by-variant
+                console.log('[Draft Init] Resolving', myPicks.length, 'cards from server');
                 try {
                   const bySet = new Map<string | null, Set<string>>();
                   for (const c of myPicks) {
@@ -833,7 +835,7 @@ function AuthenticatedDeckEditor() {
                       const slug = String((r as { slug: string }).slug || '');
                       if (slug) idBySlug.set(slug, cid);
                     }
-                    const resolved = myPicks
+                    const resolved: SearchResult[] = myPicks
                       .map((c) => {
                         const slug = typeof c.slug === 'string' ? c.slug : '';
                         const cardId = slug ? (idBySlug.get(slug) || 0) : 0;
@@ -843,17 +845,20 @@ function AuthenticatedDeckEditor() {
                           ? {
                               variantId: 0,
                               slug,
-                              finish: 'Standard',
+                              finish: 'Standard' as 'Standard' | 'Foil',
                               product: 'Draft',
                               cardId,
                               cardName: name,
                               set: setName,
                               type: (c.type as string | null) || null,
-                              rarity: (c.rarity as string | null) || null,
-                            }
+                              rarity: (c.rarity as 'Common' | 'Uncommon' | 'Rare' | 'Exceptional' | null) || null,
+                            } as SearchResult
                           : null;
                       })
-                      .filter(Boolean);
+                      .filter((x): x is SearchResult => x !== null);
+
+                    console.log('[Draft Init] Resolved', resolved.length, 'cards, loading into editor');
+
                     try {
                       localStorage.setItem(
                         `draftedCardsResolved_${storageSuffix}`,
@@ -866,10 +871,58 @@ function AuthenticatedDeckEditor() {
                         );
                       }
                     } catch {}
-                  }
-                } catch {}
 
-                try { window.location.reload(); } catch {}
+                    // Load resolved cards directly into the editor
+                    if (resolved.length > 0) {
+                      setPicks((prev) => {
+                        const next = { ...prev } as Record<PickKey, PickItem>;
+                        for (const r of resolved) {
+                          const zone: Zone = "Sideboard";
+                          const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+                          const exists = next[key];
+                          next[key] = exists
+                            ? { ...exists, count: exists.count + 1 }
+                            : {
+                                cardId: r.cardId,
+                                variantId: r.variantId ?? null,
+                                name: r.cardName,
+                                type: r.type,
+                                slug: r.slug,
+                                zone,
+                                count: 1,
+                                set: r.set,
+                              };
+                        }
+                        return next;
+                      });
+
+                      // Infer default set
+                      const counts = new Map<string, number>();
+                      for (const r of resolved)
+                        counts.set(r.set, (counts.get(r.set) || 0) + 1);
+                      if (counts.size) {
+                        let best = setName;
+                        let bestN = -1;
+                        for (const [name, n] of counts.entries()) {
+                          if (n > bestN) {
+                            best = name;
+                            bestN = n;
+                          }
+                        }
+                        setSetName(best);
+                      }
+                      if (!deckName || deckName === "New Deck") {
+                        const matchName = searchParams?.get("matchName");
+                        setDeckName(matchName || "Draft Deck");
+                      }
+                      setDraftInitDone(true);
+                      console.log('[Draft Init] Done! Cards loaded into editor');
+                      return;
+                    }
+                  }
+                } catch (err) {
+                  console.warn('[Draft Init] Failed to pre-resolve cards:', err);
+                }
               } else {
                 setError("No drafted cards found for this draft.");
                 setDraftInitDone(true);
