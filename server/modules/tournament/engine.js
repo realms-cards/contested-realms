@@ -5,6 +5,7 @@
 let prisma = null;
 let io = null;
 let storeRedis = null;
+let instanceId = null;
 
 const DRAFT_STATE_CHANNEL = 'draft:session:update';
 
@@ -12,10 +13,11 @@ const DRAFT_STATE_CHANNEL = 'draft:session:update';
 // Map<sessionId, { session: { id, participants, status, packConfiguration, settings }, state, persistTimer, lastPersistAt, meta }>
 const sessions = new Map();
 
-export function setDeps({ prismaClient, ioServer, storeRedisClient }) {
+export function setDeps({ prismaClient, ioServer, storeRedisClient, instanceId: id }) {
   prisma = prismaClient;
   io = ioServer;
   storeRedis = storeRedisClient;
+  instanceId = id || 'unknown';
 }
 
 function room(sessionId) {
@@ -56,9 +58,14 @@ async function getOrLoad(sessionId) {
 function publishState(sessionId, state) {
   // Local fast-path emit
   try { io && io.to(room(sessionId)).emit('draftUpdate', state); } catch {}
-  // Cross-instance broadcast
+  // Cross-instance broadcast (include instanceId to prevent echo)
   try {
-    if (storeRedis) storeRedis.publish(DRAFT_STATE_CHANNEL, JSON.stringify({ sessionId, draftState: state }));
+    if (storeRedis) {
+      storeRedis.publish(
+        DRAFT_STATE_CHANNEL,
+        JSON.stringify({ sessionId, draftState: state, instanceId })
+      );
+    }
   } catch {}
 }
 
