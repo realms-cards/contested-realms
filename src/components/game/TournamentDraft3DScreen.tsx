@@ -972,7 +972,7 @@ export default function TournamentDraft3DScreen({
           Number(s.packIndex) === Number(inflight.packIndex) &&
           Number(s.pickNumber) === Number(inflight.pickNumber);
         const mySeatPack = Array.isArray(s.currentPacks?.[myPlayerIndex])
-          ? (s.currentPacks![myPlayerIndex] as DraftCard[])
+          ? (s.currentPacks[myPlayerIndex] as DraftCard[])
           : [];
         const containsCard = mySeatPack.some(
           (c) => c && c.id === inflight.cardId
@@ -1008,6 +1008,30 @@ export default function TournamentDraft3DScreen({
         }
       }
 
+      // Reject stale updates: if we have an in-flight pick for this same round, only accept updates that moved forward
+      if (inflight) {
+        const sameRound2 =
+          s.phase === "picking" &&
+          Number(s.packIndex) === Number(inflight.packIndex) &&
+          Number(s.pickNumber) === Number(inflight.pickNumber);
+        const mySeatPack3 = Array.isArray(s.currentPacks?.[myPlayerIndex])
+          ? (s.currentPacks[myPlayerIndex] as DraftCard[])
+          : [];
+        const stillHasMyCard = mySeatPack3.some(
+          (c) => c && c.id === inflight.cardId
+        );
+        const iAmStillWaiting = Array.isArray(s.waitingFor)
+          ? s.waitingFor.includes(myPlayerId)
+          : false;
+        // Reject stale snapshot: same pick number but server still has my card and me in waitingFor
+        if (sameRound2 && stillHasMyCard && iAmStillWaiting) {
+          console.log(
+            `[TournamentDraft3D] Ignoring stale draftUpdate (pre-pick snapshot)`
+          );
+          return;
+        }
+      }
+
       setDraftState(s);
       console.log(
         `[TournamentDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
@@ -1016,7 +1040,7 @@ export default function TournamentDraft3DScreen({
       // Clear in-flight pick marker when pick is confirmed by server
       if (inflight) {
         const mySeatPack2 = Array.isArray(s.currentPacks?.[myPlayerIndex])
-          ? (s.currentPacks![myPlayerIndex] as DraftCard[])
+          ? (s.currentPacks[myPlayerIndex] as DraftCard[])
           : [];
         const stillHasCard = mySeatPack2.some(
           (c) => c && c.id === inflight.cardId
