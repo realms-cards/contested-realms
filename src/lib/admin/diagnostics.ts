@@ -4,7 +4,48 @@ import { Prisma } from "@prisma/client";
 import Redis from "ioredis";
 import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
-import type { ConnectionTestResult, AdminStats } from "./types";
+import type {
+  ConnectionTestResult,
+  AdminStats,
+  HealthSnapshot,
+} from "./types";
+
+const MAX_HEALTH_HISTORY = 20;
+const healthHistory: HealthSnapshot[] = [];
+
+function cloneConnections(
+  connections: ConnectionTestResult[]
+): ConnectionTestResult[] {
+  return connections.map((c) => ({ ...c }));
+}
+
+function cloneStats(stats: AdminStats): AdminStats {
+  return {
+    totals: { ...stats.totals },
+    updatedAt: stats.updatedAt,
+  };
+}
+
+export function recordHealthSnapshot(
+  connections: ConnectionTestResult[],
+  stats: AdminStats
+): void {
+  const snapshot: HealthSnapshot = {
+    id: `${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    connections: cloneConnections(connections),
+    stats: cloneStats(stats),
+  };
+  healthHistory.push(snapshot);
+  while (healthHistory.length > MAX_HEALTH_HISTORY) {
+    healthHistory.shift();
+  }
+}
+
+export function getHealthHistory(limit = MAX_HEALTH_HISTORY): HealthSnapshot[] {
+  if (limit <= 0) return [];
+  return healthHistory.slice(-limit).reverse();
+}
 
 function timing<T>(fn: () => Promise<T>): Promise<{ result: T; latency: number }> {
   const start = performance.now();

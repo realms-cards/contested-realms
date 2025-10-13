@@ -26,3 +26,61 @@ export interface AdminActionResult {
   message: string;
   details?: Record<string, unknown>;
 }
+
+export interface HealthSnapshot {
+  id: string;
+  timestamp: string;
+  connections: ConnectionTestResult[];
+  stats: AdminStats;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  name: string | null;
+  email: string | null;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  matchCount: number;
+  tournamentRegistrations: number;
+}
+
+export interface AdminErrorRecord {
+  id: string;
+  timestamp: string;
+  eventType: string;
+  success: boolean;
+  statusCode: number | null;
+  errorMessage: string | null;
+  targetUrl: string;
+  retryCount: number;
+}
+
+export interface AdminJobStatus {
+  id: string;
+  label: string;
+  queued: number;
+  inProgress: number;
+  failed: number;
+  updatedAt: string;
+  details?: string;
+}
+
+export interface AdminSessionInfo {
+  id: string;
+  type: "match" | "draft" | "tournament";
+  status: string;
+  playerCount: number;
+  description: string;
+  startedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface UsageSnapshot {
+  period: "24h" | "7d";
+  newUsers: number;
+  matchesCompleted: number;
+  tournamentsStarted: number;
+  draftsStarted: number;
+  activeUsers: number;
+  generatedAt: string;
+}
