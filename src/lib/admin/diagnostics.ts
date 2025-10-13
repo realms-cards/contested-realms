@@ -44,7 +44,15 @@ function resolveSocketHealthUrl(): string | null {
     const url = raw ? toHttpUrl(raw) : null;
     if (!url) continue;
     const healthUrl = new URL(url.toString());
-    healthUrl.pathname = `${healthUrl.pathname.replace(/\/+$/, "")}/healthz`;
+    const cleanPath = healthUrl.pathname.replace(/\/+$/, "") || "";
+    if (cleanPath.toLowerCase().endsWith("/healthz") || cleanPath.toLowerCase() === "healthz") {
+      return healthUrl.toString();
+    }
+    if (cleanPath === "" || cleanPath === "/") {
+      healthUrl.pathname = "/healthz";
+    } else {
+      healthUrl.pathname = `${cleanPath}/healthz`;
+    }
     return healthUrl.toString();
   }
   return null;
