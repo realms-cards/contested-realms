@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 // Enable with BASIC_AUTH_ENABLED=true and set BASIC_AUTH_PASSWORD (and optionally BASIC_AUTH_USER)
 // This middleware runs on Vercel Edge and protects the entire site behind HTTP Basic Auth.
 
+const ADMIN_PATHS = [/^\/admin(?:$|\/)/, /^\/api\/admin(?:$|\/)/];
+
 function isEnabled() {
   const v = (process.env.BASIC_AUTH_ENABLED || process.env.LOCKDOWN_ENABLED || '').toLowerCase();
   const explicit = v === '1' || v === 'true' || v === 'yes' || v === 'on';
@@ -25,13 +27,89 @@ function decodeBase64(b64: string): string {
   }
 }
 
+function parseAllowlist(raw: string | undefined | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function toIpv4Int(ip: string): number | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let result = 0;
+  for (const part of parts) {
+    const value = Number(part);
+    if (!Number.isInteger(value) || value < 0 || value > 255) {
+      return null;
+    }
+    result = (result << 8) + value;
+  }
+  return result >>> 0;
+}
+
+function matchesCidr(ip: string, cidr: string): boolean {
+  const [base, prefixStr] = cidr.split('/');
+  const prefix = Number(prefixStr);
+  if (!base || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+    return false;
+  }
+  const ipInt = toIpv4Int(ip);
+  const baseInt = toIpv4Int(base);
+  if (ipInt === null || baseInt === null) return false;
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  return (ipInt & mask) === (baseInt & mask);
+}
+
+function normalizeIp(ip: string | null | undefined): string | null {
+  if (!ip) return null;
+  if (ip === '::1') return '127.0.0.1';
+  if (ip.startsWith('::ffff:')) {
+    const trimmed = ip.slice(7);
+    return trimmed || null;
+  }
+  return ip;
+}
+
+function ipAllowed(ip: string | null, allowlist: string[]): boolean {
+  if (!ip) return false;
+  for (const entry of allowlist) {
+    if (entry.includes('/')) {
+      if (matchesCidr(ip, entry)) return true;
+      continue;
+    }
+    if (entry === ip) return true;
+  }
+  return false;
+}
+
 export async function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname;
+  const adminPathsEnabled = ADMIN_PATHS.some((re) => re.test(pathname));
+  if (adminPathsEnabled) {
+    const allowlist = parseAllowlist(process.env.ADMIN_IP_ACCESSLIST);
+    if (allowlist.length > 0) {
+      const clientIpHeader = req.headers.get('x-forwarded-for') || '';
+      const clientIpList = clientIpHeader
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const headerIp = normalizeIp(clientIpList[0]);
+      const realIp = normalizeIp(req.headers.get('x-real-ip'));
+      const fallbackIp =
+        headerIp || realIp || (process.env.NODE_ENV !== 'production' ? '127.0.0.1' : null);
+      const allowed = fallbackIp ? ipAllowed(fallbackIp, allowlist) : allowlist.length === 0;
+      if (!allowed) {
+        return new NextResponse('forbidden', { status: 403 });
+      }
+    }
+  }
+
   if (!isEnabled()) return setLockdown(NextResponse.next(), 'disabled');
 
   const expectedPass = process.env.BASIC_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || '';
   const expectedUser = process.env.BASIC_AUTH_USER || '';
-
-  const { pathname } = req.nextUrl;
 
   // Internal API bypass: allow trusted server-to-server calls to API routes
   // Requires headers:

@@ -114,6 +114,7 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
         "Set SOCKET_SERVER_URL or ADMIN_SOCKET_HEALTH_URL to enable this check.",
     };
   }
+<<<<<<< HEAD
   const probe = async (target: string): Promise<ConnectionTestResult> => {
     try {
       const controller = new AbortController();
@@ -157,10 +158,24 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
           : error instanceof Error
             ? error.message
             : String(error);
+=======
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const { result: response, latency } = await timing(async () => {
+      return fetch(healthUrl, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+>>>>>>> 4817179ce504700699079e7411e1e60c07eec641
       return {
         id: "socket",
         label: "Socket server health",
         status: "error",
+<<<<<<< HEAD
         details: message,
       };
     }
@@ -192,6 +207,36 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
     };
   }
   return secondary;
+=======
+        latencyMs: latency,
+        details: `HTTP ${response.status}`,
+      };
+    }
+    let responseDetails: string | undefined;
+    try {
+      const json = await response.json();
+      if (json && typeof json === "object") {
+        responseDetails = JSON.stringify(json);
+      }
+    } catch {
+      responseDetails = undefined;
+    }
+    return {
+      id: "socket",
+      label: "Socket server health",
+      status: "ok",
+      latencyMs: latency,
+      details: responseDetails,
+    };
+  } catch (error) {
+    return {
+      id: "socket",
+      label: "Socket server health",
+      status: "error",
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+>>>>>>> 4817179ce504700699079e7411e1e60c07eec641
 }
 
 async function testCdn(): Promise<ConnectionTestResult> {
