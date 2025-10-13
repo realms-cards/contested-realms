@@ -3637,6 +3637,7 @@ function getMatchInfo(match) {
     lobbyId: match.lobbyId || undefined,
     lobbyName: match.lobbyName || undefined,
     tournamentId: match.tournamentId || undefined,
+    draftSessionId: match.draftSessionId || undefined,
     players: match.playerIds.map(getPlayerInfo).filter(Boolean),
     status: match.status,
     seed: match.seed,

@@ -584,6 +584,9 @@ class BotClient {
     const phase = state && state.phase;
     if (!state || typeof state !== "object") return;
 
+    // Detect if this is a tournament draft (has sessionId) vs regular lobby draft
+    const isTournamentDraft = Boolean(this.currentMatch.draftSessionId);
+
     if (phase === "pack_selection") {
       try {
         // Only choose a pack once per packIndex
@@ -592,7 +595,17 @@ class BotClient {
           const packsForMe = Array.isArray(state.allGeneratedPacks?.[meIdx]) ? state.allGeneratedPacks[meIdx] : [];
           const firstPack = packsForMe.find((p) => Array.isArray(p) && p.length > 0);
           const setChoice = (firstPack && (firstPack[0]?.setName || firstPack[0]?.set)) || "Beta";
-          this.socket.emit("chooseDraftPack", { matchId, setChoice, packIndex: state.packIndex || 0 });
+
+          if (isTournamentDraft) {
+            // Tournament draft: use chooseTournamentDraftPack with sessionId
+            this.socket.emit("chooseTournamentDraftPack", {
+              sessionId: this.currentMatch.draftSessionId,
+              packIndex: state.packIndex || 0
+            });
+          } else {
+            // Regular lobby draft: use chooseDraftPack with matchId
+            this.socket.emit("chooseDraftPack", { matchId, setChoice, packIndex: state.packIndex || 0 });
+          }
           this._packChosen.add(k);
         }
       } catch {}
@@ -614,12 +627,21 @@ class BotClient {
         if (pick) {
           const pk = `${matchId}:${state.packIndex || 0}:${state.pickNumber || 1}`;
           if (!this._pickSent.has(pk)) {
-            this.socket.emit("makeDraftPick", {
-              matchId,
-              cardId: pick.id,
-              packIndex: state.packIndex || 0,
-              pickNumber: state.pickNumber || 1,
-            });
+            if (isTournamentDraft) {
+              // Tournament draft: use makeTournamentDraftPick with sessionId
+              this.socket.emit("makeTournamentDraftPick", {
+                sessionId: this.currentMatch.draftSessionId,
+                cardId: pick.id,
+              });
+            } else {
+              // Regular lobby draft: use makeDraftPick with matchId
+              this.socket.emit("makeDraftPick", {
+                matchId,
+                cardId: pick.id,
+                packIndex: state.packIndex || 0,
+                pickNumber: state.pickNumber || 1,
+              });
+            }
             this._pickSent.add(pk);
           }
         }
