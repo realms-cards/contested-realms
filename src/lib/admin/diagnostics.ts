@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import Redis from "ioredis";
 import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import type { ConnectionTestResult, AdminStats } from "./types";
@@ -49,15 +50,17 @@ function resolveSocketHealthUrl(): string | null {
   return null;
 }
 
-function resolveCdnOrigin(): string | null {
-  const raw =
+function resolveCdnCheck(): { origin: string; path: string } | null {
+  const rawOrigin =
     process.env.ADMIN_CDN_ORIGIN ||
     process.env.ASSET_CDN_ORIGIN ||
     process.env.NEXT_PUBLIC_TEXTURE_ORIGIN ||
     process.env.NEXT_PUBLIC_ASSET_ORIGIN;
-  if (!raw) return null;
-  const url = toHttpUrl(raw);
-  return url ? url.toString() : null;
+  if (!rawOrigin) return null;
+  const url = toHttpUrl(rawOrigin);
+  if (!url) return null;
+  const path = (process.env.ADMIN_CDN_TEST_PATH || "/").trim() || "/";
+  return { origin: url.toString(), path: path.startsWith("/") ? path : `/${path}` };
 }
 
 async function testDatabase(): Promise<ConnectionTestResult> {
@@ -84,6 +87,23 @@ async function testDatabase(): Promise<ConnectionTestResult> {
 async function testRedis(): Promise<ConnectionTestResult> {
   try {
     const { latency } = await timing(async () => {
+      const redisUrl = process.env.REDIS_URL || null;
+      const password = process.env.REDIS_PASSWORD || undefined;
+      if (redisUrl) {
+        const client = new Redis(redisUrl, {
+          lazyConnect: true,
+          password,
+        });
+        try {
+          await client.connect();
+          await client.ping();
+        } finally {
+          await client.quit().catch(() => {
+            /* ignore */
+          });
+        }
+        return;
+      }
       const redis = getRedis();
       await redis.ping();
     });
@@ -197,8 +217,8 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
 }
 
 async function testCdn(): Promise<ConnectionTestResult> {
-  const cdnOrigin = resolveCdnOrigin();
-  if (!cdnOrigin) {
+  const cdnCheck = resolveCdnCheck();
+  if (!cdnCheck) {
     return {
       id: "cdn",
       label: "Asset CDN",
@@ -210,7 +230,7 @@ async function testCdn(): Promise<ConnectionTestResult> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const requestUrl = `${cdnOrigin.replace(/\/+$/, "")}/`;
+    const requestUrl = `${cdnCheck.origin.replace(/\/+$/, "")}${cdnCheck.path}`;
     const { result: response, latency } = await timing(async () => {
       return fetch(requestUrl, {
         method: "HEAD",
@@ -219,6 +239,15 @@ async function testCdn(): Promise<ConnectionTestResult> {
       });
     });
     clearTimeout(timeout);
+    if (response.status === 401 || response.status === 403) {
+      return {
+        id: "cdn",
+        label: "Asset CDN",
+        status: "ok",
+        latencyMs: latency,
+        details: `Reachable (HTTP ${response.status}) - check CDN auth rules`,
+      };
+    }
     if (!response.ok) {
       return {
         id: "cdn",
