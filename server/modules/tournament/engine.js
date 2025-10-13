@@ -51,7 +51,13 @@ async function loadSession(sessionId) {
 }
 
 async function getOrLoad(sessionId) {
-  if (sessions.has(sessionId)) return sessions.get(sessionId);
+  if (sessions.has(sessionId)) {
+    const entry = sessions.get(sessionId);
+    console.log('[Engine] Using cached session: phase=%s pickNumber=%d waitingFor=%j',
+      entry.state?.phase, entry.state?.pickNumber, entry.state?.waitingFor);
+    return entry;
+  }
+  console.log('[Engine] Loading session from DB: %s', sessionId);
   return await loadSession(sessionId);
 }
 
@@ -197,8 +203,18 @@ export async function makePick(sessionId, playerId, cardId) {
     const playerCount = participants.length;
     ensureArrays(state, playerCount);
 
-    if (state.phase !== 'picking') return state;
-    if (!Array.isArray(state.waitingFor) || !state.waitingFor.includes(playerId)) return state;
+    console.log('[Engine] makePick: phase=%s pickNumber=%d waitingFor=%j playerId=%s',
+      state.phase, state.pickNumber, state.waitingFor, playerId);
+
+    if (state.phase !== 'picking') {
+      console.log('[Engine] Rejecting pick: not in picking phase');
+      return state;
+    }
+    if (!Array.isArray(state.waitingFor) || !state.waitingFor.includes(playerId)) {
+      console.log('[Engine] Rejecting pick: player not in waitingFor. waitingFor=%j playerId=%s',
+        state.waitingFor, playerId);
+      return state;
+    }
 
     const idx = indexByPlayer(participants, playerId);
     if (idx < 0) return state;
@@ -212,10 +228,13 @@ export async function makePick(sessionId, playerId, cardId) {
     if (!Array.isArray(state.picks[idx])) state.picks[idx] = [];
     state.picks[idx].push(picked);
 
+    console.log('[Engine] Before removing picker: waitingFor=%j', state.waitingFor);
     state.waitingFor = state.waitingFor.filter((pid) => pid !== playerId);
+    console.log('[Engine] After removing picker: waitingFor=%j (length=%d)', state.waitingFor, state.waitingFor.length);
 
     // If all have picked, pass or advance round
     if (state.waitingFor.length === 0) {
+      console.log('[Engine] All players picked, rotating packs...');
       // Check if ALL packs are done (not just the current player's pack)
       const allPacksEmpty = state.currentPacks.every((pack) => !Array.isArray(pack) || pack.length === 0);
       const packDone = allPacksEmpty || state.pickNumber >= meta.packSize;
@@ -245,9 +264,12 @@ export async function makePick(sessionId, playerId, cardId) {
         }
         state.phase = 'picking';
         state.waitingFor = participants.map((p) => p.playerId);
+        console.log('[Engine] After pack rotation: pickNumber=%d waitingFor=%j', state.pickNumber, state.waitingFor);
       }
     }
 
+    console.log('[Engine] Final state: phase=%s pickNumber=%d waitingFor=%j',
+      state.phase, state.pickNumber, state.waitingFor);
     publishState(sessionId, state);
     schedulePersist(sessionId, state);
     entry.state = state;
