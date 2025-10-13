@@ -19,8 +19,6 @@ export interface AdminStats {
   };
   updatedAt: string;
 }
-<<<<<<< HEAD
-=======
 
 export interface AdminActionResult {
   action: string;
@@ -28,4 +26,3 @@ export interface AdminActionResult {
   message: string;
   details?: Record<string, unknown>;
 }
->>>>>>> 4817179ce504700699079e7411e1e60c07eec641
