@@ -211,6 +211,7 @@ export type CreateTournamentConfig = {
   format: "swiss" | "elimination" | "round_robin";
   matchType: "constructed" | "sealed" | "draft";
   maxPlayers: number;
+  isPrivate?: boolean;
   sealedConfig?: {
     packCounts: Record<string, number>;
     timeLimit: number;
@@ -221,6 +222,7 @@ export type CreateTournamentConfig = {
     packCount: number;
     packSize: number;
     packCounts: Record<string, number>;
+    cubeId?: string;
   };
 };
 
@@ -329,6 +331,7 @@ export default function LobbiesCentral({
   const tournamentFormat = "swiss";
   const [tournamentMatchType, setTournamentMatchType] = useState<"constructed" | "sealed" | "draft">("sealed");
   const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
+  const [tournamentIsPrivate, setTournamentIsPrivate] = useState<boolean>(false);
   // Tournament pack settings
   // New format: array of set names, one per booster
   const [sealedBoosterCount, setSealedBoosterCount] = useState<number>(6);
@@ -338,6 +341,10 @@ export default function LobbiesCentral({
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
   const [draftBoosters, setDraftBoosters] = useState<string[]>(["Beta", "Arthurian Legends", "Arthurian Legends"]);
   const [draftPackSize, setDraftPackSize] = useState<number>(15);
+  const [draftUseCube, setDraftUseCube] = useState<boolean>(false);
+  const [draftCubeId, setDraftCubeId] = useState<string>("");
+  const [userCubes, setUserCubes] = useState<Array<{ id: string; name: string; cardCount: number }>>([]);
+  const [loadingCubes, setLoadingCubes] = useState(false);
 
   // Generate a random name when overlay opens
   const handleOverlayOpen = () => {
@@ -348,6 +355,28 @@ export default function LobbiesCentral({
   const handleTournamentOverlayOpen = () => {
     setTournamentName(generateLobbyName());
     setTournamentOverlayOpen(true);
+    // Fetch user's cubes when opening tournament modal
+    fetchUserCubes();
+  };
+
+  const fetchUserCubes = async () => {
+    setLoadingCubes(true);
+    try {
+      const res = await fetch('/api/cubes');
+      if (res.ok) {
+        const data = await res.json();
+        const cubes = (data.myCubes || []).map((cube: { id: string; name: string; cardCount: number }) => ({
+          id: cube.id,
+          name: cube.name,
+          cardCount: cube.cardCount
+        }));
+        setUserCubes(cubes);
+      }
+    } catch (error) {
+      console.error('Failed to fetch cubes:', error);
+    } finally {
+      setLoadingCubes(false);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -1186,6 +1215,26 @@ export default function LobbiesCentral({
                   </button>
                 </div>
               </div>
+              {/* Private Tournament Toggle */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tournamentIsPrivate}
+                    onChange={(e) => setTournamentIsPrivate(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
+                  />
+                  <span className="text-xs">
+                    Private tournament (invite-only)
+                  </span>
+                </label>
+                {tournamentIsPrivate && (
+                  <p className="text-slate-400 text-xs mt-1 ml-6">
+                    Only invited players can see and join
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-medium mb-2">Match Type</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1277,67 +1326,111 @@ export default function LobbiesCentral({
               )}
               {tournamentMatchType === 'draft' && (
                 <div className="space-y-3 mt-2">
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs font-medium">Booster Count</div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newCount = Math.max(1, draftBoosterCount - 1);
-                          setDraftBoosterCount(newCount);
-                          setDraftBoosters(prev => prev.slice(0, newCount));
-                        }}
-                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
-                      >
-                        -
-                      </button>
-                      <span className="w-8 text-center text-xs font-semibold">{draftBoosterCount}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newCount = Math.min(5, draftBoosterCount + 1);
-                          setDraftBoosterCount(newCount);
-                          setDraftBoosters(prev => [...prev, ...Array(newCount - prev.length).fill("Arthurian Legends")]);
-                        }}
-                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs opacity-80 mb-1">Pack Size</label>
+                  {/* Cube draft toggle */}
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
-                      type="number"
-                      min={8}
-                      max={20}
-                      value={draftPackSize}
-                      onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
-                      className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      type="checkbox"
+                      checked={draftUseCube}
+                      onChange={(e) => setDraftUseCube(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    {draftBoosters.map((setName, idx) => (
-                      <div key={`draft-booster-${idx}`} className="flex items-center gap-2">
-                        <div className="text-xs text-slate-400 w-16">Pack {idx + 1}</div>
-                        <select
-                          value={setName}
-                          onChange={(e) => {
-                            setDraftBoosters(prev => {
-                              const next = [...prev];
-                              next[idx] = e.target.value;
-                              return next;
-                            });
-                          }}
-                          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
-                        >
-                          <option value="Beta">Beta</option>
-                          <option value="Arthurian Legends">Arthurian Legends</option>
-                          <option value="Alpha">Alpha</option>
-                        </select>
+                    <span className="text-xs">Use Cube for draft</span>
+                  </label>
+
+                  {!draftUseCube && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <div className="text-xs font-medium">Booster Count</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCount = Math.max(1, draftBoosterCount - 1);
+                              setDraftBoosterCount(newCount);
+                              setDraftBoosters(prev => prev.slice(0, newCount));
+                            }}
+                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                          >
+                            -
+                          </button>
+                          <span className="w-8 text-center text-xs font-semibold">{draftBoosterCount}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCount = Math.min(5, draftBoosterCount + 1);
+                              setDraftBoosterCount(newCount);
+                              setDraftBoosters(prev => [...prev, ...Array(newCount - prev.length).fill("Arthurian Legends")]);
+                            }}
+                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                      <div>
+                        <label className="block text-xs opacity-80 mb-1">Pack Size</label>
+                        <input
+                          type="number"
+                          min={8}
+                          max={20}
+                          value={draftPackSize}
+                          onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
+                          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        {draftBoosters.map((setName, idx) => (
+                          <div key={`draft-booster-${idx}`} className="flex items-center gap-2">
+                            <div className="text-xs text-slate-400 w-16">Pack {idx + 1}</div>
+                            <select
+                              value={setName}
+                              onChange={(e) => {
+                                setDraftBoosters(prev => {
+                                  const next = [...prev];
+                                  next[idx] = e.target.value;
+                                  return next;
+                                });
+                              }}
+                              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                            >
+                              <option value="Beta">Beta</option>
+                              <option value="Arthurian Legends">Arthurian Legends</option>
+                              <option value="Alpha">Alpha</option>
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {draftUseCube && (
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Select Cube</label>
+                      {loadingCubes ? (
+                        <div className="text-xs text-slate-400 py-2">Loading cubes...</div>
+                      ) : userCubes.length === 0 ? (
+                        <div className="text-xs text-slate-400 py-2">
+                          No cubes found. Create a cube first to use for drafting.
+                        </div>
+                      ) : (
+                        <select
+                          value={draftCubeId}
+                          onChange={(e) => setDraftCubeId(e.target.value)}
+                          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        >
+                          <option value="">-- Select a cube --</option>
+                          {userCubes.map((cube) => (
+                            <option key={cube.id} value={cube.id}>
+                              {cube.name} ({cube.cardCount} cards)
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">
+                        Choose one of your cubes for this draft tournament
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -1366,15 +1459,21 @@ export default function LobbiesCentral({
               </button>
               <button
                 className="rounded bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
-                disabled={!tournamentName.trim()}
+                disabled={!tournamentName.trim() || (tournamentMatchType === 'draft' && draftUseCube && !draftCubeId)}
                 onClick={() => {
                   const trimmedName = tournamentName.trim();
                   if (trimmedName) {
+                    // Validate cube selection if using cube mode
+                    if (tournamentMatchType === 'draft' && draftUseCube && !draftCubeId) {
+                      alert('Please select a cube for the draft tournament');
+                      return;
+                    }
                     const payload: CreateTournamentConfig = {
                       name: trimmedName,
                       format: tournamentFormat,
                       matchType: tournamentMatchType,
                       maxPlayers: tournamentMaxPlayers,
+                      isPrivate: tournamentIsPrivate,
                     };
                     if (tournamentMatchType === 'sealed') {
                       // Convert booster array to packCounts format
@@ -1388,18 +1487,29 @@ export default function LobbiesCentral({
                         replaceAvatars: sealedReplaceAvatars,
                       };
                     } else if (tournamentMatchType === 'draft') {
-                      // Convert booster array to packCounts format
-                      const packCounts: Record<string, number> = {};
-                      draftBoosters.forEach(setName => {
-                        packCounts[setName] = (packCounts[setName] || 0) + 1;
-                      });
-                      const mix = Object.keys(packCounts);
-                      payload.draftConfig = {
-                        setMix: mix.length ? mix : ['Beta'],
-                        packCount: draftBoosterCount,
-                        packSize: draftPackSize,
-                        packCounts,
-                      };
+                      if (draftUseCube && draftCubeId) {
+                        // Cube draft mode
+                        payload.draftConfig = {
+                          setMix: [],
+                          packCount: draftBoosterCount,
+                          packSize: draftPackSize,
+                          packCounts: {},
+                          cubeId: draftCubeId,
+                        };
+                      } else {
+                        // Convert booster array to packCounts format
+                        const packCounts: Record<string, number> = {};
+                        draftBoosters.forEach(setName => {
+                          packCounts[setName] = (packCounts[setName] || 0) + 1;
+                        });
+                        const mix = Object.keys(packCounts);
+                        payload.draftConfig = {
+                          setMix: mix.length ? mix : ['Beta'],
+                          packCount: draftBoosterCount,
+                          packSize: draftPackSize,
+                          packCounts,
+                        };
+                      }
                     }
                     onCreateTournament(payload);
                     setTournamentOverlayOpen(false);

@@ -23,6 +23,7 @@ interface CreateTournamentForm {
   name: string;
   format: "sealed" | "draft" | "constructed";
   maxPlayers: number;
+  isPrivate: boolean;
   settings: {
     totalRounds?: number;
     roundDuration?: number;
@@ -65,6 +66,7 @@ export default function TournamentsPage() {
     name: "",
     format: "constructed",
     maxPlayers: 8,
+    isPrivate: false,
     settings: {
       totalRounds: 3,
       roundDuration: 60,
@@ -239,6 +241,7 @@ export default function TournamentsPage() {
         name: form.name,
         format: form.format,
         maxPlayers: form.maxPlayers,
+        isPrivate: form.isPrivate,
         settings: settingsOut,
       });
 
@@ -250,6 +253,7 @@ export default function TournamentsPage() {
         name: "",
         format: "constructed",
         maxPlayers: 8,
+        isPrivate: false,
         settings: {
           totalRounds: 3,
           roundDuration: 60,
@@ -512,9 +516,16 @@ export default function TournamentsPage() {
                         {getFormatIcon(tournament.format)}
                       </span>
                       <div>
-                        <h3 className="font-fantaisie text-lg text-white truncate">
-                          {tournament.name}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-fantaisie text-lg text-white truncate">
+                            {tournament.name}
+                          </h3>
+                          {(tournament as unknown as { isPrivate?: boolean }).isPrivate && (
+                            <span className="text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
+                              🔒 Private
+                            </span>
+                          )}
+                        </div>
                         <p className="text-slate-400 text-sm capitalize">
                           {tournament.format}
                         </p>
@@ -632,6 +643,31 @@ export default function TournamentsPage() {
                       🎲
                     </button>
                   </div>
+                </div>
+
+                {/* Privacy Toggle */}
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.isPrivate}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          isPrivate: e.target.checked,
+                        }))
+                      }
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-slate-300 text-sm">
+                      Private tournament (invite-only)
+                    </span>
+                  </label>
+                  {form.isPrivate && (
+                    <p className="text-slate-400 text-xs mt-1 ml-6">
+                      Only invited players can see and join this tournament
+                    </p>
+                  )}
                 </div>
 
                 {/* Pairing Format */}

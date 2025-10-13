@@ -44,13 +44,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'You are not part of this tournament' }), { status: 400 });
     }
 
-    // Mark player as eliminated and clear current match assignment
-    await prisma.playerStanding.update({
-      where: {
-        tournamentId_playerId: { tournamentId: id, playerId: userId }
-      },
-      data: { isEliminated: true, currentMatchId: null }
-    });
+    // Mark player as eliminated, clear current match assignment, and remove registration
+    await prisma.$transaction([
+      prisma.playerStanding.update({
+        where: {
+          tournamentId_playerId: { tournamentId: id, playerId: userId }
+        },
+        data: { isEliminated: true, currentMatchId: null }
+      }),
+      // Remove the registration to fully unregister the player
+      prisma.tournamentRegistration.deleteMany({
+        where: {
+          tournamentId: id,
+          playerId: userId
+        }
+      })
+    ]);
 
     // Broadcast update so UIs refresh standings and lists
     try {
