@@ -14,15 +14,33 @@ import * as tourneyEngine from './engine.js';
 export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySocket) {
   // Tournament draft pick - uses DraftSession + TournamentDraftEngine instead of match-based drafts
   socket.on("makeTournamentDraftPick", async (payload) => {
-    if (!isAuthed()) return;
+    console.log('[Socket/TournamentDraft] makeTournamentDraftPick received:', JSON.stringify(payload));
+
+    if (!isAuthed()) {
+      console.log('[Socket/TournamentDraft] Not authenticated - rejecting pick');
+      return;
+    }
+
     const player = getPlayerBySocket(socket);
-    if (!player) return;
+    if (!player) {
+      console.log('[Socket/TournamentDraft] No player found for socket - rejecting pick');
+      return;
+    }
+
+    console.log('[Socket/TournamentDraft] Player found:', player.id, player.name);
+
     const { sessionId, cardId } = payload || {};
-    if (!sessionId || !cardId) return;
+    if (!sessionId || !cardId) {
+      console.log('[Socket/TournamentDraft] Missing sessionId or cardId - rejecting pick');
+      return;
+    }
+
+    console.log('[Socket/TournamentDraft] Processing pick:', { sessionId, playerId: player.id, cardId });
 
     try {
       // Execute pick locally via tournament engine (fast-path)
       const next = await tourneyEngine.makePick(sessionId, player.id, cardId);
+      console.log('[Socket/TournamentDraft] Pick successful, new state phase:', next?.phase, 'pickNumber:', next?.pickNumber);
       // Engine already emits and publishes; also echo back to caller for immediate UX
       try { socket.emit('draftUpdate', next); } catch {}
 
@@ -37,14 +55,33 @@ export function registerTournamentDraftHandlers(socket, isAuthed, getPlayerBySoc
 
   // Tournament draft choose-pack (start of each round)
   socket.on("chooseTournamentDraftPack", async (payload = {}) => {
-    if (!isAuthed()) return;
+    console.log('[Socket/TournamentDraft] chooseTournamentDraftPack received:', JSON.stringify(payload));
+
+    if (!isAuthed()) {
+      console.log('[Socket/TournamentDraft] Not authenticated - rejecting pack choice');
+      return;
+    }
+
     const player = getPlayerBySocket(socket);
-    if (!player) return;
+    if (!player) {
+      console.log('[Socket/TournamentDraft] No player found for socket - rejecting pack choice');
+      return;
+    }
+
+    console.log('[Socket/TournamentDraft] Player found:', player.id, player.name);
+
     const sessionId = payload?.sessionId;
     const packIndex = Number(payload?.packIndex || 0);
-    if (!sessionId) return;
+    if (!sessionId) {
+      console.log('[Socket/TournamentDraft] Missing sessionId - rejecting pack choice');
+      return;
+    }
+
+    console.log('[Socket/TournamentDraft] Processing pack choice:', { sessionId, playerId: player.id, packIndex });
+
     try {
       const next = await tourneyEngine.choosePack(sessionId, player.id, { packIndex });
+      console.log('[Socket/TournamentDraft] Pack choice successful, new state phase:', next?.phase);
       try { socket.emit('draftUpdate', next); } catch {}
     } catch (e) {
       const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
