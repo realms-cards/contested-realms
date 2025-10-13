@@ -964,99 +964,18 @@ export default function TournamentDraft3DScreen({
       if (s?.phase && s.phase !== "waiting") {
         everOutOfWaitingRef.current = true;
       }
-      // If a pick is in-flight, ignore a likely pre-pick snapshot for a short grace window (race with join/snapshot)
       const inflight = pickInFlightRef.current;
-      if (inflight) {
-        const sameRound =
-          s.phase === "picking" &&
-          Number(s.packIndex) === Number(inflight.packIndex) &&
-          Number(s.pickNumber) === Number(inflight.pickNumber);
-        const mySeatPack = Array.isArray(s.currentPacks?.[myPlayerIndex])
-          ? (s.currentPacks[myPlayerIndex] as DraftCard[])
-          : [];
-        const containsCard = mySeatPack.some(
-          (c) => c && c.id === inflight.cardId
-        );
-        const iAmWaiting = Array.isArray(s.waitingFor)
-          ? s.waitingFor.includes(myPlayerId)
-          : false;
-        const likelyPrePick = sameRound && (containsCard || iAmWaiting);
-        const withinGrace = Date.now() - pickInFlightSinceRef.current < 1500;
-        if (likelyPrePick && withinGrace) {
-          console.log(
-            "[TournamentDraft3D] Ignoring pre-pick snapshot/race update"
-          );
-          return;
-        }
-        // Safety: if still waiting for me or my card remains after grace, re-emit pick once
-        if (
-          sameRound &&
-          (containsCard || iAmWaiting) &&
-          Date.now() - pickInFlightSinceRef.current >= 1500
-        ) {
-          try {
-            console.warn(
-              "[TournamentDraft3D] Re-emitting tournament pick (stale state after grace)"
-            );
-            transport?.emit("makeTournamentDraftPick", {
-              sessionId: draftSessionId,
-              cardId: inflight.cardId,
-            });
-            pickInFlightSinceRef.current = Date.now();
-            // Do not return; allow state to set so UI stays in sync
-          } catch {}
-        }
-      }
-
-      // Reject stale updates: if we have an in-flight pick for this same round, only accept updates that moved forward
-      if (inflight) {
-        const sameRound2 =
-          s.phase === "picking" &&
-          Number(s.packIndex) === Number(inflight.packIndex) &&
-          Number(s.pickNumber) === Number(inflight.pickNumber);
-        const mySeatPack3 = Array.isArray(s.currentPacks?.[myPlayerIndex])
-          ? (s.currentPacks[myPlayerIndex] as DraftCard[])
-          : [];
-        const stillHasMyCard = mySeatPack3.some(
-          (c) => c && c.id === inflight.cardId
-        );
-        const iAmStillWaiting = Array.isArray(s.waitingFor)
-          ? s.waitingFor.includes(myPlayerId)
-          : false;
-        // Reject stale snapshot: same pick number but server still has my card and me in waitingFor
-        if (sameRound2 && stillHasMyCard && iAmStillWaiting) {
-          console.log(
-            `[TournamentDraft3D] Ignoring stale draftUpdate (pre-pick snapshot)`
-          );
-          return;
-        }
-      }
 
       setDraftState(s);
       console.log(
         `[TournamentDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
       );
 
-      // Clear in-flight pick marker when pick is confirmed by server
+      // Clear in-flight pick marker on any draftUpdate (simpler = more reliable)
       if (inflight) {
-        const mySeatPack2 = Array.isArray(s.currentPacks?.[myPlayerIndex])
-          ? (s.currentPacks[myPlayerIndex] as DraftCard[])
-          : [];
-        const stillHasCard = mySeatPack2.some(
-          (c) => c && c.id === inflight.cardId
-        );
-        const iAmWaiting2 = Array.isArray(s.waitingFor)
-          ? s.waitingFor.includes(myPlayerId)
-          : false;
-        // Clear if: card removed from pack, OR we've moved to a different pick (pack/pick number changed)
-        const movedToNextPick =
-          s.packIndex !== inflight.packIndex ||
-          s.pickNumber !== inflight.pickNumber;
-        if (!stillHasCard && (!iAmWaiting2 || movedToNextPick)) {
-          console.log(`[TournamentDraft3D] Clearing in-flight pick marker`);
-          pickInFlightRef.current = null;
-          pickInFlightSinceRef.current = 0;
-        }
+        console.log(`[TournamentDraft3D] Clearing in-flight pick marker`);
+        pickInFlightRef.current = null;
+        pickInFlightSinceRef.current = 0;
       }
 
       // Only clear staged/ready when transitioning INTO picking phase (not on every picking update)
