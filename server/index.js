@@ -1199,12 +1199,17 @@ try {
   try { console.warn(`[store] Redis state init failed:`, e?.message || e); } catch {}
 }
 
-// Wire tournament engine dependencies (Prisma, Socket.IO, Redis)
+// Wire tournament engine dependencies (Prisma, Socket.IO, Redis, InstanceID)
 (async () => {
   try {
     const mod = await import('./modules/tournament/engine.js');
     if (mod && typeof mod.setDeps === 'function') {
-      mod.setDeps({ prismaClient: prisma, ioServer: io, storeRedisClient: storeRedis });
+      mod.setDeps({
+        prismaClient: prisma,
+        ioServer: io,
+        storeRedisClient: storeRedis,
+        instanceId: INSTANCE_ID
+      });
       try { console.log('[tourney] engine dependencies injected'); } catch {}
     }
   } catch (e) {
@@ -1284,9 +1289,14 @@ if (storeSub) {
       }
       if (channel === DRAFT_STATE_CHANNEL) {
         // Forward tournament draft session updates to room subscribers
+        // Skip echo: if this instance published the message, it already emitted locally
         try {
-          const { sessionId, draftState } = msg || {};
+          const { sessionId, draftState, instanceId } = msg || {};
           if (!sessionId) return;
+          if (instanceId && instanceId === INSTANCE_ID) {
+            // This is an echo of our own publish - skip re-broadcast
+            return;
+          }
           io.to(`draft:${sessionId}`).emit('draftUpdate', draftState);
         } catch (e) {
           try { console.warn('[draft] failed to forward state:', e?.message || e); } catch {}
