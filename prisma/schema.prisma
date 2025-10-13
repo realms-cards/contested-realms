@@ -242,6 +242,7 @@ model User {
   passkeys              PasskeyCredential[]
   friendshipsOwned      Friendship[] @relation("FriendshipOwner")
   friendshipsTargeted   Friendship[] @relation("FriendshipTarget")
+  tournamentInvitations TournamentInvitation[]
 }
 
 model VerificationToken {
@@ -293,6 +294,7 @@ model Tournament {
   format            TournamentFormat
   status            TournamentStatus  @default(registering)
   maxPlayers        Int
+  isPrivate         Boolean           @default(false) // Private tournaments require invitation
   settings          Json              // Tournament settings (format-specific configuration)
   featureFlags      Json?             // Tournament-specific feature toggles
   startedAt         DateTime?         // When preparation phase began
@@ -307,10 +309,12 @@ model Tournament {
   matches           Match[]
   statistics        TournamentStatistics[] @relation("TournamentStatistics")
   draftSessions     DraftSession[]
+  invitations       TournamentInvitation[]
 
   @@index([status])
   @@index([createdAt])
   @@index([creatorId])
+  @@index([isPrivate])
 }
 
 model TournamentRegistration {
@@ -598,6 +602,33 @@ model Friendship {
   @@unique([ownerUserId, targetUserId])
   @@index([ownerUserId])
   @@index([targetUserId])
+}
+
+// Tournament invitation system for private tournaments
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+  expired
+}
+
+model TournamentInvitation {
+  id           String           @id @default(cuid())
+  tournamentId String
+  inviteeId    String           // User being invited
+  inviterId    String?          // User who sent the invite (null if system-generated)
+  status       InvitationStatus @default(pending)
+  createdAt    DateTime         @default(now())
+  respondedAt  DateTime?        // When invitation was accepted/declined
+  expiresAt    DateTime?        // Optional expiration time
+
+  tournament   Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  invitee      User             @relation(fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, inviteeId])
+  @@index([tournamentId])
+  @@index([inviteeId])
+  @@index([status])
 }
 
 // T027: Audit logging for tournament broadcast events

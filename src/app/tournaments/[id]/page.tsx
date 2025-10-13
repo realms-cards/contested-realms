@@ -17,6 +17,11 @@ const TournamentPresenceOverlay = dynamic(
   { ssr: false }
 );
 
+const TournamentInviteModal = dynamic(
+  () => import("@/components/tournament/TournamentInviteModal"),
+  { ssr: false }
+);
+
 interface Tournament {
   id: string;
   name: string;
@@ -25,6 +30,7 @@ interface Tournament {
   maxPlayers: number;
   currentPlayers: number;
   creatorId: string;
+  isPrivate?: boolean;
   startedAt: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -64,6 +70,7 @@ export default function TournamentDetailsPage() {
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardPreviewData | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<
@@ -1093,6 +1100,17 @@ export default function TournamentDetailsPage() {
 
           <div className="flex flex-col gap-2">
             <div className="flex space-x-3">
+              {/* Invite Players button (creator only, during registration) */}
+              {isCreator && tournament.status === "registering" && (
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <span>👥</span>
+                  <span>Invite Players</span>
+                </button>
+              )}
+
               {tournament.status === "registering" &&
                 !isRegistered &&
                 getCurrentPlayersCount(tournament) < tournament.maxPlayers && (
@@ -2695,6 +2713,18 @@ export default function TournamentDetailsPage() {
 
         {/* Card Preview Overlay */}
         <CardPreview card={hoveredCard} />
+
+        {/* Tournament Invite Modal */}
+        <TournamentInviteModal
+          tournamentId={tournamentId}
+          tournamentName={tournament.name}
+          isOpen={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          onInvitesSent={() => {
+            setToast("Invitations sent successfully");
+            setTimeout(() => setToast(null), 3000);
+          }}
+        />
       </div>
     </div>
   );

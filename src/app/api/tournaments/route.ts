@@ -1,4 +1,4 @@
-import { TournamentFormat, TournamentStatus } from '@prisma/client';
+import { InvitationStatus, TournamentFormat, TournamentStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -40,9 +40,30 @@ export async function GET(req: NextRequest) {
 
     console.log('Fetching tournaments...', { statuses: statuses ?? 'ALL', limit, offset });
 
+    // Build where clause - filter out private tournaments unless user is creator or has invitation
     const where = {
       ...(statuses ? { status: { in: statuses } } : {}),
       ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      // Show public tournaments + private tournaments where user is creator or invited
+      OR: [
+        { isPrivate: false },
+        { creatorId: session.user.id },
+        {
+          invitations: {
+            some: {
+              inviteeId: session.user.id,
+              status: { in: ['pending' as InvitationStatus, 'accepted' as InvitationStatus] }
+            }
+          }
+        },
+        {
+          registrations: {
+            some: {
+              playerId: session.user.id
+            }
+          }
+        }
+      ]
     };
     const tournaments = await prisma.tournament.findMany({
       where,
@@ -83,6 +104,7 @@ export async function GET(req: NextRequest) {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
+      isPrivate: tournament.isPrivate,
       currentPlayers: tournament.registrations.length,
       registeredPlayers: tournament.registrations.map(reg => {
         const prepData = reg.preparationData as Record<string, unknown> | null;
@@ -125,7 +147,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/tournaments
-// Body: { name: string, format: 'swiss' | 'elimination' | 'round_robin', matchType: 'constructed' | 'sealed' | 'draft', maxPlayers: number, sealedConfig?: any, draftConfig?: any }
+// Body: { name: string, format: 'swiss' | 'elimination' | 'round_robin', matchType: 'constructed' | 'sealed' | 'draft', maxPlayers: number, isPrivate?: boolean, sealedConfig?: any, draftConfig?: any }
 export async function POST(req: NextRequest) {
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -138,6 +160,7 @@ export async function POST(req: NextRequest) {
     const format = body?.format as TournamentFormat;
     const matchType = String(body?.matchType || 'sealed');
     const maxPlayers = Number(body?.maxPlayers || 8);
+    const isPrivate = Boolean(body?.isPrivate);
     // Accept sealed/draft config from either top-level or nested in `settings`
     const incomingSettings = (body?.settings as Record<string, unknown> | undefined) || {};
     const sealedConfig = (body?.sealedConfig as unknown)
@@ -147,7 +170,7 @@ export async function POST(req: NextRequest) {
       ?? (incomingSettings?.draftConfig as unknown)
       ?? null;
 
-    console.log("Creating tournament:", { name, format, matchType, maxPlayers, creatorId: session.user.id });
+    console.log("Creating tournament:", { name, format, matchType, maxPlayers, isPrivate, creatorId: session.user.id });
 
     if (!name) {
       return new Response(JSON.stringify({ error: 'Missing tournament name' }), { status: 400 });
@@ -205,6 +228,7 @@ export async function POST(req: NextRequest) {
         format,
         status: 'registering',
         maxPlayers,
+        isPrivate,
         // Ensure a Prisma-compatible JSON shape
         settings: JSON.parse(JSON.stringify(settingsOut))
       }

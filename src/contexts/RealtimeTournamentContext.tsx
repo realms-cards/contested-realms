@@ -48,6 +48,7 @@ interface RealtimeTournamentContextValue {
     name: string;
     format: 'sealed' | 'draft' | 'constructed';
     maxPlayers: number;
+    isPrivate?: boolean;
     settings?: Record<string, unknown>;
   }) => Promise<TournamentInfo>;
   joinTournament: (tournamentId: string) => Promise<void>;
@@ -564,6 +565,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     name: string;
     format: 'sealed' | 'draft' | 'constructed';
     maxPlayers: number;
+    isPrivate?: boolean;
     settings?: Record<string, unknown>;
   }) => {
     setLoading(true);
