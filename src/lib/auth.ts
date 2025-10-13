@@ -123,7 +123,7 @@ King Arthur
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sorcery Sign-in</title>
+    <title>Realms.cards Sign-in</title>
   </head>
   <body style="margin:0;padding:0;background:${backgroundColor};font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#e2e8f0;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${backgroundColor};padding:32px 0;">
@@ -149,7 +149,7 @@ King Arthur
               </td>
             </tr>
           </table>
-          <p style="margin-top:16px;font-size:12px;color:#475569;">Sent securely by Sorcery • ${previewText}</p>
+          <p style="margin-top:16px;font-size:12px;color:#475569;">Do not reply, this is an automated message. Sent securely from Realms.cards • ${previewText}</p>
         </td>
       </tr>
     </table>

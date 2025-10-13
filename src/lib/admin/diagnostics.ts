@@ -236,26 +236,29 @@ async function testCdn(): Promise<ConnectionTestResult> {
     };
   }
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     const requestUrl = `${cdnCheck.origin.replace(/\/+$/, "")}${cdnCheck.path}`;
-    const { result: response, latency } = await timing(async () => {
-      return fetch(requestUrl, {
-        method: "HEAD",
-        cache: "no-store",
-        signal: controller.signal,
+    const attempt = async (method: "HEAD" | "GET") => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timingResult = await timing(async () => {
+        return fetch(requestUrl, {
+          method,
+          cache: "no-store",
+          signal: controller.signal,
+        });
       });
-    });
-    clearTimeout(timeout);
-    if (response.status === 401 || response.status === 403) {
-      return {
-        id: "cdn",
-        label: "Asset CDN",
-        status: "ok",
-        latencyMs: latency,
-        details: `Reachable (HTTP ${response.status}) - check CDN auth rules`,
-      };
+      clearTimeout(timeout);
+      return timingResult;
+    };
+
+    let { result: response, latency } = await attempt("HEAD");
+
+    if (!response.ok && [401, 403, 405, 501].includes(response.status)) {
+      const fallback = await attempt("GET");
+      response = fallback.result;
+      latency = fallback.latency;
     }
+
     if (!response.ok) {
       return {
         id: "cdn",
