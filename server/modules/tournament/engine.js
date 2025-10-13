@@ -167,11 +167,8 @@ export async function choosePack(sessionId, playerId, { packIndex, setChoice } =
       const source = allPacks?.[idx]?.[roundIndex] ?? [];
       return Array.isArray(source) ? source.map((c) => ({ ...c })) : [];
     });
-    const nextWaiting = participants
-      .map((p, idx) => (Array.isArray(nextCurrentPacks[idx]) && nextCurrentPacks[idx].length > 0 ? p.playerId : null))
-      .filter(Boolean);
     state.currentPacks = nextCurrentPacks;
-    state.waitingFor = nextWaiting;
+    state.waitingFor = participants.map((p) => p.playerId);
     state.phase = 'picking';
     state.pickNumber = 1;
     state.allGeneratedPacks = allPacks;
@@ -212,7 +209,9 @@ export async function makePick(sessionId, playerId, cardId) {
 
     // If all have picked, pass or advance round
     if (state.waitingFor.length === 0) {
-      const packDone = currentPack.length === 0 || state.pickNumber >= meta.packSize;
+      // Check if ALL packs are done (not just the current player's pack)
+      const allPacksEmpty = state.currentPacks.every((pack) => !Array.isArray(pack) || pack.length === 0);
+      const packDone = allPacksEmpty || state.pickNumber >= meta.packSize;
       if (packDone) {
         // Next round
         state.packIndex = (Number(state.packIndex) || 0) + 1;
@@ -238,10 +237,7 @@ export async function makePick(sessionId, playerId, cardId) {
           for (let i = 0; i < n; i++) state.currentPacks[(i - 1 + n) % n] = tmp[i];
         }
         state.phase = 'picking';
-        // Only mark players as waiting if they have cards in their pack
-        state.waitingFor = participants
-          .map((p, idx) => (Array.isArray(state.currentPacks[idx]) && state.currentPacks[idx].length > 0 ? p.playerId : null))
-          .filter(Boolean);
+        state.waitingFor = participants.map((p) => p.playerId);
       }
     }
 
