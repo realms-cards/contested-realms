@@ -1650,6 +1650,13 @@ export default function TournamentDraft3DScreen({
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
                     disabled={isSortingEnabled && !isVisible}
+                    onHoverStart={(preview) => {
+                      if (!preview || orbitLocked) return;
+                      showCardPreview(preview);
+                    }}
+                    onHoverEnd={() => {
+                      hideCardPreview();
+                    }}
                   />
                 );
               })}
