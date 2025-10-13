@@ -966,12 +966,51 @@ export default function TournamentDraft3DScreen({
       }
       const inflight = pickInFlightRef.current;
 
+      // Check if server has confirmed our pick before accepting the update
+      if (inflight) {
+        const sameRound =
+          s.phase === "picking" &&
+          Number(s.packIndex) === Number(inflight.packIndex) &&
+          Number(s.pickNumber) === Number(inflight.pickNumber);
+
+        if (sameRound) {
+          const mySeatPack = Array.isArray(s.currentPacks?.[myPlayerIndex])
+            ? (s.currentPacks[myPlayerIndex] as DraftCard[])
+            : [];
+          const stillHasCard = mySeatPack.some((c) => c && c.id === inflight.cardId);
+          const iAmWaiting = Array.isArray(s.waitingFor) && s.waitingFor.includes(myPlayerId);
+
+          // If server still has our card and we're still waiting, the pick wasn't processed
+          if (stillHasCard && iAmWaiting) {
+            const timeSincePick = Date.now() - pickInFlightSinceRef.current;
+            if (timeSincePick < 2000) {
+              // Too soon - this is likely a stale broadcast racing with our pick
+              console.log(`[TournamentDraft3D] Ignoring stale pre-pick update (${timeSincePick}ms old)`);
+              return;
+            } else {
+              // Too long - pick might have been lost, re-emit once
+              console.warn(`[TournamentDraft3D] Pick not confirmed after ${timeSincePick}ms, re-emitting`);
+              try {
+                transport?.emit("makeTournamentDraftPick", {
+                  sessionId: draftSessionId,
+                  cardId: inflight.cardId,
+                });
+                pickInFlightSinceRef.current = Date.now(); // Reset timer
+              } catch (err) {
+                console.error("[TournamentDraft3D] Re-emit failed:", err);
+              }
+              return; // Don't update state yet, wait for confirmation
+            }
+          }
+        }
+      }
+
       setDraftState(s);
       console.log(
         `[TournamentDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
       );
 
-      // Clear in-flight pick marker on any draftUpdate (simpler = more reliable)
+      // Clear in-flight pick marker after accepting server update
       if (inflight) {
         console.log(`[TournamentDraft3D] Clearing in-flight pick marker`);
         pickInFlightRef.current = null;
