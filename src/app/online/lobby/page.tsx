@@ -861,8 +861,10 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                       name: cfg.name,
                       format: cfg.matchType,
                       maxPlayers: cfg.maxPlayers,
-                      isPrivate: cfg.isPrivate,
-                      settings,
+                      settings: {
+                        ...settings,
+                        isPrivate: cfg.isPrivate,
+                      },
                     });
                     // Stay on lobby page - tournaments are now shown here
                   } catch (error) {
