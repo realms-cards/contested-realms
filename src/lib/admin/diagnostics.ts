@@ -114,7 +114,7 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
         "Set SOCKET_SERVER_URL or ADMIN_SOCKET_HEALTH_URL to enable this check.",
     };
   }
-<<<<<<< HEAD
+
   const probe = async (target: string): Promise<ConnectionTestResult> => {
     try {
       const controller = new AbortController();
@@ -158,24 +158,10 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
           : error instanceof Error
             ? error.message
             : String(error);
-=======
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const { result: response, latency } = await timing(async () => {
-      return fetch(healthUrl, {
-        cache: "no-store",
-        signal: controller.signal,
-      });
-    });
-    clearTimeout(timeout);
-    if (!response.ok) {
->>>>>>> 4817179ce504700699079e7411e1e60c07eec641
       return {
         id: "socket",
         label: "Socket server health",
         status: "error",
-<<<<<<< HEAD
         details: message,
       };
     }
@@ -185,58 +171,29 @@ async function testSocketServer(): Promise<ConnectionTestResult> {
   if (primary.status === "ok") {
     return primary;
   }
+
   const url = new URL(healthUrl);
   if (url.hostname !== "localhost") {
     return primary;
   }
-  const fallback = new URL(healthUrl);
-  fallback.hostname = "127.0.0.1";
-  const secondary = await probe(fallback.toString());
-  if (secondary.status === "ok" && primary.details) {
+
+  const fallbackUrl = new URL(healthUrl);
+  fallbackUrl.hostname = "127.0.0.1";
+  const secondary = await probe(fallbackUrl.toString());
+
+  if (secondary.status === "ok") {
     return {
       ...secondary,
       details:
         secondary.details ??
-        `Primary localhost probe failed (${primary.details}); fallback to 127.0.0.1 succeeded`,
+        `Primary localhost probe failed (${primary.details ?? "unknown error"}); fallback to 127.0.0.1 succeeded`,
     };
   }
-  if (secondary.status === "error" && primary.details) {
-    return {
-      ...secondary,
-      details: `${primary.details}; fallback to 127.0.0.1 failed: ${secondary.details}`,
-    };
-  }
-  return secondary;
-=======
-        latencyMs: latency,
-        details: `HTTP ${response.status}`,
-      };
-    }
-    let responseDetails: string | undefined;
-    try {
-      const json = await response.json();
-      if (json && typeof json === "object") {
-        responseDetails = JSON.stringify(json);
-      }
-    } catch {
-      responseDetails = undefined;
-    }
-    return {
-      id: "socket",
-      label: "Socket server health",
-      status: "ok",
-      latencyMs: latency,
-      details: responseDetails,
-    };
-  } catch (error) {
-    return {
-      id: "socket",
-      label: "Socket server health",
-      status: "error",
-      details: error instanceof Error ? error.message : String(error),
-    };
-  }
->>>>>>> 4817179ce504700699079e7411e1e60c07eec641
+
+  return {
+    ...secondary,
+    details: `${primary.details ?? "Primary localhost probe failed"}; fallback to 127.0.0.1 failed${secondary.details ? `: ${secondary.details}` : ""}`,
+  };
 }
 
 async function testCdn(): Promise<ConnectionTestResult> {
