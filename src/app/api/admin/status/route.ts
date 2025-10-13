@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { AdminAccessError, requireAdminSession } from "@/lib/admin/auth";
-import { getAdminStats, runConnectionTests } from "@/lib/admin/diagnostics";
+import {
+  getAdminStats,
+  runConnectionTests,
+  recordHealthSnapshot,
+} from "@/lib/admin/diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,10 +16,12 @@ export async function GET(): Promise<NextResponse> {
       runConnectionTests(),
       getAdminStats(),
     ]);
+    recordHealthSnapshot(connections, stats);
+    const generatedAt = new Date().toISOString();
     return NextResponse.json({
       connections,
       stats,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
     });
   } catch (error) {
     if (error instanceof AdminAccessError) {

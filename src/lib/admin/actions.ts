@@ -119,6 +119,28 @@ export async function clearReplayRecordings(): Promise<AdminActionResult> {
   };
 }
 
+export async function clearMatches(): Promise<AdminActionResult> {
+  const summary = await prisma.$transaction(async (tx) => {
+    const actionsDeleted = await tx.onlineMatchAction.deleteMany({});
+    const sessionsDeleted = await tx.onlineMatchSession.deleteMany({});
+    const matchResultsDeleted = await tx.matchResult.deleteMany({
+      where: { tournamentId: null },
+    });
+    return {
+      actions: actionsDeleted.count,
+      sessions: sessionsDeleted.count,
+      matchResults: matchResultsDeleted.count,
+    };
+  });
+
+  return {
+    action: "clearMatches",
+    status: "ok",
+    message: `Cleared ${summary.matchResults} match results and ${summary.sessions} sessions.`,
+    details: summary,
+  };
+}
+
 export async function runIngestCards(): Promise<AdminActionResult> {
   const outcome = await runNodeScript("scripts/ingest-cards.js");
   if (outcome.exitCode !== 0) {
@@ -209,6 +231,13 @@ export const ADMIN_ACTIONS = [
     dangerous: true,
   },
   {
+    id: "clearMatches",
+    label: "Clear matches",
+    description:
+      "Remove online match sessions, actions, and non-tournament match results.",
+    dangerous: true,
+  },
+  {
     id: "runIngestCards",
     label: "Run ingest-cards.js",
     description:
@@ -243,6 +272,8 @@ export async function executeAdminAction(
       return clearLeaderboard();
     case "clearReplayRecordings":
       return clearReplayRecordings();
+    case "clearMatches":
+      return clearMatches();
     case "runIngestCards":
       return runIngestCards();
     case "runSeedPackConfig":
