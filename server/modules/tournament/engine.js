@@ -238,7 +238,10 @@ export async function makePick(sessionId, playerId, cardId) {
           for (let i = 0; i < n; i++) state.currentPacks[(i - 1 + n) % n] = tmp[i];
         }
         state.phase = 'picking';
-        state.waitingFor = participants.map((p) => p.playerId);
+        // Only mark players as waiting if they have cards in their pack
+        state.waitingFor = participants
+          .map((p, idx) => (Array.isArray(state.currentPacks[idx]) && state.currentPacks[idx].length > 0 ? p.playerId : null))
+          .filter(Boolean);
       }
     }
 

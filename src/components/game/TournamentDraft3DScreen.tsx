@@ -121,6 +121,7 @@ export default function TournamentDraft3DScreen({
     pickNumber: number;
     cardId: string;
   } | null>(null);
+  const pickInFlightSinceRef = useRef<number>(0);
 
   // Enhanced preview and hover state
   const [hoverPreview, setHoverPreview] = useState<{
@@ -212,7 +213,10 @@ export default function TournamentDraft3DScreen({
       if (!mounted || joinSentRef.current) return;
       if (!canSend()) return;
       try {
-        console.log("[TournamentDraft3D] Attempting to join draft session:", draftSessionId);
+        console.log(
+          "[TournamentDraft3D] Attempting to join draft session:",
+          draftSessionId
+        );
         transport.emit("draft:session:join", {
           sessionId: draftSessionId,
           playerId: myPlayerId,
@@ -224,7 +228,9 @@ export default function TournamentDraft3DScreen({
           window.clearTimeout(joinAckTimeoutRef.current);
         joinAckTimeoutRef.current = window.setTimeout(() => {
           if (!joinSentRef.current && mounted) {
-            console.warn("[TournamentDraft3D] No join response after 5s, retrying once");
+            console.warn(
+              "[TournamentDraft3D] No join response after 5s, retrying once"
+            );
             tryJoin();
           }
         }, 5000);
@@ -293,16 +299,18 @@ export default function TournamentDraft3DScreen({
   useEffect(() => {
     const round = draftState.packIndex;
     const inPackSelection = draftState.phase === "pack_selection";
-    const inNextRoundPicking = draftState.phase === "picking" && draftState.pickNumber === 1;
+    const inNextRoundPicking =
+      draftState.phase === "picking" && draftState.pickNumber === 1;
     if (!inPackSelection && !inNextRoundPicking) return;
     if (chosenPackForRoundRef.current.has(round)) return;
-    chosenPackForRoundRef.current.add(round);
     if (!transport) return;
     try {
       transport.emit("chooseTournamentDraftPack", {
         sessionId: draftSessionId,
         packIndex: round,
       });
+      // Mark chosen only after successful emit
+      chosenPackForRoundRef.current.add(round);
     } catch (err) {
       console.warn("[TournamentDraft3D] choose-pack emit error:", err);
     }
@@ -310,7 +318,13 @@ export default function TournamentDraft3DScreen({
     if (inNextRoundPicking) {
       setPackChoiceOverlay(false);
     }
-  }, [draftState.phase, draftState.pickNumber, draftState.packIndex, draftSessionId, transport]);
+  }, [
+    draftState.phase,
+    draftState.pickNumber,
+    draftState.packIndex,
+    draftSessionId,
+    transport,
+  ]);
   const autoPickTimerRef = useRef<number | null>(null);
 
   // Close the pack overlay as soon as we enter picking
@@ -436,7 +450,7 @@ export default function TournamentDraft3DScreen({
           }
         }
       } catch (err) {
-        const isAbort = err instanceof Error && err.name === 'AbortError';
+        const isAbort = err instanceof Error && err.name === "AbortError";
         if (!isAbort) {
           console.error("[TournamentDraft3D] Error polling state:", err);
         }
@@ -673,11 +687,16 @@ export default function TournamentDraft3DScreen({
 
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
-    const result = (
+    const result =
       draftState.phase === "picking" &&
-      draftState.waitingFor.includes(myPlayerId)
+      draftState.waitingFor.includes(myPlayerId);
+    console.log(
+      `[TournamentDraft3D] amPicker=${result} phase=${
+        draftState.phase
+      } waitingFor=${JSON.stringify(
+        draftState.waitingFor
+      )} myPlayerId=${myPlayerId} myPack.length=${myPack.length}`
     );
-    console.log(`[TournamentDraft3D] amPicker=${result} phase=${draftState.phase} waitingFor=${JSON.stringify(draftState.waitingFor)} myPlayerId=${myPlayerId} myPack.length=${myPack.length}`);
     return result;
   }, [draftState.phase, draftState.waitingFor, myPlayerId, myPack.length]);
 
@@ -945,18 +964,79 @@ export default function TournamentDraft3DScreen({
       if (s?.phase && s.phase !== "waiting") {
         everOutOfWaitingRef.current = true;
       }
+      // If a pick is in-flight, ignore a likely pre-pick snapshot for a short grace window (race with join/snapshot)
+      const inflight = pickInFlightRef.current;
+      if (inflight) {
+        const sameRound =
+          s.phase === "picking" &&
+          Number(s.packIndex) === Number(inflight.packIndex) &&
+          Number(s.pickNumber) === Number(inflight.pickNumber);
+        const mySeatPack = Array.isArray(s.currentPacks?.[myPlayerIndex])
+          ? (s.currentPacks![myPlayerIndex] as DraftCard[])
+          : [];
+        const containsCard = mySeatPack.some(
+          (c) => c && c.id === inflight.cardId
+        );
+        const iAmWaiting = Array.isArray(s.waitingFor)
+          ? s.waitingFor.includes(myPlayerId)
+          : false;
+        const likelyPrePick = sameRound && (containsCard || iAmWaiting);
+        const withinGrace = Date.now() - pickInFlightSinceRef.current < 1500;
+        if (likelyPrePick && withinGrace) {
+          console.log(
+            "[TournamentDraft3D] Ignoring pre-pick snapshot/race update"
+          );
+          return;
+        }
+        // Safety: if still waiting for me or my card remains after grace, re-emit pick once
+        if (
+          sameRound &&
+          (containsCard || iAmWaiting) &&
+          Date.now() - pickInFlightSinceRef.current >= 1500
+        ) {
+          try {
+            console.warn(
+              "[TournamentDraft3D] Re-emitting tournament pick (stale state after grace)"
+            );
+            transport?.emit("makeTournamentDraftPick", {
+              sessionId: draftSessionId,
+              cardId: inflight.cardId,
+            });
+            pickInFlightSinceRef.current = Date.now();
+            // Do not return; allow state to set so UI stays in sync
+          } catch {}
+        }
+      }
+
       setDraftState(s);
       console.log(
         `[TournamentDraft3D] draftUpdate: phase=${s.phase} pack=${s.packIndex} pick=${s.pickNumber}`
       );
 
-      // Clear in-flight pick marker when server confirms state update
-      if (pickInFlightRef.current) {
-        console.log(`[TournamentDraft3D] Clearing in-flight pick marker`);
-        pickInFlightRef.current = null;
+      // Clear in-flight pick marker when pick is confirmed by server
+      if (inflight) {
+        const mySeatPack2 = Array.isArray(s.currentPacks?.[myPlayerIndex])
+          ? (s.currentPacks![myPlayerIndex] as DraftCard[])
+          : [];
+        const stillHasCard = mySeatPack2.some(
+          (c) => c && c.id === inflight.cardId
+        );
+        const iAmWaiting2 = Array.isArray(s.waitingFor)
+          ? s.waitingFor.includes(myPlayerId)
+          : false;
+        // Clear if: card removed from pack, OR we've moved to a different pick (pack/pick number changed)
+        const movedToNextPick =
+          s.packIndex !== inflight.packIndex ||
+          s.pickNumber !== inflight.pickNumber;
+        if (!stillHasCard && (!iAmWaiting2 || movedToNextPick)) {
+          console.log(`[TournamentDraft3D] Clearing in-flight pick marker`);
+          pickInFlightRef.current = null;
+          pickInFlightSinceRef.current = 0;
+        }
       }
 
-      if (s.phase === "picking") {
+      // Only clear staged/ready when transitioning INTO picking phase (not on every picking update)
+      if (s.phase === "picking" && draftStateRef.current?.phase !== "picking") {
         setStaged(null);
         setReady(false);
       }
@@ -1132,6 +1212,7 @@ export default function TournamentDraft3DScreen({
         pickNumber: draftState.pickNumber,
         cardId: card.id,
       };
+      pickInFlightSinceRef.current = Date.now();
 
       // Send stack interaction for enhanced multiplayer feedback
       sendStackInteraction("pick", [card.id], "current-pack", "picked-cards", {
@@ -1155,7 +1236,9 @@ export default function TournamentDraft3DScreen({
           sessionId: draftSessionId,
           cardId: card.id,
         });
-        console.log(`[TournamentDraft3D] Emitted makeTournamentDraftPick: session=${draftSessionId} cardId=${card.id}`);
+        console.log(
+          `[TournamentDraft3D] Emitted makeTournamentDraftPick: session=${draftSessionId} cardId=${card.id}`
+        );
         // Pick will be acknowledged via socket broadcast (draftUpdate event)
         // pickInFlightRef will be cleared when we receive the draftUpdate
       } catch (err) {
@@ -1220,7 +1303,13 @@ export default function TournamentDraft3DScreen({
   // Treat all picks as Deck to match editor-3d stacking behavior
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled, true, { sortMode });
+    return computeStackPositions(
+      pick3D,
+      layoutMetaByCardId,
+      isSortingEnabled,
+      true,
+      { sortMode }
+    );
   }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
   // Calculate stack sizes for hitbox optimization
@@ -1314,26 +1403,28 @@ export default function TournamentDraft3DScreen({
 
   // Monitor WebGL context loss and automatically restore
   useEffect(() => {
-    const canvas = document.querySelector('canvas');
+    const canvas = document.querySelector("canvas");
     if (!canvas) return;
 
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[TournamentDraft3D] WebGL context lost - attempting recovery');
+      console.warn(
+        "[TournamentDraft3D] WebGL context lost - attempting recovery"
+      );
     };
 
     const handleContextRestored = () => {
-      console.log('[TournamentDraft3D] WebGL context restored successfully');
+      console.log("[TournamentDraft3D] WebGL context restored successfully");
       // Force re-render to reload textures
       window.location.reload();
     };
 
-    canvas.addEventListener('webglcontextlost', handleContextLost);
-    canvas.addEventListener('webglcontextrestored', handleContextRestored);
+    canvas.addEventListener("webglcontextlost", handleContextLost);
+    canvas.addEventListener("webglcontextrestored", handleContextRestored);
 
     return () => {
-      canvas.removeEventListener('webglcontextlost', handleContextLost);
-      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+      canvas.removeEventListener("webglcontextlost", handleContextLost);
+      canvas.removeEventListener("webglcontextrestored", handleContextRestored);
     };
   }, []);
 
@@ -1394,7 +1485,9 @@ export default function TournamentDraft3DScreen({
                 getTopRenderOrder={getTopRenderOrder}
                 transitionEnabled
                 transitionKey={`${draftState.packIndex}:${draftState.pickNumber}`}
-                passDirection={draftState.packDirection === "right" ? "right" : "left"}
+                passDirection={
+                  draftState.packDirection === "right" ? "right" : "left"
+                }
                 transitionDurationMs={480}
                 onHoverInfo={(info) => {
                   if (info) {
@@ -1677,8 +1770,8 @@ export default function TournamentDraft3DScreen({
                     ) : (
                       <>
                         Waiting for {draftState.waitingFor.length} player
-                        {draftState.waitingFor.length === 1 ? "" : "s"} to
-                        pick & pass…
+                        {draftState.waitingFor.length === 1 ? "" : "s"} to pick
+                        & pass…
                       </>
                     )}
                   </div>
