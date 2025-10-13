@@ -1,6 +1,7 @@
 "use client";
 
 import { Star, Settings } from "lucide-react";
+import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useGameStore } from "@/lib/game/store";
 
@@ -78,6 +79,10 @@ export default function OnlineStatusBar({
             </button>
           </>
         )}
+
+        {/* Audio Controls (Music + Sound) */}
+        <div className="w-px h-4 bg-white/20" />
+        <AudioControls />
       </div>
     </div>
   );

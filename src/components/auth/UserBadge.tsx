@@ -7,7 +7,6 @@ import { useSession, signOut, signIn } from "next-auth/react";
 import React, {
   useContext,
   useEffect,
-  useId,
   useRef,
   useState,
   useCallback,
@@ -15,7 +14,6 @@ import React, {
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
-import { useSound } from "@/lib/contexts/SoundContext";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -46,9 +44,6 @@ export default function UserBadge({
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  // Sound controls
-  const { volume, setVolume, playCardShuffle } = useSound();
-  const volumeSliderId = useId();
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState(() => (user?.email as string | undefined) ?? "");
   const [serverEmail, setServerEmail] = useState(() => (user?.email as string | undefined) ?? "");
@@ -473,29 +468,6 @@ export default function UserBadge({
               >
                 <Settings className="w-5 h-5" />
               </button>
-            </div>
-            {/* Sound volume control */}
-            <div className="mt-2 px-2 py-2 rounded-md bg-slate-800/70 ring-1 ring-slate-700/50">
-              <label
-                htmlFor={volumeSliderId}
-                className="flex items-center justify-between text-xs uppercase tracking-wide text-white/70"
-              >
-                <span>Sound Volume</span>
-                <span>{Math.round(volume * 100)}%</span>
-              </label>
-              <input
-                id={volumeSliderId}
-                type="range"
-                min={0}
-                max={100}
-                value={Math.round(volume * 100)}
-                onChange={(e) => setVolume(e.currentTarget.valueAsNumber / 100)}
-                onPointerUp={(e) => {
-                  const next = e.currentTarget.valueAsNumber / 100;
-                  if (next > 0) playCardShuffle();
-                }}
-                className="mt-1 w-full accent-purple-400"
-              />
             </div>
             <div className="my-2 h-px bg-white/10" />
             {voice && voice.enabled && voice.rtc.featureEnabled && (
