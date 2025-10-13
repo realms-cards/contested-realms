@@ -260,7 +260,7 @@ export function computeStackPositions(
   }, {} as Record<string, Pick3D[]>);
 
   // Sort within each category
-  Object.entries(deckCategories).forEach(([ _key, cards]) => {
+  Object.entries(deckCategories).forEach(([, cards]) => {
     if (sortMode === "mana") {
       // Keep stable/alphabetical within the same bucket
       cards.sort((a, b) => a.card.cardName.localeCompare(b.card.cardName));
