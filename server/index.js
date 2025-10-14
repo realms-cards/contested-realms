@@ -1012,7 +1012,7 @@ const {
   generateCubeBoosterDeterministic,
 } = require("./booster");
 const { BotManager } = require("./botManager");
-const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
+const { applyTurnStart, validateAction, ensureCosts, applyMovementAndCombat } = require("./rules");
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 const { buildMatchInfo } = require("./matchInfo");
 
@@ -2173,22 +2173,37 @@ async function recordLeaderboardMatchResult(match, payload = {}) {
 
     const existing = await prisma.matchResult.findFirst({ where: { matchId: match.id } });
     if (!existing) {
-      await prisma.matchResult.create({
-        data: {
-          matchId: match.id,
-          lobbyName: match.lobbyName || null,
-          winnerId: isDraw ? null : winnerId,
-          loserId: isDraw ? null : loserId,
-          isDraw,
-          format,
-          tournamentId,
-          players: playerInfos.map((info) => ({
-            id: info.id,
-            displayName: info.displayName,
-          })),
-          duration: durationSeconds !== null ? durationSeconds : null,
-        },
-      });
+      // Skip CPU-only matches from persistence
+      const cpuOnly = Array.isArray(playerInfos) && playerInfos.length > 0 && playerInfos.every((info) => isCpuPlayerId(info.id));
+      if (!cpuOnly) {
+        // Ensure FK safety: null winner/loser if not in User table (e.g., CPU IDs)
+        let safeWinnerId = isDraw ? null : winnerId;
+        let safeLoserId = isDraw ? null : loserId;
+        if (safeWinnerId) {
+          const exists = await prisma.user.findUnique({ where: { id: safeWinnerId } });
+          if (!exists) safeWinnerId = null;
+        }
+        if (safeLoserId) {
+          const exists = await prisma.user.findUnique({ where: { id: safeLoserId } });
+          if (!exists) safeLoserId = null;
+        }
+        await prisma.matchResult.create({
+          data: {
+            matchId: match.id,
+            lobbyName: match.lobbyName || null,
+            winnerId: safeWinnerId,
+            loserId: safeLoserId,
+            isDraw,
+            format,
+            tournamentId,
+            players: playerInfos.map((info) => ({
+              id: info.id,
+              displayName: info.displayName,
+            })),
+            duration: durationSeconds !== null ? durationSeconds : null,
+          },
+        });
+      }
     }
 
     match._leaderboardRecorded = true;
@@ -3164,6 +3179,14 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
         };
       }
       match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
+      // Resolve movement/combat after merge (basic v1)
+      try {
+        const mc = applyMovementAndCombat(baseForMerge, patchToApply, playerId, { match });
+        if (mc && typeof mc === 'object') {
+          match.game = deepMergeReplaceArrays(match.game || {}, mc);
+          patchToApply = deepMergeReplaceArrays(patchToApply || {}, mc);
+        }
+      } catch {}
       // Apply start-of-turn effects if phase/currentPlayer indicates a new turn
       try {
         const prevPhase = (baseForMerge && baseForMerge.phase) || null;

@@ -40,6 +40,7 @@
     "bot:add": "node scripts/add-cpu-bot.js",
     "bots:spawn": "node scripts/spawn-bots.js",
     "sim:tournament": "node scripts/simulate-tournament.js",
+    "train:selfplay": "node scripts/training/selfplay.js",
     "test:rules": "vitest run tests/unit/rules*.test.ts tests/unit/triggers.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -55,7 +56,10 @@
     "redis:down": "docker compose stop redis",
     "stack:up": "docker compose up -d postgres redis server1 server2 caddy",
     "stack:up:single": "docker compose up -d postgres redis migrate server1 caddy",
-    "stack:down": "docker compose down"
+    "stack:down": "docker compose down",
+    "artifacts:export": "node scripts/training/export-artifact.js",
+    "artifacts:import": "node scripts/training/import-artifact.js",
+    "validate:rules": "node scripts/validate-rules.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",

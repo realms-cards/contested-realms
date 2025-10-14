@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "rules": [
+    { "category": "PLACEMENT", "phase": "Main", "action": "play_site", "condition": "firstSite=1 && atAvatarPos=1", "constraint": "require", "priority": 95 },
+    { "category": "PLACEMENT", "phase": "Main", "action": "play_site", "condition": "adjacentToOwned=1", "constraint": "require", "priority": 90 },
+    { "category": "COST", "phase": "Main", "action": "play_site", "condition": "avatarUntapped=1", "constraint": "require", "effect": "autoTapAvatar", "priority": 70 },
+    { "category": "TIMING", "phase": "Main", "action": "play_permanent", "condition": "actorIsActive=1", "constraint": "require", "priority": 90 },
+    { "category": "THRESHOLD", "phase": "Main", "action": "play_permanent", "condition": "meetsThresholds=1", "constraint": "require", "priority": 95 },
+    { "category": "MOVEMENT", "phase": "Main", "action": "move", "condition": "orthogonal=1 && inBounds=1 && destFriendlyOccupied=0", "constraint": "require", "priority": 90 },
+    { "category": "COMBAT", "phase": "Main", "action": "attack", "condition": "orthogonal=1 && inBounds=1 && occupiedBy=opponent", "constraint": "require", "priority": 95 },
+    { "category": "DRAW", "phase": "Draw", "action": "draw_atlas", "condition": "actorIsActive=1", "constraint": "prefer", "priority": 40 },
+    { "category": "DRAW", "phase": "Draw", "action": "draw_atlas_tap", "condition": "avatarUntapped=1 && noSiteInHand=1", "constraint": "prefer", "priority": 50 }
+  ]
+}

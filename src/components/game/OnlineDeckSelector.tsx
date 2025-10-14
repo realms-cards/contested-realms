@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { PlayerKey } from "@/lib/game/store";
 
 type MyDeckInfo = {
@@ -23,12 +23,14 @@ interface OnlineDeckSelectorProps {
   myPlayerKey: PlayerKey;
   playerNames: { p1: string; p2: string };
   onPrepareComplete: () => void;
+  matchType?: "constructed" | "sealed" | "draft";
 }
 
 export default function OnlineDeckSelector({ 
   myPlayerKey, 
   playerNames, 
-  onPrepareComplete 
+  onPrepareComplete,
+  matchType
 }: OnlineDeckSelectorProps) {
   const curiosaEnabled = process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
   const [myDecks, setMyDecks] = useState<MyDeckInfo[]>([]);
@@ -43,6 +45,8 @@ export default function OnlineDeckSelector({
   const [impLoading, setImpLoading] = useState(false);
   const [impError, setImpError] = useState<string | null>(null);
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
+
+  const isConstructed = (matchType ?? "constructed") === "constructed";
 
   useEffect(() => {
     (async () => {
@@ -87,6 +91,20 @@ export default function OnlineDeckSelector({
       setIsLoading(false);
     }
   };
+
+  const selectedDeckMeta = useMemo(() => {
+    if (!selectedDeck) return null;
+    const mine = myDecks.find((d) => d.id === selectedDeck) || null;
+    if (mine) return mine;
+    const pub = publicDecks.find((d) => d.id === selectedDeck) || null;
+    return pub;
+  }, [selectedDeck, myDecks, publicDecks]);
+
+  const isPreconSelected = useMemo(() => {
+    const name = selectedDeckMeta?.name || "";
+    const lower = name.toLowerCase();
+    return lower.includes("precon"); // seeded decks use "Beta Precon – <Element>"
+  }, [selectedDeckMeta]);
 
   const importFromCuriosa = async () => {
     if (!impUrl.trim() && !impTts.trim()) return;
@@ -225,6 +243,12 @@ export default function OnlineDeckSelector({
         {deckError && (
           <div className="text-red-400 text-sm bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
             {deckError}
+          </div>
+        )}
+
+        {isConstructed && isPreconSelected && (
+          <div className="mt-2 text-amber-300 text-xs bg-amber-900/20 rounded px-3 py-2 ring-1 ring-amber-800">
+            You selected a Precon deck. These lists are for learning the game and are not competitive constructed-legal.
           </div>
         )}
 

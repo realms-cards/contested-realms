@@ -4,7 +4,9 @@
 /* eslint-env node */
 
 const path = require("path");
+const fs = require("fs");
 const { io } = require("socket.io-client");
+const botEngine = require("./engine");
 
 // Lazy-loaded card database from data/cards_raw.json
 let _CARDS_DB = null;
@@ -34,6 +36,19 @@ class BotClient {
     this.currentMatch = null; // { id, matchType, players, sealedPacks?, draftState? }
     this.playerIndex = -1; // index into match.players
 
+    // AI engine configuration (overridable per bot)
+    this.engineMode = (opts && typeof opts.engineMode === 'string' && opts.engineMode) || process.env.CPU_AI_ENGINE_MODE || "evaluate"; // evaluate|train
+    this.aiEnabled = (opts && typeof opts.aiEnabled === 'boolean') ? !!opts.aiEnabled : (
+      process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
+      process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "true"
+    );
+    this.theta = (opts && opts.theta) || null;
+    this._rng = null;
+    this._trainLogPath = null;
+    this._trainSeed = null;
+    this.constructedDeckFile = (opts && typeof opts.constructedDeckFile === 'string' && opts.constructedDeckFile) || process.env.CPU_BOT_DECK_FILE || null;
+    this.constructedDeck = (opts && typeof opts.constructedDeck === 'object' && opts.constructedDeck) || null;
+
     // internal flags
     this._connected = false;
     this._joinedLobby = false;
@@ -58,6 +73,7 @@ class BotClient {
     this._draftReadyScheduled = new Set(); // matchId
     this._d20Scheduled = new Set(); // matchId
     this._mulliganScheduled = new Set(); // matchId
+    this._mulliganKeepalive = new Map(); // matchId -> interval
 
     // Join guards
     this._joinedMatch = new Set(); // matchId
@@ -69,6 +85,8 @@ class BotClient {
     this._actedTurn = new Set(); // `${matchId}:${turnIndex}`
     this._startedAsFirst = false; // true if we were the first player when Start applied
     this._constructedInitDone = new Set(); // matchId
+    // Bot rules
+    this._botRules = null;
   }
 
   async start() {
@@ -96,6 +114,18 @@ class BotClient {
 
     socket.on("welcome", (payload) => {
       this.you = payload && payload.you ? payload.you : null;
+      try {
+        if (!this.theta) {
+          let theta = null;
+          const p = process.env.CPU_AI_PARAMS_PATH || path.join(process.cwd(), "data", "bots", "params", "champion.json");
+          if (fs.existsSync(p)) {
+            try { theta = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
+          }
+          this.theta = theta || (botEngine && botEngine.loadTheta ? botEngine.loadTheta() : null);
+        }
+      } catch {}
+      // Load bot rules (JSON preferred, CSV fallback)
+      try { this._ensureBotRulesLoaded(); } catch {}
       // Join the requested lobby and ready up
       if (this.lobbyId) {
         socket.emit("joinLobby", { lobbyId: this.lobbyId });
@@ -106,11 +136,9 @@ class BotClient {
 
     socket.on("joinedLobby", () => {
       this._joinedLobby = true;
-      // Ready up immediately
       setTimeout(() => {
-        socket.emit("ready", { ready: true });
-        // Say hello so opponents see CPU in console
-        socket.emit("chat", { content: `Hello! I'm ${this.displayName}.`, scope: "lobby" });
+        try { socket.emit("ready", { ready: true }); } catch {}
+        try { socket.emit("chat", { content: `Hello! I'm ${this.displayName}.`, scope: "lobby" }); } catch {}
       }, 200);
     });
 
@@ -123,6 +151,26 @@ class BotClient {
       if (!match) return;
       this.currentMatch = match;
       this.playerIndex = this._resolvePlayerIndex(match);
+      try {
+        const seedStr = `${match.seed || match.id}|${this.you?.id || this.playerId}`;
+        this._trainSeed = seedStr;
+        if (botEngine && botEngine.createRng) this._rng = botEngine.createRng(seedStr);
+      } catch {}
+
+      if (this.engineMode === "train") {
+        try {
+          const now = new Date();
+          const y = String(now.getFullYear());
+          const m = String(now.getMonth() + 1).padStart(2, "0");
+          const d = String(now.getDate()).padStart(2, "0");
+          const dir = path.join(process.cwd(), "logs", "training", `${y}${m}${d}`);
+          fs.mkdirSync(dir, { recursive: true });
+          this._trainLogPath = path.join(dir, `match_${match.id}_${this.playerId}.jsonl`);
+          fs.appendFileSync(this._trainLogPath, "");
+        } catch {}
+      } else {
+        this._trainLogPath = null;
+      }
 
       // Ensure we are in the match room so actions and patches are routed correctly
       try {
@@ -164,6 +212,8 @@ class BotClient {
             } catch {}
           }, 500 + Math.floor(Math.random() * 500));
         }
+        // Keep emitting mulliganDone until we observe Main phase
+        this._startMulliganKeepalive(match.id);
       }
 
       // Schedule D20 roll once per match (sufficient even if we miss a statePatch)
@@ -235,6 +285,14 @@ class BotClient {
     } catch {}
     this.socket = null;
     this._connected = false;
+  }
+
+  joinMatchById(matchId) {
+    try {
+      if (!this.socket || !matchId) return;
+      if (!this._joinedMatch.has(matchId)) this._joinedMatch.add(matchId);
+      this.socket.emit('joinMatch', { matchId });
+    } catch {}
   }
 
   _resolvePlayerIndex(match) {
@@ -349,28 +407,272 @@ class BotClient {
         this._constructedInitDone.add(mid);
         return;
       }
-      // Build a 24/12 constructed deck using real slugs from cards_raw.json and draw opening 3+3
-      const deck = this._buildConstructedDeckFromData();
+      let deck = null;
+      if (this.constructedDeckFile) {
+        deck = this._loadConstructedDeckFromFile(this.constructedDeckFile);
+      } else if (this.constructedDeck) {
+        deck = this._buildDeckFromConfig(this.constructedDeck);
+      }
+      if (!deck) {
+        try { console.warn('[Bot] No constructed deck provided; bots are restricted to precon decks. Skipping initialization.'); } catch {}
+        return;
+      }
       const spells = Array.isArray(deck.book) ? [...deck.book] : [];
       const sites = Array.isArray(deck.atlas) ? [...deck.atlas] : [];
-      const hand = [];
-      for (let i = 0; i < 3 && spells.length; i++) hand.push(spells.shift());
-      for (let i = 0; i < 3 && sites.length; i++) hand.push(sites.shift());
+      const opening = this._chooseOpeningHand(spells, sites);
       const myZones = {
-        spellbook: spells,
-        atlas: sites,
-        hand,
+        spellbook: opening.restSpells,
+        atlas: opening.restSites,
+        hand: [...opening.handSpells, ...opening.handSites],
         graveyard: [],
         battlefield: [],
         banished: [],
       };
       const patch = { zones: { [meKey]: myZones } };
       try {
-        this.socket.emit('action', { action: patch });
+        const hydrated = this._hydratePatchCardRefs(patch);
+        this.socket.emit('action', { action: hydrated });
         this._constructedInitDone.add(mid);
         try { console.log('[Bot] Initialized constructed deck and opening hand'); } catch {}
       } catch {}
     } catch {}
+  }
+
+  _hydratePatchCardRefs(patch) {
+    if (!patch || typeof patch !== 'object') return patch;
+    if (patch.zones) {
+      for (const key in patch.zones) {
+        const zone = patch.zones[key];
+        if (zone && typeof zone === 'object') {
+          if (zone.hand) {
+            zone.hand = zone.hand.map((c) => this._hydrateCardRef(c));
+          }
+          if (zone.spellbook) {
+            zone.spellbook = zone.spellbook.map((c) => this._hydrateCardRef(c));
+          }
+          if (zone.atlas) {
+            zone.atlas = zone.atlas.map((c) => this._hydrateCardRef(c));
+          }
+          if (zone.battlefield) {
+            zone.battlefield = zone.battlefield.map((c) => this._hydrateCardRef(c));
+          }
+          if (zone.graveyard) {
+            zone.graveyard = zone.graveyard.map((c) => this._hydrateCardRef(c));
+          }
+          if (zone.banished) {
+            zone.banished = zone.banished.map((c) => this._hydrateCardRef(c));
+          }
+        }
+      }
+    }
+    if (patch.board) {
+      for (const key in patch.board.sites) {
+        const site = patch.board.sites[key];
+        if (site && site.card) {
+          site.card = this._hydrateCardRef(site.card);
+        }
+      }
+    }
+    if (patch.avatars) {
+      for (const key in patch.avatars) {
+        const avatar = patch.avatars[key];
+        if (avatar && avatar.card) {
+          avatar.card = this._hydrateCardRef(avatar.card);
+        }
+      }
+    }
+    return patch;
+  }
+
+  _hydrateCardRef(card) {
+    if (!card || typeof card !== 'object') return card;
+    if (!card.slug) {
+      // Prefer name-based lookup; our generated IDs are not stable
+      const name = card.name ? String(card.name) : null;
+      if (name) {
+        const slug = this._getSlugForName(name);
+        if (slug) card.slug = slug;
+      }
+    }
+    // Attach thresholds so the engine can gate non-site plays locally
+    try {
+      if (!card.thresholds) {
+        const th = this._getThresholdsForCard(card);
+        if (th) card.thresholds = th;
+      }
+    } catch {}
+    // Attach type if missing so engine can identify permanents
+    try {
+      if (!card.type || typeof card.type !== 'string' || !card.type.length) {
+        const t = this._getTypeForCard(card);
+        if (t) card.type = t;
+      }
+    } catch {}
+    return card;
+  }
+
+  _getCardRef(id) {
+    // Deprecated: we no longer rely on IDs for lookup; use name -> slug
+    return null;
+  }
+
+  _getTypeForCard(card) {
+    try {
+      const db = _loadCardsDb();
+      const slug = card && card.slug ? String(card.slug) : null;
+      if (slug) {
+        for (const c of db) {
+          const sets = Array.isArray(c?.sets) ? c.sets : [];
+          for (const s of sets) {
+            const vs = Array.isArray(s?.variants) ? s.variants : [];
+            if (vs.find((v) => String(v.slug) === slug)) {
+              return String(c?.guardian?.type || c?.sets?.[0]?.metadata?.type || '') || null;
+            }
+          }
+        }
+      }
+      const nm = card && card.name ? String(card.name) : null;
+      if (nm) {
+        const found = db.find((c) => String(c?.name || '').toLowerCase() === nm.toLowerCase());
+        if (found) return String(found?.guardian?.type || found?.sets?.[0]?.metadata?.type || '') || null;
+      }
+    } catch {}
+    return null;
+  }
+
+  _ensureBotRulesLoaded() {
+    try {
+      if (this._botRules) return;
+      const jsonP = path.join(process.cwd(), 'data', 'bots', 'botrules.json');
+      const csvP = path.join(process.cwd(), 'reference', 'BotRules.csv');
+      let rules = null;
+      if (fs.existsSync(jsonP)) {
+        try {
+          const obj = JSON.parse(fs.readFileSync(jsonP, 'utf8'));
+          if (obj && typeof obj === 'object' && Array.isArray(obj.rules)) rules = obj;
+        } catch {}
+      }
+      if (!rules && fs.existsSync(csvP)) {
+        try {
+          const txt = fs.readFileSync(csvP, 'utf8');
+          rules = this._parseBotRulesCsv(txt);
+        } catch {}
+      }
+      this._botRules = rules || { version: 1, rules: [] };
+    } catch {}
+  }
+
+  _parseBotRulesCsv(text) {
+    try {
+      if (!text || typeof text !== 'string') return { version: 1, rules: [] };
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length === 0) return { version: 1, rules: [] };
+      const header = lines[0].split(',').map((h) => String(h || '').trim().toLowerCase());
+      const idx = (name) => header.indexOf(String(name).toLowerCase());
+      const rules = [];
+      for (let i = 1; i < lines.length; i++) {
+        const raw = lines[i];
+        if (!raw || !raw.trim()) continue;
+        const cols = raw.split(',');
+        const get = (name) => {
+          const j = idx(name);
+          return j >= 0 ? String(cols[j] || '').trim() : '';
+        };
+        const r = {
+          category: get('category') || undefined,
+          phase: get('phase') || undefined,
+          action: get('action') || undefined,
+          condition: get('condition') || undefined,
+          constraint: get('constraint') || undefined,
+        };
+        const pr = Number(get('priority'));
+        if (Number.isFinite(pr)) r.priority = pr;
+        const eff = get('effect');
+        if (eff) r.effect = eff;
+        const src = get('source');
+        if (src) r.source = src;
+        if (r.action) rules.push(r);
+      }
+      return { version: 1, rules };
+    } catch { return { version: 1, rules: [] }; }
+  }
+
+  _getCostForCardRef(card) {
+    try {
+      if (card && typeof card.cost === 'number') return Number(card.cost) || 0;
+      const db = _loadCardsDb();
+      const slug = card && card.slug ? String(card.slug) : null;
+      if (slug) {
+        for (const c of db) {
+          const sets = Array.isArray(c?.sets) ? c.sets : [];
+          for (const s of sets) {
+            const vs = Array.isArray(s?.variants) ? s.variants : [];
+            if (vs.find((v) => String(v.slug) === slug)) {
+              const meta = c?.guardian || (Array.isArray(c?.sets) && c.sets.length > 0 ? c.sets[0]?.metadata : null);
+              const cost = meta && typeof meta.cost === 'number' ? Number(meta.cost) : 0;
+              return Number.isFinite(cost) ? cost : 0;
+            }
+          }
+        }
+      }
+      const nm = card && card.name ? String(card.name) : null;
+      if (nm) {
+        const found = db.find((c) => String(c?.name || '').toLowerCase() === nm.toLowerCase());
+        if (found) {
+          const meta = found?.guardian || (Array.isArray(found?.sets) && found.sets.length > 0 ? found.sets[0]?.metadata : null);
+          const cost = meta && typeof meta.cost === 'number' ? Number(meta.cost) : 0;
+          return Number.isFinite(cost) ? cost : 0;
+        }
+      }
+    } catch {}
+    return 0;
+  }
+
+  _chooseOpeningHand(spells, sites) {
+    try {
+      const rng = this._rng || ((seed) => { let x = 1234567; return () => ((x ^= x << 13, x ^= x >>> 17, x ^= x << 5) >>> 0) / 4294967296; })(`${this._trainSeed || 'seed'}/opening`);
+      const shuffle = (arr) => {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+        return a;
+      };
+      const isPerm = (c) => {
+        const t = String(c?.type || '').toLowerCase();
+        return !!t && !t.includes('site') && !t.includes('avatar') && !t.includes('spell');
+      };
+      const perms = spells.filter(isPerm);
+      const nonPerms = spells.filter((c) => !isPerm(c));
+      const score = (c) => this._getCostForCardRef(c) + (isPerm(c) ? -2 : 0);
+      const permSorted = perms.map((c) => ({ c, s: score(c) })).sort((a,b)=>a.s-b.s).map(x=>x.c);
+      const otherSorted = nonPerms.map((c) => ({ c, s: score(c) })).sort((a,b)=>a.s-b.s).map(x=>x.c);
+      const handSpells = [];
+      for (const c of permSorted) { if (handSpells.length >= 3) break; handSpells.push(c); }
+      for (const c of otherSorted) { if (handSpells.length >= 3) break; handSpells.push(c); }
+      const pickedIdx = new Set(handSpells.map((c) => spells.indexOf(c)));
+      const restSpells = spells.filter((_, i) => !pickedIdx.has(i));
+
+      // Sites: favor early color fixing by taking first 3 (atlas already balanced by _standardSites)
+      const sitesShuffled = shuffle(sites);
+      // Light bias toward 'Valley' and 'Stream' if present
+      sitesShuffled.sort((a, b) => {
+        const bias = (n) => {
+          const nm = String(n?.name || '').toLowerCase();
+          if (nm.includes('valley')) return -2;
+          if (nm.includes('stream')) return -1;
+          return 0;
+        };
+        return bias(a) - bias(b) || (rng() - 0.5);
+      });
+      const handSites = sitesShuffled.slice(0, Math.min(3, sitesShuffled.length));
+      const restSites = sites.filter((c, i) => !handSites.includes(c));
+
+      return { handSpells, handSites, restSpells, restSites };
+    } catch {
+      // Fallback: first 3 + first 3
+      const hs = spells.slice(0, 3);
+      const hsi = sites.slice(0, 3);
+      return { handSpells: hs, handSites: hsi, restSpells: spells.slice(hs.length), restSites: sites.slice(hsi.length) };
+    }
   }
 
   _mergeGamePatch(patch) {
@@ -441,6 +743,67 @@ class BotClient {
 
       // 1) Draw one card (skip if we started first on the very first turn)
       const isFirstTurnForMe = this._turnIndex === 0 && this._startedAsFirst === true;
+      // AI Engine path (evaluate/train): generate a move using the parameterized engine
+      if (this.aiEnabled && botEngine && typeof botEngine.search === "function") {
+        try {
+          const baseTheta = (this.theta && this.theta.weights) ? this.theta : (botEngine.loadTheta ? botEngine.loadTheta() : null);
+          const mergedTheta = (() => {
+            const t = baseTheta ? JSON.parse(JSON.stringify(baseTheta)) : {};
+            if (this.theta && this.theta.search) t.search = { ...(t.search || {}), ...this.theta.search };
+            if (this.theta && this.theta.exploration) t.exploration = { ...(t.exploration || {}), ...this.theta.exploration };
+            if (this.theta && this.theta.meta) t.meta = { ...(t.meta || {}), ...this.theta.meta };
+            return t;
+          })();
+          const patch = botEngine.search(
+            this._game,
+            meKey,
+            mergedTheta,
+            this._rng || (botEngine.createRng ? botEngine.createRng(`${this.currentMatch?.id}|${this.you?.id || this.playerId}`) : null),
+            {
+              skipDrawThisTurn: isFirstTurnForMe,
+              mode: this.engineMode === "train" ? "train" : "evaluate",
+              exploration: (mergedTheta && mergedTheta.exploration) || { epsilon_root: 0 },
+              seed: this._trainSeed,
+              rules: this._botRules || undefined,
+              logger: this.engineMode === "train" && this._trainLogPath
+                ? (entry) => {
+                    try {
+                      const payload = {
+                        matchId: this.currentMatch ? this.currentMatch.id : null,
+                        turnIndex: this._turnIndex,
+                        ...entry,
+                      };
+                      fs.appendFile(this._trainLogPath, JSON.stringify(payload) + "\n", () => {});
+                    } catch {}
+                  }
+                : undefined,
+            }
+          );
+          if (patch && typeof patch === "object") {
+            const toSend = this._hydratePatchCardRefs(patch);
+            this.socket.emit('action', { action: toSend });
+            // Mark acted this turn and schedule end-turn after a short delay
+            this._actedTurn.add(turnKey);
+            setTimeout(() => {
+              try {
+                const other = myNum === 1 ? 2 : 1;
+                this.socket.emit('action', { action: { currentPlayer: other, phase: 'Main' } });
+              } catch {}
+            }, 500);
+            // Fallback: if currentPlayer didn't flip after 1.2s, try once more
+            setTimeout(() => {
+              try {
+                if (!this._game) return;
+                if (this._game.currentPlayer === myNum) {
+                  const other = myNum === 1 ? 2 : 1;
+                  this.socket.emit('action', { action: { currentPlayer: other, phase: 'Main' } });
+                }
+              } catch {}
+            }, 1200);
+            return; // avoid running the legacy heuristic path
+          }
+        } catch {}
+      }
       if (!isFirstTurnForMe) {
         const spellbook = Array.isArray(myZones.spellbook) ? [...myZones.spellbook] : [];
         if (spellbook.length > 0) {
@@ -543,7 +906,8 @@ class BotClient {
 
       // Send action
       try {
-        this.socket.emit('action', { action: patch });
+        const toSend = this._hydratePatchCardRefs(patch);
+        this.socket.emit('action', { action: toSend });
       } catch {}
 
       // Mark acted this turn and schedule end-turn after a short delay
@@ -587,6 +951,34 @@ class BotClient {
           }
         } catch {}
       }, 600 + Math.floor(Math.random() * 600));
+    } catch {}
+  }
+
+  _startMulliganKeepalive(matchId) {
+    try {
+      if (!matchId) return;
+      if (this._mulliganKeepalive.has(matchId)) return;
+      const timer = setInterval(() => {
+        try {
+          // Stop once Main is observed
+          if (this._game && this._game.phase === 'Main') {
+            this._stopMulliganKeepalive(matchId);
+            return;
+          }
+          this.socket && this.socket.emit && this.socket.emit('mulliganDone', {});
+        } catch {}
+      }, 700);
+      this._mulliganKeepalive.set(matchId, timer);
+    } catch {}
+  }
+
+  _stopMulliganKeepalive(matchId) {
+    try {
+      const t = this._mulliganKeepalive.get(matchId);
+      if (t) {
+        clearInterval(t);
+        this._mulliganKeepalive.delete(matchId);
+      }
     } catch {}
   }
 
@@ -840,31 +1232,46 @@ class BotClient {
   // Build a 24/12 constructed deck using real slugs
   _buildConstructedDeckFromData() {
     const db = _loadCardsDb();
-    // Pick 24 non-site, non-avatar cards, biased by preferred elements
+    // Pick 24 cards biased toward permanents/units (avoid spell-heavy builds)
     const want = 24;
     const preferred = Array.isArray(this.preferredElements) ? this.preferredElements : [];
+    const typeOf = (c) => c?.guardian?.type || c?.sets?.[0]?.metadata?.type || '';
     const isSite = (t) => String(t || '').toLowerCase().includes('site');
     const isAvatar = (t) => String(t || '').toLowerCase().includes('avatar');
-    const candidates = [];
+    const isSpell = (t) => String(t || '').toLowerCase().includes('spell');
+    const isPermanent = (t) => {
+      const s = String(t || '').toLowerCase();
+      if (!s) return false;
+      if (isSite(s) || isAvatar(s) || isSpell(s)) return false;
+      // Treat all non-site, non-avatar, non-spell as board permanents (minions, relics, structures, etc.)
+      return true;
+    };
+    const permanents = [];
+    const nonPermanents = [];
     for (const c of db) {
       try {
-        const t = c?.guardian?.type || c?.sets?.[0]?.metadata?.type || '';
+        const t = typeOf(c);
         if (isSite(t) || isAvatar(t)) continue;
-        candidates.push(c);
+        if (isPermanent(t)) permanents.push(c);
+        else nonPermanents.push(c);
       } catch {}
     }
-    // Bias by preferred elements first
-    const scored = candidates.map((c) => {
+    // Score function: prefer preferred elements and lower cost
+    const scoreCard = (c) => {
       const el = String(c?.elements || '').toLowerCase();
       let score = 0;
       for (const e of preferred) if (el.includes(String(e).toLowerCase())) score += 10;
-      // Mild cost bias if present
       const cost = Number(c?.guardian?.cost || c?.sets?.[0]?.metadata?.cost || 0) || 0;
       score += Math.max(0, 6 - cost);
-      return { c, score };
-    }).sort((a,b) => b.score - a.score);
-    const pick = (count) => scored.slice(0, Math.min(count, scored.length)).map(({ c }, idx) => this._toRefFromDb(c, idx));
-    const book = pick(want);
+      return score;
+    };
+    const sortByScoreDesc = (arr) => arr.map((c) => ({ c, s: scoreCard(c) })).sort((a,b) => b.s - a.s).map(x => x.c);
+    const permSorted = sortByScoreDesc(permanents);
+    const nonPermSorted = sortByScoreDesc(nonPermanents);
+    const chosen = [];
+    for (const c of permSorted) { if (chosen.length >= want) break; chosen.push(c); }
+    for (const c of nonPermSorted) { if (chosen.length >= want) break; chosen.push(c); }
+    const book = chosen.slice(0, want).map((c, idx) => this._toRefFromDb(c, idx));
 
     // Build 12 standard sites using real slugs
     const atlas = [];
@@ -875,11 +1282,79 @@ class BotClient {
     return { book, atlas };
   }
 
+  _loadConstructedDeckFromFile(filePath) {
+    try {
+      const abs = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+      if (!fs.existsSync(abs)) return null;
+      const raw = JSON.parse(fs.readFileSync(abs, 'utf8'));
+      const sb = Array.isArray(raw && raw.spellbook) ? raw.spellbook : [];
+      const at = Array.isArray(raw && raw.atlas) ? raw.atlas : [];
+      const book = [];
+      const atlas = [];
+      const pushMany = (arr, ref, n) => { for (let i = 0; i < n; i++) arr.push(ref); };
+      for (const e of sb) {
+        try {
+          const name = String(e && e.name || '');
+          const count = Math.max(1, Number(e && e.count || 1));
+          if (!name) continue;
+          const slug = this._getSlugForName(name);
+          const ref = { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: null, set: 'Beta', slug: slug || undefined };
+          pushMany(book, ref, count);
+        } catch {}
+      }
+      for (const e of at) {
+        try {
+          const name = String(e && e.name || '');
+          const count = Math.max(1, Number(e && e.count || 1));
+          if (!name) continue;
+          const slug = this._getSlugForName(name);
+          const ref = { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: 'Site', set: 'Beta', slug: slug || undefined };
+          pushMany(atlas, ref, count);
+        } catch {}
+      }
+      if (book.length === 0 || atlas.length === 0) return null;
+      return { book, atlas };
+    } catch { return null; }
+  }
+
+  _buildDeckFromConfig(config) {
+    try {
+      const sb = Array.isArray(config && config.spellbook) ? config.spellbook : [];
+      const at = Array.isArray(config && config.atlas) ? config.atlas : [];
+      const book = [];
+      const atlas = [];
+      const pushMany = (arr, ref, n) => { for (let i = 0; i < n; i++) arr.push(ref); };
+      for (const e of sb) {
+        try {
+          const name = String(e && e.name || '');
+          const count = Math.max(1, Number(e && e.count || 1));
+          if (!name) continue;
+          const slug = this._getSlugForName(name);
+          const ref = { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: null, set: 'Beta', slug: slug || undefined };
+          pushMany(book, ref, count);
+        } catch {}
+      }
+      for (const e of at) {
+        try {
+          const name = String(e && e.name || '');
+          const count = Math.max(1, Number(e && e.count || 1));
+          if (!name) continue;
+          const slug = this._getSlugForName(name);
+          const ref = { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: 'Site', set: 'Beta', slug: slug || undefined };
+          pushMany(atlas, ref, count);
+        } catch {}
+      }
+      if (book.length === 0 || atlas.length === 0) return null;
+      return { book, atlas };
+    } catch { return null; }
+  }
+
   _toRefFromDb(card, serial = 0) {
     const name = String(card?.name || 'Card');
     const type = String(card?.guardian?.type || card?.sets?.[0]?.metadata?.type || '') || null;
     const { slug, setName } = this._chooseVariantForCard(card);
-    return { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${serial}_${Math.random().toString(36).slice(2,6)}`, name, type, set: setName || 'Beta', slug: slug || undefined };
+    const thresholds = this._extractThresholdsFromDbCard(card) || undefined;
+    return { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${serial}_${Math.random().toString(36).slice(2,6)}`, name, type, set: setName || 'Beta', slug: slug || undefined, thresholds };
   }
 
   _chooseVariantForCard(card, preferSets = ['Beta','Alpha']) {
@@ -908,6 +1383,37 @@ class BotClient {
     if (!card) return null;
     const { slug } = this._chooseVariantForCard(card, preferSets);
     return slug || null;
+  }
+
+  _extractThresholdsFromDbCard(card) {
+    try {
+      const meta = (card?.guardian) || (Array.isArray(card?.sets) && card.sets.length > 0 ? card.sets[0]?.metadata : null);
+      const th = meta && meta.thresholds ? meta.thresholds : null;
+      if (th && typeof th === 'object') return { air: th.air || 0, water: th.water || 0, earth: th.earth || 0, fire: th.fire || 0 };
+    } catch {}
+    return null;
+  }
+
+  _getThresholdsForCard(card) {
+    try {
+      const db = _loadCardsDb();
+      const slug = card && card.slug ? String(card.slug) : null;
+      if (slug) {
+        for (const c of db) {
+          const sets = Array.isArray(c?.sets) ? c.sets : [];
+          for (const s of sets) {
+            const vs = Array.isArray(s?.variants) ? s.variants : [];
+            if (vs.find((v) => String(v.slug) === slug)) return this._extractThresholdsFromDbCard(c);
+          }
+        }
+      }
+      const nm = card && card.name ? String(card.name) : null;
+      if (nm) {
+        const found = db.find((c) => String(c?.name || '').toLowerCase() === nm.toLowerCase());
+        if (found) return this._extractThresholdsFromDbCard(found);
+      }
+    } catch {}
+    return null;
   }
 
   _chooseAvatarCardRef() {

@@ -1534,6 +1534,7 @@ export default function OnlineMatchPage() {
                 myPlayerKey={myPlayerKey}
                 playerNames={playerNames}
                 onPrepareComplete={() => setPrepared(true)}
+                matchType={match?.matchType as "constructed" | "sealed" | "draft"}
               />
             )
           ) : !d20RollingComplete ? (
