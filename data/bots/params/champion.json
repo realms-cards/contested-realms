@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "id": "refined/v3",
+    "description": "Hand-tuned weights with mana/threshold enforcement + phase-based strategy",
+    "version": "3.0.0",
+    "created": "2025-10-15",
+    "changes": [
+      "T002: Added cost and threshold validation",
+      "T004-T008: Added board development, mana efficiency, threat deployment, life pressure features",
+      "T010: Added phase-based strategic modifiers",
+      "T011: Integrated strategic modifiers into search scoring",
+      "T012-T014: Refined candidate generation and prioritization"
+    ]
+  },
+  "search": {
+    "beamWidth": 8,
+    "maxDepth": 3,
+    "quiescenceDepth": 1,
+    "nodeCap": 2000,
+    "budgetMs": 60,
+    "gamma": 0.6
+  },
+  "exploration": {
+    "epsilon_root": 0,
+    "gumbel_leaf": 0
+  },
+  "weights": {
+    "_comment_life": "Life total evaluation",
+    "w_life": 0.8,
+    "w_lethal_now": 10.0,
+    "w_opp_lethal_next": -4.5,
+
+    "_comment_combat": "Combat stats",
+    "w_atk": 0.5,
+    "w_hp": 0.2,
+    "w_threats_my": 0.7,
+    "w_threats_opp": -0.6,
+
+    "_comment_cards": "Card advantage",
+    "w_hand": 0.2,
+    "w_draw_potential": 0.3,
+    "w_expected_two_for_one": 0.4,
+
+    "_comment_mana": "Mana and resources - REFINED WEIGHTS",
+    "w_mana_waste": -0.7,
+    "w_mana_avail": 0.3,
+    "w_sites": 2.0,
+    "w_providers": 0.5,
+    "w_thresholds_total": 0.5,
+    "w_on_curve": 0.9,
+
+    "_comment_synergy": "Synergy and engines",
+    "w_engine_online": 1.2,
+    "w_combo_online": 1.0,
+    "w_tribal_count": 0.2,
+
+    "_comment_risk": "Risk assessment",
+    "w_sweeper_risk": -0.8,
+    "w_win_more": -0.25,
+    "w_action_count_penalty": -0.02,
+
+    "_comment_position": "Board position",
+    "w_advance": 0.08,
+
+    "_comment_refined": "NEW REFINED FEATURES (T004-T008)",
+    "w_board_development": 0.8,
+    "w_mana_efficiency": 0.7,
+    "w_mana_efficiency_waste": -0.5,
+    "w_threat_deployment": 0.6,
+    "w_life_pressure": 1.2,
+
+    "_comment_penalties": "Anti-pattern penalties (T008)",
+    "w_site_spam_penalty": -2.0,
+    "w_wasted_resources": -1.5
+  },
+  "constraints": {
+    "clamp_eval_min": -50,
+    "clamp_eval_max": 50,
+    "legal_move_fallback": "pass_or_minimal"
+  },
+  "strategic_modifiers": {
+    "_comment": "Phase-based strategy implemented in getStrategicModifiers() (T010)",
+    "establish_mana_base": {
+      "condition": "turnNumber <= 3 && ownedSites < 3",
+      "modifiers": {
+        "play_site": 2.0,
+        "play_unit": 0.5,
+        "play_minion": 0.5
+      }
+    },
+    "deploy_threats": {
+      "condition": "ownedSites >= 3 && boardDevelopment === 0",
+      "modifiers": {
+        "play_minion": 1.5,
+        "play_unit": 1.5,
+        "play_site": 0.5
+      }
+    },
+    "apply_pressure": {
+      "condition": "boardDevelopment > 0 && oppLife < 15",
+      "modifiers": {
+        "attack": 1.2,
+        "play_site": 0.3
+      }
+    },
+    "defend_lethal": {
+      "condition": "oppThreatDeploy >= myLife && myLife > 0",
+      "modifiers": {
+        "play_unit": 2.0,
+        "play_minion": 2.0,
+        "attack": 0.5
+      }
+    }
+  },
+  "quality_metrics": {
+    "_comment": "Expected performance metrics for this theta",
+    "expected_meaningful_actions_percent": "70-85%",
+    "expected_avg_game_length": "15-25 turns",
+    "expected_eval_variance": "> 2.0",
+    "expected_mana_wasted_turns_5plus": "< 3.0"
+  }
+}
