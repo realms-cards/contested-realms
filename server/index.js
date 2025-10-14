@@ -13,6 +13,131 @@ const draftConfig = require('./modules/draft/config');
 const standingsService = require('./modules/tournament/standings');
 
 // -----------------------------
+// Card Cost Enrichment (Issue 5: Missing Card Cost Data)
+// -----------------------------
+// Global cache for card costs (loaded once at startup)
+let cardCostCache = null;
+
+/**
+ * Load all card costs from database into a Map: cardName -> cost
+ * This is called once and cached for the lifetime of the server process.
+ * @param {object} prismaClient - The Prisma client instance to use
+ * @returns {Promise<Map<string, number>>} Map of card names to their mana costs
+ */
+async function loadCardCosts(prismaClient) {
+  if (cardCostCache) return cardCostCache;
+
+  try {
+    const metas = await prismaClient.cardSetMetadata.findMany({
+      select: {
+        card: { select: { name: true } },
+        cost: true
+      }
+    });
+
+    const map = new Map();
+    for (const meta of metas) {
+      const name = meta.card?.name;
+      if (name && meta.cost !== null && meta.cost !== undefined) {
+        // Use the first cost found for each card
+        // (could be refined to prefer specific sets, but most cards have same cost across sets)
+        if (!map.has(name)) {
+          map.set(name, meta.cost);
+        }
+      }
+    }
+
+    cardCostCache = map;
+    console.log(`[CardCosts] Loaded ${map.size} card costs from database`);
+    return map;
+  } catch (err) {
+    console.error('[CardCosts] Failed to load card costs:', err?.message || err);
+    // Return empty map to prevent crashes
+    cardCostCache = new Map();
+    return cardCostCache;
+  }
+}
+
+/**
+ * Enrich all card objects in a patch with cost data from database.
+ * This adds a 'cost' field to every card object that doesn't already have one.
+ *
+ * Card objects can appear in:
+ * - patch.zones[seat][zoneName] (hand, spellbook, atlas, graveyard, battlefield, banished)
+ * - patch.board.sites[pos].card (site cards on the board)
+ * - patch.permanents[seat] (units on the battlefield)
+ *
+ * @param {object} patch - The game state patch to enrich
+ * @param {object} prismaClient - The Prisma client instance to use
+ * @returns {Promise<object>} The enriched patch with cost data added to all cards
+ */
+async function enrichPatchWithCosts(patch, prismaClient) {
+  if (!patch || typeof patch !== 'object') return patch;
+
+  const costMap = await loadCardCosts(prismaClient);
+
+  // Enrich a single card object
+  function enrichCard(card) {
+    if (!card || typeof card !== 'object' || !card.name) return card;
+
+    // Only add cost if not already present
+    if (card.cost === undefined && costMap.has(card.name)) {
+      return { ...card, cost: costMap.get(card.name) };
+    }
+    return card;
+  }
+
+  // Recursively enrich arrays of cards
+  function enrichCardArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map(item => enrichCard(item));
+  }
+
+  // Clone patch and enrich zones
+  const enriched = { ...patch };
+
+  // Enrich zones (hand, spellbook, atlas, graveyard, battlefield, banished)
+  if (patch.zones) {
+    enriched.zones = {};
+    for (const [seat, zones] of Object.entries(patch.zones)) {
+      if (zones && typeof zones === 'object') {
+        enriched.zones[seat] = {};
+        for (const [zoneName, cards] of Object.entries(zones)) {
+          enriched.zones[seat][zoneName] = enrichCardArray(cards);
+        }
+      } else {
+        enriched.zones[seat] = zones;
+      }
+    }
+  }
+
+  // Enrich board.sites
+  if (patch.board?.sites) {
+    enriched.board = { ...patch.board, sites: {} };
+    for (const [pos, tile] of Object.entries(patch.board.sites)) {
+      if (tile?.card) {
+        enriched.board.sites[pos] = {
+          ...tile,
+          card: enrichCard(tile.card)
+        };
+      } else {
+        enriched.board.sites[pos] = tile;
+      }
+    }
+  }
+
+  // Enrich permanents
+  if (patch.permanents) {
+    enriched.permanents = {};
+    for (const [seat, units] of Object.entries(patch.permanents)) {
+      enriched.permanents[seat] = enrichCardArray(units);
+    }
+  }
+
+  return enriched;
+}
+
+// -----------------------------
 // Leader-aware Draft helpers (match-level)
 // -----------------------------
 function repairDraftInvariants(match) {
@@ -380,7 +505,7 @@ function getTopCards(match, seat, pile, count, from) {
   return list.slice(0, count);
 }
 
-function applyPendingAction(match, entry, now) {
+async function applyPendingAction(match, entry, now) {
   if (!match || !entry || !entry.pendingAction) return null;
   const { pendingAction, request } = entry;
   if (!pendingAction || typeof pendingAction !== 'object') return null;
@@ -477,7 +602,8 @@ function applyPendingAction(match, entry, now) {
       match.game = deepMergeReplaceArrays(match.game || {}, patch);
       match.lastTs = now;
       const room = `match:${match.id}`;
-      io.to(room).emit('statePatch', { patch, t: now });
+      const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+      io.to(room).emit('statePatch', { patch: enrichedPatch, t: now });
       // Finalize as draw (fire-and-forget)
       try { finalizeMatch(match, { isDraw: true }); } catch {}
       return {
@@ -3253,7 +3379,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           console.log('[d20] broadcasting patch', { matchId, d20Rolls: patchToApply.d20Rolls, setupWinner: patchToApply.setupWinner });
         }
       }
-      io.to(matchRoom).emit('statePatch', { patch: patchToApply, t: now });
+      const enrichedPatchToApply = await enrichPatchWithCosts(patchToApply, prisma);
+      io.to(matchRoom).emit('statePatch', { patch: enrichedPatchToApply, t: now });
       if (isSnapshot) {
         try {
           const sites = match.game && match.game.board && match.game.board.sites ? Object.keys(match.game.board.sites).length : null;
@@ -3265,7 +3392,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       }
       try { await persistMatchUpdate(match, patchToApply, playerId, now); } catch {}
     } else {
-      io.to(matchRoom).emit('statePatch', { patch, t: now });
+      const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+      io.to(matchRoom).emit('statePatch', { patch: enrichedPatch, t: now });
       try { await persistMatchUpdate(match, patch || null, playerId, now); } catch {}
     }
     if (shouldFinalizeMatch) {
@@ -3276,7 +3404,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       }
     }
   } catch {
-    io.to(matchRoom).emit('statePatch', { patch: incomingPatch || null, t: Date.now() });
+    const enrichedIncoming = await enrichPatchWithCosts(incomingPatch || null, prisma);
+    io.to(matchRoom).emit('statePatch', { patch: enrichedIncoming, t: Date.now() });
   }
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
 }
@@ -3352,7 +3481,8 @@ async function leaderHandleMulliganDone(matchId, playerId) {
   // Update server-side aggregated snapshot
   match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
   match.lastTs = now;
-  io.to(room).emit("statePatch", { patch: mainPatch, t: now });
+  const enrichedMainPatch = await enrichPatchWithCosts(mainPatch, prisma);
+  io.to(room).emit("statePatch", { patch: enrichedMainPatch, t: now });
   try { await persistMatchUpdate(match, mainPatch, playerId, now); } catch {}
   try { console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`); } catch {}
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
@@ -3535,7 +3665,7 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
       try {
         const entry = match.interactionRequests.get(requestId);
         if (entry) {
-          const result = applyPendingAction(match, entry, now);
+          const result = await applyPendingAction(match, entry, now);
           if (result) {
             entry.result = result;
             entry.pendingAction = null;
@@ -5270,7 +5400,9 @@ io.on("connection", async (socket) => {
           return false;
         })();
         if (hasMeaningfulGame) {
-          snap.game = match.game;
+          // Enrich game state with card costs before sending to client
+          const enrichedGame = await enrichPatchWithCosts(match.game, prisma);
+          snap.game = enrichedGame;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
             console.log('[resync] sending game state with d20Rolls:', {

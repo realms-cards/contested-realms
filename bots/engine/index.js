@@ -574,9 +574,7 @@ function countManaProvidersFromPermanents(state, seat) {
 }
 
 // T002: Cost and Threshold Validation - check if a card can be afforded
-// NOTE: Card objects in game state currently DO NOT include cost information.
-// This function always returns 0 until cost data is added to card objects.
-// See CLOSED-LOOP-SESSION-FINDINGS.md Issue 5 for details.
+// NOTE: Card costs are enriched by server (see server/index.js enrichPatchWithCosts)
 function getCardManaCost(card) {
   // Extract generic mana cost from card
   try {
@@ -588,7 +586,8 @@ function getCardManaCost(card) {
     // Try alternate cost fields
     if (card && typeof card.manaCost === 'number') return Number(card.manaCost);
     if (card && typeof card.generic === 'number') return Number(card.generic);
-    return 0; // Default to 0 (sites have no cost, but this also applies to all cards due to missing data)
+    // Sites don't have costs - they're played via Avatar ability
+    return 0;
   } catch {
     return 0;
   }
