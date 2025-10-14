@@ -27,6 +27,17 @@ The system SHALL train θ via self-play with evolutionary selection, without neu
 - WHEN running training matches
 - THEN the system SHALL enable ε>0 and small leaf noise
 
+### Requirement: Out-of-Process Training and Exportable Artifacts
+The system SHALL allow training to run separately from the live application and export artifacts consumable by other instances.
+
+#### Scenario: Export champion and logs
+- WHEN a generation promotes a new champion
+- THEN the system SHALL write the champion θ (e.g., `data/bots/params/champion.yaml`) and season logs to a portable location
+
+#### Scenario: Import champion on another instance
+- WHEN a champion θ file is provided to a different deployment
+- THEN the live bot engine SHALL load it on start without requiring a code change
+
 ### Requirement: Opening/Mulligan Book (v1)
 The system MAY maintain an opening/mulligan book derived from frequency and win-rate statistics.
 
@@ -40,3 +51,10 @@ The system MUST store per-turn telemetry and season summaries for analysis.
 #### Scenario: Season summary
 - WHEN a season completes
 - THEN the system SHALL write a summary with generation id, ratings, elites, and champion id
+
+### Requirement: Admin Dashboard Ladder View
+The system SHOULD surface training results on an admin dashboard.
+
+#### Scenario: Elo ladder and champion metadata at /admin
+- WHEN visiting `/admin`
+- THEN the dashboard SHALL display θ id, Elo, generation, recent head-to-heads, and current champion metadata
