@@ -18,8 +18,8 @@ import {
   SkipBack,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useSound } from "@/lib/contexts/SoundContext";
 import { useMusicPlayer } from "@/hooks/useMusicPlayer";
+import { useSound } from "@/lib/contexts/SoundContext";
 import { MUSIC_TRACKS } from "@/lib/music/music-config";
 
 export default function AudioControls() {
