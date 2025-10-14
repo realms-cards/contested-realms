@@ -1129,6 +1129,49 @@ function evalFeaturesWithBreakdown(f, w) {
   return { breakdown, total };
 }
 
+// T011: Helper to determine action type from patch
+function getActionType(patch) {
+  try {
+    if (!patch || typeof patch !== 'object') return 'pass';
+
+    // Check for site playing
+    if (patch.board && patch.board.sites) {
+      const keys = Object.keys(patch.board.sites);
+      if (keys.length > 0) return 'play_site';
+    }
+
+    // Check for unit/minion playing
+    if (patch.permanents) {
+      const cells = Object.keys(patch.permanents);
+      for (const cell of cells) {
+        const arr = Array.isArray(patch.permanents[cell]) ? patch.permanents[cell] : [];
+        if (arr.length > 0) {
+          // Check if this is a movement (tapped: true) or a play (tapped: false)
+          const hasNewPermanent = arr.some(p => p && p.card && p.tapped === false);
+          if (hasNewPermanent) return 'play_unit';
+        }
+      }
+      // If we have permanents array changes but no new untapped units, it's movement (attack)
+      return 'attack';
+    }
+
+    // Check for draw actions
+    if (patch.zones && typeof patch.zones === 'object') {
+      const seats = Object.keys(patch.zones);
+      if (seats.length > 0) {
+        const z = patch.zones[seats[0]];
+        if (z && typeof z === 'object' && Object.prototype.hasOwnProperty.call(z, 'hand')) {
+          return 'draw';
+        }
+      }
+    }
+
+    return 'pass';
+  } catch {
+    return 'pass';
+  }
+}
+
 // T012-T014: Refined candidate generation with cost validation and prioritization
 // T015: Enhanced to track filtering stats for telemetry
 function generateCandidates(state, seat, options = {}) {
@@ -1261,12 +1304,21 @@ function search(state, seat, theta, rng, options) {
   const list = collectStats ? genResult.candidates : genResult;
   const generationStats = collectStats ? genResult.stats : null;
 
+  // T011: Get strategic modifiers for phase-based strategy
+  const strategicModifiers = getStrategicModifiers(state, seat, thetaUse);
+
   const scored = [];
   for (const p of list) {
     const next = applyPatch(state, p);
     const f = extractFeatures(state, next, seat);
-    const s = evalFeatures(f, w);
-    scored.push({ patch: p, score: s, features: f, state: next });
+    let s = evalFeatures(f, w);
+
+    // T011: Apply strategic modifier based on action type
+    const actionType = getActionType(p);
+    const modifier = strategicModifiers[actionType] || 1.0;
+    s = s * modifier;
+
+    scored.push({ patch: p, score: s, features: f, state: next, actionType, modifier });
   }
 
   let nodes = scored.length;

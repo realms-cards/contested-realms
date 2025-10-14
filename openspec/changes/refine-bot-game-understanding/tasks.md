@@ -324,3 +324,149 @@
 - Export champion and logs to `data/bots/training-artifacts/refine-v2/`
 - Document training parameters and results in `openspec/changes/refine-bot-game-understanding/training-report.md`
 - **Validation**: Training produces champion theta with win rate ≥60% vs. hand-tuned baseline
+
+---
+
+## 12. Card-Specific Understanding (Phase 2 - LLM-Based)
+
+**Note**: This section represents follow-up work to be done AFTER generic evaluation (T001-T032) is complete and functional.
+
+### T033 Design LLM-Based Card Understanding System
+- Create `specs/card-understanding/spec.md`:
+  - **Problem**: Generic evaluation treats all cards equally (Divine Healing = Overpower = Flood)
+  - **Solution**: Parse `rulesText` with LLM to generate card-specific evaluation functions
+  - **Approach**:
+    1. Extract `rulesText` from database for all cards
+    2. Send to LLM with prompt: "Generate evaluation function for this card effect"
+    3. LLM outputs: category (healing/combat-trick/board-clear/etc.), situational modifiers, priority hints
+    4. Cache generated evaluations in `data/cards/card-evaluations.json`
+  - **Example**:
+    ```json
+    {
+      "Divine Healing": {
+        "category": "healing",
+        "evaluation": "return myLife < 10 ? 5.0 : (myLife < 15 ? 2.0 : 0.5)",
+        "priority": "high when low life, low when healthy",
+        "rulesText": "You gain 7 life."
+      }
+    }
+    ```
+- Document LLM prompt templates and evaluation function schema
+- **Validation**: Manual review confirms schema is expressive enough for 80% of card types
+
+### T034 Implement Card Evaluation Cache System
+- Create `bots/card-evaluations/loader.js`:
+  - Load `data/cards/card-evaluations.json` at startup
+  - Expose `getCardEvaluation(cardName)` API
+  - Return evaluation function as executable JavaScript
+- Update `enrichPatchWithCosts()` to also include `evaluation` field:
+  ```js
+  enriched.zones[seat][zoneName] = cards.map(card => ({
+    ...card,
+    cost: costMap.get(card.name),
+    evaluation: evaluationCache.get(card.name), // NEW
+    rulesText: rulesTextMap.get(card.name)
+  }));
+  ```
+- Add fallback: if no cached evaluation, use generic category heuristic
+- **Validation**: Bot receives evaluation functions for 509 cards in cache
+
+### T035 Generate Evaluations for Common Cards
+- Create `scripts/generate-card-evaluations.js`:
+  - Query database for all cards with `rulesText`
+  - For each card, call LLM with prompt:
+    ```
+    Given this card effect: "{rulesText}"
+    Generate a JavaScript evaluation function that returns a numeric score (0-10)
+    based on game state. The function receives: { myLife, oppLife, myUnits, oppUnits, myMana, turn }
+
+    Example input: "You gain 7 life."
+    Example output: "return myLife < 10 ? 8.0 : (myLife < 15 ? 3.0 : 0.5)"
+    ```
+  - Validate generated code compiles
+  - Write results to `data/cards/card-evaluations.json`
+- Start with 50 most common cards in constructed decks
+- **Validation**: 50 evaluation functions generated successfully; spot-check 10 for correctness
+
+### T036 Integrate Card-Specific Evaluation into Search
+- Update `evalFeatures()` to call card evaluation functions:
+  ```js
+  function evalFeatures(f, w, candidateAction, state, seat) {
+    let baseScore = /* existing generic evaluation */;
+
+    // Add card-specific bonus if playing a card
+    if (candidateAction.type === 'play_card') {
+      const card = candidateAction.card;
+      const evalFn = card.evaluation;
+      if (evalFn) {
+        const context = buildEvalContext(state, seat);
+        const cardBonus = evalFn(context);
+        baseScore += cardBonus;
+      }
+    }
+
+    return baseScore;
+  }
+  ```
+- Add `buildEvalContext()` helper to extract: myLife, oppLife, myUnits, oppUnits, myMana, turn
+- **Validation**: Bot with Divine Healing prioritizes playing it when life < 10, ignores when life = 20
+
+### T037 Expand Coverage to All Card Types
+- Extend evaluation generation to all 509 cards in database
+- Handle edge cases:
+  - Cards with complex targeting (e.g., "Choose a unit...")
+  - Cards with conditional effects (e.g., "If opponent controls...")
+  - Cards with regional effects (future: ignore for v1)
+- For unsupported cards, fall back to generic category heuristics
+- **Validation**: Coverage report shows 80%+ of cards have specific evaluations; 20% use fallback
+
+### T038 Add Card Synergy Detection
+- Enhance LLM prompt to identify synergies:
+  ```
+  Does this card synergize with other cards? Examples:
+  - "Overpower" synergizes with "attacking units" (combat trick)
+  - "Blacksmith Family" synergizes with "fire threshold cards" (mana fixing)
+  Output: { synergies: ["attacking_units"], antiSynergies: ["no_units"] }
+  ```
+- Update evaluation functions to check for synergy conditions
+- **Validation**: Bot with Overpower prefers to play it when units are positioned to attack
+
+### T039 Unit Test Card Evaluation Functions
+- Create `tests/bot/card-evaluations.test.js`:
+  - For each card category, create test scenarios:
+    - **Healing**: Low life (expect high score), high life (expect low score)
+    - **Combat Trick**: Units attacking (high), no units (low)
+    - **Board Clear**: Opponent has many units (high), few units (low)
+  - Verify evaluation functions return expected scores
+- All tests pass
+- **Validation**: 95%+ of card evaluation tests pass
+
+### T040 Self-Play Validation with Card Understanding
+- Run 50 self-play matches comparing:
+  - **Baseline**: Generic evaluation only (no card-specific understanding)
+  - **Enhanced**: Generic + card-specific evaluation
+- Measure:
+  - Win rate of enhanced vs. baseline (expect ≥65%)
+  - Average game quality (e.g., Divine Healing used appropriately)
+  - Strategic diversity (different card types played in appropriate situations)
+- Document results in `openspec/changes/refine-bot-game-understanding/card-understanding-validation.md`
+- **Validation**: Enhanced bot shows measurably better strategic decision-making
+
+### T041 Documentation for Card Understanding System
+- Create `docs/bot-card-understanding.md`:
+  - Explain LLM-based evaluation generation pipeline
+  - Document evaluation function schema and context API
+  - Provide examples of adding custom evaluations for new cards
+  - Troubleshooting guide for invalid generated functions
+- Add section to `bots/engine/README.md` explaining card evaluation system
+- **Validation**: Documentation enables adding new card evaluations without engineering support
+
+### T042 Production Integration and Monitoring
+- Add telemetry to track card evaluation usage:
+  - Log when card-specific evaluations influence decisions
+  - Track which cards lack evaluations (fallback used)
+  - Monitor evaluation function execution time
+- Set up alerts for:
+  - Evaluation functions that error during execution
+  - Cards with >10% fallback usage (need better evaluations)
+- **Validation**: Telemetry dashboard shows card evaluation impact on decision quality

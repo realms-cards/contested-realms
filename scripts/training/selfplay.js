@@ -14,6 +14,8 @@ const path = require('path');
 const { io } = require('socket.io-client');
 const { PrismaClient } = require('@prisma/client');
 const { BotClient } = require('../../bots/headless-bot-client');
+const { analyzeLogFiles } = require('./analyze-logs');
+const { runSmokeTest, reportSmokeTest } = require('./smoke-test');
 
 function parseArgs(argv) {
   const out = {
@@ -31,6 +33,7 @@ function parseArgs(argv) {
     gamma: null,
     deckA: null,
     deckB: null,
+    smokeTest: false, // T019: Run smoke test before training
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -49,6 +52,7 @@ function parseArgs(argv) {
     if (a === '--gamma' && argv[i + 1]) { out.gamma = Number(argv[++i]); continue; }
     if (a === '--deckA' && argv[i + 1]) { out.deckA = String(argv[++i]); continue; }
     if (a === '--deckB' && argv[i + 1]) { out.deckB = String(argv[++i]); continue; }
+    if (a === '--smoke-test' || a === '--smokeTest') { out.smokeTest = true; continue; }
   }
   return out;
 }
@@ -295,6 +299,85 @@ function loadThetaMaybe(p) {
         };
         fs.appendFileSync(path.join(dir, 'results.jsonl'), JSON.stringify(out) + '\n');
       } catch {}
+
+      // T019: Smoke test - validate functional play if requested
+      if (opts.smokeTest) {
+        try {
+          console.log('[SelfPlay] Running smoke test to validate functional play...');
+          const logsDir = path.join(process.cwd(), 'logs', 'training');
+          const todayDir = new Date().toISOString().split('T')[0].replace(/-/g, '');
+          const matchLogsDir = path.join(logsDir, todayDir);
+
+          if (fs.existsSync(matchLogsDir)) {
+            const logFiles = fs.readdirSync(matchLogsDir)
+              .filter(f => f.startsWith(`match_${mid}`) && f.endsWith('.jsonl'))
+              .map(f => path.join(matchLogsDir, f));
+
+            if (logFiles.length > 0) {
+              const smokeResult = runSmokeTest(logFiles);
+              reportSmokeTest(smokeResult);
+
+              if (!smokeResult.passed) {
+                console.error('[SelfPlay] ❌ SMOKE TEST FAILED - Training should not proceed!');
+                cleanupAndExit(3);
+                return;
+              }
+
+              console.log('[SelfPlay] ✅ Smoke test passed - functional play validated');
+            }
+          }
+        } catch (e) {
+          console.warn('[SelfPlay] Smoke test failed:', e?.message || e);
+          // Halt on smoke test errors when explicitly requested
+          if (opts.smokeTest) {
+            cleanupAndExit(3);
+            return;
+          }
+        }
+      }
+
+      // T016: Regression detection - analyze match logs and halt if critical issues found
+      try {
+        console.log('[SelfPlay] Analyzing match logs for regressions...');
+        const logsDir = path.join(process.cwd(), 'logs', 'training');
+        const todayDir = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        const matchLogsDir = path.join(logsDir, todayDir);
+
+        if (fs.existsSync(matchLogsDir)) {
+          const logFiles = fs.readdirSync(matchLogsDir)
+            .filter(f => f.startsWith(`match_${mid}`) && f.endsWith('.jsonl'))
+            .map(f => path.join(matchLogsDir, f));
+
+          if (logFiles.length > 0) {
+            const analysis = analyzeLogFiles(logFiles, { detectRegressions: true });
+            const criticalMatches = analysis.results.filter(r => r.regression && r.regression.hasCriticalIssues);
+
+            if (criticalMatches.length > 0) {
+              console.error('[SelfPlay] ❌ CRITICAL REGRESSION DETECTED - Halting training!');
+              for (const result of criticalMatches) {
+                console.error(`[SelfPlay] Match: ${result.matchId}`);
+                for (const issue of result.regression.issues.filter(i => i.severity === 'critical')) {
+                  console.error(`[SelfPlay]   - [${issue.type}] ${issue.message}`);
+                  console.error(`[SelfPlay]     ${issue.detail}`);
+                }
+              }
+              // Exit with error code to signal regression
+              cleanupAndExit(2);
+              return;
+            }
+
+            console.log('[SelfPlay] ✅ No critical regressions detected');
+            const warnings = analysis.results.filter(r => r.regression && r.regression.hasWarnings);
+            if (warnings.length > 0) {
+              console.warn('[SelfPlay] ⚠️  Warnings detected but training can continue');
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[SelfPlay] Regression detection failed:', e?.message || e);
+        // Don't halt training on analysis errors, just log and continue
+      }
+
       setTimeout(() => cleanupAndExit(0), 1000);
     }
   });
