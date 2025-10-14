@@ -1,4 +1,7 @@
 import "server-only";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { requireAdminSession } from "@/lib/admin/auth";
@@ -42,6 +45,9 @@ async function getMetrics(): Promise<Metrics | null> {
 export default async function AdminTrainingPage() {
   await requireAdminSession();
   const metrics = await getMetrics();
+  const topGainers: PerCardEntry[] = (metrics?.perCard?.topGainers as PerCardEntry[] | undefined) ?? [];
+  const topLosers: PerCardEntry[] = (metrics?.perCard?.topLosers as PerCardEntry[] | undefined) ?? [];
+  const eloRatings: EloRating[] = (metrics?.elo?.ratings as EloRating[] | undefined) ?? [];
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -114,7 +120,7 @@ export default async function AdminTrainingPage() {
                   <table className="min-w-full text-left text-xs text-slate-200">
                     <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Card</th><th className="px-3 py-2">Count</th><th className="px-3 py-2">Avg Δ</th></tr></thead>
                     <tbody>
-                      {Array.isArray(metrics.perCard?.topGainers) && metrics.perCard.topGainers.length > 0 ? metrics.perCard.topGainers.map((c: PerCardEntry) => (
+                      {topGainers.length > 0 ? topGainers.map((c: PerCardEntry) => (
                         <tr key={c.key} className="border-t border-slate-800/60"><td className="px-3 py-2">{c.name || c.key}</td><td className="px-3 py-2">{c.count}</td><td className="px-3 py-2">{(c.avgDelta as number).toFixed(3)}</td></tr>
                       )) : (<tr><td className="px-3 py-2 text-slate-400" colSpan={3}>No data</td></tr>)}
                     </tbody>
@@ -127,7 +133,7 @@ export default async function AdminTrainingPage() {
                   <table className="min-w-full text-left text-xs text-slate-200">
                     <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Card</th><th className="px-3 py-2">Count</th><th className="px-3 py-2">Avg Δ</th></tr></thead>
                     <tbody>
-                      {Array.isArray(metrics.perCard?.topLosers) && metrics.perCard.topLosers.length > 0 ? metrics.perCard.topLosers.map((c: PerCardEntry) => (
+                      {topLosers.length > 0 ? topLosers.map((c: PerCardEntry) => (
                         <tr key={c.key} className="border-t border-slate-800/60"><td className="px-3 py-2">{c.name || c.key}</td><td className="px-3 py-2">{c.count}</td><td className="px-3 py-2">{(c.avgDelta as number).toFixed(3)}</td></tr>
                       )) : (<tr><td className="px-3 py-2 text-slate-400" colSpan={3}>No data</td></tr>)}
                     </tbody>
@@ -145,7 +151,7 @@ export default async function AdminTrainingPage() {
               <table className="min-w-full text-left text-xs text-slate-200">
                 <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Theta</th><th className="px-3 py-2">Rating</th><th className="px-3 py-2">Games</th></tr></thead>
                 <tbody>
-                  {Array.isArray(metrics.elo?.ratings) && metrics.elo.ratings.length > 0 ? metrics.elo.ratings.map((r: EloRating) => (
+                  {eloRatings.length > 0 ? eloRatings.map((r: EloRating) => (
                     <tr key={r.thetaId} className="border-t border-slate-800/60"><td className="px-3 py-2">{r.thetaId}</td><td className="px-3 py-2">{r.rating}</td><td className="px-3 py-2">{r.games}</td></tr>
                   )) : (<tr><td className="px-3 py-2 text-slate-400" colSpan={3}>No ratings</td></tr>)}
                 </tbody>
