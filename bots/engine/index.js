@@ -23,20 +23,23 @@ function createRng(seedString) {
   return mulberry32(seed);
 }
 
+// T009: Updated theta with refined weights
+// Updated: v3 with site-prioritization and no-sites-no-units rule
 function loadTheta() {
   return {
-    meta: { id: "baseline/v0" },
+    meta: { id: "refined/v3", description: "Site-prioritization + no units without mana base" },
     search: { beamWidth: 8, maxDepth: 3, quiescenceDepth: 1, nodeCap: 2000, budgetMs: 60, gamma: 0.6 },
     exploration: { epsilon_root: 0, gumbel_leaf: 0 },
     weights: {
+      // Existing weights
       w_life: 0.8,
-      w_lethal_now: 5.0,
+      w_lethal_now: 10.0, // Increased: prioritize lethal
       w_opp_lethal_next: -4.5,
       w_atk: 0.5,
       w_hp: 0.2,
       w_threats_my: 0.7,
       w_threats_opp: -0.6,
-      w_hand: 0.6,
+      w_hand: 0.2, // Reduced: don't overvalue hoarding cards
       w_draw_potential: 0.3,
       w_expected_two_for_one: 0.4,
       w_mana_waste: -0.7,
@@ -47,12 +50,19 @@ function loadTheta() {
       w_sweeper_risk: -0.8,
       w_win_more: -0.25,
       w_action_count_penalty: -0.02,
-      w_mana_avail: 0.05,
-      w_sites: 0.1,
-      w_providers: 0.1,
-      w_thresholds_total: 0.2,
-      // Encourage advancing units toward the opponent avatar (movement heuristic)
+      w_mana_avail: 0.3, // Increased: reward having mana available
+      w_sites: 2.0, // MASSIVELY increased: reward building mana base
+      w_providers: 0.5, // Increased: reward mana providers
+      w_thresholds_total: 0.5, // Increased: reward threshold diversity
       w_advance: 0.08,
+      // New refined weights (T009)
+      w_board_development: 0.8,        // Reward deploying permanents
+      w_mana_efficiency: 0.7,          // Reward spending mana
+      w_mana_efficiency_waste: -0.5,   // Penalize wasted mana
+      w_threat_deployment: 0.6,        // Reward ATK on board
+      w_life_pressure: 1.2,            // Reward damage potential
+      w_site_spam_penalty: -2.0,       // Penalize site spam (sites >= 6)
+      w_wasted_resources: -1.5,        // Penalize passing with playable cards
     },
     constraints: { clamp_eval_min: -50, clamp_eval_max: 50, legal_move_fallback: "pass_or_minimal" },
   };
@@ -233,8 +243,8 @@ function chooseNonSiteFromHand(state, seat, z) {
     const c = hand[i];
     if (!c) continue;
     if (!isPermanent(c)) continue;
-    const req = getCardThresholds(c);
-    if (hasThresholds(state, seat, req)) return { idx: i, card: c };
+    // CRITICAL FIX: Use canAffordCard instead of just threshold check
+    if (canAffordCard(state, seat, c)) return { idx: i, card: c };
   }
   return null;
 }
@@ -299,11 +309,30 @@ function playSitePatch(state, seat) {
   return patch;
 }
 
-function playUnitPatch(state, seat, placedCell) {
+function playUnitPatch(state, seat, placedCell, specificCard = null) {
   const z = getZones(state, seat);
   const hand = Array.isArray(z.hand) ? [...z.hand] : [];
-  const pick = chooseNonSiteFromHand(state, seat, { hand });
+
+  let pick = null;
+
+  // If specific card provided, use it and find its index
+  if (specificCard) {
+    const idx = hand.findIndex(c => c === specificCard || (c && c.slug === specificCard.slug));
+    if (idx !== -1) {
+      pick = { idx, card: hand[idx] };
+    }
+  } else {
+    // Otherwise, choose first affordable non-site from hand
+    pick = chooseNonSiteFromHand(state, seat, { hand });
+  }
+
   if (!pick) return null;
+
+  // CRITICAL: Validate affordability before creating patch
+  if (!canAffordCard(state, seat, pick.card)) {
+    return null; // Don't generate illegal move
+  }
+
   hand.splice(pick.idx, 1);
   let cell = placedCell || findAnyOwnedSiteCell(state, seat);
   if (!cell) cell = findAnyEmptyCell(state);
@@ -544,6 +573,404 @@ function countManaProvidersFromPermanents(state, seat) {
   return n;
 }
 
+// T002: Cost and Threshold Validation - check if a card can be afforded
+// NOTE: Card objects in game state currently DO NOT include cost information.
+// This function always returns 0 until cost data is added to card objects.
+// See CLOSED-LOOP-SESSION-FINDINGS.md Issue 5 for details.
+function getCardManaCost(card) {
+  // Extract generic mana cost from card
+  try {
+    if (card && typeof card.cost === 'number') return Number(card.cost);
+    if (card && card.cost && typeof card.cost === 'string') {
+      const parsed = parseInt(card.cost, 10);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    // Try alternate cost fields
+    if (card && typeof card.manaCost === 'number') return Number(card.manaCost);
+    if (card && typeof card.generic === 'number') return Number(card.generic);
+    return 0; // Default to 0 (sites have no cost, but this also applies to all cards due to missing data)
+  } catch {
+    return 0;
+  }
+}
+
+function countUntappedMana(state, seat) {
+  // Count untapped sites
+  const myNum = seatNum(seat);
+  const sites = (state && state.board && state.board.sites) || {};
+  let mana = 0;
+
+  for (const key of Object.keys(sites)) {
+    const tile = sites[key];
+    if (!tile || !tile.card) continue;
+    if (Number(tile.owner) === myNum && tile.tapped !== true) {
+      mana++;
+    }
+  }
+
+  // Add untapped mana providers
+  const per = (state && state.permanents) || {};
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      try {
+        if (!p || Number(p.owner) !== myNum || p.tapped === true) continue;
+        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        if (MANA_PROVIDER_BY_NAME.has(nm)) mana++;
+      } catch {}
+    }
+  }
+
+  return mana;
+}
+
+function meetsThresholds(have, required) {
+  if (!required) return true;
+  const req = required || {};
+  const h = have || { air: 0, water: 0, earth: 0, fire: 0 };
+  return (
+    (h.air || 0) >= (req.air || 0) &&
+    (h.water || 0) >= (req.water || 0) &&
+    (h.earth || 0) >= (req.earth || 0) &&
+    (h.fire || 0) >= (req.fire || 0)
+  );
+}
+
+function canAffordCard(state, seat, card) {
+  if (!card) return false;
+
+  // Sites don't cost mana (played via Avatar ability)
+  const cardType = (card.type || '').toLowerCase();
+  if (cardType.includes('site')) return true;
+
+  // CRITICAL: Cannot play units when you have no sites on the board
+  // This is a fundamental game rule - you need mana base before deploying creatures
+  const ownedSites = countOwnedManaSites(state, seat);
+  if (ownedSites === 0) return false;
+
+  // Check mana cost WITH awareness of mana already spent this turn
+  const totalMana = countUntappedMana(state, seat);
+  const resources = (state && state.resources) || {};
+  const myRes = resources[seat] || {};
+  const manaSpent = Number(myRes.spentThisTurn) || 0;
+  const available = totalMana - manaSpent; // Subtract mana spent earlier this turn
+  const cost = getCardManaCost(card);
+  if (available < cost) return false;
+
+  // Check threshold requirements
+  const thresholds = countThresholdsForSeat(state, seat);
+  const required = getCardThresholds(card);
+  return meetsThresholds(thresholds, required);
+}
+
+// T003: Win Condition Detection - detect when opponent can be defeated
+function detectWinCondition(state, seat) {
+  const opp = otherSeat(seat);
+  const players = (state && state.players) || {};
+  const oppPlayer = players[opp] || {};
+  const oppLife = Number(oppPlayer.life) || 0;
+
+  // Check if opponent is at death's door (life = 0)
+  const oppAtDeathsDoor = oppLife <= 0;
+
+  // Check if we can deal damage for lethal (simplified: check if we have any threats)
+  const per = (state && state.permanents) || {};
+  const myNum = seatNum(seat);
+  let canDealDamage = false;
+
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      if (p && Number(p.owner) === myNum && !p.tapped) {
+        // Has untapped unit that could attack
+        const atk = Number(p.card && p.card.attack) || 0;
+        if (atk > 0) {
+          canDealDamage = true;
+          break;
+        }
+      }
+    }
+    if (canDealDamage) break;
+  }
+
+  return {
+    oppAtDeathsDoor,
+    canDealLethal: oppAtDeathsDoor && canDealDamage,
+    oppLife
+  };
+}
+
+// T001: Build explicit game state model with resources, thresholds, turn state, and win conditions
+function buildGameStateModel(serverState, seat) {
+  const me = seat;
+  const opp = otherSeat(seat);
+
+  // Count untapped vs tapped sites for mana tracking
+  const myNum = seatNum(me);
+  const sites = (serverState && serverState.board && serverState.board.sites) || {};
+  let sitesUntappedMy = 0;
+  let sitesTappedMy = 0;
+  let sitesUntappedOpp = 0;
+  let sitesTappedOpp = 0;
+
+  for (const key of Object.keys(sites)) {
+    const tile = sites[key];
+    if (!tile || !tile.card) continue;
+    const owner = Number(tile.owner);
+    const tapped = tile.tapped === true;
+
+    if (owner === myNum) {
+      if (tapped) sitesTappedMy++;
+      else sitesUntappedMy++;
+    } else if (owner === seatNum(opp)) {
+      if (tapped) sitesTappedOpp++;
+      else sitesUntappedOpp++;
+    }
+  }
+
+  // Count untapped mana providers
+  const per = (serverState && serverState.permanents) || {};
+  let providersUntappedMy = 0;
+  let providersUntappedOpp = 0;
+
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      try {
+        if (!p) continue;
+        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        if (!MANA_PROVIDER_BY_NAME.has(nm)) continue;
+        const owner = Number(p.owner);
+        const tapped = p.tapped === true;
+
+        if (owner === myNum && !tapped) providersUntappedMy++;
+        else if (owner === seatNum(opp) && !tapped) providersUntappedOpp++;
+      } catch {}
+    }
+  }
+
+  // Calculate mana available (untapped sites + untapped providers)
+  const manaAvailableMy = sitesUntappedMy + providersUntappedMy;
+  const manaAvailableOpp = sitesUntappedOpp + providersUntappedOpp;
+
+  // Extract mana spent this turn from resources
+  const resources = (serverState && serverState.resources) || {};
+  const myRes = resources[me] || {};
+  const oppRes = resources[opp] || {};
+  const manaSpentMy = Number(myRes.spentThisTurn) || 0;
+  const manaSpentOpp = Number(oppRes.spentThisTurn) || 0;
+
+  // Get thresholds
+  const thresholdsMy = countThresholdsForSeat(serverState, me);
+  const thresholdsOpp = countThresholdsForSeat(serverState, opp);
+
+  // Get turn state
+  const currentPlayer = (serverState && serverState.currentPlayer) || 1;
+  const phase = (serverState && serverState.phase) || 'Main';
+  const turnNumber = (serverState && serverState.turnIndex) || 0;
+
+  // Get avatar status
+  const players = (serverState && serverState.players) || {};
+  const p1 = players.p1 || {};
+  const p2 = players.p2 || {};
+  const lifeMy = me === 'p1' ? (Number(p1.life) || 0) : (Number(p2.life) || 0);
+  const lifeOpp = opp === 'p1' ? (Number(p1.life) || 0) : (Number(p2.life) || 0);
+  const atDeathsDoorMy = lifeMy <= 0;
+  const atDeathsDoorOpp = lifeOpp <= 0;
+
+  return {
+    resources: {
+      [me]: {
+        manaAvailable: manaAvailableMy,
+        manaSpent: manaSpentMy,
+        sitesUntapped: sitesUntappedMy,
+        sitesTapped: sitesTappedMy,
+        providersUntapped: providersUntappedMy,
+      },
+      [opp]: {
+        manaAvailable: manaAvailableOpp,
+        manaSpent: manaSpentOpp,
+        sitesUntapped: sitesUntappedOpp,
+        sitesTapped: sitesTappedOpp,
+        providersUntapped: providersUntappedOpp,
+      }
+    },
+    thresholds: {
+      [me]: thresholdsMy,
+      [opp]: thresholdsOpp
+    },
+    turnState: {
+      currentPlayer,
+      phase,
+      turnNumber
+    },
+    avatarStatus: {
+      [me]: { life: lifeMy, atDeathsDoor: atDeathsDoorMy },
+      [opp]: { life: lifeOpp, atDeathsDoor: atDeathsDoorOpp }
+    }
+  };
+}
+
+// T004: Board Development Feature - count permanents deployed
+function extractBoardDevelopment(state, seat) {
+  const myNum = seatNum(seat);
+  const per = (state && state.permanents) || {};
+  let count = 0;
+
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      if (p && Number(p.owner) === myNum) {
+        count++;
+      }
+    }
+  }
+
+  return count;
+}
+
+// T005: Mana Efficiency Feature - calculate efficiency and waste
+function extractManaEfficiency(state, prevState, seat) {
+  const stateModel = buildGameStateModel(state, seat);
+  const myRes = stateModel.resources[seat];
+  const manaAvailable = myRes.manaAvailable;
+  const manaSpent = myRes.manaSpent;
+
+  const spentRatio = manaAvailable > 0 ? manaSpent / Math.max(1, manaAvailable) : 0;
+  const manaWasted = Math.max(0, manaAvailable - manaSpent);
+
+  return {
+    efficiency: spentRatio,
+    wasted: manaWasted,
+    available: manaAvailable,
+    spent: manaSpent
+  };
+}
+
+// T006: Threat Deployment Feature - sum ATK of untapped units
+function extractThreatDeployment(state, seat) {
+  const myNum = seatNum(seat);
+  const per = (state && state.permanents) || {};
+  let totalAtk = 0;
+
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      if (!p || Number(p.owner) !== myNum || p.tapped === true) continue;
+      const atk = Number(p.card && p.card.attack) || 0;
+      totalAtk += atk;
+    }
+  }
+
+  return totalAtk;
+}
+
+// T007: Life Pressure Feature - damage potential against opponent
+function extractLifePressure(state, seat) {
+  const myNum = seatNum(seat);
+  const opp = otherSeat(seat);
+  const oppAvatarPos = getOpponentAvatarPos(state, seat);
+  const per = (state && state.permanents) || {};
+  let pressure = 0;
+
+  // Find units adjacent to opponent Avatar or opponent units
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    const pos = parseCellKey(cellKey);
+    if (!pos) continue;
+
+    for (const p of arr) {
+      if (!p || Number(p.owner) !== myNum || p.tapped === true) continue;
+
+      const atk = Number(p.card && p.card.attack) || 0;
+      if (atk === 0) continue;
+
+      // Check if adjacent to opponent Avatar
+      const distToAvatar = manhattan([pos.x, pos.y], oppAvatarPos);
+      if (distToAvatar <= 1) {
+        pressure += atk;
+      }
+    }
+  }
+
+  return pressure;
+}
+
+// T008: Anti-Pattern Penalties - detect degenerate behaviors
+function extractAntiPatterns(state, prevState, seat, candidateAction) {
+  let penalty = 0;
+  const ownedSites = countOwnedManaSites(state, seat);
+  const stateModel = buildGameStateModel(state, seat);
+  const manaAvailable = stateModel.resources[seat].manaAvailable;
+
+  // Site spam penalty: sites >= 6 and playing another site
+  if (ownedSites >= 6 && candidateAction === 'play_site') {
+    penalty += 2.0;
+  }
+
+  // Wasted resources penalty: mana >= 3, playable cards exist, but passing
+  if (manaAvailable >= 3 && candidateAction === 'pass') {
+    const hand = getZones(state, seat).hand || [];
+    const hasPlayableCards = hand.some(c => canAffordCard(state, seat, c));
+    if (hasPlayableCards) {
+      penalty += 1.5;
+    }
+  }
+
+  return penalty;
+}
+
+// T010: Phase-Based Weight Modifiers - strategic primitives
+function getStrategicModifiers(state, seat, theta) {
+  const stateModel = buildGameStateModel(state, seat);
+  const turnNumber = stateModel.turnState.turnNumber;
+  const ownedSites = countOwnedManaSites(state, seat);
+  const boardDev = extractBoardDevelopment(state, seat);
+  const opp = otherSeat(seat);
+  const oppLife = stateModel.avatarStatus[opp].life;
+  const myLife = stateModel.avatarStatus[seat].life;
+
+  // Check opponent damage potential (simplified)
+  const oppThreatDeploy = extractThreatDeployment(state, opp);
+
+  const modifiers = {
+    play_site: 1.0,
+    play_unit: 1.0,
+    play_minion: 1.0,
+    attack: 1.0,
+    pass: 1.0,
+  };
+
+  // Establish mana base (turns 1-3, sites < 3)
+  if (turnNumber <= 3 && ownedSites < 3) {
+    modifiers.play_site = 2.0;
+    modifiers.play_unit = 0.5;
+    modifiers.play_minion = 0.5;
+  }
+
+  // Deploy threats (sites >= 3, no board development)
+  else if (ownedSites >= 3 && boardDev === 0) {
+    modifiers.play_minion = 1.5;
+    modifiers.play_unit = 1.5;
+    modifiers.play_site = 0.5;
+  }
+
+  // Apply pressure (board developed, opponent life low)
+  else if (boardDev > 0 && oppLife < 15) {
+    modifiers.attack = 1.2;
+    modifiers.play_site = 0.3;
+  }
+
+  // Defend against lethal (opponent has damage >= our life)
+  if (oppThreatDeploy >= myLife && myLife > 0) {
+    modifiers.play_unit = 2.0; // Prioritize blockers
+    modifiers.play_minion = 2.0;
+    modifiers.attack = 0.5; // Deprioritize attacking
+  }
+
+  return modifiers;
+}
+
 function extractFeatures(prevState, nextState, seat) {
   const me = seat;
   const opp = otherSeat(seat);
@@ -595,6 +1022,14 @@ function extractFeatures(prevState, nextState, seat) {
     }
   }
   const advance = myCount > 0 ? - (distSum / myCount) : 0;
+
+  // T009: Add new evaluation features
+  const boardDevelopment = extractBoardDevelopment(nextState, me);
+  const manaEfficiency = extractManaEfficiency(nextState, prevState, me);
+  const threatDeployment = extractThreatDeployment(nextState, me);
+  const lifePressure = extractLifePressure(nextState, me);
+  const winCond = detectWinCondition(nextState, me);
+
   return {
     life_my: lifeMy,
     life_opp: lifeOpp,
@@ -609,7 +1044,7 @@ function extractFeatures(prevState, nextState, seat) {
     mana_avail: available,
     mana_wasted: manaWasted,
     on_curve: onCurve,
-    lethal_now: lifeOpp <= 0 ? 1 : 0,
+    lethal_now: winCond.canDealLethal ? 1 : 0,
     opp_lethal_next: 0,
     removal_in_hand: 0,
     engines_online: 0,
@@ -621,11 +1056,20 @@ function extractFeatures(prevState, nextState, seat) {
     th_total_my: thTotMy,
     th_total_opp: thTotOpp,
     advance,
+    // New features
+    board_development: boardDevelopment,
+    mana_efficiency: manaEfficiency.efficiency,
+    mana_efficiency_wasted: manaEfficiency.wasted,
+    threat_deployment: threatDeployment,
+    life_pressure: lifePressure,
   };
 }
 
+// T009: Updated evaluation function with new features
 function evalFeatures(f, w) {
   let s = 0;
+
+  // Existing features
   s += (w.w_life || 0) * (f.life_my - f.life_opp);
   s += (w.w_atk || 0) * (f.atk_my - f.atk_opp);
   s += (w.w_hp || 0) * (f.hp_my - f.hp_opp);
@@ -641,63 +1085,69 @@ function evalFeatures(f, w) {
   s += (w.w_engine_online || 0) * f.engines_online + (w.w_sweeper_risk || 0) * f.sweeper_risk;
   s += (w.w_action_count_penalty || 0) * 0;
   s += (w.w_advance || 0) * (f.advance || 0);
+
+  // New features (T004-T007)
+  s += (w.w_board_development || 0) * (f.board_development || 0);
+  s += (w.w_mana_efficiency || 0) * (f.mana_efficiency || 0);
+  s += (w.w_mana_efficiency_waste || 0) * (f.mana_efficiency_wasted || 0);
+  s += (w.w_threat_deployment || 0) * (f.threat_deployment || 0);
+  s += (w.w_life_pressure || 0) * (f.life_pressure || 0);
+
   if (Number.isFinite(s) === false) s = 0;
   return s;
 }
 
+// T015: Evaluation breakdown for telemetry
+function evalFeaturesWithBreakdown(f, w) {
+  const breakdown = {};
+  breakdown.life = (w.w_life || 0) * (f.life_my - f.life_opp);
+  breakdown.atk = (w.w_atk || 0) * (f.atk_my - f.atk_opp);
+  breakdown.hp = (w.w_hp || 0) * (f.hp_my - f.hp_opp);
+  breakdown.hand = (w.w_hand || 0) * (f.hand_my - f.hand_opp);
+  breakdown.threats = (w.w_threats_my || 0) * f.threats_my + (w.w_threats_opp || 0) * f.threats_opp;
+  breakdown.mana_waste = (w.w_mana_waste || 0) * f.mana_wasted;
+  breakdown.mana_avail = (w.w_mana_avail || 0) * f.mana_avail;
+  breakdown.sites = (w.w_sites || 0) * (f.sites_my - f.sites_opp);
+  breakdown.providers = (w.w_providers || 0) * (f.providers_my - f.providers_opp);
+  breakdown.thresholds = (w.w_thresholds_total || 0) * (f.th_total_my - f.th_total_opp);
+  breakdown.on_curve = (w.w_on_curve || 0) * f.on_curve;
+  breakdown.lethal = (w.w_lethal_now || 0) * f.lethal_now + (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
+  breakdown.engines = (w.w_engine_online || 0) * f.engines_online;
+  breakdown.sweeper_risk = (w.w_sweeper_risk || 0) * f.sweeper_risk;
+  breakdown.advance = (w.w_advance || 0) * (f.advance || 0);
+  breakdown.board_development = (w.w_board_development || 0) * (f.board_development || 0);
+  breakdown.mana_efficiency = (w.w_mana_efficiency || 0) * (f.mana_efficiency || 0);
+  breakdown.mana_efficiency_waste = (w.w_mana_efficiency_waste || 0) * (f.mana_efficiency_wasted || 0);
+  breakdown.threat_deployment = (w.w_threat_deployment || 0) * (f.threat_deployment || 0);
+  breakdown.life_pressure = (w.w_life_pressure || 0) * (f.life_pressure || 0);
+
+  let total = 0;
+  for (const key of Object.keys(breakdown)) {
+    if (Number.isFinite(breakdown[key])) total += breakdown[key];
+  }
+  if (!Number.isFinite(total)) total = 0;
+
+  return { breakdown, total };
+}
+
+// T012-T014: Refined candidate generation with cost validation and prioritization
+// T015: Enhanced to track filtering stats for telemetry
 function generateCandidates(state, seat, options = {}) {
   const base = deepClone(state || {});
   const moves = [];
   const skipDraw = options && options.skipDrawThisTurn === true;
-
-  // Helper to extract the placed site cell from a site patch
-  function siteCellFromPatch(p) {
-    try {
-      if (!p || !p.board || !p.board.sites) return null;
-      const keys = Object.keys(p.board.sites);
-      return keys.length ? keys[0] : null;
-    } catch { return null; }
-  }
-
-  // Generate draw alternatives
-  const drawSpell = skipDraw ? null : drawFromPilePatch(base, seat, "spellbook");
-  const drawAtlas = skipDraw ? null : drawFromAtlasPatch(base, seat);
-  const drawAtlasTap = skipDraw ? null : drawFromAtlasWithTapPatch(base, seat);
-
-  // Paths after drawing from Spellbook
-  const baseAfterDrawS = drawSpell ? applyPatch(base, drawSpell) : base;
-  const siteAfterDrawS = playSitePatch(baseAfterDrawS, seat);
-  const cellAfterDrawS = siteCellFromPatch(siteAfterDrawS);
-  const unitAfterDrawS = playUnitPatch(siteAfterDrawS ? applyPatch(baseAfterDrawS, siteAfterDrawS) : baseAfterDrawS, seat, cellAfterDrawS);
-
-  // Paths after drawing from Atlas
-  const baseAfterDrawA = drawAtlas ? applyPatch(base, drawAtlas) : base;
-  const siteAfterDrawA = playSitePatch(baseAfterDrawA, seat);
-  const cellAfterDrawA = siteCellFromPatch(siteAfterDrawA);
-  const unitAfterDrawA = playUnitPatch(siteAfterDrawA ? applyPatch(baseAfterDrawA, siteAfterDrawA) : baseAfterDrawA, seat, cellAfterDrawA);
-
-  // Paths after tapping to draw from Atlas (do not attempt to play a site in the same patch)
-
-  // Paths without drawing
-  const siteBase = playSitePatch(base, seat);
-  const cellBase = siteCellFromPatch(siteBase);
-  const unitBase = playUnitPatch(siteBase ? applyPatch(base, siteBase) : base, seat, cellBase);
-
-  // Heuristic gating to avoid spamming sites when units are playable or we already have many sites
-  const anyUnitCandidate = !!(unitBase || unitAfterDrawS || unitAfterDrawA);
   const ownedSitesNow = countOwnedManaSites(base, seat);
-  const allowSiteOnly = (ownedSitesNow < 2) && !anyUnitCandidate;
+  const hand = getZones(base, seat).hand || [];
 
-  // Hand composition for draw preference
-  const handNow = getZones(base, seat).hand || [];
-  const handNonSites = handNow.filter((c) => c && typeof c.type === 'string' && !c.type.toLowerCase().includes('site'));
-  const handSites = handNow.length - handNonSites.length;
-  const preferDrawSpell = (ownedSitesNow >= 2) || (handSites > 0 && handNonSites.length === 0);
-  const allowTapDraw = ownedSitesNow < 4 && handSites === 0;
+  // T015: Track filtering stats
+  const stats = {
+    totalUnitsInHand: 0,
+    filteredUnaffordable: 0,
+    playableUnits: 0,
+    sitesGated: false,
+    candidatesGenerated: 0,
+  };
 
-  // Movement-only patches (for one unit) — keep small to avoid branching blowup
-  const movePatches = generateMoveCandidates(base, seat);
-  const pass = {};
   function mergeTwo(a, b) {
     return mergeReplaceArrays(a || {}, b || {});
   }
@@ -707,38 +1157,92 @@ function generateCandidates(state, seat, options = {}) {
     return p;
   }
 
-  // Reprioritize: unit-inclusive sequences first
-  if (drawSpell && (siteAfterDrawS || unitAfterDrawS)) {
-    moves.push(seq([drawSpell, siteAfterDrawS, unitAfterDrawS]));
-  }
-  if (!preferDrawSpell && drawAtlas && (siteAfterDrawA || unitAfterDrawA)) {
-    moves.push(seq([drawAtlas, siteAfterDrawA, unitAfterDrawA]));
-  }
-  if (siteBase && unitBase) moves.push(seq([siteBase, unitBase]));
-  if (unitBase) moves.push(seq([unitBase]));
+  // T012: Filter playable units by cost/threshold validation
+  // Exclude sites AND avatars (avatars are part of setup, cannot be played from hand)
+  const allUnits = hand.filter(c => {
+    const cardType = (c.type || '').toLowerCase();
+    if (cardType.includes('site')) return false;
+    if (cardType.includes('avatar')) return false; // CRITICAL: avatars can't be played
+    return true;
+  });
+  stats.totalUnitsInHand = allUnits.length;
 
-  // Draw-only (prefer spellbook when flooded with sites)
-  if (preferDrawSpell && drawSpell) moves.push(seq([drawSpell]));
-  if (!preferDrawSpell && drawAtlas) moves.push(seq([drawAtlas]));
-  if (drawSpell && !preferDrawSpell) moves.push(seq([drawSpell]));
-  if (drawAtlasTap && allowTapDraw) moves.push(seq([drawAtlasTap]));
+  const playableUnits = allUnits.filter(c => {
+    const affordable = canAffordCard(base, seat, c);
+    if (!affordable) stats.filteredUnaffordable++;
+    return affordable;
+  }).slice(0, 8); // Limit to 8 playable units
+  stats.playableUnits = playableUnits.length;
 
-  // Site-only (gated)
-  if (allowSiteOnly) {
-    if (!preferDrawSpell && drawAtlas && siteAfterDrawA) moves.push(seq([drawAtlas, siteAfterDrawA]));
-    if (drawSpell && siteAfterDrawS) moves.push(seq([drawSpell, siteAfterDrawS]));
-    if (siteBase) moves.push(seq([siteBase]));
+  // Draw patches
+  const drawSpell = skipDraw ? null : drawFromPilePatch(base, seat, "spellbook");
+  const drawAtlas = skipDraw ? null : drawFromAtlasPatch(base, seat);
+  const pass = {};
+
+  // T012: Prioritize unit-playing candidates FIRST - pass specific cards
+  if (playableUnits.length > 0) {
+    for (const unit of playableUnits) {
+      const unitPatch = playUnitPatch(base, seat, null, unit); // Pass specific card
+      if (unitPatch) moves.push(seq([unitPatch]));
+    }
+    // Also try unit after draw
+    if (drawSpell) {
+      const afterDraw = applyPatch(base, drawSpell);
+      // Re-check affordability after draw (hand changed)
+      const newHand = getZones(afterDraw, seat).hand || [];
+      const affordableAfterDraw = newHand.filter(c => {
+        const cardType = (c.type || '').toLowerCase();
+        if (cardType.includes('site')) return false;
+        if (cardType.includes('avatar')) return false; // CRITICAL: avatars can't be played
+        return canAffordCard(afterDraw, seat, c);
+      }).slice(0, 3); // Limit to 3 after draw
+
+      for (const unit of affordableAfterDraw) {
+        const unitAfterDraw = playUnitPatch(afterDraw, seat, null, unit);
+        if (unitAfterDraw) moves.push(seq([drawSpell, unitAfterDraw]));
+      }
+    }
   }
 
-  // Movement-first options, then pass
-  if (movePatches && movePatches.length) {
-    moves.push(seq([movePatches[0]]));
-    if (drawSpell) moves.push(seq([drawSpell, movePatches[0]]));
-    if (drawAtlas) moves.push(seq([drawAtlas, movePatches[0]]));
-    if (movePatches[1]) moves.push(seq([movePatches[1]]));
+  // Movement candidates (up to 4)
+  const movePatches = generateMoveCandidates(base, seat);
+  for (let i = 0; i < Math.min(4, movePatches.length); i++) {
+    moves.push(seq([movePatches[i]]));
   }
+
+  // T013: Gate site-playing after mana base established
+  const allowSitePlaying = ownedSitesNow < 4 || playableUnits.length === 0;
+  stats.sitesGated = !allowSitePlaying;
+
+  if (allowSitePlaying && ownedSitesNow < 6) {
+    const sitePatch = playSitePatch(base, seat);
+    if (sitePatch) {
+      moves.push(seq([sitePatch]));
+      // Site + unit combo
+      if (playableUnits.length > 0) {
+        const afterSite = applyPatch(base, sitePatch);
+        const unitAfterSite = playUnitPatch(afterSite, seat, null);
+        if (unitAfterSite) moves.push(seq([sitePatch, unitAfterSite]));
+      }
+    }
+  }
+
+  // Draw candidates
+  if (drawSpell) moves.push(seq([drawSpell]));
+  if (drawAtlas) moves.push(seq([drawAtlas]));
+
+  // Pass candidate (always include)
   moves.push(seq([pass]));
-  return moves;
+
+  // T014: Limit branching factor to 16
+  stats.candidatesGenerated = moves.length;
+  const limited = moves.slice(0, 16);
+
+  // T015: Attach stats for telemetry
+  if (options && options.collectStats) {
+    return { candidates: limited, stats };
+  }
+  return limited;
 }
 
 function search(state, seat, theta, rng, options) {
@@ -752,7 +1256,12 @@ function search(state, seat, theta, rng, options) {
   const gamma = (typeof conf.gamma === 'number') ? conf.gamma : 0.6;
   const softDeadline = start + Math.floor(budgetMs * 2); // soft budget, never hard-fail
 
-  const list = generateCandidates(state, seat, options || {});
+  // T015: Collect generation stats for telemetry
+  const collectStats = options && typeof options.logger === 'function';
+  const genResult = generateCandidates(state, seat, { ...options, collectStats });
+  const list = collectStats ? genResult.candidates : genResult;
+  const generationStats = collectStats ? genResult.stats : null;
+
   const scored = [];
   for (const p of list) {
     const next = applyPatch(state, p);
@@ -878,6 +1387,30 @@ function search(state, seat, theta, rng, options) {
   }
   try {
     if (options && typeof options.logger === "function") {
+      // T015: Compute evaluation breakdown for chosen move
+      let evaluationBreakdown = null;
+      if (chosen && chosen.features) {
+        const result = evalFeaturesWithBreakdown(chosen.features, w);
+        evaluationBreakdown = result.breakdown;
+      }
+
+      // T015: Build candidate details with action labels and scores
+      const candidateDetails = scored.map((x) => {
+        const cards = summarizeChosenCards(x.patch);
+        let actionLabel = "pass";
+        if (cards) {
+          if (cards.playedUnit) actionLabel = `play_unit:${cards.playedUnit.name || cards.playedUnit.slug || "?"}`;
+          else if (cards.playedSite) actionLabel = `play_site:${cards.playedSite.name || cards.playedSite.slug || "?"}`;
+          else if (cards.drawFrom) actionLabel = `draw:${cards.drawFrom}`;
+        }
+        return {
+          action: actionLabel,
+          score: x.score,
+          refined: Number.isFinite(x.refined) ? x.refined : x.score,
+          isLegal: true, // All scored candidates are legal (illegal ones filtered)
+        };
+      });
+
       options.logger({
         mode: options.mode || "evaluate",
         seed: options.seed || null,
@@ -893,6 +1426,17 @@ function search(state, seat, theta, rng, options) {
         timeMs,
         t: Date.now(),
         chosenCards: chosen && chosen.patch ? summarizeChosenCards(chosen.patch) : null,
+        // T015: Enhanced telemetry fields
+        evaluationBreakdown,
+        candidateDetails,
+        filteredCandidates: generationStats ? {
+          totalUnitsInHand: generationStats.totalUnitsInHand,
+          filteredUnaffordable: generationStats.filteredUnaffordable,
+          playableUnits: generationStats.playableUnits,
+          sitesGated: generationStats.sitesGated,
+          candidatesGenerated: generationStats.candidatesGenerated,
+          candidatesAfterLimit: list.length,
+        } : null,
       });
     }
   } catch {}

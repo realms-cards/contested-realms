@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { requireAdminSession } from "@/lib/admin/auth";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   await requireAdminSession();
