@@ -46,6 +46,17 @@ type DraftParticipant = {
   status: string;
 };
 
+const FALLBACK_CARD_ID_BASE = 1_000_000_000;
+function stableIdFromString(input: string | null | undefined): number {
+  if (!input) return FALLBACK_CARD_ID_BASE;
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 131 + input.charCodeAt(i)) >>> 0;
+  }
+  const normalized = hash % FALLBACK_CARD_ID_BASE;
+  return FALLBACK_CARD_ID_BASE + (normalized === 0 ? 1 : normalized);
+}
+
 // Player ready message type
 // (player ready messaging omitted in this screen)
 
@@ -644,9 +655,10 @@ export default function TournamentDraft3DScreen({
   // Convert DraftCard to BoosterCard format
   const draftCardToBoosterCard = useCallback(
     (card: DraftCard): BoosterCard => {
+      const slug = typeof card?.slug === "string" ? card.slug : "";
       let resolvedId = 0;
-      if (card && typeof card.slug === "string") {
-        const mapped = slugToCardId[card.slug];
+      if (slug) {
+        const mapped = slugToCardId[slug];
         if (
           typeof mapped === "number" &&
           Number.isFinite(mapped) &&
@@ -656,12 +668,17 @@ export default function TournamentDraft3DScreen({
         }
       }
       if (!resolvedId) {
-        const n = Number(card?.id);
-        if (Number.isFinite(n) && n > 0) resolvedId = n;
+        const numericId = Number(card?.id);
+        if (Number.isFinite(numericId) && numericId > 0) {
+          resolvedId = numericId;
+        }
+      }
+      if (!resolvedId) {
+        resolvedId = stableIdFromString(slug || String(card?.id || ""));
       }
       return {
         variantId: 0,
-        slug: card.slug,
+        slug,
         finish: "Standard" as const,
         product: "Draft",
         rarity:

@@ -61,14 +61,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament registration is closed' }), { status: 400 });
     }
 
-    if (tournament.registrations.length >= tournament.maxPlayers) {
-      return new Response(JSON.stringify({ error: 'Tournament is full' }), { status: 400 });
-    }
-
-    // Check if already registered
+    // Check if already registered (return success to avoid surfacing an error to existing participants)
     const existingRegistration = tournament.registrations.find(reg => reg.playerId === userId);
     if (existingRegistration) {
-      return new Response(JSON.stringify({ error: 'Already registered for this tournament' }), { status: 400 });
+      return new Response(JSON.stringify({
+        success: true,
+        alreadyRegistered: true,
+        registrationId: existingRegistration.id,
+        playerId: userId,
+        displayName,
+        currentPlayerCount: tournament.registrations.length
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+
+    if (tournament.registrations.length >= tournament.maxPlayers) {
+      return new Response(JSON.stringify({ error: 'Tournament is full' }), { status: 400 });
     }
 
     // Enforce "one lobby rule" - check if user is in any other active tournament or lobby

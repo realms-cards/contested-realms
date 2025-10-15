@@ -1100,8 +1100,10 @@ export default function TournamentDetailsPage() {
 
           <div className="flex flex-col gap-2">
             <div className="flex space-x-3">
-              {/* Invite Players button (creator only, during registration) */}
-              {isCreator && tournament.status === "registering" && (
+              {/* Invite Players button (creator only, during registration while capacity remains) */}
+              {isCreator &&
+                tournament.status === "registering" &&
+                getCurrentPlayersCount(tournament) < tournament.maxPlayers && (
                 <button
                   onClick={() => setShowInviteModal(true)}
                   className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
