@@ -13,6 +13,131 @@ const draftConfig = require('./modules/draft/config');
 const standingsService = require('./modules/tournament/standings');
 
 // -----------------------------
+// Card Cost Enrichment (Issue 5: Missing Card Cost Data)
+// -----------------------------
+// Global cache for card costs (loaded once at startup)
+let cardCostCache = null;
+
+/**
+ * Load all card costs from database into a Map: cardName -> cost
+ * This is called once and cached for the lifetime of the server process.
+ * @param {object} prismaClient - The Prisma client instance to use
+ * @returns {Promise<Map<string, number>>} Map of card names to their mana costs
+ */
+async function loadCardCosts(prismaClient) {
+  if (cardCostCache) return cardCostCache;
+
+  try {
+    const metas = await prismaClient.cardSetMetadata.findMany({
+      select: {
+        card: { select: { name: true } },
+        cost: true
+      }
+    });
+
+    const map = new Map();
+    for (const meta of metas) {
+      const name = meta.card?.name;
+      if (name && meta.cost !== null && meta.cost !== undefined) {
+        // Use the first cost found for each card
+        // (could be refined to prefer specific sets, but most cards have same cost across sets)
+        if (!map.has(name)) {
+          map.set(name, meta.cost);
+        }
+      }
+    }
+
+    cardCostCache = map;
+    console.log(`[CardCosts] Loaded ${map.size} card costs from database`);
+    return map;
+  } catch (err) {
+    console.error('[CardCosts] Failed to load card costs:', err?.message || err);
+    // Return empty map to prevent crashes
+    cardCostCache = new Map();
+    return cardCostCache;
+  }
+}
+
+/**
+ * Enrich all card objects in a patch with cost data from database.
+ * This adds a 'cost' field to every card object that doesn't already have one.
+ *
+ * Card objects can appear in:
+ * - patch.zones[seat][zoneName] (hand, spellbook, atlas, graveyard, battlefield, banished)
+ * - patch.board.sites[pos].card (site cards on the board)
+ * - patch.permanents[seat] (units on the battlefield)
+ *
+ * @param {object} patch - The game state patch to enrich
+ * @param {object} prismaClient - The Prisma client instance to use
+ * @returns {Promise<object>} The enriched patch with cost data added to all cards
+ */
+async function enrichPatchWithCosts(patch, prismaClient) {
+  if (!patch || typeof patch !== 'object') return patch;
+
+  const costMap = await loadCardCosts(prismaClient);
+
+  // Enrich a single card object
+  function enrichCard(card) {
+    if (!card || typeof card !== 'object' || !card.name) return card;
+
+    // Only add cost if not already present
+    if (card.cost === undefined && costMap.has(card.name)) {
+      return { ...card, cost: costMap.get(card.name) };
+    }
+    return card;
+  }
+
+  // Recursively enrich arrays of cards
+  function enrichCardArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map(item => enrichCard(item));
+  }
+
+  // Clone patch and enrich zones
+  const enriched = { ...patch };
+
+  // Enrich zones (hand, spellbook, atlas, graveyard, battlefield, banished)
+  if (patch.zones) {
+    enriched.zones = {};
+    for (const [seat, zones] of Object.entries(patch.zones)) {
+      if (zones && typeof zones === 'object') {
+        enriched.zones[seat] = {};
+        for (const [zoneName, cards] of Object.entries(zones)) {
+          enriched.zones[seat][zoneName] = enrichCardArray(cards);
+        }
+      } else {
+        enriched.zones[seat] = zones;
+      }
+    }
+  }
+
+  // Enrich board.sites
+  if (patch.board?.sites) {
+    enriched.board = { ...patch.board, sites: {} };
+    for (const [pos, tile] of Object.entries(patch.board.sites)) {
+      if (tile?.card) {
+        enriched.board.sites[pos] = {
+          ...tile,
+          card: enrichCard(tile.card)
+        };
+      } else {
+        enriched.board.sites[pos] = tile;
+      }
+    }
+  }
+
+  // Enrich permanents
+  if (patch.permanents) {
+    enriched.permanents = {};
+    for (const [seat, units] of Object.entries(patch.permanents)) {
+      enriched.permanents[seat] = enrichCardArray(units);
+    }
+  }
+
+  return enriched;
+}
+
+// -----------------------------
 // Leader-aware Draft helpers (match-level)
 // -----------------------------
 function repairDraftInvariants(match) {
@@ -380,7 +505,7 @@ function getTopCards(match, seat, pile, count, from) {
   return list.slice(0, count);
 }
 
-function applyPendingAction(match, entry, now) {
+async function applyPendingAction(match, entry, now) {
   if (!match || !entry || !entry.pendingAction) return null;
   const { pendingAction, request } = entry;
   if (!pendingAction || typeof pendingAction !== 'object') return null;
@@ -477,7 +602,8 @@ function applyPendingAction(match, entry, now) {
       match.game = deepMergeReplaceArrays(match.game || {}, patch);
       match.lastTs = now;
       const room = `match:${match.id}`;
-      io.to(room).emit('statePatch', { patch, t: now });
+      const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+      io.to(room).emit('statePatch', { patch: enrichedPatch, t: now });
       // Finalize as draw (fire-and-forget)
       try { finalizeMatch(match, { isDraw: true }); } catch {}
       return {
@@ -1012,7 +1138,7 @@ const {
   generateCubeBoosterDeterministic,
 } = require("./booster");
 const { BotManager } = require("./botManager");
-const { applyTurnStart, validateAction, ensureCosts } = require("./rules");
+const { applyTurnStart, validateAction, ensureCosts, applyMovementAndCombat } = require("./rules");
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 const { buildMatchInfo } = require("./matchInfo");
 
@@ -1422,7 +1548,9 @@ server.on("request", async (req, res) => {
         if (!p) continue;
         const online = !!p.socketId;
         const inMatch = !!p.matchId;
-        if (online && !inMatch) {
+        // Filter out CPU bots and host accounts (IDs starting with 'cpu_' or 'host_')
+        const isBotOrHost = String(pid).startsWith('cpu_') || String(pid).startsWith('host_');
+        if (online && !inMatch && !isBotOrHost) {
           if (!q || (p.displayName || "").toLowerCase().includes(q)) {
             candidates.push({ id: pid, displayName: p.displayName || "Player" });
           }
@@ -1994,6 +2122,15 @@ function lobbyHasHumanPlayers(lobby) {
   return false;
 }
 
+// Returns true if there is at least one non-CPU (human) player in the match
+function matchHasHumanPlayers(match) {
+  if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0) return false;
+  for (const pid of match.playerIds) {
+    if (!isCpuPlayerId(pid)) return true;
+  }
+  return false;
+}
+
 // -----------------------------
 // Helpers: leaderboard tracking
 // -----------------------------
@@ -2173,22 +2310,37 @@ async function recordLeaderboardMatchResult(match, payload = {}) {
 
     const existing = await prisma.matchResult.findFirst({ where: { matchId: match.id } });
     if (!existing) {
-      await prisma.matchResult.create({
-        data: {
-          matchId: match.id,
-          lobbyName: match.lobbyName || null,
-          winnerId: isDraw ? null : winnerId,
-          loserId: isDraw ? null : loserId,
-          isDraw,
-          format,
-          tournamentId,
-          players: playerInfos.map((info) => ({
-            id: info.id,
-            displayName: info.displayName,
-          })),
-          duration: durationSeconds !== null ? durationSeconds : null,
-        },
-      });
+      // Skip CPU-only matches from persistence
+      const cpuOnly = Array.isArray(playerInfos) && playerInfos.length > 0 && playerInfos.every((info) => isCpuPlayerId(info.id));
+      if (!cpuOnly) {
+        // Ensure FK safety: null winner/loser if not in User table (e.g., CPU IDs)
+        let safeWinnerId = isDraw ? null : winnerId;
+        let safeLoserId = isDraw ? null : loserId;
+        if (safeWinnerId) {
+          const exists = await prisma.user.findUnique({ where: { id: safeWinnerId } });
+          if (!exists) safeWinnerId = null;
+        }
+        if (safeLoserId) {
+          const exists = await prisma.user.findUnique({ where: { id: safeLoserId } });
+          if (!exists) safeLoserId = null;
+        }
+        await prisma.matchResult.create({
+          data: {
+            matchId: match.id,
+            lobbyName: match.lobbyName || null,
+            winnerId: safeWinnerId,
+            loserId: safeLoserId,
+            isDraw,
+            format,
+            tournamentId,
+            players: playerInfos.map((info) => ({
+              id: info.id,
+              displayName: info.displayName,
+            })),
+            duration: durationSeconds !== null ? durationSeconds : null,
+          },
+        });
+      }
     }
 
     match._leaderboardRecorded = true;
@@ -2911,6 +3063,12 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
               });
             } catch {}
           }
+          // T057/T070: DISABLED - Summoning sickness causes "Insufficient resources" regression
+          // Root cause unknown - ANY mutation of permanents after cost validation triggers errors
+          // DEFERRED until root cause can be properly diagnosed
+          // if (costRes && costRes._summoningSicknessInfo && RULES_HELPERS_ENABLED) {
+          //   ...summoning sickness application disabled...
+          // }
           if (costRes && costRes.ok === false) {
             if (enforce) {
               if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
@@ -3164,6 +3322,14 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
         };
       }
       match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
+      // Resolve movement/combat after merge (basic v1)
+      try {
+        const mc = applyMovementAndCombat(baseForMerge, patchToApply, playerId, { match });
+        if (mc && typeof mc === 'object') {
+          match.game = deepMergeReplaceArrays(match.game || {}, mc);
+          patchToApply = deepMergeReplaceArrays(patchToApply || {}, mc);
+        }
+      } catch {}
       // Apply start-of-turn effects if phase/currentPlayer indicates a new turn
       try {
         const prevPhase = (baseForMerge && baseForMerge.phase) || null;
@@ -3230,7 +3396,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
           console.log('[d20] broadcasting patch', { matchId, d20Rolls: patchToApply.d20Rolls, setupWinner: patchToApply.setupWinner });
         }
       }
-      io.to(matchRoom).emit('statePatch', { patch: patchToApply, t: now });
+      const enrichedPatchToApply = await enrichPatchWithCosts(patchToApply, prisma);
+      io.to(matchRoom).emit('statePatch', { patch: enrichedPatchToApply, t: now });
       if (isSnapshot) {
         try {
           const sites = match.game && match.game.board && match.game.board.sites ? Object.keys(match.game.board.sites).length : null;
@@ -3242,7 +3409,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       }
       try { await persistMatchUpdate(match, patchToApply, playerId, now); } catch {}
     } else {
-      io.to(matchRoom).emit('statePatch', { patch, t: now });
+      const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+      io.to(matchRoom).emit('statePatch', { patch: enrichedPatch, t: now });
       try { await persistMatchUpdate(match, patch || null, playerId, now); } catch {}
     }
     if (shouldFinalizeMatch) {
@@ -3253,7 +3421,8 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
       }
     }
   } catch {
-    io.to(matchRoom).emit('statePatch', { patch: incomingPatch || null, t: Date.now() });
+    const enrichedIncoming = await enrichPatchWithCosts(incomingPatch || null, prisma);
+    io.to(matchRoom).emit('statePatch', { patch: enrichedIncoming, t: Date.now() });
   }
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
 }
@@ -3329,7 +3498,8 @@ async function leaderHandleMulliganDone(matchId, playerId) {
   // Update server-side aggregated snapshot
   match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
   match.lastTs = now;
-  io.to(room).emit("statePatch", { patch: mainPatch, t: now });
+  const enrichedMainPatch = await enrichPatchWithCosts(mainPatch, prisma);
+  io.to(room).emit("statePatch", { patch: enrichedMainPatch, t: now });
   try { await persistMatchUpdate(match, mainPatch, playerId, now); } catch {}
   try { console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`); } catch {}
   try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
@@ -3512,7 +3682,7 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
       try {
         const entry = match.interactionRequests.get(requestId);
         if (entry) {
-          const result = applyPendingAction(match, entry, now);
+          const result = await applyPendingAction(match, entry, now);
           if (result) {
             entry.result = result;
             entry.pendingAction = null;
@@ -5175,7 +5345,11 @@ io.on("connection", async (socket) => {
               }
               if (meta.owner !== undefined) next.meta = meta;
             }
-            dragging = Object.keys(next).length > 1 ? next : null;
+            const allowBareKind = kind === 'hand' || kind === 'pile' || kind === 'token';
+            dragging =
+              Object.keys(next).length > 1 || allowBareKind
+                ? next
+                : null;
           }
         }
         // Sanitize highlight from payload: expect an object with { cardId?, slug? }
@@ -5247,7 +5421,9 @@ io.on("connection", async (socket) => {
           return false;
         })();
         if (hasMeaningfulGame) {
-          snap.game = match.game;
+          // Enrich game state with card costs before sending to client
+          const enrichedGame = await enrichPatchWithCosts(match.game, prisma);
+          snap.game = enrichedGame;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
             console.log('[resync] sending game state with d20Rolls:', {
@@ -5730,10 +5906,22 @@ io.on("connection", async (socket) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     try {
-      const recordings = await replay.listRecordings(prisma, { limit: 200 });
+      const allRecordings = await replay.listRecordings(prisma, { limit: 200 });
+
+      // Filter out bot matches (those with CPU bots or host accounts)
+      // Only admins should see bot matches (via admin endpoints)
+      const recordings = allRecordings.filter((recording) => {
+        if (!Array.isArray(recording.playerIds)) return true;
+        // Exclude if any player is a bot (ID starts with 'cpu_' or 'host_')
+        return !recording.playerIds.some((id) => {
+          const pid = String(id || '');
+          return pid.startsWith('cpu_') || pid.startsWith('host_');
+        });
+      });
+
       try {
         console.log(
-          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries`
+          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries (filtered ${allRecordings.length - recordings.length} bot matches)`
         );
       } catch {}
       socket.emit("matchRecordingsResponse", { recordings });
@@ -5753,6 +5941,20 @@ io.on("connection", async (socket) => {
         socket.emit("matchRecordingResponse", { error: "Recording not found" });
         return;
       }
+
+      // Block access to bot matches for regular users
+      // Check if any player is a bot (ID starts with 'cpu_' or 'host_')
+      const playerIds = recording.initialState?.playerIds || [];
+      const isBotMatch = Array.isArray(playerIds) && playerIds.some((id) => {
+        const pid = String(id || '');
+        return pid.startsWith('cpu_') || pid.startsWith('host_');
+      });
+
+      if (isBotMatch) {
+        socket.emit("matchRecordingResponse", { error: "Recording not found" });
+        return;
+      }
+
       socket.emit("matchRecordingResponse", { recording });
     } catch (e) {
       try { console.warn('[Recording] loadRecording failed:', e?.message || e); } catch {}
@@ -6247,6 +6449,23 @@ io.on("connection", async (socket) => {
         // Clear association last so future logic sees player out of lobby
         player.lobbyId = null;
       }
+
+      // Clean up bot-only matches immediately when any player disconnects
+      // Bot matches don't need the "rejoin" grace period that human matches get
+      if (player.matchId && matches.has(player.matchId)) {
+        const match = matches.get(player.matchId);
+        if (match && !matchHasHumanPlayers(match)) {
+          try {
+            console.log(`[Match] Cleaning up bot-only match ${match.id} after disconnect`);
+            cleanupMatchNow(match.id, 'bot_only_disconnect', true).catch((err) => {
+              console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
+            });
+          } catch (err) {
+            console.warn(`[Match] Error initiating bot match cleanup:`, err);
+          }
+        }
+      }
+
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;
     }
@@ -6254,8 +6473,9 @@ io.on("connection", async (socket) => {
   });
 });
 
-// Periodic cleanup: trim CPU-only lobbies; keep human lobbies alive even when idle
+// Periodic cleanup: trim CPU-only lobbies and bot-only matches; keep human lobbies/matches alive
 setInterval(() => {
+  // Clean up CPU-only lobbies
   for (const lobby of lobbies.values()) {
     if (lobby.status !== "open") continue;
     // Close CPU-only lobbies immediately
@@ -6265,6 +6485,29 @@ setInterval(() => {
       lobbies.delete(lobby.id);
       broadcastLobbies();
       continue;
+    }
+  }
+
+  // Clean up bot-only matches that are completed or have been idle
+  for (const match of matches.values()) {
+    try {
+      if (!match) continue;
+
+      // Skip matches with human players
+      if (matchHasHumanPlayers(match)) continue;
+
+      // Clean up bot-only matches that are completed or have been inactive for 5+ minutes
+      const age = Date.now() - (Number(match.lastTs) || Date.now());
+      const shouldCleanup = match.status === 'completed' || age >= 5 * 60 * 1000;
+
+      if (shouldCleanup) {
+        console.log(`[Match] Periodic cleanup of bot-only match ${match.id} (status=${match.status}, age=${Math.floor(age/1000)}s)`);
+        cleanupMatchNow(match.id, 'bot_only_periodic', true).catch((err) => {
+          console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
+        });
+      }
+    } catch (err) {
+      console.warn('[Match] Error in bot match periodic cleanup:', err);
     }
   }
 }, 30 * 1000);

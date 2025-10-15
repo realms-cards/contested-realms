@@ -14,15 +14,12 @@ export default function AsciiBottomArt({
   className = "",
   maxVh = 38,
   opacityClass = "text-white/10",
-  bottomOffsetPx = 8,
 }: {
   className?: string;
   /** Max height as percentage of viewport height */
   maxVh?: number | null;
   /** Tailwind color utility for the ASCII characters */
   opacityClass?: string;
-  /** Raise the art slightly above the viewport bottom to avoid clipping */
-  bottomOffsetPx?: number;
 }) {
   const [art, setArt] = React.useState<string>("");
   const [error, setError] = React.useState<string | null>(null);
@@ -56,29 +53,31 @@ export default function AsciiBottomArt({
   }
 
   const containerStyle: React.CSSProperties = {
-    overflow: "visible",
-    paddingBottom: "env(safe-area-inset-bottom)",
-    bottom: `calc(env(safe-area-inset-bottom) + ${bottomOffsetPx}px)`,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: "hidden",
   };
   if (typeof maxVh === "number" && maxVh > 0) {
     containerStyle.maxHeight = `${maxVh}vh`;
+  } else {
+    containerStyle.height = "100vh";
   }
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-0 pointer-events-none select-none ${className}`}
+      className={`fixed inset-0 z-0 pointer-events-none select-none ${className}`}
       aria-hidden
       style={containerStyle}
     >
-      <div className="relative w-full overflow-hidden">
-        <AsciiSvg
-          text={art}
-          className={`h-auto ${opacityClass}`}
-          padBottomLines={4}
-          preserveAspectRatio="xMidYMax meet"
-          style={{ width: 'calc(100% + 2px)', transform: 'translateX(-1px)' } as React.CSSProperties}
-        />
-      </div>
+      <AsciiSvg
+        text={art}
+        className={`w-full h-full ${opacityClass}`}
+        padBottomLines={4}
+        preserveAspectRatio="xMidYMax slice"
+        style={{ display: "block", width: "100%", height: "100%" }}
+      />
     </div>
   );
 }

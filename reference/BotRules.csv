@@ -1,0 +1,10 @@
+category,phase,action,condition,constraint,effect,priority,source
+PLACEMENT,Main,play_site,firstSite=1 && atAvatarPos=1,require,,95,Rulebook
+PLACEMENT,Main,play_site,adjacentToOwned=1,require,,90,Rulebook
+COST,Main,play_site,avatarUntapped=1,require,autoTapAvatar,70,Rulebook
+TIMING,Main,play_permanent,actorIsActive=1,require,,90,Rulebook
+THRESHOLD,Main,play_permanent,meetsThresholds=1,require,,95,Rulebook
+MOVEMENT,Main,move,orthogonal=1 && inBounds=1 && destFriendlyOccupied=0,require,,90,Rulebook
+COMBAT,Main,attack,orthogonal=1 && inBounds=1 && occupiedBy=opponent,require,,95,Rulebook
+DRAW,Draw,draw_atlas,actorIsActive=1,prefer,,40,Rulebook
+DRAW,Draw,draw_atlas_tap,avatarUntapped=1 && noSiteInHand=1,prefer,,50,Rulebook

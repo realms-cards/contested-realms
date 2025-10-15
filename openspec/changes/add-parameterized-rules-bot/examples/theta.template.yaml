@@ -1,0 +1,66 @@
+# Parameter set θ for the Sorcery rules+search bot (no nets)
+# This file is loaded by the engine in evaluation mode (ε=0) or training mode (ε>0)
+# Keep parameter count <= ~200 for stable evolution.
+
+meta:
+  id: "baseline/v0"
+  description: "Hand-tuned starter weights; conservative, prefer on-curve development"
+  createdAt: "2025-10-13"
+
+search:
+  beamWidth: 8          # beam size for best-first expansion (4–12 typical)
+  maxDepth: 4           # iterative deepening cap before quiescence
+  quiescenceDepth: 2    # additional local depth on tactical instability
+  nodeCap: 4000         # soft cap per move selection
+  budgetMs: 60          # per-turn time budget in milliseconds
+  moveOrdering:
+    play_on_curve: 1.0
+    remove_threat: 0.8
+    develop_engine: 0.6
+
+exploration:
+  epsilon_root: 0.08    # ε-greedy at root (training only)
+  gumbel_leaf: 0.2      # small noise added to leaf evals (training only)
+
+rollouts:               # Optional rollout policy (for MCTS or playouts)
+  play_on_curve: 0.55
+  remove_biggest_threat: 0.30
+  push_face: 0.15
+
+weights:
+  # Life & pressure
+  w_life: 0.8
+  w_lethal_now: 5.0
+  w_opp_lethal_next: -4.5
+
+  # Board presence
+  w_atk: 0.5
+  w_hp: 0.2
+  w_threats_my: 0.7
+  w_threats_opp: -0.6
+
+  # Card economy
+  w_hand: 0.6
+  w_draw_potential: 0.3
+  w_expected_two_for_one: 0.4
+
+  # Tempo & mana
+  w_mana_waste: -0.7
+  w_on_curve: 0.9
+
+  # Synergy hooks (start small)
+  w_engine_online: 1.2
+  w_combo_online: 1.0
+  w_tribal_count: 0.2
+
+  # Risk controls
+  w_sweeper_risk: -0.8
+  w_win_more: -0.25
+
+  # Regularization / tie-breakers
+  w_action_count_penalty: -0.02
+
+constraints:
+  clamp_eval_min: -50
+  clamp_eval_max: 50
+  legal_move_fallback: "pass_or_minimal"

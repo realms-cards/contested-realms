@@ -55,4 +55,5 @@ next-env.d.ts
 /data-ktx2-bak
 /.playwright-mcp
 dev.db
-/reference
+
+/logs/training

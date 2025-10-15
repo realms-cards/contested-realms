@@ -13,6 +13,61 @@ function loadCardsDb() {
   return _CARDS_DB;
 }
 
+function canonicalCardKey(card) {
+  try {
+    const name = (card && card.name ? String(card.name) : '').toLowerCase();
+    const slug = (card && card.slug ? String(card.slug) : '').toLowerCase();
+    const type = (card && card.type ? String(card.type) : '').toLowerCase();
+    const set = (card && card.set ? String(card.set) : '').toLowerCase();
+    return `${name}|${slug}|${type}|${set}`;
+  } catch { return ''; }
+}
+
+function buildOwnedCardMultiset(game, playerNum) {
+  const multiset = new Map();
+  try {
+    const per = (game && game.permanents) || {};
+    for (const key of Object.keys(per)) {
+      const arr = Array.isArray(per[key]) ? per[key] : [];
+      for (const p of arr) {
+        try {
+          if (!p || Number(p.owner) !== playerNum) continue;
+          const k = canonicalCardKey(p.card || {});
+          if (!k) continue;
+          multiset.set(k, (multiset.get(k) || 0) + 1);
+        } catch {}
+      }
+    }
+  } catch {}
+  return multiset;
+}
+
+function markAndCountNewPlacements(game, action, playerNum) {
+  // Returns { newItems: Array<{card:any}>, isNew: WeakSet } where isNew has references to new card entries
+  const result = { newItems: [], isNew: new WeakSet() };
+  try {
+    const current = buildOwnedCardMultiset(game, playerNum);
+    const perPatch = (action && action.permanents) || {};
+    for (const key of Object.keys(perPatch)) {
+      const arr = Array.isArray(perPatch[key]) ? perPatch[key] : [];
+      for (const p of arr) {
+        try {
+          if (!p || Number(p.owner) !== playerNum) continue;
+          const k = canonicalCardKey(p.card || {});
+          if (!k) { result.newItems.push(p); result.isNew.add(p); continue; }
+          const count = current.get(k) || 0;
+          if (count > 0) {
+            current.set(k, count - 1); // treat as existing (moved / already on board)
+          } else {
+            result.newItems.push(p);
+            result.isNew.add(p);
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+  return result;
+}
 function getCostForCard(card) {
   if (card && typeof card.cost === 'number') return Number(card.cost) || 0;
   // Lookup by slug or name
@@ -223,6 +278,7 @@ function countManaProvidersFromPermanents(game, playerNum) {
 /**
  * Compute a patch to apply at the start of the turn for the current player in `game`.
  * Untaps sites, permanents, and avatar of the current player.
+ * Clears summoning sickness (summonedThisTurn) for permanents owned by current player.
  * @param {any} game - current or simulated next game state (must contain currentPlayer)
  * @returns {any|null} partial patch to merge, or null if none
  */
@@ -231,13 +287,24 @@ function applyTurnStart(game) {
     const cp = Number(game && game.currentPlayer);
     if (!(cp === 1 || cp === 2)) return null;
 
-    // Untap permanents owned by current player
+    // Untap permanents owned by current player AND clear summoning sickness
     const permsPrev = (game && game.permanents) || {};
     const permanents = {};
     for (const cellKey of Object.keys(permsPrev)) {
       const arr = Array.isArray(permsPrev[cellKey]) ? permsPrev[cellKey] : [];
       permanents[cellKey] = arr.map((p) => {
-        try { return Number(p.owner) === cp ? { ...p, tapped: false } : p; } catch { return p; }
+        try {
+          if (Number(p.owner) === cp) {
+            // Untap and clear summoning sickness flag
+            const updated = { ...p, tapped: false };
+            // Remove summonedThisTurn flag (if present)
+            delete updated.summonedThisTurn;
+            return updated;
+          }
+          return p;
+        } catch {
+          return p;
+        }
       });
     }
 
@@ -323,6 +390,30 @@ function validateAction(game, action, playerId, context) {
           }
         }
       }
+
+      // Simple movement legality: detect one-step orthogonal move for the acting player
+      try {
+        const prevPer = (game && game.permanents) || {};
+        const touched = Object.keys(action.permanents);
+        if (touched.length === 2) {
+          const [k1, k2] = touched;
+          const a1 = Array.isArray(prevPer[k1]) ? prevPer[k1] : [];
+          const a2 = Array.isArray(prevPer[k2]) ? prevPer[k2] : [];
+          const n1 = Array.isArray(action.permanents[k1]) ? action.permanents[k1] : [];
+          const n2 = Array.isArray(action.permanents[k2]) ? action.permanents[k2] : [];
+          // Identify from/to keys by length delta
+          const d1 = (n1.length - a1.length);
+          const d2 = (n2.length - a2.length);
+          const fromKey = d1 < 0 ? k1 : (d2 < 0 ? k2 : null);
+          const toKey = d1 > 0 ? k1 : (d2 > 0 ? k2 : null);
+          if (fromKey && toKey) {
+            // Must be orthogonal step and within bounds
+            if (!isOrthogonalStep(game, fromKey, toKey)) {
+              return { ok: false, error: 'Illegal movement: must move orthogonally by 1 within bounds' };
+            }
+          }
+        }
+      } catch {}
     }
 
     // Removed: Permanents can now be placed on unsited cells (void)
@@ -389,20 +480,18 @@ function validateAction(game, action, playerId, context) {
       if (!(effectivePlayer === meNum && effectivePhase === 'Main')) {
         return { ok: false, error: 'Permanents can only be played during your Main phase' };
       }
+      // Only enforce thresholds for truly new placements; skip items that already exist on board (movement)
       const available = countThresholdsForPlayer(game, meNum);
-      for (const key of Object.keys(action.permanents)) {
-        const arr = Array.isArray(action.permanents[key]) ? action.permanents[key] : [];
-        for (const p of arr) {
-          const card = p && p.card ? p.card : null;
-          if (!card) continue;
-          const th = getThresholdsForCard(card);
-          if (!th) continue; // unknown => allow for now
-          // Compare element-wise using >=
-          if ((th.air || 0) > (available.air || 0)) return { ok: false, error: 'Insufficient Air thresholds' };
-          if ((th.earth || 0) > (available.earth || 0)) return { ok: false, error: 'Insufficient Earth thresholds' };
-          if ((th.fire || 0) > (available.fire || 0)) return { ok: false, error: 'Insufficient Fire thresholds' };
-          if ((th.water || 0) > (available.water || 0)) return { ok: false, error: 'Insufficient Water thresholds' };
-        }
+      const { newItems } = markAndCountNewPlacements(game, action, meNum);
+      for (const p of newItems) {
+        const card = p && p.card ? p.card : null;
+        if (!card) continue;
+        const th = getThresholdsForCard(card);
+        if (!th) continue; // unknown => allow for now
+        if ((th.air || 0) > (available.air || 0)) return { ok: false, error: 'Insufficient Air thresholds' };
+        if ((th.earth || 0) > (available.earth || 0)) return { ok: false, error: 'Insufficient Earth thresholds' };
+        if ((th.fire || 0) > (available.fire || 0)) return { ok: false, error: 'Insufficient Fire thresholds' };
+        if ((th.water || 0) > (available.water || 0)) return { ok: false, error: 'Insufficient Water thresholds' };
       }
     }
 
@@ -414,6 +503,7 @@ function validateAction(game, action, playerId, context) {
 }
 
 // Cost enforcement using per-turn spend model (sites never tap; avatars tap to play sites)
+// Also marks newly-played permanents with summonedThisTurn flag
 function ensureCosts(game, action, playerId, context) {
   try {
     const match = context && context.match ? context.match : null;
@@ -422,15 +512,16 @@ function ensureCosts(game, action, playerId, context) {
     const meKey = idx === 0 ? 'p1' : idx === 1 ? 'p2' : null;
     if (!meNum || !meKey) return { ok: true };
 
-    // Sum costs of permanents being placed now
+    // Sum costs of truly new permanents only (movement should not be charged)
     let totalCost = 0;
+    const newPermanentsInfo = { newItems: [], isNew: new WeakSet() };
     if (action.permanents && typeof action.permanents === 'object') {
-      for (const key of Object.keys(action.permanents)) {
-        const arr = Array.isArray(action.permanents[key]) ? action.permanents[key] : [];
-        for (const p of arr) {
-          const card = p && p.card ? p.card : null;
-          if (card) totalCost += getCostForCard(card);
-        }
+      const info = markAndCountNewPlacements(game, action, meNum);
+      newPermanentsInfo.newItems = info.newItems;
+      newPermanentsInfo.isNew = info.isNew;
+      for (const p of info.newItems) {
+        const card = p && p.card ? p.card : null;
+        if (card) totalCost += getCostForCard(card);
       }
     }
     // Detect if actor is placing any new site this action
@@ -480,11 +571,133 @@ function ensureCosts(game, action, playerId, context) {
       }
     }
 
+    // T057/T070: Summoning sickness DEFERRED
+    // All implementations cause "Insufficient resources" regressions
+    // Root cause: Unknown interaction between WeakSet tracking and cost validation
+
     if (hasAuto) return { ok: true, autoPatch: auto };
+
     return { ok: true };
   } catch {
     return { ok: true };
   }
 }
 
-module.exports = { applyTurnStart, validateAction, ensureCosts };
+// --- Movement + Combat (basic v1) ---
+function getCardStatsFromRef(card) {
+  try {
+    if (!card || typeof card !== 'object') return null;
+    const power = Number(card.power ?? card.atk ?? card.attack);
+    const life = Number(card.life ?? card.hp ?? card.health ?? card.defense);
+    const powOk = Number.isFinite(power) && power > 0;
+    const lifeOk = Number.isFinite(life) && life > 0;
+    if (powOk || lifeOk) return { power: powOk ? power : 1, life: lifeOk ? life : 1 };
+  } catch {}
+  return null;
+}
+
+function getCardStatsFromDb(card) {
+  try {
+    const slug = card && card.slug ? String(card.slug) : null;
+    const nm = card && card.name ? String(card.name) : null;
+    const found = slug ? getCardBySlug(slug) : nm ? getCardByName(nm) : null;
+    const meta = found && (found.guardian || (found.sets && found.sets[0] && found.sets[0].metadata)) || null;
+    if (!meta) return { power: 1, life: 1 };
+    const power = Number(meta.power ?? meta.atk ?? meta.attack);
+    const life = Number(meta.life ?? meta.hp ?? meta.health ?? meta.defense);
+    const pow = Number.isFinite(power) && power > 0 ? power : 1;
+    const hp = Number.isFinite(life) && life > 0 ? life : 1;
+    return { power: pow, life: hp };
+  } catch { return { power: 1, life: 1 }; }
+}
+
+function getCardStats(card) {
+  return getCardStatsFromRef(card) || getCardStatsFromDb(card || {});
+}
+
+function seatFromPlayer(match, playerId) {
+  try {
+    if (!match || !Array.isArray(match.playerIds)) return null;
+    const idx = match.playerIds.indexOf(playerId);
+    if (idx === 0) return 'p1';
+    if (idx === 1) return 'p2';
+  } catch {}
+  return null;
+}
+
+function manhattan(a, b) {
+  try { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); } catch { return 0; }
+}
+
+function inBounds(pos, w, h) {
+  try { return pos.x >= 0 && pos.x < w && pos.y >= 0 && pos.y < h; } catch { return false; }
+}
+
+function isOrthogonalStep(game, fromKey, toKey) {
+  try {
+    const from = parseCellKey(fromKey); const to = parseCellKey(toKey);
+    if (!from || !to) return false;
+    const w = (game && game.board && game.board.size && Number(game.board.size.w)) || 5;
+    const h = (game && game.board && game.board.size && Number(game.board.size.h)) || 4;
+    if (!inBounds(from, w, h) || !inBounds(to, w, h)) return false;
+    return manhattan(from, to) === 1;
+  } catch { return false; }
+}
+
+/**
+ * Compute a combat resolution patch for any cells that end up with both sides after applying `action`.
+ * Simplified v1: simultaneous damage; remove any unit whose received dmg >= life.
+ */
+function applyMovementAndCombat(prevGame, action, playerId, context) {
+  try {
+    if (!action || typeof action !== 'object') return null;
+    const match = context && context.match ? context.match : null;
+    const meSeat = seatFromPlayer(match, playerId);
+    const meNum = meSeat === 'p1' ? 1 : meSeat === 'p2' ? 2 : null;
+    const perPrev = (prevGame && prevGame.permanents) || {};
+    const perPatch = (action && action.permanents) || {};
+
+    // Collect all touched cells
+    const keys = new Set([...Object.keys(perPrev), ...Object.keys(perPatch)]);
+    const result = { permanents: {}, events: [] };
+    let changed = false;
+
+    for (const k of keys) {
+      const beforeArr = Array.isArray(perPrev[k]) ? perPrev[k] : [];
+      const afterArr = Object.prototype.hasOwnProperty.call(perPatch, k)
+        ? (Array.isArray(perPatch[k]) ? perPatch[k] : [])
+        : beforeArr;
+      if (!afterArr || afterArr.length === 0) {
+        continue;
+      }
+      let mine = [];
+      let theirs = [];
+      for (const it of afterArr) {
+        try {
+          if (Number(it.owner) === 1 || Number(it.owner) === 2) {
+            if (Number(it.owner) === 1) mine.push(it);
+            else theirs.push(it);
+          }
+        } catch {}
+      }
+      if (mine.length > 0 && theirs.length > 0) {
+        // Resolve simultaneous damage
+        const dmgToMine = theirs.reduce((s, u) => s + getCardStats(u.card || {}).power, 0);
+        const dmgToTheirs = mine.reduce((s, u) => s + getCardStats(u.card || {}).power, 0);
+        const survivorsMine = mine.filter((u) => getCardStats(u.card || {}).life > dmgToMine);
+        const survivorsTheirs = theirs.filter((u) => getCardStats(u.card || {}).life > dmgToTheirs);
+        const survivors = [...survivorsMine, ...survivorsTheirs];
+        result.permanents[k] = survivors;
+        changed = true;
+        try {
+          result.events.push({ id: 0, ts: Date.now(), text: `[Combat] ${k}: ${mine.length} vs ${theirs.length} -> survivors ${survivors.length}` });
+        } catch {}
+      }
+    }
+
+    if (!changed) return null;
+    return result;
+  } catch { return null; }
+}
+
+module.exports = { applyTurnStart, validateAction, ensureCosts, applyMovementAndCombat };

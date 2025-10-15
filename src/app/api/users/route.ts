@@ -23,8 +23,19 @@ export async function GET(req: NextRequest) {
             { name: { contains: search, mode: 'insensitive' as const } },
             { email: { contains: search, mode: 'insensitive' as const } },
           ],
+          // Exclude CPU bots (IDs starting with 'cpu_') and host accounts
+          AND: [
+            { NOT: { id: { startsWith: 'cpu_' } } },
+            { NOT: { id: { startsWith: 'host_' } } },
+          ],
         }
-      : {};
+      : {
+          // Exclude CPU bots (IDs starting with 'cpu_') and host accounts when no search
+          NOT: [
+            { id: { startsWith: 'cpu_' } },
+            { id: { startsWith: 'host_' } },
+          ],
+        };
 
     const users = await prisma.user.findMany({
       where,

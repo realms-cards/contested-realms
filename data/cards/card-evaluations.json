@@ -1,0 +1,1648 @@
+{
+  "version": "2.1.0",
+  "generated": "2025-10-14T23:05:58.548Z",
+  "description": "LLM-assisted card evaluation functions for bot AI",
+  "generator": "scripts/generate-card-evaluations-llm.js",
+  "model": "claude-3-5-sonnet-20241022",
+  "cards": {
+    "Apprentice Wizard": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 && context.turn === 1) ? 7.0 : (context.myHandSize < 3 ? 6.0 : 4.5);",
+      "priority": "high early game for Genesis card draw, moderate otherwise",
+      "synergies": [
+        "spells",
+        "card_advantage",
+        "spellcaster_synergy",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "aggro_strategy",
+        "late_game"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Spellcaster\r\n\r\nGenesis → Draw a spell."
+    },
+    "Blood Ravens": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.myLife < context.myMaxLife * 0.5 ? 2.0 : 0) + (context.oppUnitCount === 0 ? 1.0 : 0) + (context.oppUnits.filter(u => !u.keywords.includes('Flying')).length > 0 ? 1.0 : 0)) : 0;",
+      "priority": "high when low on life or opponent has ground-only blockers",
+      "synergies": [
+        "life_gain",
+        "evasion",
+        "air_threshold",
+        "aggression"
+      ],
+      "antiSynergies": [
+        "opponent_flying_blockers",
+        "full_life"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nDamage dealt by Blood Ravens' strikes heals you."
+    },
+    "Candlemas Monks": {
+      "category": "minion",
+      "evaluationFunction": "return (context.lethalThreat || (context.oppTotalATK > context.myLife && !context.isMyTurn)) ? 8.0 : (context.phase === 'combat' && context.underPressure ? 6.5 : 4.0);",
+      "priority": "high when needing emergency phase skip, moderate otherwise",
+      "synergies": [
+        "defensive_position",
+        "lethal_prevention",
+        "combat_tricks"
+      ],
+      "antiSynergies": [
+        "aggressive_position",
+        "board_advantage"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Deathrite → Proceed to the end phase."
+    },
+    "Cloud Spirit": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.0 + (context.oppUnits.filter(u => !u.keywords.includes('Flying')).length > 0 ? 1.0 : 0) + (context.turn <= 3 ? 1.0 : 0)) : 0;",
+      "priority": "early game evasive threat with mobility",
+      "synergies": [
+        "air_threshold",
+        "evasive_attacks",
+        "mobility"
+      ],
+      "antiSynergies": [
+        "ground_blockers",
+        "defensive_position"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Airborne, Movement +2"
+    },
+    "Daperyll Vampire": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.5 + (context.myMaxLife - context.myLife)/5 + (context.oppUnits.filter(u => !u.keywords.includes('Flying') && !u.keywords.includes('Reach')).length > 0 ? 1 : 0)) : 0;",
+      "priority": "moderate to high - evasive threat that provides life gain",
+      "synergies": [
+        "life_gain",
+        "evasion",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "opponent_flying_blockers"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nDamage dealt by Daperyll Vampire's strikes heals you."
+    },
+    "Dead of Night Demon": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.oppUnitCount > 0 ? 1.0 : 0) + (context.underPressure ? 1.0 : 0)) : 0;",
+      "priority": "moderate - efficient early stealth minion for evasive damage",
+      "synergies": [
+        "stealth_synergies",
+        "aggro_strategy",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "board_clear",
+        "opponent_detection"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Stealth"
+    },
+    "East-West Dragon": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.5 + (context.oppUnits.filter(u => !u.keywords.includes('Flying')).length * 0.3) + (context.myUnitCount < context.oppUnitCount ? 1 : 0)) : 0;",
+      "priority": "good midrange flyer with unique sideways movement ability",
+      "synergies": [
+        "air_threshold",
+        "evasive_threats",
+        "board_control"
+      ],
+      "antiSynergies": [
+        "ground_focused_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nMoves freely sideways."
+    },
+    "Grandmaster Wizard": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 && context.myDeckSize >= 3) ? (context.myHandSize < 4 ? 8.5 : 7.0) : 0.0;",
+      "priority": "high - immediate powerful card advantage",
+      "synergies": [
+        "spell_synergy",
+        "card_advantage",
+        "air_threshold",
+        "spellcaster_tribal"
+      ],
+      "antiSynergies": [
+        "empty_deck",
+        "full_hand"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Spellcaster\n\nGenesis → Draw three spells."
+    },
+    "Grim Reaper": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.0 + (context.oppUnits.filter(u => u.hp <= 1).length * 0.5) + (context.oppHandSize > 2 ? 1.0 : 0) + (context.underPressure ? 1.0 : 0) + (context.lethalThreat && context.oppUnits.length > 0 ? 1.5 : 0)) : 0;",
+      "priority": "high when opponent has important minions or multiple copies of threats",
+      "synergies": [
+        "removal",
+        "control",
+        "banish_effects",
+        "defensive_position"
+      ],
+      "antiSynergies": [
+        "aggro",
+        "opponent_no_units"
+      ],
+      "situational": false,
+      "complexity": "complex",
+      "rulesText": "Lethal\r\n\r\nWhenever Grim Reaper kills a minion, banish that minion and all copies. Search its owner's cemetery, hand, and spellbook and banish any copies. They shuffle."
+    },
+    "Gyre Hippogriffs": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.5 + (context.isMyTurn ? 1.0 : 0) + (context.lethalThreat ? 1.0 : 0) + (context.nearLethal ? 1.0 : 0)) : 0;",
+      "priority": "high - efficient flying attacker with immediate impact due to charge",
+      "synergies": [
+        "air_threshold",
+        "aggressive_strategy",
+        "evasive_threats"
+      ],
+      "antiSynergies": [
+        "defensive_position"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Airborne, Charge"
+    },
+    "Haast Eagle": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.myUnits.some(u => u.atk < 3 && !u.keywords.includes('Airborne')) ? 1.5 : 0) + (context.oppUnits.some(u => !u.keywords.includes('Airborne')) ? 1.0 : 0)) : 0;",
+      "priority": "good aggressive flyer that can transport other units",
+      "synergies": [
+        "small_units",
+        "air_magic",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "large_units",
+        "ground_defense"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nMay carry a weaker allied minion."
+    },
+    "Headless Haunt": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (7.0 + (context.oppUnitCount > context.myUnitCount ? 1.0 : 0)) : 0;",
+      "priority": "high - above rate stats with evasion and mobility",
+      "synergies": [
+        "air_threshold",
+        "aggressive_strategy",
+        "evasion"
+      ],
+      "antiSynergies": [
+        "token_strategy",
+        "aura_buffs"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Voidwalk\n\nAt the start of your turn, Headless Haunt teleports to the top of a random site or void."
+    },
+    "Highland Clansmen": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.lethalThreat ? 6.0 : (context.isMyTurn ? 7.5 : 5.5)) : 0.0;",
+      "priority": "high when you can attack immediately due to Charge",
+      "synergies": [
+        "aggressive_strategy",
+        "combat_tricks",
+        "haste_matters"
+      ],
+      "antiSynergies": [
+        "defensive_position",
+        "control_strategy"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Charge"
+    },
+    "Highland Falconer": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.turn <= 3 ? 7.0 : 5.0) : 0.0;",
+      "priority": "high early game for tutoring small flying units",
+      "synergies": [
+        "beast_synergy",
+        "flying_matters",
+        "early_game",
+        "tutor_effects"
+      ],
+      "antiSynergies": [
+        "late_game",
+        "no_flying_targets"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Genesis → You may search your hand and spellbook for a Beast with Airborne and mana cost ② or less and summon it here. Shuffle if needed."
+    },
+    "Highland Princess": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 && context.turn <= 3 ? 7.5 : (context.manaLeftover >= 0 ? 5.5 : 0.0);",
+      "priority": "high early game for artifact tutoring, moderate later",
+      "synergies": [
+        "artifacts",
+        "early_game",
+        "tutoring",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "late_game",
+        "aggressive_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Genesis → Search your spellbook for an artifact that costs ① or less, reveal it, and put it into your hand. Shuffle."
+    },
+    "Hounds of Ondaros": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.5 + (context.oppUnits.filter(u => u.keywords.includes('Stealth')).length * 0.5) + (context.lethalThreat ? 1 : 0) + (context.oppUnits.length > 3 ? 1 : 0)) : 0;",
+      "priority": "high when opponent has stealth units or multiple threats to navigate",
+      "synergies": [
+        "air_threshold",
+        "evasion",
+        "mobility"
+      ],
+      "antiSynergies": [
+        "ground_focused_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne, Burrowing, Submerge, Voidwalk\n\nNearby enemies permanently lose Stealth."
+    },
+    "Kite Archer": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.oppUnits.some(u => !u.keywords.includes('Flying') && u.hp <= 2) ? 1.5 : 0) + (context.oppUnits.some(u => u.keywords.includes('Flying') && u.hp <= 2) ? 1.0 : 0) + (context.underPressure ? 1.0 : 0)) : 0;",
+      "priority": "good early game ranged unit with mobility",
+      "synergies": [
+        "air_threshold",
+        "ranged_units",
+        "mobile_units"
+      ],
+      "antiSynergies": [
+        "go_wide_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Ranged\n\nImmediately after performing a ranged strike, Kite Archer may take a step."
+    },
+    "Lord of the Void": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 && context.oppMana >= 1 ? (context.turn > 10 ? 8.5 : 7.0) : 0.0;",
+      "priority": "high - potent mana denial through site removal",
+      "synergies": [
+        "mana_denial",
+        "late_game",
+        "voidwalk"
+      ],
+      "antiSynergies": [
+        "early_game",
+        "aggressive_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Voidwalk\n\nAt the end of your turn, Lord of the Void may banish an adjacent site, unless there's an Avatar there."
+    },
+    "Men of Leng": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 ? (5.0 + (context.oppHandSize > 2 ? 1.0 : 0) + (context.isMyTurn && !context.oppUnits.some(u => u.keywords.includes('Flying')) ? 1.0 : 0) + (context.turn <= 3 ? 1.0 : 0)) : 0);",
+      "priority": "early game discard pressure, especially when opponent has cards",
+      "synergies": [
+        "discard_effects",
+        "early_game",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "late_game",
+        "opponent_empty_hand",
+        "flying_blockers"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Whenever Men of Leng strike an Avatar, that Avatar discards a random card."
+    },
+    "Midnight Rogue": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.oppUnits.length > 0 ? 1.0 : 0) + (context.oppLife <= 6 ? 1.0 : 0) + (context.underPressure ? 1.0 : 0)) : 0.0;",
+      "priority": "moderate - evasive threat with stealth and ranged",
+      "synergies": [
+        "air_threshold",
+        "evasion",
+        "ranged_support",
+        "stealth_synergy"
+      ],
+      "antiSynergies": [
+        "aggro_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Ranged, Stealth"
+    },
+    "Moon Clan Werewolf": {
+      "category": "minion",
+      "evaluationFunction": "const mortals = context.myUnits.filter(u => u.keywords.includes('Mortal')); const hasMortalToSac = mortals.length > 0; const value = 6.0 + (hasMortalToSac ? 2.0 : 0) + (context.underPressure ? -1.0 : 0) + (context.myHandSize > 1 ? 1.0 : -1.0); return context.manaLeftover >= 0 ? Math.min(10, Math.max(0, value)) : 0;",
+      "priority": "high when you have expendable Mortals and another copy in hand",
+      "synergies": [
+        "mortals",
+        "sacrifice_effects",
+        "multiple_copies"
+      ],
+      "antiSynergies": [
+        "no_mortals",
+        "empty_hand",
+        "under_pressure"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Sacrifice an allied Mortal → Summon Moon Clan Werewolf from your hand to the Mortal's location."
+    },
+    "Nightmare": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + Math.min(3.0, context.oppUnits.length * 0.75) + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0)) : 0.0;",
+      "priority": "high when opponent has multiple units to disrupt",
+      "synergies": [
+        "control",
+        "board_control",
+        "air_threshold",
+        "location_manipulation"
+      ],
+      "antiSynergies": [
+        "opponent_no_units",
+        "aggressive_strategy"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "At the end of your turn, for each enemy minion here, you may push it to an adjacent location or void."
+    },
+    "Nimbus Jinn": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.myHandSize > 0 ? 1.5 : 0) + (context.oppUnitCount > 0 ? 1.5 : 0) + (context.underPressure ? 1.0 : 0)) : 0;",
+      "priority": "high when you have spells to discard and opposing units to target",
+      "synergies": [
+        "spell_count",
+        "air_threshold",
+        "flying_matters",
+        "removal_effects"
+      ],
+      "antiSynergies": [
+        "empty_hand",
+        "opponent_no_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nDiscard a spell → Deal 3 damage to another random unit here."
+    },
+    "Palliburrie Bats": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.5 + (context.oppUnits.filter(u => !u.keywords.includes('Airborne') && !u.keywords.includes('Flying')).length * 0.3) + (context.lethalThreat ? 1.0 : 0)) : 0;",
+      "priority": "good early game evasive threat, better against ground-based opponents",
+      "synergies": [
+        "air_threshold",
+        "evasive_attacks",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "opposing_flyers",
+        "defensive_position"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne, Burrowing"
+    },
+    "Peregrine Apparition": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.oppUnits.filter(u => !u.keywords.includes('Flying')).length * 0.5) + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0) + (context.lethalThreat ? 1.5 : 0)) : 0;",
+      "priority": "high when opponent lacks flying blockers or when evasion is needed",
+      "synergies": [
+        "air_threshold",
+        "evasion_strategy",
+        "mobility"
+      ],
+      "antiSynergies": [
+        "opponent_flying_units",
+        "ground_focused_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne, Movement +3, Voidwalk"
+    },
+    "Phantasmal Shade": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.oppUnitCount === 0 ? 7.5 : (context.oppTotalATK === 0 ? 7.0 : 4.0)) : 0.0;",
+      "priority": "high when opponent has no units or no attackers, moderate otherwise",
+      "synergies": [
+        "empty_opponent_board",
+        "aggressive_strategy",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "opponent_ping_effects",
+        "opponent_direct_damage",
+        "opponent_board_presence"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "When Phantasmal Shade is struck, destroy it."
+    },
+    "Phantom Steed": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 ? (context.myUnitCount > 0 ? 7.0 : 5.5) : 0.0) + (context.lethalThreat ? -1.0 : 0.0) + (context.nearLethal ? 1.0 : 0.0);",
+      "priority": "high when you have other minions to carry, moderate otherwise",
+      "synergies": [
+        "small_minions",
+        "evasion",
+        "mobility",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "defensive_position"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Movement +2, Voidwalk\n\nMay carry an allied minion."
+    },
+    "Phase Assassin": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.5 + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0) + (context.lethalThreat ? 1.0 : 0)) : 0;",
+      "priority": "good early game threat that can trade well due to Voidwalk and Stealth recursion",
+      "synergies": [
+        "void_synergies",
+        "stealth_synergies",
+        "air_threshold",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "graveyard_hate",
+        "mass_removal"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Voidwalk\n\nWhenever Phase Assassin enters the void, he gains Stealth."
+    },
+    "Plumed Pegasus": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.5 + (context.oppUnits.filter(u => !u.keywords.includes('Airborne')).length * 0.3)) : 0.0;",
+      "priority": "good early-mid game flyer, especially against ground units",
+      "synergies": [
+        "air_threshold",
+        "evasion",
+        "aerial_assault"
+      ],
+      "antiSynergies": [
+        "opposing_flyers"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Airborne"
+    },
+    "Puppet Master": {
+      "category": "minion",
+      "evaluationFunction": "return (context.oppUnits.filter(u => u.tapped).length >= 2) ? 8.5 : (context.oppUnits.filter(u => u.tapped).length == 1 ? 6.5 : 3.0) + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0.0);",
+      "priority": "high when opponent has multiple tapped units, especially strong ones",
+      "synergies": [
+        "opponent_attacking_units",
+        "control_effects",
+        "air_threshold",
+        "evasive_units"
+      ],
+      "antiSynergies": [
+        "opponent_defensive_position",
+        "untapped_units"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Airborne\n\nGenesis → Gain control of all tapped minions here until Puppet Master leaves the realm."
+    },
+    "Recurring Specter": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 ? (4.0 + (context.turn > 4 ? 2.0 : 0) + (context.oppUnits.length === 0 ? 1.0 : 0) + (context.nearLethal ? 1.0 : 0)) : 0);",
+      "priority": "moderate - recurring threat that can be recast from cemetery",
+      "synergies": [
+        "self_mill",
+        "sacrifice_effects",
+        "air_threshold",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "defensive_strategy",
+        "board_stall"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Can't defend.\n\nMay be cast from your cemetery."
+    },
+    "Riddle Sphinx": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.myDeckSize > 0 ? 1.5 : 0) + (context.lethalThreat ? -1 : 0) + (context.myHandSize < 3 ? 1 : 0) + (context.oppUnits.filter(u => !u.keywords.includes('Flying')).length > 0 ? 1 : 0)) : 0;",
+      "priority": "moderate - evasive threat with card selection/draw",
+      "synergies": [
+        "card_advantage",
+        "flying_matters",
+        "spell_matters",
+        "deck_manipulation"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "opponent_flying_units"
+      ],
+      "situational": false,
+      "complexity": "complex",
+      "rulesText": "Airborne\n\nGenesis → Look at your topmost spell. You may put it on the bottom of your spellbook, then an opponent may exchange your top and bottommost spells. Draw a card."
+    },
+    "Roaming Monster": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0) ? (5.5 + (context.oppUnits.length > 0 ? 1.0 : 0) + (context.lethalThreat ? 1.0 : 0) + (context.underPressure ? 1.0 : 0)) : 0;",
+      "priority": "flexible defender that can be placed anywhere to counter threats",
+      "synergies": [
+        "defensive_position",
+        "reactive_play",
+        "flexible_positioning"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "May be summoned to any site."
+    },
+    "Skirmishers of Mu": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.oppUnitCount > 0 ? 1.5 : 0) + (context.underPressure ? 1.0 : 0) + (context.myUnitCount < context.oppUnitCount ? 1.0 : 0)) : 0;",
+      "priority": "higher when opponent has units due to ranged strike mobility",
+      "synergies": [
+        "air_threshold",
+        "ranged_units",
+        "mobile_strategy"
+      ],
+      "antiSynergies": [
+        "empty_board"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Ranged\n\nDuring basic movement, Skirmishers of Mu may perform a ranged strike from any location along their path."
+    },
+    "Sky Baron": {
+      "category": "minion",
+      "evaluationFunction": "const oppAirborne = context.oppUnits.filter(u => u.keywords.includes('Airborne')).length; const myAirborne = context.myUnits.filter(u => u.keywords.includes('Airborne')).length - 1; return context.manaLeftover >= 0 ? (6.0 + (oppAirborne * 0.75) - (myAirborne * 0.5)) : 0.0;",
+      "priority": "high when opponent has airborne threats, moderate otherwise",
+      "synergies": [
+        "anti_airborne",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "own_airborne_units"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nAll other minions lose Airborne."
+    },
+    "Snow Leopard": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.turn <= 2 ? 7.5 : 5.5 - context.turn * 0.3) : 0;",
+      "priority": "high early game - efficient 2/2 for 1 mana",
+      "synergies": [
+        "early_game",
+        "aggressive_strategy",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "late_game"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": ""
+    },
+    "Spectral Stalker": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.myUnitCount < 4 ? 7.0 : 5.5) : 0.0;",
+      "priority": "high early game - efficient voidwalking unit",
+      "synergies": [
+        "voidwalk_synergies",
+        "aggro_strategy",
+        "early_pressure"
+      ],
+      "antiSynergies": [
+        "board_stall",
+        "full_board"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Voidwalk"
+    },
+    "Spire Lich": {
+      "category": "minion",
+      "evaluationFunction": "const onTower = context.myUnits.some(u => u.name === 'Spire Lich' && u.keywords.includes('Tower')); return context.manaLeftover >= 0 ? (onTower ? 7.5 : 4.0) : 0.0;",
+      "priority": "high when played on a Tower, moderate otherwise",
+      "synergies": [
+        "towers",
+        "spellcaster",
+        "ranged_units",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "no_towers",
+        "aggressive_strategy"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "If Spire Lich is atop a Tower, it has +2 power, Ranged, and Spellcaster."
+    },
+    "Ultimate Horror": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.0 + Math.min(3, context.myUnits.filter(u => u.keywords.includes('Voidwalk') && !u.canAttack).length)) : 0.0;",
+      "priority": "high when multiple Voidwalk minions have died",
+      "synergies": [
+        "voidwalk_minions",
+        "air_threshold",
+        "flying_units",
+        "recursion"
+      ],
+      "antiSynergies": [
+        "early_game",
+        "aggressive_strategy"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Airborne, Voidwalk\n\nGenesis → Summon each other dead Voidwalk minion to a nearby site or void."
+    },
+    "Vril Revenant": {
+      "category": "minion",
+      "evaluationFunction": "let score = 5.0; if (context.myMana >= 2) { score += 0.5 * context.turn; if (context.isMyTurn) { score += 1.0; } if (context.oppUnits.length > 0 && context.oppUnits.some(u => u.hp <= 1)) { score += 2.0; } if (context.lethalThreat) { score -= 2.0; } } return Math.min(Math.max(score, 0), 10);",
+      "priority": "early game evasive threat that scales with available mana",
+      "synergies": [
+        "air_threshold",
+        "voidwalk",
+        "mana_scaling"
+      ],
+      "antiSynergies": [
+        "defensive_position",
+        "under_pressure"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Voidwalk\n\n① → Gain +1 power this turn."
+    },
+    "Wind Sylph": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.myHandSize > 2 && context.myMana >= 3 ? 1.5 : 0) + (context.oppUnits.some(u => !u.keywords.includes('Flying')) ? 1.0 : 0)) : 0;",
+      "priority": "early game flyer with utility, better with magic spells in hand",
+      "synergies": [
+        "magic_spells",
+        "air_spells",
+        "push_effects",
+        "evasion",
+        "spellcaster_synergy"
+      ],
+      "antiSynergies": [
+        "opponent_flying_units",
+        "empty_hand"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne, Air Spellcaster\n\nAfter Wind Sylph casts a Magic spell, she may push a unit here one step."
+    },
+    "Witherwing Hero": {
+      "category": "minion",
+      "evaluationFunction": "const baseScore = 6.5; const hasWeakerAllies = context.myUnits.some(u => u.atk < 4 && u.hp < 4); const airScore = context.oppUnits.filter(u => u.keywords.includes('Flying')).length > 0 ? 1 : 0.5; const protectionValue = hasWeakerAllies ? 1.5 : 0; return context.manaLeftover >= 0 ? Math.min(10, baseScore + airScore + protectionValue) : 0;",
+      "priority": "good stats for cost, protects weaker units, answers flying threats",
+      "synergies": [
+        "small_units",
+        "air_threshold",
+        "flying_units",
+        "defensive_position"
+      ],
+      "antiSynergies": [
+        "aggro_strategy",
+        "no_weaker_units"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne\n\nWhenever a weaker allied minion here is attacked, you may return it to its owner's hand."
+    },
+    "Zephyranne Airship": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + (context.myUnits.filter(u => !u.keywords.includes('Airborne')).length * 0.5) + (context.underPressure ? 1.0 : 0) + (context.oppUnits.filter(u => !u.keywords.includes('Airborne')).length > 1 ? 1.0 : 0)) : 0.0;",
+      "priority": "higher with ground units to transport or when needing evasive threats",
+      "synergies": [
+        "ground_units",
+        "mobility",
+        "evasion",
+        "transport"
+      ],
+      "antiSynergies": [
+        "airborne_heavy_board"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Airborne, Movement +2\n\nMay carry any number of allied minions."
+    },
+    "Blink": {
+      "category": "spell",
+      "evaluationFunction": "return (context.myUnits.length > 0 ? (context.underPressure ? 7.0 : 5.5) : 1.0) + (context.myHandSize < context.oppHandSize ? 1.0 : 0.5);",
+      "priority": "high when repositioning units for defense or attack, plus card draw",
+      "synergies": [
+        "defensive_position",
+        "card_advantage",
+        "air_threshold",
+        "positioning"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "no_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "An ally teleports to a location it’s nearby. Draw a card."
+    },
+    "Browse": {
+      "category": "spell",
+      "evaluationFunction": "return Math.min(9.0, 6.0 + (context.myHandSize < 3 ? 2.0 : 0) + (context.underPressure ? 1.0 : 0) + (context.lethalThreat ? 1.0 : 0));",
+      "priority": "high - card selection and quality improvement",
+      "synergies": [
+        "air_threshold",
+        "card_advantage",
+        "combo_pieces",
+        "deck_manipulation"
+      ],
+      "antiSynergies": [
+        "empty_deck",
+        "aggressive_start"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Look at your next seven spells. Put one in your hand and the rest on the bottom of your spellbook in any order."
+    },
+    "Chain Lightning": {
+      "category": "spell",
+      "evaluationFunction": "return Math.min(10, context.oppUnits.length > 0 ? (4.0 + Math.min(3, Math.floor(context.manaLeftover / 2)) * 2.0) : 0.5)",
+      "priority": "high when opponent has multiple units in proximity",
+      "synergies": [
+        "air_threshold",
+        "abundant_mana",
+        "clustered_units"
+      ],
+      "antiSynergies": [
+        "no_units",
+        "scattered_units",
+        "low_mana"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Deal 2 damage to target unit nearby. Any number of times, you may spend ② to additionally target a new unit nearby the previous one."
+    },
+    "Chaos Twister": {
+      "category": "spell",
+      "evaluationFunction": "return Math.max(0, Math.min(10, context.oppUnits.reduce((value, unit) => { const highPowerTarget = context.myUnits.find(u => u.atk >= 4); return highPowerTarget ? Math.max(value, Math.min(8.5, (unit.atk + unit.hp)/2 + highPowerTarget.atk/2)) : 2.0; }, 2.0)));",
+      "priority": "high when you have a high-power unit and opponent has clustered units",
+      "synergies": [
+        "high_power_units",
+        "opponent_stacked_units",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "no_units",
+        "opponent_spread_units",
+        "opponent_flying_units"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Place target minion on the back of your hand, then blow it off from a height of at least one foot. Deal damage equal to its power to each unit atop the site it lands on, including itself."
+    },
+    "Disenchant": {
+      "category": "spell",
+      "evaluationFunction": "let targets = context.oppUnits.filter(u => u.keywords.includes('Aura')).length + context.oppUnits.filter(u => u.keywords.includes('Artifact')).length; return targets > 1 ? 8.0 : (targets === 1 ? 6.0 : 2.0);",
+      "priority": "high when opponent has multiple auras/artifacts, low otherwise",
+      "synergies": [
+        "artifact_hate",
+        "aura_hate",
+        "control_strategy"
+      ],
+      "antiSynergies": [
+        "no_artifacts",
+        "no_auras"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Destroy all auras and artifacts at target location up to two steps away."
+    },
+    "Dream-Quest": {
+      "category": "spell",
+      "evaluationFunction": "return context.myUnits.filter(u => u.keywords.includes('Spellcaster')).length > 0 && context.myDeckSize > 0 ? (context.myHandSize < 4 ? 7.5 : 5.0) : 0.5;",
+      "priority": "high when you have a Spellcaster and need specific cards",
+      "synergies": [
+        "spellcasters",
+        "tutoring",
+        "combo_pieces",
+        "card_advantage"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "no_spellcasters",
+        "opponent_removal"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "An allied Spellcaster falls asleep and is disabled until hurt. At the start of your next turn, if it's still asleep, you may wake it up to search your spellbook for a card and put it into your hand. Shuffle if needed."
+    },
+    "Fade": {
+      "category": "spell",
+      "evaluationFunction": "return (context.myUnits.length === 0) ? 0.5 : (context.myUnits.some(unit => unit.keywords.includes('Occupying')) ? 8.0 : 5.0);",
+      "priority": "high when an allied unit is occupying an enemy site for card draw",
+      "synergies": [
+        "stealth_matters",
+        "site_control",
+        "card_draw",
+        "infiltration_strategy"
+      ],
+      "antiSynergies": [
+        "no_units",
+        "defensive_position"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Give an allied minion Stealth. If it occupies an enemy site, draw a card."
+    },
+    "Flanking Maneuver": {
+      "category": "spell",
+      "evaluationFunction": "return (context.myUnits.length >= 2 && context.isMyTurn) ? Math.min(6.5 + Math.min(context.myUnits.length * 0.5, 2.0), 9.0) + (context.myHandSize < 3 ? 1.0 : 0.0) : 3.0;",
+      "priority": "high when multiple units can be repositioned advantageously, moderate for card draw alone",
+      "synergies": [
+        "multiple_units",
+        "combat_tricks",
+        "positioning",
+        "card_advantage"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "single_unit"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Teleport any number of allies at one location to another location a chess knight's move away. Draw a card."
+    },
+    "Grapple Shot": {
+      "category": "spell",
+      "evaluationFunction": "return context.myUnits.length === 0 ? 0.0 : (context.oppUnits.length === 0 ? 2.0 : (context.isMyTurn && context.myUnits.some(u => !u.tapped) ? 6.5 + Math.min(context.oppUnits.length, 2) : 4.0));",
+      "priority": "high when you have untapped units and opponent has valuable targets",
+      "synergies": [
+        "untapped_units",
+        "offensive_position",
+        "mobility",
+        "combat_tricks"
+      ],
+      "antiSynergies": [
+        "no_units",
+        "no_targets",
+        "tapped_units"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "An ally shoots a projectile. If it hits a unit, the ally is dragged to that location, and may strike the hit unit."
+    },
+    "Lightning Bolt": {
+      "category": "spell",
+      "evaluationFunction": "return context.oppUnitCount === 0 ? 1.0 : (context.oppUnits.some(u => u.hp <= 3 && (u.atk >= 4 || u.keywords.includes('Flying') || u.keywords.includes('Lethal'))) ? 8.0 : (context.oppTotalATK > context.myTotalATK ? 6.5 : 5.0));",
+      "priority": "high when opponent has dangerous units with 3 or less HP",
+      "synergies": [
+        "removal",
+        "air_threshold",
+        "opponent_threats"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "opponent_high_hp_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Deal 3 damage to a random unit at target location."
+    },
+    "Mortality": {
+      "category": "spell",
+      "evaluationFunction": "const mortalTargets = context.oppUnits.filter(u => !u.keywords.includes('Immortal')); return mortalTargets.length === 0 ? 1.0 : (mortalTargets.length >= 2 ? 8.0 : (context.oppTotalATK > context.myTotalATK ? 7.0 : 5.0));",
+      "priority": "high when opponent has multiple mortal units or threatening mortal units",
+      "synergies": [
+        "opponent_board_advantage",
+        "defensive_position",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "opponent_immortal_units",
+        "empty_board"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Kill all Mortal minions at target location up to two steps away."
+    },
+    "Occult Ritual": {
+      "category": "spell",
+      "evaluationFunction": "const nearbySpellcasters = context.myUnits.filter(u => u.name.toLowerCase().includes('spellcaster')).length; return nearbySpellcasters >= 2 ? 8.0 : (nearbySpellcasters === 1 ? 5.0 : 2.0);",
+      "priority": "high when multiple spellcasters are on board, generates mana advantage",
+      "synergies": [
+        "spellcaster_tribal",
+        "combo_turn",
+        "mana_ramp"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "no_spellcasters"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Gain (2) this turn for each allied Spellcaster nearby."
+    },
+    "Psionic Blast": {
+      "category": "spell",
+      "evaluationFunction": "return (context.oppUnits.length > 0 ? Math.min(8.0, 4.0 + context.oppUnits.length) : 2.0) * (context.oppTotalATK > 4 ? 1.2 : 1.0) * (context.myUnits.length > context.oppUnits.length ? 0.7 : 1.0)",
+      "priority": "high when opponent has multiple units, especially threatening ones",
+      "synergies": [
+        "control_strategy",
+        "defensive_position",
+        "tempo_plays"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "board_advantage"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Deal 1 damage to each minion here. They're disabled until your next turn."
+    },
+    "Rain of Arrows": {
+      "category": "spell",
+      "evaluationFunction": "const oppAboveground = context.oppUnits.filter(u => !u.keywords.includes('Burrowing')).length; const myAboveground = context.myUnits.filter(u => !u.keywords.includes('Burrowing')).length; return oppAboveground === 0 ? 1.0 : (oppAboveground > myAboveground ? 7.0 : (oppAboveground > 2 ? 6.0 : 4.0));",
+      "priority": "high when opponent has multiple aboveground units, especially if you have few",
+      "synergies": [
+        "opponent_wide_board",
+        "defensive_position",
+        "burrowing_units"
+      ],
+      "antiSynergies": [
+        "own_wide_board",
+        "opponent_burrowing_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Deal 1 damage to each aboveground minion."
+    },
+    "Raise Dead": {
+      "category": "spell",
+      "evaluationFunction": "return (context.myUnits.length + context.oppUnits.length === 0) ? 0.0 : (context.manaLeftover >= 0 ? 6.0 + (context.myUnitCount < context.oppUnitCount ? 1.0 : 0.0) : 0.0);",
+      "priority": "moderate - value increases when units have died and behind on board",
+      "synergies": [
+        "graveyard_interaction",
+        "long_game",
+        "minion_death_triggers"
+      ],
+      "antiSynergies": [
+        "early_game",
+        "empty_graveyard",
+        "banish_effects"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Summon a random dead minion."
+    },
+    "Recall": {
+      "category": "spell",
+      "evaluationFunction": "return context.myUnits.filter(u => u.tapped || !u.canBlock).length > 1 ? (context.underPressure ? 8.0 : 6.5) : (context.myUnits.length > 0 ? 4.0 : 0.5);",
+      "priority": "high when multiple units need repositioning or are tapped, especially under pressure",
+      "synergies": [
+        "spread_out_units",
+        "tapped_units",
+        "defensive_position",
+        "multiple_units"
+      ],
+      "antiSynergies": [
+        "no_units",
+        "concentrated_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Teleport any number of allied minions to the caster’s location."
+    },
+    "Telekinesis": {
+      "category": "spell",
+      "evaluationFunction": "return (context.oppUnits.some(u => u.keywords.includes('Artifact')) || context.myUnits.some(u => u.keywords.includes('Artifact'))) ? 7.0 : 2.0;",
+      "priority": "high when valuable artifacts are present on board",
+      "synergies": [
+        "artifacts",
+        "tempo_plays",
+        "artifact_control"
+      ],
+      "antiSynergies": [
+        "no_artifacts"
+      ],
+      "situational": true,
+      "complexity": "simple",
+      "rulesText": "Caster snatches and picks up target nearby artifact they can carry."
+    },
+    "Teleport": {
+      "category": "spell",
+      "evaluationFunction": "return (context.myUnits.length > 0 && context.lethalThreat) ? 8.0 : (context.myUnits.length > 0 && context.underPressure ? 6.5 : (context.myUnits.length > 0 ? 5.0 : 0.5));",
+      "priority": "high when saving valuable units from lethal damage or repositioning for tactical advantage",
+      "synergies": [
+        "defensive_position",
+        "valuable_units",
+        "site_control",
+        "evasion_tactics"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "aggressive_strategy"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Teleport an ally to the surface of target site."
+    },
+    "Unlikely Alliance": {
+      "category": "spell",
+      "evaluationFunction": "const rarityCounts = new Set(context.myUnits.map(u => u.name.toLowerCase().includes('mythic') ? 'mythic' : u.name.toLowerCase().includes('rare') ? 'rare' : u.name.toLowerCase().includes('uncommon') ? 'uncommon' : 'common')).size; return context.myUnitCount > 0 ? Math.min(2.0 + (rarityCounts * 2.0), 8.0) : 1.0;",
+      "priority": "high when you have multiple units of different rarities",
+      "synergies": [
+        "board_presence",
+        "diverse_rarities",
+        "card_advantage"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "homogeneous_rarities"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Draw a card for each rarity among allied minions."
+    },
+    "Waypoint Portal": {
+      "category": "spell",
+      "evaluationFunction": "return (context.myUnits.length > 1 && context.isMyTurn) ? (context.oppUnitCount > context.myUnitCount ? 7.5 : 6.0) : 3.0;",
+      "priority": "high when you have multiple units and need tactical advantage",
+      "synergies": [
+        "wide_board",
+        "mobility",
+        "tactical_combat",
+        "site_control"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "opponent_turn"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Choose two different sites. This turn, units can move between them as if they were adjacent."
+    },
+    "Whirling Blades": {
+      "category": "spell",
+      "evaluationFunction": "const bestUnit = context.myUnits.sort((a,b) => b.atk - a.atk)[0]; const potentialKills = context.oppUnits.filter(u => !u.keywords.includes('Flying')).length; return !bestUnit ? 0.0 : (potentialKills >= 2 ? 8.5 : (potentialKills === 1 ? 6.5 : 3.0)) + (context.nearLethal ? 1.0 : 0);",
+      "priority": "high when multiple ground enemies are lined up, or when pushing for lethal",
+      "synergies": [
+        "high_attack_units",
+        "wide_enemy_board",
+        "ground_units"
+      ],
+      "antiSynergies": [
+        "no_units",
+        "flying_enemies",
+        "single_enemy"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "An ally may take up to two steps, and then strikes each enemy along their entire path."
+    },
+    "Windblast": {
+      "category": "spell",
+      "evaluationFunction": "return (context.isMyTurn && context.oppTotalATK > context.myTotalATK ? 7.0 : (context.oppUnitCount > 0 ? 5.0 : 2.0)) + (context.lethalThreat ? 2.0 : 0.0);",
+      "priority": "high when disrupting opponent's board position or avoiding lethal",
+      "synergies": [
+        "defensive_position",
+        "board_control"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "opponent_no_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Push everything atop sites one step in a cardinal direction."
+    },
+    "Evil Presence": {
+      "category": "aura",
+      "evaluationFunction": "return Math.min(8.0, 5.0 + (context.myHandSize > 2 ? context.myManaMax/2 : 0) + (context.myHandSize > 0 && context.oppUnitCount > context.myUnitCount ? 2.0 : 0));",
+      "priority": "high when you have spirit cards in hand or need recurring value",
+      "synergies": [
+        "spirits",
+        "charge_units",
+        "card_recursion",
+        "board_presence"
+      ],
+      "antiSynergies": [
+        "empty_hand",
+        "low_mana"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "You may summon Spirits to affected sites. When you summon a Spirit here, give it Charge, and return Evil Presence to its owner's hand."
+    },
+    "Summoning Sphere": {
+      "category": "aura",
+      "evaluationFunction": "return (context.myManaMax >= 2 && context.manaLeftover >= 0) ? (context.myHandSize > 0 ? 7.5 : 4.0) : 2.0;",
+      "priority": "high when you have minions in hand and multiple sites",
+      "synergies": [
+        "multiple_sites",
+        "minions_in_hand",
+        "aggressive_strategy"
+      ],
+      "antiSynergies": [
+        "empty_hand",
+        "single_site"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "You may summon minions to affected sites."
+    },
+    "Thunderstorm": {
+      "category": "aura",
+      "evaluationFunction": "return (context.oppUnitCount > 0 ? 6.0 + Math.min(context.oppUnitCount * 0.5, 2.0) : 3.0) + (context.underPressure ? 1.0 : 0) + (context.oppTotalATK > 8 ? 1.0 : 0)",
+      "priority": "high when opponent has multiple units or threatening units",
+      "synergies": [
+        "control_strategy",
+        "opponent_board_advantage",
+        "air_threshold"
+      ],
+      "antiSynergies": [
+        "opponent_no_units",
+        "aggressive_strategy"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "At the end of your turn, deal 3 damage to a random unit atop affected sites, then you may move Thunderstorm one step. After it deals damage three times, dispel it."
+    },
+    "Wall of Air": {
+      "category": "aura",
+      "evaluationFunction": "return context.oppUnits.filter(u => (u.keywords.includes('Flying') || u.atk <= 2)).length >= 2 ? 7.5 : (context.oppUnits.filter(u => (u.keywords.includes('Flying') || u.atk <= 2)).length >= 1 ? 6.0 : 4.0);",
+      "priority": "high when opponent has multiple small/flying units",
+      "synergies": [
+        "defensive_position",
+        "site_control",
+        "anti_aggro"
+      ],
+      "antiSynergies": [
+        "opponent_big_units"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Conjure atop the border of a site you control.\n\nMinions with Airborne or 2 or less power can't traverse Wall of Air."
+    },
+    "Albespine Pikemen": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.0 + (context.isMyTurn ? 0.5 : 0) + (context.oppUnits.some(u => u.atk <= 3 && u.hp <= 3) ? 0.5 : 0) + (context.underPressure ? -1 : 0)) : 0;",
+      "priority": "good early-mid game attacker due to first strike",
+      "synergies": [
+        "aggressive_strategy",
+        "attack_first",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "defensive_position",
+        "late_game"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Strikes first while attacking."
+    },
+    "Älvalinne Dryads": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0) ? (5.0 + (context.myManaMax < 5 ? 2.0 : 0)) : 0;",
+      "priority": "high early game for mana acceleration",
+      "synergies": [
+        "mana_ramp",
+        "early_game",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "late_game",
+        "aggro_strategy"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Älvalinne Dryads provide ①."
+    },
+    "Amazon Warriors": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0) ? 7.0 - (Math.max(0, context.turn - 7) * 0.2) : 0.0;",
+      "priority": "high - efficient stats for cost, good midgame threat",
+      "synergies": [
+        "midgame_curve",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "late_game"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": ""
+    },
+    "Atlas Wanderers": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.5 + (context.underPressure ? 2.0 : 0) + (context.myUnitCount >= 2 ? 1.0 : 0)) : 0;",
+      "priority": "high when rearranging board position is advantageous",
+      "synergies": [
+        "earth_threshold",
+        "positional_effects",
+        "site_manipulation"
+      ],
+      "antiSynergies": [
+        "site_locked_effects"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Genesis → This site and an adjacent site change places, carrying along everything of normal size."
+    },
+    "Autumn Unicorn": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 && context.turn <= 4) ? 7.5 : (context.manaLeftover >= 0 ? 6.0 : 0.0);",
+      "priority": "high early game - efficient stats for cost",
+      "synergies": [
+        "earth_threshold",
+        "aggressive_curve"
+      ],
+      "antiSynergies": [],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": ""
+    },
+    "Belmotte Longbowmen": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (6.5 + (context.oppUnits.filter(u => u.hp <= 3 && !u.keywords.includes('Flying')).length * 0.5)) : 0.0;",
+      "priority": "good early-mid game unit with Ranged ability",
+      "synergies": [
+        "ranged_units",
+        "board_control"
+      ],
+      "antiSynergies": [
+        "flying_heavy_meta"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Ranged"
+    },
+    "Bone Rabble": {
+      "category": "minion",
+      "evaluationFunction": "return Math.min(8.0, 4.0 + (context.myManaMax * 0.5));",
+      "priority": "high in earth decks, value increases with more sites",
+      "synergies": [
+        "earth_sites",
+        "cemetery_recursion",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "graveyard_hate",
+        "non_earth_deck"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Whenever you play an earth site, you may summon Bone Rabble from your cemetery to that site."
+    },
+    "Bosk Troll": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.turn <= 3 ? 7.5 : 6.0) : 0.0;",
+      "priority": "high early game - efficient 3/3 for 2 mana",
+      "synergies": [
+        "aggressive_strategy",
+        "curve_plays",
+        "early_game"
+      ],
+      "antiSynergies": [],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": ""
+    },
+    "Cave Trolls": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0) ? (5.5 + (context.underPressure ? 1.0 : 0) + (context.oppTotalATK > context.myLife ? 1.0 : 0)) : 0;",
+      "priority": "solid defensive unit with Burrowing for protection",
+      "synergies": [
+        "earth_threshold",
+        "defensive_position"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Burrowing"
+    },
+    "Conqueror Worm": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 && context.myMana >= 8) ? (6.0 + (context.oppUnitCount === 0 ? 3.0 : 0) + (context.oppTotalATK < 8 ? 1.0 : 0) + (context.turn >= 10 ? 1.0 : -1.0)) : 0.0;",
+      "priority": "high in late game when opponent has few/no units to contest sites",
+      "synergies": [
+        "site_control",
+        "late_game",
+        "earth_threshold",
+        "board_control"
+      ],
+      "antiSynergies": [
+        "aggro_strategy",
+        "wide_opponent_board",
+        "early_game"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "At the end of your turn, if no enemy units occupy this site, permanently gain control of it."
+    },
+    "Dalcean Phalanx": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? Math.min(7.5, 6.0 + (context.underPressure ? 2.0 : 0)) : 0;",
+      "priority": "high - efficient defensive body with good stats for cost",
+      "synergies": [
+        "defensive_position",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "mobile_strategy"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Can only move themselves forward."
+    },
+    "Dwarven Digging Team": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.0 + Math.min(2.0, context.myUnits.length * 0.5) + (context.underPressure ? 1.0 : 0)) : 0.0;",
+      "priority": "good early game unit that gets better with other minions",
+      "synergies": [
+        "earth_threshold",
+        "minion_heavy_strategy",
+        "defensive_position"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "aggro_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Burrowing\n\nAllied minions occupying nearby sites have Burrowing."
+    },
+    "Frontier Settlers": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 && context.myMana >= 2) ? (context.turn <= 3 ? 7.0 : (context.myManaMax < 4 ? 6.0 : 4.0)) : 0.0;",
+      "priority": "high early game for mana acceleration",
+      "synergies": [
+        "early_game",
+        "mana_ramp",
+        "earth_threshold",
+        "sites"
+      ],
+      "antiSynergies": [
+        "late_game",
+        "high_mana"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Tap → Reveal the topmost site of your atlas. Play it adjacent to Frontier Settlers, if able, and they move there. They lose this ability."
+    },
+    "Gneissgnath Gnomes": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (4.5 + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0) + (context.turn < 3 ? 1.0 : 0) + (context.myUnitCount < 2 ? 1.0 : 0)) : 0;",
+      "priority": "early game 1-drop that can avoid removal via burrowing",
+      "synergies": [
+        "earth_threshold",
+        "defensive_position",
+        "early_game"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "late_game"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Burrowing\n\nAt the end of your turn, Gneissgnath Gnomes may burrow."
+    },
+    "Grey Wolves": {
+      "category": "minion",
+      "evaluationFunction": "const nearbyWolves = context.myUnits.filter(u => u.name === 'Grey Wolves').length; return context.manaLeftover >= 0 ? Math.min(3.0 + (nearbyWolves * 2), 8.0) : 0.0;",
+      "priority": "high when multiple Grey Wolves are in play, moderate otherwise",
+      "synergies": [
+        "grey_wolves",
+        "go_wide",
+        "swarm_strategy"
+      ],
+      "antiSynergies": [
+        "board_wipes",
+        "singleton_strategy"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Your spellbook may include any number of Grey Wolves.\n\nHas +1 power for each other Grey Wolves nearby."
+    },
+    "House Arn Bannerman": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (4.0 + Math.min(3.0, context.myUnits.filter(u => !u.tapped).length * 0.8)) : 0.0;",
+      "priority": "higher value when you have other untapped units that can benefit from the power buff",
+      "synergies": [
+        "wide_board",
+        "token_strategy",
+        "combat_tricks"
+      ],
+      "antiSynergies": [
+        "empty_board",
+        "removal_heavy"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Other nearby allies have +1 power."
+    },
+    "King of the Realm": {
+      "category": "minion",
+      "evaluationFunction": "const mortalsInPlay = context.oppUnits.filter(u => !u.keywords.includes('Immortal')).length + context.myUnits.filter(u => !u.keywords.includes('Immortal')).length; const controlValue = context.oppUnits.filter(u => !u.keywords.includes('Immortal')).length * 1.5; return context.manaLeftover >= 0 ? Math.min(10, 5.0 + mortalsInPlay * 0.5 + controlValue) : 0;",
+      "priority": "high when opponent has valuable mortal units to steal",
+      "synergies": [
+        "mortal_units",
+        "wide_board",
+        "unit_buffs"
+      ],
+      "antiSynergies": [
+        "immortal_heavy_meta",
+        "empty_board"
+      ],
+      "situational": true,
+      "complexity": "complex",
+      "rulesText": "Other Mortals have +1 power.\r\n\r\nYou control all Mortals."
+    },
+    "Land Surveyor": {
+      "category": "minion",
+      "evaluationFunction": "return (context.turn <= 3 && context.manaLeftover >= 0) ? 7.0 : (context.myHandSize < 4 ? 5.5 : 4.0);",
+      "priority": "high early game for site acceleration, moderate otherwise for card advantage",
+      "synergies": [
+        "site_matters",
+        "early_game",
+        "card_advantage",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "late_game",
+        "full_hand"
+      ],
+      "situational": false,
+      "complexity": "simple",
+      "rulesText": "Genesis → Draw a site."
+    },
+    "Mage Slayer": {
+      "category": "minion",
+      "evaluationFunction": "const hasNearbySpellcaster = context.oppUnits.some(unit => unit.name.toLowerCase().includes('spellcaster')); return context.manaLeftover >= 0 ? (hasNearbySpellcaster ? 8.5 : 4.0) : 0.0;",
+      "priority": "high when opponent has a Spellcaster, moderate otherwise",
+      "synergies": [
+        "spellcaster_removal",
+        "anti_spellcaster"
+      ],
+      "antiSynergies": [
+        "no_spellcaster_targets"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Genesis → Kill target Spellcaster minion nearby."
+    },
+    "Master Tracker": {
+      "category": "minion",
+      "evaluationFunction": "const stealthUnits = context.oppUnits.filter(u => u.keywords.includes('Stealth')).length; return Math.min(10, 4.0 + (stealthUnits * 2.0) + (context.manaLeftover >= 0 ? 1.0 : -10.0));",
+      "priority": "high when opponent has stealth units, moderate otherwise",
+      "synergies": [
+        "anti_stealth",
+        "early_game"
+      ],
+      "antiSynergies": [
+        "no_opponent_stealth"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "All enemies permanently lose Stealth."
+    },
+    "Midland Army": {
+      "category": "minion",
+      "evaluationFunction": "const baseValue = 6.5; const statValue = context.manaLeftover >= 0 ? 1.0 : 0.0; const aoeDamageValue = context.oppUnitCount > 0 ? 1.0 : 0.0; const deathValue = 0.5; return Math.min(10, baseValue + statValue + aoeDamageValue + (context.underPressure ? deathValue : 0));",
+      "priority": "high - strong stats with board control ability and death effect",
+      "synergies": [
+        "earth_threshold",
+        "board_control",
+        "token_generation",
+        "wide_strategy"
+      ],
+      "antiSynergies": [
+        "aggro_strategy",
+        "low_mana_curve"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Tap → Target a location up to three steps away. Deal 4 damage to each unit there.\n\nDeathrite → Summon a Foot Soldier token to each adjacent location."
+    },
+    "Monastery Gargoyle": {
+      "category": "minion",
+      "evaluationFunction": "const baseValue = 5.0; const flyingNeeded = context.oppUnits.some(u => u.keywords.includes('Flying')); const artifactValue = context.oppUnits.some(u => u.keywords.includes('Deathtouch') || u.atk >= 3); return context.manaLeftover >= 0 ? baseValue + (flyingNeeded ? 1.5 : 0) + (artifactValue ? 1.5 : 0) + (context.underPressure ? 1.0 : 0) : 0;",
+      "priority": "moderate - flexible unit that can adapt to threats",
+      "synergies": [
+        "earth_threshold",
+        "artifact_synergies",
+        "flying_matters"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy"
+      ],
+      "situational": false,
+      "complexity": "complex",
+      "rulesText": "At the start and end of your turn, choose whether Monastery Gargoyle has Airborne or is a non-minion artifact."
+    },
+    "Monster Hunter": {
+      "category": "minion",
+      "evaluationFunction": "const nearbyMonsters = context.oppUnits.filter(u => u.keywords.includes('Monster')).length; return context.manaLeftover >= 0 ? (nearbyMonsters > 0 ? 8.0 : 3.5) : 0.0;",
+      "priority": "high when opponent has Monsters, low otherwise",
+      "synergies": [
+        "monster_removal",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "no_opponent_monsters"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Genesis → Kill a nearby Monster."
+    },
+    "Mordric Druids": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (4.0 + (context.oppUnitCount > context.myUnitCount ? 2.0 : 0) + (context.myLife < context.oppLife ? 1.0 : 0) + (context.underPressure ? 1.5 : 0)) : 0;",
+      "priority": "higher when under pressure from opponent's attackers",
+      "synergies": [
+        "defensive_position",
+        "life_manipulation",
+        "spellcaster_synergy"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "board_advantage"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Spellcaster\n\nWhenever you lose life due to an undefended attack nearby, the attacker's controller also loses that much life."
+    },
+    "Mountain Giant": {
+      "category": "minion",
+      "evaluationFunction": "return (context.manaLeftover >= 0 && context.myUnitCount <= 4) ? (7.0 + (context.underPressure ? 1.0 : 0) + (context.oppTotalATK > 12 ? 1.0 : 0)) : 0.0;",
+      "priority": "high - powerful late game threat that occupies multiple locations",
+      "synergies": [
+        "earth_threshold",
+        "defensive_position",
+        "late_game"
+      ],
+      "antiSynergies": [
+        "wide_board_strategy",
+        "board_full",
+        "aggro_strategy"
+      ],
+      "situational": true,
+      "complexity": "moderate",
+      "rulesText": "Occupies four locations."
+    },
+    "Pudge Butcher": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (5.5 + (context.oppUnits.filter(u => u.atk <= 5 && !u.keywords.includes('Flying')).length * 0.5) + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0)) : 0;",
+      "priority": "high when opponent has ground units that can be pulled and fought",
+      "synergies": [
+        "control",
+        "board_control",
+        "defensive_position"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "opponent_flying_units"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Immobile\n\nTap → Shoot a projectile. If it hits a unit, drag it to this location. Pudge may fight it."
+    },
+    "Root Spider": {
+      "category": "minion",
+      "evaluationFunction": "return context.manaLeftover >= 0 ? (context.oppUnits.length > 0 ? 7.0 : 5.0) + (context.underPressure ? 1.0 : 0) + (context.oppTotalATK > context.myTotalATK ? 1.0 : 0) : 0;",
+      "priority": "high when opponent has units to disable, moderate otherwise",
+      "synergies": [
+        "defensive_position",
+        "board_control",
+        "earth_threshold"
+      ],
+      "antiSynergies": [
+        "aggressive_strategy",
+        "empty_opponent_board"
+      ],
+      "situational": false,
+      "complexity": "moderate",
+      "rulesText": "Burrowing\n\nWhile Root Spider is burrowed, minions directly above it are disabled."
+    }
+  }
+}
