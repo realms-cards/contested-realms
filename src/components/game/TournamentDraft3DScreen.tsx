@@ -1155,49 +1155,10 @@ export default function TournamentDraft3DScreen({
     myPlayerId,
   ]);
 
-  // Fetch metadata for picked cards
-  useEffect(() => {
-    if (pick3D.length === 0) {
-      setMetaByCardId({});
-      return;
-    }
-
-    const groups = new Map<string, Set<number>>();
-    for (const p of pick3D) {
-      const setName = p.card.setName || "Beta";
-      if (!groups.has(setName)) groups.set(setName, new Set());
-      const set = groups.get(setName);
-      if (set) set.add(p.card.cardId);
-    }
-
-    const requests = Array.from(groups.entries()).map(([s, ids]) => {
-      const params = new URLSearchParams();
-      params.set("set", s);
-      params.set("ids", Array.from(ids).join(","));
-      return fetch(`/api/cards/meta?${params.toString()}`)
-        .then((r) => r.json())
-        .then((rows: ApiCardMetaRow[]) => rows)
-        .catch(() => [] as ApiCardMetaRow[]);
-    });
-
-    Promise.all(requests)
-      .then(async (chunks) => {
-        const combined = chunks.flat();
-        const ids = Array.from(new Set(pick3D.map((p) => p.card.cardId)));
-        if (combined.length < ids.length) {
-          try {
-            const res = await fetch(`/api/cards/meta?ids=${ids.join(",")}`);
-            const rows = (await res.json()) as ApiCardMetaRow[];
-            setMetaByCardId(toCardMetaMap(rows));
-            return;
-          } catch {}
-        }
-        setMetaByCardId(toCardMetaMap(combined));
-      })
-      .catch((err) => {
-        console.warn("Failed to fetch card metadata:", err);
-      });
-  }, [pick3D]);
+  // Metadata is now fetched by the slug-based effect above (lines 763-943)
+  // which runs for both current pack AND picked cards, and properly handles
+  // cardId resolution via slug mapping. This duplicate cardId-based fetch
+  // was causing metadata to be cleared on reload when picks had cardId=0.
 
   // Enhanced Pick & Pass with staging mechanics
   const commitPickAndPass = useCallback(
