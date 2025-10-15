@@ -53,34 +53,31 @@ export default function AsciiBottomArt({
   }
 
   const containerStyle: React.CSSProperties = {
-    position: 'fixed',
     top: 0,
     left: 0,
-    width: '100vw',
-    height: '100dvh', // Use dvh to match the main container
-    zIndex: 0, // Changed from -1 to 0 to ensure visibility
-    overflow: "visible",
-    pointerEvents: 'none',
+    right: 0,
+    bottom: 0,
+    overflow: "hidden",
   };
   if (typeof maxVh === "number" && maxVh > 0) {
     containerStyle.maxHeight = `${maxVh}vh`;
+  } else {
+    containerStyle.height = "100vh";
   }
 
   return (
     <div
-      className={`pointer-events-none select-none ${className}`}
+      className={`fixed inset-0 z-0 pointer-events-none select-none ${className}`}
       aria-hidden
       style={containerStyle}
     >
-      <div className="relative w-full h-full">
-        <AsciiSvg
-          text={art}
-          className={`w-full h-full ${opacityClass}`}
-          padBottomLines={4}
-          preserveAspectRatio="xMidYMid slice"
-          style={{}}
-        />
-      </div>
+      <AsciiSvg
+        text={art}
+        className={`w-full h-full ${opacityClass}`}
+        padBottomLines={4}
+        preserveAspectRatio="xMidYMax slice"
+        style={{ display: "block", width: "100%", height: "100%" }}
+      />
     </div>
   );
 }

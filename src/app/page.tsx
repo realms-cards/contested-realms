@@ -14,13 +14,27 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-center px-5 relative">
-      <div className="relative z-10 max-w-5xl w-full text-center space-y-8 pt-10 flex flex-col justify-center flex-1">
+    <div className="h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-center px-5 relative overflow-hidden">
+      <div className="relative z-10 max-w-5xl w-full text-center space-y-8 pt-10 pb-12">
         {/* ASCII Logotype */}
-        <AsciiLogo className="max-w-4xl mx-auto min-w-xl" />
+        <AsciiLogo className="max-w-4xl mx-auto" />
 
         {/* Primary Navigation */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          {/* Local Hotseat */}
+          <AsciiPanel>
+            <Link
+              href="/play"
+              className="group block hover:scale-[1.02] transition-transform duration-200"
+            >
+              <div className="flex items-center justify-center py-7">
+                <h3 className="text-2xl font-semibold tracking-wide">
+                  Local Hotseat
+                </h3>
+              </div>
+            </Link>
+          </AsciiPanel>
+
           {/* Contest a Realm (Online) */}
           <AsciiPanel>
             <Link
@@ -30,20 +44,6 @@ export default function Home() {
               <div className="flex items-center justify-center py-7">
                 <h3 className="text-2xl font-semibold tracking-wide">
                   Online Realms
-                </h3>
-              </div>
-            </Link>
-          </AsciiPanel>
-
-          {/* Draft Simulator */}
-          <AsciiPanel>
-            <Link
-              href="/draft-3d"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-7">
-                <h3 className="text-2xl font-semibold tracking-wide">
-                  Draft Simulator
                 </h3>
               </div>
             </Link>
@@ -87,12 +87,12 @@ export default function Home() {
         </div>
 
         {/* Other Realms (wide bottom element) */}
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-5xl mx-auto cursor-pointer">
           <OtherRealms />
         </div>
 
         {/* Footer */}
-        <div className="text-xs text-orange-300/80 space-y-1">
+        <div className="text-xs text-orange-300/80">
           <p>
             All rights to Sorcery: Contested Realms and affiliated intellectual
             property, including but not limited to card images, artwork, logos,
@@ -116,7 +116,7 @@ export default function Home() {
           <p />
         </div>
 
-        <div className="mx-auto mt-6 text-xs text-orange-200/80 flex flex-row items-center gap-1">
+        <div className="mx-auto mt-6 text-xs text-orange-200/80 grid grid-cols-3 items-center gap-1">
           <a
             href="https://github.com/realms-cards/issues/issues"
             target="_blank"
@@ -125,6 +125,15 @@ export default function Home() {
             aria-label="Report an issue on GitHub"
           >
             Report an Issue
+          </a>
+          <a
+            href="https://realms.cards"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+            aria-label="Realms.cards"
+          >
+            Realms.cards
           </a>
           <a
             href="mailto:kingofthe@realms.cards"
