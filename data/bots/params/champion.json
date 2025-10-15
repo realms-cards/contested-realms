@@ -1,15 +1,19 @@
 {
   "meta": {
-    "id": "refined/v3",
-    "description": "Hand-tuned weights with mana/threshold enforcement + phase-based strategy",
-    "version": "3.0.0",
+    "id": "refined/v7-balanced-aggressive",
+    "description": "Balanced aggressive: maintains hand size while prioritizing board development",
+    "version": "7.0.0",
     "created": "2025-10-15",
     "changes": [
       "T002: Added cost and threshold validation",
       "T004-T008: Added board development, mana efficiency, threat deployment, life pressure features",
       "T010: Added phase-based strategic modifiers",
       "T011: Integrated strategic modifiers into search scoring",
-      "T012-T014: Refined candidate generation and prioritization"
+      "T012-T014: Refined candidate generation and prioritization",
+      "T048: Increased early mana development priority (w_sites 2.0→3.5, extended establish_mana_base to turn 6)",
+      "T061: AGGRESSIVE TUNING - penalize drawing (w_hand: -0.1), boost sites (5.0), board development (1.5), life pressure (2.0), add 'draw' modifier to discourage spam",
+      "T073: ULTRA-AGGRESSIVE - massive draw penalty (0.01-0.05), extreme site priority (5.0→8.0 modifier), punish card hoarding (-0.5)",
+      "T078: BALANCED - moderate hand penalty (-0.2), tactical draw modifiers (0.1-0.2), conditional draw generation (hand<6)"
     ]
   },
   "search": {
@@ -36,18 +40,18 @@
     "w_threats_my": 0.7,
     "w_threats_opp": -0.6,
 
-    "_comment_cards": "Card advantage",
-    "w_hand": 0.2,
-    "w_draw_potential": 0.3,
-    "w_expected_two_for_one": 0.4,
+    "_comment_cards": "Card advantage (T078: BALANCED - moderate penalty to encourage action while maintaining options)",
+    "w_hand": -0.2,
+    "w_draw_potential": 0.15,
+    "w_expected_two_for_one": 0.2,
 
-    "_comment_mana": "Mana and resources - REFINED WEIGHTS",
-    "w_mana_waste": -0.7,
-    "w_mana_avail": 0.3,
-    "w_sites": 2.0,
-    "w_providers": 0.5,
-    "w_thresholds_total": 0.5,
-    "w_on_curve": 0.9,
+    "_comment_mana": "Mana and resources (T061: MASSIVELY boost sites and board presence)",
+    "w_mana_waste": -1.2,
+    "w_mana_avail": 0.5,
+    "w_sites": 5.0,
+    "w_providers": 0.8,
+    "w_thresholds_total": 0.8,
+    "w_on_curve": 1.2,
 
     "_comment_synergy": "Synergy and engines",
     "w_engine_online": 1.2,
@@ -62,16 +66,16 @@
     "_comment_position": "Board position",
     "w_advance": 0.08,
 
-    "_comment_refined": "NEW REFINED FEATURES (T004-T008)",
-    "w_board_development": 0.8,
-    "w_mana_efficiency": 0.7,
-    "w_mana_efficiency_waste": -0.5,
-    "w_threat_deployment": 0.6,
-    "w_life_pressure": 1.2,
+    "_comment_refined": "REFINED FEATURES (T061: boost aggression and board presence)",
+    "w_board_development": 1.5,
+    "w_mana_efficiency": 1.0,
+    "w_mana_efficiency_waste": -0.8,
+    "w_threat_deployment": 1.2,
+    "w_life_pressure": 2.0,
 
-    "_comment_penalties": "Anti-pattern penalties (T008)",
+    "_comment_penalties": "Anti-pattern penalties (T061: penalize passivity)",
     "w_site_spam_penalty": -2.0,
-    "w_wasted_resources": -1.5
+    "w_wasted_resources": -2.5
   },
   "constraints": {
     "clamp_eval_min": -50,
@@ -79,36 +83,50 @@
     "legal_move_fallback": "pass_or_minimal"
   },
   "strategic_modifiers": {
-    "_comment": "Phase-based strategy implemented in getStrategicModifiers() (T010)",
+    "_comment": "Phase-based strategy (T078: BALANCED - strong site/unit priority with tactical draw options)",
     "establish_mana_base": {
       "condition": "turnNumber <= 3 && ownedSites < 3",
       "modifiers": {
-        "play_site": 2.0,
-        "play_unit": 0.5,
-        "play_minion": 0.5
+        "play_site": 5.0,
+        "play_unit": 0.3,
+        "play_minion": 0.3,
+        "draw": 0.2
+      }
+    },
+    "expand_toward_opponent": {
+      "condition": "ownedSites >= 3 && ownedSites < 8",
+      "modifiers": {
+        "play_site": 3.0,
+        "play_unit": 1.8,
+        "play_minion": 1.8,
+        "draw": 0.15
       }
     },
     "deploy_threats": {
-      "condition": "ownedSites >= 3 && boardDevelopment === 0",
+      "condition": "ownedSites >= 3 && boardDevelopment < 5",
       "modifiers": {
-        "play_minion": 1.5,
-        "play_unit": 1.5,
-        "play_site": 0.5
+        "play_minion": 2.5,
+        "play_unit": 2.5,
+        "play_site": 1.8,
+        "draw": 0.1
       }
     },
-    "apply_pressure": {
-      "condition": "boardDevelopment > 0 && oppLife < 15",
+    "attack_phase": {
+      "condition": "boardDevelopment >= 2 && ownedSites >= 4",
       "modifiers": {
-        "attack": 1.2,
-        "play_site": 0.3
+        "attack": 2.5,
+        "play_minion": 1.8,
+        "play_site": 2.0,
+        "draw": 0.1
       }
     },
     "defend_lethal": {
       "condition": "oppThreatDeploy >= myLife && myLife > 0",
       "modifiers": {
-        "play_unit": 2.0,
-        "play_minion": 2.0,
-        "attack": 0.5
+        "play_unit": 4.0,
+        "play_minion": 4.0,
+        "attack": 0.3,
+        "draw": 0.05
       }
     }
   },

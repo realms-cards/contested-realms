@@ -177,6 +177,24 @@ export async function runSeedPackConfig(): Promise<AdminActionResult> {
   };
 }
 
+export async function runSeedPreconDecks(): Promise<AdminActionResult> {
+  const outcome = await runNodeScript("scripts/seed-precon-decks.js");
+  if (outcome.exitCode !== 0) {
+    return {
+      action: "runSeedPreconDecks",
+      status: "error",
+      message: "seed-precon-decks.js failed",
+      details: outcome,
+    };
+  }
+  return {
+    action: "runSeedPreconDecks",
+    status: "ok",
+    message: "Preconstructed decks seeded successfully.",
+    details: outcome,
+  };
+}
+
 export async function runDatabaseSeed(): Promise<AdminActionResult> {
   const ingest = await runIngestCards();
   if (ingest.status === "error") {
@@ -252,6 +270,13 @@ export const ADMIN_ACTIONS = [
     dangerous: false,
   },
   {
+    id: "runSeedPreconDecks",
+    label: "Run seed-precon-decks.js",
+    description:
+      "Seed preconstructed decks using scripts/seed-precon-decks.js.",
+    dangerous: false,
+  },
+  {
     id: "runDatabaseSeed",
     label: "Run db:seed (ingest + seed packs)",
     description:
@@ -278,6 +303,8 @@ export async function executeAdminAction(
       return runIngestCards();
     case "runSeedPackConfig":
       return runSeedPackConfig();
+    case "runSeedPreconDecks":
+      return runSeedPreconDecks();
     case "runDatabaseSeed":
       return runDatabaseSeed();
     default:

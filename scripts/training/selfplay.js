@@ -195,6 +195,7 @@ function loadThetaMaybe(p) {
     (async () => {
       if (!opts.deckA || !opts.deckB) {
         const confs = await pickRandomPrecons();
+        console.log(`[SelfPlay] Loaded ${confs.length} precon deck(s) from database`);
         if (!confs.length) {
           console.error('[SelfPlay] No public precon decks found in DB and no explicit --deckA/--deckB provided. Aborting to enforce precon-only bots.');
           cleanupAndExit(1);
@@ -208,6 +209,8 @@ function loadThetaMaybe(p) {
           let guard = 4;
           while (guard-- > 0 && JSON.stringify(deckConfA) === JSON.stringify(deckConfB)) deckConfB = pick();
         }
+        console.log(`[SelfPlay] Bot A deck: ${deckConfA ? (deckConfA.spellbook.length + ' spells, ' + deckConfA.atlas.length + ' sites') : 'file-based'}`);
+        console.log(`[SelfPlay] Bot B deck: ${deckConfB ? (deckConfB.spellbook.length + ' spells, ' + deckConfB.atlas.length + ' sites') : 'file-based'}`);
       }
 
       botA = new BotClient({

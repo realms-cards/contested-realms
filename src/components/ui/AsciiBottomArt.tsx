@@ -14,15 +14,12 @@ export default function AsciiBottomArt({
   className = "",
   maxVh = 38,
   opacityClass = "text-white/10",
-  bottomOffsetPx = 8,
 }: {
   className?: string;
   /** Max height as percentage of viewport height */
   maxVh?: number | null;
   /** Tailwind color utility for the ASCII characters */
   opacityClass?: string;
-  /** Raise the art slightly above the viewport bottom to avoid clipping */
-  bottomOffsetPx?: number;
 }) {
   const [art, setArt] = React.useState<string>("");
   const [error, setError] = React.useState<string | null>(null);
@@ -56,9 +53,14 @@ export default function AsciiBottomArt({
   }
 
   const containerStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100dvh', // Use dvh to match the main container
+    zIndex: 0, // Changed from -1 to 0 to ensure visibility
     overflow: "visible",
-    paddingBottom: "env(safe-area-inset-bottom)",
-    bottom: `calc(env(safe-area-inset-bottom) + ${bottomOffsetPx}px)`,
+    pointerEvents: 'none',
   };
   if (typeof maxVh === "number" && maxVh > 0) {
     containerStyle.maxHeight = `${maxVh}vh`;
@@ -66,17 +68,17 @@ export default function AsciiBottomArt({
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-0 pointer-events-none select-none ${className}`}
+      className={`pointer-events-none select-none ${className}`}
       aria-hidden
       style={containerStyle}
     >
-      <div className="relative w-full overflow-hidden">
+      <div className="relative w-full h-full">
         <AsciiSvg
           text={art}
-          className={`h-auto ${opacityClass}`}
+          className={`w-full h-full ${opacityClass}`}
           padBottomLines={4}
-          preserveAspectRatio="xMidYMax meet"
-          style={{ width: 'calc(100% + 2px)', transform: 'translateX(-1px)' } as React.CSSProperties}
+          preserveAspectRatio="xMidYMid slice"
+          style={{}}
         />
       </div>
     </div>
