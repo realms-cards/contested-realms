@@ -1,4 +1,15 @@
--- CreateEnum (if not exists)
+-- Manual fix for the failed migration
+-- This handles the case where InvitationStatus enum already exists
+
+-- First, mark the migration as rolled back again
+UPDATE _prisma_migrations
+SET rolled_back_at = NOW(),
+    finished_at = NULL
+WHERE migration_name = '20251014230734_add_card_evaluation_table';
+
+-- Now manually apply each part, with error handling
+
+-- 1. Create enum only if it doesn't exist
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'InvitationStatus') THEN
@@ -6,7 +17,7 @@ BEGIN
     END IF;
 END $$;
 
--- AlterTable (if column doesn't exist)
+-- 2. Add column to Tournament if it doesn't exist
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -19,7 +30,7 @@ BEGIN
     END IF;
 END $$;
 
--- CreateTable (if not exists)
+-- 3. Create TournamentInvitation table if it doesn't exist
 CREATE TABLE IF NOT EXISTS "public"."TournamentInvitation" (
     "id" TEXT NOT NULL,
     "tournamentId" TEXT NOT NULL,
@@ -29,11 +40,10 @@ CREATE TABLE IF NOT EXISTS "public"."TournamentInvitation" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "respondedAt" TIMESTAMP(3),
     "expiresAt" TIMESTAMP(3),
-
     CONSTRAINT "TournamentInvitation_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable (if not exists)
+-- 4. Create CardEvaluation table if it doesn't exist
 CREATE TABLE IF NOT EXISTS "public"."CardEvaluation" (
     "id" SERIAL NOT NULL,
     "cardId" INTEGER NOT NULL,
@@ -50,71 +60,49 @@ CREATE TABLE IF NOT EXISTS "public"."CardEvaluation" (
     "validationError" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-
     CONSTRAINT "CardEvaluation_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex (if not exists)
+-- 5. Create indexes if they don't exist
 CREATE INDEX IF NOT EXISTS "TournamentInvitation_tournamentId_idx" ON "public"."TournamentInvitation"("tournamentId");
-
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "TournamentInvitation_inviteeId_idx" ON "public"."TournamentInvitation"("inviteeId");
-
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "TournamentInvitation_status_idx" ON "public"."TournamentInvitation"("status");
-
--- CreateIndex (if not exists)
 CREATE UNIQUE INDEX IF NOT EXISTS "TournamentInvitation_tournamentId_inviteeId_key" ON "public"."TournamentInvitation"("tournamentId", "inviteeId");
 
--- CreateIndex (if not exists)
 CREATE UNIQUE INDEX IF NOT EXISTS "CardEvaluation_cardId_key" ON "public"."CardEvaluation"("cardId");
-
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "CardEvaluation_cardId_idx" ON "public"."CardEvaluation"("cardId");
-
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "CardEvaluation_category_idx" ON "public"."CardEvaluation"("category");
-
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "CardEvaluation_validationStatus_idx" ON "public"."CardEvaluation"("validationStatus");
-
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "CardEvaluation_generatedBy_idx" ON "public"."CardEvaluation"("generatedBy");
 
--- CreateIndex (if not exists)
 CREATE INDEX IF NOT EXISTS "Tournament_isPrivate_idx" ON "public"."Tournament"("isPrivate");
 
--- AddForeignKey (if not exists)
+-- 6. Add foreign keys if they don't exist
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'TournamentInvitation_tournamentId_fkey'
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'TournamentInvitation_tournamentId_fkey'
     ) THEN
         ALTER TABLE "public"."TournamentInvitation"
         ADD CONSTRAINT "TournamentInvitation_tournamentId_fkey"
         FOREIGN KEY ("tournamentId") REFERENCES "public"."Tournament"("id")
         ON DELETE CASCADE ON UPDATE CASCADE;
     END IF;
-END $$;
 
--- AddForeignKey (if not exists)
-DO $$
-BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'TournamentInvitation_inviteeId_fkey'
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'TournamentInvitation_inviteeId_fkey'
     ) THEN
         ALTER TABLE "public"."TournamentInvitation"
         ADD CONSTRAINT "TournamentInvitation_inviteeId_fkey"
         FOREIGN KEY ("inviteeId") REFERENCES "public"."User"("id")
         ON DELETE CASCADE ON UPDATE CASCADE;
     END IF;
-END $$;
 
--- AddForeignKey (if not exists)
-DO $$
-BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'CardEvaluation_cardId_fkey'
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'CardEvaluation_cardId_fkey'
     ) THEN
         ALTER TABLE "public"."CardEvaluation"
         ADD CONSTRAINT "CardEvaluation_cardId_fkey"
@@ -122,3 +110,11 @@ BEGIN
         ON DELETE CASCADE ON UPDATE CASCADE;
     END IF;
 END $$;
+
+-- 7. Mark migration as completed
+UPDATE _prisma_migrations
+SET applied_steps_count = 1,
+    finished_at = NOW(),
+    rolled_back_at = NULL,
+    logs = 'Manually fixed after InvitationStatus enum already existed'
+WHERE migration_name = '20251014230734_add_card_evaluation_table';

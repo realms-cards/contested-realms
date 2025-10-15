@@ -27,12 +27,16 @@ export async function GET(
       );
     }
 
-    // First verify this is a bot match
+    // First check if match exists in MatchResult or OnlineMatchSession
     const matchResult = await prisma.matchResult.findFirst({
       where: { matchId },
     });
 
-    if (!matchResult) {
+    const session = await prisma.onlineMatchSession.findUnique({
+      where: { id: matchId },
+    });
+
+    if (!matchResult && !session) {
       return NextResponse.json(
         { error: 'Match not found' },
         { status: 404 }
@@ -40,14 +44,23 @@ export async function GET(
     }
 
     // Verify at least one player is a bot
-    const isBotMatch = Array.isArray(matchResult.players) &&
-      matchResult.players.some((player) => {
+    let isBotMatch = false;
+
+    if (matchResult && Array.isArray(matchResult.players)) {
+      isBotMatch = matchResult.players.some((player) => {
         if (!player || typeof player !== 'object') return false;
         const p = player as Record<string, unknown>;
         const playerId = p?.id;
         return typeof playerId === 'string' &&
                (playerId.startsWith('cpu_') || playerId.startsWith('host_'));
       });
+    } else if (session && Array.isArray(session.playerIds)) {
+      // Check session playerIds if matchResult doesn't exist
+      isBotMatch = session.playerIds.some((id) => {
+        const playerId = String(id || '');
+        return playerId.startsWith('cpu_') || playerId.startsWith('host_');
+      });
+    }
 
     if (!isBotMatch) {
       return NextResponse.json(
@@ -55,11 +68,6 @@ export async function GET(
         { status: 403 }
       );
     }
-
-    // Load full replay data
-    const session = await prisma.onlineMatchSession.findUnique({
-      where: { id: matchId },
-    });
 
     const actions = await prisma.onlineMatchAction.findMany({
       where: { matchId },
@@ -72,7 +80,7 @@ export async function GET(
     });
 
     // Get player names
-    const playerIds = Array.isArray(matchResult.players)
+    const playerIds = matchResult && Array.isArray(matchResult.players)
       ? matchResult.players
           .map((p) => {
             if (!p || typeof p !== 'object') return null;
@@ -80,9 +88,9 @@ export async function GET(
             return typeof player.id === 'string' ? player.id : null;
           })
           .filter((id): id is string => id !== null)
-      : (Array.isArray(session?.playerIds) ? session.playerIds : []);
+      : (Array.isArray(session?.playerIds) ? session.playerIds.map((id) => String(id)) : []);
 
-    const playerNames = Array.isArray(matchResult.players)
+    const playerNames = matchResult && Array.isArray(matchResult.players)
       ? matchResult.players.map((p) => {
           if (!p || typeof p !== 'object') return 'Player';
           const player = p as Record<string, unknown>;
@@ -90,13 +98,13 @@ export async function GET(
           const id = typeof player.id === 'string' ? player.id : null;
           return displayName || id || 'Player';
         })
-      : [];
+      : playerIds.map((id) => id.replace('cpu_', 'CPU ').replace('host_', 'HOST '));
 
-    const endTime = matchResult.completedAt
+    const endTime = matchResult?.completedAt
       ? new Date(matchResult.completedAt).getTime()
       : (session?.updatedAt ? new Date(session.updatedAt).getTime() : undefined);
 
-    const duration = typeof matchResult.duration === 'number' ? matchResult.duration * 1000 : undefined;
+    const duration = matchResult && typeof matchResult.duration === 'number' ? matchResult.duration * 1000 : undefined;
     const startTime = endTime && duration
       ? endTime - duration
       : (session?.createdAt ? new Date(session.createdAt).getTime() : (endTime || Date.now()));
@@ -134,7 +142,7 @@ export async function GET(
       endTime,
       initialState,
       actions: finalActions,
-      lobbyName: matchResult.lobbyName,
+      lobbyName: matchResult?.lobbyName || undefined,
     });
   } catch (error) {
     if (error instanceof AdminAccessError) {
