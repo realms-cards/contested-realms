@@ -63,7 +63,7 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
 ];
 
 export default function OtherRealms({
-  className = "",
+  className = "cursor-pointer",
   links = DEFAULT_LINKS,
   linktreeUrl = null,
   title = "Other Realms",

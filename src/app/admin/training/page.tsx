@@ -23,6 +23,23 @@ type Metrics = {
   elo?: { ratings?: EloRating[] };
 };
 
+type BotReplay = {
+  matchId: string;
+  playerNames: string[];
+  playerIds: string[];
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  actionCount: number;
+  matchType: string;
+  lobbyName?: string;
+};
+
+type BotReplaysResponse = {
+  recordings: BotReplay[];
+  total: number;
+};
+
 async function getMetrics(): Promise<Metrics | null> {
   try {
     const base = (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL.trim().length > 0)
@@ -42,12 +59,38 @@ async function getMetrics(): Promise<Metrics | null> {
   }
 }
 
+async function getBotReplays(): Promise<BotReplaysResponse | null> {
+  try {
+    const base = (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL.trim().length > 0)
+      ? process.env.NEXT_PUBLIC_BASE_URL
+      : "http://localhost:3000";
+    const jar = await cookies();
+    const all = jar.getAll();
+    const cookie = all && all.length ? all.map((c) => `${c.name}=${c.value}`).join("; ") : "";
+    const res = await fetch(`${base}/api/admin/replays/bots`, {
+      cache: "no-store",
+      headers: cookie ? { cookie } : undefined,
+    });
+    if (!res.ok) {
+      console.error(`[admin] Bot replays fetch failed: ${res.status} ${res.statusText}`);
+      return null;
+    }
+    const data = (await res.json()) as BotReplaysResponse;
+    console.log(`[admin] Bot replays loaded: ${data.recordings?.length || 0} matches`);
+    return data;
+  } catch (error) {
+    console.error('[admin] Bot replays fetch error:', error);
+    return null;
+  }
+}
+
 export default async function AdminTrainingPage() {
   await requireAdminSession();
-  const metrics = await getMetrics();
+  const [metrics, botReplaysData] = await Promise.all([getMetrics(), getBotReplays()]);
   const topGainers: PerCardEntry[] = (metrics?.perCard?.topGainers as PerCardEntry[] | undefined) ?? [];
   const topLosers: PerCardEntry[] = (metrics?.perCard?.topLosers as PerCardEntry[] | undefined) ?? [];
   const eloRatings: EloRating[] = (metrics?.elo?.ratings as EloRating[] | undefined) ?? [];
+  const botReplays: BotReplay[] = botReplaysData?.recordings ?? [];
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -159,6 +202,89 @@ export default async function AdminTrainingPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-6 rounded border border-slate-800 bg-slate-900/40 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-white">Bot Match Replays</h2>
+        <p className="mb-3 text-sm text-slate-400">
+          Recent bot training matches. Click a match to view the full replay.
+        </p>
+        {!botReplaysData && <div className="text-sm text-slate-400">No bot replays found.</div>}
+        {botReplaysData && botReplays.length === 0 && (
+          <div className="text-sm text-slate-400">No bot matches recorded yet.</div>
+        )}
+        {botReplays.length > 0 && (
+          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/50">
+            <table className="min-w-full text-left text-xs text-slate-200">
+              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-3 py-2">Match ID</th>
+                  <th className="px-3 py-2">Players</th>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Duration</th>
+                  <th className="px-3 py-2">Actions</th>
+                  <th className="px-3 py-2">Time</th>
+                  <th className="px-3 py-2">View</th>
+                </tr>
+              </thead>
+              <tbody>
+                {botReplays.slice(0, 20).map((replay) => {
+                  const durationSeconds = replay.duration ? Math.floor(replay.duration / 1000) : null;
+                  const durationStr = durationSeconds
+                    ? `${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')}`
+                    : '-';
+                  const timeStr = replay.endTime
+                    ? new Date(replay.endTime).toLocaleString()
+                    : new Date(replay.startTime).toLocaleString();
+
+                  return (
+                    <tr key={replay.matchId} className="border-t border-slate-800/60 hover:bg-slate-800/30">
+                      <td className="px-3 py-2 font-mono text-[10px]">{replay.matchId.slice(0, 8)}</td>
+                      <td className="px-3 py-2">
+                        <div className="max-w-xs truncate" title={replay.playerNames.join(' vs ')}>
+                          {replay.playerNames.join(' vs ')}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
+                          {replay.matchType}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{durationStr}</td>
+                      <td className="px-3 py-2">{replay.actionCount}</td>
+                      <td className="px-3 py-2 text-[10px] text-slate-400">{timeStr}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex gap-1">
+                          <Link
+                            href={`/admin/replays/${replay.matchId}`}
+                            className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
+                          >
+                            Watch
+                          </Link>
+                          <Link
+                            href={`/api/admin/replays/bots/${replay.matchId}`}
+                            className="rounded bg-slate-700/50 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-600/50"
+                            target="_blank"
+                          >
+                            JSON
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {botReplays.length > 20 && (
+          <div className="mt-3 text-xs text-slate-400">
+            Showing 20 of {botReplays.length} bot replays.
+            <Link href="/api/admin/replays/bots" className="ml-2 text-blue-400 hover:text-blue-300">
+              View all (JSON)
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

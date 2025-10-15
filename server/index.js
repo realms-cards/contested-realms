@@ -1548,7 +1548,9 @@ server.on("request", async (req, res) => {
         if (!p) continue;
         const online = !!p.socketId;
         const inMatch = !!p.matchId;
-        if (online && !inMatch) {
+        // Filter out CPU bots and host accounts (IDs starting with 'cpu_' or 'host_')
+        const isBotOrHost = String(pid).startsWith('cpu_') || String(pid).startsWith('host_');
+        if (online && !inMatch && !isBotOrHost) {
           if (!q || (p.displayName || "").toLowerCase().includes(q)) {
             candidates.push({ id: pid, displayName: p.displayName || "Player" });
           }
@@ -2115,6 +2117,15 @@ function isCpuPlayerId(id) {
 function lobbyHasHumanPlayers(lobby) {
   if (!lobby || !lobby.playerIds || lobby.playerIds.size === 0) return false;
   for (const pid of lobby.playerIds) {
+    if (!isCpuPlayerId(pid)) return true;
+  }
+  return false;
+}
+
+// Returns true if there is at least one non-CPU (human) player in the match
+function matchHasHumanPlayers(match) {
+  if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0) return false;
+  for (const pid of match.playerIds) {
     if (!isCpuPlayerId(pid)) return true;
   }
   return false;
@@ -5895,10 +5906,22 @@ io.on("connection", async (socket) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     try {
-      const recordings = await replay.listRecordings(prisma, { limit: 200 });
+      const allRecordings = await replay.listRecordings(prisma, { limit: 200 });
+
+      // Filter out bot matches (those with CPU bots or host accounts)
+      // Only admins should see bot matches (via admin endpoints)
+      const recordings = allRecordings.filter((recording) => {
+        if (!Array.isArray(recording.playerIds)) return true;
+        // Exclude if any player is a bot (ID starts with 'cpu_' or 'host_')
+        return !recording.playerIds.some((id) => {
+          const pid = String(id || '');
+          return pid.startsWith('cpu_') || pid.startsWith('host_');
+        });
+      });
+
       try {
         console.log(
-          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries`
+          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries (filtered ${allRecordings.length - recordings.length} bot matches)`
         );
       } catch {}
       socket.emit("matchRecordingsResponse", { recordings });
@@ -5918,6 +5941,20 @@ io.on("connection", async (socket) => {
         socket.emit("matchRecordingResponse", { error: "Recording not found" });
         return;
       }
+
+      // Block access to bot matches for regular users
+      // Check if any player is a bot (ID starts with 'cpu_' or 'host_')
+      const playerIds = recording.initialState?.playerIds || [];
+      const isBotMatch = Array.isArray(playerIds) && playerIds.some((id) => {
+        const pid = String(id || '');
+        return pid.startsWith('cpu_') || pid.startsWith('host_');
+      });
+
+      if (isBotMatch) {
+        socket.emit("matchRecordingResponse", { error: "Recording not found" });
+        return;
+      }
+
       socket.emit("matchRecordingResponse", { recording });
     } catch (e) {
       try { console.warn('[Recording] loadRecording failed:', e?.message || e); } catch {}
@@ -6412,6 +6449,23 @@ io.on("connection", async (socket) => {
         // Clear association last so future logic sees player out of lobby
         player.lobbyId = null;
       }
+
+      // Clean up bot-only matches immediately when any player disconnects
+      // Bot matches don't need the "rejoin" grace period that human matches get
+      if (player.matchId && matches.has(player.matchId)) {
+        const match = matches.get(player.matchId);
+        if (match && !matchHasHumanPlayers(match)) {
+          try {
+            console.log(`[Match] Cleaning up bot-only match ${match.id} after disconnect`);
+            cleanupMatchNow(match.id, 'bot_only_disconnect', true).catch((err) => {
+              console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
+            });
+          } catch (err) {
+            console.warn(`[Match] Error initiating bot match cleanup:`, err);
+          }
+        }
+      }
+
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;
     }
@@ -6419,8 +6473,9 @@ io.on("connection", async (socket) => {
   });
 });
 
-// Periodic cleanup: trim CPU-only lobbies; keep human lobbies alive even when idle
+// Periodic cleanup: trim CPU-only lobbies and bot-only matches; keep human lobbies/matches alive
 setInterval(() => {
+  // Clean up CPU-only lobbies
   for (const lobby of lobbies.values()) {
     if (lobby.status !== "open") continue;
     // Close CPU-only lobbies immediately
@@ -6430,6 +6485,29 @@ setInterval(() => {
       lobbies.delete(lobby.id);
       broadcastLobbies();
       continue;
+    }
+  }
+
+  // Clean up bot-only matches that are completed or have been idle
+  for (const match of matches.values()) {
+    try {
+      if (!match) continue;
+
+      // Skip matches with human players
+      if (matchHasHumanPlayers(match)) continue;
+
+      // Clean up bot-only matches that are completed or have been inactive for 5+ minutes
+      const age = Date.now() - (Number(match.lastTs) || Date.now());
+      const shouldCleanup = match.status === 'completed' || age >= 5 * 60 * 1000;
+
+      if (shouldCleanup) {
+        console.log(`[Match] Periodic cleanup of bot-only match ${match.id} (status=${match.status}, age=${Math.floor(age/1000)}s)`);
+        cleanupMatchNow(match.id, 'bot_only_periodic', true).catch((err) => {
+          console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
+        });
+      }
+    } catch (err) {
+      console.warn('[Match] Error in bot match periodic cleanup:', err);
     }
   }
 }, 30 * 1000);
