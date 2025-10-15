@@ -1,0 +1,1563 @@
+title,content,subcodexes
+"Ability","All cards in the game have abilities! There are two categories of abilities: Basic abilities, which 
+all units have without being printed on their cards. Special abilities, which is the card text on 
+each card, or text granted to it by other effects, e.g. [[Black Obelisk]]. Cards also have 
+characteristics, which are distinct from abilities.",""
+"Activated Ability","An activated ability has a cost (such as tapping or paying mana) and an effect.  For example, 
+[[Field Laborers]] have an activated ability. If you pay the cost, the effect occurs. If you can pay 
+the cost multiple times, you may do so (and the effect will occur each time you pay the cost). 
+Activated abilities may only be used On your turn, during your main phase, and when no events are 
+pending on the storyline. Note that it's also possible for an activated ability to have no cost, in 
+which case it will likely have some other limit, such as once on your turn. For example, [[Queen 
+Guinevere]] has an activated ability with no cost, but is limited to once on your turn. Track your 
+use of such abilities during your turn to ensure the game state remains clear to both players. By 
+default, only the controller of a card can use its activated abilities.",""
+"","","Activating Abilities:  To activate an ability, ensure that: You control the card with the ability 
+It's your turn It's your main phase No events are on the storyline You can pay the cost Once you pay 
+the cost and declare targets (if any), the effect of the activated ability goes on the storyline and 
+then will resolve normally."
+"Active Player","The active player is the player who is currently taking their turn.",""
+"Adjacent","Adjacent refers to the current square and the four orthogonal squares that share a border with it 
+(not diagonals). For example, the middle square has 5 adjacent squares - itself and four others.  If 
+a square is in the corner of the realm, it will have fewer adjacent squares. For example, the bottom 
+right square has only 3 adjacent squares - itself and two others.  When referring to adjacent sites, 
+adjacent voids, or adjacent squares, the effect can cross the boundaries of regions. For example, 
+[[Lord of the Void]] can be in the void and still banish an adjacent site, even though sites and 
+voids are in different regions. [[Frontier Settlers]] can be on a site and still play your top site 
+to an adjacent void, even though sites and voids are in different regions. For all other references 
+to adjacent, such as adjacent locations, adjacent minions, adjacent artifact, etc., regional 
+boundaries must be respected and cannot be crossed. For example, if a minion with Voidwalk was 
+attacked while at a site and then played [[Dodge Roll]], it could not move to a void square because 
+'adjacent location' cannot cross a regional boundary.",""
+"Air Site","An air site is a site that provides at least one air (A) affinity. If the site provides other types 
+of affinity as well, it's still an air site as long as it provides at least one air affinity.",""
+"Airborne","Keyword ability. A unit with Airborne may fly while on the surface. It gains three benefits while on 
+the surface: When taking a step, it may move diagonally. It cannot be targeted by attacks, unless 
+the attacking unit also has Airborne. It cannot be intercepted, unless the intercepting unit has 
+Airborne or Ranged. Important reminders: Attacks from Airborne units can be defended normally! 
+Airborne is mostly a defensive ability and gives greater mobility, but Airborne attacks (against a 
+unit or a site) can be defended by any unit, even without Airborne! The Airborne unit must swoop 
+down to attack. Even if an Airborne attacker targets an Airborne defender, a non-Airborne unit may 
+defend, since the original target can bring the fight down to the ground. Airborne only works on the 
+surface. If the unit starts its step on the surface of a site, it can step diagonally. If the unit 
+starts its step in a different region (void, underwater, underground), then it can't step diagonally 
+(and also doesn't get the other benefits either). Airborne has no effect on counting distance for 
+effects with 'up to X steps away,' e.g. [[Disenchant]].",""
+"Ally","An ally is a unit that you control, including your Avatar. Allies are always units, unless otherwise 
+specified by card text. For example, [[Cast into Exile]] uses 'allied site,' which means 'a site you 
+control.'",""
+"Animate","Animate means to give a card the minion type. It becomes a minion for the duration of the effect, in 
+addition to its other types. For example, [[Enchantress]].",""
+"Artifact","Artifacts are various relics, edifices, tools, gear, gadgets, devices, and baubles, often charged 
+with lasting enchantments by wizards of old. [[Spear of Destiny]] is an example of an artifact. 
+Artifacts have an artifact frame on their card, and typically do not require threshold. For example, 
+[[Philosopher's Stone]] or [[Sword and Shield]]. Artifact subtypes include Armor, Device, Document, 
+Instrument, Potion, Relic, and Weapon, which have no special game rules, though other cards may 
+reference them. There are two special artifact subtypes, Automaton and Monument, which have special 
+rules, described below. Artifacts have characteristics, specifically ((artifact characteristics)), 
+and are one of the six card types in the game. By default, any non-Monument, non-Automaton artifact 
+can be carried by a unit. If such an artifact is not carried, then it is not controlled by anyone. 
+If such an artifact is carried, then it's controlled by the bearer's controller. The '((Casting 
+Artifacts))' entry has details on how to cast artifact spells.",""
+"","","Automaton:  Automatons are artifacts that are minions. See 'Cards With Multiple Types' in the 
+'characteristics' entry for more details. [[Crave Golem]] is an example of an automaton."
+"","","Monument:  Monuments are an artifact subtype that cannot be carried. [[The Immortal Throne]] is an 
+example of a monument."
+"As If Adjacent","Some effects allow movement 'as if adjacent' e.g. [[Minecart Madness]]. If it matters, the 
+controller of the movement effect decides the cardinal direction when a unit is moving 'as if 
+adjacent.' For example, if you have a [[Waypoint Portal]] active and you want to move your 
+[[East-West Dragon]] through it, you can choose to consider the movement horizontal and Move Freely, 
+even if the two squares are not the same row. Similarly, a [[Dalcean Phalanx]] could step through a 
+Waypoint Portal to a square in a different column by declaring the proper cardinal direction for the 
+'as if adjacent' movement. Units moving 'as if adjacent' do not cross any borders. Therefore, a 
+[[Waypoint Portal]] would allow you to circumvent a [[Wall of Ice]] or [[Great Wall]], which look 
+for crossing borders.",""
+"As If Connected","Some effects allow movement 'as if the top and bottom edges of the realm were connected' e.g. 
+[[Polar Explorers]]. To resolve these effects, imagine a duplicate copy of the realm ))above(( the 
+top row, and ))below(( the bottom row. That is, those squares are considered adjacent for movement. 
+Importantly, the squares are not actually connected for other effects, so something like [[Poison 
+Nova]] on the top row wouldn't hit the bottom row, since Poison Nova isn't movement. Moving 'as if 
+connected' does cross borders normally, and uses normal cardinal directions. Oversized units that 
+move as if connected and then find themselves spanning the realm will immediately end up on one side 
+or the other. See '((Oversized Units))' for more details. Most forced movement effects require 
+proximity and thus won't work across the top and bottom edge when moving 'as if connected.' For 
+example, [[Whirlwind]] could theoretically push across the top or bottom edge because a 'push' 
+counts as movement, but you won't be able to select a 2x2 area that spans the top and bottom edges, 
+because those rows are not actually connected; [[Polar Explorers]] merely allow movement 'as if' 
+connected, not 'selecting 2x2 areas as if connected.' (In contrast, if [[Magellan Globe]] were in 
+the realm, then you really could select 2 squares in the top row and 2 squares in the bottom row, 
+because Magellan Globe actually connects the edges, for all purposes.) An example of a forced 
+movement effect that would work is [[MaelstrÃ¶m]]:  [[MaelstrÃ¶m]] is at M, and [[Polar Bears]] are at 
+P. The whole area is a giant body of water. You could pull normally to X, or could pull 'as if 
+connected' to M since pulling is a form of movement.",""
+"At Rest","The default state of a unit is at rest, but it stops being at rest when: It enters the realm, OR It 
+moves or is moved, OR It casts a spell, OR It activates an activated ability or triggers a triggered 
+ability. It returns to being 'at rest' after passive effects have been applied and the Storyline is 
+empty. Here are some clarifying examples: If a [[Hillock Basilisk]] moves and attacks, the minions 
+in the attacked location will be disabled before they have a chance to use their Defend triggered 
+ability, because passive abilities apply before triggered abilities. But, a defending minion moving 
+in from 1 step sideways will NOT be at rest because once that defending minion uses its triggered 
+ability, it's no longer at rest. It won't return to being at rest until the whole attack sequence 
+finishes. Also, it's doubly not at rest because it moved! Units being carried by other units will 
+not be at rest while being moved. Units being forcefully moved by an effect like [[Grapple Shot]] or 
+[[Windblast]] will not be at rest, since they're being moved.",""
+"Atlas","Your atlas is your deck of sites and is one of the zones in the game. Only sites can be placed or 
+shuffled into your atlas. If an effect would cause a spell card to be shuffled into an atlas, that 
+effect is ignored. Constructed Format
+Your atlas must contain 30 or more sites and respect rarity limits. Limited Formats (Draft or 
+Sealed)
+Your atlas must contain 12 or more sites, ignoring rarity restrictions.",""
+"Atop","On the surface of a site (not void). Synonymous with 'above a site' and 'aboveground.' This includes 
+Airborne minions, as well as all types of sites, including water sites.",""
+"Attack","Attacking is one of the main ways you deal damage to your opponent's units and sites, and is a core 
+part of Sorcery. Units attack as part of the Move and Attack basic ability. Certain rare effects may 
+also explicitly allow attacks, e.g. [[Crave Golem]]. You may only attack enemy units or the surface 
+of enemy sites that are at your location. When you attack, follow this sequence: Declare the attack 
+target and check that it's a legal target right now. If not, end this process and no attack 
+happened. Assuming the attack target is legal, 'attack' triggers are now satisfied and the defender 
+has been targeted and attacked (e.g. [[Captain Baldassare]], [[Sir Kay]], [[Dodge Roll]], 
+[[Wills-o'-the-Wisp]]). Resolve those, using the storyline rules as usual for ((simultaneous 
+triggers)). Open the defend window. One unit may use the Defend ability, resolving its movement, if 
+any. If it now occupies the attack's location, it joins the attack as a defender. If the original 
+target was a site, it's removed from the attack. If the original target was a unit, it may remain in 
+the fight or not, as the defending player chooses. Note that the defender is not 'attacked' nor 
+'targeted.' The opportunity to use 'attack' triggers (e.g. [[Dodge Roll]], [[Wills-o'-the-Wisp]], 
+etc.) has already passed. Repeat 3.a and 3.b as many times as defending player wants, one defender 
+at a time. Defend window is closed. Check for attack target legality again. Units that used the 
+Defend ability are automatically legal targets (e.g. a Stealth minion chooses to defend, a unit on 
+[[Dome of Osiros]] chooses to defend, etc.) Resolve the fight. If there are no other units involved 
+since you're attacking an undefended site, simply strike the site, damaging it and causing the 
+controlling avatar to lose that amount of life. The attack is over. Any 'after attack' triggers 
+resolve now.",""
+"Aura","Auras are mostly incorporeal but lasting manifestations of elemental power.  They usually affect a 
+2x2 area and can be cast anywhere in the realm. [[Entangle Terrain]] is an example of an aura. Auras 
+have characteristics, specifically ((aura characteristics)), and are one of the six card types in 
+the game. The '((Casting Auras))' entry has details on how to cast aura spells.",""
+"Aura minion","An aura minion is a card that is both an aura and a minion! See 'Cards with Multiple Types' for 
+details.",""
+"Avatar","Your Avatar represents you and your connection to the realm. Every deck must contain exactly 1 
+Avatar. Choose wisely! [[Sparkmage]] is an example of an avatar. Avatars have characteristics, 
+specifically ((avatar characteristics)), and are one of the six card types in the game. Avatars are 
+immune to many negative effects, as described in their characteristics.",""
+"Banished","When you banish a card, it is removed from the game; place in a separate area, clearly distinct from 
+any game zone. Once a card is banished, it can never return to the game.",""
+"Basic Ability","All units in Sorcery have five abilities that are not printed on their cards. These are called basic 
+abilities, and are described in their own codex entries: Move and Attack Defend Intercept Pick Up 
+Drop",""
+"Basic Movement","Basic movement is movement from the Move and Attack basic ability.",""
+"Below","At the subsurface of a site (not void).",""
+"Body of Water","A body of water is a contiguous group of adjacent water sites, regardless of who controls those 
+sites. If a card refers to 'its body of water' or 'this body of water' (e.g. [[Anui Undine]] or 
+[[Giant Shark]]), it means the body of water occupied by that card. If that card doesn't currently 
+occupy a body of water, then it doesn't have a body of water. To choose a body of water (e.g. 
+[[Marine Voyage]]), choose one water site. Every water site (regardless of controller) that's 
+connected to the chosen site via adjacent water sites is in that body of water. If a site becomes 
+disconnected from the chosen water site (e.g. [[Earthquake]] in the middle of the turn), the 
+disconnected site is no longer in the body of water. If the chosen site is no longer a water site 
+(e.g. [[Drought]] in the middle of the turn), then the 'chosen body of water' no longer exists.",""
+"Border","A square's border means other adjacent squares and doesn't include diagonals. The border is the edge 
+of the square, not including the corners. For example, [[Border Militia]] checks for adjacent enemy 
+sites, not diagonals.",""
+"Bottom","'Bottom' can have two different meanings in Sorcery, depending on context. When referring to your 
+deck, bottom or bottommost simply means the bottom card of the deck. For example, [[Autumn River]]. 
+When referring to the realm, bottom means the row closest to you. For example, [[Polar Explorers]].",""
+"Broken Artifact","A broken artifact is an artifact that's in a cemetery.",""
+"Bruin","Bruin is a token minion with 4 power. Bruin is a Unique Beast with 'While near your Avatar, Bruin 
+takes damage for them.' Bruin is an ((earth)) minion. See [[Druid]].",""
+"Burrowed Safely","Burrowed safely means that the minion has burrowing and can't move itself, while at this location. 
+Typically an effect will cause the minion to unburrow, for example [[Awakened Mummies]].",""
+"Burrowing","Keyword Ability. A minion with Burrowing can be summoned to underground locations and survive 
+underground. By using one step, a minion with Burrowing can move between the surface and subsurface 
+of a land site, or between adjacent underground locations. For example, [[Cave Trolls]] can be 
+summoned underground to one of your land sites. Then, after their summoning sickness wore off, they 
+could use their Move and Attack ability to take a step from underground to the surface of that site 
+(and that would use up their step). If they were on the surface of a land site, they could use their 
+step to move from the surface to underground of that site. To 'burrow' means to move from the 
+surface to the underground of a land site. When an effect 'burrows' a card, you forcefully move that 
+card from the surface to underground, even if it doesn't have the Burrowing ability. If an effect 
+tries to forcefully burrow (e.g. [[Bury]]) a card that occupies at least one water site, the effect 
+fails.",""
+"Can vs. Can't","If one or more effects say you 'can' do something and one or more effects say you 'can't' do that 
+same thing, the 'can't' effects always take precedence. For example, [[Queen Guinevere]] explicitly 
+allows you to untap an allied minion, while [[Rhitta Gawr of Snowdonia]] prohibits other minions 
+from untapping. If Queen Guinevere tries to untap any minion other than Rhitta, the effect will fail 
+because the 'can't' effect from Rhitta takes precedence. Note that 'lose' effects (e.g. [[Sky 
+Baron]]) also implicitly include a 'can't' effect. So if Sky Baron is in the realm and then you cast 
+[[Power of Flight]], the 'can't' effect takes precedence and the minion doesn't gain Airborne.",""
+"Can't be Modified","A card that 'can't be modified' cannot gain or lose any abilities, and it's characteristics cannot 
+be changed. For example, [[Bedrock]] is not affected by [[Atlantean Fate]] nor [[Abundance]].",""
+"Card","When you are instructed to draw a card, you may choose to draw a spell from your spellbook or a site 
+from your atlas. If you draw multiple cards at once (e.g. [[Pact with the Devil]]), choose how many 
+of each you'll draw, then draw all of them simultaneously. If a game effect or rule references a 
+card in the realm, it includes tokens as well.",""
+"Card Type","There are six different card types in Sorcery: Avatar Minion Artifact Aura Magic Site",""
+"","","Multiple Simultaneous Card Types:  It is sometimes possible for cards to have multiple types. For 
+example, automatons are minions and artifacts. For more details, see characteristics and 'Cards with 
+Multiple Types.'"
+"Cards with Multiple Types","It's possible for cards to have multiple types. For example, automatons are minions and artifacts. 
+It's also possible for cards to gain types during the game. For example, [[Enchantress]] can cause 
+auras to gain the minion type for a turn. When a card has multiple types, apply the following rules 
+regarding characteristics: The default size remains unchanged. If the card was already occupying 
+multiple locations (e.g. an aura) and becomes a minion (e.g. via [[Enchantress]]), it continues to 
+occupy multiple locations even though minions default to a single location. For everything other 
+than size, the characteristics of a minion take precedence. For example: Artifacts can be carried, 
+while minions cannot be carried by default. Therefore, artifact minions cannot be carried as an 
+artifact would be, since we give preference to the minion rules. Note that artifact minions can be 
+carried as a minion would be carried (e.g. [[War Horse]]). Auras cannot carry artifacts. Minions can 
+carry artifacts. Therefore, Aura minions can carry artifacts, since we give preference to the minion 
+rules.",""
+"Carriable Artifact","A carriable artifact is any artifact that's not a ((monument)) and not a minion (i.e. not an 
+((automaton))). Carriable artifacts have additional options when being cast as a spell. See 
+'((Casting Artifacts))' for more details, and '((Ownership and Control))' for details on how control 
+can change for carriable artifacts.",""
+"Carrying Artifacts","Many artifacts can be carried by units, and carried artifacts are moved along with the unit that's 
+carrying them. For example, [[Ruby Core]] can be carried by a unit. See '((Carriable Artifacts))' 
+for more details on which artifacts can be carried, and how control may change for such artifacts. 
+See the 'Pick Up' and 'Drop' basic abilities, as well as '((Casting Artifacts)),' for details on how 
+a unit might start or stop carrying an artifact. If an Oversized Unit is carrying an artifact, the 
+artifact remains in a single location and maintains relative positioning to the Oversized Unit. See 
+'((Oversized Units))' and '((Teleporting Oversized Units))' for further details. An artifact that's 
+being carried must share at least one location with the unit that's carrying it. If they ever share 
+no locations, the carried artifact is automatically dropped. Non-units cannot carry artifacts. If a 
+non-unit is somehow carrying an artifact, the artifact is immediately dropped. If a unit is 
+forcefully moved, anything they're carrying moves with them, e.g. [[Bury]]. If a minion leaves the 
+realm, anything they're carrying remains in the realm, e.g. [[Fey Changeling]], [[Cast into Exile]], 
+[[Monster Hunter]].",""
+"Carrying Units","Normally, units cannot be carried by other units, but some effects allow it, e.g. [[War Horse]]. 
+Such units have modified Pick Up and Drop basic abilities, as described in those codex entries. If 
+such a unit loses the ability to carry other units, the carried units are immediately dropped. A 
+unit that's being carried must share at least one location with the unit that's carrying it. If they 
+ever share no locations, the carried unit is automatically dropped. Similar to carrying artifacts, 
+the carried units are moved along with the unit that's carrying them. This is considered forced 
+movement. If a carried unit cannot enter the location, the carried unit won't move (and will be 
+dropped as usual if they no longer share a location with the carrying unit). For example, if a War 
+Horse tries to carry a [[Bosk Troll]] into a [[Gnome Hollows]], the War Horse can enter the Gnome 
+Hollows but the Troll cannot, and thus the Troll remains where it was and is automatically dropped. 
+Units that can carry other units confer their movement abilities to the carried units while they're 
+carried. For example, [[Phantom Steed]] can pick up a [[Bosk Troll]] and then carry the Troll into 
+the Void. The Troll will have Voidwalk while being carried by the Phantom Steed, and thus be able to 
+survive in the void. Carried units may take the Move and Attack action normally (once the Storyline 
+is empty). Therefore, even if the carrying unit can't Drop that turn, the carried unit could still 
+move themselves normally. For that first step, they will have any movement abilities conferred to 
+them by being carried, which are lost as soon as they're no longer carried. For example, a Bosk 
+Troll on a Phantom Steed in the void could step from the void onto the surface of an adjacent site, 
+using the Voidwalk ability conferred to them by being carried. Once the Troll is on the surface of a 
+site, it's no longer being carried by the Phantom Steed, but by that point it's safely in on the 
+surface.",""
+"Casting Spells","Spells are the main way Avatars and other Spellcasters influence the realm. You cast minions, 
+artifacts, auras, and magics. You can only cast a spell during your main phase, while the storyline 
+is empty. (A few cards like [[Dodge Roll]] grant a timing exception.) When you cast a spell, follow 
+this process: Choose the Spellcaster. This is often your Avatar, but it can be any Spellcaster you 
+control. If your Spellcaster occupies multiple locations, choose the location where they're casting 
+the spell. For example, [[River of Flame]] occupies two locations, surface and subsurface; when it 
+casts a spell, you must choose if it's casting from the surface or subsurface location. Reveal the 
+spell and confirm you have the necessary threshold and mana to cast it. Note: Both players are 
+responsible for confirming that all spells are cast legally! The most common spellcasting mistake is 
+having insufficient threshold. Make it a regular practice to check threshold on every spell that's 
+cast! Choose additional details based on the type of spell. See ))below((. Once you've done those 
+three steps, you actually pay the cost to cast the spell and the card moves from where it was 
+(usually your hand) and enters the storyline. It will then resolve according to the normal storyline 
+rules.",""
+"","","Casting Minions:  To cast a minion spell, you must declare the minion's summoning location. By 
+default, you must choose the surface of one of your sites. Some abilities may modify what summoning 
+locations you may choose. For example, minions with Burrowing may be summoned directly to 
+underground locations you control. The summoning location must be a legal location for that minion 
+to enter at time of casting (regardless of what might happen after the spell is cast and enters the 
+storyline). For example, you could not choose [[Gnome Hollows]] as the summoning location of an 
+[[Autumn Unicorn]]."
+"","","Casting Artifacts:  To cast an artifact spell, you must declare the artifact's conjuring location. 
+By default, you must choose the surface of one of your sites. If it's a carriable artifact, you may 
+alternately choose one of your units and declare a location occupied by that unit; when the artifact 
+enters the realm, it will be carried by that unit."
+"","","Casting Auras:  To cast an aura spell, you must declare the conjuring location(s). The aura's card 
+text will often specify conjuring details, but by default, auras occupy 2x2 areas and can be 
+conjured anywhere in the realm. Auras occupy the surface of sites and the void. To represent the 
+aura's locations, place the card at the intersection of the squares it occupies."
+"","","Casting Magics:  To cast a magic spell, you must declare all targets of the magic. For example, if 
+you cast [[Arc Lightning]], you must declare the 'target nearby unit' at the moment you cast the 
+magic spell. When the magic goes on the storyline, the target will have been chosen and can't change 
+later when the magic resolves. Note that some magic spells do not use the word 'target' and instead 
+use a word like 'ally.' For example, when you cast [[Overpower]], you do not need to specify which 
+ally you will choose, and instead you simply select the ally when the spell is resolving from the 
+storyline. Finally, there are a few magic spells that don't target directly, and instead cause an 
+ally to target. In that case, you also do not need to specify targets when you cast, since you only 
+need to declare the targets that the magic itself is targeting. For example, if you cast [[Joust!]], 
+you do not need to declare the target when you cast the magic; you select the ally when the magic is 
+resolving from the storyline, and then the ally (not the magic!) does the targeting at that time."
+"Cemetery","Your cemetery represents a record of your contest in the realm. Whenever any of your cards are 
+discarded, destroyed, or resolved, place them face-up in your cemetery. Players may freely examine 
+the contents of any cemetery at any time, and the order of the cards in a cemetery is irrelevant. 
+Each cemetery is a zone in the game.",""
+"Characteristics","Many cards have abilities that can be gained or removed during the game, but there are some 
+characteristics that all cards possess, depending on their card type. Effects that remove or modify 
+abilities will not remove or modify these characteristics, unless specifically mentioned in the 
+effect.",""
+"","","Minion Characteristics:  Minions occupy a single location by default. Minions can also hold 
+carriable artifacts by default. Minions have the following characteristics: Card name Rarity Power, 
+which may be a single number (including zero) or two numbers (split power, one for attack power and 
+one for defense power) Cost, which may be zero Elemental threshold, which may be none Subtype, which 
+may be none or multiple"
+"","","Avatar Characteristics:  Avatars occupy a single location by default. Avatars can also hold 
+carriable artifacts by default. Unless an effect specifically mentions the word 'Avatar,' Avatars by 
+default cannot be banished, destroyed, sacrificed, disabled, silenced, leave the realm, or enter any 
+region other than the surface. Avatars have the following characteristics: Card name Power, which is 
+a single number (including zero) Current and max life Spellcaster ability"
+"","","Artifact Characteristics:  Artifacts occupy a single location by default. Artifacts have the 
+following characteristics: Card name Rarity Cost, which may be zero Elemental threshold, which may 
+be none Subtype, which may be none or multiple"
+"","","Aura Characteristics:  Auras occupy four locations in a 2x2 area on the surface or in the void by 
+default. Auras have the following characteristics: Card name Rarity Cost, which may be zero 
+Elemental threshold, which may be none Subtype, which may be none or multiple"
+"","","Magic Characteristics:  Magics do not enter the realm by default, and go to the cemetery after being 
+resolved. Magics have the following characteristics: Card name Rarity Cost, which may be zero 
+Elemental threshold, which may be none"
+"","","Site Characteristics:  Sites occupy two locations by default, surface and subsurface. Sites have the 
+following characteristics: Card name Rarity Cost, which defaults to zero Elemental affinity, which 
+may be none Provides 1 mana"
+"Charge","Keyword Ability. This minion does not suffer from summoning sickness. It can tap or be tapped to pay 
+for costs associated with an ability the same turn it is summoned.",""
+"Codex","The codex is a collection of terms and rules to create a fair and consistent way to enjoy Sorcery 
+anywhere in the world!",""
+"","","Further Note:  Please do not mention the existence of this subcodex entry to anyone publicly. If you 
+need a hint deciphering the code ))below((, feel free to DM @Ira on Discord. Pbatenghyngvbaf ba 
+qrpvcurevat guvf pbqr ohevrq jvguva gur Pbqrk! Vs lbh QZ @Ven jvgu n abgr gung lbh'ir ernq gur shyy 
+Pbqrk, ur jvyy njneq lbh jvgu gur Pbqrk Ernqre ebyr ba gur znva Fbeprel qvfpbeq freire. V ubcr 
+lbh'ir unq sha ernqvat ehyrf! -Ven"
+"Conjure","Conjure means 'enter the realm,' for artifacts and auras. See the 'summon' codex entry for details. 
+Conjure and summon are analogous.",""
+"Copy","When a card enters the realm as a copy, e.g. [[Mirror Realm]] or [[Selfsame Simulacrum]], its 
+characteristics and abilities match the copied card. If the copying card (e.g. Selfsame Simulacrum) 
+leaves the realm, it reverts to its printed characteristics and abilities. When you create a copy, 
+e.g. an artifact via [[Replication]] or a magic via [[Archimago]] or [[Orb of Ba'al Berith]], the 
+characteristics and abilities match the copied card, and the copy is a token. For example, in the 
+case of a copied magic, it will be banished as soon as it resolves from the storyline, per the 
+normal token rules.",""
+"Corner","The corners of the realm are squares 1, 5, 16, and 20.",""
+"Cost","Cost is the amount of mana required to cast a spell. Cost can be modified by various effects, e.g. 
+[[Hamlet]]. Cost cannot be negative. Sites have a default cost of zero. When determining the cost of 
+a spell with an X value (e.g. [[Assorted Animals]]), X is the actual mana cost while the spell is on 
+the storyline, and otherwise X is zero. To calculate the total cost of a spell or ability: Start 
+with the mana cost or activation cost. For example, (3) for [[Bury]]. Alternately, you can start 
+with an alternate cost. For example, (0) if you discard a card for [[Aramos Mercenaries]]. Include 
+any additional costs. For example, discarding a site for [[Craterize]]. Add anything that increases 
+cost. For example, (2) for [[Maddening Bells]]. Subtract anything that reduces cost. For example, 
+(1) less for [[Philosopher's Stone]].",""
+"Damage","Cards take damage from fighting and from the effects of spells and abilities. Damage dealt to 
+minions accumulates until the end phase, at which time it is healed. Whenever a minion accumulates 
+damage equal to or greater than its power, it dies. Damage dealt to your Avatar causes you to lose 
+life (or lose the game if they were already at Death's Door). Damage dealt to a site causes the 
+player who controls the site to lose life equal to the damage dealt. Damage modification and 
+prevention are described in more detail below, and the 'attack' codex entry provides further details 
+as well. In most cases, there will be zero or perhaps one damage modifier, and it will be easy to 
+determine damage. But in complex cases, follow these steps when applying damage: Determine incoming 
+damage. Declare and immediately apply damage modification from the active player, then the 
+non-active player. Declare and immediately apply damage prevention effects from the active player, 
+then the non-active player. Note that replacement effects and prevention effects don't use the 
+storyline, which is why they are immediately applied as soon as they're declared.",""
+"","","Modifying Damage:  Damage can be modified in a variety of ways: Reduce damage, e.g. [[Shield 
+Maidens]]. Increase damage, e.g. Lance. Double damage, e.g. [[Critical Strike]] Set damage, e.g. 
+[[Golden Harp]] Redirect damage, e.g. [[Sir Gawain]] Note that damage prevention effects including 
+damage immunity (e.g. [[Tufted Turtles]], [[Lava Salamander]]) are separate and apply after all 
+damage modification effects. Damage prevention effects use the word 'prevent' or 'immune;' see the 
+Preventing Damage section below for more details. Damage modification effects, including all those 
+listed above, are replacement effects and are all handled the same way. Specifically: In the order 
+of their choice, the active player declares and immediately resolves all of their damage 
+modification effects, including from sources they own and no one controls (e.g. a [[Mask of Mayhem]] 
+controlled by no one). Note that replacement effects do not use the storyline, and thus these 
+effects are immediately resolved as soon as they are declared. In the order of their choice, the 
+non-active player does the same thing. Each replacement effect can only be applied at most once per 
+instance of damage. For example, if you have two Sir Gawains (perhaps via [[Selfsame Simulacrum]]), 
+each Sir Gawain can redirect to themselves once, but they can't use their ability a second time on 
+the same instance of damage. After applying all the damage modification, proceed to damage 
+prevention."
+"","","Preventing Damage:  Damage prevention uses the words 'prevent' or 'immune,' and applies after all 
+other damage modification. Examples include: Prevent damage, e.g. [[Goswhit Helm]]. Immune to 
+damage, e.g. [[Lava Salamander]], or an Avatar on the turn they're put to Death's Door. After 
+applying all damage modification effects, then apply damage prevention effects in the same way: In 
+the order of their choice, the active player declares and immediately resolves all of their damage 
+prevention effects, including from sources they own and no one controls. Note that prevention 
+effects do not use the storyline, and thus these effects are immediately resolved as soon as they 
+are declared. In the order of their choice, the non-active player does the same thing."
+"Damage Grid","To simplify rules text and illustrate the extent of effects over a wide area, some cards show a 
+damage grid, e.g. [[Craterize]]. Damage grids may use a bold square to indicate the center of the 
+card's effect, or a dot to show the Spellcaster's location on the grid, e.g. [[Cone of Flame]]. A 
+damage grid may be rotated and reflected, though some effects may specify otherwise. E.g. [[Flame 
+Wave]] may only be reflected, not rotated. A damage grid affects each unit at the shown squares and 
+in the same region as the caster, though some effects may specify otherwise. E.g. [[Craterize]] 
+specifies 'above and below.'  An effect with a damage grid may be oriented so that the grid is 
+partially outside the realm, as long as the source or origin square in the realm.",""
+"Dead Minion","A dead minion is a minion that's in a cemetery.",""
+"Death Blow","A death blow is any damage dealt to an Avatar who is on death's door. If you deal a death blow to 
+your opponent's avatar, you win! The damage can come from a strike or any effect that specifically 
+deals damage. Note that attacking their sites causes your opponent's avatar to lose life, which is 
+different from damaging their avatar. Losing life, including due to site damage, does not cause a 
+death blow. If both Avatars suffer a death blow simultaneously (perhaps by one attacking the other), 
+the game is a draw. Alternately, many tournaments declare that simultaneous death blows are ignored, 
+and the game continues.",""
+"Death's Door","As your Avatar loses life, its connection with the realm weakens. When your life is reduced to 0, 
+you don't instantly lose the game! Instead, you are at death's door and your life total cannot 
+change (e.g. no healing). The moment you reach 0 life, your Avatar becomes immune to damage until 
+the end of that turn. After that single turn, any damage dealt to your avatar is a death blow, 
+causing you to lose the game. See the 'death blow' codex entry for more details.",""
+"Deathrite","Keyword Ability. Deathrite is keyword for a triggered ability with the text: When this card dies, 
+... Do whatever is stated. Deathrite effects resolve before placing the card in its owner's 
+cemetery. See the '((die))' and '((attack))' codex entries for more details on specific Deathrite 
+timing.",""
+"Defend","Defend is a basic ability that allows you to defend against your opponent's attacks. A unit must be 
+untapped to defend, and it's one of two basic abilities that you can use on your opponent's turn 
+(the other is Intercept). Defend is a triggered ability with the following text: When an enemy 
+attacks another unit or site in this unit's range of motion, it may tap to defend, moving to the 
+attack's location and joining the fight. When an attack is occurring, there is a window to defend. 
+See the '((attack))' codex entry for further details. During that window, multiple different units 
+can defend, one at a time. When a unit moves to defend, it may use any of its movement abilities, 
+such as Airborne, Burrowing, Movement +X, Submerge, or Voidwalk. If the original target of the 
+attack was a unit, the defender's controller may decide if that unit remains in the fight, or is 
+removed. If the original target was a site, it is automatically removed. Remember, only 'attacks' 
+can be defended; attacks are only caused by the Move and Attack basic ability, or very specific card 
+text that uses the word 'attack,' e.g. [[Crave Golem]]. When a unit uses its Defend ability, it 
+automatically becomes a legal target for the attack. For example, a minion with Stealth normally 
+can't be targeted by an attack, but if it chooses to Defend, it will be a legal target (as an 
+explicit exception to the normal precedence in the Silver Rule).",""
+"","","Movement Paths for Defending:  When a unit defends, it must declare a movement path that ends with 
+it occupying the attack's location, ignoring any triggered abilities."
+"","","When Exactly is a Unit Allowed to Defend?:  If the unit is untapped and the attack's location is 
+within its range of motion. See '((range of motion))' for more details."
+"Defender","Defender is the opposite of attacker. Any attacked unit is considered a defender, even if they 
+didn't use the Defend ability. A unit that uses the Defend ability becomes a defender, but the 
+originally attacked unit is also a 'defender' if it stays in the fight. An attack is 'undefended' 
+only if there are no defenders (i.e. attacking a site).",""
+"Die","'Dies' is synonymous with 'destroyed' and 'killed' (and 'dispel' for auras). Whenever a minion has 
+damage on it equal to or greater than its power (or is destroyed directly by an effect), that card 
+is marked for death. After it is marked, any 'kill' or Deathrite triggers resolve, and finally the 
+marked card is put into its owner's cemetery. If multiple cards are marked for death simultaneously, 
+use the normal storyline rules for simultaneous triggers, then all the marked cards are put into 
+their owners' cemeteries simultaneously.
+Once a card has been marked for death, nothing can remove the mark. An effect that heals a marked 
+creature or increases its power does not remove the mark. Certain replacement effects can avoid 
+death entirely (e.g. [[Gilded Aegis]], [[Lady Iseult]]), in which case the minion was never marked 
+for death at all, because that's how replacement effects work.
+An effect may move a marked card to a different zone (e.g. [[Fey Changeling]] on [[The Geistwood]]), 
+but that card is still considered to have died for the purposes of other effects.
+If a Deathrite ability causes more cards to die, they are also marked for death, and their Deathrite 
+effects will also trigger before any cards are placed in the cemetery. None of the cards that have 
+been marked for death are put into their owners' cemeteries until all Deathrite effects have 
+resolved.
+Players cannot choose to sacrifice or kill a card that is already marked for death. A card that is 
+already marked for death cannot be marked for death again, and any effect that attempts to destroy 
+or sacrifice that card fails. That card still only triggers its Deathrite ability once.
+Cards that are sacrificed also count as being destroyed. They are marked for death following the 
+same process outlined above.",""
+"Disabled","While disabled, a minion has no abilities (including basic abilities), cannot strike, cannot take 
+steps itself, cannot shoot projectiles, and cannot be tapped to pay for costs.
+A disabled minion may be moved forcefully as long the disabled minion does not take one of its own 
+steps. A disabled minion may still be tapped by effects as long as it isn't tapping to pay for 
+costs.
+Disabled is not an ability itself and is not removed by silence effects (e.g. [[Silence]]).",""
+"Dispel","Dispel means to 'die,' for auras. See the 'die' codex entry for more details.",""
+"Drop","Drop is a basic, activated ability with the following text: Once on your turn, if this unit hasn't 
+interacted with the realm, it may drop any number of artifacts it's carrying. Each unit can use its 
+Drop ability once per turn. Since Drop is an activated ability, you can only use it during the main 
+phase on your turn while nothing is on the storyline. For example, you can't use the Drop ability 
+while in the middle of the Move and Attack ability. If the unit has the ability to carry other units 
+(e.g. [[War Horse]]), then its Drop basic ability is modified from 'artifacts' to 'artifacts and/or 
+units.' See the 'Pick Up' and 'Interact' codex entries for more details.",""
+"Earth Site","An earth site is a site that provides at least one earth (E) affinity. If the site provides other 
+types of affinity as well, it's still an earth site as long as it provides at least one earth 
+affinity. In particular, note that a site could be a water site (because it provides water affinity) 
+AND an earth site (because it provides earth affinity). [[Aqueduct]] is an example of a water site 
+and earth site. Earth site and land site are NOT synonyms.",""
+"Element","Sorcery: Contested Realm is built around the four classical elements: Air, Earth, Fire, and Water. 
+To cast spells, you'll generally need to have elemental affinity. A spell is an air spell if it 
+requires one or more air threshold, e.g. [[Apprentice Wizard]], or has an air frame, e.g. [[Castle 
+Servants]]. Earth, fire, and water spells are determined in the same manner. If a spell requires 
+multiple different elemental thresholds, e.g. [[Purple Knight]], it is each of those elements. 
+Knowing the element of a spell is relevant for cards like [[Lava Salamander]], which can only cast 
+fire spells and takes no damage from fire spells. A site is an air site if it provides one or more 
+air affinity. Earth, fire, and water sites are determined in the same manner. If a site provides 
+multiple different elemental affinities, e.g. [[Ruins]], it is each of those elements. Knowing the 
+element of a site is relevant for cards like [[Avatar of Earth]], which specifically looks for earth 
+elemental affinity on sites.",""
+"","","Air:  Air is the element of knowledge and ))power((, dabbling in forces beyond mortal ))control(( to 
+acquire the magical means to respond to any battlefield situation. An attunement with air grants you 
+both mobility and tactical options thanks to its ability to teleport units around the realm and to 
+increase its available spells."
+"","","Earth:  Earth is the element of enduring strength, defined by its focus on fielding and enhancing 
+martial forces throughout the realm. An attunement with earth grants you the ability to affect your 
+atlas and minions that can dominate the battle through teamwork and sheer ))fighting(( power."
+"","","Fire:  Fire is the element of desire and destruction, willing to do whatever it takes to secure 
+victory in the realm. An attunement with fire grants you an array of explosive spells and abilities 
+that can create bursts of speed or burn friend and foe alike in great gouts of flame."
+"","","Water:  Water is the element of charm and trickery, ready to adapt and disrupt the strategies of the 
+enemy as it manipulates all. An attunement with water grants you a powerful homefield advantage that 
+will slowly engulf the realm and the ability to position the enemy right where you want them."
+"Elemental Threshold and Affinity","Elemental threshold, often shortened to simply 'threshold,' describes how much elemental affinity is 
+needed to cast most spells or use some abilities. Elemental affinity is most often provided by 
+sites, but can come from other sources as well. For example, [[Arid Desert]] provides one fire 
+affinity (F), denoted by the red triangle near the bottom right of the card. Similarly, [[Blacksmith 
+Family]] is a minion that provides fire affinity. There are four elemental thresholds: Air (A), e.g. 
+[[Castle Servants]] Earth (E), e.g. [[Common Cottagers]] Fire (F), e.g. [[Blacksmith Family]] Water 
+(W), e.g. [[Fisherman's Family]] Unlike mana, you don't spend your affinity. It is merely a 
+requirement you must meet to cast spells and use ability. For example, to cast [[Ancient Dragon]] 
+with its three fire threshold (F)(F)(F), you must have three or more fire affinity. Some spells, 
+often artifacts, have no threshold requirements to cast.",""
+"End Phase","The end phase is the last phase during your turn. Trigger abilities that happen at the end of the 
+turn. Players remove all damage from their minions in the realm. Remember that Avatars do not 
+automatically heal in the same way as damage is removed from minions; however, you can heal using 
+spells and other card effects. Effects that last for your turn now end. Your turn is now over.",""
+"Enemy","An enemy is a unit that an opponent controls, including their Avatar. Enemies are always units, 
+unless otherwise specified by card text. For example, [[Fade]] uses 'enemy site,' which means 'a 
+site an opponent controls.'",""
+"Enter","A unit 'enters' a location or site when it is summoned there, or when it moves there from somewhere 
+else. 'Somewhere else' means 'a different location' for entering locations, and it means 'a 
+different site' for entering sites. The method of movement doesn't matter; it can be any type of 
+movement, including the Move and Attack basic ability, effects that cause a unit to 'take a step,' 
+teleportation, or other forced movement. The relevant questions are: Was it summoned there, OR Did 
+it move there from somewhere else? If either of those are true, then the unit 'entered' that 
+location or site. Further notes: If a site is placed under an existing unit, the unit did not enter 
+the site. The unit didn't move, and it wasn't just summoned, so it didn't enter. This can happen if 
+Rubble was replaced by a site, or it was a voidwalk minion in the void and a site was played there. 
+If a non-minion occupies a location or site and then becomes a minion without moving (e.g. 
+[[Enchantress]]), the minion did not enter. The minion didn't move and wasn't just summoned. If a 
+minion moves between levels of a site (e.g. surface to subsurface, or subsurface to surface), it 
+does not enter the site, since it was already occupying the site. (It does enter the specific 
+location of surface or subsurface.) For oversized units, they only enter a location or site if they 
+didn't previously occupy it. For example:  The [[Mountain Giant]] occupies the four left squares, 
+and then takes a step to the east. It enters the two sites in the right column, but it does not 
+enter the two sites in the middle column, since it already occupied those sites before the move. See 
+the '((Oversized Units))' codex entry for more details.",""
+"Errata","Errata means to change a printed card after publication, such that the official rules text on the 
+card differs from what's printed on it. Use the errata'd text instead of the printed text. For 
+example, [[Truesight Crossbow]] needed errata. As printed, the text 'can target Stealth units' 
+doesn't actually solve the primary issue of projectiles hitting units with Stealth, since 
+projectiles don't target! Therefore, the printed text is a major thematic miss and wouldn't allow 
+the bearer to hit Stealth units with ranged strikes! The Erik's Curiosa team felt like it was worth 
+an errata to make that card function as intended. For obvious reasons, as few cards as possible are 
+errata'd.",""
+"Fight","When units fight, they strike each other. Apply the following sequence to resolve a fight: First 
+strikes resolve (e.g. Lance, [[Albespine Pikemen]]). Resolve deathrites and 'kill' effects (and 
+'successfully attack' effects if this fight was part of an attack). Place dead minions in 
+cemeteries. Normal strikes happen. Resolve deathrites and 'kill' effects (and 'successfully attack' 
+effects if this fight was part of an attack). Place dead minions in cemeteries. Whenever a unit is 
+striking against multiple other units (for example, if there are multiple defenders), the controller 
+decides how the strike damage is distributed. There is still only a single strike from that unit 
+(though some of the struck units could be struck for zero damage).",""
+"Fire Site","A fire site is a site that provides at least one fire (F) affinity. If the site provides other types 
+of affinity as well, it's still a fire site as long as it provides at least one fire affinity.",""
+"Fireball","This refers to the actual [[Fireball]] spell! This is relevant for the [[Avatar of Fire]].",""
+"Flooded","Keyword ability. A flooded site has a minimum of one water affinity (W). Therefore, it's a water 
+site, though it still provides other elemental affinities, if any. For example, if a [[Humble 
+Village]] was flooded, it would provide earth (E) affinity and water (W) affinity. It would be a 
+water site and an earth site. If an effect 'floods' a site (e.g. [[Geyser]]), that site gains the 
+Flooded ability for the stated duration. Since Flooded is an ability, effects that remove abilities 
+from sites will also remove Flooded.",""
+"Fly","If you fly a unit somewhere, treat the unit as if it had Airborne while crossing borders, e.g. 
+[[Avatar of Air]]. Fly is synonymous with 'throw through the air,' e.g. [[Siege Giant]]. For 
+example, a unit being moved by ))Avatar(( of Air's ability will be able to cross the border of a 
+[[Perilous Bridge]] or [[Great Wall]], and will not take damage from a [[Wall of Brambles]], even if 
+it's disabled, silenced, or [[Sky Baron]] is in the realm. Note that this effect is specific to 
+crossing borders (and not entering sites), and therefore [[Bottomless Pit]] will still trigger for 
+non-Airborne minions moved via ))Avatar(( of Air's ability. If you fly a site somewhere, e.g. 
+[[Cloud City]], treat all units occupying the site as if they had Airborne while the site moves.",""
+"Foot Soldier Token","A Foot Soldier is a token minion with 1 power. A Foot Soldier is an Ordinary Mortal and an ((earth)) 
+minion. For example, [[Common Village]].",""
+"Forced Movement","Forced movement is any movement that does not require the unit to take their own step. For example, 
+[[Windblast]] is forced movement, since the moved unit doesn't step. A unit being carried by another 
+unit, e.g. [[War Horse]], is also forced movement for the carried unit. Effects that use the words 
+drag, pull, or push are also forced movement, e.g. [[Unland Eel]] or [[Grapple Shot]]. Teleportation 
+is forced movement. Effects that require a unit to take a step are not forced movement. For example, 
+[[Led Astray]] is not forced movement, because the unit is taking their own step (and an Immobile 
+unit wouldn't move at all). Confusingly, some lure effects on older cards use a phrase like 'force 
+an enemy to take a step towards,' e.g. [[Coy Nixie]]. This is still not forced movement, since the 
+unit is taking their own step, and an Immobile unit wouldn't move; 'force' in these cases is being 
+used in the normal English usage. The guiding principle for forced movement is whether or not the 
+unit is taking their own step. If they aren't taking their own step, then it's forced movement!",""
+"Forward","'Forward' is the cardinal direction away from your starting edge. This is relevant for a few cards 
+like [[Dalcean Phalanx]]. 'Forward' is player-relative. If the control of such a card changes, the 
+direction it perceives as 'forward' will also change.",""
+"Frog Token","A Frog is a token minion with zero power. A Frog is an Ordinary Beast with 'Submerge.' A Frog is a 
+((water)) minion. For example, [[Pollimorph]].",""
+"Genesis","Keyword Ability. Genesis is keyword for a triggered ability with the text: When this card enters the 
+realm, ... Do whatever is stated.",""
+"Hand","Your hand contains spells and sites. There is no limit to the number of cards you may have in your 
+hand, and their order is irrelevant. You may look at cards in your hand at any time. Your opponent 
+is allowed to know how many cards of each type (spell or site) you have in your hand at any time. 
+For clarity of game state, if you are using card sleeves, you should use different sleeves for sites 
+and spells. Your hand is one of the zones in the game.",""
+"Healing","Healing an avatar is synonymous with gaining life. Healing a minion removes damage from that minion. 
+When 'you heal X,' you increase your life by that amount, up to your avatar's maximum life. For 
+example, [[Divine Healing]] increases your current life by 7 (to a maximum of 20 or whatever your 
+avatar's maximum life is). If you are at death's door, your life total can't change, so any healing 
+effect will fail. Setting life doesn't count as healing (e.g. [[Twist of Fate]]). But, if you're at 
+death's door, your life total can't change and will remain at 0.",""
+"Here","'Here' refers to the location(s) that the card occupies. For most cards, such as minions and 
+artifacts, that means one location. For example, [[Fey Changeling]]. For auras, that usually means 4 
+locations, most commonly the surface of 4 sites. For example, [[A Midsummer Night's Dream]]. Another 
+example is the use of 'here' on [[Evil Presence]], which includes the site surfaces but could also 
+include void squares as well, if the aura occupied a void square. When a site itself uses the word 
+'here,' that includes both the site's surface location and it's subsurface location. For example, 
+[[Dome of Osiros]] protects minions in its subsurface as well as surface. 'Here' is analogous to 
+'there.'",""
+"Immobile","Keyword ability. An Immobile unit cannot take steps. For example, if you use the Move and Attack 
+basic ability, an Immobile unit can't take steps, though it can still attack and defend at that 
+location. An Immobile unit couldn't take any steps with [[Leap Attack]] but it could still strike. 
+Forced movement effects apply normally to Immobile units, so they can [[Blink]] or [[Grapple Shot]] 
+like any other unit.",""
+"Interact","A unit 'interacts' with the realm if it does any of the following things: Strikes Casts a spell 
+Activates a special ability Note that only ((activated abilities)) can be activated. Triggered 
+abilities and passive abilities aren't activated. Note that a '((special ability))' is different 
+from a '((basic ability))'. Deal damage (even if the damage is prevented) Note that 'deal damage' is 
+mostly but not fully covered by the first three bullet points. 'Activates a special ability' doesn't 
+include triggered abilities, since only activated abilities can be activated. There are some 
+triggered abilities that could deal damage, e.g. [[Infernal Legion]] or [[Colicky Dragonettes]], 
+which are intentionally included in 'interacting.'",""
+"Intercept","Intercept is a basic ability that allows you to fight your opponent's units who 'Move and Attack' 
+without actually attacking. A unit must be untapped to intercept, and it's one of two basic 
+abilities that you can use on your opponent's turn (the other is Defend). Intercept is a triggered 
+ability with the following text: When an enemy using its Move and Attack ability finishes its 
+movement and does not attack, any of your units there may tap to intercept and fight that enemy. 
+Units cannot move when they intercept; they must already be at the enemy's final location. The 
+timing for an attack and the timing for intercept are the same; if the enemy attacks, you may 
+defend. If the enemy doesn't attack, you may intercept. In summary, if both of the following are 
+true, you can intercept: The enemy used Move and Attack, AND They chose not attack. Units with 
+Stealth cannot be intercepted, and units with Airborne can only be intercepted by enemies with 
+Airborne or Ranged. If multiple allied units intercept the same enemy, they all fight that enemy 
+together. Only the enemy's final location is relevant for interception. See the examples below for 
+more details.",""
+"","","Intercept as a Deterrent:   I have an [[Apprentice Wizard]] on site D. You have an untapped [[Bosk 
+Troll]] on site C, and both [[Queen of Midland]] and [[Queen Guinevere]] on site B. I would love to 
+cast my [[Poison Nova]] to kill all your minions, but I need to get my Apprentice Wizard to site C 
+first. If I use the Move and Attack ability to move my Apprentice Wizard to site C and then attack, 
+your Bosk Troll will be able to defend. If I move to site C but don't attack, your Bosk Troll will 
+be able to intercept. Either way, my Apprentice Wizard would die before being able to cast the 
+Poison Nova on site C. In the end, I will probably not choose to move to site C, and instead do 
+something else. Intercept is a deterrent to certain basic movement, even if you don't actually use 
+the intercept ability during a game."
+"","","Intercept vs. Movement +X:   You have [[Rimland Nomads]] on site D. I have an untapped [[Bosk 
+Troll]] on site C. You tap your Nomads, using the Move and Attack ability. As the ability resolves, 
+you declare the following movement path: Surface site D -> Surface site C Surface site C -> Surface 
+site A Rimland Nomads have Movement +1, so you resolve that movement normally and they're now on the 
+surface of site A, having moved past the Bosk Troll without any problem. On the surface of site A, 
+they choose not to attack. (If they did attack, my Bosk Troll could defend, killing them.) Even 
+though your Rimland Nomads didn't attack, my Bosk Troll cannot intercept since it doesn't share the 
+final location with your Rimland Nomads."
+"","","The Final Location is Key:   You have a Foot Soldier token on site C. I have an untapped [[Bosk 
+Troll]] on site C as well. You tap your Foot Soldier, using the Move and Attack ability. As the 
+ability resolves, you declare the following movement path: Surface site C -> Surface site A You 
+resolve that movement normally and they're now on the surface of site A, having moved away from the 
+Bosk Troll without any problem. On the surface of site A, they choose not to attack. (If they did 
+attack, my Bosk Troll could defend, killing them.) Even though your Foot Soldier departed a location 
+shared with my Bosk Troll and then didn't attack, my Bosk Troll cannot intercept now since it 
+doesn't share the final location (surface of site A) with your Foot Soldier. Remember, the two 
+things that are relevant for intercept are: Did the enemy use the Move and Attack ability, AND Did 
+they not attack? At the moment they choose not to attack, that's the moment you can tap to 
+intercept, at that location."
+"","","Only 'Move and Attack' can Trigger Intercept:   You have an [[Apprentice Wizard]] on site D. I have 
+an untapped [[Bosk Troll]] on site C. You cast [[Blink]] to teleport your Wizard to site C. My Bosk 
+Troll cannot intercept since you didn't Move and Attack. I can only intercept if you use Move and 
+Attack, then don't attack."
+"","","Intercept Without Moving:  Units can technically tap to use their Move and Attack ability without 
+moving and without attacking since both are optional, perhaps anticipating [[Mesmerism]]. If the 
+unit does not attack, you may intercept! For example, you have untapped [[Amazon Warriors]] and I 
+have an [[Autumn Unicorn]] at the same location. If I tap my [[Autumn Unicorn]] to use its Move and 
+Attack basic ability, then decline to move and decline to attack, your Amazon Warriors may tap to 
+Intercept."
+"Its Location","If minion, artifact, aura, or avatar refers to 'its location,' that means the location that it 
+currently occupies. See the 'here' codex entry for more details.",""
+"Its Site","If minion, artifact, aura, or avatar refers to 'its site,' that means the site that it currently 
+occupies. See the 'here' codex entry for more details.",""
+"Keyword Ability","A keyword is a word or phrase that functions as shorthand for a longer piece of rules text. For 
+example, Burrowing is a keyword that includes multiple related rules and abilities (e.g. can move 
+between surface and underground locations, and can survive underground). Keywords are used to 
+communicate concepts that require more text than what will fit on a card. You can find these longer 
+explanations in the rulebook and the Codex. If a card gains multiple copies of a keyword ability, 
+usually there is no benefit. For example, a [[Plumed Pegasus]] with Airborne and [[Power of Flight]] 
+simply has Airborne. When the Power of Flight ends, the Pegasus will still have Airborne due to its 
+printed ability. Sometimes, multiple copies of a keyword do provide a benefit, such as multiple 
+Lance keywords, e.g. [[Thankless Squire]].",""
+"Kill","Kill simply means destroy; they are synonyms. See 'kill credit' for more details.",""
+"Kill Credit","Some effects care about who did the killing (e.g. [[Crown of the Victor]]). Only units can get 
+credit for a kill. Determine credit for a kill when a minion dies (i.e. marked for death), in 
+priority order (highest first): Did a unit just strike or deal damage with a special ability? Did a 
+unit just resolve a Magic spell they cast? Did a unit just activate or trigger an ability, including 
+abilities granted by artifacts? If any of the above are true, in priority order, then that unit is 
+the killer. If a unit is tapped to pay for an ability (e.g. [[Payload Trebuchet]]), they count as 
+'activating' the artifact's ability for purposes of kill credit. The killer must be a unit, but 
+multiple units can share credit for a kill, if they both share the same priority. For example, 
+[[Grapple Shot]] will only give credit to the ally who strikes, not the spellcaster, since priority 
+1 is higher. If two units defend against a single attack, both defenders could get credit for the 
+kill. Note that passive abilities and other ongoing effects are not included in kill credit. Only 
+activated and triggered abilities are included at priority 3.",""
+"Lance","Keyword Ability. A minion with the Lance keyword enters the realm carrying a Lance artifact token. A 
+Lance is an Ordinary, Weapon, artifact token with the text: Bearer's next strike deals +1 damage and 
+strikes first, then Lance breaks.  Further notes: There's only one 'first strike' window in a fight. 
+More than one Lance confers no extra speed benefit. If a unit has multiple Lances, they will each 
+add +1 damage, and all will break after the next strike. Using a Lance is not optional. If a unit is 
+carrying a Lance and strikes, the Lance will be used and break. Lances are normal artifacts that can 
+be picked up and dropped as usual. When they break, they are removed from the game, like all tokens. 
+Since the Lance keyword is an 'enters the realm' effect, even if the minion is immediately disabled 
+or silenced when entering the realm, they will still have their Lance with them!",""
+"Land Site","A land site is a site that provides zero water affinity. Though water sites are tied specifically to 
+the element of water, land sites can have any combination of non-water affinity, or no affinity at 
+all. For example, a site that provides both fire and air affinity is a land site. A site that 
+provides no affinity is also a land site. A land site is not specifically tied to the element of 
+earth. If a site provides water affinity and other types of affinity (e.g. earth), it's a water site 
+and not a land site. If a site gains water affinity, then it stops being a land site. 'Land site' 
+and 'water site' are mutually exclusive. A site cannot be both a water site and a land site; it will 
+always be one or the other.",""
+"Landbound","Keyword Ability. This minion is disabled while not occupying at least one land location. The 
+landbound ability persists even when disabled.",""
+"Lethal","Keyword Ability. Any damage a Lethal unit deals to a minion is enough to kill it. (Remember that 
+zero damage isn't damage at all, so it will need to do one or more damage.) For example, [[Pit 
+Vipers]] can kill [[Amazon Warriors]] with a single strike for 1 damage. If the Amazon Warriors had 
+their [[Shield Maidens]] nearby, then the Pit Vipers wouldn't actually kill the Amazon Warriors, 
+because they'd do zero damage, which isn't actually damage at all.",""
+"Life","Avatars have life. Life represents the amount of damage that your Avatar can endure before it is 
+placed on death's door. As your Avatar takes damage, its overall life decreases accordingly. An 
+avatar's maximum life is the value printed on their card (typically 20), and cannot exceed that 
+number. An avatar's minimum life is zero, and cannot go below that. When an avatar reaches zero 
+life, it is on Death's Door.",""
+"Location","The smallest area in Sorcery. A location is defined by its square AND region. For example, a square 
+with a void has a single location, that particular void location. At the beginning of the game, 
+there are 20 locations in the realm, all void. A square with a site has two locations: the surface 
+of the site and the subsurface of the site. Those are two different locations, even though they're 
+in the same square. If the entire 5x4 realm was filled with sites, then the realm would contain 40 
+locations (the surface and subsurface of each of the 20 sites).",""
+"Lose","Some effects will cause artifacts, minions, and sites to lose certain abilities, often keywords. 
+'Lose' really means 'lose, can't gain, and can't have.' These effects take precedence over competing 
+passive abilities. E.g. [[Sky Baron]] wins, even if I give [[Wings of Invention]] to my minion after 
+you summoned Sky Baron. It's relevant to these cards: [[Sisters of Silence]], [[Silence]], 
+[[Entangle Terrain]], [[Sky Baron]], [[Atlantean Fate]], [[Scent Hounds]], [[House of Ondaros]], 
+[[Master Tracker]], [[Magnetic Muzzle]], [[Smokestacks of Gnaak]], [[Watchtower]], [[Hunting 
+Party]], [[Sir Bors the Younger]], [[Pebbled Paths]] See the 'Can vs. Can't' codex entry for more 
+details.",""
+"Magic","Magics are transient spells that have an immediate impact but do not persist in the realm. [[Heat 
+Ray]] is an example of a magic. Magics have characteristics, specifically ((magic characteristics)), 
+and are one of the six card types in the game. The '((Casting Magics))' entry has details on how to 
+cast magic spells.",""
+"Main Phase","The main phase is where most of Sorcery's actions and events take place. During this phase, your 
+units can be ordered to do two types of actions. They can: Cast a spell from your hand if they are a 
+Spellcaster, or Activate one of their abilities You may have your units do these as many times as 
+you have resources to do so, and in any order you like. For example, you might have one minion use 
+their Move and Attack basic ability, then cast a spell with your Avatar, then have a minion use 
+their Pick Up basic ability, then have a different minion use their Move and Attack ability.",""
+"Mana","Mana can come from several sources, but sites are the most common. When a mana source enters the 
+realm on your turn, and during your start phase, they generate mana. You use this mana to cast 
+spells or activate abilities. At the end of your turn, any remaining mana is lost, whether or not 
+you used it that turn. You may not generate mana on your opponent's turn.",""
+"Mandatory Actions","One game rule causes a mandatory action: If your Avatar is in the void, you may and must use their 
+ability to play a site under them, ignoring normal site adjacency rules. Other effects may cause 
+mandatory actions (e.g. [[Mask of Mayhem]] or [[The Green Knight]]). For mandatory attacks, the 
+question of whether a unit 'can attack,' depends on their range of motion. You must resolve 
+mandatory actions during your main phase before doing anything else. If you have multiple mandatory 
+actions, do one of your choice, resolve it, and then continue doing mandatory actions one at a time 
+until they are all resolved. To properly apply mandatory actions, simply ask: At this moment in my 
+main phase, can I do the mandatory action? If yes, do it now! If no, do whatever you wish. If there 
+is a mandatory action that you can't legally take, you can proceed with your main phase as you wish. 
+If at any point during your main phase you become able to take a mandatory action, you must do so 
+immediately, before continuing. Example - Avatar in the Void with No Sites in Hand
+Your Avatar is in the void, so the game rules require you to play a site under your Avatar, ignoring 
+normal site adjacency rules. But, you don't have any sites in your hand, so you can't. Therefore, 
+you are free to continue your main phase as you wish. You are not required to draw a site at the 
+start of your turn, nor tap your Avatar to draw a site. But if at any point you have a site in hand 
+and an untapped Avatar in the void, you must play a site under you!  Example - Mandatory Attack Your 
+[[Bosk Troll]] is 2 squares away from [[The Green Knight]], The Green Knight is not within the Bosk 
+Troll's range of motion, and thus you are not required to attack The Green Knight. You take actions 
+in your main phase as you wish. Perhaps you cast a [[War Horse]] in the same square as the Bosk 
+Troll. Then, you have the [[War Horse]] use the Pick Up basic ability, carrying the Bosk Troll. 
+Then, you use the War Horse's Move and Attack basic ability, moving one square closer to The Green 
+Knight. After resolving the War Horse's ability and the storyline is empty, the Bosk Troll is now 
+able to attack The Green Knight. You must do so, in the middle of your main phase before doing 
+anything else. You were not required to carry the Bosk Troll closer to The Green Knight. But once 
+you chose to do that, the game noticed that The Green Knight was in the Bosk Troll's range of 
+motion, and thus you were required to make the Troll's attack.",""
+"Materials Needed to Play Sorcery","A deck, a way to track life, and a fun attitude! A playmat will also help, but it's not strictly 
+required! Your deck includes 1 avatar, a spellbook, and an atlas. Depending on the format 
+(constructed vs. draft/sealed), the minimum deck size varies, so explore those codex entries for 
+more details.",""
+"May and Can","If an effect uses the word 'may' or 'can,' it is optional, e.g. [[Aramos Mercenaries]] or [[Felbog 
+Frog Men]]. Exception: if the effect uses 'may only' or 'can only,' then it's actually a mandatory 
+restriction, e.g. [[Dalcean Phalanx]] or [[Morgana le Fay]].",""
+"Minion","Minions are your greatest allies, assisting you with myriad abilities in offense and defense. 
+[[Plumed Pegasus]] is an example of a minion. Minions have characteristics, specifically ((minion 
+characteristics)), and are one of the six card types in the game. The '((Casting Minions))' entry 
+has details on how to cast minion spells.",""
+"Move","'Move' means to go from one location in the realm to a different location in the realm. There are 
+many ways for units in Sorcery to move. The most common way for a unit to move is the Move and 
+Attack basic ability. Another way for a unit to move is a forced movement effect, including 
+teleportation. Notably, if a unit enters a location from a different zone, e.g. summoning a minion 
+from your hand, cemetery, or spellbook, that does not count as moving (though it is 'entering'). 
+Finally, note that if a unit tries to 'move' from its current location to that same location, it's 
+not actually moving at all.",""
+"Move and Attack","Move and Attack is a basic, activated ability with the following text: Tap -> This unit may take one 
+step. Then, it may attack.",""
+"","","Movement:  Normally the unit's movement path is one step between two adjacent surface locations, but 
+some abilities may modify this, including Movement +X, Moves Freely, Burrowing, Submerge, Airborne, 
+and Voidwalk (and effects like [[Felbog Frog Men]]). Steps resolve one at a time. Because some 
+abilities may change as your unit moves through the realm, you may declare seemingly-illegal 
+movement paths. That is, the legality of the movement path is only checked step by step, as each 
+individual step is about to happen. If the step is not legal at the moment you try to take it, you 
+do not take that step, and you continue resolving anything remaining. See the examples below for 
+further details. When you declare movement, the only restriction is that you may not repeat specific 
+steps. If your unit takes at least one step, it has moved; if it takes zero steps, it has not moved."
+"","","Declaring The Attack Target:  The Move and Attack ability does not use the word 'target,' so you do 
+not declare any targets in advance. As it resolves from the storyline, you declare your full 
+movement path, then resolve that movement. After completing all the movement (if any), you may 
+attack, declaring your attack target at that time. See the '((attack))' codex entry for further 
+details on the attack sequence."
+"","","Example - Declaring a Seemingly Illegal Movement Path:   [[Rimland Nomads]] are at A, in a 
+[[Silence]] aura on the leftmost 2x2 area. You use their Move and Attack basic ability and declare 
+the following movement path: Surface A -> Surface B Surface B -> Surface C Since the Nomads are in a 
+Silence aura, they do not currently have Movement +1 and therefore they wouldn't normally be able to 
+take two steps. Nonetheless, you can declare the path and see what happens. Once they step onto B, 
+they're out of the aura. The game tries to resolve the second step and notices that, yes, the Nomads 
+do have the capacity to take a second step, so they do, and end up at C."
+"Movement +X","Keyword Ability. A unit with Movement +X may move up to X additional steps when using the Move and 
+Attack or Defend basic abilities. For example, [[Rimland Nomads]] may take two steps instead of just 
+one. If a unit has multiple copies of the Movement +X ability, the numbers simply add together. For 
+example, [[Rimland Nomads]] with [[Mad Dash]] have Movement +2.",""
+"Moves Freely","A unit with Moves Freely spends no steps moving via the Move and Attack or Defend basic abilities, 
+as long as the starting and ending locations of the step satisfy the Moves Freely condition. Moves 
+Freely only applies to basic movement, which is movement from the Move and Attack basic ability and 
+the Defend basic ability. A unit can combine free steps with regular steps, up to its movement 
+limit. See the examples below for more details.",""
+"","","Examples of Moves Freely:  Example 1  w1, w2, and w3 are water sites. A and B are land sites. [[Sir 
+Pelleas]] starts underwater at w1. He can take 1 step normally with the Move and Attack ability, so 
+he declares the following movement path: w1 underwater -> w1 surface (0 steps, Moves Freely between 
+water locations) w1 surface -> w2 surface (still 0 steps) w2 surface -> A surface (1 step) Note that 
+[[Sir Pelleas]] cannot simply teleport to w3; Moves Freely requires the unit to declare a movement 
+path, and some of the steps in that path might be free.  Example 2 Same as above, but [[Sir 
+Pelleas]] starts on the surface of B. He can declare this path: B surface -> w1 surface (1 step) w1 
+surface -> w1 underwater (0 steps) w1 underwater -> w2 underwater (0 steps) w2 underwater -> w2 
+surface (0 steps) The last three steps are all free, because they are between two water locations, 
+per the Moves Freely ability of [[Sir Pelleas]]. Note that [[Sir Pelleas]] couldn't then continue 
+from w2 surface to A surface, because that's not a free step, and [[Sir Pelleas]] already used up 
+his 1 step for his Move and Attack basic ability."
+"Near","Near is a synonym for 'nearby.'",""
+"Nearby","Nearby refers to the current square and the eight squares that surround it (including diagonals). 
+For example, the middle square has 9 nearby squares - itself and eight others.  If a square is in 
+the corner of the realm, it will have fewer nearby squares. For example, the bottom right square has 
+only 4 nearby squares - itself and three others.  When referring to nearby sites, nearby voids, or 
+nearby squares the effect can cross the boundaries of regions. For example, [[Ultimate Horror]] can 
+be in the void and still summon to a nearby site, even though sites and voids are in different 
+regions. For all other references to nearby, such as nearby locations, nearby minions, nearby 
+artifact, etc., regional boundaries must be respected and cannot be crossed. For example, if 
+[[Belfry]] is on a site, it will not untap allies in a nearby void, because 'nearby ally' cannot 
+cross a regional boundary.",""
+"Non-Active Player","The non-active player is the player who is not currently taking their turn.",""
+"On the Ground","To move 'on the ground' means to start from the surface of a site and move to another site's 
+surface, excluding Airborne and teleport. This includes all types of sites, including water sites.",""
+"Ongoing Effect","Ongoing effects apply continuously during their duration. If they do not have a listed duration, 
+they apply indefinitely while the source is in the realm. For example, [[King of the Realm]]'s 
+passive ability is an ongoing effect that gives you control of all mortals. [[Gnome Hollows]]' 
+passive ability is an ongoing effect that prevents units with 3 or more power from entering. 
+[[Quagmire]]'s genesis ability creates an ongoing effect that causes units to be Immobile while they 
+occupy nearby sites until your next turn. Between each event on the storyline, apply all ongoing 
+effects. That is, the game is very regularly applying ongoing effects, both before and after each 
+event on the storyline. Most of the time, the application of ongoing effects is straightforward; 
+simply apply them. Complex interactions are described below.",""
+"","","Apply All Ongoing Effects Before Checking For Minions Dying:  If there are multiple ongoing effects, 
+the game will apply all of them before checking to see if any minions died. For example, you have a 
+[[Bosk Troll]] that has taken 1 damage this turn. Then, you move it to a location that is nearby 
+both [[Wicked Witch]] and your [[House Arn Bannerman]]. Both the Witch and the Bannerman generate 
+ongoing effects with their passive abilities. If the game applied the -2 power from the Witch first 
+and then immediately checked for minions dying, the Bosk Troll would die, even though it shouldn't 
+due to the House Arn Bannerman. Therefore, between each event on the storyline, the game applies all 
+ongoing effects before checking for minions dying."
+"","","Apply Ongoing Effects In Order:  If ongoing effects overlap or conflict, apply them in the order 
+listed here by layer: Copy effects, e.g. [[Mirror Realm]], [[Selfsame Simulacrum]] Disabling 
+effects, silencing effects, e.g. [[Root Spider]], [[Iron Shackles]], [[Silence]], [[Sisters of 
+Silence]] Control effects, e.g. [[King of the Realm]], [[Mesmerism]] Type changing effects, e.g. 
+[[Bower of Bliss]], [[Island Leviathan]] Ability adding and removing effects, and affinity changing 
+effects, e.g. [[Power of Flight]], [[Watchtower]], [[Tide Naiads]], [[Drought]] Power setting 
+effects, e.g. [[Shrink]] Power addition and subtraction effects, e.g. [[Overpower]], [[Wicked 
+Witch]] Power multiplication effects, e.g. [[Warp Spasm]] Within each layer, apply the effects based 
+on their timestamp, from oldest to newest. For ongoing effects generated by a passive ability (e.g. 
+[[King of the Realm]], [[Root Spider]]), their timestamp is when the card entered the realm. For 
+ongoing effects generated by an activated or triggered ability (e.g. [[Floodplain]], [[Bog]]), their 
+timestamp is when the ability was activated or triggered, not when the original source entered the 
+realm. An effect cannot remove itself once it's already being applied. For example, an animated 
+[[Silence]] aura will cause itself to lose its abilities in layer 2, but losing that ability will 
+not remove the silence effect, which was already being applied."
+"","","Example - Two Kings of the Realm:  If you play [[King of the Realm]] and then I play [[King of the 
+Realm]] afterward, the game applies both control effects in layer 3. Since your King is older, the 
+game starts with that effect. Your King gives you control of all mortals, including my King. Then, 
+when the second King's ability is being applied, he's already controlled by you due to the first 
+King's ability. Therefore, you control all mortals and the first King 'wins.'"
+"","","Example - Two Smokestacks of Gnaak:  If you play [[Smokestacks of Gnaak]] and then I play another 
+Smokestacks of Gnaak nearby, the game tries to apply both lose-ability effects in layer 5. Since 
+your Smokestacks are older, the game starts with that effect. Your Smokestacks causes my Smokestacks 
+to lose its ability. Then, when my Smokestacks ability would be applied, it already lost its ability 
+due to the first Smokestacks. Therefore, the first Smokestacks 'wins.'"
+"","","Example - Flood vs. Drought:  If you play [[Flood]] and then I play [[Drought]], the game tries to 
+apply both affinity changing effects in layer 5. Since you played Flood first, the game first gives 
+the affected sites a minimum of one water affinity (W). Then, when my Drought ability is applied, 
+the affected sites have no water affinity. Therefore, the Drought 'wins.' If Flood had been played 
+second, then the Flood effect would have been applied second, and thus would 'win.' Remember that if 
+an activated or triggered ability creates an ongoing effect, the effect applies based on when the 
+ability activated or triggered, not when the original source entered the realm. For example, 
+[[Floodplain]]'s activated ability would 'win' against a [[Drought]] even if the Floodplain entered 
+the realm before Drought, as long as the Floodplain's activated ability was used after Drought."
+"Oversized Units","Normally, units occupy only one location while in the realm. However, some oversized units occupy 
+multiple locations simultaneously due to their size, e.g. [[Mountain Giant]]. To represent the 
+minion's locations, place the card at the intersection of the sites. When you cast such a minion, 
+declare the area it will occupy when summoned, which must include at least one of your sites, per 
+normal minion casting rules. It may include some of your opponent's sites, but couldn't include the 
+void (without Voidwalk) nor [[Gnome Hollows]] (unless its power was low enough). A card's size is 
+determined as it enters the realm and becomes one of its characteristics. Therefore, even if a 
+[[Mountain Giant]] were disabled or in a [[Silence]] aura, it would continue to occupy a 2x2 area. 
+Exception: Some effects modify a unit's size after it's in the realm, e.g. [[Megamoeba]], and those 
+size-modifying effects could be removed later (e.g. disabled, [[Silence]]). Oversized units occupy 
+each of their locations. Therefore, if grid damage is dealt to multiple such locations, oversized 
+units take damage at each of those locations. For example, a [[Major Explosion]] centered on a 
+Mountain Giant would deal 7 + 5 + 5 + 3 = 20 damage to it. An oversized unit could simultaneously 
+occupy both land and water sites, as well as void squares if it had voidwalk. It cannot occupy the 
+surface and subsurface simultaneously, unless it has specific text allowing it, e.g. [[Megamoeba]]. 
+When an oversized unit moves, you choose a direction and all parts of it move that direction. If any 
+part of it can't move in the chosen direction, then it can't move in that direction at all. When 
+attacking, oversized units still target only a single enemy unit or site.",""
+"","","Teleporting Oversized Units:  When an oversized unit is teleported, it must be to a location or set 
+of locations that are all legal for that unit to occupy, and must not cross regional boundaries 
+unless allowed by card text. If the destination of the teleportation is a single location, the 
+controller of the teleportation effect chooses the position and orientation of the unit, as long as 
+the destination is included in the locations it ends up occupying. For example, [[Mountain Giant]] 
+is chosen as the ally for [[Blink]]:  As the 'nearby location,' I choose X. Now, the Mountain Giant 
+can end up in any of these positions:     Since the Mountain Giant is a square shape, its 
+orientation doesn't typically matter, but if it were carrying something, it could also be rotated as 
+desired from the teleportation."
+"","","Cards that Assume Units Occupy Only One Location:  There are many cards that assume units occupy 
+only one location or site. When resolving such effects for oversized units, simply pick a single 
+site or location they occupy. For example, [[Spin Attack]], [[Leap Attack]], and [[Recall]] all 
+assume the unit occupies only one location; to resolve them properly, you pick one location the 
+oversized unit occupies."
+"Ownership and Control","You are the owner of all the cards you bring to a game of Sorcery. The owner of a card does not 
+change during the game. A card is always returned to its owner's hand, shuffled into its owner's 
+deck, or sent to its owner's cemetery, regardless of who controls the card when it leaves the realm. 
+While the owner of a card is most often its controller, control of cards may change over the course 
+of a game, e.g. [[Mesmerism]]. When effects use phrases like 'your minions' or 'your sites,' it 
+refers to what you control, and not what you own. By default, cards are controlled by whoever puts 
+them into the realm. For artifacts that can be carried, the controller of the unit that's carrying 
+the artifact also controls the artifact itself. If such an artifact is not carried, it has no 
+controller. For tokens, see the '((Token))' codex entry for details.",""
+"Passive Ability","A passive ability creates an ongoing effect that is always active while the card is in the relevant 
+game zone. Typically this zone will be the realm, but some cards have abilities that specify what 
+they do while in your hand, while in your cemetery, etc. [[King of the Realm]] is an example of a 
+card with a passive ability. A passive ability is one of the few ways that an ongoing effect can be 
+created. See the '((ongoing effect))' codex entry for more details on how to handle multiple 
+overlapping or conflicting ongoing effects.",""
+"Path","A path for a card that's moving involves 1 or more steps, and each step has a starting and ending 
+location that's different. If your step is from a location to that same location, you didn't 
+actually move anywhere. If you occupied multiple locations while moving, all of those locations are 
+included in your path, including for oversized units. A path for projectiles is a bit different, and 
+can include just the starting location. See '((projectiles))' for more details.",""
+"Phrases that are Synonymous","Sorcery cards use natural, thematic language. Some words and phrases are synonymous and have the 
+same game effect: Fly. Throw through the air.  You heal. Gain life. Technically, if a minion heals, 
+its wounds can go away. If a minion gains life, there's no effect. But there are very few cards in 
+the game that ever heal minions, e.g. [[Font of Life]]. The vast majority of healing effects only 
+heal 'you,' the player.  Drag. Pull. Note that 'Lure' is different, since 'Lure' requires the unit 
+to take the step themselves.  Destroy. Kill. Die. Dispel (for auras). Note that 'Banish' is 
+different from those listed above.  Traverse. Move into. Enter. Leave. Note that 'leave' and 'enter' 
+obviously care about different locations, but the moment in time is identical. If you move and leave 
+one location, you have simultaneously entered a different location. There's no moment when you're in 
+limbo between locations.  Atop. Above.  Near. Nearby.  On the ground. Onto the ground.",""
+"Phrases with Subtle Meanings","Sorcery cards use natural, thematic language. Some words and phrases have different meanings 
+depending on their context. Read the card text carefully to determine which meaning is correct: 
+Bottom (deck) vs. Bottom (realm)  Surface (noun) vs. Surface (verb)  Aboveground (atop, includes 
+Airborne) vs. 'on the ground' (related to movement from surface to surface, excludes Airborne) These 
+two phrases mean different things!  Water (threshold) vs. Water site (opposite of land site) These 
+are very similar ideas, but not exactly the same.  Fight vs. Attack vs. Strike If a card uses the 
+word fight, it ignores normal attack targeting restrictions. E.g. [[Pudge Butcher]] could fight 
+[[Gyre Hippogriffs]] even though they have Airborne and Pudge Butcher does not, and [[Giant Shark]] 
+could fight a [[Band of Thieves]] that moves in the water even though the Thieves have Stealth. All 
+units involved in the fight strike each other simultaneously. If a card uses the word strike, it 
+also ignores normal attack targeting restrictions. E.g. [[Grapple Shot]] can allow a [[Bosk Troll]] 
+to strike Gyre Hippogriffs even though they have Airborne and the Troll does not. When a unit 
+strikes due to an effect like Grapple Shot (and not merely a fight), the opposing unit doesn't 
+strike back. If a card uses the word attack in the text, follow normal attack restrictions and card 
+effects, e.g. [[Crave Golem]], which has many FAQs to clarify the effect! Note that some cards use 
+'attack' in the title (e.g. [[Spin Attack]]) but use 'strike' in the card text; card text is what 
+matters in this case, not the title.  Take a step vs. X steps away vs. Push/Pull one step See the 
+'Step' codex entry for more details.  Stops is not the same as at rest. A unit stops when there is 
+no additional movement for that unit on the storyline. A unit must first move to then stop. At rest 
+means nothing is on the storyline. See the 'At Rest' codex entry for more details.  Draw vs. 'Put 
+into your hand' If you put a card directly into your hand, you have not drawn it.",""
+"Pick Up","Pick Up is a basic, activated ability with the following text: Once on your turn, this unit may pick 
+up any number of artifacts here. Each unit can use its Pick Up ability once per turn. Since Pick Up 
+is an activated ability, you can only use it during the main phase on your turn while nothing is on 
+the storyline. For example, you can't use the Pick Up ability while in the middle of the Move and 
+Attack ability. If the unit has the ability to carry units (e.g. [[War Horse]]), then its Pick Up 
+basic ability is modified from 'artifacts' to 'artifacts and/or units.' See the 'Drop' and 
+'((Carrying Units))' codex entries for more details.",""
+"Play","The word 'play' is synonymous with 'cast' for purposes of spells. For sites, the word 'play' means 
+selecting the site and placing it in the realm. Unlike spells that enter the storyline, playing 
+sites does not use the storyline. They go directly from your hand (or your atlas) to the realm.",""
+"Power","Units have power, which is a measure of their ability to inflict damage and sustain damage. Power is 
+most often shown as a single number in the top right of the card. For example, [[Bosk Troll]] has a 
+power of 3. When it strikes, it will inflict 3 damage. If it takes 3 or more damage in a turn, it 
+will die. Some minions have split power. Units may not have less than zero power. See the '((zero))' 
+codex entry for more details on units with zero power.",""
+"Prevention Effect","Prevention effects are very similar to replacement effects, but are specifically related to 
+preventing damage, and apply after replacement effects. For example, [[Tufted Turtle]] is a 
+prevention effect. When applying damage to a Tufted Turtle, first apply any replacement effects 
+(e.g. Lance, [[Critical Strike]]) and then apply the Turtle's prevention effect last. This rule 
+ensures that prevention effects function properly. E.g., you can't somehow apply a Lance after the 
+Turtle's prevention effect was applied, somehow dealing damage, which would be wrong. For more 
+details, see the 'Damage' codex entry and subsections.",""
+"Printed Ability","Printed abilities are the special abilities actually printed on the card. Any special abilities that 
+the card gains through other effects, while still special abilities, are not 'printed' abilities.",""
+"Projectile","A projectile's flight begins at the shooting unit's location and travels within the same region in a 
+cardinal direction. Its flight continues until it either reaches the edge of its region or it 
+reaches the first unit (enemy or ally) along its path, ignoring any allies at the projectile's 
+starting location. Different projectiles will have different effects, but often deal damage to the 
+impacted unit. If there are multiple valid units that could be hit, the projectile's controller 
+chooses which unit the projectile hits. Projectiles enter their starting location. Then, they have a 
+path that includes their starting location and any additional locations. Projectiles cannot hit 
+minions with Stealth, but some projectiles don't care about 'hitting' and instead just care about 
+their path (e.g. [[Snowball]]).",""
+"","","Piercing Projectile:  Piercing projectiles keep moving even after hitting a unit; they only stop 
+when they reach a region boundary. Piercing projectiles only hit one unit at each location, ignoring 
+allies at the starting location as usual. A piercing projectile cannot cross region boundaries, and 
+cannot hit a unit more than once (even if it's oversized)."
+"","","Projectiles That Cause Forced Movement:  Some projectiles cause forced movement after they hit, e.g. 
+[[Grapple Shot]] or [[Pudge Butcher]]. The forced movement path matches the projectile's path. (If 
+[[Magellan Globe]] or [[Ruler of Thul]] is in the realm, you can't shoot the projectile one way, and 
+then drag the other way around the realm.) See the '((Movement on the Storyline))' entry for more 
+details."
+"Random","Random effects are those that use the word 'random' or involve rolling a ))die((, e.g. [[Salmon of 
+Knowledge]]. To determine a random outcome, use any reasonable method, such as rolling a ))die((, 
+assigning equal probability to each possible outcome. For example, if there are three units at the 
+location you target with [[Lightning Bolt]], you could assign 1-2 to the first unit, 3-4 to the 
+second unit, and 5-6 to the third unit, then roll a six-sided ))die((.",""
+"Range of Motion","A unit's range of motion is every location it could reach if it used the Move and Attack basic 
+ability, ignoring all triggered abilities. If a unit can't use the Move and Attack basic ability 
+(e.g. Disabled), then it has no range of motion. When determining which locations the unit can reach 
+(and thus Defend there, or be forced to attack there via [[The Green Knight]], for example), the 
+game looks ahead, considering all ongoing effects (including passive abilities) and ignoring all 
+triggered abilities. Below are some examples to help illuminate these rules. Example 1  An 
+[[Apprentice Wizard]] is in square A and the attack is happening in square E. The game foresees that 
+the Apprentice Wizard can't reach square E and thus he can't tap to Defend. Example 2
+Same as Example 1, but [[Magellan Globe]] is in the realm or [[Waypoint Portal]] is in effect. Now, 
+the game notices the ongoing effect and allows the Defend ability. Example 3
+The attack's location is [[Gnome Hollows]] and a [[Bosk Troll]] is at an adjacent site. The game 
+foresee that the Bosk Troll won't be able to move into the Gnome Hollows because that's a passive 
+effect, and thus the Troll can't tap to Defend. Example 4
+The attack's location is [[Bottomless Pit]] and the Bosk Troll is adjacent. The game will allow the 
+Defend ability, because the Troll can actually move there. Of course, the Bosk Troll will die upon 
+arrival due to Bottomless Pit, but the Defend ability would be allowed. Example 5  The attack is 
+happening at A. I have [[Rimland Nomads]] at N. There is a [[Giant Shark]] at S, which is a water 
+site. As soon as the Rimland Nomads move toward A to Defend, the Shark will fight them at S via its 
+mandatory triggered ability. There is no way that the Nomads could actually reach A in two steps. 
+Nonetheless, the game will allow the Rimland Nomads to use the Defend ability because when the game 
+looks ahead to see which locations the Nomads can reach, the game ignores all triggered abilities. 
+Example 6
+Same as Example 5, but instead of a Shark at S, it's a [[Bog]], having targeted itself. In this 
+case, the game will not allow the Nomads to use the Defend ability, because the game considers all 
+ongoing effects (including the Bog) and foresees that the Nomads can't reach the attack's location. 
+The difference is that Giant Shark is a triggered ability (which is ignored during lookahead) and 
+Bog is an ongoing ability (which is considered during lookahead). Lookahead Summary
+In summary, if the player can demonstrate a movement path that would reach the attack's location, 
+ignoring all triggered abilities, then the Defend ability is allowed. Explanation
+If you're reading this deeply into the Codex, you might be wondering why the game ignores triggered 
+abilities for the lookahead. One reason is that there are some cases where the lookahead for 
+triggered abilities yields an unknown outcome. For example, in Example 5, instead of Nomads, if it 
+were a [[Phantom Steed]] with a [[Poisonous Dagger]] carrying [[Amazon Warriors]], can the Phantom 
+Steed reach A or not? It depends if the Shark chooses to fight the Warriors first or the Steed 
+first. The second reason is that this approach allows the lookahead for mandatory actions like 'must 
+attack' (e.g. [[Mask of Mayhem]]) to use the same rules, since players' intuition in those cases is 
+to force an attack even into a Shark or [[Mariner's Curse]]. Therefore, we consistently ignore 
+triggered abilities when considering a unit's range of motion.",""
+"Ranged, Ranged X, and +X Range","Keyword Ability. Ranged is a keyword that grants a unit the following activated ability: Tap â Shoot 
+a projectile that stops after 1 step. Strike the hit unit. If a unit has Ranged X, e.g. Ranged 3 on 
+[[Fail-not Bow]], then replace '1 step' with 'X steps.' Multiple copies of the Ranged ability do not 
+provide additional range, but if an effect explicitly uses +X Range, e.g. [[Vantage Hills]], then 
+the number of steps the projectile can travel increases accordingly. The ranged projectile follows 
+normal projectile rules. If the projectile hits a unit, the ranged shooter strikes the hit unit. 
+This follows normal strike rules, even though the shooter and the struck unit might be in different 
+locations, e.g. a Lance will inflict +1 damage and break. Note that the ranged ability shoots a 
+projectile that may hit a unit; it will not hit sites, and thus cannot damage sites in that way (use 
+the Move and Attack ability instead).",""
+"Rarity","There are four levels of rarity in Sorcery, described below. Note that Avatars do not have a rarity 
+listed on their typeline and thus don't have any rarity during gameplay, but you still only have one 
+Avatar!",""
+"","","Ordinary:  The lowest level of rarity. You may include up to 4 copies of an ordinary card (by name) 
+in your deck."
+"","","Exceptional:  The second lowest level of rarity. You may include up to 3 copies of an exceptional 
+card (by name) in your deck."
+"","","Elite:  The second highest level of rarity. You may include up to 2 copies of an elite card (by 
+name) in your deck."
+"","","Unique:  The highest level of rarity. You may include only 1 ))copy(( of a unique card (by name) in 
+your deck."
+"","","Curios:  We don't talk about curios!"
+"Realm","The realm is all the squares in the game and everything in those squares. Typically the realm is a 
+5x4 grid of squares.",""
+"Region","There are exactly four regions in Sorcery: Surface Underwater Underground Void Even if a group of 
+surface locations is separated by the void from another group of surface locations, there is still 
+only a single surface region. Every surface location is part of the surface region. Every 
+underground location is part of the underground region. Etc.",""
+"Replacement Effect","Replacement effects replace one event with another. These types of effects often use the word 
+'instead' and 'would,' with phrases like 'would die,' 'would take damage,' 'would successfully 
+attack,' or 'would untap.' For example, [[Gilded Aegis]] is a replacement effect for a minion dying. 
+It's constantly looking for the moment that minion is about to die, then it replaces that event (the 
+minion dying) with a different event (healing the minion and banishing the Gilded Aegis). In such a 
+situation, the minion never actually died, and the game was actually looking ahead just slightly to 
+see it, then trigger and resolve the replacement effect. Note that replacement effects do not use 
+the storyline; they immediately resolve as soon as they are triggered. See the 'Damage' codex entry 
+and subsections for more details on damage-specific replacement effects.",""
+"Royalty","Royalty is any card with King, Queen (or Queene), Prince, or Princess in its name. For example, 
+[[Crown Prince]] and [[The Faerie Queene]] are royalty.",""
+"Rubble","Rubble is a Ordinary site token with the ability 'Provides no mana.' It also has no affinity and is 
+controlled by no one. When a site is destroyed, it leaves behind a Rubble token. When a site would 
+enter the realm, it may replace a Rubble as if the Rubble were a void, following all other normal 
+site placement rules. In all other ways, Rubble is treated the same as any other site. For example, 
+because it has no water affinity, it is a land site.",""
+"Sacrifice","You can only sacrifice cards you control and that are in the realm. If you are sacrificing as part 
+of paying a cost for an effect, the sacrificed card doesn't go to the cemetery until the effect is 
+resolved. For example, [[Sinkhole]]. If you try to sacrifice a card and it doesn't actually die 
+(e.g. [[Lady Iseult]], [[Gilded Aegis]]) then you didn't actually sacrifice it, and thus you didn't 
+pay whatever cost you were trying to pay.",""
+"Search","Searching a zone (e.g. [[Adept Illusionist]]) allows you to look at the cards in those zones and 
+potentially find something. If you search a public zone, then you must find what you're searching 
+for, if possible. If you search a private zone, then you may choose to fail to find what you're 
+searching for, even if it exists in that zone.",""
+"Setup","Follow these steps to set up the game: Clearing some space in the middle of the table for the realm. 
+Each player places their Avatar on the square in the middle of their bottom row. Players shuffle and 
+place their atlas and spellbook decks somewhere close by, leaving some space for their cemeteries. 
+Players randomly decide who goes first. Each player draws three cards from their atlas and three 
+cards from their spellbook. The first player may mulligan up to three cards from their hand, placing 
+them on the bottom of their respective decks in any order. Then, they redraw the same number of 
+cards from each deck. The second player may mulligan in the same way. Some tournament rules may 
+modify the setup procedure.",""
+"Silenced","A silenced card loses all its special abilities. It retains its characteristics and its basic 
+abilities. See the '((lose))' codex entry to understand what that word means in a Sorcery context.",""
+"Site","A site is a locus of energy within the realm that provides you with mana to cast spells. Sites are 
+usually played by activating your Avatar's ability, though they may enter the realm in other ways. 
+You and your opponent may attack each other's sites to cause life loss, so make sure to place your 
+sites carefully! [[MaelstrÃ¶m]] is an example of a site. When a site is destroyed, put it in its 
+owner's cemetery, leaving behind a Rubble token. There is no limit to the number of cards that may 
+occupy the same site. Sites have characteristics, specifically ((site characteristics)), and are one 
+of the six card types in the game. To play a site, you will typically use your avatar's ability, 
+though some other effects allow you to play sites in other ways, e.g. [[Frontier Settlers]]. If an 
+effect instructs you to 'play a site' (e.g. [[Sorcerer]]), by default you must play it adjacent to 
+one of your existing sites, or as close as possible to your avatar if you don't have any sites. If 
+an effect instructs you to play a site with some positional information (e.g. [[Pathfinder]]), then 
+card text takes precedence and you may ignore the 'adjacent to your existing sites' requirement. 
+When cards refer to 'adjacent site' or 'nearby site,' see ((adjacent)) and ((nearby)) for clarity on 
+how to resolve it.",""
+"Span of Land","A span of land is a contiguous group of adjacent land sites, regardless of who controls those sites. 
+If a card refers to 'its span of land' or 'this span of land,' it means the span of land occupied by 
+that card. If that card doesn't currently occupy a span of land, then it doesn't have a span of 
+land. To choose a span of land (e.g. [[Minecart Madness]]), choose one land site. Every land site 
+(regardless of controller) that's connected to the chosen site via adjacent land sites is in that 
+span of land. If a site becomes disconnected from the chosen land site (e.g. [[Earthquake]] in the 
+middle of the turn), the disconnected site is no longer in the span of land. If the chosen site is 
+no longer a land site (e.g. [[Flood]] in the middle of the turn), then the 'chosen span of land' no 
+longer exists.",""
+"Special Ability","Anything printed in the text box of a card is considered a special ability, as well as any other 
+abilities it gains via other effects, e.g. [[Charge!]]. Special abilities have four categories, 
+described in their own codex entries: Keyword ability Passive ability Activated ability Triggered 
+ability",""
+"Spell","Spells represent all of your prepared power to contest the realm. These include minions to help you 
+defend your sites and attack the enemy, artifacts to tip the balance of power in your favor, magics 
+to overpower your foes, and auras to impose your will on areas of the realm. Magics are a type of 
+spell, but minions, artifacts, and auras are all spells as well! Every card in your spellbook is a 
+spell! See casting spells for more details.",""
+"Spellbook","Your spellbook is your deck of spells and is one of the zones in the game. Only spells can be placed 
+or shuffled into your spellbook. If an effect would cause an atlas card to be shuffled into a 
+spellbook, that effect is ignored. Constructed Format
+Your spellbook must contain 50 or more spells and respect rarity limits. Limited Formats (Draft or 
+Sealed)
+Your spellbook must contain 24 or more spells, ignoring rarity restrictions.",""
+"Spellcaster","Keyword Ability. A card with the Spellcaster keyword may cast spells. Avatars are automatically 
+spellcasters. Some spellcasters may only cast spells that match a specific element. For example, 
+[[Lava Salamander]] is a Fire Spellcaster, and thus may only cast spells that require Fire threshold 
+(F).",""
+"Split Power","Some units have split power, with a separate number for attack power and defense power. The first 
+number is attack power and the second number is defense power. For example, [[White Knight]] has 3 
+attack power and 5 defense power. Attack power is how much damage the unit will inflict when it 
+strikes. For example, [[White Knight]] will deal 3 damage when it strikes. Defense power is how much 
+damage the unit can take in a turn before it dies. For example, [[White Knight]] must take 5 or more 
+damage in a turn to be killed. If an effect needs to know the 'power' of a unit with split power, 
+e.g. [[Gnome Hollows]] or [[Chaos Twister]], take the average of the two numbers and round down, if 
+needed. For example, a [[Brother Knight]] could enter Gnome Hollows and would deal 2 damage via 
+Chaos Twister.",""
+"Square","One grid square in the realm. The default size of the realm is a 5 x 4 grid of squares. When 
+referring to squares, an effect can cross the boundaries of regions. The physical dimensions of a 
+grid square can sometimes matter, e.g. [[Chaos Twister]]. Follow the golden rule and tournament 
+rules, but reasonable sizes are between 4.5' and 5'.",""
+"Start Phase","The start phase is the first phase you complete during your turn. Follow these steps in order: All 
+abilities that last 'Until next turn' now end. All of your cards untap. All of your sites (and other 
+cards) provide their mana for this turn. Trigger and resolve abilities that happen at the start of 
+the turn. Draw a card from either your spellbook or atlas. On the first player's first turn of the 
+game, they do not draw a card.",""
+"Stealth","Keyword Ability. Minions with Stealth cannot be targeted by spells or abilities from your opponents 
+(including attacks), their attacks cannot be defended, they cannot be intercepted, and projectiles 
+cannot hit them. Stealth is tracked with a stealth token. Stealth is lost after the minion interacts 
+with the realm. Non-minions cannot have Stealth. If a minion with Stealth becomes a non-minion, 
+remove the Stealth token and they lose Stealth.",""
+"","","When exactly is 'after'?:  Stealth is lost 'after' interacting with the realm, so here is a precise 
+explanation of when 'after' occurs for the ways Stealth could be lost. Important note: If a minion 
+loses Stealth for multiple reasons (e.g. activated ability that causes damage and does other 
+things), the minion loses Stealth after the first reason. Activate a special ability: Resolve the 
+entire ability, including any Deathrites. Once the Storyline is empty, Stealth is lost. Deal Damage: 
+Resolve any effects concurrent with dealing damage (e.g. [[Daperyll Vampire]] gaining life based on 
+a strike). Stealth will be lost before Deathrites resolve. Note: even if the damage is prevented 
+(e.g. [[Shield Maidens]]), Stealth will still be lost. Strike: Resolve any effects concurrent with 
+dealing damage (e.g. [[Daperyll Vampire]] gaining life based on a strike, or the controlling avatar 
+losing life if a site was struck). Stealth will be lost before Deathrites resolve. Note: even if the 
+strike is for 0 damage (e.g. [[Grandmaster Wizard]]), Stealth will still be lost. Cast a spell: 
+Resolve the entire spell, including any Deathrites. Once the Storyline is empty, Stealth is lost."
+"Step","Step has two meanings in Sorcery! A step is the smallest measure of distance in Sorcery, equal to 
+the distance between two adjacent locations in the same region, e.g. 'up to 2 steps away' on cards 
+like [[Dispel]]. A step is also the smallest distance a unit can travel when moving, e.g. 'take a 
+step' on cards like [[Leap Attack]]. If an effect uses 'up to X steps away,' use the first 
+definition. Movement abilities do not apply because you're not moving anywhere, you're checking 
+distance. Simply count 1 adjacent square per step, without crossing region boundaries. Examples 
+include [[Payload Trebuchet]] and [[Sleep]]. If an effect uses 'push/pull/drag one step,' also use 
+the first definition, because the unit is not moving of their own volition. This is forced movement. 
+Simply count 1 adjacent square per step, without crossing region boundaries. Examples include 
+[[Whirlwind]] and [[Wind Sylph]]. If an effect uses 'take a step' or 'move one step,' the unit is 
+moving itself and may use abilities like Airborne, Voidwalk, Burrow, and Submerge, crossing region 
+boundaries. Use the second definition. An Immobile unit could not 'take a step' at all. Examples 
+include [[Guile Sirens]], which could make a nearby Airborne enemy take a diagonal step toward them, 
+and [[Leap Attack]], which could allow a Burrowed minion to unburrow to the surface and strike all 
+the units there. Note that the Moves Freely ability only applies during the 'Move and Attack' and 
+'Defend' basic abilities.",""
+"Stops","After a unit moves, it 'stops' when there is no additional movement for that unit on the storyline. 
+A unit must first move to then stop. Projectiles are similar; if they do not enter a new location, 
+the projectile hasn't moved at all and thus cannot stop. For example, a [[Snowball]] that doesn't 
+enter any new locations and doesn't move will not deal any damage. Note that 'stops' is not the same 
+as at rest. As a complicated example, consider casting [[Blink]] with an [[Orb of Ba'al Berith]] 
+nearby. Both Blink spells will be on the storyline. After the first Blink resolves, whatever unit 
+just moved will 'stop,' since there's no other movement for that unit on the storyline immediately 
+after the first Blink resolves; the ally for the second Blink hasn't been chosen yet. If the same 
+unit is chosen for the second Blink, it will stop a second time (assuming it changes locations after 
+each Blink to actually result in movement).",""
+"Storyline","When the story being told during a game of Sorcery starts to get complicated, particularly when 
+multiple abilities trigger at the same time, use the storyline to resolve them.",""
+"","","Most Effects Use The Storyline:  A storyline begins each time a spell is cast, or an ability is 
+activated or triggered. For example, when you cast the [[Plumed Pegasus]] spell, the spell goes onto 
+the storyline, and then it resolves from the storyline. The same is true for abilities. For example, 
+when you tap a unit to use the 'Move and Attack' basic ability, the ability itself goes onto the 
+storyline, then resolves from the storyline. Minion, aura, and artifact spells enter the realm after 
+they resolve, while magic spells go to the cemetery after they resolve. When casting spells, or 
+activating or triggering abilities, please note the 'target' rules."
+"","","Some Effects Do Not Use the Storyline:  Note that replacement effects, prevention effects, and 
+ongoing effects do not use the storyline. See those codex entries for further details."
+"","","Splitting Events on the Storyline:  As some events are resolving from the storyline, they split up 
+into smaller events. Note that events are only split up as they are resolving, and not when they are 
+added to the storyline. The following are the reasons to split up an event as it resolves from the 
+storyline: A card enters or leaves the realm A card moves in the realm Explicit card text, e.g. 'one 
+at a time' on [[Firebolts]] or [[Tactical Move]] For example, let's say the realm looks like this:  
+I have an allied at [[Azuridge Caravan]] at A. Site R is a [[Summer River]]. There's an enemy [[Lady 
+Iseult]] at I. I cast [[Grapple Shot]]. The storyline will look like this: Grapple Shot effect If 
+there were any cast triggers (e.g. [[Enchantress]], [[Fenvale Muse]], [[Ring of Morrigan]], etc.), 
+those ((new events interrupt the storyline)). Assuming for now we don't have those, Grapple Shot 
+starts to resolve. I choose Azuridge Caravan as the ally, who shoots a projectile, hitting Lady 
+Iseult. At this moment, the Caravan needs to move, so we handle the ((movement on the storyline)). 
+The movement path is set, and now Grapple Shot is split into smaller events, so the storyline now 
+looks like this: DONE: first part of Grapple Shot Azuridge Caravan moves from surface of A to 
+surface of R Azuridge Caravan moves from surface of R to surface of I Remaining part of Grapple Shot 
+The events on the storyline continue to resolve now, and triggered abilities may insert themselves 
+as needed, since ((new events interrupt the storyline)). Another Example of Splitting Events
+Let's say I use the [[Druid]]'s ability to play a site and summon Tawny. I tap the Druid and the 
+storyline looks like this: Druid's ability (Play or draw a site. If you played a site and you don't 
+control Tawny, summon her there.) So, the ability starts to resolve and I play my site. As soon as a 
+card enters the realm, the event on the storyline splits, so it now looks like: DONE: first part of 
+Druid's ability (Play or draw a site) Remaining part of Druid's ability (If you played a site and 
+you don't control Tawny, summon her there.) Since ((new events interrupt the storyline)), here's 
+what the storyline would look like if the site had a genesis ability, e.g. [[Red Desert]]: DONE: 
+first part of Druid's ability (Play or draw a site) Red Desert's genesis ability Remaining part of 
+Druid's ability (If you played a site and you don't control Tawny, summon her there.) The Red 
+Desert's genesis ability is inserted before the remaining part of the Druid's ability. The Red 
+Desert's genesis ability must resolve before Tawny is summoned.
+ Special Case for Search Effects
+If an effect causes you to search, then do something that would normally cause a storyline event to 
+be split, and then do something else with the searched cards, you complete the entire search process 
+before splitting the event. For example, if [[Brother Knight]]'s genesis ability is resolving and I 
+search my deck, then summon the other Brother Knight, normally a card entering the realm would cause 
+the event to split on the storyline. E.g. a [[Giant Shark]] or [[Bottomless Pit]] might interrupt 
+the rest of the first Brother Knight's genesis ability. But, in fact, you must complete the entire 
+search process and shuffle your deck before allowing any triggered abilities to insert themselves 
+into the storyline. The Giant Shark or Bottomless Pit could absolutely still trigger, but your deck 
+would be shuffled before they do!"
+"","","Movement on the Storyline:  When you need to specify movement from an effect on the storyline, the 
+entire movement path goes onto the storyline before any movement actually resolves. Each step is 
+resolved one at a time, but the whole movement path is placed on the storyline first. See 
+((Splitting Events on the Storyline)) for an example of [[Grapple Shot]], and see ((Projectiles That 
+Cause Forced Movement)) for more details. Some effects cause movement to a specific location without 
+specifying the path, e.g. [[Giant Shark]]. When such an effect resolves from the storyline, you must 
+specify the shortest path that would allow the unit to actually reach the desired destination, 
+ignoring triggered abilities. If there are multiple such paths, the controller of the effect chooses 
+among the tied routes. If there is no valid path that allows the unit to reach its destination (e.g. 
+[[Iceberg]]), do not move at all."
+"","","New Events Interrupt The Storyline:  If the resolution of one event triggers a new event, the new 
+event will be inserted into the storyline just before the triggering event. The new event 
+temporarily interrupts any remaining events on the storyline. Once the new event has been resolved, 
+the story continues. For example, if you cast [[Plumed Pegasus]] while carrying the [[Ring of 
+Morrigan]], the sequence will be: 1) Cast Plumed Pegasus. The storyline looks like this: Summon 
+Plumed Pegasus to the surface of site 8 2) Ring of Morrigan notices the 'cast' trigger, and now the 
+storyline looks like this: Ring of Morrigan ability Summon Plumed Pegasus to the surface of site 8 
+3) Then, you resolve the Ring of Morrigan ability. Note that the Plumed Pegasus spell hasn't 
+resolved yet, so it's still on the storyline and not in the realm. The storyline looks like this: 
+DONE: Ring of Morrigan ability Summon Plumed Pegasus to the surface of site 8 4) Then, the Plumed 
+Pegasus spell resolves. The storyline looks like this: DONE: Ring of Morrigan ability DONE: Summon 
+Plumed Pegasus to the surface of site 8 And the Plumed Pegasus is now in the realm."
+"","","Simultaneous Triggers:  If multiple events are competing to be added at the same point on the 
+storyline, the active player adds all of their events first, in the order of their choice. Then, the 
+non-active player add their events in the order of their choice. The non-active player's events will 
+end up resolving first, since newly added events always interrupt what's already on the storyline. 
+See the example below. It's my turn and I cast [[Apprentice Wizard]] to the surface of my 
+[[Bottomless Pit]]. Also, my Bottomless Pit happens to be flooded and you have a [[Mariner's Curse]] 
+there. The storyline starts like this: Summon Apprentice Wizard to the surface of Bottomless Pit 
+There are no triggers yet, because the Wizard isn't the realm yet. So, we resolve the storyline and 
+it looks like this: DONE: Summon Apprentice Wizard to the surface of Bottomless Pit Now, the 
+Apprentice Wizard is in the realm, and we have three simultaneous triggers! As the active player, I 
+declare mine first in the order of my choice. I order them like this: Apprentice Wizard Genesis 
+(Draw a spell) Bottomless Pit ability (Kill Apprentice Wizard since it doesn't have Airborne) Then, 
+as the non-active player, you declare your ability and add it ahead of mine. The storyline now looks 
+like this: Mariner's Curse ability (Submerge Apprentice Wizard and return to hand) Apprentice Wizard 
+Genesis (Draw a spell) Bottomless Pit ability (Kill Apprentice Wizard since it doesn't have 
+Airborne) And then those three effects will resolve in order, yours first, then mine. See the 
+'((Source is No Longer in the Realm))' example below for more details."
+"","","Simultaneous Effects:  Sometimes multiple effects occur simultaneously, as a single event on the 
+storyline. For example, [[Windblast]] involves many cards moving, but they all move simultaneously 
+and are treated as a single event on the Storyline. Simultaneous effects are different from 
+((simultaneous triggers)). Effects are simultaneous and are resolved as a single event on the 
+storyline if they use language like 'everything.' E.g. [[Peasant Revolt]] can simultaneously destroy 
+many cards. An effect is also simultaneous if it uses language like 'each' or 'all,' without also 
+using 'one at a time.' For example, [[MaelstrÃ¶m]] simultaneously moves many minions and [[Boneyard]] 
+simultaneously summons two minions, but [[Tactical Move]] is resolved as separate events on the 
+storyline."
+"","","Source is No Longer in the Realm:  If the source of a storyline event was in the realm but then 
+leaves the realm before the event resolves, the event is ignored and does not actually resolve. 
+Simply proceed to the next event on the storyline. Continuing from the example in '((Multiple 
+Simultaneous Triggers))' above, the [[Apprentice Wizard]] entered the realm on the surface of a 
+flooded [[Bottomless Pit]] with a [[Mariner's Curse]]. We have three events on the storyline, as 
+follows: Mariner's Curse ability (Submerge Apprentice Wizard and return to hand) Apprentice Wizard 
+Genesis (Draw a spell) Bottomless Pit ability (Kill Apprentice Wizard since it doesn't have 
+Airborne) The Mariner's Curse resolves, submerging the Apprentice Wizard (who dies underwater 
+without the submerge ability), and the Mariner's Curse returns to your hand. Now, the storyline 
+looks like: DONE: Mariner's Curse ability Apprentice Wizard Genesis (Draw a spell) Bottomless Pit 
+ability (Kill Apprentice Wizard since it doesn't have Airborne) Now, the Apprentice Wizard's Genesis 
+ability tries to resolve, but the Apprentice Wizard is no longer in the realm. The genesis ability 
+cannot resolve and is ignored. I do not draw a spell. Now, the storyline looks like: DONE: Mariner's 
+Curse ability IGNORED: Apprentice Wizard Genesis Bottomless Pit ability (Kill Apprentice Wizard 
+since it doesn't have Airborne) The Bottomless Pit ability resolves. It tries to kill the Apprentice 
+Wizard and fails, since the Apprentice Wizard is already dead. If a specific event has started to 
+resolve and got split up (per the ((Splitting Events on the Storyline)) rules), that event will 
+continue to resolve even if the source leaves the realm."
+"Strike","Strike simply means to deal damage equal to the unit's power. For example, if a [[Bosk Troll]] 
+strikes, it strikes for 3 damage. In a fight, units strike each other simultaneously. Some abilities 
+allow units to strike first, e.g. Lance. Split power units deal damage equal to their attack power 
+when they strike.",""
+"","","Strikes vs. Multiple Units:  At the moment a strike is resolving against multiple units, the 
+controller of the striking unit declares how to split up the damage among the struck units. The 
+damage may be split up however you prefer, including assigning zero damage to some units (see 
+below). The total damage assigned must equal the total power of the strike. Units assigned zero 
+damage are still considered struck, and the striking unit makes a total of one strike, split among 
+multiple units. The damage is inflicted simultaneously on all units."
+"","","Strikes for Zero Damage:  A strike for zero damage, e.g. [[Grandmaster Wizard]], is still a strike, 
+even though it doesn't do damage. See the 'zero' codex entry for more details."
+"Submerge","Keyword Ability. A minion with Submerge can be summoned to underwater locations and survive 
+underwater. By using one step, a minion with Submerge can move between the surface and subsurface of 
+a water site, or between adjacent underwater locations. For example, [[Coral-reef Kelpie]] can be 
+summoned underwater to one of your water sites. Then, after their summoning sickness wore off, they 
+could use their Move and Attack ability to take a step from underwater to the surface of that site 
+(and that would use up their step). If they were on the surface of a water site, they could use 
+their step to move from the surface to underwater of that site. To 'submerge' means to move from the 
+surface to the underwater of a water site. When an effect 'submerges' a card, you forcefully move 
+that card from the surface to underwater, even if it doesn't have the Submerge ability. If an effect 
+tries to forcefully submerge (e.g. [[Drown]]) a card that occupies at least one land site, the 
+effect fails.",""
+"Subsurface","The bottom layer of a site. The subsurface of a water site is underwater. The subsurface of a land 
+site is underground. Void squares do not have a subsurface (or surface).",""
+"Subtypes","Subtypes provide additional theme and flavor for a card. Subtypes are capitalized and shown in the 
+card's typeline. For example, the card [[Roaming Monster]] has the 'Monster' subtype. In general, 
+subtypes have no inherent game effect, but other cards may refer to them. For example, [[King of the 
+Realm]] cares about the Mortal subtype. Artifacts have two special subtypes ('((Automaton))', 
+'((Monument))') that do have inherent game rules. See the those codex entries for more details.",""
+"Summon","Summon means 'enter the realm,' for minions. When you cast a minion spell, the result is that you 
+summon that minion, following normal restrictions about casting spells. When another effect causes 
+you to summon a minion directly without casting it, e.g. [[Mother Nature]], [[Brother Knight]], 
+[[Knighthood]], etc., you simply put it into the realm. You don't need to pay mana, meet threshold 
+requirements, or choose a location you control, as you usually do when you cast a minion spell. 
+Typically a summon effect will specify where the summoned minion appears. For example, [[Mother 
+Nature]] specifies that the minion is summoned 'here,' i.e., Mother Nature's location, even if 
+that's an enemy site. If a summon effect does not specify where the summoned minion appears, e.g. 
+[[Raise Dead]] or [[Plague of Frogs]], you may summon it to any location in any region. If you try 
+to summon a minion to a location that it can't enter, e.g. [[Gnome Hollows]], it doesn't change 
+zones and remains where it was.",""
+"Summoning Sickness","A minion that entered the realm this turn, whether from being cast or from another card's effect, 
+suffers from ))summoning(( sickness until the end of turn. A minion suffering from ))summoning(( 
+sickness cannot tap, or be tapped, to pay for costs associated with any ability. This includes any 
+additional abilities that may have been granted by spells and artifacts. When you summon a minion on 
+your turn, it enters play untapped, so you may use it to defend on your opponent's turn.",""
+"Surface","Surface has two meanings in Sorcery! Sorry about that! English is tricky. Surface as a noun means 
+'the top layer of a site,' as in 'the surface of a site.' This is the more common usage of the word, 
+which you can see on [[Buried Treasure]], [[Teleport]], or [[Bone Rabble]]. Surface as a verb means 
+'to move up from underwater,' as in 'surface the submerged minion.' You can see examples of this on 
+[[Diluvian Kraken]], [[Iceberg]], and [[Mudflow]]. Void squares do not have a surface (or 
+subsurface).",""
+"Tap","Cards in the realm can be tapped as a cost to activate various abilities. A player may also need to 
+tap a card as a cost related to spells or abilities on other cards. A minion with summoning sickness 
+cannot tap or be tapped to pay costs (but may be tapped directly by other effects, e.g. [[Grievous 
+Insult]]). To tap a card, turn a it 90Â° to the right, from an upright position. Only untapped cards 
+in the realm can be tapped.",""
+"Target","A target is the chosen object of a spell or effect. It uses the word 'target,' and choosing a target 
+is required. For example, [[Arc Lightning]] has a target of a 'nearby unit' and [[Red Desert]] has a 
+target of 'nearby site.' The source of the ability, or the caster of the spell, must be in the same 
+region as everything it targets. When you cast a spell or use an ability that targets, before it 
+even goes on the storyline, you must declare all targets. For example, [[Bury]] is a spell that 
+targets, and [[Vile Imp]] has an ability that targets. You must declare a legal target as the effect 
+goes on the storyline, and the legality of the target is checked again when the effect actually 
+resolves. If you cannot declare a legal target when the spell or ability would enter the storyline, 
+the spell isn't actually cast and the ability can't be used. See '((Casting Magics))' for more 
+details.",""
+"Tawny","Tawny is a token minion with 1 power. She is a Unique Beast with 'Airborne, Spellcaster, Can't 
+defend.' Tawny is an ((air)) minion. See [[Druid]].",""
+"Teleport","Teleportation is forced movement directly from one location to another. Teleportation does not cross 
+borders, and does not have a defined cardinal direction (even if the two locations are in the same 
+row or column). Teleportation from the same location to itself is not movement at all; in that case, 
+the unit never left the location and never entered it again. See the 'Oversized Units' codex entry 
+for more details on teleportation with oversized units.",""
+"The Golden Rule","The Golden Rule of Sorcery is that some text is intentionally informal or necessarily compact. Use 
+common sense and be cool.",""
+"The Silver Rule","When card text and rules text conflict, specific card text takes precedence when there is a direct 
+conflict. See also the 'Can vs. Can't' codex entry. The priority from highest to lowest is: Specific 
+card text that says you 'can't' do something. Specific card text that says you 'can' do something. 
+Rules text that says you 'can't' do something. Rules text that says you 'can' do something.",""
+"There","'There' refers to the location(s) that the card occupies. For most cards, such as minions and 
+artifacts, that means one location. For example, [[Backstab]]'s use of 'there' means the adjacent 
+location of the tapped minion. For auras, that usually means 4 locations, most commonly the surface 
+of 4 sites. For sites, 'there' includes both the site's surface location and it's subsurface 
+location. For example, [[Upwelling]] will return subsurface minions and artifacts as well as those 
+on the surface. 'There' is analogous to 'here.'",""
+"Token","Token cards are equivalent to normal cards while in the realm. If they would ever leave the realm, 
+they are banished instead. Tokens have a default cost of zero, though if the token is a copy of 
+another card it will copy that card's characteristics. Players may use anything they wish to 
+represent tokens, as long as the game state is clear. The owner of a token is typically whoever put 
+it into play, but if a card is transformed into a token, e.g. [[Pollimorph]] or [[Degradation]], the 
+owner of the transformed card is the owner of the token. Typical token minions include: Foot Soldier 
+token Frog token Tawny Bruin Typical token sites include: Rubble Typical token artifacts include: 
+Lance",""
+"Top","'Top' can have two different meanings in Sorcery, depending on context. When referring to your deck, 
+top or topmost simply means the top card of the deck. For example, [[Mother Nature]]. When referring 
+to the realm, top means the row farthest from you. For example, [[Polar Explorers]].",""
+"Top Border","The 'top border' of a site is the border farthest from your starting edge. This is relevant for a 
+few cards like [[Perilous Bridge]]. 'Top border' is player-relative. If the control of such a card 
+changes, the direction it perceives as 'top border' will also change.",""
+"Tournament Rules","Sorcery is intended to be played in whatever way you and your friends find most enjoyable! If you're 
+attending a tournament, it's wise to be aware of the rules that will apply, ensuring that everyone 
+attending the event understands how it will work. Tournament organizers are empowered to modify the 
+rules to maximize the fun of the players in their community, including banning or modifying cards, 
+modifying the setup rules to provide some compensation for going second, etc. For example, one such 
+setup rule is that after mulligans, the second player may look at the top card of their spellbook or 
+the top card of their atlas, and then may put that card on the bottom. Please check with the 
+tournament organizer of any events you attend to ensure you understand the rules that will be in 
+effect, and most importantly, have fun!",""
+"Transform","When a card transforms, its printed abilities and characteristics change to match its new form, but 
+it is otherwise the same game object. That means the new form does not 'enter the realm' and does 
+not trigger any 'enter the realm' effects like Genesis - it was there all along! Furthermore, since 
+the new form doesn't enter the realm, it will not suffer from summoning sickness, assuming the old 
+form didn't enter the realm this turn. If one card transforms into a different card, the original 
+card is banished but game effects treat it as the same game object. For example, if you play 
+[[Pollimorph]] on my [[Apprentice Wizard]], I end up with a Frog token under my control and the 
+Apprentice Wizard card is banished. If some game effect was tracking the Apprentice Wizard, it is 
+now tracking the Frog token. If one card transforms into a different type, e.g. [[Island 
+Leviathan]], continue to use the same card. When a card transforms, it does not die and deathrites 
+do not trigger. For example, if you [[Pollimorph]] my [[Kettletop Leprechaun]] into a Frog token, I 
+do not resolve the Leprechaun's deathrite. As mentioned above, the printed abilities and 
+characteristics change to match the new form upon transformation. For example, if a [[Plumed 
+Pegasus]] is [[Shapeshift]]ed into [[Great Old One]], it no longer has Airborne or 3 power, and its 
+Genesis does not trigger. Instead, it has Submerge and 16 power. In contrast, any ongoing effects 
+continue to apply to the new form! For example, if I cast [[Power of Flight]] on my [[Bosk Troll]] 
+and then I [[Shapeshift]] it into [[Great Old One]], it does have Airborne until my next turn, since 
+Power of Flight applies to the game object and isn't a printed ability. The game treats the new form 
+as the same game object. For example, if the old form was tapped, had taken damage, and was carrying 
+an artifact, the new form will also be tapped, have damage, and will be carrying that artifact. Note 
+that Stealth, though a printed keyword on many cards, is tracked via a Stealth token. Therefore, a 
+Stealth token will carry over to the new form. For example, if I [[Shapeshift]] a [[Band of 
+Thieves]] with a Stealth token into a [[Great Old One]], it will still have the Stealth token. If I 
+cast [[Fade]] on my [[Bosk Troll]] and then [[Shapeshift]] it into [[Great Old One]], then it will 
+also still have the Stealth token. Unlike the Airborne example, Stealth is tracked via a token, 
+which carries over. Finally, if you Shapeshift a minion into a new form with the printed Stealth 
+keyword, Stealth will not trigger since it's an 'enters the realm' effect. You only get the Stealth 
+token when the minion enters the realm, and it's not entering the realm when transforming.",""
+"Traverse","Traverse means to move through a border. For example, [[Wall of Brambles]] specifies that it sits 
+atop a border of a site. [[Perilous Bridge]] has a passive ability which affects its top border. To 
+move through a border, a unit must take a step which causes it to enter a location on one side of 
+the border, having occupied a location on the other side of the border.",""
+"","","On the Ground:  Some effects use the phrase 'traverse on the ground,' e.g. [[Wall of Brambles]]. To 
+'traverse on the ground,' a unit must move from the surface of a site to the surface of another 
+site, excluding Airborne and Teleportation."
+"Triggered Ability","A triggered ability specifies a condition and then an effect. Triggered abilities use words such as 
+'when,' 'whenever,' and 'at [a specified moment].' For example, [[Scourge Zombies]] have a triggered 
+ability.",""
+"Turn Overview","Your turn has three phases: Start phase Main phase End phase",""
+"Unburrow","Unburrow means 'to move up from underground.' For example, [[Mudflow]].",""
+"Uncontrolled","Some cards in the realm are uncontrolled, meaning that neither player controls them. For example, a 
+carriable artifact that's not currently being carried is uncontrolled. If an uncontrolled card has a 
+trigger, e.g. [[Angel's Egg]], the owner of the card orders the trigger with other effects they 
+control, as needed.",""
+"Under","At the subsurface of a site (not void).",""
+"Underground","The subsurface of land sites. Whenever a minion without Burrowing occupies an underground location, 
+it immediately dies. An avatar may never enter an underground location. Underground is one of the 
+four regions in the realm.",""
+"Underwater","The subsurface of water sites. Whenever a minion without Submerge occupies an underwater location, 
+it immediately dies. An avatar may never enter an underwater location. Underwater is one of the four 
+regions in the realm.",""
+"Unit","A unit is a collective term that includes Avatars and minions. Some cards might specify only 
+minions, or only Avatars, but many cards affect units in general.",""
+"Untap","To untap a card, turn it upright. All of your cards in the realm untap during your Start phase.",""
+"Void","A square without a site is a void. Minions in the void are immediately banished unless they have 
+Voidwalk. Unlike sites that have two locations (surface and subsurface), a void square only has a 
+single location, the void. Voids do not have a surface or subsurface. Avatars in the void have a 
+mandatory action.",""
+"Voidwalk","Keyword Ability. A minion with Voidwalk can be summoned to void locations and survive in the void. 
+Whenever a minion without Voidwalk occupies a void location, it is immediately banished. An avatar 
+may never enter the void. By using one step, a minion with Voidwalk can move between the surface of 
+a site and the void, the subsurface of a site and the void, or between adjacent void locations. For 
+example, [[Hounds of Ondaros]] can be summoned to any void location. Then, after their summoning 
+sickness wore off, they could use their Move and Attack ability to take a step from the void 
+directly to the subsurface of an adjacent site, or directly to the surface of an adjacent site. If 
+they were underground (or underwater or on the surface), they could use their step to move to an 
+adjacent void.",""
+"Water Site","A water site is a site that provides one or more water affinity. If a site provides water affinity 
+and other types of affinity (e.g. earth), it's still a water site (and not a land site). If a site 
+previously provided water affinity and then stops providing water affinity, then it also stops being 
+a water site. 'Land site' and 'water site' are mutually exclusive. A site cannot be both a water 
+site and a land site; it will always be one or the other.",""
+"Waterbound","Keyword Ability. This minion is disabled while not occupying at least one water location. The 
+waterbound ability persists even when disabled.",""
+"Winning the Game","You win the game if you deal a death blow to your opponent's avatar, or if your opponent attempts to 
+draw a card from an empty deck. There may be other effects that cause you to win the game, e.g. 
+[[Wedding Hall]].",""
+"Wounded","A wounded minion is one that has taken damage. A wounded Avatar is one that has current life less 
+than its maximum life.",""
+"You","'You' and 'your' in card text refers to the player. For example, [[Sparkmage]] cares about 'spells 
+you've cast,' which includes any spells from any of your spellcasters. As another example, [[Bone 
+Rabble]] would trigger if you used your Avatar's ability or if you used [[Frontier Settlers]]. Some 
+older cards use the word 'you' to mean 'your avatar.' If it's impossible to read the card as 
+'player' in a sensible way, then use 'avatar' instead. For example, [[Cerberus in Chains]] follows 
+your avatar and [[Avatar of Earth]] looks at her own adjacent sites.",""
+"Zero","In Sorcery, if there is zero of something, the game considers that thing to not exist at all. For 
+example: If a unit takes zero damage, then it did not actually take any damage at all. Triggers 
+looking for damage wouldn't be satisfied. If a unit takes zero steps, then it did not move at all. 
+Triggers looking for movement wouldn't be satisfied. If you draw zero cards, you did not draw any 
+cards at all. Triggers looking for card draws wouldn't be satisfied. etc. There are two notable 
+exceptions: It is possible to strike for zero damage, e.g. [[Grandmaster Wizard]]. The unit still 
+made a strike for effects that are looking for strikes (e.g. [[Phantasmal Shade]]), but the strike 
+didn't do any damage at all. It's possible for units to have zero power and still exist in the 
+realm. Units with 0 power (e.g. [[Grandmaster Wizard]]) only die if they take damage (1 or more). A 
+spell cast for zero mana does not require any mana at all to cast, but it still counts as a cast 
+spell.",""
+"Zone","A zone is a general area where a card can exist. Game zones include: The realm (a shared zone) Each 
+player's spellbook, atlas, cemetery, and hand zones (specific to each player) The storyline (a 
+shared zone) Additional zones based on specific cards (e.g. [[Morgana le Fay]] creates a 'Morgana's 
+hand' zone.) Public zones include the realm and cemeteries, and cards in these zones have no hidden 
+information, i.e. they're face-up, and you're allowed to look at the opposite side of any card in 
+those zones, e.g. [[Druid]]. For clarity of game state, it's acceptable to put banished cards 
+face-down in a specific area of the table, but they may be reviewed by either player at any time. 
+The number of cards and type of card (e.g. spell or site) in each zone is public information (e.g. 
+any player can know how many cards remain in any deck, or how many cards of each type you have in 
+your hand). Each player may view the cards in their own hand. Cards in the spellbook and atlas are 
+face-down, and thus not visible to any player.",""

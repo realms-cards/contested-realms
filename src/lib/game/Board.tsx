@@ -182,11 +182,11 @@ export default function Board({
   // Removed baseline-shift helper to ensure only the moved card changes position
 
   // Continuously update the drag ghost position based on cursor ray -> ground plane (y=0)
-  useFrame(() => {
-    // Only drive ghost while dragging a card from hand/pile (not board/avatars)
-    if (
-      dragFromHand &&
-      !dragAvatar &&
+useFrame(() => {
+  // Only drive ghost while dragging a card from hand/pile (not board/avatars)
+  if (
+    dragFromHand &&
+    !dragAvatar &&
       !dragging &&
       (selected || dragFromPile?.card) &&
       ghostGroupRef.current &&
@@ -211,6 +211,10 @@ export default function Board({
             0.1,
             lastGhostPosRef.current.z
           );
+          handlePointerMoveRef.current(
+            lastGhostPosRef.current.x,
+            lastGhostPosRef.current.z
+          );
         }
       } catch (err) {
         if (process.env.NODE_ENV !== "production") {
@@ -229,6 +233,9 @@ export default function Board({
     matH = baseGridH;
     matW = baseGridH * MAT_RATIO;
   }
+
+  const offsetX = useMemo(() => -((board.size.w - 1) * TILE_SIZE) / 2, [board.size.w]);
+  const offsetY = useMemo(() => -((board.size.h - 1) * TILE_SIZE) / 2, [board.size.h]);
 
   const cells = useMemo(() => {
     const out: { x: number; y: number; key: string }[] = [];
@@ -334,6 +341,65 @@ export default function Board({
     };
   }, [remoteCursors, localPlayerId, permanents, overlayBlocking]);
 
+  const remoteHandDrags = useMemo(() => {
+    type RemoteHandDrag = {
+      key: string;
+      pos: { x: number; z: number };
+      rotZ: number;
+      color: string;
+    };
+
+    if (overlayBlocking) {
+      return [] as RemoteHandDrag[];
+    }
+
+    const drags: RemoteHandDrag[] = [];
+
+    const halfTile = TILE_SIZE * 0.5;
+    const boardMinX = offsetX - halfTile;
+    const boardMaxX = offsetX + TILE_SIZE * (board.size.w - 0.5);
+    const boardMinZ = offsetY - halfTile;
+    const boardMaxZ = offsetY + TILE_SIZE * (board.size.h - 0.5);
+    const boundaryEps = TILE_SIZE * 0.2;
+
+    try {
+      const rc = remoteCursors || {};
+      for (const entry of Object.values(rc)) {
+        if (!entry) continue;
+        if (!entry.position) continue;
+        if (localPlayerId && entry.playerId === localPlayerId) continue;
+        const drag = entry.dragging;
+        if (!drag || drag.kind !== "hand") continue;
+        const { x, z } = entry.position;
+        if (
+          x < boardMinX - boundaryEps ||
+          x > boardMaxX + boundaryEps ||
+          z < boardMinZ - boundaryEps ||
+          z > boardMaxZ + boundaryEps
+        ) {
+          continue;
+        }
+
+        const color =
+          entry.playerKey === "p1"
+            ? PLAYER_COLORS.p1
+            : entry.playerKey === "p2"
+            ? PLAYER_COLORS.p2
+            : PLAYER_COLORS.spectator;
+        const rotZ = entry.playerKey === "p2" ? Math.PI : 0;
+
+        drags.push({
+          key: `rhand:${entry.playerId ?? "unknown"}`,
+          pos: { x, z },
+          rotZ,
+          color,
+        });
+      }
+    } catch {}
+
+    return drags;
+  }, [overlayBlocking, remoteCursors, localPlayerId, offsetX, offsetY, board.size.w, board.size.h]);
+
   const { remoteAvatarDrags, remoteAvatarDragSet } = useMemo(() => {
     type RemoteAvatarDrag = {
       key: string;
@@ -413,9 +479,6 @@ export default function Board({
     }
   }, [board.size.w, board.size.h, setPlayerPosition]);
 
-  const offsetX = -((board.size.w - 1) * TILE_SIZE) / 2;
-  const offsetY = -((board.size.h - 1) * TILE_SIZE) / 2;
-
   // Local drag state for moving permanents across tiles
   const lastTurnPlayerRef = useRef<number | null>(null);
 
@@ -476,6 +539,7 @@ export default function Board({
   const lastGhostPosRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
   const raycasterRef = useRef(new Raycaster());
   const { camera, pointer } = useThree();
+  const handlePointerMoveRef = useRef<(x: number, z: number) => void>(() => {});
 
   function moveDraggedBody(x: number, z: number, lift = true) {
     // Defer actual physics API calls to useAfterPhysicsStep
@@ -800,6 +864,10 @@ export default function Board({
       sendCursor(null);
     }
   }, [setLastPointerWorldPos, sendCursor, isSpectator]);
+
+  useEffect(() => {
+    handlePointerMoveRef.current = handlePointerMove;
+  }, [handlePointerMove]);
 
   // Re-emit cursor when drag or highlight changes (using last known position)
   useEffect(() => {
@@ -1876,6 +1944,35 @@ export default function Board({
 
       {/* Remote cursors */}
       <BoardCursorLayer />
+
+      {/* Remote hand drag proxies (card backs while hovering over board) */}
+      {remoteHandDrags.length > 0 && (
+        <group>
+          {remoteHandDrags.map((d) => (
+            <group key={d.key} position={[d.pos.x, 0.33, d.pos.z]}>
+              <CardGlow
+                width={CARD_SHORT + 0.18}
+                height={CARD_LONG + 0.24}
+                rotationZ={d.rotZ}
+                elevation={0}
+                color={d.color}
+                renderOrder={-90}
+              />
+              <CardPlane
+                slug=""
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={d.rotZ}
+                elevation={0.005}
+                renderOrder={540}
+                interactive={false}
+                textureUrl="/api/assets/cardback_spellbook.png"
+                forceTextureUrl
+              />
+            </group>
+          ))}
+        </group>
+      )}
 
       {/* Remote permanent drag proxies (opponent live drags) */}
       {remotePermanentDrags.length > 0 && (

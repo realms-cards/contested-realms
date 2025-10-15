@@ -5125,7 +5125,11 @@ io.on("connection", (socket) => {
               }
               if (meta.owner !== undefined) next.meta = meta;
             }
-            dragging = Object.keys(next).length > 1 ? next : null;
+            const allowBareKind = kind === 'hand' || kind === 'pile' || kind === 'token';
+            dragging =
+              Object.keys(next).length > 1 || allowBareKind
+                ? next
+                : null;
           }
         }
         // Sanitize highlight from payload: expect an object with { cardId?, slug? }

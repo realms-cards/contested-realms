@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 type MyDeckInfo = {
   id: string;
@@ -31,6 +31,31 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
   const [deckErrP1, setDeckErrP1] = useState<string | null>(null);
   const [deckErrP2, setDeckErrP2] = useState<string | null>(null);
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
+
+  const selectedDeckMetaP1 = useMemo(() => {
+    if (!deckIdP1) return null;
+    return (
+      myDecks.find((d) => d.id === deckIdP1) ||
+      publicDecks.find((d) => d.id === deckIdP1) ||
+      null
+    );
+  }, [deckIdP1, myDecks, publicDecks]);
+  const selectedDeckMetaP2 = useMemo(() => {
+    if (!deckIdP2) return null;
+    return (
+      myDecks.find((d) => d.id === deckIdP2) ||
+      publicDecks.find((d) => d.id === deckIdP2) ||
+      null
+    );
+  }, [deckIdP2, myDecks, publicDecks]);
+  const isPreconP1 = useMemo(() => {
+    const name = (selectedDeckMetaP1?.name || "").toLowerCase();
+    return name.includes("precon");
+  }, [selectedDeckMetaP1]);
+  const isPreconP2 = useMemo(() => {
+    const name = (selectedDeckMetaP2?.name || "").toLowerCase();
+    return name.includes("precon");
+  }, [selectedDeckMetaP2]);
 
   useEffect(() => {
     (async () => {
@@ -124,6 +149,11 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
         {deckErrP1 && (
           <div className="text-red-300 text-xs mt-2">{deckErrP1}</div>
         )}
+        {!deckErrP1 && isPreconP1 && (
+          <div className="text-amber-300 text-xs mt-2 bg-amber-900/20 ring-1 ring-amber-800 rounded px-2 py-1">
+            Precon deck selected. These lists are for learning the game and are not competitive constructed-legal.
+          </div>
+        )}
       </div>
       
       <div>
@@ -161,6 +191,11 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
         )}
         {deckErrP2 && (
           <div className="text-red-300 text-xs mt-2">{deckErrP2}</div>
+        )}
+        {!deckErrP2 && isPreconP2 && (
+          <div className="text-amber-300 text-xs mt-2 bg-amber-900/20 ring-1 ring-amber-800 rounded px-2 py-1">
+            Precon deck selected. These lists are for learning the game and are not competitive constructed-legal.
+          </div>
         )}
       </div>
       
