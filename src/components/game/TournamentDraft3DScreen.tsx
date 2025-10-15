@@ -46,17 +46,6 @@ type DraftParticipant = {
   status: string;
 };
 
-const FALLBACK_CARD_ID_BASE = 1_000_000_000;
-function stableIdFromString(input: string | null | undefined): number {
-  if (!input) return FALLBACK_CARD_ID_BASE;
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash * 131 + input.charCodeAt(i)) >>> 0;
-  }
-  const normalized = hash % FALLBACK_CARD_ID_BASE;
-  return FALLBACK_CARD_ID_BASE + (normalized === 0 ? 1 : normalized);
-}
-
 // Player ready message type
 // (player ready messaging omitted in this screen)
 
@@ -657,6 +646,8 @@ export default function TournamentDraft3DScreen({
     (card: DraftCard): BoosterCard => {
       const slug = typeof card?.slug === "string" ? card.slug : "";
       let resolvedId = 0;
+
+      // First try slug mapping (this is populated by metadata fetch)
       if (slug) {
         const mapped = slugToCardId[slug];
         if (
@@ -667,15 +658,18 @@ export default function TournamentDraft3DScreen({
           resolvedId = mapped;
         }
       }
+
+      // Fallback to card.id if available
       if (!resolvedId) {
         const numericId = Number(card?.id);
         if (Number.isFinite(numericId) && numericId > 0) {
           resolvedId = numericId;
         }
       }
-      if (!resolvedId) {
-        resolvedId = stableIdFromString(slug || String(card?.id || ""));
-      }
+
+      // If still no ID, use 0 - metadata will fix this later
+      // DO NOT use fallback hash - it prevents proper metadata lookup
+
       return {
         variantId: 0,
         slug,
@@ -791,6 +785,7 @@ export default function TournamentDraft3DScreen({
         if (!c?.slug) continue;
         if (!needsMeta(c.slug)) continue;
         const setName = c.setName || null;
+        console.log(`[TournamentDraft3D] Need meta for pack card: ${c.slug} (set: ${setName})`);
         ensureGroup(setName).add(c.slug);
       }
       // Slugs from already picked cards – only if meta is still missing
@@ -799,6 +794,7 @@ export default function TournamentDraft3DScreen({
         if (!s) continue;
         if (!needsMeta(s)) continue;
         const setName = (p.card.setName as string | undefined) || null;
+        console.log(`[TournamentDraft3D] Need meta for picked card: ${s} (set: ${setName}, cardId: ${p.card.cardId})`);
         ensureGroup(setName).add(s);
       }
 
@@ -816,9 +812,16 @@ export default function TournamentDraft3DScreen({
         if (!slugs || slugs.size === 0) continue;
         reqEntries.push([setName, Array.from(slugs).sort()]);
       }
-      if (reqEntries.length === 0) return;
+      if (reqEntries.length === 0) {
+        console.log("[TournamentDraft3D] No metadata needed, all cards already have meta");
+        return;
+      }
       const reqKey = JSON.stringify(reqEntries);
-      if (reqKey === lastMetaReqKeyRef.current) return;
+      if (reqKey === lastMetaReqKeyRef.current) {
+        console.log("[TournamentDraft3D] Metadata request deduped (same as last request)");
+        return;
+      }
+      console.log(`[TournamentDraft3D] Requesting metadata for ${reqEntries.length} set groups:`, reqEntries);
       lastMetaReqKeyRef.current = reqKey;
 
       // Abort inflight request, if any
@@ -834,12 +837,24 @@ export default function TournamentDraft3DScreen({
         const params = new URLSearchParams();
         params.set("slugs", Array.from(slugs).join(","));
         if (setName) params.set("set", setName);
+        const url = `/api/cards/meta-by-variant?${params.toString()}`;
+        console.log(`[TournamentDraft3D] Fetching from: ${url}`);
         requests.push(
-          fetch(`/api/cards/meta-by-variant?${params.toString()}`, {
+          fetch(url, {
             signal: ac.signal,
           })
-            .then((r) => r.json() as Promise<MetaByVariantRow[]>)
-            .catch(() => [] as MetaByVariantRow[])
+            .then((r) => {
+              console.log(`[TournamentDraft3D] Fetch response status: ${r.status} ${r.statusText}`);
+              if (!r.ok) {
+                console.error(`[TournamentDraft3D] Fetch failed with status ${r.status}`);
+                return [] as MetaByVariantRow[];
+              }
+              return r.json() as Promise<MetaByVariantRow[]>;
+            })
+            .catch((err) => {
+              console.error(`[TournamentDraft3D] Fetch error:`, err);
+              return [] as MetaByVariantRow[];
+            })
         );
       }
 
@@ -847,10 +862,15 @@ export default function TournamentDraft3DScreen({
         .then((chunks) => {
           if (ac.signal.aborted) return;
           const rows = chunks.flat();
-          if (!rows || rows.length === 0) return;
+          console.log(`[TournamentDraft3D] Metadata fetch completed: ${rows.length} rows returned`);
+          if (!rows || rows.length === 0) {
+            console.warn("[TournamentDraft3D] No metadata rows returned from API");
+            return;
+          }
           const newSlugMap: Record<string, number> = {};
           const metaRows: ApiCardMetaRow[] = rows.map((r: MetaByVariantRow) => {
             newSlugMap[r.slug] = Number(r.cardId) || 0;
+            console.log(`[TournamentDraft3D] Mapping ${r.slug} -> cardId ${r.cardId}, cost: ${r.cost}, atk/def: ${r.attack}/${r.defence}`);
             return {
               cardId: Number(r.cardId) || 0,
               cost: r.cost ?? null,
@@ -862,11 +882,19 @@ export default function TournamentDraft3DScreen({
           });
 
           // Update slug->cardId map
-          setSlugToCardId((prev) => ({ ...prev, ...newSlugMap }));
+          setSlugToCardId((prev) => {
+            const updated = { ...prev, ...newSlugMap };
+            console.log(`[TournamentDraft3D] Updated slugToCardId map, now has ${Object.keys(updated).length} entries`);
+            return updated;
+          });
 
           // Merge metadata
           const incoming = toCardMetaMap(metaRows);
-          setMetaByCardId((prev) => mergeCardMetaMaps(prev, incoming));
+          setMetaByCardId((prev) => {
+            const merged = mergeCardMetaMaps(prev, incoming);
+            console.log(`[TournamentDraft3D] Merged metadata, now has ${Object.keys(merged).length} cardIds with meta`);
+            return merged;
+          });
 
           // Patch existing picks with resolved cardIds if needed and collect id changes
           const idChanges: Array<{ oldId: number; newId: number }> = [];
@@ -1186,6 +1214,7 @@ export default function TournamentDraft3DScreen({
 
       // Add picked card to 3D board display immediately
       const boosterCard = draftCardToBoosterCard(card);
+      console.log(`[TournamentDraft3D] Adding pick: slug=${boosterCard.slug} cardId=${boosterCard.cardId} type=${boosterCard.type} cardName=${boosterCard.cardName}`);
       const optimisticPickId = nextPickId;
       const newPick: Pick3D = {
         id: optimisticPickId,
@@ -1301,11 +1330,14 @@ export default function TournamentDraft3DScreen({
 
   const picksByType = useMemo(() => {
     const counts = { creatures: 0, spells: 0, sites: 0, avatars: 0 };
+    console.log(`[TournamentDraft3D] Calculating picksByType for ${pick3D.length} picks, metaByCardId has ${Object.keys(metaByCardId).length} entries`);
     for (const pick of pick3D) {
       const meta = metaByCardId[pick.card.cardId];
       const category = categorizeCard(pick.card, meta);
+      console.log(`[TournamentDraft3D] Pick ${pick.card.slug} (cardId ${pick.card.cardId}): meta=${meta ? `cost:${meta.cost} atk:${meta.attack} def:${meta.defence}` : 'NO META'} -> category: ${category}`);
       counts[category as keyof typeof counts]++;
     }
+    console.log(`[TournamentDraft3D] Final counts:`, counts);
     return counts;
   }, [pick3D, metaByCardId]);
 
