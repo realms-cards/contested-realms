@@ -431,6 +431,10 @@ class BotClient {
       const patch = { zones: { [meKey]: myZones } };
       try {
         const hydrated = this._hydratePatchCardRefs(patch);
+        // DEBUG: Log initial deck setup
+        try {
+          console.log('[Bot] Initial deck setup - hand:', myZones.hand.length, 'spellbook:', myZones.spellbook.length, 'atlas:', myZones.atlas.length);
+        } catch {}
         this.socket.emit('action', { action: hydrated });
         this._constructedInitDone.add(mid);
         try { console.log('[Bot] Initialized constructed deck and opening hand'); } catch {}
@@ -719,6 +723,15 @@ class BotClient {
       const turnKey = `${match.id}:${this._turnIndex}`;
       if (this._actedTurn.has(turnKey)) return;
 
+      // DEBUG: Log game state before acting
+      try {
+        const zones = (this._game.zones && this._game.zones[meKey]) || null;
+        const handSize = zones && zones.hand ? zones.hand.length : 0;
+        const sites = (this._game.board && this._game.board.sites) || {};
+        const ownedSites = Object.values(sites).filter(s => s && s.card && Number(s.owner) === myNum).length;
+        console.log(`[Bot] Turn ${this._turnIndex}: hand=${handSize}, ownedSites=${ownedSites}, turnKey=${turnKey}`);
+      } catch {}
+
       let zones = (this._game.zones && this._game.zones[meKey]) || null;
       const board = this._game.board || { size: { w: 5, h: 5 }, sites: {} };
       const avatars = this._game.avatars || { p1: { card: null, pos: null }, p2: { card: null, pos: null } };
@@ -781,6 +794,18 @@ class BotClient {
           );
           if (patch && typeof patch === "object") {
             const toSend = this._hydratePatchCardRefs(patch);
+            // DEBUG: Log action being sent to understand cost errors
+            try {
+              const summary = {
+                hasZones: !!toSend.zones,
+                hasPermanents: !!toSend.permanents,
+                hasBoard: !!toSend.board,
+                permanentCount: toSend.permanents ? Object.keys(toSend.permanents).length : 0,
+                boardSiteCount: toSend.board && toSend.board.sites ? Object.keys(toSend.board.sites).length : 0,
+              };
+              // Log full patch for debugging
+              console.log('[Bot] Sending action (full):', JSON.stringify(toSend, null, 2).substring(0, 500));
+            } catch {}
             this.socket.emit('action', { action: toSend });
             // Mark acted this turn and schedule end-turn after a short delay
             this._actedTurn.add(turnKey);
@@ -802,7 +827,9 @@ class BotClient {
             }, 1200);
             return; // avoid running the legacy heuristic path
           }
-        } catch {}
+        } catch (e) {
+          console.log('[Bot] AI engine failed:', e.message || e);
+        }
       }
       if (!isFirstTurnForMe) {
         const spellbook = Array.isArray(myZones.spellbook) ? [...myZones.spellbook] : [];
@@ -895,7 +922,7 @@ class BotClient {
       if (nonSiteIdx !== -1) {
         const card = handAfterSite.splice(nonSiteIdx, 1)[0];
         myZones.hand = handAfterSite;
-        const at = placedCell || findEmptyCell();
+        const at = placedCell || findAnyEmptyCell();
         patch.permanents = patch.permanents || {};
         const existing = (this._game.permanents && this._game.permanents[at]) || [];
         patch.permanents[at] = [...existing, { owner: myNum, card, tapped: false }];
@@ -1331,7 +1358,10 @@ class BotClient {
           if (!name) continue;
           const slug = this._getSlugForName(name);
           const ref = { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: null, set: 'Beta', slug: slug || undefined };
-          pushMany(book, ref, count);
+          // CRITICAL: Enrich with cost, thresholds, and type for bot engine validation
+          const enriched = this._hydrateCardRef(ref);
+          if (!enriched.cost) enriched.cost = this._getCostForCardRef(enriched);
+          pushMany(book, enriched, count);
         } catch {}
       }
       for (const e of at) {
@@ -1341,7 +1371,11 @@ class BotClient {
           if (!name) continue;
           const slug = this._getSlugForName(name);
           const ref = { id: `${name.replace(/\s+/g,'_').toLowerCase()}_${Math.random().toString(36).slice(2,6)}`, name, type: 'Site', set: 'Beta', slug: slug || undefined };
-          pushMany(atlas, ref, count);
+          // CRITICAL: Enrich with thresholds for threshold validation
+          const enriched = this._hydrateCardRef(ref);
+          // CRITICAL: Sites are free to play (played via Avatar ability), so explicitly set cost to 0
+          enriched.cost = 0;
+          pushMany(atlas, enriched, count);
         } catch {}
       }
       if (book.length === 0 || atlas.length === 0) return null;

@@ -3052,6 +3052,12 @@ async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId
               });
             } catch {}
           }
+          // T057/T070: DISABLED - Summoning sickness causes "Insufficient resources" regression
+          // Root cause unknown - ANY mutation of permanents after cost validation triggers errors
+          // DEFERRED until root cause can be properly diagnosed
+          // if (costRes && costRes._summoningSicknessInfo && RULES_HELPERS_ENABLED) {
+          //   ...summoning sickness application disabled...
+          // }
           if (costRes && costRes.ok === false) {
             if (enforce) {
               if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
@@ -5328,7 +5334,11 @@ io.on("connection", async (socket) => {
               }
               if (meta.owner !== undefined) next.meta = meta;
             }
-            dragging = Object.keys(next).length > 1 ? next : null;
+            const allowBareKind = kind === 'hand' || kind === 'pile' || kind === 'token';
+            dragging =
+              Object.keys(next).length > 1 || allowBareKind
+                ? next
+                : null;
           }
         }
         // Sanitize highlight from payload: expect an object with { cardId?, slug? }

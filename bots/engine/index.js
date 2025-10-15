@@ -1,5 +1,58 @@
 // Pure engine module (no Node I/O). Consumers provide θ and optional telemetry logger.
 
+// T036: Import card evaluation system for card-specific understanding
+let cardEvalLoader = null;
+let cardEvalCache = null;
+let cacheInitialized = false;
+
+try {
+  cardEvalLoader = require('../card-evaluations/loader');
+  // Note: Cache not loaded at module time - use initCardEvaluations() for async DB loading
+  // or cache will be lazy-loaded from JSON on first use
+} catch (e) {
+  console.warn('[Engine] Card evaluation system not available:', e.message);
+}
+
+/**
+ * Initialize card evaluation cache (async)
+ * Tries database first, falls back to JSON if database fails
+ * @returns {Promise<object>} Stats about loaded evaluations
+ */
+async function initCardEvaluations() {
+  if (cacheInitialized) {
+    return { loaded: cardEvalCache ? cardEvalCache.getStats().loaded : 0, source: 'already_initialized' };
+  }
+
+  if (!cardEvalLoader) {
+    console.warn('[Engine] Card evaluation system not available');
+    return { loaded: 0, source: 'unavailable' };
+  }
+
+  try {
+    // Try database first
+    console.log('[Engine] Loading card evaluations from database...');
+    cardEvalCache = await cardEvalLoader.initCacheFromDatabase();
+    const stats = cardEvalCache.getStats();
+    console.log(`[Engine] Card evaluation cache loaded from database: ${stats.loaded} cards`);
+    cacheInitialized = true;
+    return { loaded: stats.loaded, source: 'database' };
+  } catch (dbError) {
+    // Fall back to JSON
+    console.warn('[Engine] Database loading failed, falling back to JSON:', dbError.message);
+    try {
+      cardEvalCache = cardEvalLoader.getCache();
+      const stats = cardEvalCache.getStats();
+      console.log(`[Engine] Card evaluation cache loaded from JSON: ${stats.loaded} cards`);
+      cacheInitialized = true;
+      return { loaded: stats.loaded, source: 'json' };
+    } catch (jsonError) {
+      console.error('[Engine] Failed to load evaluations from both database and JSON:', jsonError.message);
+      cacheInitialized = false;
+      return { loaded: 0, source: 'failed', error: jsonError.message };
+    }
+  }
+}
+
 function hashString(s) {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < s.length; i++) {
@@ -63,6 +116,7 @@ function loadTheta() {
       w_life_pressure: 1.2,            // Reward damage potential
       w_site_spam_penalty: -2.0,       // Penalize site spam (sites >= 6)
       w_wasted_resources: -1.5,        // Penalize passing with playable cards
+      w_card_specific: 1.0,            // Weight for card-specific evaluation (T036)
     },
     constraints: { clamp_eval_min: -50, clamp_eval_max: 50, legal_move_fallback: "pass_or_minimal" },
   };
@@ -140,6 +194,23 @@ function ownedSiteKeys(state, seat) {
   return keys;
 }
 
+// T044: Get opponent's site keys for targeting
+function getOpponentSiteKeys(state, seat) {
+  const oppNum = seatNum(otherSeat(seat));
+  const sites = (state && state.board && state.board.sites) || {};
+  const keys = [];
+  for (const k of Object.keys(sites)) {
+    const t = sites[k];
+    if (t && t.card && Number(t.owner) === oppNum) keys.push(k);
+  }
+  return keys;
+}
+
+// T044: Count opponent's sites for strategy decisions
+function countOpponentSites(state, seat) {
+  return getOpponentSiteKeys(state, seat).length;
+}
+
 function inBounds(x, y, w, h) {
   return x >= 0 && x < w && y >= 0 && y < h;
 }
@@ -148,6 +219,42 @@ function isEmpty(state, x, y) {
   const key = `${x},${y}`;
   const tile = state && state.board && state.board.sites && state.board.sites[key];
   return !(tile && tile.card);
+}
+
+// T050: Check if a unit has voidwalk keyword
+function hasVoidwalk(unit) {
+  if (!unit || !unit.item) return false;
+  const card = unit.item.card;
+  if (!card) return false;
+
+  // Check keywords array
+  const keywords = card.keywords || [];
+  if (Array.isArray(keywords) && keywords.some(k => String(k).toLowerCase().includes('voidwalk'))) {
+    return true;
+  }
+
+  // Check rulesText for voidwalk mention
+  const rulesText = String(card.rulesText || '').toLowerCase();
+  if (rulesText.includes('voidwalk')) {
+    return true;
+  }
+
+  return false;
+}
+
+// T050: Check if movement from -> to traverses void illegally
+function isValidMovement(state, fromKey, toKey, unit) {
+  // If destination is void (empty), unit must have voidwalk
+  const toParsed = parseCellKey(toKey);
+  if (!toParsed) return false;
+
+  const destIsVoid = isEmpty(state, toParsed.x, toParsed.y);
+
+  if (destIsVoid && !hasVoidwalk(unit)) {
+    return false; // Cannot move into void without voidwalk
+  }
+
+  return true;
 }
 
 function findAnyEmptyCell(state) {
@@ -283,6 +390,7 @@ function drawFromAtlasWithTapPatch(state, seat) {
   return patch;
 }
 
+// T045: Strategic site placement with defensive positioning
 function playSitePatch(state, seat) {
   const z = getZones(state, seat);
   const hand = Array.isArray(z.hand) ? [...z.hand] : [];
@@ -291,22 +399,151 @@ function playSitePatch(state, seat) {
   const earthIdx = hand.findIndex((c) => c && typeof c.type === 'string' && c.type.toLowerCase().includes('site') && String(c.name || '').toLowerCase().includes('valley'));
   if (earthIdx !== -1) pick = { idx: earthIdx, card: hand[earthIdx] };
   if (!pick) pick = chooseSiteFromHand({ hand });
-  if (!pick) return null;
-  hand.splice(pick.idx, 1);
-  const a = getAvatarPos(state, seat);
-  let cell = null;
-  if (ownedSiteKeys(state, seat).length === 0) {
-    const ax = a[0];
-    const ay = a[1];
-    cell = isEmpty(state, ax, ay) ? `${ax},${ay}` : findAnyEmptyCell(state);
-  } else {
-    cell = findAdjacentEmptyToOwned(state, seat) || findAnyEmptyCell(state);
+  if (!pick) {
+    console.log('[Bot Engine] playSitePatch: No site in hand');
+    return null;
   }
+  hand.splice(pick.idx, 1);
+
+  // T045: Strategic placement logic
+  const avatarPos = getAvatarPos(state, seat);
+  const ownedSites = ownedSiteKeys(state, seat);
+  const siteCount = ownedSites.length;
+
+  let cell = null;
+
+  if (siteCount === 0) {
+    // Strategy 1: First site goes ON avatar position (or adjacent if occupied)
+    const [ax, ay] = avatarPos;
+    cell = isEmpty(state, ax, ay) ? `${ax},${ay}` : findAnyEmptyCell(state);
+    console.log(`[Bot Engine] playSitePatch: First site at avatar position ${ax},${ay} -> cell ${cell}`);
+  } else if (siteCount < 3) {
+    // Strategy 2: Create defensive line near avatar (2-3 sites)
+    cell = findDefensivePosition(state, seat, avatarPos) || findAdjacentEmptyToOwned(state, seat) || findAnyEmptyCell(state);
+  } else {
+    // Strategy 3: Expand toward opponent (4+ sites)
+    const oppAvatarPos = getOpponentAvatarPos(state, seat);
+    cell = findExpansionPosition(state, seat, oppAvatarPos, ownedSites) || findAdjacentEmptyToOwned(state, seat) || findAnyEmptyCell(state);
+  }
+
   const myNum = seatNum(seat);
   const patch = { zones: {}, board: { sites: {} } };
   patch.zones[seat] = { ...z, hand };
   patch.board.sites[cell] = { owner: myNum, tapped: false, card: pick.card };
+  console.log(`[Bot Engine] playSitePatch: Placing ${pick.card.name} at ${cell}, hand size after: ${hand.length}`);
   return patch;
+}
+
+// T045: Find defensive position near avatar
+function findDefensivePosition(state, seat, avatarPos) {
+  const [ax, ay] = avatarPos;
+  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+
+  // Defensive positions: directly adjacent to avatar in cardinal directions
+  const defensiveOffsets = [
+    [1, 0],   // Right
+    [-1, 0],  // Left
+    [0, 1],   // Down
+    [0, -1],  // Up
+  ];
+
+  for (const [dx, dy] of defensiveOffsets) {
+    const x = ax + dx;
+    const y = ay + dy;
+    if (inBounds(x, y, w, h) && isEmpty(state, x, y)) {
+      return `${x},${y}`;
+    }
+  }
+
+  return null;
+}
+
+// T045: Find expansion position toward opponent
+// T051: Strategic expansion - prioritize placing sites adjacent to enemy sites for traversal
+function findExpansionPosition(state, seat, oppAvatarPos, ownedSites) {
+  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+
+  // Get enemy sites for adjacency checking
+  const oppSiteKeys = getOpponentSiteKeys(state, seat);
+  const oppSitePositions = oppSiteKeys.map(sk => parseCellKey(sk)).filter(Boolean);
+
+  // Helper: Check if position is adjacent to any enemy site
+  const isAdjacentToEnemySite = (x, y) => {
+    return oppSitePositions.some(oppPos => {
+      const dx = Math.abs(oppPos.x - x);
+      const dy = Math.abs(oppPos.y - y);
+      return dx + dy === 1; // Manhattan distance of 1 = adjacent
+    });
+  };
+
+  // Strategy 1 (HIGHEST PRIORITY): Place adjacent to enemy sites for traversal
+  // This allows units to move between our sites and enemy sites
+  for (const sk of ownedSites) {
+    const pos = parseCellKey(sk);
+    if (!pos) continue;
+
+    const candidates = [
+      [pos.x + 1, pos.y],
+      [pos.x - 1, pos.y],
+      [pos.x, pos.y + 1],
+      [pos.x, pos.y - 1],
+    ];
+
+    // Filter to empty cells adjacent to enemy sites
+    const adjacentToEnemy = candidates
+      .filter(([x, y]) => inBounds(x, y, w, h) && isEmpty(state, x, y) && isAdjacentToEnemySite(x, y))
+      .map(([x, y]) => ({ x, y }));
+
+    if (adjacentToEnemy.length > 0) {
+      // Pick the one closest to opponent avatar
+      adjacentToEnemy.sort((a, b) => {
+        const distA = manhattan([a.x, a.y], oppAvatarPos);
+        const distB = manhattan([b.x, b.y], oppAvatarPos);
+        return distA - distB;
+      });
+      const best = adjacentToEnemy[0];
+      return `${best.x},${best.y}`;
+    }
+  }
+
+  // Strategy 2 (FALLBACK): Move closer to opponent if no enemy-adjacent positions available
+  const sitesWithDist = ownedSites.map(sk => {
+    const p = parseCellKey(sk);
+    const dist = p ? manhattan([p.x, p.y], oppAvatarPos) : 999;
+    return { key: sk, pos: p, dist };
+  }).filter(s => s.pos !== null);
+
+  sitesWithDist.sort((a, b) => a.dist - b.dist);
+
+  for (const siteInfo of sitesWithDist) {
+    const { pos } = siteInfo;
+    if (!pos) continue;
+
+    const candidates = [
+      [pos.x + 1, pos.y],
+      [pos.x - 1, pos.y],
+      [pos.x, pos.y + 1],
+      [pos.x, pos.y - 1],
+    ];
+
+    const candidatesWithDist = candidates
+      .filter(([x, y]) => inBounds(x, y, w, h) && isEmpty(state, x, y))
+      .map(([x, y]) => {
+        const dist = manhattan([x, y], oppAvatarPos);
+        return { x, y, dist };
+      });
+
+    candidatesWithDist.sort((a, b) => a.dist - b.dist);
+
+    if (candidatesWithDist.length > 0) {
+      const best = candidatesWithDist[0];
+      return `${best.x},${best.y}`;
+    }
+  }
+
+  return null;
 }
 
 function playUnitPatch(state, seat, placedCell, specificCard = null) {
@@ -342,6 +579,99 @@ function playUnitPatch(state, seat, placedCell, specificCard = null) {
   patch.zones[seat] = { ...z, hand };
   patch.permanents[cell] = [...existing, { owner: myNum, card: pick.card, tapped: false }];
   return patch;
+}
+
+// Site Type Detection - identify Site cards
+function isSiteCard(card) {
+  if (!card || !card.type) return false;
+  const cardType = String(card.type).toLowerCase();
+  return cardType.includes('site');
+}
+
+// T043: Spell Type Detection - identify Magic/Sorcery/Aura cards
+function isSpellCard(card) {
+  if (!card || !card.type) return false;
+  const cardType = String(card.type).toLowerCase();
+
+  // Exclude non-spell types
+  if (cardType.includes('site')) return false;
+  if (cardType.includes('avatar')) return false;
+  if (cardType.includes('minion')) return false;
+  if (cardType.includes('unit')) return false;
+  if (cardType.includes('relic')) return false;
+  if (cardType.includes('structure')) return false;
+  if (cardType.includes('artifact')) return false;
+
+  // Include spell types
+  if (cardType.includes('magic')) return true;      // Instant spells
+  if (cardType.includes('sorcery')) return true;    // Slow spells
+  if (cardType.includes('aura')) return true;       // Enchantments
+  if (cardType.includes('enchantment')) return true; // Alternative naming
+
+  return false;
+}
+
+function isAuraCard(card) {
+  if (!card || !card.type) return false;
+  const cardType = String(card.type).toLowerCase();
+  return cardType.includes('aura') || cardType.includes('enchantment');
+}
+
+// T043: Spell Casting - create patch for playing spells
+function playSpellPatch(state, seat, specificCard = null) {
+  const z = getZones(state, seat);
+  const hand = Array.isArray(z.hand) ? [...z.hand] : [];
+
+  let pick = null;
+
+  // If specific card provided, use it
+  if (specificCard) {
+    const idx = hand.findIndex(c => c === specificCard || (c && c.slug === specificCard.slug));
+    if (idx !== -1 && isSpellCard(hand[idx])) {
+      pick = { idx, card: hand[idx] };
+    }
+  } else {
+    // Otherwise, find first affordable spell
+    for (let i = 0; i < hand.length; i++) {
+      const c = hand[i];
+      if (!c || !isSpellCard(c)) continue;
+      if (canAffordCard(state, seat, c)) {
+        pick = { idx: i, card: c };
+        break;
+      }
+    }
+  }
+
+  if (!pick) return null;
+
+  // Validate affordability
+  if (!canAffordCard(state, seat, pick.card)) {
+    return null;
+  }
+
+  hand.splice(pick.idx, 1);
+
+  // Auras and enchantments go to battlefield (attached to permanents)
+  // Instant spells (Magic) and Sorceries resolve immediately (server handles effect)
+  const cardType = String(pick.card.type || '').toLowerCase();
+
+  if (cardType.includes('aura') || cardType.includes('enchantment')) {
+    // Place aura on battlefield at owned site
+    let cell = findAnyOwnedSiteCell(state, seat);
+    if (!cell) cell = findAnyEmptyCell(state);
+
+    const myNum = seatNum(seat);
+    const existing = (state && state.permanents && state.permanents[cell]) || [];
+    const patch = { zones: {}, permanents: {} };
+    patch.zones[seat] = { ...z, hand };
+    patch.permanents[cell] = [...existing, { owner: myNum, card: pick.card, tapped: false }];
+    return patch;
+  } else {
+    // Magic (instant) / Sorcery - just remove from hand, server resolves effect
+    const patch = { zones: {} };
+    patch.zones[seat] = { ...z, hand };
+    return patch;
+  }
 }
 
 function endTurnPatch(state, seat) {
@@ -435,32 +765,112 @@ function buildMovePatch(state, seat, fromKey, index, toKey) {
   } catch { return null; }
 }
 
+// T044: Enhanced movement with site targeting
+// T057: Respects summoning sickness - units cannot attack if summonedThisTurn = true
+// RULES: Attacking sites causes opponent to LOSE LIFE (not take damage)
+// Attacking sites CANNOT deliver death blow (must attack avatar for that)
+// Sites are valid targets EXCEPT when opponent is at death's door (0 life)
+// Units with summoning sickness CAN move/defend but CANNOT attack
 function generateMoveCandidates(state, seat) {
-  const units = myUnits(state, seat).filter(u => !u.item?.tapped);
+  // T057: Filter out tapped units AND units with summoning sickness
+  const units = myUnits(state, seat).filter(u => {
+    if (u.item?.tapped) return false; // Must be untapped
+    if (u.item?.summonedThisTurn) return false; // T057: Cannot attack with summoning sickness
+    return true;
+  });
   if (!units.length) return [];
-  // Choose the unit closest to opponent avatar
+
   const oppPos = getOpponentAvatarPos(state, seat);
-  units.sort((a,b) => {
-    const ap = parseCellKey(a.at); const bp = parseCellKey(b.at);
-    const ad = ap ? manhattan([ap.x, ap.y], oppPos) : 999;
-    const bd = bp ? manhattan([bp.x, bp.y], oppPos) : 999;
-    return ad - bd;
-  });
-  const chosen = units[0];
-  const neigh = neighborsInBounds(state, chosen.at).filter(k => !hasFriendlyAt(state, seat, k));
-  // Prefer moving into a cell with an enemy; else reduce distance
-  const intoEnemy = neigh.filter(k => hasEnemyAt(state, seat, k));
-  const candidates = [];
-  const tryKeys = intoEnemy.length ? intoEnemy : neigh.sort((k1,k2) => {
-    const p1 = parseCellKey(k1), p2 = parseCellKey(k2);
-    const d1 = p1 ? manhattan([p1.x,p1.y], oppPos) : 999;
-    const d2 = p2 ? manhattan([p2.x,p2.y], oppPos) : 999;
-    return d1 - d2;
-  });
-  for (const k of tryKeys.slice(0, 2)) {
-    const p = buildMovePatch(state, seat, chosen.at, chosen.index, k);
-    if (p) candidates.push(p);
+  const oppSites = getOpponentSiteKeys(state, seat);
+
+  // Check if opponent is at death's door (life = 0)
+  const players = (state && state.players) || {};
+  const oppPlayer = players[otherSeat(seat)] || {};
+  const oppLife = Number(oppPlayer.life) || 20;
+  const oppAtDeathsDoor = oppLife <= 0;
+
+  // CRITICAL RULE: Final blow must be to avatar when opponent is at 0 life
+  // Otherwise, sites are valid damage targets
+  let targetPositions = [];
+
+  if (oppAtDeathsDoor) {
+    // Opponent at 0 life - MUST target avatar for final blow
+    targetPositions = [oppPos];
+  } else {
+    // Opponent still has life - can target sites OR avatar
+    // Include both as valid targets (prioritize closer ones)
+    const sitePositions = oppSites.map(sk => {
+      const p = parseCellKey(sk);
+      return p ? [p.x, p.y] : null;
+    }).filter(Boolean);
+
+    targetPositions = [oppPos, ...sitePositions];
   }
+
+  if (targetPositions.length === 0) {
+    targetPositions = [oppPos]; // Fallback to avatar
+  }
+
+  // Sort units by distance to closest target
+  units.sort((a, b) => {
+    const ap = parseCellKey(a.at);
+    const bp = parseCellKey(b.at);
+
+    const aDistances = targetPositions.map(t => ap ? manhattan([ap.x, ap.y], t) : 999);
+    const bDistances = targetPositions.map(t => bp ? manhattan([bp.x, bp.y], t) : 999);
+
+    const aMin = Math.min(...aDistances);
+    const bMin = Math.min(...bDistances);
+
+    return aMin - bMin;
+  });
+
+  const chosen = units[0];
+  // T050: Filter neighbors to exclude void unless unit has voidwalk
+  const neigh = neighborsInBounds(state, chosen.at)
+    .filter(k => !hasFriendlyAt(state, seat, k))
+    .filter(k => isValidMovement(state, chosen.at, k, chosen));
+
+  // Prefer moving into a cell with an enemy (unit, avatar, or site)
+  const intoEnemy = neigh.filter(k => hasEnemyAt(state, seat, k));
+  const intoSite = !oppAtDeathsDoor ? neigh.filter(k => {
+    const oppSiteNum = seatNum(otherSeat(seat));
+    const sites = (state && state.board && state.board.sites) || {};
+    const tile = sites[k];
+    return tile && Number(tile.owner) === oppSiteNum;
+  }) : [];
+
+  const candidates = [];
+
+  // Prioritize: 1. Enemy units/avatar, 2. Enemy sites (if not death's door), 3. Move toward target
+  const priorityTargets = [...intoEnemy, ...intoSite.filter(k => !intoEnemy.includes(k))];
+
+  if (priorityTargets.length > 0) {
+    for (const k of priorityTargets.slice(0, 2)) {
+      const p = buildMovePatch(state, seat, chosen.at, chosen.index, k);
+      if (p) candidates.push(p);
+    }
+  } else {
+    // Move toward closest target
+    const sorted = neigh.sort((k1, k2) => {
+      const p1 = parseCellKey(k1);
+      const p2 = parseCellKey(k2);
+
+      const d1Arr = targetPositions.map(t => p1 ? manhattan([p1.x, p1.y], t) : 999);
+      const d2Arr = targetPositions.map(t => p2 ? manhattan([p2.x, p2.y], t) : 999);
+
+      const d1 = Math.min(...d1Arr);
+      const d2 = Math.min(...d2Arr);
+
+      return d1 - d2;
+    });
+
+    for (const k of sorted.slice(0, 2)) {
+      const p = buildMovePatch(state, seat, chosen.at, chosen.index, k);
+      if (p) candidates.push(p);
+    }
+  }
+
   return candidates;
 }
 
@@ -919,7 +1329,7 @@ function extractAntiPatterns(state, prevState, seat, candidateAction) {
   return penalty;
 }
 
-// T010: Phase-Based Weight Modifiers - strategic primitives
+// T010/T061: Phase-Based Weight Modifiers - AGGRESSIVE strategy that builds toward opponent
 function getStrategicModifiers(state, seat, theta) {
   const stateModel = buildGameStateModel(state, seat);
   const turnNumber = stateModel.turnState.turnNumber;
@@ -928,8 +1338,6 @@ function getStrategicModifiers(state, seat, theta) {
   const opp = otherSeat(seat);
   const oppLife = stateModel.avatarStatus[opp].life;
   const myLife = stateModel.avatarStatus[seat].life;
-
-  // Check opponent damage potential (simplified)
   const oppThreatDeploy = extractThreatDeployment(state, opp);
 
   const modifiers = {
@@ -938,33 +1346,51 @@ function getStrategicModifiers(state, seat, theta) {
     play_minion: 1.0,
     attack: 1.0,
     pass: 1.0,
+    draw: 1.0, // NEW: control draw spam
   };
 
-  // Establish mana base (turns 1-3, sites < 3)
+  // Phase 1: Establish initial mana base (turns 1-3, sites < 3)
+  // Priority: Play sites aggressively, avoid drawing
   if (turnNumber <= 3 && ownedSites < 3) {
-    modifiers.play_site = 2.0;
-    modifiers.play_unit = 0.5;
-    modifiers.play_minion = 0.5;
+    modifiers.play_site = 3.0;  // MUST build mana base
+    modifiers.play_unit = 0.3;  // Don't play units yet
+    modifiers.play_minion = 0.3;
+    modifiers.draw = 0.5;       // Discourage draw spam
   }
 
-  // Deploy threats (sites >= 3, no board development)
-  else if (ownedSites >= 3 && boardDev === 0) {
-    modifiers.play_minion = 1.5;
-    modifiers.play_unit = 1.5;
-    modifiers.play_site = 0.5;
+  // Phase 2: Expand toward opponent (sites 3-5)
+  // Priority: Continue site expansion while deploying some threats
+  else if (ownedSites >= 3 && ownedSites < 6) {
+    modifiers.play_site = 2.5;  // Keep expanding
+    modifiers.play_unit = 1.2;  // Start deploying threats
+    modifiers.play_minion = 1.2;
+    modifiers.draw = 0.4;       // Discourage draw spam
   }
 
-  // Apply pressure (board developed, opponent life low)
-  else if (boardDev > 0 && oppLife < 15) {
-    modifiers.attack = 1.2;
-    modifiers.play_site = 0.3;
+  // Phase 3: Deploy threats (sites >= 3, need board presence)
+  // Priority: Play creatures and continue expanding
+  if (ownedSites >= 3 && boardDev < 3) {
+    modifiers.play_minion = 2.0;  // Deploy creatures aggressively
+    modifiers.play_unit = 2.0;
+    modifiers.play_site = 1.5;    // Keep expanding
+    modifiers.draw = 0.3;         // Heavily discourage draw spam
   }
 
-  // Defend against lethal (opponent has damage >= our life)
+  // Phase 4: Attack phase (developed board, enough sites)
+  // Priority: Attack and continue developing
+  if (boardDev >= 2 && ownedSites >= 4) {
+    modifiers.attack = 2.0;       // ATTACK!
+    modifiers.play_minion = 1.3;  // Keep deploying threats
+    modifiers.play_site = 1.8;    // Continue expansion
+    modifiers.draw = 0.2;         // Minimal drawing
+  }
+
+  // Override: Defend against lethal threat
   if (oppThreatDeploy >= myLife && myLife > 0) {
-    modifiers.play_unit = 2.0; // Prioritize blockers
-    modifiers.play_minion = 2.0;
-    modifiers.attack = 0.5; // Deprioritize attacking
+    modifiers.play_unit = 2.5;    // Prioritize blockers
+    modifiers.play_minion = 2.5;
+    modifiers.attack = 0.3;       // Don't attack when defending
+    modifiers.draw = 0.1;         // No time for drawing
   }
 
   return modifiers;
@@ -1172,6 +1598,40 @@ function getActionType(patch) {
   }
 }
 
+// T036: Helper to extract card being played from patch
+function getCardFromPatch(patch) {
+  try {
+    if (!patch || typeof patch !== 'object') return null;
+
+    // Check for site being played
+    if (patch.board && patch.board.sites) {
+      const keys = Object.keys(patch.board.sites);
+      for (const key of keys) {
+        const tile = patch.board.sites[key];
+        if (tile && tile.card) return tile.card;
+      }
+    }
+
+    // Check for unit/permanent being played
+    if (patch.permanents) {
+      const cells = Object.keys(patch.permanents);
+      for (const cell of cells) {
+        const arr = Array.isArray(patch.permanents[cell]) ? patch.permanents[cell] : [];
+        for (const p of arr) {
+          // Only return newly played cards (not tapped, which indicates movement)
+          if (p && p.card && p.tapped === false) {
+            return p.card;
+          }
+        }
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // T012-T014: Refined candidate generation with cost validation and prioritization
 // T015: Enhanced to track filtering stats for telemetry
 function generateCandidates(state, seat, options = {}) {
@@ -1186,6 +1646,8 @@ function generateCandidates(state, seat, options = {}) {
     totalUnitsInHand: 0,
     filteredUnaffordable: 0,
     playableUnits: 0,
+    totalSpellsInHand: 0,
+    playableSpells: 0,
     sitesGated: false,
     candidatesGenerated: 0,
   };
@@ -1205,6 +1667,7 @@ function generateCandidates(state, seat, options = {}) {
     const cardType = (c.type || '').toLowerCase();
     if (cardType.includes('site')) return false;
     if (cardType.includes('avatar')) return false; // CRITICAL: avatars can't be played
+    if (isSpellCard(c)) return false; // T043: Exclude spells from units
     return true;
   });
   stats.totalUnitsInHand = allUnits.length;
@@ -1215,6 +1678,13 @@ function generateCandidates(state, seat, options = {}) {
     return affordable;
   }).slice(0, 8); // Limit to 8 playable units
   stats.playableUnits = playableUnits.length;
+
+  // T043: Filter playable spells (Magic/Sorcery/Aura)
+  const allSpells = hand.filter(c => isSpellCard(c));
+  stats.totalSpellsInHand = allSpells.length;
+
+  const playableSpells = allSpells.filter(c => canAffordCard(base, seat, c)).slice(0, 6);
+  stats.playableSpells = playableSpells.length;
 
   // Draw patches
   const drawSpell = skipDraw ? null : drawFromPilePatch(base, seat, "spellbook");
@@ -1236,6 +1706,7 @@ function generateCandidates(state, seat, options = {}) {
         const cardType = (c.type || '').toLowerCase();
         if (cardType.includes('site')) return false;
         if (cardType.includes('avatar')) return false; // CRITICAL: avatars can't be played
+        if (isSpellCard(c)) return false; // Exclude spells
         return canAffordCard(afterDraw, seat, c);
       }).slice(0, 3); // Limit to 3 after draw
 
@@ -1246,32 +1717,65 @@ function generateCandidates(state, seat, options = {}) {
     }
   }
 
+  // T043: Spell-playing candidates - generate for Magic/Sorcery/Aura cards
+  if (playableSpells.length > 0) {
+    for (const spell of playableSpells) {
+      const spellPatch = playSpellPatch(base, seat, spell);
+      if (spellPatch) moves.push(seq([spellPatch]));
+    }
+    // Also try spell after draw (combos)
+    if (drawSpell) {
+      const afterDraw = applyPatch(base, drawSpell);
+      const newHand = getZones(afterDraw, seat).hand || [];
+      const affordableSpellsAfterDraw = newHand.filter(c => {
+        if (!isSpellCard(c)) return false;
+        return canAffordCard(afterDraw, seat, c);
+      }).slice(0, 2); // Limit to 2 spells after draw
+
+      for (const spell of affordableSpellsAfterDraw) {
+        const spellAfterDraw = playSpellPatch(afterDraw, seat, spell);
+        if (spellAfterDraw) moves.push(seq([drawSpell, spellAfterDraw]));
+      }
+    }
+  }
+
   // Movement candidates (up to 4)
   const movePatches = generateMoveCandidates(base, seat);
   for (let i = 0; i < Math.min(4, movePatches.length); i++) {
     moves.push(seq([movePatches[i]]));
   }
 
-  // T013: Gate site-playing after mana base established
-  const allowSitePlaying = ownedSitesNow < 4 || playableUnits.length === 0;
+  // T013/T076: Always allow site playing up to 8 sites to encourage aggressive expansion
+  const allowSitePlaying = ownedSitesNow < 8;
   stats.sitesGated = !allowSitePlaying;
 
-  if (allowSitePlaying && ownedSitesNow < 6) {
+  if (allowSitePlaying) {
     const sitePatch = playSitePatch(base, seat);
     if (sitePatch) {
       moves.push(seq([sitePatch]));
-      // Site + unit combo
-      if (playableUnits.length > 0) {
-        const afterSite = applyPatch(base, sitePatch);
-        const unitAfterSite = playUnitPatch(afterSite, seat, null);
-        if (unitAfterSite) moves.push(seq([sitePatch, unitAfterSite]));
-      }
+      // DISABLED: Site + unit combo causes "Insufficient resources" errors
+      // The server processes the combined patch atomically, so the unit is played before the site provides mana
+      // TODO: Re-enable once server supports sequential patch processing or sites provide mana immediately
+      // if (playableUnits.length > 0) {
+      //   const afterSite = applyPatch(base, sitePatch);
+      //   const unitAfterSite = playUnitPatch(afterSite, seat, null);
+      //   if (unitAfterSite) moves.push(seq([sitePatch, unitAfterSite]));
+      // }
     }
   }
 
-  // Draw candidates
-  if (drawSpell) moves.push(seq([drawSpell]));
-  if (drawAtlas) moves.push(seq([drawAtlas]));
+  // T076/T078: Draw candidates - only generate when hand is small OR no playable actions available
+  // Check if there are actually sites in hand before considering site-playing as an action
+  const sitesInHand = hand.filter(c => isSiteCard(c)).length;
+  const hasSiteToPlay = allowSitePlaying && ownedSitesNow < 8 && sitesInHand > 0;
+  const handSize = getZones(base, seat).hand?.length || 0;
+  const hasPlayableActions = playableUnits.length > 0 || playableSpells.length > 0 || hasSiteToPlay;
+  const shouldGenerateDraws = handSize < 6 || !hasPlayableActions;
+
+  if (shouldGenerateDraws) {
+    if (drawSpell) moves.push(seq([drawSpell]));
+    if (drawAtlas) moves.push(seq([drawAtlas]));
+  }
 
   // Pass candidate (always include)
   moves.push(seq([pass]));
@@ -1318,7 +1822,29 @@ function search(state, seat, theta, rng, options) {
     const modifier = strategicModifiers[actionType] || 1.0;
     s = s * modifier;
 
-    scored.push({ patch: p, score: s, features: f, state: next, actionType, modifier });
+    // T036: Apply card-specific evaluation if available
+    let cardBonus = 0;
+    let cardName = null;
+    if (cardEvalCache && cardEvalLoader) {
+      try {
+        const card = getCardFromPatch(p);
+        if (card && card.name) {
+          cardName = card.name;
+          const context = cardEvalLoader.buildEvaluationContext(state, seat, card);
+          const cardScore = cardEvalLoader.evaluateCard(card.name, context);
+          if (cardScore !== null) {
+            // Card-specific score is 0-10, add as bonus weighted by theta
+            const cardWeight = (w.w_card_specific || 1.0);
+            cardBonus = cardScore * cardWeight;
+            s = s + cardBonus;
+          }
+        }
+      } catch (e) {
+        // Silently fall back to generic evaluation if card evaluation fails
+      }
+    }
+
+    scored.push({ patch: p, score: s, features: f, state: next, actionType, modifier, cardBonus, cardName });
   }
 
   let nodes = scored.length;
@@ -1426,11 +1952,17 @@ function search(state, seat, theta, rng, options) {
           for (const p of arr) {
             const c = p && p.card;
             if (c && (c.slug || c.name)) {
-              out.playedUnit = { slug: c.slug || null, name: c.name || null };
+              // T049: Distinguish auras from units based on type
+              const cardType = String(c.type || '').toLowerCase();
+              if (cardType.includes('aura') || cardType.includes('enchantment')) {
+                out.playedAura = { slug: c.slug || null, name: c.name || null };
+              } else {
+                out.playedUnit = { slug: c.slug || null, name: c.name || null };
+              }
               break;
             }
           }
-          if (out.playedUnit) break;
+          if (out.playedUnit || out.playedAura) break;
         }
       }
       return Object.keys(out).length ? out : null;
@@ -1451,6 +1983,7 @@ function search(state, seat, theta, rng, options) {
         let actionLabel = "pass";
         if (cards) {
           if (cards.playedUnit) actionLabel = `play_unit:${cards.playedUnit.name || cards.playedUnit.slug || "?"}`;
+          else if (cards.playedAura) actionLabel = `play_aura:${cards.playedAura.name || cards.playedAura.slug || "?"}`; // T049
           else if (cards.playedSite) actionLabel = `play_site:${cards.playedSite.name || cards.playedSite.slug || "?"}`;
           else if (cards.drawFrom) actionLabel = `draw:${cards.drawFrom}`;
         }
@@ -1495,4 +2028,4 @@ function search(state, seat, theta, rng, options) {
   return endTurnPatch(state, seat);
 }
 
-module.exports = { loadTheta, createRng, search };
+module.exports = { loadTheta, createRng, search, initCardEvaluations };

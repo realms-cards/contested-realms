@@ -51,6 +51,7 @@ model Card {
   variants   Variant[]
   deckCards  DeckCard[]
   cubeCards  CubeCard[]
+  evaluation CardEvaluation?
 
   @@index([name])
 }
@@ -661,4 +662,34 @@ model SocketBroadcastHealth {
   @@index([timestamp(sort: Desc)])
   @@index([success])
   @@index([eventType])
+}
+
+// Card evaluation storage for bot AI
+model CardEvaluation {
+  id                  Int      @id @default(autoincrement())
+  cardId              Int      @unique
+  card                Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // Evaluation data
+  category            String   // minion, spell, artifact, aura, site
+  evaluationFunction  String   @db.Text
+  priority            String   @db.Text
+  synergies           Json     // Array of synergy tags
+  antiSynergies       Json     // Array of anti-synergy tags
+  situational         Boolean  @default(false)
+  complexity          String   // simple, moderate, complex
+  
+  // Generation metadata
+  generatedBy         String   // "llm" or "direct"
+  model               String?  // e.g., "claude-3-5-sonnet-20241022"
+  validationStatus    String   @default("pending") // pending, validated, failed
+  validationError     String?  @db.Text
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@index([cardId])
+  @@index([category])
+  @@index([validationStatus])
+  @@index([generatedBy])
 }

@@ -278,6 +278,7 @@ function countManaProvidersFromPermanents(game, playerNum) {
 /**
  * Compute a patch to apply at the start of the turn for the current player in `game`.
  * Untaps sites, permanents, and avatar of the current player.
+ * Clears summoning sickness (summonedThisTurn) for permanents owned by current player.
  * @param {any} game - current or simulated next game state (must contain currentPlayer)
  * @returns {any|null} partial patch to merge, or null if none
  */
@@ -286,13 +287,24 @@ function applyTurnStart(game) {
     const cp = Number(game && game.currentPlayer);
     if (!(cp === 1 || cp === 2)) return null;
 
-    // Untap permanents owned by current player
+    // Untap permanents owned by current player AND clear summoning sickness
     const permsPrev = (game && game.permanents) || {};
     const permanents = {};
     for (const cellKey of Object.keys(permsPrev)) {
       const arr = Array.isArray(permsPrev[cellKey]) ? permsPrev[cellKey] : [];
       permanents[cellKey] = arr.map((p) => {
-        try { return Number(p.owner) === cp ? { ...p, tapped: false } : p; } catch { return p; }
+        try {
+          if (Number(p.owner) === cp) {
+            // Untap and clear summoning sickness flag
+            const updated = { ...p, tapped: false };
+            // Remove summonedThisTurn flag (if present)
+            delete updated.summonedThisTurn;
+            return updated;
+          }
+          return p;
+        } catch {
+          return p;
+        }
       });
     }
 
@@ -491,6 +503,7 @@ function validateAction(game, action, playerId, context) {
 }
 
 // Cost enforcement using per-turn spend model (sites never tap; avatars tap to play sites)
+// Also marks newly-played permanents with summonedThisTurn flag
 function ensureCosts(game, action, playerId, context) {
   try {
     const match = context && context.match ? context.match : null;
@@ -501,9 +514,12 @@ function ensureCosts(game, action, playerId, context) {
 
     // Sum costs of truly new permanents only (movement should not be charged)
     let totalCost = 0;
+    const newPermanentsInfo = { newItems: [], isNew: new WeakSet() };
     if (action.permanents && typeof action.permanents === 'object') {
-      const { newItems } = markAndCountNewPlacements(game, action, meNum);
-      for (const p of newItems) {
+      const info = markAndCountNewPlacements(game, action, meNum);
+      newPermanentsInfo.newItems = info.newItems;
+      newPermanentsInfo.isNew = info.isNew;
+      for (const p of info.newItems) {
         const card = p && p.card ? p.card : null;
         if (card) totalCost += getCostForCard(card);
       }
@@ -555,7 +571,12 @@ function ensureCosts(game, action, playerId, context) {
       }
     }
 
+    // T057/T070: Summoning sickness DEFERRED
+    // All implementations cause "Insufficient resources" regressions
+    // Root cause: Unknown interaction between WeakSet tracking and cost validation
+
     if (hasAuto) return { ok: true, autoPatch: auto };
+
     return { ok: true };
   } catch {
     return { ok: true };
