@@ -281,9 +281,11 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({
       id: tournament.id,
       name: tournament.name,
+      creatorId: tournament.creatorId,
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
+      isPrivate: tournament.isPrivate,
       settings: tournament.settings
     }), {
       status: 201,
