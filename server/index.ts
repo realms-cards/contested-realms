@@ -4,8 +4,8 @@
 
 // T019: Import extracted modules
 const { createBootstrap } = require('./core/bootstrap');
-const { createFeatureRegistry } = require('./core/featureRegistry');
 const { createPersistenceLayer } = require('./core/persistence');
+const { createContainer } = require('./core/container');
 const {
   createInteractionModule,
   INTERACTION_VERSION,
@@ -729,31 +729,43 @@ function loadBotClientCtor() {
   }
 }
 
-const featureRegistry = createFeatureRegistry();
+const container = createContainer();
 
-const lobbyFeature = featureRegistry.registerFeature("lobby", createLobbyFeature, {
-  io,
-  storeRedis,
-  instanceId: INSTANCE_ID,
-  rid,
-  ensurePlayerCached,
-  players,
-  matches,
-  getPlayerInfo,
-  getMatchInfo,
-  lobbyHasHumanPlayers,
-  createRngFromString,
-  generateBoosterDeterministic,
-  startMatchRecording,
-  persistMatchCreated,
-  hydrateMatchFromDatabase,
-  lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
-  lobbyStateChannel: LOBBY_STATE_CHANNEL,
-  cpuBotsEnabled: CPU_BOTS_ENABLED,
-  loadBotClientCtor,
-  port: PORT,
-  isCpuPlayerId,
-});
+container.registerValue("io", io);
+container.registerValue("storeRedis", storeRedis);
+container.registerValue("instanceId", INSTANCE_ID);
+container.registerValue("rid", rid);
+container.registerValue("matches", matches);
+container.registerValue("players", players);
+container.registerValue("playerIdBySocket", playerIdBySocket);
+container.registerValue("prisma", prisma);
+container.registerValue("config", serverConfig);
+
+const lobbyFeature = container.registerFeature("lobby", () =>
+  createLobbyFeature({
+    io,
+    storeRedis,
+    instanceId: INSTANCE_ID,
+    rid,
+    ensurePlayerCached,
+    players,
+    matches,
+    getPlayerInfo,
+    getMatchInfo,
+    lobbyHasHumanPlayers,
+    createRngFromString,
+    generateBoosterDeterministic,
+    startMatchRecording,
+    persistMatchCreated,
+    hydrateMatchFromDatabase,
+    lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
+    lobbyStateChannel: LOBBY_STATE_CHANNEL,
+    cpuBotsEnabled: CPU_BOTS_ENABLED,
+    loadBotClientCtor,
+    port: PORT,
+    isCpuPlayerId,
+  })
+);
 
 const {
   lobbies,
@@ -770,24 +782,26 @@ const {
   upsertLobbyFromSerialized,
 } = lobbyFeature;
 
-const tournamentFeature = featureRegistry.registerFeature("tournament", createTournamentFeature, {
-  io,
-  storeRedis,
-  instanceId: INSTANCE_ID,
-  players,
-  matches,
-  playerIdBySocket,
-  prisma,
-  rid,
-  normalizeSealedConfig,
-  createRngFromString,
-  generateBoosterDeterministic,
-  persistMatchCreated,
-  hydrateMatchFromDatabase,
-  startMatchRecording,
-  getMatchInfo,
-  tournamentBroadcast,
-});
+const tournamentFeature = container.registerFeature("tournament", () =>
+  createTournamentFeature({
+    io,
+    storeRedis,
+    instanceId: INSTANCE_ID,
+    players,
+    matches,
+    playerIdBySocket,
+    prisma,
+    rid,
+    normalizeSealedConfig,
+    createRngFromString,
+    generateBoosterDeterministic,
+    persistMatchCreated,
+    hydrateMatchFromDatabase,
+    startMatchRecording,
+    getMatchInfo,
+    tournamentBroadcast,
+  })
+);
 
 const {
   broadcastTournamentUpdate,
@@ -799,6 +813,17 @@ const {
   broadcastDraftReady,
   broadcastStatisticsUpdate,
 } = tournamentFeature;
+
+container.initialize().catch((err) => {
+  try {
+    console.error(
+      "[container] Initialization failed:",
+      err instanceof Error ? err.message : err
+    );
+  } catch {
+    // noop
+  }
+});
 
 function getVoiceRoomIdForPlayer(player) {
   if (!player) return null;
@@ -2669,7 +2694,7 @@ io.on("connection", async (socket) => {
   let authUser = null;
   // Track current draft session room for this socket (if any)
   let currentDraftSessionId = null;
-  featureRegistry.applyConnectionHandlers({
+  container.applyConnectionHandlers({
     socket,
     isAuthed: () => authed,
     getPlayerBySocket,
