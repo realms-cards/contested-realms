@@ -964,13 +964,25 @@ const matchLeaderService = createMatchLeaderService({
   io,
   storeRedis,
   prisma,
+  players,
   getOrLoadMatch,
+  ensurePlayerCached,
+  getMatchInfo,
+  rid,
   getSeatForPlayer,
   getOpponentSeat,
   ensureInteractionState,
   purgeExpiredGrants,
   collectInteractionRequirements,
   usePermitForRequirement,
+  sanitizeGrantOptions,
+  sanitizePendingAction,
+  recordInteractionRequest,
+  createGrantRecord,
+  recordInteractionResponse,
+  applyPendingAction,
+  emitInteraction,
+  emitInteractionResult,
   mergeEvents,
   dedupePermanents,
   deepMergeReplaceArrays,
@@ -984,10 +996,18 @@ const matchLeaderService = createMatchLeaderService({
   finalizeMatch,
   rulesEnforceMode: RULES_ENFORCE_MODE,
   interactionEnforcementEnabled: INTERACTION_ENFORCEMENT_ENABLED,
+  interactionKinds: INTERACTION_REQUEST_KINDS,
+  interactionDecisions: INTERACTION_DECISIONS,
   isCpuPlayerId,
 });
 
-const { applyAction: leaderApplyAction } = matchLeaderService;
+const {
+  applyAction: leaderApplyAction,
+  joinMatch: leaderJoinMatch,
+  handleMulliganDone: leaderHandleMulliganDone,
+  handleInteractionRequest: leaderHandleInteractionRequest,
+  handleInteractionResponse: leaderHandleInteractionResponse,
+} = matchLeaderService;
 
 // Global feature flag for CPU bots (default: disabled)
 const CPU_BOTS_ENABLED =
@@ -1578,59 +1598,6 @@ async function getOrLoadMatch(matchId) {
   return null;
 }
 
-async function leaderJoinMatch(matchId, playerId, socketId) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match) return;
-  // Update roster
-  if (!Array.isArray(match.playerIds)) match.playerIds = [];
-  if (!match.playerIds.includes(playerId)) match.playerIds.push(playerId);
-  // Update player mapping in local cache
-  const p = await ensurePlayerCached(playerId);
-  try {
-    p.matchId = matchId;
-  } catch {}
-  // Join the socket (works cluster-wide with Redis adapter)
-  const room = `match:${matchId}`;
-  try {
-    await io.in(socketId).socketsJoin(room);
-    console.log("[joinMatch] Socket joined room", { socketId, room, playerId });
-  } catch (e) {
-    console.error("[joinMatch] Failed to join room", {
-      socketId,
-      room,
-      playerId,
-      error: e?.message,
-    });
-  }
-  // Send match info directly to the joiner to avoid any race, then broadcast to the room
-  try {
-    if (socketId)
-      io.to(socketId).emit("matchStarted", { match: getMatchInfo(match) });
-  } catch {}
-  try {
-    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
-  } catch {}
-  // If a draft is in progress, immediately sync the joining socket with the current draft state
-  try {
-    if (
-      match.matchType === "draft" &&
-      match.draftState &&
-      match.draftState.phase &&
-      match.draftState.phase !== "waiting"
-    ) {
-      if (socketId) io.to(socketId).emit("draftUpdate", match.draftState);
-    }
-  } catch {}
-  // Persist roster change and refresh cache
-  try {
-    await persistMatchUpdate(match, null, playerId, Date.now());
-  } catch {}
-  // Keep our leadership fresh
-  try {
-    if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60);
-  } catch {}
-}
-
 // Permanently remove a match if truly empty (no players, no sockets in room)
 async function cleanupMatchNow(matchId, reason, force = false) {
   const match = await getOrLoadMatch(matchId);
@@ -1709,375 +1676,6 @@ async function cleanupMatchNow(matchId, reason, force = false) {
 
 
 // Handle per-player mulligan completion as the cluster leader
-async function leaderHandleMulliganDone(matchId, playerId) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match) return;
-  // Accept mulligans during "waiting", "deck_construction", or "in_progress"
-  if (
-    match.status !== "waiting" &&
-    match.status !== "deck_construction" &&
-    match.status !== "in_progress"
-  )
-    return;
-  // If already in Main phase, mulligans are no longer relevant
-  if (match.game && match.game.phase === "Main") return;
-
-  // Track per-player mulligan completion for this match
-  if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
-    match.mulliganDone = new Set();
-  }
-
-  const wasAlreadyDone = match.mulliganDone.has(playerId);
-  match.mulliganDone.add(playerId);
-
-  try {
-    const doneCount = match.mulliganDone.size;
-    const total = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
-    const waitingFor = Array.isArray(match.playerIds)
-      ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
-      : [];
-    const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
-    console.log(
-      `[Setup] mulliganDone <= ${playerId}${
-        wasAlreadyDone ? " (duplicate)" : ""
-      }. ${doneCount}/${total} complete. Waiting for: ${
-        names.join(", ") || "none"
-      }`
-    );
-  } catch {}
-
-  // If all current players have finished mulligans, start the game
-  const allDone =
-    Array.isArray(match.playerIds) &&
-    match.playerIds.every((pid) => match.mulliganDone.has(pid));
-  if (!allDone) {
-    // Even if this player was already done, send them current state to ensure they're synced
-    if (wasAlreadyDone) {
-      const room = `match:${match.id}`;
-      try {
-        console.log(
-          `[Setup] Player ${playerId} resubmitted mulligan - sending current game state`
-        );
-        io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
-      } catch {}
-    }
-    return;
-  }
-
-  const room = `match:${match.id}`;
-  // Flip match status and broadcast updated match info for strict sync
-  match.status = "in_progress";
-  io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
-  // Broadcast a deterministic patch to set phase to Main
-  const now = Date.now();
-  // If currentPlayer isn't set yet (e.g., human winner hasn't chosen), set a sensible default
-  let cp =
-    match.game && typeof match.game.currentPlayer === "number"
-      ? match.game.currentPlayer
-      : null;
-  if (cp !== 1 && cp !== 2) {
-    const sw = match.game ? match.game.setupWinner : null;
-    cp = sw === "p2" ? 2 : 1; // default to P1 if undefined
-  }
-  // Ensure avatar positions exist so first-site placement rule can be applied client/server
-  const sz = (match.game && match.game.board && match.game.board.size) || {
-    w: 5,
-    h: 4,
-  };
-  const cx = Math.floor(Math.max(1, Number(sz.w) || 5) / 2);
-  const topY = (Number(sz.h) || 4) - 1;
-  const botY = 0;
-  const avPrev = (match.game && match.game.avatars) || { p1: {}, p2: {} };
-  const p1Prev = avPrev.p1 || {};
-  const p2Prev = avPrev.p2 || {};
-  const avatars = {
-    p1: { ...p1Prev, pos: Array.isArray(p1Prev.pos) ? p1Prev.pos : [cx, topY] },
-    p2: { ...p2Prev, pos: Array.isArray(p2Prev.pos) ? p2Prev.pos : [cx, botY] },
-  };
-  const mainPatch = { phase: "Main", currentPlayer: cp, avatars };
-  // Update server-side aggregated snapshot
-  match.game = deepMergeReplaceArrays(match.game || {}, mainPatch);
-  match.lastTs = now;
-  const enrichedMainPatch = await enrichPatchWithCosts(mainPatch, prisma);
-  io.to(room).emit("statePatch", { patch: enrichedMainPatch, t: now });
-  try {
-    await persistMatchUpdate(match, mainPatch, playerId, now);
-  } catch {}
-  try {
-    console.log(
-      `[Setup] All mulligans complete for match ${match.id}. Starting game.`
-    );
-  } catch {}
-  try {
-    if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60);
-  } catch {}
-}
-
-async function leaderHandleInteractionRequest(
-  matchId,
-  playerId,
-  payload,
-  actorSocketId
-) {
-  try {
-    const match = await getOrLoadMatch(matchId);
-    if (!match) return;
-    const now = Date.now();
-    const actorSeat = getSeatForPlayer(match, playerId);
-    if (!actorSeat) {
-      return {
-        ok: false,
-        error: "Interaction requests are only available to seated players",
-        code: "interaction_invalid",
-      };
-    }
-    const opponentSeat = getOpponentSeat(actorSeat);
-    if (!opponentSeat) return;
-    const opponentIndex = actorSeat === "p1" ? 1 : 0;
-    const opponentId = Array.isArray(match.playerIds)
-      ? match.playerIds[opponentIndex]
-      : null;
-    if (!opponentId) {
-      return {
-        ok: false,
-        error: "Opponent unavailable for interaction",
-        code: "interaction_invalid_opponent",
-      };
-    }
-
-    const rawKind = typeof payload?.kind === "string" ? payload.kind : null;
-    if (!rawKind || !INTERACTION_REQUEST_KINDS.has(rawKind)) {
-      return {
-        ok: false,
-        error: "Unsupported interaction kind",
-        code: "interaction_invalid_kind",
-      };
-    }
-
-    const requestId =
-      typeof payload?.requestId === "string" && payload.requestId.length >= 6
-        ? payload.requestId
-        : rid("intl");
-    const expiresAtRaw = Number(payload?.expiresAt);
-    const expiresAt =
-      Number.isFinite(expiresAtRaw) && expiresAtRaw > now ? expiresAtRaw : null;
-    const note =
-      typeof payload?.note === "string"
-        ? payload.note.slice(0, 280)
-        : undefined;
-
-    const rawPayload =
-      payload && typeof payload.payload === "object" && payload.payload !== null
-        ? payload.payload
-        : {};
-    const sanitizedPayload = {};
-    for (const [key, value] of Object.entries(rawPayload)) {
-      if (key === "grant" || key === "proposedGrant") continue;
-      sanitizedPayload[key] = value;
-    }
-
-    const proposedGrant = sanitizeGrantOptions(
-      payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
-      opponentSeat
-    );
-    if (proposedGrant) {
-      sanitizedPayload.proposedGrant = proposedGrant;
-    }
-
-    const message = {
-      type: "interaction:request",
-      requestId,
-      matchId: match.id,
-      from: playerId,
-      to: opponentId,
-      kind: rawKind,
-      createdAt: now,
-    };
-    if (expiresAt) message.expiresAt = expiresAt;
-    if (note) message.note = note;
-    if (Object.keys(sanitizedPayload).length > 0)
-      message.payload = sanitizedPayload;
-
-    const pendingAction = sanitizePendingAction(
-      rawKind,
-      sanitizedPayload,
-      actorSeat,
-      playerId
-    );
-    recordInteractionRequest(
-      match,
-      message,
-      proposedGrant || null,
-      pendingAction
-    );
-    match.lastTs = now;
-    emitInteraction(matchId, message);
-    try {
-      await persistMatchUpdate(match, null, playerId, now);
-    } catch {}
-    return { ok: true };
-  } catch (err) {
-    try {
-      console.warn("[interaction] request failed", err?.message || err);
-    } catch {}
-    return {
-      ok: false,
-      error: "Failed to process interaction request",
-      code: "interaction_internal",
-    };
-  }
-}
-
-async function leaderHandleInteractionResponse(
-  matchId,
-  playerId,
-  payload,
-  actorSocketId
-) {
-  try {
-    const match = await getOrLoadMatch(matchId);
-    if (!match) return;
-    ensureInteractionState(match);
-    const now = Date.now();
-    const actorSeat = getSeatForPlayer(match, playerId);
-    const requestId =
-      typeof payload?.requestId === "string" ? payload.requestId : null;
-    if (!requestId) {
-      return {
-        ok: false,
-        error: "Missing interaction request identifier",
-        code: "interaction_invalid_request",
-      };
-    }
-    const entry =
-      match.interactionRequests instanceof Map
-        ? match.interactionRequests.get(requestId)
-        : null;
-    const request = entry && entry.request ? entry.request : null;
-    if (!request) {
-      return {
-        ok: false,
-        error: "Interaction request not found",
-        code: "interaction_unknown_request",
-      };
-    }
-
-    const rawDecision =
-      typeof payload?.decision === "string" ? payload.decision : null;
-    if (!rawDecision || !INTERACTION_DECISIONS.has(rawDecision)) {
-      return {
-        ok: false,
-        error: "Invalid interaction decision",
-        code: "interaction_invalid_decision",
-      };
-    }
-
-    const responderTargetsOpponent = rawDecision !== "cancelled";
-    if (responderTargetsOpponent && playerId !== request.to) {
-      return {
-        ok: false,
-        error: "Only the targeted opponent may respond",
-        code: "interaction_not_authorized",
-      };
-    }
-    if (!responderTargetsOpponent && playerId !== request.from) {
-      return {
-        ok: false,
-        error: "Only the requester may cancel",
-        code: "interaction_not_authorized",
-      };
-    }
-
-    const reason =
-      typeof payload?.reason === "string"
-        ? payload.reason.slice(0, 280)
-        : undefined;
-    const rawPayload =
-      payload && typeof payload.payload === "object" && payload.payload !== null
-        ? payload.payload
-        : {};
-    const sanitizedPayload = {};
-    for (const [key, value] of Object.entries(rawPayload)) {
-      if (key === "grant" || key === "proposedGrant") continue;
-      sanitizedPayload[key] = value;
-    }
-
-    let grantOpts = null;
-    if (rawDecision === "approved") {
-      grantOpts = sanitizeGrantOptions(
-        payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
-        actorSeat || getOpponentSeat(getSeatForPlayer(match, request.from))
-      );
-      if (grantOpts) {
-        sanitizedPayload.grant = grantOpts;
-      }
-    }
-
-    const recipientId = playerId === request.from ? request.to : request.from;
-    const responseMessage = {
-      type: "interaction:response",
-      requestId: request.requestId,
-      matchId: match.id,
-      from: playerId,
-      to: recipientId,
-      kind: request.kind,
-      decision: rawDecision,
-      createdAt: request.createdAt,
-      expiresAt: request.expiresAt,
-      respondedAt: now,
-    };
-    if (reason) responseMessage.reason = reason;
-    if (Object.keys(sanitizedPayload).length > 0)
-      responseMessage.payload = sanitizedPayload;
-
-    let grantRecord = null;
-    if (rawDecision === "approved" && grantOpts) {
-      grantRecord = createGrantRecord(request, responseMessage, grantOpts, now);
-      const existing = match.interactionGrants.get(grantRecord.grantedTo) || [];
-      existing.push(grantRecord);
-      match.interactionGrants.set(grantRecord.grantedTo, existing);
-    }
-
-    recordInteractionResponse(match, responseMessage, grantRecord);
-    if (rawDecision === "approved") {
-      try {
-        const entry = match.interactionRequests.get(requestId);
-        if (entry) {
-          const result = await applyPendingAction(match, entry, now);
-          if (result) {
-            entry.result = result;
-            entry.pendingAction = null;
-            match.interactionRequests.set(requestId, entry);
-            emitInteractionResult(matchId, result);
-          }
-        }
-      } catch (err) {
-        try {
-          console.warn(
-            "[interaction] failed to execute pending action",
-            err?.message || err
-          );
-        } catch {}
-      }
-    }
-    match.lastTs = now;
-    emitInteraction(matchId, responseMessage);
-    try {
-      await persistMatchUpdate(match, null, playerId, now);
-    } catch {}
-    return { ok: true };
-  } catch (err) {
-    try {
-      console.warn("[interaction] response failed", err?.message || err);
-    } catch {}
-    return {
-      ok: false,
-      error: "Failed to process interaction response",
-      code: "interaction_internal",
-    };
-  }
-}
-
 function getMatchInfo(match) {
   return {
     id: match.id,
