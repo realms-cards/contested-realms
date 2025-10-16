@@ -1,143 +1,19 @@
+// @ts-nocheck
 // Simple Socket.IO server for Sorcery online MVP
-// Run with: node server/index.js
-
-// Load environment variables (.env, .env.local) for standalone server runs
-try { require('dotenv').config(); } catch {}
+// Run with: npm run server:dev (development) or npm run server:start (production)
 
 // T019: Import extracted modules
-const tournamentBroadcast = require('./modules/tournament/broadcast');
-const replay = require('./modules/replay');
+const { createBootstrap } = require('./core/bootstrap');
+const { createFeatureRegistry } = require('./core/featureRegistry');
+const { tournament: tournamentModules, draft: draftModules, replay } = require('./modules');
+const tournamentBroadcast = tournamentModules.broadcast;
 // T021: Import draft config service
-const draftConfig = require('./modules/draft/config');
+const draftConfig = draftModules.config;
 // T023: Import standings service
-const standingsService = require('./modules/tournament/standings');
+const standingsService = tournamentModules.standings;
+const { enrichPatchWithCosts } = require('./modules/card-costs');
 const { createLobbyFeature } = require('./features/lobby');
 const { createTournamentFeature } = require('./features/tournament');
-
-// -----------------------------
-// Card Cost Enrichment (Issue 5: Missing Card Cost Data)
-// -----------------------------
-// Global cache for card costs (loaded once at startup)
-let cardCostCache = null;
-
-/**
- * Load all card costs from database into a Map: cardName -> cost
- * This is called once and cached for the lifetime of the server process.
- * @param {object} prismaClient - The Prisma client instance to use
- * @returns {Promise<Map<string, number>>} Map of card names to their mana costs
- */
-async function loadCardCosts(prismaClient) {
-  if (cardCostCache) return cardCostCache;
-
-  try {
-    const metas = await prismaClient.cardSetMetadata.findMany({
-      select: {
-        card: { select: { name: true } },
-        cost: true
-      }
-    });
-
-    const map = new Map();
-    for (const meta of metas) {
-      const name = meta.card?.name;
-      if (name && meta.cost !== null && meta.cost !== undefined) {
-        // Use the first cost found for each card
-        // (could be refined to prefer specific sets, but most cards have same cost across sets)
-        if (!map.has(name)) {
-          map.set(name, meta.cost);
-        }
-      }
-    }
-
-    cardCostCache = map;
-    console.log(`[CardCosts] Loaded ${map.size} card costs from database`);
-    return map;
-  } catch (err) {
-    console.error('[CardCosts] Failed to load card costs:', err?.message || err);
-    // Return empty map to prevent crashes
-    cardCostCache = new Map();
-    return cardCostCache;
-  }
-}
-
-/**
- * Enrich all card objects in a patch with cost data from database.
- * This adds a 'cost' field to every card object that doesn't already have one.
- *
- * Card objects can appear in:
- * - patch.zones[seat][zoneName] (hand, spellbook, atlas, graveyard, battlefield, banished)
- * - patch.board.sites[pos].card (site cards on the board)
- * - patch.permanents[seat] (units on the battlefield)
- *
- * @param {object} patch - The game state patch to enrich
- * @param {object} prismaClient - The Prisma client instance to use
- * @returns {Promise<object>} The enriched patch with cost data added to all cards
- */
-async function enrichPatchWithCosts(patch, prismaClient) {
-  if (!patch || typeof patch !== 'object') return patch;
-
-  const costMap = await loadCardCosts(prismaClient);
-
-  // Enrich a single card object
-  function enrichCard(card) {
-    if (!card || typeof card !== 'object' || !card.name) return card;
-
-    // Only add cost if not already present
-    if (card.cost === undefined && costMap.has(card.name)) {
-      return { ...card, cost: costMap.get(card.name) };
-    }
-    return card;
-  }
-
-  // Recursively enrich arrays of cards
-  function enrichCardArray(arr) {
-    if (!Array.isArray(arr)) return arr;
-    return arr.map(item => enrichCard(item));
-  }
-
-  // Clone patch and enrich zones
-  const enriched = { ...patch };
-
-  // Enrich zones (hand, spellbook, atlas, graveyard, battlefield, banished)
-  if (patch.zones) {
-    enriched.zones = {};
-    for (const [seat, zones] of Object.entries(patch.zones)) {
-      if (zones && typeof zones === 'object') {
-        enriched.zones[seat] = {};
-        for (const [zoneName, cards] of Object.entries(zones)) {
-          enriched.zones[seat][zoneName] = enrichCardArray(cards);
-        }
-      } else {
-        enriched.zones[seat] = zones;
-      }
-    }
-  }
-
-  // Enrich board.sites
-  if (patch.board?.sites) {
-    enriched.board = { ...patch.board, sites: {} };
-    for (const [pos, tile] of Object.entries(patch.board.sites)) {
-      if (tile?.card) {
-        enriched.board.sites[pos] = {
-          ...tile,
-          card: enrichCard(tile.card)
-        };
-      } else {
-        enriched.board.sites[pos] = tile;
-      }
-    }
-  }
-
-  // Enrich permanents
-  if (patch.permanents) {
-    enriched.permanents = {};
-    for (const [seat, units] of Object.entries(patch.permanents)) {
-      enriched.permanents[seat] = enrichCardArray(units);
-    }
-  }
-
-  return enriched;
-}
 
 // -----------------------------
 // Leader-aware Draft helpers (match-level)
@@ -904,12 +780,7 @@ async function leaderChooseDraftPack(matchId, playerId, { setChoice, packIndex }
   try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
 }
 
-const http = require("http");
-const { Server } = require("socket.io");
-const { PrismaClient } = require("@prisma/client");
 const jwt = require("jsonwebtoken");
-const { createAdapter } = require("@socket.io/redis-adapter");
-const Redis = require("ioredis");
 const {
   createRngFromString,
   generateBoosterDeterministic,
@@ -920,17 +791,16 @@ const { applyTurnStart, validateAction, ensureCosts, applyMovementAndCombat } = 
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 const { buildMatchInfo } = require("./matchInfo");
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3010;
-const prisma = new PrismaClient();
+const bootstrap = createBootstrap();
+const { config: serverConfig, prisma, httpServer: server, io, redis } = bootstrap;
+const { pubClient, subClient, storeRedis, storeSub } = redis;
+const PORT = serverConfig.port;
+const INSTANCE_ID = serverConfig.instanceId;
+const CORS_ORIGINS = Array.isArray(serverConfig.corsOrigins)
+  ? serverConfig.corsOrigins
+  : [serverConfig.corsOrigins].filter(Boolean);
 // Optional: start periodic pruning of old replay actions/sessions
 try { replay.setupReplayRetentionPruner?.(prisma); } catch {}
-const REDIS_URL = process.env.REDIS_URL || process.env.SOCKET_REDIS_URL || "redis://localhost:6379";
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
-const REDIS_CONFIG = REDIS_PASSWORD ? { password: REDIS_PASSWORD } : {};
-const ENABLE_REDIS_ADAPTER = !(
-  process.env.SOCKET_REDIS_DISABLED === '1' ||
-  (process.env.SOCKET_REDIS_DISABLED || '').toLowerCase() === 'true'
-);
 let isReady = false; // readiness flips true once DB connected and recovery done
 let isShuttingDown = false;
 // Rules enforcement modes:
@@ -943,22 +813,6 @@ const RULES_HELPERS_ENABLED = !(
   (process.env.RULES_HELPERS_ENABLED || '').toLowerCase() === 'false'
 );
 
-
-const server = http.createServer();
-// Allow multiple origins via env to support localhost and LAN IPs in dev
-const CORS_ORIGINS = (process.env.SOCKET_CORS_ORIGIN || "http://localhost:3000")
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-const io = new Server(server, {
-  cors: {
-    origin: CORS_ORIGINS,
-    credentials: true,
-  },
-  // Be a bit more tolerant behind proxies/CDNs to avoid false disconnects
-  pingInterval: Number(process.env.SOCKET_PING_INTERVAL_MS || 15000),
-  pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT_MS || 30000),
-});
 
 // Persistence strategy: default to Redis write-behind to avoid DB pool pressure
 const PERSIST_STRATEGY = (process.env.PERSIST_STRATEGY || 'write_behind').toLowerCase();
@@ -1073,40 +927,10 @@ function buildPromMetrics() {
   return lines.join('\n') + '\n';
 }
 
-// Socket.IO Redis adapter (horizontal scaling)
-let pubClient = null;
-let subClient = null;
-try {
-  if (ENABLE_REDIS_ADAPTER) {
-    pubClient = new Redis(REDIS_URL, REDIS_CONFIG);
-    subClient = pubClient.duplicate();
-    io.adapter(createAdapter(pubClient, subClient));
-    const redisUrlSafe = REDIS_PASSWORD ? REDIS_URL.replace(/redis:\/\//, 'redis://redacted@') : REDIS_URL;
-    try { console.log(`[socket.io] Redis adapter enabled -> ${redisUrlSafe}`); } catch {}
-  } else {
-    try { console.log("[socket.io] Redis adapter disabled by config"); } catch {}
-  }
-} catch (e) {
-  try { console.warn("[socket.io] Redis adapter initialization failed:", e?.message || e); } catch {}
-}
-
-// Dedicated Redis clients for shared state and control plane
-const INSTANCE_ID = process.env.INSTANCE_ID || `srv-${Math.random().toString(36).slice(2, 7)}`;
-let storeRedis = null;
-let storeSub = null;
-try {
-  storeRedis = new Redis(REDIS_URL, REDIS_CONFIG);
-  storeSub = storeRedis.duplicate();
-  const redisUrlSafe = REDIS_PASSWORD ? REDIS_URL.replace(/redis:\/\//, 'redis://redacted@') : REDIS_URL;
-  try { console.log(`[store] Redis state connected -> ${redisUrlSafe} (instance=${INSTANCE_ID})`); } catch {}
-} catch (e) {
-  try { console.warn(`[store] Redis state init failed:`, e?.message || e); } catch {}
-}
-
 // Wire tournament engine dependencies (Prisma, Socket.IO, Redis, InstanceID)
 (async () => {
   try {
-    const mod = await import('./modules/tournament/engine.js');
+    const mod = await tournamentModules.loadEngine();
     if (mod && typeof mod.setDeps === 'function') {
       mod.setDeps({
         prismaClient: prisma,
@@ -1239,7 +1063,7 @@ server.on("request", async (req, res) => {
     // Helper: dynamic CORS based on SOCKET_CORS_ORIGIN
     const reqOrigin = (req && req.headers && req.headers.origin) || null;
     const allowCors = () => {
-      if (reqOrigin && CORS_ORIGINS.includes(reqOrigin)) {
+      if (reqOrigin && (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))) {
         res.setHeader("Access-Control-Allow-Origin", reqOrigin);
         res.setHeader("Vary", "Origin");
       }
@@ -1587,7 +1411,9 @@ function loadBotClientCtor() {
   }
 }
 
-const lobbyFeature = createLobbyFeature({
+const featureRegistry = createFeatureRegistry();
+
+const lobbyFeature = featureRegistry.registerFeature("lobby", createLobbyFeature, {
   io,
   storeRedis,
   instanceId: INSTANCE_ID,
@@ -1622,12 +1448,11 @@ const {
   publishLobbyDelete,
   getOrClaimLobbyLeader,
   handleLobbyControlAsLeader,
-  registerSocketHandlers: registerLobbySocketHandlers,
   setBotManager,
   upsertLobbyFromSerialized,
 } = lobbyFeature;
 
-const tournamentFeature = createTournamentFeature({
+const tournamentFeature = featureRegistry.registerFeature("tournament", createTournamentFeature, {
   io,
   storeRedis,
   instanceId: INSTANCE_ID,
@@ -1647,7 +1472,6 @@ const tournamentFeature = createTournamentFeature({
 });
 
 const {
-  registerSocketHandlers: registerTournamentSocketHandlers,
   broadcastTournamentUpdate,
   broadcastPhaseChanged,
   broadcastRoundStarted,
@@ -3787,13 +3611,7 @@ io.on("connection", async (socket) => {
   let authUser = null;
   // Track current draft session room for this socket (if any)
   let currentDraftSessionId = null;
-  registerLobbySocketHandlers({
-    socket,
-    isAuthed: () => authed,
-    getPlayerBySocket,
-  });
-
-  registerTournamentSocketHandlers({
+  featureRegistry.applyConnectionHandlers({
     socket,
     isAuthed: () => authed,
     getPlayerBySocket,
@@ -3908,7 +3726,7 @@ io.on("connection", async (socket) => {
         try { setTimeout(() => { try { io.to(socket.id).emit('draft:session:presence', { sessionId, players: list }); } catch {} }, 25); } catch {}
         // Send current draft state snapshot to the joining socket (tournament draft engine)
         try {
-          const mod = await import('./modules/tournament/engine.js');
+        const mod = await tournamentModules.loadEngine();
           if (mod && typeof mod.getState === 'function') {
             const s = await mod.getState(sessionId);
             if (s) {
