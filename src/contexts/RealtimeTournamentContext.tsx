@@ -248,10 +248,23 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
     // Toast hint for phase changes
     try {
-      const msg = `Tournament advanced to ${data.newStatus}`;
-      localStorage.setItem('app:toast', msg);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
+      // Generate user-friendly messages based on status transitions
+      let msg = '';
+      if (data.newStatus === 'preparing') {
+        msg = 'Tournament is preparing - waiting for players to ready up';
+      } else if (data.newStatus === 'active') {
+        msg = 'Tournament has started!';
+      } else if (data.newStatus === 'completed') {
+        msg = 'Tournament has ended';
+      } else if (data.newStatus === 'cancelled') {
+        msg = 'Tournament was cancelled';
+      }
+
+      if (msg) {
+        localStorage.setItem('app:toast', msg);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
+        }
       }
     } catch {}
 
@@ -594,14 +607,16 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       // Also refresh list only if socket is not connected (socket will broadcast otherwise)
       if (!isConnected) { refreshTournamentsDebounced(); }
       // Fetch full details and set as current tournament for downstream hooks
+      let fullDetail = tournament;
       try {
         const detailRes = await fetch(`/api/tournaments/${tournament.id}`);
         if (detailRes.ok) {
           const detail = await detailRes.json();
+          fullDetail = detail;
           setCurrentTournament(detail as unknown as TournamentInfo);
         }
       } catch {}
-      return tournament;
+      return fullDetail;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create tournament';
       setError(message);

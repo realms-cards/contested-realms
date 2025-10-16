@@ -93,6 +93,11 @@ export default function TournamentsPage() {
     "Arthurian Legends",
   ]);
 
+  // Time limit configuration
+  const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
+  const [draftPickTimeLimit, setDraftPickTimeLimit] = useState<number>(60);
+  const [draftConstructionTimeLimit, setDraftConstructionTimeLimit] = useState<number>(20);
+
   // Cube draft support
   const [useCube, setUseCube] = useState(false);
   const [cubeId, setCubeId] = useState<string>("");
@@ -216,13 +221,18 @@ export default function TournamentsPage() {
         sealedBoosters.forEach((setName) => {
           packCounts[setName] = (packCounts[setName] || 0) + 1;
         });
-        settingsOut.sealedConfig = { packCounts };
+        settingsOut.sealedConfig = {
+          packCounts,
+          timeLimit: sealedTimeLimit
+        };
       } else if (form.format === "draft") {
         if (useCube && cubeId) {
           // Cube draft mode
           settingsOut.draftConfig = {
             cubeId,
             packCount: draftBoosterCount,
+            pickTimeLimit: draftPickTimeLimit,
+            constructionTimeLimit: draftConstructionTimeLimit
           };
         } else {
           // Regular set-based draft
@@ -233,6 +243,8 @@ export default function TournamentsPage() {
           settingsOut.draftConfig = {
             packCount: draftBoosterCount,
             packCounts,
+            pickTimeLimit: draftPickTimeLimit,
+            constructionTimeLimit: draftConstructionTimeLimit
           };
         }
       }
@@ -769,6 +781,25 @@ export default function TournamentsPage() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Sealed Time Limit */}
+                    <div>
+                      <label className="block text-slate-300 text-sm font-medium mb-2">
+                        Time Limit (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={90}
+                        step={5}
+                        value={sealedTimeLimit}
+                        onChange={(e) => setSealedTimeLimit(Math.max(10, Math.min(90, parseInt(e.target.value) || 40)))}
+                        className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-slate-400 text-xs mt-1">
+                        Warning-only time limit for deck construction (10-90 minutes)
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -890,6 +921,44 @@ export default function TournamentsPage() {
                         </div>
                       </>
                     )}
+
+                    {/* Draft Time Limits */}
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-2">
+                          Pick Time Limit (sec)
+                        </label>
+                        <input
+                          type="number"
+                          min={30}
+                          max={300}
+                          step={15}
+                          value={draftPickTimeLimit}
+                          onChange={(e) => setDraftPickTimeLimit(Math.max(30, Math.min(300, parseInt(e.target.value) || 60)))}
+                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-slate-400 text-xs mt-1">
+                          Time per pick (30-300 seconds)
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-2">
+                          Construction Time (min)
+                        </label>
+                        <input
+                          type="number"
+                          min={10}
+                          max={60}
+                          step={5}
+                          value={draftConstructionTimeLimit}
+                          onChange={(e) => setDraftConstructionTimeLimit(Math.max(10, Math.min(60, parseInt(e.target.value) || 20)))}
+                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-slate-400 text-xs mt-1">
+                          Deck building (10-60 minutes)
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
 
