@@ -6,6 +6,14 @@ import type { PrismaClient } from "@prisma/client";
 
 type Seat = "p1" | "p2";
 
+interface PlayerState {
+  id: string;
+  displayName: string;
+  socketId: string | null;
+  lobbyId?: string | null;
+  matchId?: string | null;
+}
+
 interface D20Rolls {
   p1: number | null;
   p2: number | null;
@@ -123,7 +131,7 @@ interface MatchState {
   _cleanupTimer?: NodeJS.Timeout | null;
 }
 
-type GrantRecord = Record<string, unknown>;
+type GrantRecord = Record<string, unknown> & { grantedTo: string };
 
 interface InteractionRequirements {
   needsOpponentZoneWrite: boolean;
@@ -142,11 +150,21 @@ interface MatchPatch extends Record<string, unknown> {
   currentPlayer?: number;
 }
 
+interface LeaderResult {
+  ok: boolean;
+  error?: string;
+  code?: string;
+}
+
 interface MatchLeaderDeps {
   io: SocketIOServer;
   storeRedis: Redis | null;
   prisma: PrismaClient;
+  players: Map<string, PlayerState>;
   getOrLoadMatch: (matchId: string) => Promise<MatchState | null>;
+  ensurePlayerCached: (playerId: string) => Promise<PlayerState>;
+  getMatchInfo: (match: MatchState) => unknown;
+  rid: (prefix: string) => string;
   getSeatForPlayer: (match: MatchState, playerId: string) => Seat | null;
   getOpponentSeat: (seat: Seat) => Seat;
   ensureInteractionState: (match: MatchState) => void;
@@ -185,6 +203,40 @@ interface MatchLeaderDeps {
     ctx: { match: MatchState }
   ) => MatchPatch | null | undefined;
   enrichPatchWithCosts: (patch: MatchPatch | null, prisma: PrismaClient) => Promise<MatchPatch | null>;
+  sanitizeGrantOptions: (
+    grantValue: unknown,
+    seat: Seat
+  ) => Record<string, unknown> | null;
+  sanitizePendingAction: (
+    kind: string,
+    payload: Record<string, unknown>,
+    actorSeat: Seat,
+    playerId: string
+  ) => MatchPatch | null;
+  recordInteractionRequest: (
+    match: MatchState,
+    message: InteractionRequestMessage,
+    grant: Record<string, unknown> | null,
+    pendingAction: MatchPatch | null
+  ) => void;
+  createGrantRecord: (
+    entry: InteractionRequestEntry,
+    response: InteractionResponseMessage,
+    grantOptions: Record<string, unknown>,
+    now: number
+  ) => GrantRecord;
+  recordInteractionResponse: (
+    match: MatchState,
+    response: InteractionResponseMessage,
+    grantRecord: GrantRecord | null
+  ) => void;
+  applyPendingAction: (
+    match: MatchState,
+    entry: InteractionRequestEntry,
+    now: number
+  ) => Promise<MatchPatch | null>;
+  emitInteraction: (matchId: string, message: InteractionRequestMessage | InteractionResponseMessage) => void;
+  emitInteractionResult: (matchId: string, result: MatchPatch) => void;
   recordMatchAction: (matchId: string, patch: MatchPatch | null, playerId: string) => void;
   persistMatchUpdate: (
     match: MatchState,
@@ -195,6 +247,8 @@ interface MatchLeaderDeps {
   finalizeMatch: (match: MatchState, options: Record<string, unknown>) => Promise<void>;
   rulesEnforceMode: string;
   interactionEnforcementEnabled: boolean;
+  interactionKinds: Set<string>;
+  interactionDecisions: Set<string>;
   isCpuPlayerId: (playerId: string) => boolean;
 }
 
@@ -288,13 +342,25 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     io,
     storeRedis,
     prisma,
+    players,
     getOrLoadMatch,
+    ensurePlayerCached,
+    getMatchInfo,
+    rid,
     getSeatForPlayer,
     getOpponentSeat,
     ensureInteractionState,
     purgeExpiredGrants,
     collectInteractionRequirements,
     usePermitForRequirement,
+    sanitizeGrantOptions,
+    sanitizePendingAction,
+    recordInteractionRequest,
+    createGrantRecord,
+    recordInteractionResponse,
+    applyPendingAction,
+    emitInteraction,
+    emitInteractionResult,
     mergeEvents,
     dedupePermanents,
     deepMergeReplaceArrays,
@@ -308,6 +374,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     finalizeMatch,
     rulesEnforceMode,
     interactionEnforcementEnabled,
+    interactionKinds,
+    interactionDecisions,
     isCpuPlayerId,
   } = deps;
 
@@ -320,7 +388,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
     if (!(match.interactionGrants instanceof Map)) {
-      match.interactionGrants = new Map<string, Record<string, unknown>[]>();
+      match.interactionGrants = new Map<string, GrantRecord[]>();
     }
     if (!(match.interactionRequests instanceof Map)) {
       match.interactionRequests = new Map<string, InteractionRequestEntry>();
@@ -834,7 +902,392 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
   }
 
+  async function joinMatch(matchId: string, playerId: string, socketId: string): Promise<void> {
+    const match = await getOrLoadMatch(matchId);
+    if (!match) return;
+    if (!Array.isArray(match.playerIds)) {
+      match.playerIds = [];
+    }
+    if (!match.playerIds.includes(playerId)) {
+      match.playerIds.push(playerId);
+    }
+    const playerState = await ensurePlayerCached(playerId);
+    playerState.matchId = matchId;
+
+    const room = `match:${matchId}`;
+    try {
+      await io.in(socketId).socketsJoin(room);
+      console.log("[joinMatch] Socket joined room", { socketId, room, playerId });
+    } catch (err) {
+      console.error("[joinMatch] Failed to join room", {
+        socketId,
+        room,
+        playerId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    try {
+      io.to(socketId).emit("matchStarted", { match: getMatchInfo(match) });
+    } catch {
+      // ignore
+    }
+    try {
+      io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (
+        match.matchType === "draft" &&
+        match.draftState &&
+        match.draftState.phase &&
+        match.draftState.phase !== "waiting"
+      ) {
+        io.to(socketId).emit("draftUpdate", match.draftState);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      await persistMatchUpdate(match, null, playerId, Date.now());
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleMulliganDone(matchId: string, playerId: string): Promise<void> {
+    const match = await getOrLoadMatch(matchId);
+    if (!match) return;
+    if (
+      match.status !== "waiting" &&
+      match.status !== "deck_construction" &&
+      match.status !== "in_progress"
+    ) {
+      return;
+    }
+    if (match.game?.phase === "Main") return;
+
+    if (!(match.mulliganDone instanceof Set)) {
+      match.mulliganDone = new Set<string>();
+    }
+    const wasAlreadyDone = match.mulliganDone.has(playerId);
+    match.mulliganDone.add(playerId);
+
+    try {
+      const doneCount = match.mulliganDone.size;
+      const total = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
+      const waitingFor = Array.isArray(match.playerIds)
+        ? match.playerIds.filter((pid) => !match.mulliganDone!.has(pid))
+        : [];
+      const names = waitingFor.map((pid) => players.get(pid)?.displayName ?? pid);
+      console.log(
+        `[Setup] mulliganDone <= ${playerId}${wasAlreadyDone ? " (duplicate)" : ""}. ${doneCount}/${total} complete. Waiting for: ${
+          names.length > 0 ? names.join(", ") : "none"
+        }`
+      );
+    } catch {
+      // ignore logging errors
+    }
+  }
+
+  async function handleInteractionRequest(
+    matchId: string,
+    playerId: string,
+    payload: Record<string, unknown> | null | undefined
+  ): Promise<LeaderResult> {
+    try {
+      const match = await getOrLoadMatch(matchId);
+      if (!match) return { ok: false, error: "Match not found", code: "interaction_internal" };
+      if (!(match.interactionRequests instanceof Map)) {
+        match.interactionRequests = new Map<string, InteractionRequestEntry>();
+      }
+      if (!(match.interactionGrants instanceof Map)) {
+        match.interactionGrants = new Map<string, GrantRecord[]>();
+      }
+
+      const now = Date.now();
+      const actorSeat = getSeatForPlayer(match, playerId);
+      if (!actorSeat) {
+        return {
+          ok: false,
+          error: "Interaction requests are only available to seated players",
+          code: "interaction_invalid",
+        };
+      }
+
+      const opponentSeat = getOpponentSeat(actorSeat);
+      const opponentIndex = actorSeat === "p1" ? 1 : 0;
+      const opponentId = Array.isArray(match.playerIds) ? match.playerIds[opponentIndex] : null;
+      if (!opponentId) {
+        return {
+          ok: false,
+          error: "Opponent unavailable for interaction",
+          code: "interaction_invalid_opponent",
+        };
+      }
+
+      const rawKind =
+        payload && typeof payload.kind === "string" ? (payload.kind as string) : null;
+      if (!rawKind || !interactionKinds.has(rawKind)) {
+        return {
+          ok: false,
+          error: "Unsupported interaction kind",
+          code: "interaction_invalid_kind",
+        };
+      }
+
+      const requestId =
+        payload && typeof payload.requestId === "string" && payload.requestId.length >= 6
+          ? (payload.requestId as string)
+          : rid("intl");
+      const expiresAtRaw = Number(payload?.expiresAt);
+      const expiresAt =
+        Number.isFinite(expiresAtRaw) && expiresAtRaw > now ? expiresAtRaw : null;
+      const note =
+        payload && typeof payload.note === "string"
+          ? (payload.note as string).slice(0, 280)
+          : undefined;
+
+      const rawPayload =
+        payload && typeof payload.payload === "object" && payload.payload !== null
+          ? (payload.payload as Record<string, unknown>)
+          : {};
+      const sanitizedPayload: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawPayload)) {
+        if (key === "grant" || key === "proposedGrant") continue;
+        sanitizedPayload[key] = value;
+      }
+
+      const proposedGrant = sanitizeGrantOptions(
+        payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
+        opponentSeat
+      );
+      if (proposedGrant) {
+        sanitizedPayload.proposedGrant = proposedGrant;
+      }
+
+      const message: InteractionRequestMessage = {
+        type: "interaction:request",
+        requestId,
+        matchId: match.id,
+        from: playerId,
+        to: opponentId,
+        kind: rawKind,
+        createdAt: now,
+      };
+      if (expiresAt) message.expiresAt = expiresAt;
+      if (note) message.note = note;
+      if (Object.keys(sanitizedPayload).length > 0) {
+        message.payload = sanitizedPayload;
+      }
+
+      const pendingAction = sanitizePendingAction(rawKind, sanitizedPayload, actorSeat, playerId);
+
+      recordInteractionRequest(match, message, proposedGrant ?? null, pendingAction);
+      match.lastTs = now;
+      emitInteraction(matchId, message);
+      try {
+        await persistMatchUpdate(match, null, playerId, now);
+      } catch {
+        // ignore
+      }
+
+      return { ok: true };
+    } catch (err) {
+      try {
+        console.warn(
+          "[interaction] request failed",
+          err instanceof Error ? err.message : String(err)
+        );
+      } catch {
+        // ignore
+      }
+      return {
+        ok: false,
+        error: "Failed to process interaction request",
+        code: "interaction_internal",
+      };
+    }
+  }
+
+  async function handleInteractionResponse(
+    matchId: string,
+    playerId: string,
+    payload: Record<string, unknown> | null | undefined
+  ): Promise<LeaderResult> {
+    try {
+      const match = await getOrLoadMatch(matchId);
+      if (!match) return { ok: false, error: "Match not found", code: "interaction_internal" };
+      ensureInteractionState(match);
+      if (!(match.interactionRequests instanceof Map)) {
+        match.interactionRequests = new Map<string, InteractionRequestEntry>();
+      }
+      if (!(match.interactionGrants instanceof Map)) {
+        match.interactionGrants = new Map<string, GrantRecord[]>();
+      }
+
+      const now = Date.now();
+      const actorSeat = getSeatForPlayer(match, playerId);
+
+      const requestId =
+        payload && typeof payload.requestId === "string" ? (payload.requestId as string) : null;
+      if (!requestId) {
+        return {
+          ok: false,
+          error: "Missing interaction request identifier",
+          code: "interaction_invalid_request",
+        };
+      }
+
+      const entry = match.interactionRequests.get(requestId);
+      const request = entry?.request ?? null;
+      if (!request) {
+        return {
+          ok: false,
+          error: "Interaction request not found",
+          code: "interaction_unknown_request",
+        };
+      }
+
+      const rawDecision =
+        payload && typeof payload.decision === "string"
+          ? (payload.decision as string)
+          : null;
+      if (!rawDecision || !interactionDecisions.has(rawDecision)) {
+        return {
+          ok: false,
+          error: "Invalid interaction decision",
+          code: "interaction_invalid_decision",
+        };
+      }
+
+      const responderTargetsOpponent = rawDecision !== "cancelled";
+      if (responderTargetsOpponent && playerId !== request.to) {
+        return {
+          ok: false,
+          error: "Only the targeted opponent may respond",
+          code: "interaction_not_authorized",
+        };
+      }
+      if (!responderTargetsOpponent && playerId !== request.from) {
+        return {
+          ok: false,
+          error: "Only the requester may cancel",
+          code: "interaction_not_authorized",
+        };
+      }
+
+      const reason =
+        payload && typeof payload.reason === "string"
+          ? (payload.reason as string).slice(0, 280)
+          : undefined;
+      const rawPayload =
+        payload && typeof payload.payload === "object" && payload.payload !== null
+          ? (payload.payload as Record<string, unknown>)
+          : {};
+      const sanitizedPayload: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawPayload)) {
+        if (key === "grant" || key === "proposedGrant") continue;
+        sanitizedPayload[key] = value;
+      }
+
+      let grantOpts: Record<string, unknown> | null = null;
+      if (rawDecision === "approved") {
+        const grantSeat = actorSeat ?? getOpponentSeat(getSeatForPlayer(match, request.from)!);
+        grantOpts = sanitizeGrantOptions(
+          payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
+          grantSeat
+        );
+        if (grantOpts) {
+          sanitizedPayload.grant = grantOpts;
+        }
+      }
+
+      const recipientId = playerId === request.from ? request.to : request.from;
+      const responseMessage: InteractionResponseMessage = {
+        type: "interaction:response",
+        requestId: request.requestId,
+        matchId: match.id,
+        from: playerId,
+        to: recipientId,
+        kind: request.kind,
+        decision: rawDecision,
+        createdAt: request.createdAt,
+        expiresAt: request.expiresAt,
+        respondedAt: now,
+      };
+      if (reason) responseMessage.reason = reason;
+      if (Object.keys(sanitizedPayload).length > 0) {
+        responseMessage.payload = sanitizedPayload;
+      }
+
+      if (rawDecision === "approved" && grantOpts) {
+        const entryRecord = match.interactionRequests.get(request.requestId);
+        if (entryRecord) {
+          const grantRecord = createGrantRecord(entryRecord, responseMessage, grantOpts, now);
+          match.interactionGrants.set(grantRecord.grantedTo, [
+            ...(match.interactionGrants.get(grantRecord.grantedTo) ?? []),
+            grantRecord,
+          ]);
+        }
+      }
+
+      recordInteractionResponse(match, responseMessage, null);
+
+      if (rawDecision === "approved") {
+        const storedEntry = match.interactionRequests.get(requestId);
+        if (storedEntry) {
+          try {
+            const result = await applyPendingAction(match, storedEntry, now);
+            if (result) {
+              storedEntry.result = result;
+              storedEntry.pendingAction = null;
+              match.interactionRequests.set(requestId, storedEntry);
+              emitInteractionResult(matchId, result);
+            }
+          } catch (err) {
+            console.warn(
+              "[interaction] failed to execute pending action",
+              err instanceof Error ? err.message : err
+            );
+          }
+        }
+      }
+
+      match.lastTs = now;
+      emitInteraction(matchId, responseMessage);
+      try {
+        await persistMatchUpdate(match, null, playerId, now);
+      } catch {
+        // ignore
+      }
+
+      return { ok: true };
+    } catch (err) {
+      try {
+        console.warn(
+          "[interaction] response failed",
+          err instanceof Error ? err.message : String(err)
+        );
+      } catch {
+        // ignore
+      }
+      return {
+        ok: false,
+        error: "Failed to process interaction response",
+        code: "interaction_internal",
+      };
+    }
+  }
+
   return {
     applyAction,
+    joinMatch,
+    handleMulliganDone,
+    handleInteractionRequest,
+    handleInteractionResponse,
   };
 }
