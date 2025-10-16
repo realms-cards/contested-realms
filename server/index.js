@@ -12,6 +12,7 @@ const draftConfig = require('./modules/draft/config');
 // T023: Import standings service
 const standingsService = require('./modules/tournament/standings');
 const { createLobbyFeature } = require('./features/lobby');
+const { createTournamentFeature } = require('./features/tournament');
 
 // -----------------------------
 // Card Cost Enrichment (Issue 5: Missing Card Cost Data)
@@ -1626,13 +1627,40 @@ const {
   upsertLobbyFromSerialized,
 } = lobbyFeature;
 
+const tournamentFeature = createTournamentFeature({
+  io,
+  storeRedis,
+  instanceId: INSTANCE_ID,
+  players,
+  matches,
+  playerIdBySocket,
+  prisma,
+  rid,
+  normalizeSealedConfig,
+  createRngFromString,
+  generateBoosterDeterministic,
+  persistMatchCreated,
+  hydrateMatchFromDatabase,
+  startMatchRecording,
+  getMatchInfo,
+  tournamentBroadcast,
+});
+
+const {
+  registerSocketHandlers: registerTournamentSocketHandlers,
+  broadcastTournamentUpdate,
+  broadcastPhaseChanged,
+  broadcastRoundStarted,
+  broadcastPlayerJoined,
+  broadcastPlayerLeft,
+  broadcastPreparationUpdate,
+  broadcastDraftReady,
+  broadcastStatisticsUpdate,
+} = tournamentFeature;
+
 // Draft session presence: sessionId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
 /** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
 const draftPresence = new Map();
-
-// Tournament presence: tournamentId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
-/** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
-const tournamentPresence = new Map();
 
 function getDraftPresenceList(sessionId) {
   const m = draftPresence.get(sessionId);
@@ -1684,21 +1712,6 @@ async function updateDraftPresence(sessionId, playerId, playerName, isConnected)
   }
   // Fallback to local process memory
   return upsertDraftPresence(sessionId, playerId, playerName, isConnected);
-}
-
-function getTournamentPresenceList(tournamentId) {
-  const m = tournamentPresence.get(tournamentId);
-  if (!m) return [];
-  return Array.from(m.values());
-}
-
-function upsertTournamentPresence(tournamentId, playerId, playerName, isConnected) {
-  let m = tournamentPresence.get(tournamentId);
-  if (!m) { m = new Map(); tournamentPresence.set(tournamentId, m); }
-  const prev = m.get(playerId) || { playerId, playerName: playerName || `Player ${playerId.slice(-4)}`, isConnected: false, lastActivity: 0 };
-  const rec = { playerId, playerName: playerName || prev.playerName, isConnected: !!isConnected, lastActivity: Date.now() };
-  m.set(playerId, rec);
-  return getTournamentPresenceList(tournamentId);
 }
 
 function getVoiceRoomIdForPlayer(player) {
@@ -3673,38 +3686,6 @@ function mergeEvents(prev, add) {
 }
 
 // T019: Tournament broadcast helpers - now use extracted module
-function broadcastTournamentUpdate(tournamentId, data) {
-  tournamentBroadcast.emitTournamentUpdate(io, tournamentId, data);
-}
-
-function broadcastPhaseChanged(tournamentId, newPhase, additionalData = {}) {
-  tournamentBroadcast.emitPhaseChanged(io, tournamentId, newPhase, additionalData);
-}
-
-function broadcastRoundStarted(tournamentId, roundNumber, matches) {
-  tournamentBroadcast.emitRoundStarted(io, tournamentId, roundNumber, matches);
-}
-
-function broadcastPlayerJoined(tournamentId, playerId, playerName, currentPlayerCount) {
-  tournamentBroadcast.emitPlayerJoined(io, tournamentId, playerId, playerName, currentPlayerCount);
-}
-
-function broadcastPlayerLeft(tournamentId, playerId, playerName, currentPlayerCount) {
-  tournamentBroadcast.emitPlayerLeft(io, tournamentId, playerId, playerName, currentPlayerCount);
-}
-
-function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted = false) {
-  tournamentBroadcast.emitPreparationUpdate(io, tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted);
-}
-
-function broadcastDraftReady(tournamentId, payload) {
-  tournamentBroadcast.emitDraftReady(io, tournamentId, payload);
-}
-
-function broadcastStatisticsUpdate(tournamentId, statistics) {
-  tournamentBroadcast.emitStatisticsUpdate(io, tournamentId, statistics);
-}
-
 function broadcastPlayers() {
   io.emit("playerList", { players: playersArray() });
 }
@@ -3806,11 +3787,13 @@ io.on("connection", async (socket) => {
   let authUser = null;
   // Track current draft session room for this socket (if any)
   let currentDraftSessionId = null;
-  // Track tournament rooms this socket has joined
-  /** @type {Set<string>} */
-  let currentTournamentIds = new Set();
-
   registerLobbySocketHandlers({
+    socket,
+    isAuthed: () => authed,
+    getPlayerBySocket,
+  });
+
+  registerTournamentSocketHandlers({
     socket,
     isAuthed: () => authed,
     getPlayerBySocket,
@@ -3895,59 +3878,6 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // Tournament room join/leave handlers (matches constants.ts event names)
-  socket.on("tournament:join", async (payload) => {
-    const tournamentId = payload?.tournamentId;
-    if (!tournamentId) return;
-
-    console.log(`[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`);
-    await socket.join(`tournament:${tournamentId}`);
-    currentTournamentIds.add(tournamentId);
-
-    // Acknowledge the join
-    try {
-      socket.emit("tournament:joined", { tournamentId });
-    } catch (err) {
-      console.error("[Tournament] Error sending join acknowledgment:", err);
-    }
-
-    // Presence update (server-authoritative)
-    try {
-      const player = getPlayerBySocket(socket);
-      const pid = player?.id || playerIdBySocket.get(socket.id);
-      const name = player?.displayName || null;
-      if (pid) {
-        const list = upsertTournamentPresence(tournamentId, pid, name, true);
-        io.to(`tournament:${tournamentId}`).emit('tournament:presence', { tournamentId, players: list });
-      }
-    } catch {}
-  });
-
-  socket.on("tournament:leave", async (payload) => {
-    const tournamentId = payload?.tournamentId;
-    if (!tournamentId) return;
-
-    console.log(`[Tournament] Player ${socket.id} leaving tournament room: tournament:${tournamentId}`);
-    await socket.leave(`tournament:${tournamentId}`);
-    try { currentTournamentIds.delete(tournamentId); } catch {}
-
-    // Acknowledge the leave
-    try {
-      socket.emit("tournament:left", { tournamentId });
-    } catch (err) {
-      console.error("[Tournament] Error sending leave acknowledgment:", err);
-    }
-
-    // Presence update (mark disconnected for this tournament)
-    try {
-      const pid = playerIdBySocket.get(socket.id);
-      if (pid) {
-        const list = upsertTournamentPresence(tournamentId, pid, players.get(pid)?.displayName || null, false);
-        io.to(`tournament:${tournamentId}`).emit('tournament:presence', { tournamentId, players: list });
-      }
-    } catch {}
-  });
-
   // --- Tournament Draft session rooms + presence ---
   socket.on('draft:session:join', async (payload = {}) => {
     if (!authed) return;
@@ -4017,28 +3947,6 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // Tournament chat
-  socket.on("TOURNAMENT_CHAT", async (payload) => {
-    const tournamentId = payload?.tournamentId;
-    const content = payload?.content;
-    const timestamp = payload?.timestamp || Date.now();
-
-    if (!tournamentId || !content) return;
-
-    const player = getPlayerBySocket(socket);
-    const from = player?.displayName || "Anonymous";
-
-    console.log(`[Tournament Chat] ${from} in ${tournamentId}: ${content}`);
-
-    // Broadcast to all players in tournament room
-    io.to(`tournament:${tournamentId}`).emit("TOURNAMENT_CHAT", {
-      tournamentId,
-      from,
-      content,
-      timestamp
-    });
-  });
-
   // Per-player mulligan completion. When all players are done, advance to Main.
   socket.on("mulliganDone", async () => {
     if (!authed) return;
@@ -4053,157 +3961,6 @@ io.on("connection", async (socket) => {
       }
       await leaderHandleMulliganDone(matchId, player.id);
     } catch {}
-  });
-
-  // Create or ensure a tournament match exists by a known matchId with given players
-  // Payload: { matchId: string, playerIds: string[], matchType?: 'constructed'|'sealed'|'draft', lobbyName?: string, sealedConfig?: any, draftConfig?: any }
-  socket.on("startTournamentMatch", async (payload = {}) => {
-    if (!authed) return;
-    const matchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
-    const playerIds = Array.isArray(payload && payload.playerIds) ? payload.playerIds.filter(Boolean).map(String) : [];
-    const requestedMatchType = (payload && payload.matchType) || 'constructed';
-    const lobbyName = (payload && payload.lobbyName) || null;
-    const tournamentId = payload && payload.tournamentId ? String(payload.tournamentId) : null;
-    const sealedConfig = payload && payload.sealedConfig ? payload.sealedConfig : null;
-    if (!matchId || playerIds.length < 1) return;
-
-    const actualMatchType = requestedMatchType === 'sealed'
-      ? 'sealed'
-      : 'constructed';
-    const normalizedSealedConfig = actualMatchType === 'sealed'
-      ? (() => {
-          const base = normalizeSealedConfig(sealedConfig || {});
-          if (base && !base.constructionStartTime) {
-            base.constructionStartTime = Date.now();
-          }
-          return base;
-        })()
-      : null;
-
-    let match = matches.get(matchId);
-    if (!match) {
-      // Initialize a new match with provided id and roster
-      match = {
-        id: matchId,
-        lobbyId: null,
-        lobbyName,
-        tournamentId,
-        playerIds: [...new Set(playerIds)],
-        status: actualMatchType === 'sealed' ? 'deck_construction' : 'waiting',
-        seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
-        turn: playerIds[0] || null,
-        winnerId: null,
-        matchType: actualMatchType,
-        sealedConfig: normalizedSealedConfig,
-        playerDecks: new Map(),
-        game: {
-          phase: "Setup",
-          mulligans: { p1: 1, p2: 1 },
-          d20Rolls: { p1: null, p2: null },
-          setupWinner: null,
-        },
-        lastTs: 0,
-        interactionRequests: new Map(),
-        interactionGrants: new Map(),
-      };
-
-      matches.set(matchId, match);
-      // Elect this instance as initial match leader and persist the session for cluster recovery
-      try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
-      try { await persistMatchCreated(match); } catch {}
-      // Begin recording
-      startMatchRecording(match);
-      await hydrateMatchFromDatabase(matchId, match);
-    } else {
-      // Ensure provided players are present
-      for (const pid of playerIds) {
-        if (!match.playerIds.includes(pid)) match.playerIds.push(pid);
-      }
-      // Adopt tournament context if provided and not already set
-      if (!match.tournamentId && tournamentId) {
-        match.tournamentId = tournamentId;
-      }
-      if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
-        match.playerDecks = new Map();
-      }
-      if (actualMatchType === 'sealed') {
-        match.sealedConfig = normalizedSealedConfig || normalizeSealedConfig(match.sealedConfig);
-      }
-      await hydrateMatchFromDatabase(matchId, match);
-    }
-
-    // Join all currently connected sockets for provided players (cross-instance)
-    const room = `match:${match.id}`;
-    for (const pid of playerIds) {
-      const p = players.get(pid);
-      if (!p) continue;
-      p.matchId = match.id;
-      const sid = p.socketId || null;
-      if (sid) { try { await io.in(sid).socketsJoin(room); } catch {} }
-    }
-
-    // If sealed, generate packs deterministically (same logic as startMatchFromLobby)
-    if (match.matchType === 'sealed' && match.sealedConfig) {
-      (async () => {
-        try {
-          const sealedPacks = {};
-          for (const pid of match.playerIds) {
-            const rng = createRngFromString(`${match.seed}|${pid}|sealed`);
-            const sc = match.sealedConfig || {};
-            const packCounts = sc.packCounts && typeof sc.packCounts === 'object' ? sc.packCounts : null;
-            const replaceAvatars = !!sc.replaceAvatars;
-            /** @type {string[]} */
-            let sets = [];
-            if (packCounts) {
-              for (const [setName, cnt] of Object.entries(packCounts)) {
-                const c = Math.max(0, Number(cnt) || 0);
-                for (let i = 0; i < c; i++) sets.push(setName);
-              }
-              // Deterministic shuffle of sets using rng for variety
-              for (let i = sets.length - 1; i > 0; i--) {
-                const j = Math.floor(rng() * (i + 1));
-                [sets[i], sets[j]] = [sets[j], sets[i]];
-              }
-            } else {
-              console.error(`[Sealed] packCounts not provided for player ${pid} in match ${match.id}`);
-              continue;
-            }
-
-            /** @type {Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string, cardId?: number, variantId?: number, finish?: string, product?: string }> }>} */
-            const packs = [];
-            for (let i = 0; i < sets.length; i++) {
-              const setName = sets[i];
-              const picks = await generateBoosterDeterministic(setName, rng, replaceAvatars);
-              const cards = picks.map((p, idx) => ({
-                id: `${String(p.variantId)}_${i}_${idx}_${pid.slice(-4)}`,
-                name: p.cardName || "",
-                set: setName,
-                slug: String(p.slug || ""),
-                type: p.type ?? null,
-                cost: p.cost ?? null,
-                rarity: String(p.rarity || "Ordinary"),
-                // Include identifiers so clients can avoid per-card lookups
-                cardId: typeof p.cardId === 'number' ? p.cardId : undefined,
-                variantId: typeof p.variantId === 'number' ? p.variantId : undefined,
-                finish: typeof p.finish === 'string' ? p.finish : undefined,
-                product: typeof p.product === 'string' ? p.product : undefined,
-              }));
-              packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
-            }
-            sealedPacks[pid] = packs;
-          }
-          match.sealedPacks = sealedPacks;
-          io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
-        } catch (err) {
-          console.error(`[Sealed] Error generating sealed packs for match ${match.id}:`, err);
-          io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
-        }
-      })();
-      return; // will emit after packs are generated
-    }
-
-    // Broadcast updated match info to room (and initiator)
-    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
   });
 
   socket.on("joinMatch", async (payload) => {
@@ -5329,106 +5086,6 @@ io.on("connection", async (socket) => {
     try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
   });
 
-  // ==========================================
-  // TOURNAMENT SOCKET EVENTS  
-  // ==========================================
-  
-  // Join tournament room for real-time updates
-  socket.on("joinTournament", async (payload) => {
-    const { tournamentId } = payload || {};
-    if (!tournamentId) return;
-    
-    const pid = playerIdBySocket.get(socket.id);
-    if (!pid) return;
-    
-    // Join the tournament room
-    socket.join(`tournament:${tournamentId}`);
-    console.log(`[Tournament] Socket ${socket.id} (player ${pid}) joined tournament ${tournamentId}`);
-    
-    // Send current tournament state
-    try {
-      const tournament = await prisma.tournament.findUnique({
-        where: { id: tournamentId },
-        include: { registrations: true }
-      });
-      if (tournament) {
-        socket.emit("TOURNAMENT_UPDATED", {
-          id: tournament.id,
-          name: tournament.name,
-          format: tournament.format,
-          status: tournament.status,
-          maxPlayers: tournament.maxPlayers,
-          currentPlayers: tournament.registrations.length,
-          creatorId: tournament.creatorId,
-          settings: tournament.settings,
-          createdAt: tournament.createdAt.toISOString(),
-          startedAt: tournament.startedAt?.toISOString() || null,
-          completedAt: tournament.completedAt?.toISOString() || null
-        });
-      }
-    } catch (err) {
-      console.error("[Tournament] Failed to send initial state:", err);
-    }
-  });
-
-  // Leave tournament room
-  socket.on("leaveTournament", (payload) => {
-    const { tournamentId } = payload || {};
-    if (!tournamentId) return;
-    
-    socket.leave(`tournament:${tournamentId}`);
-    console.log(`[Tournament] Socket ${socket.id} left tournament ${tournamentId}`);
-  });
-
-  // Update preparation status (sealed/draft/constructed)
-  socket.on("UPDATE_PREPARATION", async (payload) => {
-    const { tournamentId, preparationData } = payload || {};
-    if (!tournamentId) return;
-    
-    const pid = playerIdBySocket.get(socket.id);
-    if (!pid) return;
-    
-    try {
-      const registration = await prisma.tournamentRegistration.findUnique({
-        where: {
-          tournamentId_playerId: {
-            tournamentId,
-            playerId: pid
-          }
-        }
-      });
-      
-      if (!registration) return;
-      
-      await prisma.tournamentRegistration.update({
-        where: { id: registration.id },
-        data: {
-          preparationData: JSON.parse(JSON.stringify(preparationData)),
-          preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
-          deckSubmitted: Boolean(preparationData.deckSubmitted)
-        }
-      });
-      
-      // Broadcast preparation update
-      const [readyCount, totalCount] = await Promise.all([
-        prisma.tournamentRegistration.count({
-          where: { tournamentId, preparationStatus: 'completed', deckSubmitted: true }
-        }),
-        prisma.tournamentRegistration.count({ where: { tournamentId } })
-      ]);
-      
-      io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", {
-        tournamentId,
-        playerId: pid,
-        preparationStatus: preparationData.isComplete ? 'completed' : 'inProgress',
-        deckSubmitted: Boolean(preparationData.deckSubmitted),
-        readyPlayerCount: readyCount,
-        totalPlayerCount: totalCount
-      });
-    } catch (err) {
-      console.error("[Tournament] Preparation update failed:", err);
-    }
-  });
   socket.on("disconnect", () => {
     const pid = playerIdBySocket.get(socket.id);
     if (!pid) return;
@@ -5443,16 +5100,6 @@ io.on("connection", async (socket) => {
             try { io.to(`draft:${currentDraftSessionId}`).emit('draft:session:presence', { sessionId: currentDraftSessionId, players: list }); } catch {}
           })
           .catch(() => {});
-      }
-    } catch {}
-
-    // Update tournament presence on disconnect for all tournaments this socket joined
-    try {
-      if (currentTournamentIds && currentTournamentIds.size > 0) {
-        for (const tid of Array.from(currentTournamentIds)) {
-          const list = upsertTournamentPresence(tid, pid, players.get(pid)?.displayName || null, false);
-          io.to(`tournament:${tid}`).emit('tournament:presence', { tournamentId: tid, players: list });
-        }
       }
     } catch {}
 
