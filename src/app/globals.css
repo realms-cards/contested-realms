@@ -94,3 +94,34 @@ input, textarea, select, button,
     box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
   }
 }
+
+/* Global loading indicator spinner */
+.ascii-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 1.4rem;
+  line-height: 1;
+  width: 1.75rem;
+  height: 1.75rem;
+  text-shadow: 0 0 6px rgba(148, 163, 184, 0.4);
+  animation: asciiSpinRotate 0.9s linear infinite;
+}
+
+@media (max-width: 640px) {
+  .ascii-spinner {
+    font-size: 1.1rem;
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+}
+
+@keyframes asciiSpinRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
