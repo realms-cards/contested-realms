@@ -3,31 +3,41 @@
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
 // T019: Import extracted modules
-const { createBootstrap } = require('./core/bootstrap');
-const { createPersistenceLayer } = require('./core/persistence');
-const { createContainer } = require('./core/container');
-const { registerFeatures } = require('./features');
+const { createBootstrap } = require("./core/bootstrap");
+const { createPersistenceLayer } = require("./core/persistence");
+const { createContainer } = require("./core/container");
+const { registerFeatures } = require("./features");
 const {
   createInteractionModule,
   INTERACTION_VERSION,
   INTERACTION_ENFORCEMENT_ENABLED,
   INTERACTION_REQUEST_KINDS,
   INTERACTION_DECISIONS,
-} = require('./modules/interactions');
-const { tournament: tournamentModules, draft: draftModules, replay } = require('./modules');
+} = require("./modules/interactions");
+const {
+  tournament: tournamentModules,
+  draft: draftModules,
+  replay,
+} = require("./modules");
 const tournamentBroadcast = tournamentModules.broadcast;
 // T021: Import draft config service
 const draftConfig = draftModules.config;
 const { createMatchDraftService } = draftModules;
+const { createMatchLeaderService } = require('./modules/match-leader');
 // T023: Import standings service
 const standingsService = tournamentModules.standings;
-const { enrichPatchWithCosts } = require('./modules/card-costs');
+const { enrichPatchWithCosts } = require("./modules/card-costs");
 const {
   getSeatForPlayer,
   getPlayerIdForSeat,
   getOpponentSeat,
   inferLoserId,
-} = require('./modules/match-utils');
+} = require("./modules/match-utils");
+const {
+  normalizeDeckPayload,
+  validateDeckCards,
+} = require("./modules/deck-utils");
+const { createLeaderboardService } = require("./modules/leaderboard");
 
 const jwt = require("jsonwebtoken");
 const {
@@ -36,12 +46,23 @@ const {
   generateCubeBoosterDeterministic,
 } = require("./booster");
 const { BotManager } = require("./botManager");
-const { applyTurnStart, validateAction, ensureCosts, applyMovementAndCombat } = require("./rules");
+const {
+  applyTurnStart,
+  validateAction,
+  ensureCosts,
+  applyMovementAndCombat,
+} = require("./rules");
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 const { buildMatchInfo } = require("./matchInfo");
 
 const bootstrap = createBootstrap();
-const { config: serverConfig, prisma, httpServer: server, io, redis } = bootstrap;
+const {
+  config: serverConfig,
+  prisma,
+  httpServer: server,
+  io,
+  redis,
+} = bootstrap;
 const { pubClient, subClient, storeRedis, storeSub } = redis;
 const PORT = serverConfig.port;
 const INSTANCE_ID = serverConfig.instanceId;
@@ -49,32 +70,42 @@ const CORS_ORIGINS = Array.isArray(serverConfig.corsOrigins)
   ? serverConfig.corsOrigins
   : [serverConfig.corsOrigins].filter(Boolean);
 // Optional: start periodic pruning of old replay actions/sessions
-try { replay.setupReplayRetentionPruner?.(prisma); } catch {}
+try {
+  replay.setupReplayRetentionPruner?.(prisma);
+} catch {}
 let isReady = false; // readiness flips true once DB connected and recovery done
 let isShuttingDown = false;
 // Rules enforcement modes:
 //  - off: helpers only, no strict gating
 //  - bot_only: enforce for CPU bots only
 //  - all: enforce for all players
-const RULES_ENFORCE_MODE = (process.env.RULES_ENFORCE_MODE || 'off').toLowerCase();
+const RULES_ENFORCE_MODE = (
+  process.env.RULES_ENFORCE_MODE || "off"
+).toLowerCase();
 const RULES_HELPERS_ENABLED = !(
-  process.env.RULES_HELPERS_ENABLED === '0' ||
-  (process.env.RULES_HELPERS_ENABLED || '').toLowerCase() === 'false'
+  process.env.RULES_HELPERS_ENABLED === "0" ||
+  (process.env.RULES_HELPERS_ENABLED || "").toLowerCase() === "false"
 );
-
 
 // Persistence strategy: default to Redis write-behind to avoid DB pool pressure
-const PERSIST_STRATEGY = (process.env.PERSIST_STRATEGY || 'write_behind').toLowerCase();
-const PERSIST_IS_WRITE_BEHIND = (
-  PERSIST_STRATEGY === 'write_behind' ||
-  PERSIST_STRATEGY === 'redis' ||
-  PERSIST_STRATEGY === 'redis_writebehind'
+const PERSIST_STRATEGY = (
+  process.env.PERSIST_STRATEGY || "write_behind"
+).toLowerCase();
+const PERSIST_IS_WRITE_BEHIND =
+  PERSIST_STRATEGY === "write_behind" ||
+  PERSIST_STRATEGY === "redis" ||
+  PERSIST_STRATEGY === "redis_writebehind";
+const PERSIST_FLUSH_INTERVAL_MS = Number(
+  process.env.PERSIST_FLUSH_INTERVAL_MS || 3000
 );
-const PERSIST_FLUSH_INTERVAL_MS = Number(process.env.PERSIST_FLUSH_INTERVAL_MS || 3000);
 const PERSIST_MAX_WAIT_MS = Number(process.env.PERSIST_MAX_WAIT_MS || 2000);
 const PERSIST_TIMEOUT_MS = Number(process.env.PERSIST_TIMEOUT_MS || 2000);
-const PERSIST_ACTION_BATCH_SIZE = Number(process.env.PERSIST_ACTION_BATCH_SIZE || 200);
-const REDIS_SESSION_TTL_SEC = Number(process.env.MATCH_SESSION_TTL_SEC || 60 * 60 * 24);
+const PERSIST_ACTION_BATCH_SIZE = Number(
+  process.env.PERSIST_ACTION_BATCH_SIZE || 200
+);
+const REDIS_SESSION_TTL_SEC = Number(
+  process.env.MATCH_SESSION_TTL_SEC || 60 * 60 * 24
+);
 
 // Simple in-memory metrics registry (process lifetime)
 const METRICS = {
@@ -95,7 +126,7 @@ function metricsObserveMs(key, ms) {
 }
 
 function promSafe(name) {
-  return String(name).replace(/[^a-zA-Z0-9_]/g, '_');
+  return String(name).replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
 let getPersistenceBufferStats = () => ({ bufferCount: 0, bufferedActions: 0 });
@@ -106,21 +137,37 @@ function collectMetricsSnapshot() {
   const counters = {};
   for (const [k, v] of METRICS.counters.entries()) counters[k] = v;
   const hist = {};
-  for (const [k, v] of METRICS.hist.entries()) hist[k] = { sum: v.sum, count: v.count, avg: v.count > 0 ? v.sum / v.count : 0 };
-  const sockets = (() => { try { return io.of('/').sockets.size; } catch { return 0; } })();
+  for (const [k, v] of METRICS.hist.entries())
+    hist[k] = {
+      sum: v.sum,
+      count: v.count,
+      avg: v.count > 0 ? v.sum / v.count : 0,
+    };
+  const sockets = (() => {
+    try {
+      return io.of("/").sockets.size;
+    } catch {
+      return 0;
+    }
+  })();
   const mem = process.memoryUsage();
   const { bufferCount, bufferedActions } = getPersistenceBufferStats();
   return {
     time: now,
     uptimeSec: Math.floor(process.uptime()),
-    matchesCached: typeof matches !== 'undefined' && matches ? matches.size : 0,
+    matchesCached: typeof matches !== "undefined" && matches ? matches.size : 0,
     persistBuffers: bufferCount,
     bufferedActions,
     socketsConnected: sockets,
     dbReady: !!isReady,
-    redisAdapterStatus: pubClient ? pubClient.status : 'none',
-    storeRedisStatus: storeRedis ? storeRedis.status : 'none',
-    memory: { rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal, external: mem.external },
+    redisAdapterStatus: pubClient ? pubClient.status : "none",
+    storeRedisStatus: storeRedis ? storeRedis.status : "none",
+    memory: {
+      rss: mem.rss,
+      heapUsed: mem.heapUsed,
+      heapTotal: mem.heapTotal,
+      external: mem.external,
+    },
     counters,
     hist,
   };
@@ -149,69 +196,127 @@ function buildPromMetrics() {
     lines.push(`${base}_count ${Number(count)}`);
   };
   // Gauges
-  pushGauge('matches_cached', snap.matchesCached, 'Number of matches in memory');
-  pushGauge('persist_buffers', snap.persistBuffers, 'Number of write-behind buffers');
-  pushGauge('persist_buffered_actions', snap.bufferedActions, 'Queued actions in buffers');
-  pushGauge('sockets_connected', snap.socketsConnected, 'Connected WebSocket clients');
-  pushGauge('uptime_seconds', snap.uptimeSec, 'Process uptime in seconds');
-  pushGauge('process_heap_used_bytes', snap.memory.heapUsed, 'Node.js heap used');
-  pushGauge('process_rss_bytes', snap.memory.rss, 'Resident set size');
+  pushGauge(
+    "matches_cached",
+    snap.matchesCached,
+    "Number of matches in memory"
+  );
+  pushGauge(
+    "persist_buffers",
+    snap.persistBuffers,
+    "Number of write-behind buffers"
+  );
+  pushGauge(
+    "persist_buffered_actions",
+    snap.bufferedActions,
+    "Queued actions in buffers"
+  );
+  pushGauge(
+    "sockets_connected",
+    snap.socketsConnected,
+    "Connected WebSocket clients"
+  );
+  pushGauge("uptime_seconds", snap.uptimeSec, "Process uptime in seconds");
+  pushGauge(
+    "process_heap_used_bytes",
+    snap.memory.heapUsed,
+    "Node.js heap used"
+  );
+  pushGauge("process_rss_bytes", snap.memory.rss, "Resident set size");
   // Counters
   for (const [k, v] of Object.entries(snap.counters)) {
-    pushCounter(k.replace(/\./g, '_'), v, `Counter ${k}`);
+    pushCounter(k.replace(/\./g, "_"), v, `Counter ${k}`);
   }
   // Summaries
   for (const [k, v] of Object.entries(snap.hist)) {
-    pushSummary(`${k.replace(/\./g, '_')}_ms`, v.sum, v.count, `Summary ${k}`);
+    pushSummary(`${k.replace(/\./g, "_")}_ms`, v.sum, v.count, `Summary ${k}`);
   }
-  return lines.join('\n') + '\n';
+  return lines.join("\n") + "\n";
 }
 
 // Wire tournament engine dependencies (Prisma, Socket.IO, Redis, InstanceID)
 (async () => {
   try {
     const mod = await tournamentModules.loadEngine();
-    if (mod && typeof mod.setDeps === 'function') {
+    if (mod && typeof mod.setDeps === "function") {
       mod.setDeps({
         prismaClient: prisma,
         ioServer: io,
         storeRedisClient: storeRedis,
-        instanceId: INSTANCE_ID
+        instanceId: INSTANCE_ID,
       });
-      try { console.log('[tourney] engine dependencies injected'); } catch {}
+      try {
+        console.log("[tourney] engine dependencies injected");
+      } catch {}
     }
   } catch (e) {
-    try { console.warn('[tourney] engine init failed:', e?.message || e); } catch {}
+    try {
+      console.warn("[tourney] engine init failed:", e?.message || e);
+    } catch {}
   }
 })();
 
 // Match control pub/sub channel
-const MATCH_CONTROL_CHANNEL = 'match:control';
-const DRAFT_STATE_CHANNEL = 'draft:session:update';
-const MATCH_CLEANUP_DELAY_MS = Number(process.env.MATCH_CLEANUP_DELAY_MS || 60000); // 60s default
-const STALE_WAITING_MS = Number(process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000); // 10 min default
-const INACTIVE_MATCH_CLEANUP_MS = Number(process.env.INACTIVE_MATCH_CLEANUP_MS || 3 * 60 * 60 * 1000); // 3 hours default
-const LOBBY_CONTROL_CHANNEL = 'lobby:control';
-const LOBBY_STATE_CHANNEL = 'lobby:state';
+const MATCH_CONTROL_CHANNEL = "match:control";
+const DRAFT_STATE_CHANNEL = "draft:session:update";
+const MATCH_CLEANUP_DELAY_MS = Number(
+  process.env.MATCH_CLEANUP_DELAY_MS || 60000
+); // 60s default
+const STALE_WAITING_MS = Number(
+  process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000
+); // 10 min default
+const INACTIVE_MATCH_CLEANUP_MS = Number(
+  process.env.INACTIVE_MATCH_CLEANUP_MS || 3 * 60 * 60 * 1000
+); // 3 hours default
+const LOBBY_CONTROL_CHANNEL = "lobby:control";
+const LOBBY_STATE_CHANNEL = "lobby:state";
 let clusterStateReady = false; // flip after maps are initialized
 if (storeSub) {
   try {
     storeSub.subscribe(MATCH_CONTROL_CHANNEL, (err) => {
-      if (err) try { console.warn(`[store] subscribe ${MATCH_CONTROL_CHANNEL} failed:`, err?.message || err); } catch {}
+      if (err)
+        try {
+          console.warn(
+            `[store] subscribe ${MATCH_CONTROL_CHANNEL} failed:`,
+            err?.message || err
+          );
+        } catch {}
     });
     storeSub.subscribe(LOBBY_CONTROL_CHANNEL, (err) => {
-      if (err) try { console.warn(`[store] subscribe ${LOBBY_CONTROL_CHANNEL} failed:`, err?.message || err); } catch {}
+      if (err)
+        try {
+          console.warn(
+            `[store] subscribe ${LOBBY_CONTROL_CHANNEL} failed:`,
+            err?.message || err
+          );
+        } catch {}
     });
     storeSub.subscribe(LOBBY_STATE_CHANNEL, (err) => {
-      if (err) try { console.warn(`[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
+      if (err)
+        try {
+          console.warn(
+            `[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`,
+            err?.message || err
+          );
+        } catch {}
     });
     storeSub.subscribe(DRAFT_STATE_CHANNEL, (err) => {
-      if (err) try { console.warn(`[store] subscribe ${DRAFT_STATE_CHANNEL} failed:`, err?.message || err); } catch {}
+      if (err)
+        try {
+          console.warn(
+            `[store] subscribe ${DRAFT_STATE_CHANNEL} failed:`,
+            err?.message || err
+          );
+        } catch {}
     });
-    storeSub.on('message', async (channel, message) => {
+    storeSub.on("message", async (channel, message) => {
       if (!clusterStateReady) return;
       let msg = null;
-      try { msg = JSON.parse(message); } catch { return; }
+      try {
+        msg = JSON.parse(message);
+      } catch {
+        return;
+      }
       if (channel === MATCH_CONTROL_CHANNEL) {
         if (!msg || !msg.type) return;
         const { matchId } = msg;
@@ -219,39 +324,80 @@ if (storeSub) {
         try {
           const leader = await getOrClaimMatchLeader(matchId);
           if (leader !== INSTANCE_ID) return;
-        } catch { return; }
+        } catch {
+          return;
+        }
         try {
-          if (msg.type === 'join' && msg.playerId && msg.socketId) {
+          if (msg.type === "join" && msg.playerId && msg.socketId) {
             await ensurePlayerCached(msg.playerId);
             await leaderJoinMatch(matchId, msg.playerId, msg.socketId);
-          } else if (msg.type === 'action' && msg.playerId) {
-            await leaderApplyAction(matchId, msg.playerId, msg.patch || null, msg.socketId || null);
-          } else if (msg.type === 'interaction:request' && msg.playerId) {
-            await leaderHandleInteractionRequest(matchId, msg.playerId, msg.payload || null, msg.socketId || null);
-          } else if (msg.type === 'interaction:response' && msg.playerId) {
-            await leaderHandleInteractionResponse(matchId, msg.playerId, msg.payload || null, msg.socketId || null);
-          } else if (msg.type === 'draft:playerReady' && typeof msg.ready === 'boolean' && msg.playerId) {
+          } else if (msg.type === "action" && msg.playerId) {
+            await leaderApplyAction(
+              matchId,
+              msg.playerId,
+              msg.patch || null,
+              msg.socketId || null
+            );
+          } else if (msg.type === "interaction:request" && msg.playerId) {
+            await leaderHandleInteractionRequest(
+              matchId,
+              msg.playerId,
+              msg.payload || null,
+              msg.socketId || null
+            );
+          } else if (msg.type === "interaction:response" && msg.playerId) {
+            await leaderHandleInteractionResponse(
+              matchId,
+              msg.playerId,
+              msg.payload || null,
+              msg.socketId || null
+            );
+          } else if (
+            msg.type === "draft:playerReady" &&
+            typeof msg.ready === "boolean" &&
+            msg.playerId
+          ) {
             await leaderDraftPlayerReady(matchId, msg.playerId, !!msg.ready);
-          } else if (msg.type === 'draft:start' && msg.playerId) {
+          } else if (msg.type === "draft:start" && msg.playerId) {
             const m = await getOrLoadMatch(matchId);
-            if (!m || m.matchType !== 'draft' || !m.draftState) return;
-            if (m.draftState.phase !== 'waiting') {
+            if (!m || m.matchType !== "draft" || !m.draftState) return;
+            if (m.draftState.phase !== "waiting") {
               // Already started: broadcast current state to sync clients
-              try { io.to(`match:${m.id}`).emit('draftUpdate', m.draftState); } catch {}
+              try {
+                io.to(`match:${m.id}`).emit("draftUpdate", m.draftState);
+              } catch {}
             } else {
-              await leaderStartDraft(matchId, msg.playerId, msg.draftConfig || null, msg.socketId || null);
+              await leaderStartDraft(
+                matchId,
+                msg.playerId,
+                msg.draftConfig || null,
+                msg.socketId || null
+              );
             }
-          } else if (msg.type === 'draft:pick' && msg.playerId && msg.cardId) {
-            await leaderMakeDraftPick(matchId, msg.playerId, { cardId: msg.cardId, packIndex: Number(msg.packIndex || 0), pickNumber: Number(msg.pickNumber || 1) });
-          } else if (msg.type === 'draft:choosePack' && msg.playerId && msg.setChoice) {
-            await leaderChooseDraftPack(matchId, msg.playerId, { setChoice: msg.setChoice, packIndex: Number(msg.packIndex || 0) });
-          } else if (msg.type === 'mulligan:done' && msg.playerId) {
+          } else if (msg.type === "draft:pick" && msg.playerId && msg.cardId) {
+            await leaderMakeDraftPick(matchId, msg.playerId, {
+              cardId: msg.cardId,
+              packIndex: Number(msg.packIndex || 0),
+              pickNumber: Number(msg.pickNumber || 1),
+            });
+          } else if (
+            msg.type === "draft:choosePack" &&
+            msg.playerId &&
+            msg.setChoice
+          ) {
+            await leaderChooseDraftPack(matchId, msg.playerId, {
+              setChoice: msg.setChoice,
+              packIndex: Number(msg.packIndex || 0),
+            });
+          } else if (msg.type === "mulligan:done" && msg.playerId) {
             await leaderHandleMulliganDone(matchId, msg.playerId);
-          } else if (msg.type === 'match:cleanup' && msg.reason) {
+          } else if (msg.type === "match:cleanup" && msg.reason) {
             await cleanupMatchNow(matchId, msg.reason, !!msg.force);
           }
         } catch (e) {
-          try { console.warn('[match:control] handler error:', e?.message || e); } catch {}
+          try {
+            console.warn("[match:control] handler error:", e?.message || e);
+          } catch {}
         }
         return;
       }
@@ -265,9 +411,11 @@ if (storeSub) {
             // This is an echo of our own publish - skip re-broadcast
             return;
           }
-          io.to(`draft:${sessionId}`).emit('draftUpdate', draftState);
+          io.to(`draft:${sessionId}`).emit("draftUpdate", draftState);
         } catch (e) {
-          try { console.warn('[draft] failed to forward state:', e?.message || e); } catch {}
+          try {
+            console.warn("[draft] failed to forward state:", e?.message || e);
+          } catch {}
         }
         return;
       }
@@ -276,20 +424,28 @@ if (storeSub) {
         try {
           const leader = await getOrClaimLobbyLeader();
           if (leader !== INSTANCE_ID) return;
-        } catch { return; }
+        } catch {
+          return;
+        }
         try {
           await handleLobbyControlAsLeader(msg);
         } catch (e) {
-          try { console.warn('[lobby:control] handler error:', e?.message || e); } catch {}
+          try {
+            console.warn("[lobby:control] handler error:", e?.message || e);
+          } catch {}
         }
         return;
       }
       if (channel === LOBBY_STATE_CHANNEL) {
         if (!msg) return;
-        if (msg.type === 'upsert' && msg.lobby && msg.lobby.id) {
-          try { upsertLobbyFromSerialized(msg.lobby); } catch {}
-        } else if (msg.type === 'delete' && msg.id) {
-          try { lobbies.delete(msg.id); } catch {}
+        if (msg.type === "upsert" && msg.lobby && msg.lobby.id) {
+          try {
+            upsertLobbyFromSerialized(msg.lobby);
+          } catch {}
+        } else if (msg.type === "delete" && msg.id) {
+          try {
+            lobbies.delete(msg.id);
+          } catch {}
         }
         return;
       }
@@ -303,7 +459,10 @@ server.on("request", async (req, res) => {
     // Helper: dynamic CORS based on SOCKET_CORS_ORIGIN
     const reqOrigin = (req && req.headers && req.headers.origin) || null;
     const allowCors = () => {
-      if (reqOrigin && (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))) {
+      if (
+        reqOrigin &&
+        (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))
+      ) {
         res.setHeader("Access-Control-Allow-Origin", reqOrigin);
         res.setHeader("Vary", "Origin");
       }
@@ -312,7 +471,10 @@ server.on("request", async (req, res) => {
     const allowCorsForOptions = () => {
       allowCors();
       res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization"
+      );
     };
 
     const method = (req && req.method) || "GET";
@@ -320,11 +482,27 @@ server.on("request", async (req, res) => {
     const pathname = u.pathname;
 
     // Health endpoints
-    if (pathname === "/healthz" || pathname === "/readyz" || pathname === "/status") {
+    if (
+      pathname === "/healthz" ||
+      pathname === "/readyz" ||
+      pathname === "/status"
+    ) {
       const dbOk = !!isReady;
-      const redisOk = pubClient ? (pubClient.status === "ready" || pubClient.status === "connect") : false;
-      const storeOk = storeRedis ? (storeRedis.status === 'ready' || storeRedis.status === 'connect') : false;
-      const body = JSON.stringify({ ok: true, db: dbOk, redis: redisOk, store: storeOk, shuttingDown: isShuttingDown, matches: typeof matches !== 'undefined' && matches ? matches.size : 0, uptimeSec: Math.floor(process.uptime()) });
+      const redisOk = pubClient
+        ? pubClient.status === "ready" || pubClient.status === "connect"
+        : false;
+      const storeOk = storeRedis
+        ? storeRedis.status === "ready" || storeRedis.status === "connect"
+        : false;
+      const body = JSON.stringify({
+        ok: true,
+        db: dbOk,
+        redis: redisOk,
+        store: storeOk,
+        shuttingDown: isShuttingDown,
+        matches: typeof matches !== "undefined" && matches ? matches.size : 0,
+        uptimeSec: Math.floor(process.uptime()),
+      });
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       res.end(body);
@@ -334,7 +512,9 @@ server.on("request", async (req, res) => {
     // Metrics endpoints
     if (pathname === "/metrics" && method === "GET") {
       allowCors();
-      try { metricsInc('http.metrics.requests', 1); } catch {}
+      try {
+        metricsInc("http.metrics.requests", 1);
+      } catch {}
       const text = buildPromMetrics();
       res.statusCode = 200;
       res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
@@ -343,7 +523,9 @@ server.on("request", async (req, res) => {
     }
     if (pathname === "/metrics.json" && method === "GET") {
       allowCors();
-      try { metricsInc('http.metrics_json.requests', 1); } catch {}
+      try {
+        metricsInc("http.metrics_json.requests", 1);
+      } catch {}
       const snap = collectMetricsSnapshot();
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
@@ -367,7 +549,10 @@ server.on("request", async (req, res) => {
       const q = (u.searchParams.get("q") || "").trim().toLowerCase();
       const sortParam = (u.searchParams.get("sort") || "recent").toLowerCase();
       const sort = sortParam === "alphabetical" ? "alphabetical" : "recent";
-      const limit = Math.max(1, Math.min(100, Number(u.searchParams.get("limit") || 100)));
+      const limit = Math.max(
+        1,
+        Math.min(100, Number(u.searchParams.get("limit") || 100))
+      );
       let offset = Number(u.searchParams.get("cursor") || 0);
       if (!Number.isFinite(offset) || offset < 0) offset = 0;
 
@@ -382,7 +567,13 @@ server.on("request", async (req, res) => {
         }
       } catch {}
 
-      try { console.info(`[http] GET /players/available q="${q}" sort=${sort} limit=${limit} cursor=${offset} requester=${requesterId ? String(requesterId).slice(-6) : 'anon'}`); } catch {}
+      try {
+        console.info(
+          `[http] GET /players/available q="${q}" sort=${sort} limit=${limit} cursor=${offset} requester=${
+            requesterId ? String(requesterId).slice(-6) : "anon"
+          }`
+        );
+      } catch {}
 
       // Build candidate list: online and not in a match
       const candidates = [];
@@ -391,10 +582,14 @@ server.on("request", async (req, res) => {
         const online = !!p.socketId;
         const inMatch = !!p.matchId;
         // Filter out CPU bots and host accounts (IDs starting with 'cpu_' or 'host_')
-        const isBotOrHost = String(pid).startsWith('cpu_') || String(pid).startsWith('host_');
+        const isBotOrHost =
+          String(pid).startsWith("cpu_") || String(pid).startsWith("host_");
         if (online && !inMatch && !isBotOrHost) {
           if (!q || (p.displayName || "").toLowerCase().includes(q)) {
-            candidates.push({ id: pid, displayName: p.displayName || "Player" });
+            candidates.push({
+              id: pid,
+              displayName: p.displayName || "Player",
+            });
           }
         }
       }
@@ -415,7 +610,10 @@ server.on("request", async (req, res) => {
       let friendSet = new Set();
       if (requesterId && visible.length > 0) {
         const fr = await prisma.friendship.findMany({
-          where: { ownerUserId: requesterId, targetUserId: { in: visible.map((v) => v.id) } },
+          where: {
+            ownerUserId: requesterId,
+            targetUserId: { in: visible.map((v) => v.id) },
+          },
           select: { targetUserId: true },
         });
         friendSet = new Set(fr.map((r) => r.targetUserId));
@@ -427,26 +625,34 @@ server.on("request", async (req, res) => {
       if (requesterId && sort === "recent") {
         const recent = await prisma.matchResult.findMany({
           where: { OR: [{ winnerId: requesterId }, { loserId: requesterId }] },
-          orderBy: { completedAt: 'desc' },
+          orderBy: { completedAt: "desc" },
           take: 10,
         });
         for (const r of recent) {
           let oppIds = [];
           try {
-            const arr = Array.isArray(r.players) ? r.players : (typeof r.players === 'string' ? JSON.parse(r.players) : []);
+            const arr = Array.isArray(r.players)
+              ? r.players
+              : typeof r.players === "string"
+              ? JSON.parse(r.players)
+              : [];
             if (Array.isArray(arr)) {
               for (const info of arr) {
                 const oid = info && (info.id || info.playerId || info.uid);
-                if (oid && String(oid) !== String(requesterId)) oppIds.push(String(oid));
+                if (oid && String(oid) !== String(requesterId))
+                  oppIds.push(String(oid));
               }
             }
           } catch {}
           // Fallback: if players JSON not helpful, try winner/loser IDs
           if (oppIds.length === 0) {
-            if (r.winnerId && r.winnerId !== requesterId) oppIds.push(r.winnerId);
+            if (r.winnerId && r.winnerId !== requesterId)
+              oppIds.push(r.winnerId);
             if (r.loserId && r.loserId !== requesterId) oppIds.push(r.loserId);
           }
-          const ts = r.completedAt ? new Date(r.completedAt).getTime() : Date.now();
+          const ts = r.completedAt
+            ? new Date(r.completedAt).getTime()
+            : Date.now();
           for (const oid of oppIds) {
             const prev = freq.get(oid) || 0;
             freq.set(oid, prev + 1);
@@ -460,7 +666,9 @@ server.on("request", async (req, res) => {
       const items = visible.map((c) => {
         const u = publicMap.get(c.id) || {};
         const mcount = freq.has(c.id) ? freq.get(c.id) : null;
-        const lpa = lastAt.has(c.id) ? new Date(lastAt.get(c.id)).toISOString() : null;
+        const lpa = lastAt.has(c.id)
+          ? new Date(lastAt.get(c.id)).toISOString()
+          : null;
         return {
           userId: c.id,
           shortUserId: u.shortId || String(c.id).slice(-8),
@@ -475,15 +683,19 @@ server.on("request", async (req, res) => {
 
       // Sort
       const alphaSort = (a, b) => {
-        const an = (a.displayName || '').toLowerCase();
-        const bn = (b.displayName || '').toLowerCase();
+        const an = (a.displayName || "").toLowerCase();
+        const bn = (b.displayName || "").toLowerCase();
         if (an < bn) return -1;
         if (an > bn) return 1;
         return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
       };
       let ordered = items;
       if (sort === "recent" && requesterId) {
-        const groupA = items.filter((it) => typeof it.matchCountInLast10 === 'number' && it.matchCountInLast10 > 0);
+        const groupA = items.filter(
+          (it) =>
+            typeof it.matchCountInLast10 === "number" &&
+            it.matchCountInLast10 > 0
+        );
         const groupB = items.filter((it) => !groupA.includes(it));
         groupA.sort((x, y) => {
           const c = (y.matchCountInLast10 || 0) - (x.matchCountInLast10 || 0);
@@ -517,59 +729,80 @@ server.on("request", async (req, res) => {
 
       // Collect request body
       const chunks = [];
-      req.on('data', chunk => chunks.push(chunk));
-      req.on('end', () => {
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
         try {
           const body = Buffer.concat(chunks).toString();
           const { event, data } = JSON.parse(body);
 
           // Call the appropriate broadcast function
           switch (event) {
-            case 'TOURNAMENT_UPDATED':
+            case "TOURNAMENT_UPDATED":
               if (data.id) broadcastTournamentUpdate(data.id, data);
               break;
-            case 'PHASE_CHANGED':
+            case "PHASE_CHANGED":
               if (data.tournamentId && data.newPhase) {
                 const { tournamentId, newPhase, ...additionalData } = data;
                 broadcastPhaseChanged(tournamentId, newPhase, additionalData);
               }
               break;
-            case 'ROUND_STARTED':
+            case "ROUND_STARTED":
               if (data.tournamentId && data.roundNumber && data.matches) {
-                broadcastRoundStarted(data.tournamentId, data.roundNumber, data.matches);
+                broadcastRoundStarted(
+                  data.tournamentId,
+                  data.roundNumber,
+                  data.matches
+                );
               }
               break;
-            case 'PLAYER_JOINED':
+            case "PLAYER_JOINED":
               if (data.tournamentId) {
-                broadcastPlayerJoined(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
+                broadcastPlayerJoined(
+                  data.tournamentId,
+                  data.playerId,
+                  data.playerName,
+                  data.currentPlayerCount
+                );
               }
               break;
-            case 'PLAYER_LEFT':
+            case "PLAYER_LEFT":
               if (data.tournamentId) {
-                broadcastPlayerLeft(data.tournamentId, data.playerId, data.playerName, data.currentPlayerCount);
+                broadcastPlayerLeft(
+                  data.tournamentId,
+                  data.playerId,
+                  data.playerName,
+                  data.currentPlayerCount
+                );
               }
               break;
-            case 'DRAFT_READY':
+            case "DRAFT_READY":
               if (data.tournamentId && data.draftSessionId) {
                 const { tournamentId, ...rest } = data;
                 broadcastDraftReady(tournamentId, rest);
               }
               break;
-            case 'UPDATE_PREPARATION':
+            case "UPDATE_PREPARATION":
               if (data.tournamentId) {
-                broadcastPreparationUpdate(data.tournamentId, data.playerId, data.preparationStatus, data.readyPlayerCount, data.totalPlayerCount, data.deckSubmitted);
+                broadcastPreparationUpdate(
+                  data.tournamentId,
+                  data.playerId,
+                  data.preparationStatus,
+                  data.readyPlayerCount,
+                  data.totalPlayerCount,
+                  data.deckSubmitted
+                );
               }
               break;
-            case 'STATISTICS_UPDATED':
+            case "STATISTICS_UPDATED":
               if (data.tournamentId) {
                 broadcastStatisticsUpdate(data.tournamentId, data);
               }
               break;
-            case 'MATCH_ASSIGNED':
+            case "MATCH_ASSIGNED":
               // For now, just log - MATCH_ASSIGNED needs player-specific routing
-              console.log('[Tournament] MATCH_ASSIGNED broadcast received');
+              console.log("[Tournament] MATCH_ASSIGNED broadcast received");
               break;
-            case 'matchEnded':
+            case "matchEnded":
               if (data.matchId) {
                 const match = matches.get(data.matchId);
                 if (match) {
@@ -581,26 +814,30 @@ server.on("request", async (req, res) => {
                     }
                   }
                   // Broadcast to match room
-                  io.to(`match:${data.matchId}`).emit('matchEnded', data);
-                  console.log(`[Match] Ended match ${data.matchId} due to ${data.reason}`);
+                  io.to(`match:${data.matchId}`).emit("matchEnded", data);
+                  console.log(
+                    `[Match] Ended match ${data.matchId} due to ${data.reason}`
+                  );
                 }
               }
               break;
           }
 
-          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true }));
         } catch (err) {
-          console.error('[Tournament] Broadcast error:', err);
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid request', details: err.message }));
+          console.error("[Tournament] Broadcast error:", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({ error: "Invalid request", details: err.message })
+          );
         }
       });
 
-      req.on('error', (err) => {
-        console.error('[Tournament] Request error:', err);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Server error' }));
+      req.on("error", (err) => {
+        console.error("[Tournament] Request error:", err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Server error" }));
       });
 
       return;
@@ -612,7 +849,12 @@ server.on("request", async (req, res) => {
     try {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: 'internal_error', message: e && e.message ? e.message : String(e) }));
+      res.end(
+        JSON.stringify({
+          error: "internal_error",
+          message: e && e.message ? e.message : String(e),
+        })
+      );
     } catch {}
   }
 });
@@ -633,6 +875,13 @@ const rtcParticipants = new Map();
 const participantDetails = new Map();
 /** @type {Map<string, { id: string, from: string, to: string, lobbyId: string|null, matchId: string|null, createdAt: number }>} */
 const pendingVoiceRequests = new Map();
+
+const leaderboardService = createLeaderboardService({
+  prisma,
+  players,
+  matchRecordings,
+});
+const { recordMatchResult: recordLeaderboardMatchResult } = leaderboardService;
 
 const persistence = createPersistenceLayer({
   prisma,
@@ -711,6 +960,35 @@ const {
   prisma,
 });
 
+const matchLeaderService = createMatchLeaderService({
+  io,
+  storeRedis,
+  prisma,
+  getOrLoadMatch,
+  getSeatForPlayer,
+  getOpponentSeat,
+  ensureInteractionState,
+  purgeExpiredGrants,
+  collectInteractionRequirements,
+  usePermitForRequirement,
+  mergeEvents,
+  dedupePermanents,
+  deepMergeReplaceArrays,
+  applyMovementAndCombat,
+  applyTurnStart,
+  applyGenesis,
+  applyKeywordAnnotations,
+  enrichPatchWithCosts,
+  recordMatchAction,
+  persistMatchUpdate,
+  finalizeMatch,
+  rulesEnforceMode: RULES_ENFORCE_MODE,
+  interactionEnforcementEnabled: INTERACTION_ENFORCEMENT_ENABLED,
+  isCpuPlayerId,
+});
+
+const { applyAction: leaderApplyAction } = matchLeaderService;
+
 // Global feature flag for CPU bots (default: disabled)
 const CPU_BOTS_ENABLED =
   process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
@@ -723,7 +1001,9 @@ function loadBotClientCtor() {
     const mod = require("../bots/headless-bot-client");
     return mod && mod.BotClient ? mod.BotClient : null;
   } catch (e) {
-    try { console.warn("[Bot] BotClient module unavailable:", e?.message || e); } catch {}
+    try {
+      console.warn("[Bot] BotClient module unavailable:", e?.message || e);
+    } catch {}
     return null;
   }
 }
@@ -740,28 +1020,31 @@ container.registerValue("playerIdBySocket", playerIdBySocket);
 container.registerValue("prisma", prisma);
 container.registerValue("config", serverConfig);
 
-const { lobby: lobbyFeature, tournament: tournamentFeature } = registerFeatures(container, {
-  rid,
-  ensurePlayerCached,
-  players,
-  matches,
-  playerIdBySocket,
-  getPlayerInfo,
-  getMatchInfo,
-  lobbyHasHumanPlayers,
-  createRngFromString,
-  generateBoosterDeterministic,
-  startMatchRecording,
-  persistMatchCreated,
-  hydrateMatchFromDatabase,
-  lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
-  lobbyStateChannel: LOBBY_STATE_CHANNEL,
-  cpuBotsEnabled: CPU_BOTS_ENABLED,
-  loadBotClientCtor,
-  port: PORT,
-  isCpuPlayerId,
-  tournamentBroadcast,
-});
+const { lobby: lobbyFeature, tournament: tournamentFeature } = registerFeatures(
+  container,
+  {
+    rid,
+    ensurePlayerCached,
+    players,
+    matches,
+    playerIdBySocket,
+    getPlayerInfo,
+    getMatchInfo,
+    lobbyHasHumanPlayers,
+    createRngFromString,
+    generateBoosterDeterministic,
+    startMatchRecording,
+    persistMatchCreated,
+    hydrateMatchFromDatabase,
+    lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
+    lobbyStateChannel: LOBBY_STATE_CHANNEL,
+    cpuBotsEnabled: CPU_BOTS_ENABLED,
+    loadBotClientCtor,
+    port: PORT,
+    isCpuPlayerId,
+    tournamentBroadcast,
+  }
+);
 
 const {
   lobbies,
@@ -810,14 +1093,22 @@ clusterStateReady = true;
 
 // Bot manager for headless CPU clients
 // Initialized after lobby feature wiring so it can access shared state
-const botManager = new BotManager(io, players, lobbies, matches, getLobbyInfo, getMatchInfo, isCpuPlayerId);
+const botManager = new BotManager(
+  io,
+  players,
+  lobbies,
+  matches,
+  getLobbyInfo,
+  getMatchInfo,
+  isCpuPlayerId
+);
 setBotManager(botManager);
 
 // -----------------------------
 // Helpers: CPU detection & cleanup
 // -----------------------------
 function isCpuPlayerId(id) {
-  return typeof id === 'string' && id.startsWith('cpu_');
+  return typeof id === "string" && id.startsWith("cpu_");
 }
 
 // Returns true if there is at least one non-CPU (human) player in the lobby
@@ -831,352 +1122,18 @@ function lobbyHasHumanPlayers(lobby) {
 
 // Returns true if there is at least one non-CPU (human) player in the match
 function matchHasHumanPlayers(match) {
-  if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0) return false;
+  if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0)
+    return false;
   for (const pid of match.playerIds) {
     if (!isCpuPlayerId(pid)) return true;
   }
   return false;
 }
 
-// -----------------------------
-// Helpers: leaderboard tracking
-// -----------------------------
-const LEADERBOARD_TIME_FRAMES = ['all_time', 'monthly', 'weekly'];
-const LEADERBOARD_DEFAULT_RATING = 1200;
-const LEADERBOARD_K_FACTOR = 32;
-
-function calculateExpectedScoreForLeaderboard(ratingA, ratingB) {
-  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-}
-
-function calculateNewRatingsForLeaderboard(winnerRating, loserRating, isDraw = false) {
-  const expectedWinner = calculateExpectedScoreForLeaderboard(winnerRating, loserRating);
-  const expectedLoser = calculateExpectedScoreForLeaderboard(loserRating, winnerRating);
-
-  const actualWinner = isDraw ? 0.5 : 1;
-  const actualLoser = isDraw ? 0.5 : 0;
-
-  const newWinnerRating = Math.round(
-    winnerRating + LEADERBOARD_K_FACTOR * (actualWinner - expectedWinner)
-  );
-  const newLoserRating = Math.round(
-    loserRating + LEADERBOARD_K_FACTOR * (actualLoser - expectedLoser)
-  );
-
-  return { newWinnerRating, newLoserRating };
-}
-
-async function resolvePlayerDisplayName(playerId) {
-  const cached = players.get(playerId);
-  if (cached && cached.displayName) return cached.displayName;
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: playerId },
-      select: { name: true },
-    });
-    if (user && user.name) return user.name;
-  } catch {}
-  return playerId;
-}
-
-async function getOrCreateLeaderboardEntry(playerId, displayName, format, timeFrame) {
-  const existing = await prisma.leaderboardEntry.findUnique({
-    where: {
-      playerId_format_timeFrame: {
-        playerId,
-        format,
-        timeFrame,
-      },
-    },
-  });
-
-  if (existing) {
-    if (displayName && existing.displayName !== displayName) {
-      try {
-        await prisma.leaderboardEntry.update({
-          where: { id: existing.id },
-          data: { displayName },
-        });
-        existing.displayName = displayName;
-      } catch {}
-    }
-    return existing;
-  }
-
-  return prisma.leaderboardEntry.create({
-    data: {
-      playerId,
-      displayName: displayName || playerId,
-      format,
-      timeFrame,
-      rating: LEADERBOARD_DEFAULT_RATING,
-    },
-  });
-}
-
-async function recalculateLeaderboardRanks(format) {
-  for (const timeFrame of LEADERBOARD_TIME_FRAMES) {
-    const entries = await prisma.leaderboardEntry.findMany({
-      where: { format, timeFrame },
-      orderBy: [
-        { rating: 'desc' },
-        { winRate: 'desc' },
-        { wins: 'desc' },
-      ],
-    });
-
-    const updatePromises = entries.map((entry, index) =>
-      prisma.leaderboardEntry.update({
-        where: { id: entry.id },
-        data: { rank: index + 1 },
-      })
-    );
-
-    if (updatePromises.length > 0) {
-      await Promise.all(updatePromises);
-    }
-  }
-}
-
-async function checkTournamentWin(tournamentId, playerId) {
-  if (!tournamentId || !playerId) return false;
-  try {
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-      include: {
-        standings: {
-          where: { playerId },
-          take: 1,
-        },
-      },
-    });
-
-    if (!tournament || tournament.status !== 'completed' || !tournament.standings[0]) {
-      return false;
-    }
-
-    const topStanding = await prisma.playerStanding.findFirst({
-      where: { tournamentId },
-      orderBy: [
-        { matchPoints: 'desc' },
-        { gameWinPercentage: 'desc' },
-        { opponentMatchWinPercentage: 'desc' },
-      ],
-    });
-
-    return topStanding?.playerId === playerId;
-  } catch {
-    return false;
-  }
-}
-
-async function recordLeaderboardMatchResult(match, payload = {}) {
-  try {
-    if (!match || !match.id || match._leaderboardRecorded) return;
-
-    const validFormats = new Set(['constructed', 'sealed', 'draft']);
-    const format = validFormats.has(match.matchType) ? match.matchType : 'constructed';
-    const playerIds = Array.isArray(match.playerIds) ? match.playerIds : [];
-    if (playerIds.length === 0) {
-      match._leaderboardRecorded = true;
-      return;
-    }
-
-    const playerInfos = await Promise.all(
-      playerIds.map(async (pid) => ({
-        id: pid,
-        displayName: await resolvePlayerDisplayName(pid),
-      }))
-    );
-
-    if (playerInfos.length === 0) {
-      match._leaderboardRecorded = true;
-      return;
-    }
-
-    const infoById = new Map(playerInfos.map((info) => [info.id, info.displayName]));
-    const recording = matchRecordings.get(match.id);
-    let durationSeconds = null;
-    if (recording && typeof recording.startTime === 'number') {
-      const endTime = recording.endTime || Date.now();
-      durationSeconds = Math.max(0, Math.round((endTime - recording.startTime) / 1000));
-    }
-
-    const isDraw = Boolean(payload.isDraw);
-    let winnerId = typeof payload.winnerId === 'string' ? payload.winnerId : match.winnerId || null;
-    let loserId = typeof payload.loserId === 'string' ? payload.loserId : null;
-
-    if (isDraw || !winnerId) {
-      winnerId = null;
-      loserId = null;
-    } else if (!loserId) {
-      loserId = playerInfos.find((info) => info.id !== winnerId)?.id || null;
-    }
-
-    const tournamentId = typeof payload.tournamentId === 'string' ? payload.tournamentId : null;
-
-    const existing = await prisma.matchResult.findFirst({ where: { matchId: match.id } });
-    if (!existing) {
-      // Skip CPU-only matches from persistence
-      const cpuOnly = Array.isArray(playerInfos) && playerInfos.length > 0 && playerInfos.every((info) => isCpuPlayerId(info.id));
-      if (!cpuOnly) {
-        // Ensure FK safety: null winner/loser if not in User table (e.g., CPU IDs)
-        let safeWinnerId = isDraw ? null : winnerId;
-        let safeLoserId = isDraw ? null : loserId;
-        if (safeWinnerId) {
-          const exists = await prisma.user.findUnique({ where: { id: safeWinnerId } });
-          if (!exists) safeWinnerId = null;
-        }
-        if (safeLoserId) {
-          const exists = await prisma.user.findUnique({ where: { id: safeLoserId } });
-          if (!exists) safeLoserId = null;
-        }
-        await prisma.matchResult.create({
-          data: {
-            matchId: match.id,
-            lobbyName: match.lobbyName || null,
-            winnerId: safeWinnerId,
-            loserId: safeLoserId,
-            isDraw,
-            format,
-            tournamentId,
-            players: playerInfos.map((info) => ({
-              id: info.id,
-              displayName: info.displayName,
-            })),
-            duration: durationSeconds !== null ? durationSeconds : null,
-          },
-        });
-      }
-    }
-
-    match._leaderboardRecorded = true;
-
-    if (playerInfos.length < 2) return;
-    if (playerInfos.some((info) => isCpuPlayerId(info.id))) return;
-
-    let leaderboardUpdated = false;
-    const tournamentWin = !isDraw && tournamentId && winnerId
-      ? await checkTournamentWin(tournamentId, winnerId)
-      : false;
-
-    if (isDraw) {
-      const [playerA, playerB] = playerInfos;
-      for (const timeFrame of LEADERBOARD_TIME_FRAMES) {
-        const [entryA, entryB] = await Promise.all([
-          getOrCreateLeaderboardEntry(
-            playerA.id,
-            infoById.get(playerA.id),
-            format,
-            timeFrame
-          ),
-          getOrCreateLeaderboardEntry(
-            playerB.id,
-            infoById.get(playerB.id),
-            format,
-            timeFrame
-          ),
-        ]);
-
-        const { newWinnerRating: ratingA, newLoserRating: ratingB } =
-          calculateNewRatingsForLeaderboard(entryA.rating, entryB.rating, true);
-
-        await Promise.all([
-          prisma.leaderboardEntry.update({
-            where: { id: entryA.id },
-            data: {
-              draws: { increment: 1 },
-              rating: ratingA,
-              winRate:
-                entryA.wins / (entryA.wins + entryA.losses + entryA.draws + 1),
-              lastActive: new Date(),
-              displayName: infoById.get(entryA.playerId) || entryA.displayName,
-            },
-          }),
-          prisma.leaderboardEntry.update({
-            where: { id: entryB.id },
-            data: {
-              draws: { increment: 1 },
-              rating: ratingB,
-              winRate:
-                entryB.wins / (entryB.wins + entryB.losses + entryB.draws + 1),
-              lastActive: new Date(),
-              displayName: infoById.get(entryB.playerId) || entryB.displayName,
-            },
-          }),
-        ]);
-
-        leaderboardUpdated = true;
-      }
-    } else if (winnerId && loserId) {
-      for (const timeFrame of LEADERBOARD_TIME_FRAMES) {
-        const [winnerEntry, loserEntry] = await Promise.all([
-          getOrCreateLeaderboardEntry(
-            winnerId,
-            infoById.get(winnerId),
-            format,
-            timeFrame
-          ),
-          getOrCreateLeaderboardEntry(
-            loserId,
-            infoById.get(loserId),
-            format,
-            timeFrame
-          ),
-        ]);
-
-        const { newWinnerRating, newLoserRating } =
-          calculateNewRatingsForLeaderboard(winnerEntry.rating, loserEntry.rating, false);
-
-        await Promise.all([
-          prisma.leaderboardEntry.update({
-            where: { id: winnerEntry.id },
-            data: {
-              wins: { increment: 1 },
-              rating: newWinnerRating,
-              winRate:
-                (winnerEntry.wins + 1) /
-                (winnerEntry.wins + winnerEntry.losses + winnerEntry.draws + 1),
-              lastActive: new Date(),
-              displayName: infoById.get(winnerId) || winnerEntry.displayName,
-              ...(tournamentWin ? { tournamentWins: { increment: 1 } } : {}),
-            },
-          }),
-          prisma.leaderboardEntry.update({
-            where: { id: loserEntry.id },
-            data: {
-              losses: { increment: 1 },
-              rating: newLoserRating,
-              winRate:
-                loserEntry.wins /
-                (loserEntry.wins + loserEntry.losses + loserEntry.draws + 1),
-              lastActive: new Date(),
-              displayName: infoById.get(loserId) || loserEntry.displayName,
-            },
-          }),
-        ]);
-
-        leaderboardUpdated = true;
-      }
-    }
-
-    if (leaderboardUpdated) {
-      await recalculateLeaderboardRanks(format);
-    }
-  } catch (err) {
-    try {
-      console.warn(
-        `[leaderboard] failed to record result for ${match && match.id ? match.id : 'unknown'}:`,
-        err?.message || err
-      );
-    } catch {}
-  }
-}
-
 async function finalizeMatch(match, options = {}) {
   if (!match) return;
   if (match._finalized) {
-    if (!match.winnerId && typeof options?.winnerId === 'string') {
+    if (!match.winnerId && typeof options?.winnerId === "string") {
       match.winnerId = options.winnerId;
     }
     return;
@@ -1185,21 +1142,26 @@ async function finalizeMatch(match, options = {}) {
   const now = Date.now();
   const winnerSeatOption = options?.winnerSeat;
   const loserSeatOption = options?.loserSeat;
-  const winnerSeat = winnerSeatOption === 'p1' || winnerSeatOption === 'p2'
-    ? winnerSeatOption
-    : (match.game && (match.game.winner === 'p1' || match.game.winner === 'p2')
-        ? match.game.winner
-        : null);
-  const loserSeat = loserSeatOption === 'p1' || loserSeatOption === 'p2'
-    ? loserSeatOption
-    : (winnerSeat ? getOpponentSeat(winnerSeat) : null);
+  const winnerSeat =
+    winnerSeatOption === "p1" || winnerSeatOption === "p2"
+      ? winnerSeatOption
+      : match.game && (match.game.winner === "p1" || match.game.winner === "p2")
+      ? match.game.winner
+      : null;
+  const loserSeat =
+    loserSeatOption === "p1" || loserSeatOption === "p2"
+      ? loserSeatOption
+      : winnerSeat
+      ? getOpponentSeat(winnerSeat)
+      : null;
 
-  let winnerId = typeof options?.winnerId === 'string' ? options.winnerId : null;
+  let winnerId =
+    typeof options?.winnerId === "string" ? options.winnerId : null;
   if (!winnerId && winnerSeat) {
     winnerId = getPlayerIdForSeat(match, winnerSeat);
   }
 
-  let loserId = typeof options?.loserId === 'string' ? options.loserId : null;
+  let loserId = typeof options?.loserId === "string" ? options.loserId : null;
   if (!loserId && loserSeat) {
     loserId = getPlayerIdForSeat(match, loserSeat);
   }
@@ -1219,16 +1181,22 @@ async function finalizeMatch(match, options = {}) {
     loserId = null;
   }
 
-  match.status = 'ended';
+  match.status = "ended";
   match.winnerId = winnerId || null;
   match.lastTs = now;
   match._finalized = true;
 
   const room = `match:${match.id}`;
-  io.to(room).emit('matchStarted', { match: getMatchInfo(match) });
-  try { botManager.cleanupBotsAfterMatch(match); } catch {}
-  try { await persistMatchEnded(match); } catch {}
-  try { finishMatchRecording(match.id); } catch {}
+  io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+  try {
+    botManager.cleanupBotsAfterMatch(match);
+  } catch {}
+  try {
+    await persistMatchEnded(match);
+  } catch {}
+  try {
+    finishMatchRecording(match.id);
+  } catch {}
   try {
     if (match._cleanupTimer) {
       clearTimeout(match._cleanupTimer);
@@ -1236,9 +1204,7 @@ async function finalizeMatch(match, options = {}) {
     }
   } catch {}
 
-  const leaderboardPayload = isDraw
-    ? { isDraw: true }
-    : { winnerId, loserId };
+  const leaderboardPayload = isDraw ? { isDraw: true } : { winnerId, loserId };
 
   recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
 
@@ -1251,7 +1217,9 @@ async function finalizeMatch(match, options = {}) {
         include: { tournament: true, round: true },
       });
       if (tMatch) {
-        const gameResults = Array.isArray(match?.game?.results) ? match.game.results : [];
+        const gameResults = Array.isArray(match?.game?.results)
+          ? match.game.results
+          : [];
         const matchResults = {
           winnerId: winnerId || null,
           loserId: loserId || null,
@@ -1262,18 +1230,24 @@ async function finalizeMatch(match, options = {}) {
 
         // Idempotent completion: only update if not already completed
         await prisma.match.updateMany({
-          where: { id: match.id, status: { not: 'completed' } },
-          data: { status: 'completed', results: matchResults, completedAt: new Date() },
+          where: { id: match.id, status: { not: "completed" } },
+          data: {
+            status: "completed",
+            results: matchResults,
+            completedAt: new Date(),
+          },
         });
 
         // FIXED T015/T023: Use standings service for atomic updates
         try {
-          const playersVal = Array.isArray(tMatch.players) ? tMatch.players : [];
+          const playersVal = Array.isArray(tMatch.players)
+            ? tMatch.players
+            : [];
           const playerIds = playersVal
             .map((p) => {
-              if (p && typeof p === 'object') {
+              if (p && typeof p === "object") {
                 const id = p.id || p.playerId || p.userId;
-                return typeof id === 'string' ? id : null;
+                return typeof id === "string" ? id : null;
               }
               return null;
             })
@@ -1283,45 +1257,72 @@ async function finalizeMatch(match, options = {}) {
             const w = isDraw ? p1 : winnerId;
             const l = isDraw ? p2 : loserId;
             if (w && l) {
-              await standingsService.recordMatchResult(prisma, tMatch.tournamentId || '', w, l, isDraw);
+              await standingsService.recordMatchResult(
+                prisma,
+                tMatch.tournamentId || "",
+                w,
+                l,
+                isDraw
+              );
             }
           }
         } catch (err) {
           // Standings service handles retry logic internally
-          console.error('[Match] Failed to update standings:', err && typeof err === 'object' && 'message' in err ? err.message : err);
+          console.error(
+            "[Match] Failed to update standings:",
+            err && typeof err === "object" && "message" in err
+              ? err.message
+              : err
+          );
           throw err; // Re-throw to prevent marking match as complete
         }
 
         // If part of a round, possibly mark the round complete and (optionally) the tournament
         if (tMatch.roundId) {
           const pendingMatches = await prisma.match.count({
-            where: { roundId: tMatch.roundId, status: { in: ['pending', 'active'] } },
+            where: {
+              roundId: tMatch.roundId,
+              status: { in: ["pending", "active"] },
+            },
           });
           if (pendingMatches === 0) {
             await prisma.tournamentRound.update({
               where: { id: tMatch.roundId },
-              data: { status: 'completed', completedAt: new Date() },
+              data: { status: "completed", completedAt: new Date() },
             });
 
             // End tournament if this was the last configured round
             if (tMatch.tournament && tMatch.round) {
-              const settings = (tMatch.tournament.settings || {});
-              const pairingFormat = (settings && typeof settings === 'object' && 'pairingFormat' in settings)
-                ? (settings.pairingFormat)
-                : 'swiss';
-              let totalRounds = (settings && typeof settings === 'object' && 'totalRounds' in settings)
-                ? Number(settings.totalRounds)
-                : 0;
+              const settings = tMatch.tournament.settings || {};
+              const pairingFormat =
+                settings &&
+                typeof settings === "object" &&
+                "pairingFormat" in settings
+                  ? settings.pairingFormat
+                  : "swiss";
+              let totalRounds =
+                settings &&
+                typeof settings === "object" &&
+                "totalRounds" in settings
+                  ? Number(settings.totalRounds)
+                  : 0;
               if (!totalRounds) {
-                const playerCount = await prisma.playerStanding.count({ where: { tournamentId: tMatch.tournament.id } });
-                if (pairingFormat === 'round_robin') totalRounds = Math.max(0, playerCount - 1);
-                else if (pairingFormat === 'elimination') totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(playerCount, 1))));
+                const playerCount = await prisma.playerStanding.count({
+                  where: { tournamentId: tMatch.tournament.id },
+                });
+                if (pairingFormat === "round_robin")
+                  totalRounds = Math.max(0, playerCount - 1);
+                else if (pairingFormat === "elimination")
+                  totalRounds = Math.max(
+                    1,
+                    Math.ceil(Math.log2(Math.max(playerCount, 1)))
+                  );
                 else totalRounds = 3;
               }
               if (tMatch.round.roundNumber >= totalRounds) {
                 await prisma.tournament.update({
                   where: { id: tMatch.tournament.id },
-                  data: { status: 'completed', completedAt: new Date() },
+                  data: { status: "completed", completedAt: new Date() },
                 });
               }
             }
@@ -1330,7 +1331,12 @@ async function finalizeMatch(match, options = {}) {
       }
     }
   } catch (err) {
-    try { console.warn('[tournament] failed to record result into rounds:', err?.message || err); } catch {}
+    try {
+      console.warn(
+        "[tournament] failed to record result into rounds:",
+        err?.message || err
+      );
+    } catch {}
   }
 }
 
@@ -1339,45 +1345,6 @@ async function finalizeMatch(match, options = {}) {
 // -----------------------------
 // Helpers: deck normalization & validation
 // -----------------------------
-function normalizeDeckPayload(deckPayload) {
-  if (!deckPayload) return [];
-  if (Array.isArray(deckPayload)) return deckPayload;
-  if (deckPayload.main && Array.isArray(deckPayload.main)) return deckPayload.main;
-  if (deckPayload.mainboard && Array.isArray(deckPayload.mainboard)) return deckPayload.mainboard;
-  // Accept direct object with cards
-  return [];
-}
-
-function isSiteType(t) {
-  return typeof t === 'string' && t.toLowerCase().includes('site');
-}
-function isAvatarType(t) {
-  return typeof t === 'string' && t.toLowerCase().includes('avatar');
-}
-
-function validateDeckCards(cards) {
-  const errors = [];
-  if (!Array.isArray(cards) || cards.length === 0) {
-    errors.push('Deck is empty or invalid');
-  }
-  // Count
-  let avatarCount = 0;
-  let siteCount = 0;
-  let spellCount = 0;
-  for (const c of cards) {
-    const t = c?.type || '';
-    if (isAvatarType(t)) avatarCount++;
-    else if (isSiteType(t) || (typeof c?.name === 'string' && ['Spire','Stream','Valley','Wasteland'].includes(c.name))) siteCount++;
-    else spellCount++;
-  }
-  if (avatarCount !== 1) {
-    errors.push(avatarCount === 0 ? 'Deck requires exactly 1 Avatar' : 'Deck has multiple Avatars');
-  }
-  if (siteCount < 12) errors.push('Atlas needs at least 12 sites');
-  if (spellCount < 24) errors.push('Spellbook needs at least 24 cards (excluding Avatar)');
-  return { isValid: errors.length === 0, errors, counts: { avatarCount, siteCount, spellCount } };
-}
-
 function rid(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now()
     .toString(36)
@@ -1400,12 +1367,26 @@ function getPlayerBySocket(socket) {
 async function ensurePlayerCached(playerId) {
   if (players.has(playerId)) return players.get(playerId);
   try {
-    const dn = storeRedis ? await storeRedis.hget(`player:${playerId}`, 'displayName') : null;
-    const p = { id: playerId, displayName: dn || `Player ${String(playerId).slice(-4)}`, socketId: null, lobbyId: null, matchId: null };
+    const dn = storeRedis
+      ? await storeRedis.hget(`player:${playerId}`, "displayName")
+      : null;
+    const p = {
+      id: playerId,
+      displayName: dn || `Player ${String(playerId).slice(-4)}`,
+      socketId: null,
+      lobbyId: null,
+      matchId: null,
+    };
     players.set(playerId, p);
     return p;
   } catch {
-    const p = { id: playerId, displayName: `Player ${String(playerId).slice(-4)}`, socketId: null, lobbyId: null, matchId: null };
+    const p = {
+      id: playerId,
+      displayName: `Player ${String(playerId).slice(-4)}`,
+      socketId: null,
+      lobbyId: null,
+      matchId: null,
+    };
     players.set(playerId, p);
     return p;
   }
@@ -1427,12 +1408,14 @@ async function getOrClaimMatchLeader(matchId) {
     const current = await storeRedis.get(key);
     if (current) {
       if (current === INSTANCE_ID) {
-        try { await storeRedis.expire(key, 60); } catch {}
+        try {
+          await storeRedis.expire(key, 60);
+        } catch {}
       }
       return current;
     }
     // Try to claim leadership
-    const setRes = await storeRedis.set(key, INSTANCE_ID, 'NX', 'EX', 60);
+    const setRes = await storeRedis.set(key, INSTANCE_ID, "NX", "EX", 60);
     if (setRes) return INSTANCE_ID;
     // Someone else won
     return await storeRedis.get(key);
@@ -1453,8 +1436,11 @@ async function getOrLoadMatch(matchId) {
           if (cached && cached.id === matchId) {
             const m = rehydrateMatch(cached);
             if (m) {
-              try { await hydrateMatchFromDatabase(matchId, m); } catch {}
-              matches.set(matchId, m); return m;
+              try {
+                await hydrateMatchFromDatabase(matchId, m);
+              } catch {}
+              matches.set(matchId, m);
+              return m;
             }
           }
         } catch {}
@@ -1463,12 +1449,16 @@ async function getOrLoadMatch(matchId) {
   } catch {}
   // Fallback to DB
   try {
-    const row = await prisma.onlineMatchSession.findUnique({ where: { id: matchId } });
+    const row = await prisma.onlineMatchSession.findUnique({
+      where: { id: matchId },
+    });
     if (row) {
       const m = rehydrateMatch(row);
       if (m) {
         // Backfill tournament context/decks from Match table if available
-        try { await hydrateMatchFromDatabase(matchId, m); } catch {}
+        try {
+          await hydrateMatchFromDatabase(matchId, m);
+        } catch {}
         matches.set(matchId, m);
         return m;
       }
@@ -1490,44 +1480,56 @@ async function getOrLoadMatch(matchId) {
         let arr = [];
         if (Array.isArray(playersJson)) {
           arr = playersJson;
-        } else if (playersJson && typeof playersJson === 'object') {
+        } else if (playersJson && typeof playersJson === "object") {
           if (Array.isArray(playersJson.playerIds)) arr = playersJson.playerIds;
-          else if (Array.isArray(playersJson.players)) arr = playersJson.players;
+          else if (Array.isArray(playersJson.players))
+            arr = playersJson.players;
           else arr = [];
         }
-        playerIds = Array.from(new Set(arr.map((it) => {
-          if (typeof it === 'string') return it;
-          if (it && typeof it === 'object') {
-            const v = it.id ?? it.playerId ?? it.userId;
-            return v ? String(v) : null;
-          }
-          return null;
-        }).filter(Boolean)));
+        playerIds = Array.from(
+          new Set(
+            arr
+              .map((it) => {
+                if (typeof it === "string") return it;
+                if (it && typeof it === "object") {
+                  const v = it.id ?? it.playerId ?? it.userId;
+                  return v ? String(v) : null;
+                }
+                return null;
+              })
+              .filter(Boolean)
+          )
+        );
       } catch {}
 
       // Map tournament format/status to session matchType/status
       const tf = t?.tournament?.format;
-      const matchType = (tf === 'sealed' || tf === 'draft' || tf === 'constructed') ? tf : 'constructed';
-      let status = matchType === 'sealed' ? 'deck_construction' : 'waiting';
+      const matchType =
+        tf === "sealed" || tf === "draft" || tf === "constructed"
+          ? tf
+          : "constructed";
+      let status = matchType === "sealed" ? "deck_construction" : "waiting";
       try {
         const s = t.status;
-        if (s === 'active') status = 'in_progress';
-        else if (s === 'completed' || s === 'cancelled') status = 'ended';
+        if (s === "active") status = "in_progress";
+        else if (s === "completed" || s === "cancelled") status = "ended";
       } catch {}
 
       // Build in-memory session from tournament Match, then persist as OnlineMatchSession
       // IMPORTANT: This fallback should only be used for new matches. If status is 'active',
       // it means an OnlineMatchSession was lost and game state will be reset.
-      if (status === 'in_progress') {
+      if (status === "in_progress") {
         try {
-          console.warn(`[match] WARNING: Creating tournament match ${matchId} from Match table with status in_progress. This indicates OnlineMatchSession was lost and game state will be reset. This should not happen with cleanup protection.`);
+          console.warn(
+            `[match] WARNING: Creating tournament match ${matchId} from Match table with status in_progress. This indicates OnlineMatchSession was lost and game state will be reset. This should not happen with cleanup protection.`
+          );
         } catch {}
       }
-      
+
       const match = {
         id: matchId,
         lobbyId: null,
-        lobbyName: (t?.tournament?.name || null),
+        lobbyName: t?.tournament?.name || null,
         tournamentId: t.tournamentId || null,
         playerIds,
         status,
@@ -1539,10 +1541,12 @@ async function getOrLoadMatch(matchId) {
         draftConfig: null,
         playerDecks: (() => {
           try {
-            return t.playerDecks && typeof t.playerDecks === 'object'
+            return t.playerDecks && typeof t.playerDecks === "object"
               ? new Map(Object.entries(t.playerDecks))
               : new Map();
-          } catch { return new Map(); }
+          } catch {
+            return new Map();
+          }
         })(),
         game: {},
         lastTs: 0,
@@ -1552,9 +1556,22 @@ async function getOrLoadMatch(matchId) {
 
       matches.set(matchId, match);
       // Elect leadership for this match and persist the session so other instances can recover it
-      try { if (storeRedis) await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, 'NX', 'EX', 60); } catch {}
-      try { await persistMatchCreated(match); } catch {}
-      try { await hydrateMatchFromDatabase(matchId, match); } catch {}
+      try {
+        if (storeRedis)
+          await storeRedis.set(
+            `match:leader:${match.id}`,
+            INSTANCE_ID,
+            "NX",
+            "EX",
+            60
+          );
+      } catch {}
+      try {
+        await persistMatchCreated(match);
+      } catch {}
+      try {
+        await hydrateMatchFromDatabase(matchId, match);
+      } catch {}
       return match;
     }
   } catch {}
@@ -1569,577 +1586,139 @@ async function leaderJoinMatch(matchId, playerId, socketId) {
   if (!match.playerIds.includes(playerId)) match.playerIds.push(playerId);
   // Update player mapping in local cache
   const p = await ensurePlayerCached(playerId);
-  try { p.matchId = matchId; } catch {}
+  try {
+    p.matchId = matchId;
+  } catch {}
   // Join the socket (works cluster-wide with Redis adapter)
   const room = `match:${matchId}`;
   try {
     await io.in(socketId).socketsJoin(room);
-    console.log('[joinMatch] Socket joined room', { socketId, room, playerId });
+    console.log("[joinMatch] Socket joined room", { socketId, room, playerId });
   } catch (e) {
-    console.error('[joinMatch] Failed to join room', { socketId, room, playerId, error: e?.message });
+    console.error("[joinMatch] Failed to join room", {
+      socketId,
+      room,
+      playerId,
+      error: e?.message,
+    });
   }
   // Send match info directly to the joiner to avoid any race, then broadcast to the room
-  try { if (socketId) io.to(socketId).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
-  try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
+  try {
+    if (socketId)
+      io.to(socketId).emit("matchStarted", { match: getMatchInfo(match) });
+  } catch {}
+  try {
+    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+  } catch {}
   // If a draft is in progress, immediately sync the joining socket with the current draft state
   try {
-    if (match.matchType === 'draft' && match.draftState && match.draftState.phase && match.draftState.phase !== 'waiting') {
-      if (socketId) io.to(socketId).emit('draftUpdate', match.draftState);
+    if (
+      match.matchType === "draft" &&
+      match.draftState &&
+      match.draftState.phase &&
+      match.draftState.phase !== "waiting"
+    ) {
+      if (socketId) io.to(socketId).emit("draftUpdate", match.draftState);
     }
   } catch {}
   // Persist roster change and refresh cache
-  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
+  try {
+    await persistMatchUpdate(match, null, playerId, Date.now());
+  } catch {}
   // Keep our leadership fresh
-  try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
+  try {
+    if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60);
+  } catch {}
 }
 
 // Permanently remove a match if truly empty (no players, no sockets in room)
 async function cleanupMatchNow(matchId, reason, force = false) {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
-  
+
   // Protect active tournament matches and in-progress matches from cleanup (but allow ended matches to be cleaned)
-  if (match.status === 'in_progress' || match.status === 'waiting' || match.status === 'deck_construction') {
+  if (
+    match.status === "in_progress" ||
+    match.status === "waiting" ||
+    match.status === "deck_construction"
+  ) {
     if (match.tournamentId) {
-      try { console.log(`[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`); } catch {}
+      try {
+        console.log(
+          `[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`
+        );
+      } catch {}
       return;
     }
     // Also protect any in-progress match (tournament or not) to preserve game state for reconnects
-    if (match.status === 'in_progress') {
-      try { console.log(`[match] cleanup blocked for in-progress match ${matchId}`); } catch {}
+    if (match.status === "in_progress") {
+      try {
+        console.log(`[match] cleanup blocked for in-progress match ${matchId}`);
+      } catch {}
       return;
     }
   }
-  
+
   // Check roster empty condition
-  const rosterEmpty = !Array.isArray(match.playerIds) || match.playerIds.length === 0;
+  const rosterEmpty =
+    !Array.isArray(match.playerIds) || match.playerIds.length === 0;
   // Check room occupancy across cluster (requires Redis adapter)
   let roomEmpty = true;
   try {
     const room = `match:${matchId}`;
-    if (typeof io.in(room).allSockets === 'function') {
+    if (typeof io.in(room).allSockets === "function") {
       const sockets = await io.in(room).allSockets();
       roomEmpty = !sockets || sockets.size === 0;
     }
   } catch {}
   // Force allows cleanup of orphaned waiting matches even if roster still lists players,
   // as long as the room is empty across the cluster.
-  if ((!(rosterEmpty) && !force) || !roomEmpty) {
-    try { console.log(`[match] cleanup skipped for ${matchId}: rosterEmpty=${rosterEmpty}, roomEmpty=${roomEmpty}, force=${force}`); } catch {}
+  if ((!rosterEmpty && !force) || !roomEmpty) {
+    try {
+      console.log(
+        `[match] cleanup skipped for ${matchId}: rosterEmpty=${rosterEmpty}, roomEmpty=${roomEmpty}, force=${force}`
+      );
+    } catch {}
     return;
   }
   // Clear any pending timers
-  try { if (match._cleanupTimer) { clearTimeout(match._cleanupTimer); match._cleanupTimer = null; } } catch {}
-  try { console.log(`[match] cleaning up ${matchId} (reason=${reason})`); } catch {}
+  try {
+    if (match._cleanupTimer) {
+      clearTimeout(match._cleanupTimer);
+      match._cleanupTimer = null;
+    }
+  } catch {}
+  try {
+    console.log(`[match] cleaning up ${matchId} (reason=${reason})`);
+  } catch {}
   // Delete from DB and cache
-  try { if (storeRedis) await storeRedis.del(`match:session:${matchId}`); } catch {}
-  try { await prisma.onlineMatchAction.deleteMany({ where: { matchId } }); } catch {}
-  try { await prisma.onlineMatchSession.delete({ where: { id: matchId } }); } catch {}
-  try { matches.delete(matchId); } catch {}
+  try {
+    if (storeRedis) await storeRedis.del(`match:session:${matchId}`);
+  } catch {}
+  try {
+    await prisma.onlineMatchAction.deleteMany({ where: { matchId } });
+  } catch {}
+  try {
+    await prisma.onlineMatchSession.delete({ where: { id: matchId } });
+  } catch {}
+  try {
+    matches.delete(matchId);
+  } catch {}
 }
 
-async function leaderApplyAction(matchId, playerId, incomingPatch, actorSocketId) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match) return;
-  const matchRoom = `match:${matchId}`;
-  const now = Date.now();
-  ensureInteractionState(match);
-  purgeExpiredGrants(match, now);
-  const actorSeat = getSeatForPlayer(match, playerId);
-  if (!actorSeat) {
-    if (actorSocketId) io.to(actorSocketId).emit("error", { message: "Only seated players may take actions", code: "action_not_authorized" });
-    return;
-  }
-  try {
-    const patch = incomingPatch;
-    let shouldFinalizeMatch = false;
-    let finalizeOptions = null;
-    if (
-      match &&
-      match.status === 'waiting' &&
-      patch && typeof patch === 'object' && patch.phase === 'Main'
-    ) {
-      match.status = 'in_progress';
-      io.to(matchRoom).emit('matchStarted', { match: getMatchInfo(match) });
-      // If this is a tournament match, mark DB match as active and set startedAt for rounds UI
-      try {
-        if (match.tournamentId) {
-          await prisma.match.updateMany({
-            where: { id: match.id, status: { in: ['pending', 'active'] } },
-            data: { status: 'active', startedAt: new Date() },
-          });
-        }
-      } catch {}
-    }
-    if (match && patch && typeof patch === 'object') {
-      const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
-      let patchToApply = patch;
-      const enforce = RULES_ENFORCE_MODE === 'all' || (RULES_ENFORCE_MODE === 'bot_only' && isCpuPlayerId(playerId));
-      const isSnapshot = Array.isArray(patchToApply && patchToApply.__replaceKeys) && patchToApply.__replaceKeys.length > 0;
-      if (isSnapshot) {
-        try {
-          console.debug('[match] apply snapshot', {
-            matchId,
-            playerId,
-            keys: Array.isArray(patchToApply.__replaceKeys) ? patchToApply.__replaceKeys : [],
-            hasEvents: Array.isArray(patchToApply.events),
-            phase: patchToApply.phase,
-            eventSeq: patchToApply.eventSeq,
-            t: now,
-          });
-        } catch {}
-      }
-      if (patch && typeof patch === 'object' && patch.d20Rolls) {
-        const prev = (match.game && match.game.d20Rolls) || { p1: null, p2: null };
-        const incRaw = patch.d20Rolls || {};
-        // Determine the seat (p1/p2) for the acting player
-        const seat = actorSeat;
-        // Only allow a player to set their own seat, and only if it hasn't been set yet
-        /** @type {{ p1?: number, p2?: number }} */
-        const inc = {};
-        if (seat === 'p1') {
-          if (incRaw.p1 !== undefined) {
-            if (prev.p1 == null) {
-              const v = Number(incRaw.p1);
-              if (Number.isFinite(v)) inc.p1 = v;
-            } else {
-              try { console.warn('[d20] ignoring extra roll from p1; already rolled', { prev, incRaw, matchId, playerId }); } catch {}
-            }
-          }
-        } else if (seat === 'p2') {
-          if (incRaw.p2 !== undefined) {
-            if (prev.p2 == null) {
-              const v = Number(incRaw.p2);
-              if (Number.isFinite(v)) inc.p2 = v;
-            } else {
-              try { console.warn('[d20] ignoring extra roll from p2; already rolled', { prev, incRaw, matchId, playerId }); } catch {}
-            }
-          }
-        } else {
-          // Spectators or unknown seats cannot affect d20 rolls
-          try { console.warn('[d20] ignoring roll from non-seated actor', { incRaw, matchId, playerId }); } catch {}
-        }
-        const mergedD20 = {
-          p1: (inc.p1 !== undefined ? inc.p1 : (prev.p1 ?? null)),
-          p2: (inc.p2 !== undefined ? inc.p2 : (prev.p2 ?? null)),
-        };
-        try { console.log('[d20] merge', { prev, inc: incRaw, merged: mergedD20, matchId }); } catch {}
-        if (mergedD20.p1 != null && mergedD20.p2 != null) {
-          if (Number(mergedD20.p1) === Number(mergedD20.p2)) {
-            try { console.log('[d20] tie detected -> resetting for reroll', { merged: mergedD20, matchId }); } catch {}
-            patchToApply = { ...patchToApply, d20Rolls: { p1: null, p2: null }, setupWinner: null };
-            try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
-            try { match._autoSeatApplied = false; } catch {}
-          } else {
-            const winner = Number(mergedD20.p1) > Number(mergedD20.p2) ? 'p1' : 'p2';
-            patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
-            if (patchToApply.setupWinner === undefined) patchToApply = { ...patchToApply, setupWinner: winner };
-            try { console.log('[d20] winner decided', { merged: mergedD20, winner, matchId }); } catch {}
-            try {
-              const g = match.game || {};
-              const phaseNow = g.phase;
-              const winnerIdx = winner === 'p1' ? 0 : 1;
-              const winnerId = Array.isArray(match.playerIds) ? match.playerIds[winnerIdx] : null;
-              const winnerIsCpu = winnerId ? isCpuPlayerId(winnerId) : false;
-              if (winnerIsCpu && !match._autoSeatApplied && match.status === 'waiting' && phaseNow !== 'Start' && phaseNow !== 'Main') {
-                const firstPlayer = winner === 'p1' ? 1 : 2;
-                patchToApply = { ...patchToApply, phase: 'Start', currentPlayer: firstPlayer };
-                match._autoSeatApplied = true;
-              }
-            } catch {}
-          }
-        } else {
-          patchToApply = { ...patchToApply, d20Rolls: mergedD20 };
-          try { console.log('[d20] partial roll - waiting for second player', { merged: mergedD20, matchId }); } catch {}
-        }
-      }
-      if (patchToApply && typeof patchToApply === 'object' && (patchToApply.phase === 'Start' || patchToApply.phase === 'Main')) {
-        try { if (match._autoSeatTimer) { clearTimeout(match._autoSeatTimer); match._autoSeatTimer = null; } } catch {}
-      }
-      if (!isSnapshot) {
-        try {
-          const costRes = ensureCosts(match.game || {}, patchToApply, playerId, { match });
-          if (costRes && costRes.autoPatch && RULES_HELPERS_ENABLED) {
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, costRes.autoPatch);
-            try {
-              console.debug('[rules] ensureCosts autoPatch applied', {
-                matchId,
-                playerId,
-                keys: Object.keys(costRes.autoPatch || {}),
-                isSnapshot,
-              });
-            } catch {}
-          }
-          // T057/T070: DISABLED - Summoning sickness causes "Insufficient resources" regression
-          // Root cause unknown - ANY mutation of permanents after cost validation triggers errors
-          // DEFERRED until root cause can be properly diagnosed
-          // if (costRes && costRes._summoningSicknessInfo && RULES_HELPERS_ENABLED) {
-          //   ...summoning sickness application disabled...
-          // }
-          if (costRes && costRes.ok === false) {
-            if (enforce) {
-              if (actorSocketId) io.to(actorSocketId).emit('error', { message: costRes.error || 'Insufficient resources', code: 'cost_unpaid' });
-              try {
-                console.warn('[rules] ensureCosts rejected action', {
-                  matchId,
-                  playerId,
-                  error: costRes.error,
-                  isSnapshot,
-                });
-              } catch {}
-              return;
-            } else {
-              const warn = [{ id: 0, ts: Date.now(), text: `[Warning] ${costRes.error || 'Insufficient resources'}` }];
-              const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
-              patchToApply = { ...patchToApply, events: [...existing, ...warn] };
-            }
-          }
-        } catch {}
-        try {
-          const v = validateAction(match.game || {}, patchToApply, playerId, { match });
-          if (!v.ok) {
-            const msg = (v && v.error) ? String(v.error) : '';
-            try {
-              console.warn('[rules] validateAction rejected action', {
-                matchId,
-                playerId,
-                error: msg,
-                isSnapshot,
-              });
-            } catch {}
-            const mustReject = /Cannot tap or untap opponent/i.test(msg);
-            if (mustReject) {
-              if (actorSocketId) io.to(actorSocketId).emit('error', { message: msg || 'Illegal tap action', code: 'rules_violation' });
-              return;
-            }
-            if (enforce) {
-              if (actorSocketId) io.to(actorSocketId).emit('error', { message: v.error || 'Rules violation', code: 'rules_violation' });
-              return;
-            } else {
-              const warnEvent = [{ id: 0, ts: Date.now(), text: `[Warning] ${v.error || 'Potential rules issue'}` }];
-              const existing = Array.isArray(patchToApply && patchToApply.events) ? patchToApply.events : [];
-              patchToApply = { ...patchToApply, events: [...existing, ...warnEvent] };
-            }
-          }
-        } catch {}
-        try {
-          const trig = applyGenesis(match.game || {}, patchToApply, playerId, { match });
-          if (trig && typeof trig === 'object') {
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, trig);
-          }
-        } catch {}
-        try {
-          const kw = applyKeywordAnnotations(match.game || {}, patchToApply, playerId, { match });
-          if (kw && typeof kw === 'object') {
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, kw);
-          }
-        } catch {}
-      }
-      // Prune avatar updates to only the acting seat to avoid accidental opponent writes
-      try {
-        if (patchToApply && patchToApply.avatars && typeof patchToApply.avatars === 'object') {
-          const seat = actorSeat === 'p1' || actorSeat === 'p2' ? actorSeat : null;
-          if (seat) {
-            const av = patchToApply.avatars || {};
-            const scoped = {};
-            if (av[seat] && typeof av[seat] === 'object') scoped[seat] = av[seat];
-            patchToApply = { ...patchToApply, avatars: scoped };
-          }
-        }
-      } catch {}
-      const interactionRequirements = collectInteractionRequirements(patchToApply, actorSeat);
-      const shouldEnforceInteraction =
-        INTERACTION_ENFORCEMENT_ENABLED &&
-        match.status === 'in_progress' &&
-        !isSnapshot;
-      if (shouldEnforceInteraction && interactionRequirements.needsOpponentZoneWrite) {
-        const grant = usePermitForRequirement(match, playerId, actorSeat, 'allowOpponentZoneWrite', now);
-        if (!grant) {
-          if (actorSocketId) io.to(actorSocketId).emit('error', { message: 'Interaction approval is required before modifying the opponent\'s zones.', code: 'interaction_required' });
-          return;
-        }
-      }
-      const eventsAdded = [];
-      if (Array.isArray(patch && patch.events)) eventsAdded.push(...patch.events);
-      if (Array.isArray(patchToApply && patchToApply.events)) eventsAdded.push(...patchToApply.events);
-      if (eventsAdded.length > 0) {
-        const prev = Array.isArray(match.game && match.game.events) ? match.game.events : [];
-        const mergedEvents = mergeEvents(prev, eventsAdded);
-        const mergedMaxId = mergedEvents.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0);
-        const seq = Math.max(mergedMaxId, Number(patch && patch.eventSeq || 0) || 0);
-        patchToApply = { ...patchToApply, events: mergedEvents, eventSeq: seq };
-      }
-      // If patch specifies __replaceKeys (authoritative snapshot like Undo),
-      // prime the base so those keys become exact replacements
-      let baseForMerge = match.game || {};
-      try {
-        if (patchToApply && Array.isArray(patchToApply.__replaceKeys)) {
-          const keys = patchToApply.__replaceKeys;
-          baseForMerge = { ...(match.game || {}) };
-          for (const k of keys) {
-            if (Object.prototype.hasOwnProperty.call(patchToApply, k)) {
-              baseForMerge[k] = patchToApply[k];
-            }
-          }
-        }
-      } catch {}
-      // Merge player patch into game snapshot
-      if (patchToApply && Array.isArray(patchToApply.__replaceKeys)) {
-        const prevZones = (match.game && match.game.zones) || null;
-        const emptyZones = {
-          spellbook: [],
-          atlas: [],
-          hand: [],
-          graveyard: [],
-          battlefield: [],
-          banished: [],
-        };
-        const normalizedZones = {
-          p1: prevZones && prevZones.p1
-            ? {
-                spellbook: Array.isArray(prevZones.p1.spellbook) ? prevZones.p1.spellbook : [],
-                atlas: Array.isArray(prevZones.p1.atlas) ? prevZones.p1.atlas : [],
-                hand: Array.isArray(prevZones.p1.hand) ? prevZones.p1.hand : [],
-                graveyard: Array.isArray(prevZones.p1.graveyard) ? prevZones.p1.graveyard : [],
-                battlefield: Array.isArray(prevZones.p1.battlefield) ? prevZones.p1.battlefield : [],
-                banished: Array.isArray(prevZones.p1.banished) ? prevZones.p1.banished : [],
-              }
-            : emptyZones,
-          p2: prevZones && prevZones.p2
-            ? {
-                spellbook: Array.isArray(prevZones.p2.spellbook) ? prevZones.p2.spellbook : [],
-                atlas: Array.isArray(prevZones.p2.atlas) ? prevZones.p2.atlas : [],
-                hand: Array.isArray(prevZones.p2.hand) ? prevZones.p2.hand : [],
-                graveyard: Array.isArray(prevZones.p2.graveyard) ? prevZones.p2.graveyard : [],
-                battlefield: Array.isArray(prevZones.p2.battlefield) ? prevZones.p2.battlefield : [],
-                banished: Array.isArray(prevZones.p2.banished) ? prevZones.p2.banished : [],
-              }
-            : emptyZones,
-        };
-        patchToApply = {
-          ...patchToApply,
-          zones: {
-            p1:
-              patchToApply.zones && patchToApply.zones.p1
-                ? {
-                    spellbook: Array.isArray(patchToApply.zones.p1.spellbook)
-                      ? patchToApply.zones.p1.spellbook
-                      : normalizedZones.p1.spellbook,
-                    atlas: Array.isArray(patchToApply.zones.p1.atlas)
-                      ? patchToApply.zones.p1.atlas
-                      : normalizedZones.p1.atlas,
-                    hand: Array.isArray(patchToApply.zones.p1.hand)
-                      ? patchToApply.zones.p1.hand
-                      : normalizedZones.p1.hand,
-                    graveyard: Array.isArray(patchToApply.zones.p1.graveyard)
-                      ? patchToApply.zones.p1.graveyard
-                      : normalizedZones.p1.graveyard,
-                    battlefield: Array.isArray(patchToApply.zones.p1.battlefield)
-                      ? patchToApply.zones.p1.battlefield
-                      : normalizedZones.p1.battlefield,
-                    banished: Array.isArray(patchToApply.zones.p1.banished)
-                      ? patchToApply.zones.p1.banished
-                      : normalizedZones.p1.banished,
-                  }
-                : normalizedZones.p1,
-            p2:
-              patchToApply.zones && patchToApply.zones.p2
-                ? {
-                    spellbook: Array.isArray(patchToApply.zones.p2.spellbook)
-                      ? patchToApply.zones.p2.spellbook
-                      : normalizedZones.p2.spellbook,
-                    atlas: Array.isArray(patchToApply.zones.p2.atlas)
-                      ? patchToApply.zones.p2.atlas
-                      : normalizedZones.p2.atlas,
-                    hand: Array.isArray(patchToApply.zones.p2.hand)
-                      ? patchToApply.zones.p2.hand
-                      : normalizedZones.p2.hand,
-                    graveyard: Array.isArray(patchToApply.zones.p2.graveyard)
-                      ? patchToApply.zones.p2.graveyard
-                      : normalizedZones.p2.graveyard,
-                    battlefield: Array.isArray(patchToApply.zones.p2.battlefield)
-                      ? patchToApply.zones.p2.battlefield
-                      : normalizedZones.p2.battlefield,
-                    banished: Array.isArray(patchToApply.zones.p2.banished)
-                      ? patchToApply.zones.p2.banished
-                      : normalizedZones.p2.banished,
-                  }
-                : normalizedZones.p2,
-          },
-        };
-        const prevAvatars = (match.game && match.game.avatars) || { p1: {}, p2: {} };
-        const normalizeAvatar = (candidate, fallback) => {
-          const base = fallback || {};
-          const card = candidate && 'card' in candidate ? candidate.card ?? null : base.card ?? null;
-          const pos = candidate && Array.isArray(candidate.pos) && candidate.pos.length === 2
-            ? [candidate.pos[0], candidate.pos[1]]
-            : Array.isArray(base.pos) && base.pos.length === 2
-              ? [base.pos[0], base.pos[1]]
-              : null;
-          const tapped = candidate && typeof candidate.tapped === 'boolean'
-            ? candidate.tapped
-            : typeof base.tapped === 'boolean'
-              ? base.tapped
-              : false;
-          const next = { card, pos, tapped };
-          if (candidate && 'offset' in candidate) {
-            next.offset = candidate.offset ?? null;
-          } else if (base && 'offset' in base) {
-            next.offset = base.offset ?? null;
-          }
-          return next;
-        };
-        const fallbackAvatars = {
-          p1: normalizeAvatar(prevAvatars.p1, { card: null, pos: null, tapped: false }),
-          p2: normalizeAvatar(prevAvatars.p2, { card: null, pos: null, tapped: false }),
-        };
-        const patchAvatars = (patchToApply.avatars && typeof patchToApply.avatars === 'object') ? patchToApply.avatars : {};
-        patchToApply = {
-          ...patchToApply,
-          avatars: {
-            p1: normalizeAvatar(patchAvatars.p1, fallbackAvatars.p1),
-            p2: normalizeAvatar(patchAvatars.p2, fallbackAvatars.p2),
-          },
-        };
-        const prevPos = (match.game && match.game.playerPositions) || {
-          p1: { playerId: 1, position: { x: 0, z: 0 } },
-          p2: { playerId: 2, position: { x: 0, z: 0 } },
-        };
-        const normalizePos = (seat, candidate, fallback) => {
-          const base = fallback || { playerId: seat === 'p1' ? 1 : 2, position: { x: 0, z: 0 } };
-          const id = candidate && typeof candidate.playerId === 'number' ? candidate.playerId : base.playerId;
-          const posObj = candidate && candidate.position && typeof candidate.position === 'object' ? candidate.position : base.position || {};
-          return {
-            playerId: id,
-            position: {
-              x: typeof posObj.x === 'number' ? posObj.x : 0,
-              z: typeof posObj.z === 'number' ? posObj.z : 0,
-            },
-          };
-        };
-        const patchPos = (patchToApply.playerPositions && typeof patchToApply.playerPositions === 'object')
-          ? patchToApply.playerPositions
-          : {};
-        patchToApply = {
-          ...patchToApply,
-          playerPositions: {
-            p1: normalizePos('p1', patchPos.p1, prevPos.p1),
-            p2: normalizePos('p2', patchPos.p2, prevPos.p2),
-          },
-        };
-      }
-      match.game = deepMergeReplaceArrays(baseForMerge, patchToApply);
-      // Resolve movement/combat after merge (basic v1)
-      try {
-        const mc = applyMovementAndCombat(baseForMerge, patchToApply, playerId, { match });
-        if (mc && typeof mc === 'object') {
-          match.game = deepMergeReplaceArrays(match.game || {}, mc);
-          patchToApply = deepMergeReplaceArrays(patchToApply || {}, mc);
-        }
-      } catch {}
-      // Apply start-of-turn effects if phase/currentPlayer indicates a new turn
-      try {
-        const prevPhase = (baseForMerge && baseForMerge.phase) || null;
-        const prevCp = (baseForMerge && typeof baseForMerge.currentPlayer === 'number') ? baseForMerge.currentPlayer : null;
-        const nextPhase = (match.game && match.game.phase) || prevPhase;
-        const nextCp = (match.game && typeof match.game.currentPlayer === 'number') ? match.game.currentPlayer : prevCp;
-        const phaseBecameStart = nextPhase === 'Start' && nextPhase !== prevPhase;
-        const enteredMainWithNewCp = nextPhase === 'Main' && prevCp != null && nextCp != null && nextCp !== prevCp;
-        if (phaseBecameStart || enteredMainWithNewCp) {
-          const tsPatch = applyTurnStart(match.game || {});
-          if (tsPatch && typeof tsPatch === 'object') {
-            // Update stored snapshot and outgoing patch
-            match.game = deepMergeReplaceArrays(match.game || {}, tsPatch);
-            patchToApply = deepMergeReplaceArrays(patchToApply || {}, tsPatch);
-            try { console.debug('[rules] applyTurnStart merged', { matchId, phase: nextPhase, currentPlayer: nextCp }); } catch {}
-          }
-        }
-      } catch {}
-      const nextMatchEnded = Boolean(match.game && match.game.matchEnded);
-      if (!prevMatchEnded && nextMatchEnded) {
-        const winnerSeatFromPatch =
-          patchToApply && (patchToApply.winner === 'p1' || patchToApply.winner === 'p2')
-            ? patchToApply.winner
-            : null;
-        const loserSeatFromPatch = winnerSeatFromPatch ? getOpponentSeat(winnerSeatFromPatch) : null;
-        finalizeOptions = {};
-        if (winnerSeatFromPatch) finalizeOptions.winnerSeat = winnerSeatFromPatch;
-        if (loserSeatFromPatch) finalizeOptions.loserSeat = loserSeatFromPatch;
-        shouldFinalizeMatch = true;
-      }
-      try {
-        if (match.game && match.game.permanents) {
-          match.game.permanents = dedupePermanents(match.game.permanents);
-        }
-        if (isSnapshot) {
-          const perCount = match.game && match.game.permanents && typeof match.game.permanents === 'object'
-            ? Object.values(match.game.permanents).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0)
-            : null;
-          const zones = match.game && match.game.zones ? match.game.zones : null;
-          console.debug('[match] snapshot merge result', {
-            matchId,
-            permanentsCount: perCount,
-            handP1: zones && zones.p1 && Array.isArray(zones.p1.hand) ? zones.p1.hand.length : null,
-            handP2: zones && zones.p2 && Array.isArray(zones.p2.hand) ? zones.p2.hand.length : null,
-          });
-        }
-      } catch {}
-      match.lastTs = now;
-      recordMatchAction(matchId, patchToApply, playerId);
-      if (patchToApply && patchToApply.d20Rolls) {
-        try {
-          // Check who's in the room
-          io.in(matchRoom).fetchSockets().then(sockets => {
-            console.log('[d20] broadcasting patch to room', {
-              matchId,
-              room: matchRoom,
-              socketsInRoom: sockets.length,
-              socketIds: sockets.map(s => s.id).join(', '),
-              d20Rolls: patchToApply.d20Rolls,
-              setupWinner: patchToApply.setupWinner
-            });
-          });
-        } catch (e) {
-          console.log('[d20] broadcasting patch', { matchId, d20Rolls: patchToApply.d20Rolls, setupWinner: patchToApply.setupWinner });
-        }
-      }
-      const enrichedPatchToApply = await enrichPatchWithCosts(patchToApply, prisma);
-      io.to(matchRoom).emit('statePatch', { patch: enrichedPatchToApply, t: now });
-      if (isSnapshot) {
-        try {
-          const sites = match.game && match.game.board && match.game.board.sites ? Object.keys(match.game.board.sites).length : null;
-          const per = match.game && match.game.permanents && typeof match.game.permanents === 'object'
-            ? Object.values(match.game.permanents).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0)
-            : null;
-          console.debug('[match] snapshot applied and broadcast', { matchId, sites, permanentsCount: per, t: now });
-        } catch {}
-      }
-      try { await persistMatchUpdate(match, patchToApply, playerId, now); } catch {}
-    } else {
-      const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
-      io.to(matchRoom).emit('statePatch', { patch: enrichedPatch, t: now });
-      try { await persistMatchUpdate(match, patch || null, playerId, now); } catch {}
-    }
-    if (shouldFinalizeMatch) {
-      try {
-        await finalizeMatch(match, finalizeOptions || {});
-      } catch (err) {
-        try { console.warn('[match] finalize failed', err?.message || err); } catch {}
-      }
-    }
-  } catch {
-    const enrichedIncoming = await enrichPatchWithCosts(incomingPatch || null, prisma);
-    io.to(matchRoom).emit('statePatch', { patch: enrichedIncoming, t: Date.now() });
-  }
-  try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
-}
+
 
 // Handle per-player mulligan completion as the cluster leader
 async function leaderHandleMulliganDone(matchId, playerId) {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
   // Accept mulligans during "waiting", "deck_construction", or "in_progress"
-  if (match.status !== "waiting" && match.status !== "deck_construction" && match.status !== "in_progress") return;
+  if (
+    match.status !== "waiting" &&
+    match.status !== "deck_construction" &&
+    match.status !== "in_progress"
+  )
+    return;
   // If already in Main phase, mulligans are no longer relevant
   if (match.game && match.game.phase === "Main") return;
 
@@ -2147,7 +1726,7 @@ async function leaderHandleMulliganDone(matchId, playerId) {
   if (!match.mulliganDone || !(match.mulliganDone instanceof Set)) {
     match.mulliganDone = new Set();
   }
-  
+
   const wasAlreadyDone = match.mulliganDone.has(playerId);
   match.mulliganDone.add(playerId);
 
@@ -2158,7 +1737,13 @@ async function leaderHandleMulliganDone(matchId, playerId) {
       ? match.playerIds.filter((pid) => !match.mulliganDone.has(pid))
       : [];
     const names = waitingFor.map((pid) => players.get(pid)?.displayName || pid);
-    console.log(`[Setup] mulliganDone <= ${playerId}${wasAlreadyDone ? ' (duplicate)' : ''}. ${doneCount}/${total} complete. Waiting for: ${names.join(", ") || "none"}`);
+    console.log(
+      `[Setup] mulliganDone <= ${playerId}${
+        wasAlreadyDone ? " (duplicate)" : ""
+      }. ${doneCount}/${total} complete. Waiting for: ${
+        names.join(", ") || "none"
+      }`
+    );
   } catch {}
 
   // If all current players have finished mulligans, start the game
@@ -2169,8 +1754,10 @@ async function leaderHandleMulliganDone(matchId, playerId) {
     // Even if this player was already done, send them current state to ensure they're synced
     if (wasAlreadyDone) {
       const room = `match:${match.id}`;
-      try { 
-        console.log(`[Setup] Player ${playerId} resubmitted mulligan - sending current game state`);
+      try {
+        console.log(
+          `[Setup] Player ${playerId} resubmitted mulligan - sending current game state`
+        );
         io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
       } catch {}
     }
@@ -2184,13 +1771,19 @@ async function leaderHandleMulliganDone(matchId, playerId) {
   // Broadcast a deterministic patch to set phase to Main
   const now = Date.now();
   // If currentPlayer isn't set yet (e.g., human winner hasn't chosen), set a sensible default
-  let cp = match.game && typeof match.game.currentPlayer === 'number' ? match.game.currentPlayer : null;
+  let cp =
+    match.game && typeof match.game.currentPlayer === "number"
+      ? match.game.currentPlayer
+      : null;
   if (cp !== 1 && cp !== 2) {
     const sw = match.game ? match.game.setupWinner : null;
-    cp = sw === 'p2' ? 2 : 1; // default to P1 if undefined
+    cp = sw === "p2" ? 2 : 1; // default to P1 if undefined
   }
   // Ensure avatar positions exist so first-site placement rule can be applied client/server
-  const sz = (match.game && match.game.board && match.game.board.size) || { w: 5, h: 4 };
+  const sz = (match.game && match.game.board && match.game.board.size) || {
+    w: 5,
+    h: 4,
+  };
   const cx = Math.floor(Math.max(1, Number(sz.w) || 5) / 2);
   const topY = (Number(sz.h) || 4) - 1;
   const botY = 0;
@@ -2207,12 +1800,25 @@ async function leaderHandleMulliganDone(matchId, playerId) {
   match.lastTs = now;
   const enrichedMainPatch = await enrichPatchWithCosts(mainPatch, prisma);
   io.to(room).emit("statePatch", { patch: enrichedMainPatch, t: now });
-  try { await persistMatchUpdate(match, mainPatch, playerId, now); } catch {}
-  try { console.log(`[Setup] All mulligans complete for match ${match.id}. Starting game.`); } catch {}
-  try { if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60); } catch {}
+  try {
+    await persistMatchUpdate(match, mainPatch, playerId, now);
+  } catch {}
+  try {
+    console.log(
+      `[Setup] All mulligans complete for match ${match.id}. Starting game.`
+    );
+  } catch {}
+  try {
+    if (storeRedis) await storeRedis.expire(`match:leader:${matchId}`, 60);
+  } catch {}
 }
 
-async function leaderHandleInteractionRequest(matchId, playerId, payload, actorSocketId) {
+async function leaderHandleInteractionRequest(
+  matchId,
+  playerId,
+  payload,
+  actorSocketId
+) {
   try {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
@@ -2228,7 +1834,9 @@ async function leaderHandleInteractionRequest(matchId, playerId, payload, actorS
     const opponentSeat = getOpponentSeat(actorSeat);
     if (!opponentSeat) return;
     const opponentIndex = actorSeat === "p1" ? 1 : 0;
-    const opponentId = Array.isArray(match.playerIds) ? match.playerIds[opponentIndex] : null;
+    const opponentId = Array.isArray(match.playerIds)
+      ? match.playerIds[opponentIndex]
+      : null;
     if (!opponentId) {
       return {
         ok: false,
@@ -2246,12 +1854,22 @@ async function leaderHandleInteractionRequest(matchId, playerId, payload, actorS
       };
     }
 
-    const requestId = typeof payload?.requestId === "string" && payload.requestId.length >= 6 ? payload.requestId : rid("intl");
+    const requestId =
+      typeof payload?.requestId === "string" && payload.requestId.length >= 6
+        ? payload.requestId
+        : rid("intl");
     const expiresAtRaw = Number(payload?.expiresAt);
-    const expiresAt = Number.isFinite(expiresAtRaw) && expiresAtRaw > now ? expiresAtRaw : null;
-    const note = typeof payload?.note === "string" ? payload.note.slice(0, 280) : undefined;
+    const expiresAt =
+      Number.isFinite(expiresAtRaw) && expiresAtRaw > now ? expiresAtRaw : null;
+    const note =
+      typeof payload?.note === "string"
+        ? payload.note.slice(0, 280)
+        : undefined;
 
-    const rawPayload = payload && typeof payload.payload === "object" && payload.payload !== null ? payload.payload : {};
+    const rawPayload =
+      payload && typeof payload.payload === "object" && payload.payload !== null
+        ? payload.payload
+        : {};
     const sanitizedPayload = {};
     for (const [key, value] of Object.entries(rawPayload)) {
       if (key === "grant" || key === "proposedGrant") continue;
@@ -2277,28 +1895,53 @@ async function leaderHandleInteractionRequest(matchId, playerId, payload, actorS
     };
     if (expiresAt) message.expiresAt = expiresAt;
     if (note) message.note = note;
-    if (Object.keys(sanitizedPayload).length > 0) message.payload = sanitizedPayload;
+    if (Object.keys(sanitizedPayload).length > 0)
+      message.payload = sanitizedPayload;
 
-    const pendingAction = sanitizePendingAction(rawKind, sanitizedPayload, actorSeat, playerId);
-    recordInteractionRequest(match, message, proposedGrant || null, pendingAction);
+    const pendingAction = sanitizePendingAction(
+      rawKind,
+      sanitizedPayload,
+      actorSeat,
+      playerId
+    );
+    recordInteractionRequest(
+      match,
+      message,
+      proposedGrant || null,
+      pendingAction
+    );
     match.lastTs = now;
     emitInteraction(matchId, message);
-    try { await persistMatchUpdate(match, null, playerId, now); } catch {}
+    try {
+      await persistMatchUpdate(match, null, playerId, now);
+    } catch {}
     return { ok: true };
   } catch (err) {
-    try { console.warn("[interaction] request failed", err?.message || err); } catch {}
-    return { ok: false, error: "Failed to process interaction request", code: "interaction_internal" };
+    try {
+      console.warn("[interaction] request failed", err?.message || err);
+    } catch {}
+    return {
+      ok: false,
+      error: "Failed to process interaction request",
+      code: "interaction_internal",
+    };
   }
 }
 
-async function leaderHandleInteractionResponse(matchId, playerId, payload, actorSocketId) {
+async function leaderHandleInteractionResponse(
+  matchId,
+  playerId,
+  payload,
+  actorSocketId
+) {
   try {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
     ensureInteractionState(match);
     const now = Date.now();
     const actorSeat = getSeatForPlayer(match, playerId);
-    const requestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+    const requestId =
+      typeof payload?.requestId === "string" ? payload.requestId : null;
     if (!requestId) {
       return {
         ok: false,
@@ -2306,7 +1949,10 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
         code: "interaction_invalid_request",
       };
     }
-    const entry = match.interactionRequests instanceof Map ? match.interactionRequests.get(requestId) : null;
+    const entry =
+      match.interactionRequests instanceof Map
+        ? match.interactionRequests.get(requestId)
+        : null;
     const request = entry && entry.request ? entry.request : null;
     if (!request) {
       return {
@@ -2316,7 +1962,8 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
       };
     }
 
-    const rawDecision = typeof payload?.decision === "string" ? payload.decision : null;
+    const rawDecision =
+      typeof payload?.decision === "string" ? payload.decision : null;
     if (!rawDecision || !INTERACTION_DECISIONS.has(rawDecision)) {
       return {
         ok: false,
@@ -2341,8 +1988,14 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
       };
     }
 
-    const reason = typeof payload?.reason === "string" ? payload.reason.slice(0, 280) : undefined;
-    const rawPayload = payload && typeof payload.payload === "object" && payload.payload !== null ? payload.payload : {};
+    const reason =
+      typeof payload?.reason === "string"
+        ? payload.reason.slice(0, 280)
+        : undefined;
+    const rawPayload =
+      payload && typeof payload.payload === "object" && payload.payload !== null
+        ? payload.payload
+        : {};
     const sanitizedPayload = {};
     for (const [key, value] of Object.entries(rawPayload)) {
       if (key === "grant" || key === "proposedGrant") continue;
@@ -2374,7 +2027,8 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
       respondedAt: now,
     };
     if (reason) responseMessage.reason = reason;
-    if (Object.keys(sanitizedPayload).length > 0) responseMessage.payload = sanitizedPayload;
+    if (Object.keys(sanitizedPayload).length > 0)
+      responseMessage.payload = sanitizedPayload;
 
     let grantRecord = null;
     if (rawDecision === "approved" && grantOpts) {
@@ -2385,7 +2039,7 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
     }
 
     recordInteractionResponse(match, responseMessage, grantRecord);
-    if (rawDecision === 'approved') {
+    if (rawDecision === "approved") {
       try {
         const entry = match.interactionRequests.get(requestId);
         if (entry) {
@@ -2398,16 +2052,29 @@ async function leaderHandleInteractionResponse(matchId, playerId, payload, actor
           }
         }
       } catch (err) {
-        try { console.warn('[interaction] failed to execute pending action', err?.message || err); } catch {}
+        try {
+          console.warn(
+            "[interaction] failed to execute pending action",
+            err?.message || err
+          );
+        } catch {}
       }
     }
     match.lastTs = now;
     emitInteraction(matchId, responseMessage);
-    try { await persistMatchUpdate(match, null, playerId, now); } catch {}
+    try {
+      await persistMatchUpdate(match, null, playerId, now);
+    } catch {}
     return { ok: true };
   } catch (err) {
-    try { console.warn("[interaction] response failed", err?.message || err); } catch {}
-    return { ok: false, error: "Failed to process interaction response", code: "interaction_internal" };
+    try {
+      console.warn("[interaction] response failed", err?.message || err);
+    } catch {}
+    return {
+      ok: false,
+      error: "Failed to process interaction response",
+      code: "interaction_internal",
+    };
   }
 }
 
@@ -2424,8 +2091,12 @@ function getMatchInfo(match) {
     turn: match.turn,
     winnerId: match.winnerId ?? null,
     matchType: match.matchType || "constructed",
-    sealedConfig: match.sealedConfig ? normalizeSealedConfig(match.sealedConfig) : null,
-    draftConfig: match.draftConfig ? normalizeDraftConfig(match.draftConfig) : null,
+    sealedConfig: match.sealedConfig
+      ? normalizeSealedConfig(match.sealedConfig)
+      : null,
+    draftConfig: match.draftConfig
+      ? normalizeDraftConfig(match.draftConfig)
+      : null,
     deckSubmissions: match.playerDecks
       ? Array.from(match.playerDecks.keys())
       : [],
@@ -2435,11 +2106,14 @@ function getMatchInfo(match) {
     sealedPacks: match.sealedPacks || undefined,
     draftState: match.draftState || undefined,
   };
-
 }
 
 async function hydrateMatchFromDatabase(matchId, match) {
-  console.log('[hydrateMatchFromDatabase] Called for match:', { matchId, matchType: match.matchType, tournamentId: match.tournamentId });
+  console.log("[hydrateMatchFromDatabase] Called for match:", {
+    matchId,
+    matchType: match.matchType,
+    tournamentId: match.tournamentId,
+  });
   try {
     const dbMatch = await prisma.match.findUnique({
       where: { id: matchId },
@@ -2450,9 +2124,14 @@ async function hydrateMatchFromDatabase(matchId, match) {
       },
     });
     if (dbMatch) {
-      try { if (!match.tournamentId && dbMatch.tournamentId) match.tournamentId = dbMatch.tournamentId; } catch {}
-      try { if (!match.roundId && dbMatch.roundId) match.roundId = dbMatch.roundId; } catch {}
-      if (dbMatch.playerDecks && typeof dbMatch.playerDecks === 'object') {
+      try {
+        if (!match.tournamentId && dbMatch.tournamentId)
+          match.tournamentId = dbMatch.tournamentId;
+      } catch {}
+      try {
+        if (!match.roundId && dbMatch.roundId) match.roundId = dbMatch.roundId;
+      } catch {}
+      if (dbMatch.playerDecks && typeof dbMatch.playerDecks === "object") {
         try {
           match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
         } catch {}
@@ -2461,12 +2140,20 @@ async function hydrateMatchFromDatabase(matchId, match) {
     if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
       match.playerDecks = new Map();
     }
-    if (!match.sealedConfig && match.matchType === 'sealed') {
-      match.sealedConfig = normalizeSealedConfig({ packCount: 6, setMix: ['Alpha'], timeLimit: 40, replaceAvatars: false });
+    if (!match.sealedConfig && match.matchType === "sealed") {
+      match.sealedConfig = normalizeSealedConfig({
+        packCount: 6,
+        setMix: ["Alpha"],
+        timeLimit: 40,
+        replaceAvatars: false,
+      });
     }
     // Load DraftSession config for tournament draft matches to get cubeId
-    if (match.matchType === 'draft' && match.tournamentId) {
-      console.log('[hydrateMatchFromDatabase] Loading DraftSession for tournament draft:', { matchId, tournamentId: match.tournamentId });
+    if (match.matchType === "draft" && match.tournamentId) {
+      console.log(
+        "[hydrateMatchFromDatabase] Loading DraftSession for tournament draft:",
+        { matchId, tournamentId: match.tournamentId }
+      );
       try {
         const draftSession = await prisma.draftSession.findFirst({
           where: { tournamentId: match.tournamentId },
@@ -2476,31 +2163,42 @@ async function hydrateMatchFromDatabase(matchId, match) {
           // Extract cubeId from DraftSession settings
           const settings = draftSession.settings || {};
           const cubeId = settings.cubeId;
-          
+
           // Build draftConfig from DraftSession
           const packConfig = draftSession.packConfiguration || [];
           const packCounts = {};
           for (const entry of packConfig) {
-            const setId = entry.setId || 'Beta';
-            packCounts[setId] = (packCounts[setId] || 0) + (entry.packCount || 0);
+            const setId = entry.setId || "Beta";
+            packCounts[setId] =
+              (packCounts[setId] || 0) + (entry.packCount || 0);
           }
-          
+
           match.draftConfig = {
             cubeId: cubeId || undefined,
             packCounts,
-            packCount: Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
+            packCount:
+              Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
             packSize: 15,
           };
-          
-          console.log('[Tournament Draft] Loaded draftConfig from DraftSession:', { matchId, cubeId, packCount: match.draftConfig.packCount });
+
+          console.log(
+            "[Tournament Draft] Loaded draftConfig from DraftSession:",
+            { matchId, cubeId, packCount: match.draftConfig.packCount }
+          );
         }
       } catch (err) {
-        console.warn('[Tournament Draft] Failed to load DraftSession:', err?.message || err);
+        console.warn(
+          "[Tournament Draft] Failed to load DraftSession:",
+          err?.message || err
+        );
       }
     }
   } catch (err) {
     try {
-      console.warn(`[Tournament] Failed to hydrate match ${matchId} from database:`, err?.message || err);
+      console.warn(
+        `[Tournament] Failed to hydrate match ${matchId} from database:`,
+        err?.message || err
+      );
     } catch {}
   }
 }
@@ -2527,13 +2225,13 @@ function deepMergeReplaceArrays(base, patch) {
 // Trust client/server sync to resolve identity; allow multiple copies of same cardId.
 function dedupePermanents(per) {
   try {
-    if (!per || typeof per !== 'object') return per;
+    if (!per || typeof per !== "object") return per;
     const out = {};
     for (const [cell, arrAny] of Object.entries(per)) {
       const arr = Array.isArray(arrAny) ? arrAny : [];
       const next = [];
       for (const item of arr) {
-        if (!item || typeof item !== 'object') continue;
+        if (!item || typeof item !== "object") continue;
         next.push(item);
       }
       out[cell] = next;
@@ -2631,13 +2329,17 @@ function finishMatchRecording(matchId) {
 
 const REQUIRE_JWT = Boolean(
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "1" ||
-  (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
+    (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
 );
 
 // Enforce NextAuth-signed JWT at connect time
 io.use((socket, next) => {
   try {
-    const token = (socket.handshake && socket.handshake.auth && socket.handshake.auth.token) || null;
+    const token =
+      (socket.handshake &&
+        socket.handshake.auth &&
+        socket.handshake.auth.token) ||
+      null;
     if (token && process.env.NEXTAUTH_SECRET) {
       const payload = jwt.verify(token, process.env.NEXTAUTH_SECRET);
       socket.data = socket.data || {};
@@ -2649,18 +2351,28 @@ io.use((socket, next) => {
     }
     if (REQUIRE_JWT) {
       try {
-        console.warn('[auth] connect rejected: auth_required', {
+        console.warn("[auth] connect rejected: auth_required", {
           tokenPresent: !!token,
-          origin: socket.handshake && socket.handshake.headers && socket.handshake.headers.origin,
-          referer: socket.handshake && socket.handshake.headers && socket.handshake.headers.referer,
+          origin:
+            socket.handshake &&
+            socket.handshake.headers &&
+            socket.handshake.headers.origin,
+          referer:
+            socket.handshake &&
+            socket.handshake.headers &&
+            socket.handshake.headers.referer,
         });
       } catch {}
-      return next(new Error('auth_required'));
+      return next(new Error("auth_required"));
     }
     return next();
   } catch (e) {
-    try { console.warn('[auth] connect rejected: invalid_token', { message: e?.message || String(e) }); } catch {}
-    return next(new Error('invalid_token'));
+    try {
+      console.warn("[auth] connect rejected: invalid_token", {
+        message: e?.message || String(e),
+      });
+    } catch {}
+    return next(new Error("invalid_token"));
   }
 });
 
@@ -2679,18 +2391,26 @@ io.on("connection", async (socket) => {
   if (socket.data && socket.data.authUser) {
     authUser = socket.data.authUser;
   } else if (REQUIRE_JWT) {
-    try { socket.emit("error", { message: "auth_required" }); } catch {}
-    try { socket.disconnect(true); } catch {}
+    try {
+      socket.emit("error", { message: "auth_required" });
+    } catch {}
+    try {
+      socket.disconnect(true);
+    } catch {}
     return;
   }
 
   socket.on("hello", async (payload) => {
-    const rawName = payload && typeof payload.displayName === "string" ? payload.displayName : "";
+    const rawName =
+      payload && typeof payload.displayName === "string"
+        ? payload.displayName
+        : "";
     let displayName = (rawName.trim() || "Player").slice(0, 40);
     if (authUser && authUser.name) {
       displayName = String(authUser.name).slice(0, 40);
     }
-    const providedId = payload && payload.playerId ? String(payload.playerId) : null;
+    const providedId =
+      payload && payload.playerId ? String(payload.playerId) : null;
     const tokenId = authUser && authUser.id ? String(authUser.id) : null;
     const playerId = tokenId || providedId || rid("p");
 
@@ -2712,10 +2432,16 @@ io.on("connection", async (socket) => {
     authed = true;
 
     // Cache player displayName in Redis for cross-instance lookups
-    try { if (storeRedis) { await storeRedis.hset(`player:${playerId}`, { displayName }); } } catch {}
+    try {
+      if (storeRedis) {
+        await storeRedis.hset(`player:${playerId}`, { displayName });
+      }
+    } catch {}
 
     console.log(
-      `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} tokenId=${tokenId ? "yes" : "no"} socket=${socket.id}`
+      `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} tokenId=${
+        tokenId ? "yes" : "no"
+      } socket=${socket.id}`
     );
 
     socket.emit("welcome", {
@@ -2728,10 +2454,16 @@ io.on("connection", async (socket) => {
       socket.join(`match:${player.matchId}`);
       const m = matches.get(player.matchId);
       socket.emit("matchStarted", { match: getMatchInfo(m) });
-      
+
       // If rejoining during an active draft, send current draft state
-      if (m.matchType === "draft" && m.draftState && m.draftState.phase !== "waiting") {
-        console.log(`[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`);
+      if (
+        m.matchType === "draft" &&
+        m.draftState &&
+        m.draftState.phase !== "waiting"
+      ) {
+        console.log(
+          `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`
+        );
         socket.emit("draftUpdate", m.draftState);
       }
     } else if (player.lobbyId && lobbies.has(player.lobbyId)) {
@@ -2746,7 +2478,11 @@ io.on("connection", async (socket) => {
           player.matchId = recovered.id;
           socket.join(`match:${recovered.id}`);
           socket.emit("matchStarted", { match: getMatchInfo(recovered) });
-          if (recovered.matchType === 'draft' && recovered.draftState && recovered.draftState.phase !== 'waiting') {
+          if (
+            recovered.matchType === "draft" &&
+            recovered.draftState &&
+            recovered.draftState.phase !== "waiting"
+          ) {
             socket.emit("draftUpdate", recovered.draftState);
           }
         }
@@ -2755,7 +2491,7 @@ io.on("connection", async (socket) => {
   });
 
   // --- Tournament Draft session rooms + presence ---
-  socket.on('draft:session:join', async (payload = {}) => {
+  socket.on("draft:session:join", async (payload = {}) => {
     if (!authed) return;
     const sessionId = payload?.sessionId;
     if (!sessionId) return;
@@ -2763,42 +2499,73 @@ io.on("connection", async (socket) => {
       await socket.join(`draft:${sessionId}`);
       currentDraftSessionId = sessionId;
       // Ack
-      try { socket.emit('draft:session:joined', { sessionId }); } catch {}
+      try {
+        socket.emit("draft:session:joined", { sessionId });
+      } catch {}
       // Presence update
       try {
         const pid = playerIdBySocket.get(socket.id);
         const p = pid ? players.get(pid) : null;
-        const list = await updateDraftPresence(sessionId, pid || 'unknown', p?.displayName || null, true);
+        const list = await updateDraftPresence(
+          sessionId,
+          pid || "unknown",
+          p?.displayName || null,
+          true
+        );
         if (pid) {
           try {
             await prisma.draftParticipant.updateMany({
               where: { draftSessionId: sessionId, playerId: pid },
-              data: { status: 'active' },
+              data: { status: "active" },
             });
           } catch (err) {
-            try { console.warn('[draft] failed to mark participant active', err?.message || err); } catch {}
+            try {
+              console.warn(
+                "[draft] failed to mark participant active",
+                err?.message || err
+              );
+            } catch {}
           }
         }
-        io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+        io.to(`draft:${sessionId}`).emit("draft:session:presence", {
+          sessionId,
+          players: list,
+        });
         // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
-        try { setTimeout(() => { try { io.to(socket.id).emit('draft:session:presence', { sessionId, players: list }); } catch {} }, 25); } catch {}
+        try {
+          setTimeout(() => {
+            try {
+              io.to(socket.id).emit("draft:session:presence", {
+                sessionId,
+                players: list,
+              });
+            } catch {}
+          }, 25);
+        } catch {}
         // Send current draft state snapshot to the joining socket (tournament draft engine)
         try {
-        const mod = await tournamentModules.loadEngine();
-          if (mod && typeof mod.getState === 'function') {
+          const mod = await tournamentModules.loadEngine();
+          if (mod && typeof mod.getState === "function") {
             const s = await mod.getState(sessionId);
             if (s) {
-              try { io.to(socket.id).emit('draftUpdate', s); } catch {}
+              try {
+                io.to(socket.id).emit("draftUpdate", s);
+              } catch {}
             }
           }
         } catch {}
       } catch {}
     } catch (e) {
-      try { socket.emit('draft:error', { errorCode: 'join_failed', errorMessage: String(e?.message || e) }); } catch {}
+      try {
+        socket.emit("draft:error", {
+          errorCode: "join_failed",
+          errorMessage: String(e?.message || e),
+        });
+      } catch {}
     }
   });
 
-  socket.on('draft:session:leave', async (payload = {}) => {
+  socket.on("draft:session:leave", async (payload = {}) => {
     const sessionId = payload?.sessionId || currentDraftSessionId;
     if (!sessionId) return;
     try {
@@ -2808,15 +2575,28 @@ io.on("connection", async (socket) => {
       try {
         const pid = playerIdBySocket.get(socket.id);
         if (pid) {
-          const list = await updateDraftPresence(sessionId, pid, players.get(pid)?.displayName || null, false);
-          io.to(`draft:${sessionId}`).emit('draft:session:presence', { sessionId, players: list });
+          const list = await updateDraftPresence(
+            sessionId,
+            pid,
+            players.get(pid)?.displayName || null,
+            false
+          );
+          io.to(`draft:${sessionId}`).emit("draft:session:presence", {
+            sessionId,
+            players: list,
+          });
           try {
             await prisma.draftParticipant.updateMany({
               where: { draftSessionId: sessionId, playerId: pid },
-              data: { status: 'disconnected' },
+              data: { status: "disconnected" },
             });
           } catch (err) {
-            try { console.warn('[draft] failed to mark participant disconnected', err?.message || err); } catch {}
+            try {
+              console.warn(
+                "[draft] failed to mark participant disconnected",
+                err?.message || err
+              );
+            } catch {}
           }
         }
       } catch {}
@@ -2832,7 +2612,15 @@ io.on("connection", async (socket) => {
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
-        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'mulligan:done', matchId, playerId: player.id }));
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "mulligan:done",
+              matchId,
+              playerId: player.id,
+            })
+          );
         return;
       }
       await leaderHandleMulliganDone(matchId, player.id);
@@ -2849,7 +2637,16 @@ io.on("connection", async (socket) => {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
         // Forward to leader via pub/sub
-        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'join', matchId, playerId: player.id, socketId: socket.id }));
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "join",
+              matchId,
+              playerId: player.id,
+              socketId: socket.id,
+            })
+          );
         return;
       }
       // We are the leader (or no leader configured but we claimed it), handle locally
@@ -2874,24 +2671,41 @@ io.on("connection", async (socket) => {
         match: getMatchInfo(match),
       });
       // Persist roster change
-      try { await persistMatchUpdate(match, null, player.id, Date.now()); } catch {}
+      try {
+        await persistMatchUpdate(match, null, player.id, Date.now());
+      } catch {}
       // If no players left, schedule cleanup
       if (!Array.isArray(match.playerIds) || match.playerIds.length === 0) {
         try {
           // Debounce existing timer
-          if (match._cleanupTimer) { clearTimeout(match._cleanupTimer); match._cleanupTimer = null; }
+          if (match._cleanupTimer) {
+            clearTimeout(match._cleanupTimer);
+            match._cleanupTimer = null;
+          }
         } catch {}
         const delay = MATCH_CLEANUP_DELAY_MS;
-        try { console.log(`[match] scheduling cleanup in ${delay}ms for ${matchId} (both players left)`); } catch {}
+        try {
+          console.log(
+            `[match] scheduling cleanup in ${delay}ms for ${matchId} (both players left)`
+          );
+        } catch {}
         try {
           match._cleanupTimer = setTimeout(async () => {
             try {
               const leader = await getOrClaimMatchLeader(matchId);
               if (leader && leader !== INSTANCE_ID) {
-                if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId, reason: 'timeout_after_empty' }));
+                if (storeRedis)
+                  await storeRedis.publish(
+                    MATCH_CONTROL_CHANNEL,
+                    JSON.stringify({
+                      type: "match:cleanup",
+                      matchId,
+                      reason: "timeout_after_empty",
+                    })
+                  );
                 return;
               }
-              await cleanupMatchNow(matchId, 'timeout_after_empty');
+              await cleanupMatchNow(matchId, "timeout_after_empty");
             } catch {}
           }, delay);
         } catch {}
@@ -2908,7 +2722,17 @@ io.on("connection", async (socket) => {
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
-        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'action', matchId, playerId: player.id, socketId: socket.id, patch }));
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "action",
+              matchId,
+              playerId: player.id,
+              socketId: socket.id,
+              patch,
+            })
+          );
         return;
       }
       await leaderApplyAction(matchId, player.id, patch, socket.id);
@@ -2925,7 +2749,7 @@ io.on("connection", async (socket) => {
       if (leader && leader !== INSTANCE_ID) {
         if (storeRedis) {
           const msg = {
-            type: 'interaction:request',
+            type: "interaction:request",
             matchId,
             playerId: player.id,
             socketId: socket.id,
@@ -2935,9 +2759,19 @@ io.on("connection", async (socket) => {
         }
         return;
       }
-      await leaderHandleInteractionRequest(matchId, player.id, payload, socket.id);
+      await leaderHandleInteractionRequest(
+        matchId,
+        player.id,
+        payload,
+        socket.id
+      );
     } catch (err) {
-      try { console.warn('[interaction] request handler error', err?.message || err); } catch {}
+      try {
+        console.warn(
+          "[interaction] request handler error",
+          err?.message || err
+        );
+      } catch {}
     }
   });
 
@@ -2951,7 +2785,7 @@ io.on("connection", async (socket) => {
       if (leader && leader !== INSTANCE_ID) {
         if (storeRedis) {
           const msg = {
-            type: 'interaction:response',
+            type: "interaction:response",
             matchId,
             playerId: player.id,
             socketId: socket.id,
@@ -2961,9 +2795,19 @@ io.on("connection", async (socket) => {
         }
         return;
       }
-      await leaderHandleInteractionResponse(matchId, player.id, payload, socket.id);
+      await leaderHandleInteractionResponse(
+        matchId,
+        player.id,
+        payload,
+        socket.id
+      );
     } catch (err) {
-      try { console.warn('[interaction] response handler error', err?.message || err); } catch {}
+      try {
+        console.warn(
+          "[interaction] response handler error",
+          err?.message || err
+        );
+      } catch {}
     }
   });
 
@@ -3015,13 +2859,23 @@ io.on("connection", async (socket) => {
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
     const matchId = player.matchId;
-    const type = payload && typeof payload.type === "string" ? payload.type : null;
+    const type =
+      payload && typeof payload.type === "string" ? payload.type : null;
     if (type === "playerReady") {
       const ready = !!(payload && payload.ready);
       try {
         const leader = await getOrClaimMatchLeader(matchId);
         if (leader && leader !== INSTANCE_ID) {
-          if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:playerReady', matchId, playerId: player.id, ready }));
+          if (storeRedis)
+            await storeRedis.publish(
+              MATCH_CONTROL_CHANNEL,
+              JSON.stringify({
+                type: "draft:playerReady",
+                matchId,
+                playerId: player.id,
+                ready,
+              })
+            );
           return;
         }
         await leaderDraftPlayerReady(matchId, player.id, ready);
@@ -3030,74 +2884,113 @@ io.on("connection", async (socket) => {
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
-        const idx = Array.isArray(match?.playerIds) ? match.playerIds.indexOf(player.id) : 0;
-        const playerKey = idx === 1 ? 'p2' : 'p1';
+        const idx = Array.isArray(match?.playerIds)
+          ? match.playerIds.indexOf(player.id)
+          : 0;
+        const playerKey = idx === 1 ? "p2" : "p1";
         const x = Number(payload && payload.position && payload.position.x);
         const z = Number(payload && payload.position && payload.position.z);
         if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-        const id = payload && typeof payload.id === 'string' ? payload.id : rid('ping');
-        const out = { type: 'boardPing', id, position: { x, z }, playerKey, ts: Date.now() };
-        io.to(room).emit('message', out);
+        const id =
+          payload && typeof payload.id === "string" ? payload.id : rid("ping");
+        const out = {
+          type: "boardPing",
+          id,
+          position: { x, z },
+          playerKey,
+          ts: Date.now(),
+        };
+        io.to(room).emit("message", out);
       } catch {}
     } else if (type === "boardCursor") {
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
-        const idx = Array.isArray(match?.playerIds) ? match.playerIds.indexOf(player.id) : 0;
-        const playerKey = idx === 1 ? 'p2' : 'p1';
-        const positionPayload = payload && payload.position ? payload.position : null;
+        const idx = Array.isArray(match?.playerIds)
+          ? match.playerIds.indexOf(player.id)
+          : 0;
+        const playerKey = idx === 1 ? "p2" : "p1";
+        const positionPayload =
+          payload && payload.position ? payload.position : null;
         const x = Number(positionPayload && positionPayload.x);
         const z = Number(positionPayload && positionPayload.z);
-        const position = Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
+        const position =
+          Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
         let dragging = null;
-        if (payload && typeof payload.dragging === 'object' && payload.dragging) {
+        if (
+          payload &&
+          typeof payload.dragging === "object" &&
+          payload.dragging
+        ) {
           const raw = payload.dragging;
-          const kind = typeof raw.kind === 'string' ? raw.kind : null;
-          const allowedKinds = new Set(['permanent', 'hand', 'pile', 'avatar', 'token']);
+          const kind = typeof raw.kind === "string" ? raw.kind : null;
+          const allowedKinds = new Set([
+            "permanent",
+            "hand",
+            "pile",
+            "avatar",
+            "token",
+          ]);
           if (kind && allowedKinds.has(kind)) {
             const next = { kind };
-            if (kind === 'permanent') {
-              const from = typeof raw.from === 'string' ? raw.from.slice(0, 32) : null;
-              const index = Number.isFinite(Number(raw.index)) ? Number(raw.index) : null;
+            if (kind === "permanent") {
+              const from =
+                typeof raw.from === "string" ? raw.from.slice(0, 32) : null;
+              const index = Number.isFinite(Number(raw.index))
+                ? Number(raw.index)
+                : null;
               if (from) next.from = from;
               if (index !== null) next.index = index;
             }
-            if (kind === 'avatar') {
-              const who = raw.who === 'p1' || raw.who === 'p2' ? raw.who : null;
+            if (kind === "avatar") {
+              const who = raw.who === "p1" || raw.who === "p2" ? raw.who : null;
               if (who) next.who = who;
             }
-            const source = typeof raw.source === 'string' ? raw.source.slice(0, 32) : null;
+            const source =
+              typeof raw.source === "string" ? raw.source.slice(0, 32) : null;
             if (source) next.source = source;
-            const cardId = Number.isFinite(Number(raw.cardId)) ? Number(raw.cardId) : null;
+            const cardId = Number.isFinite(Number(raw.cardId))
+              ? Number(raw.cardId)
+              : null;
             if (cardId !== null) next.cardId = cardId;
-            const slug = typeof raw.slug === 'string' ? raw.slug.slice(0, 64) : null;
+            const slug =
+              typeof raw.slug === "string" ? raw.slug.slice(0, 64) : null;
             if (slug) next.slug = slug;
-            if (typeof raw.meta === 'object' && raw.meta) {
+            if (typeof raw.meta === "object" && raw.meta) {
               const meta = {};
-              if (typeof raw.meta.owner === 'number' && Number.isFinite(raw.meta.owner)) {
+              if (
+                typeof raw.meta.owner === "number" &&
+                Number.isFinite(raw.meta.owner)
+              ) {
                 meta.owner = Number(raw.meta.owner);
               }
               if (meta.owner !== undefined) next.meta = meta;
             }
-            const allowBareKind = kind === 'hand' || kind === 'pile' || kind === 'token';
+            const allowBareKind =
+              kind === "hand" || kind === "pile" || kind === "token";
             dragging =
-              Object.keys(next).length > 1 || allowBareKind
-                ? next
-                : null;
+              Object.keys(next).length > 1 || allowBareKind ? next : null;
           }
         }
         // Sanitize highlight from payload: expect an object with { cardId?, slug? }
         let highlight = null;
-        if (payload && typeof payload.highlight === 'object' && payload.highlight) {
+        if (
+          payload &&
+          typeof payload.highlight === "object" &&
+          payload.highlight
+        ) {
           const h = payload.highlight;
-          const cardId = Number.isFinite(Number(h.cardId)) ? Number(h.cardId) : null;
-          const slug = typeof h.slug === 'string' ? String(h.slug).slice(0, 64) : null;
+          const cardId = Number.isFinite(Number(h.cardId))
+            ? Number(h.cardId)
+            : null;
+          const slug =
+            typeof h.slug === "string" ? String(h.slug).slice(0, 64) : null;
           if (cardId !== null || (slug && slug.length > 0)) {
             highlight = { cardId, slug };
           }
         }
         const out = {
-          type: 'boardCursor',
+          type: "boardCursor",
           playerId: player.id,
           playerKey,
           position,
@@ -3105,8 +2998,8 @@ io.on("connection", async (socket) => {
           highlight,
           ts: Date.now(),
         };
-        io.to(room).emit('message', out);
-        io.to(room).emit('boardCursor', out);
+        io.to(room).emit("message", out);
+        io.to(room).emit("boardCursor", out);
       } catch {}
     }
   });
@@ -3141,12 +3034,24 @@ io.on("connection", async (socket) => {
             // Consider avatars meaningful when at least one seat has a card or position
             try {
               const a = g.avatars || {};
-              const p1Has = !!(a.p1 && (a.p1.card || (Array.isArray(a.p1.pos) && a.p1.pos.length === 2)));
-              const p2Has = !!(a.p2 && (a.p2.card || (Array.isArray(a.p2.pos) && a.p2.pos.length === 2)));
+              const p1Has = !!(
+                a.p1 &&
+                (a.p1.card ||
+                  (Array.isArray(a.p1.pos) && a.p1.pos.length === 2))
+              );
+              const p2Has = !!(
+                a.p2 &&
+                (a.p2.card ||
+                  (Array.isArray(a.p2.pos) && a.p2.pos.length === 2))
+              );
               if (p1Has || p2Has) return true;
             } catch {}
             // D20 rolls are meaningful during Setup phase - needed for player seat selection
-            if ("d20Rolls" in g && g.d20Rolls && typeof g.d20Rolls === "object") {
+            if (
+              "d20Rolls" in g &&
+              g.d20Rolls &&
+              typeof g.d20Rolls === "object"
+            ) {
               const rolls = g.d20Rolls;
               if (rolls.p1 !== null && rolls.p1 !== undefined) return true;
               if (rolls.p2 !== null && rolls.p2 !== undefined) return true;
@@ -3160,28 +3065,33 @@ io.on("connection", async (socket) => {
           snap.game = enrichedGame;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
-            console.log('[resync] sending game state with d20Rolls:', {
+            console.log("[resync] sending game state with d20Rolls:", {
               matchId: match.id,
               d20Rolls: match.game?.d20Rolls,
               setupWinner: match.game?.setupWinner,
               phase: match.game?.phase,
-              hasMeaningfulGame
+              hasMeaningfulGame,
             });
           } catch {}
         } else {
           try {
-            console.log('[resync] NOT sending game state', {
+            console.log("[resync] NOT sending game state", {
               matchId: match?.id,
               gameKeys: match.game ? Object.keys(match.game) : [],
-              hasMeaningfulGame
+              hasMeaningfulGame,
             });
           } catch {}
         }
         socket.emit("resyncResponse", { snapshot: snap });
         // If a draft is in progress, proactively sync draft state to this socket
         try {
-          if (match.matchType === 'draft' && match.draftState && match.draftState.phase && match.draftState.phase !== 'waiting') {
-            io.to(socket.id).emit('draftUpdate', match.draftState);
+          if (
+            match.matchType === "draft" &&
+            match.draftState &&
+            match.draftState.phase &&
+            match.draftState.phase !== "waiting"
+          ) {
+            io.to(socket.id).emit("draftUpdate", match.draftState);
           }
         } catch {}
         return;
@@ -3189,7 +3099,9 @@ io.on("connection", async (socket) => {
     }
     if (player && player.lobbyId && lobbies.has(player.lobbyId)) {
       const lobby = lobbies.get(player.lobbyId);
-      socket.emit("resyncResponse", { snapshot: { lobby: getLobbyInfo(lobby) } });
+      socket.emit("resyncResponse", {
+        snapshot: { lobby: getLobbyInfo(lobby) },
+      });
     } else {
       socket.emit("resyncResponse", { snapshot: {} });
     }
@@ -3208,7 +3120,7 @@ io.on("connection", async (socket) => {
 
     const playerId = player.id;
 
-    console.log('[RTC][join] join request', {
+    console.log("[RTC][join] join request", {
       playerId,
       socket: socket.id,
       roomId,
@@ -3229,22 +3141,24 @@ io.on("connection", async (socket) => {
       lobbyId: player.lobbyId || null,
       matchId: player.matchId || null,
       roomId,
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
     });
 
-    const participants = Array.from(roomParticipants).map((pid) => {
-      const details = participantDetails.get(pid);
-      return details
-        ? {
-            id: details.id,
-            displayName: details.displayName,
-            lobbyId: details.lobbyId,
-            matchId: details.matchId,
-            roomId: details.roomId,
-            joinedAt: details.joinedAt,
-          }
-        : null;
-    }).filter(Boolean);
+    const participants = Array.from(roomParticipants)
+      .map((pid) => {
+        const details = participantDetails.get(pid);
+        return details
+          ? {
+              id: details.id,
+              displayName: details.displayName,
+              lobbyId: details.lobbyId,
+              matchId: details.matchId,
+              roomId: details.roomId,
+              joinedAt: details.joinedAt,
+            }
+          : null;
+      })
+      .filter(Boolean);
 
     roomParticipants.forEach((pid) => {
       if (pid === playerId) return;
@@ -3272,7 +3186,7 @@ io.on("connection", async (socket) => {
     const data = payload && typeof payload === "object" ? payload.data : null;
     if (!data) return;
 
-    console.log('[RTC][signal] forwarding signal', {
+    console.log("[RTC][signal] forwarding signal", {
       from: playerId,
       roomId,
       hasSdp: !!data.sdp,
@@ -3312,19 +3226,21 @@ io.on("connection", async (socket) => {
         rtcParticipants.delete(roomId);
       }
 
-      const remainingParticipants = Array.from(roomParticipants).map((pid) => {
-        const details = participantDetails.get(pid);
-        return details
-          ? {
-              id: details.id,
-              displayName: details.displayName,
-              lobbyId: details.lobbyId,
-              matchId: details.matchId,
-              roomId: details.roomId,
-              joinedAt: details.joinedAt,
-            }
-          : null;
-      }).filter(Boolean);
+      const remainingParticipants = Array.from(roomParticipants)
+        .map((pid) => {
+          const details = participantDetails.get(pid);
+          return details
+            ? {
+                id: details.id,
+                displayName: details.displayName,
+                lobbyId: details.lobbyId,
+                matchId: details.matchId,
+                roomId: details.roomId,
+                joinedAt: details.joinedAt,
+              }
+            : null;
+        })
+        .filter(Boolean);
 
       roomParticipants.forEach((pid) => {
         const participantPlayer = players.get(pid);
@@ -3353,7 +3269,9 @@ io.on("connection", async (socket) => {
     const reason = payload.reason || "unknown";
     const code = payload.code || "CONNECTION_ERROR";
 
-    console.warn(`WebRTC connection failed for player ${playerId} in ${roomId}: ${reason} (${code})`);
+    console.warn(
+      `WebRTC connection failed for player ${playerId} in ${roomId}: ${reason} (${code})`
+    );
 
     const roomParticipants = rtcParticipants.get(roomId);
     if (roomParticipants && roomParticipants.has(playerId)) {
@@ -3384,11 +3302,14 @@ io.on("connection", async (socket) => {
     const player = getPlayerBySocket(socket);
     if (!player) return;
 
-    const targetId = payload && typeof payload.targetId === 'string' ? payload.targetId : null;
-    const requestedLobbyId = payload && typeof payload.lobbyId === 'string' ? payload.lobbyId : null;
-    const requestedMatchId = payload && typeof payload.matchId === 'string' ? payload.matchId : null;
+    const targetId =
+      payload && typeof payload.targetId === "string" ? payload.targetId : null;
+    const requestedLobbyId =
+      payload && typeof payload.lobbyId === "string" ? payload.lobbyId : null;
+    const requestedMatchId =
+      payload && typeof payload.matchId === "string" ? payload.matchId : null;
     if (!targetId || targetId === player.id) {
-      console.warn('[RTC][request] invalid target', {
+      console.warn("[RTC][request] invalid target", {
         from: player.id,
         targetId,
         requestedLobbyId,
@@ -3399,20 +3320,30 @@ io.on("connection", async (socket) => {
 
     const targetPlayer = players.get(targetId);
     if (!targetPlayer || !targetPlayer.socketId) {
-      console.warn('[RTC][request] target not connected', {
+      console.warn("[RTC][request] target not connected", {
         from: player.id,
         targetId,
       });
       return;
     }
 
-    const shareLobby = player.lobbyId && targetPlayer.lobbyId && player.lobbyId === targetPlayer.lobbyId;
-    const shareMatch = player.matchId && targetPlayer.matchId && player.matchId === targetPlayer.matchId;
+    const shareLobby =
+      player.lobbyId &&
+      targetPlayer.lobbyId &&
+      player.lobbyId === targetPlayer.lobbyId;
+    const shareMatch =
+      player.matchId &&
+      targetPlayer.matchId &&
+      player.matchId === targetPlayer.matchId;
 
     let lobbyId = null;
     if (requestedLobbyId) {
       const lobby = lobbies.get(requestedLobbyId);
-      if (lobby && lobby.playerIds.has(player.id) && lobby.playerIds.has(targetId)) {
+      if (
+        lobby &&
+        lobby.playerIds.has(player.id) &&
+        lobby.playerIds.has(targetId)
+      ) {
         lobbyId = requestedLobbyId;
       }
     }
@@ -3423,7 +3354,12 @@ io.on("connection", async (socket) => {
     let matchId = null;
     if (requestedMatchId) {
       const match = matches.get(requestedMatchId);
-      if (match && Array.isArray(match.playerIds) && match.playerIds.includes(player.id) && match.playerIds.includes(targetId)) {
+      if (
+        match &&
+        Array.isArray(match.playerIds) &&
+        match.playerIds.includes(player.id) &&
+        match.playerIds.includes(targetId)
+      ) {
         matchId = requestedMatchId;
       }
     }
@@ -3432,7 +3368,7 @@ io.on("connection", async (socket) => {
     }
 
     if (!lobbyId && !matchId) {
-      console.warn('[RTC][request] rejected - no shared scope', {
+      console.warn("[RTC][request] rejected - no shared scope", {
         from: player.id,
         targetId,
         requestedLobbyId,
@@ -3443,7 +3379,7 @@ io.on("connection", async (socket) => {
       return;
     }
 
-    const requestId = rid('rtc_req');
+    const requestId = rid("rtc_req");
 
     pendingVoiceRequests.set(requestId, {
       id: requestId,
@@ -3454,7 +3390,7 @@ io.on("connection", async (socket) => {
       createdAt: Date.now(),
     });
 
-    console.log('[RTC][request] forwarding request', {
+    console.log("[RTC][request] forwarding request", {
       requestId,
       from: player.id,
       to: targetId,
@@ -3484,12 +3420,21 @@ io.on("connection", async (socket) => {
     const player = getPlayerBySocket(socket);
     if (!player) return;
 
-    const requestId = payload && typeof payload.requestId === 'string' ? payload.requestId : null;
-    const requesterId = payload && typeof payload.requesterId === 'string' ? payload.requesterId : null;
-    const accepted = payload && typeof payload.accepted === 'boolean' ? payload.accepted : false;
+    const requestId =
+      payload && typeof payload.requestId === "string"
+        ? payload.requestId
+        : null;
+    const requesterId =
+      payload && typeof payload.requesterId === "string"
+        ? payload.requesterId
+        : null;
+    const accepted =
+      payload && typeof payload.accepted === "boolean"
+        ? payload.accepted
+        : false;
 
     if (!requestId || !requesterId) {
-      console.warn('[RTC][request:respond] missing identifiers', {
+      console.warn("[RTC][request:respond] missing identifiers", {
         player: player.id,
         requestId,
         requesterId,
@@ -3500,7 +3445,7 @@ io.on("connection", async (socket) => {
 
     const request = pendingVoiceRequests.get(requestId);
     if (!request) {
-      console.warn('[RTC][request:respond] unknown request', {
+      console.warn("[RTC][request:respond] unknown request", {
         player: player.id,
         requestId,
         requesterId,
@@ -3509,7 +3454,7 @@ io.on("connection", async (socket) => {
       return;
     }
     if (request.to !== player.id || request.from !== requesterId) {
-      console.warn('[RTC][request:respond] mismatched request ownership', {
+      console.warn("[RTC][request:respond] mismatched request ownership", {
         player: player.id,
         request,
         requesterId,
@@ -3520,15 +3465,21 @@ io.on("connection", async (socket) => {
     const requesterPlayer = players.get(requesterId);
     if (!requesterPlayer || !requesterPlayer.socketId) {
       pendingVoiceRequests.delete(requestId);
-      console.warn('[RTC][request:respond] requester offline', {
+      console.warn("[RTC][request:respond] requester offline", {
         requestId,
         requesterId,
       });
       return;
     }
 
-    const sameLobby = request.lobbyId && player.lobbyId === request.lobbyId && requesterPlayer.lobbyId === request.lobbyId;
-    const sameMatch = request.matchId && player.matchId === request.matchId && requesterPlayer.matchId === request.matchId;
+    const sameLobby =
+      request.lobbyId &&
+      player.lobbyId === request.lobbyId &&
+      requesterPlayer.lobbyId === request.lobbyId;
+    const sameMatch =
+      request.matchId &&
+      player.matchId === request.matchId &&
+      requesterPlayer.matchId === request.matchId;
     if (!sameLobby && !sameMatch) {
       pendingVoiceRequests.delete(requestId);
       return;
@@ -3545,7 +3496,7 @@ io.on("connection", async (socket) => {
       timestamp: Date.now(),
     };
 
-    console.log('[RTC][request:respond]', {
+    console.log("[RTC][request:respond]", {
       requestId,
       requesterId,
       responder: player.id,
@@ -3556,7 +3507,7 @@ io.on("connection", async (socket) => {
 
     io.to(requesterPlayer.socketId).emit(
       accepted ? "rtc:request:accepted" : "rtc:request:declined",
-      responsePayload,
+      responsePayload
     );
 
     // Confirm to responder so UI can clear state
@@ -3575,7 +3526,7 @@ io.on("connection", async (socket) => {
     if (!player || !player.matchId) return;
     const match = matches.get(player.matchId);
     if (!match || match.status !== "deck_construction") return;
-    if (match.matchType !== 'sealed') return;
+    if (match.matchType !== "sealed") return;
 
     // Idempotency: if this player already submitted, ignore duplicates
     if (match.playerDecks && match.playerDecks.has(player.id)) {
@@ -3587,7 +3538,9 @@ io.on("connection", async (socket) => {
     const cards = normalizeDeckPayload(deckRaw);
     const val = validateDeckCards(cards);
     if (!val.isValid) {
-      socket.emit("error", { message: `Deck invalid: ${val.errors.join(", ")}` });
+      socket.emit("error", {
+        message: `Deck invalid: ${val.errors.join(", ")}`,
+      });
       return;
     }
 
@@ -3621,8 +3574,12 @@ io.on("connection", async (socket) => {
       // Keep lobby visible during the match for rematch/voting UX
       const lobby = match.lobbyId ? lobbies.get(match.lobbyId) : null;
       if (lobby) {
-        try { lobby.status = "started"; } catch {}
-        try { publishLobbyState(lobby); } catch {}
+        try {
+          lobby.status = "started";
+        } catch {}
+        try {
+          publishLobbyState(lobby);
+        } catch {}
         broadcastLobbies();
       }
 
@@ -3648,19 +3605,25 @@ io.on("connection", async (socket) => {
         if (!Array.isArray(recording.playerIds)) return true;
         // Exclude if any player is a bot (ID starts with 'cpu_' or 'host_')
         return !recording.playerIds.some((id) => {
-          const pid = String(id || '');
-          return pid.startsWith('cpu_') || pid.startsWith('host_');
+          const pid = String(id || "");
+          return pid.startsWith("cpu_") || pid.startsWith("host_");
         });
       });
 
       try {
         console.log(
-          `[Recording] Request for recordings from ${player?.displayName || "unknown"}, returning ${recordings.length} DB-backed summaries (filtered ${allRecordings.length - recordings.length} bot matches)`
+          `[Recording] Request for recordings from ${
+            player?.displayName || "unknown"
+          }, returning ${recordings.length} DB-backed summaries (filtered ${
+            allRecordings.length - recordings.length
+          } bot matches)`
         );
       } catch {}
       socket.emit("matchRecordingsResponse", { recordings });
     } catch (e) {
-      try { console.warn('[Recording] listRecordings failed:', e?.message || e); } catch {}
+      try {
+        console.warn("[Recording] listRecordings failed:", e?.message || e);
+      } catch {}
       socket.emit("matchRecordingsResponse", { recordings: [] });
     }
   });
@@ -3679,10 +3642,12 @@ io.on("connection", async (socket) => {
       // Block access to bot matches for regular users
       // Check if any player is a bot (ID starts with 'cpu_' or 'host_')
       const playerIds = recording.initialState?.playerIds || [];
-      const isBotMatch = Array.isArray(playerIds) && playerIds.some((id) => {
-        const pid = String(id || '');
-        return pid.startsWith('cpu_') || pid.startsWith('host_');
-      });
+      const isBotMatch =
+        Array.isArray(playerIds) &&
+        playerIds.some((id) => {
+          const pid = String(id || "");
+          return pid.startsWith("cpu_") || pid.startsWith("host_");
+        });
 
       if (isBotMatch) {
         socket.emit("matchRecordingResponse", { error: "Recording not found" });
@@ -3691,7 +3656,9 @@ io.on("connection", async (socket) => {
 
       socket.emit("matchRecordingResponse", { recording });
     } catch (e) {
-      try { console.warn('[Recording] loadRecording failed:', e?.message || e); } catch {}
+      try {
+        console.warn("[Recording] loadRecording failed:", e?.message || e);
+      } catch {}
       socket.emit("matchRecordingResponse", { error: "Recording not found" });
     }
   });
@@ -3705,22 +3672,39 @@ io.on("connection", async (socket) => {
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
-        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:start', matchId, playerId: player.id, draftConfig: payload?.draftConfig || null, socketId: socket.id }));
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "draft:start",
+              matchId,
+              playerId: player.id,
+              draftConfig: payload?.draftConfig || null,
+              socketId: socket.id,
+            })
+          );
         return;
       }
       const match = await getOrLoadMatch(matchId);
-      if (!match || match.matchType !== 'draft' || !match.draftState) return;
-      if (match.draftState.phase !== 'waiting') {
+      if (!match || match.matchType !== "draft" || !match.draftState) return;
+      if (match.draftState.phase !== "waiting") {
         // Already started or in-progress: re-emit current state to salvage stuck clients
-        try { io.to(`match:${match.id}`).emit('draftUpdate', match.draftState); } catch {}
+        try {
+          io.to(`match:${match.id}`).emit("draftUpdate", match.draftState);
+        } catch {}
       } else {
-        await leaderStartDraft(matchId, player.id, payload?.draftConfig || null, socket.id);
+        await leaderStartDraft(
+          matchId,
+          player.id,
+          payload?.draftConfig || null,
+          socket.id
+        );
       }
       // Failsafe: fetch fresh state and broadcast to ensure clients transition
       try {
         const m2 = await getOrLoadMatch(matchId);
         if (m2 && m2.draftState) {
-          io.to(`match:${m2.id}`).emit('draftUpdate', m2.draftState);
+          io.to(`match:${m2.id}`).emit("draftUpdate", m2.draftState);
         }
       } catch {}
     } catch {}
@@ -3735,10 +3719,25 @@ io.on("connection", async (socket) => {
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
-        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:pick', matchId, playerId: player.id, cardId, packIndex, pickNumber }));
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "draft:pick",
+              matchId,
+              playerId: player.id,
+              cardId,
+              packIndex,
+              pickNumber,
+            })
+          );
         return;
       }
-      await leaderMakeDraftPick(matchId, player.id, { cardId, packIndex, pickNumber });
+      await leaderMakeDraftPick(matchId, player.id, {
+        cardId,
+        packIndex,
+        pickNumber,
+      });
     } catch {}
   });
 
@@ -3751,7 +3750,17 @@ io.on("connection", async (socket) => {
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
-        if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'draft:choosePack', matchId, playerId: player.id, setChoice, packIndex }));
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "draft:choosePack",
+              matchId,
+              playerId: player.id,
+              setChoice,
+              packIndex,
+            })
+          );
         return;
       }
       await leaderChooseDraftPack(matchId, player.id, { setChoice, packIndex });
@@ -3759,7 +3768,9 @@ io.on("connection", async (socket) => {
   });
 
   // Tournament draft handlers (extracted module)
-  const { registerTournamentDraftHandlers } = await import('./modules/tournament/draft-socket-handler.js');
+  const { registerTournamentDraftHandlers } = await import(
+    "./modules/tournament/draft-socket-handler.js"
+  );
   registerTournamentDraftHandlers(socket, () => authed, getPlayerBySocket);
 
   // Submit draft deck during deck construction phase (with validation)
@@ -3770,7 +3781,7 @@ io.on("connection", async (socket) => {
 
     const match = matches.get(player.matchId);
     if (!match || !match.playerDecks) return;
-    if (match.matchType !== 'draft') return;
+    if (match.matchType !== "draft") return;
 
     // Idempotency: ignore duplicate submissions by the same player
     if (match.playerDecks.has(player.id)) return;
@@ -3780,7 +3791,9 @@ io.on("connection", async (socket) => {
     const cards = normalizeDeckPayload(deckRaw);
     const val = validateDeckCards(cards);
     if (!val.isValid) {
-      socket.emit("error", { message: `Deck invalid: ${val.errors.join(", ")}` });
+      socket.emit("error", {
+        message: `Deck invalid: ${val.errors.join(", ")}`,
+      });
       return;
     }
     match.playerDecks.set(player.id, cards);
@@ -3810,14 +3823,22 @@ io.on("connection", async (socket) => {
       );
       // Do NOT skip setup for draft; mirror sealed flow: move to waiting and keep lobby visible
       match.status = "waiting";
-      try { io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) }); } catch {}
+      try {
+        io.to(`match:${match.id}`).emit("matchStarted", {
+          match: getMatchInfo(match),
+        });
+      } catch {}
 
       // Keep lobby visible (mark as started) for in-progress match
       if (match.lobbyId) {
         const lobby = lobbies.get(match.lobbyId);
         if (lobby) {
-          try { lobby.status = "started"; } catch {}
-          try { publishLobbyState(lobby); } catch {}
+          try {
+            lobby.status = "started";
+          } catch {}
+          try {
+            publishLobbyState(lobby);
+          } catch {}
           broadcastLobbies();
         }
       }
@@ -3827,7 +3848,9 @@ io.on("connection", async (socket) => {
     io.to(`match:${match.id}`).emit("matchStarted", {
       match: getMatchInfo(match),
     });
-    try { persistMatchUpdate(match, null, player.id, Date.now()); } catch {}
+    try {
+      persistMatchUpdate(match, null, player.id, Date.now());
+    } catch {}
   });
 
   // Explicit end match (optional). Allows cleanup and status update.
@@ -3837,10 +3860,16 @@ io.on("connection", async (socket) => {
     if (!player || !player.matchId) return;
     const match = matches.get(player.matchId);
     if (!match) return;
-    try { await finalizeMatch(match, payload || {}); } catch (err) {
-      try { console.warn('[match] explicit finalize failed', err?.message || err); } catch {}
+    try {
+      await finalizeMatch(match, payload || {});
+    } catch (err) {
+      try {
+        console.warn("[match] explicit finalize failed", err?.message || err);
+      } catch {}
     }
-    try { clearDraftWatchdog(match.id); } catch {}
+    try {
+      clearDraftWatchdog(match.id);
+    } catch {}
   });
 
   socket.on("disconnect", () => {
@@ -3852,21 +3881,33 @@ io.on("connection", async (socket) => {
     // Update draft presence on disconnect (cluster-aware)
     try {
       if (currentDraftSessionId) {
-        updateDraftPresence(currentDraftSessionId, pid, players.get(pid)?.displayName || null, false)
+        updateDraftPresence(
+          currentDraftSessionId,
+          pid,
+          players.get(pid)?.displayName || null,
+          false
+        )
           .then((list) => {
-            try { io.to(`draft:${currentDraftSessionId}`).emit('draft:session:presence', { sessionId: currentDraftSessionId, players: list }); } catch {}
+            try {
+              io.to(`draft:${currentDraftSessionId}`).emit(
+                "draft:session:presence",
+                { sessionId: currentDraftSessionId, players: list }
+              );
+            } catch {}
           })
           .catch(() => {});
       }
     } catch {}
 
-    for (const [requestId, request] of Array.from(pendingVoiceRequests.entries())) {
+    for (const [requestId, request] of Array.from(
+      pendingVoiceRequests.entries()
+    )) {
       if (request.from === pid || request.to === pid) {
         pendingVoiceRequests.delete(requestId);
         const otherId = request.from === pid ? request.to : request.from;
         const otherPlayer = players.get(otherId);
         if (otherPlayer && otherPlayer.socketId) {
-          console.log('[RTC][request:cancelled] disconnect cleanup', {
+          console.log("[RTC][request:cancelled] disconnect cleanup", {
             requestId,
             cancelledBy: pid,
             other: otherId,
@@ -3884,7 +3925,9 @@ io.on("connection", async (socket) => {
 
     // Clean up WebRTC participant state on disconnect
     const participantInfo = participantDetails.get(pid);
-    const roomId = participantInfo?.roomId || (player ? getVoiceRoomIdForPlayer(player) : null);
+    const roomId =
+      participantInfo?.roomId ||
+      (player ? getVoiceRoomIdForPlayer(player) : null);
     if (roomId) {
       const roomParticipants = rtcParticipants.get(roomId);
       if (roomParticipants && roomParticipants.has(pid)) {
@@ -3894,19 +3937,21 @@ io.on("connection", async (socket) => {
           rtcParticipants.delete(roomId);
         }
 
-        const remainingParticipants = Array.from(roomParticipants).map((participantId) => {
-          const details = participantDetails.get(participantId);
-          return details
-            ? {
-                id: details.id,
-                displayName: details.displayName,
-                lobbyId: details.lobbyId,
-                matchId: details.matchId,
-                roomId: details.roomId,
-                joinedAt: details.joinedAt,
-              }
-            : null;
-        }).filter(Boolean);
+        const remainingParticipants = Array.from(roomParticipants)
+          .map((participantId) => {
+            const details = participantDetails.get(participantId);
+            return details
+              ? {
+                  id: details.id,
+                  displayName: details.displayName,
+                  lobbyId: details.lobbyId,
+                  matchId: details.matchId,
+                  roomId: details.roomId,
+                  joinedAt: details.joinedAt,
+                }
+              : null;
+          })
+          .filter(Boolean);
 
         roomParticipants.forEach((participantId) => {
           const participantPlayer = players.get(participantId);
@@ -3921,7 +3966,7 @@ io.on("connection", async (socket) => {
     }
 
     participantDetails.delete(pid);
-    
+
     if (player) {
       // If the player was in a lobby, remove them immediately to prevent ghost lobbies
       if (player.lobbyId && lobbies.has(player.lobbyId)) {
@@ -3931,24 +3976,37 @@ io.on("connection", async (socket) => {
         // If now empty or CPU-only, close and cleanup bots; otherwise if host left, reassign preferring humans
         if (lobby.playerIds.size === 0 || !lobbyHasHumanPlayers(lobby)) {
           lobby.status = "closed";
-          try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
+          try {
+            botManager.cleanupBotsForLobby(lobby.id);
+          } catch {}
           lobbies.delete(lobby.id);
           // Replicate deletion cluster-wide
-          try { publishLobbyDelete(lobby.id); } catch {}
+          try {
+            publishLobbyDelete(lobby.id);
+          } catch {}
           broadcastLobbies();
         } else if (lobby.hostId === player.id) {
           const remaining = Array.from(lobby.playerIds);
-          const humanNext = remaining.find((id) => !isCpuPlayerId(id)) || remaining[0];
+          const humanNext =
+            remaining.find((id) => !isCpuPlayerId(id)) || remaining[0];
           lobby.hostId = humanNext;
           lobby.ready.clear();
-          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
+            lobby: getLobbyInfo(lobby),
+          });
           // Replicate update cluster-wide
-          try { publishLobbyState(lobby); } catch {}
+          try {
+            publishLobbyState(lobby);
+          } catch {}
           broadcastLobbies();
         } else {
-          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
+            lobby: getLobbyInfo(lobby),
+          });
           // Replicate update cluster-wide
-          try { publishLobbyState(lobby); } catch {}
+          try {
+            publishLobbyState(lobby);
+          } catch {}
           broadcastLobbies();
         }
         // Clear association last so future logic sees player out of lobby
@@ -3961,10 +4019,17 @@ io.on("connection", async (socket) => {
         const match = matches.get(player.matchId);
         if (match && !matchHasHumanPlayers(match)) {
           try {
-            console.log(`[Match] Cleaning up bot-only match ${match.id} after disconnect`);
-            cleanupMatchNow(match.id, 'bot_only_disconnect', true).catch((err) => {
-              console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
-            });
+            console.log(
+              `[Match] Cleaning up bot-only match ${match.id} after disconnect`
+            );
+            cleanupMatchNow(match.id, "bot_only_disconnect", true).catch(
+              (err) => {
+                console.warn(
+                  `[Match] Failed to cleanup bot match ${match.id}:`,
+                  err
+                );
+              }
+            );
           } catch (err) {
             console.warn(`[Match] Error initiating bot match cleanup:`, err);
           }
@@ -3986,7 +4051,9 @@ setInterval(() => {
     // Close CPU-only lobbies immediately
     if (!lobbyHasHumanPlayers(lobby)) {
       lobby.status = "closed";
-      try { botManager.cleanupBotsForLobby(lobby.id); } catch {}
+      try {
+        botManager.cleanupBotsForLobby(lobby.id);
+      } catch {}
       lobbies.delete(lobby.id);
       broadcastLobbies();
       continue;
@@ -4003,16 +4070,21 @@ setInterval(() => {
 
       // Clean up bot-only matches that are completed or have been inactive for 5+ minutes
       const age = Date.now() - (Number(match.lastTs) || Date.now());
-      const shouldCleanup = match.status === 'completed' || age >= 5 * 60 * 1000;
+      const shouldCleanup =
+        match.status === "completed" || age >= 5 * 60 * 1000;
 
       if (shouldCleanup) {
-        console.log(`[Match] Periodic cleanup of bot-only match ${match.id} (status=${match.status}, age=${Math.floor(age/1000)}s)`);
-        cleanupMatchNow(match.id, 'bot_only_periodic', true).catch((err) => {
+        console.log(
+          `[Match] Periodic cleanup of bot-only match ${match.id} (status=${
+            match.status
+          }, age=${Math.floor(age / 1000)}s)`
+        );
+        cleanupMatchNow(match.id, "bot_only_periodic", true).catch((err) => {
           console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
         });
       }
     } catch (err) {
-      console.warn('[Match] Error in bot match periodic cleanup:', err);
+      console.warn("[Match] Error in bot match periodic cleanup:", err);
     }
   }
 }, 30 * 1000);
@@ -4028,11 +4100,11 @@ setInterval(async () => {
       const age = now - (Number(match.lastTs) || now);
 
       // Rule 1: Cleanup waiting matches after 10 minutes (existing logic)
-      if (match.status === 'waiting' && age >= STALE_WAITING_MS) {
+      if (match.status === "waiting" && age >= STALE_WAITING_MS) {
         const room = `match:${match.id}`;
         let roomEmpty = true;
         try {
-          if (typeof io.in(room).allSockets === 'function') {
+          if (typeof io.in(room).allSockets === "function") {
             const sockets = await io.in(room).allSockets();
             roomEmpty = !sockets || sockets.size === 0;
           }
@@ -4042,10 +4114,19 @@ setInterval(async () => {
         try {
           const leader = await getOrClaimMatchLeader(match.id);
           if (leader && leader !== INSTANCE_ID) {
-            if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId: match.id, reason: 'stale_waiting', force: true }));
+            if (storeRedis)
+              await storeRedis.publish(
+                MATCH_CONTROL_CHANNEL,
+                JSON.stringify({
+                  type: "match:cleanup",
+                  matchId: match.id,
+                  reason: "stale_waiting",
+                  force: true,
+                })
+              );
             continue;
           }
-          await cleanupMatchNow(match.id, 'stale_waiting', true);
+          await cleanupMatchNow(match.id, "stale_waiting", true);
         } catch {}
         continue;
       }
@@ -4058,7 +4139,7 @@ setInterval(async () => {
         const room = `match:${match.id}`;
         let roomEmpty = true;
         try {
-          if (typeof io.in(room).allSockets === 'function') {
+          if (typeof io.in(room).allSockets === "function") {
             const sockets = await io.in(room).allSockets();
             roomEmpty = !sockets || sockets.size === 0;
           }
@@ -4068,11 +4149,26 @@ setInterval(async () => {
         try {
           const leader = await getOrClaimMatchLeader(match.id);
           if (leader && leader !== INSTANCE_ID) {
-            if (storeRedis) await storeRedis.publish(MATCH_CONTROL_CHANNEL, JSON.stringify({ type: 'match:cleanup', matchId: match.id, reason: 'inactive_timeout', force: true }));
+            if (storeRedis)
+              await storeRedis.publish(
+                MATCH_CONTROL_CHANNEL,
+                JSON.stringify({
+                  type: "match:cleanup",
+                  matchId: match.id,
+                  reason: "inactive_timeout",
+                  force: true,
+                })
+              );
             continue;
           }
-          try { console.log(`[match] cleanup inactive match ${match.id} (status: ${match.status}, age: ${Math.round(age / 1000 / 60)}min)`); } catch {}
-          await cleanupMatchNow(match.id, 'inactive_timeout', true);
+          try {
+            console.log(
+              `[match] cleanup inactive match ${match.id} (status: ${
+                match.status
+              }, age: ${Math.round(age / 1000 / 60)}min)`
+            );
+          } catch {}
+          await cleanupMatchNow(match.id, "inactive_timeout", true);
         } catch {}
       }
     } catch {}
@@ -4087,16 +4183,22 @@ setInterval(async () => {
     // Delete completed/cancelled/ended matches older than configured timeout
     const result = await prisma.onlineMatchSession.deleteMany({
       where: {
-        status: { in: ['completed', 'cancelled', 'ended'] },
+        status: { in: ["completed", "cancelled", "ended"] },
         updatedAt: { lt: CLEANUP_THRESHOLD },
       },
     });
 
     if (result.count > 0) {
-      try { console.log(`[db] cleaned up ${result.count} old match(es) from database`); } catch {}
+      try {
+        console.log(
+          `[db] cleaned up ${result.count} old match(es) from database`
+        );
+      } catch {}
     }
   } catch (e) {
-    try { console.warn(`[db] cleanup failed:`, e?.message || e); } catch {}
+    try {
+      console.warn(`[db] cleanup failed:`, e?.message || e);
+    } catch {}
   }
 }, 5 * 60 * 1000); // Run every 5 minutes
 
@@ -4110,15 +4212,22 @@ server.listen(PORT, () => {
 (async () => {
   try {
     await prisma.$connect();
-    try { console.log('[db] connected'); } catch {}
+    try {
+      console.log("[db] connected");
+    } catch {}
   } catch (e) {
-    try { console.error('[db] connection failed:', e?.message || e); } catch {}
+    try {
+      console.error("[db] connection failed:", e?.message || e);
+    } catch {}
   }
   try {
     await recoverActiveMatches();
   } catch {}
   // Enable cluster pub/sub processing now that maps are initialized
-  try { clusterStateReady = true; console.log('[store] cluster state ready; pub/sub handlers active'); } catch {}
+  try {
+    clusterStateReady = true;
+    console.log("[store] cluster state ready; pub/sub handlers active");
+  } catch {}
   isReady = true;
 })();
 
@@ -4127,22 +4236,34 @@ async function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
   const timeout = Number(process.env.SHUTDOWN_TIMEOUT_MS || 10000);
-  try { console.log('[server] shutting down...'); } catch {}
+  try {
+    console.log("[server] shutting down...");
+  } catch {}
   const timer = setTimeout(() => process.exit(0), timeout);
-  try { await new Promise((resolve) => io.close(() => resolve())); } catch {}
-  try { await new Promise((resolve) => server.close(() => resolve())); } catch {}
-  try { if (pubClient) await pubClient.quit(); } catch {}
-  try { if (subClient) await subClient.quit(); } catch {}
+  try {
+    await new Promise((resolve) => io.close(() => resolve()));
+  } catch {}
+  try {
+    await new Promise((resolve) => server.close(() => resolve()));
+  } catch {}
+  try {
+    if (pubClient) await pubClient.quit();
+  } catch {}
+  try {
+    if (subClient) await subClient.quit();
+  } catch {}
   // Flush any buffered persists before disconnecting from DB
   try {
     if (PERSIST_IS_WRITE_BEHIND) {
-      await flushAllPersistenceBuffers('shutdown');
+      await flushAllPersistenceBuffers("shutdown");
     }
   } catch {}
-  try { await prisma.$disconnect(); } catch {}
+  try {
+    await prisma.$disconnect();
+  } catch {}
   clearTimeout(timer);
   process.exit(0);
 }
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

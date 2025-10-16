@@ -10,9 +10,9 @@
 - [x] 2.5 Replace direct imports in the entrypoint with the new module exports and ensure hot reload/dev flow still works.
 
 ## 3. TypeScript Enablement
-- [ ] 3.1 Add `server/tsconfig.json`, extend root config, and configure outDir for compiled artifacts.
-- [ ] 3.2 Update npm scripts to support `npm run server:dev` (ts-node/tsx) and `npm run server:build` / `server:start`.
-- [ ] 3.3 Convert shared utilities (config loader, logger, Prisma client helper) to `.ts` and fix consuming imports.
+- [x] 3.1 Add `server/tsconfig.json`, extend root config, and configure outDir for compiled artifacts.
+- [x] 3.2 Update npm scripts to support `npm run server:dev` (ts-node/tsx) and `npm run server:build` / `server:start`.
+- [x] 3.3 Convert shared utilities (config loader, logger, Prisma client helper) to `.ts` and fix consuming imports.
 - [ ] 3.4 Ensure emitted types are compatible with existing JavaScript modules and add ambient type declarations where needed.
 
 ## 4. Quality & Documentation
