@@ -78,6 +78,28 @@ export default function TournamentDetailsPage() {
   >([]);
   const [chatInput, setChatInput] = useState("");
   const chatRef = useRef<HTMLDivElement | null>(null);
+  const [isChatVisible, setIsChatVisible] = useState(false);
+
+  // Track chat section visibility using Intersection Observer
+  useEffect(() => {
+    if (!chatRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsChatVisible(entry.isIntersecting);
+        });
+      },
+      { threshold: 0.1 } // Consider visible if 10% is in viewport
+    );
+
+    observer.observe(chatRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [chatRef.current]);
+
   // Socket chat handlers
   useEffect(() => {
     if (!tournamentSocket || !tournamentId) return;
@@ -93,6 +115,13 @@ export default function TournamentDetailsPage() {
           ...prev,
           { from: data.from, content: data.content, timestamp: data.timestamp },
         ]);
+
+        // Show toast notification if chat is not visible and message is from another player
+        const currentUserName = session?.user?.name || session?.user?.email?.split('@')[0] || 'You';
+        if (!isChatVisible && data.from !== currentUserName) {
+          setToast(`💬 ${data.from}: ${data.content.slice(0, 50)}${data.content.length > 50 ? '...' : ''}`);
+          setTimeout(() => setToast(null), 4000);
+        }
       }
     };
 
@@ -101,7 +130,7 @@ export default function TournamentDetailsPage() {
     return () => {
       tournamentSocket.off("TOURNAMENT_CHAT", handleChatMessage);
     };
-  }, [tournamentSocket, tournamentId]);
+  }, [tournamentSocket, tournamentId, isChatVisible, session?.user?.name, session?.user?.email]);
 
   // Auto-scroll chat
   useEffect(() => {
