@@ -17,6 +17,7 @@ const { tournament: tournamentModules, draft: draftModules, replay } = require('
 const tournamentBroadcast = tournamentModules.broadcast;
 // T021: Import draft config service
 const draftConfig = draftModules.config;
+const { createMatchDraftService } = draftModules;
 // T023: Import standings service
 const standingsService = tournamentModules.standings;
 const { enrichPatchWithCosts } = require('./modules/card-costs');
@@ -28,320 +29,6 @@ const {
 } = require('./modules/match-utils');
 const { createLobbyFeature } = require('./features/lobby');
 const { createTournamentFeature } = require('./features/tournament');
-
-// -----------------------------
-// Leader-aware Draft helpers (match-level)
-// -----------------------------
-function repairDraftInvariants(match) {
-  if (!match || match.matchType !== 'draft' || !match.draftState) return;
-  const ds = match.draftState;
-  // If server thinks we're in picking for a new pack but hasn't distributed packs yet,
-  // revert to pack_selection and wait for choices.
-  if (ds.phase === 'picking' && Number(ds.pickNumber || 0) === 1) {
-    const hasAnyCards = Array.isArray(ds.currentPacks)
-      ? ds.currentPacks.some((p) => Array.isArray(p) && p.length > 0)
-      : false;
-    if (!hasAnyCards) {
-      ds.phase = 'pack_selection';
-      ds.waitingFor = [...match.playerIds];
-      if (!Array.isArray(ds.packChoice) || ds.packChoice.length !== match.playerIds.length) {
-        ds.packChoice = Array.from({ length: match.playerIds.length }, () => null);
-      } else {
-        ds.packChoice = ds.packChoice.map(() => null);
-      }
-      try { console.warn(`[Draft] Repaired invariant: picking@1 without packs -> reverted to pack_selection (round ${ds.packIndex + 1})`); } catch {}
-    }
-  }
-  // Bound packIndex to configured packCount
-  const maxPacks = (match.draftConfig && Number(match.draftConfig.packCount)) || 3;
-  if (typeof ds.packIndex === 'number' && ds.packIndex >= maxPacks) {
-    ds.packIndex = Math.max(0, maxPacks - 1);
-  }
-}
-
-async function leaderDraftPlayerReady(matchId, playerId, ready) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match || match.matchType !== 'draft' || !match.draftState) return;
-  const room = `match:${matchId}`;
-  const idx = Array.isArray(match.playerIds) ? match.playerIds.indexOf(playerId) : -1;
-  if (idx === -1) return;
-  const playerKey = idx === 1 ? 'p2' : 'p1';
-  if (!match.draftState.playerReady || typeof match.draftState.playerReady !== 'object') {
-    match.draftState.playerReady = { p1: false, p2: false };
-  }
-  // One-way ready: ignore attempts to unready
-  if (!ready) {
-    return;
-  }
-  match.draftState.playerReady[playerKey] = true;
-  io.to(room).emit('message', { type: 'playerReady', playerKey, ready: !!ready });
-  // Auto-start if both ready and still in waiting
-  const pr = match.draftState.playerReady;
-  if (match.draftState.phase === 'waiting' && pr && pr.p1 === true && pr.p2 === true) {
-    try { await leaderStartDraft(matchId, playerId); } catch (e) { try { console.warn('[Draft] auto-start failed:', e?.message || e); } catch {} }
-    // Watchdog: if we're still in 'waiting' shortly after, attempt again (handles leader handoff/race)
-    try { if (draftStartWatchdogs.has(matchId)) { clearTimeout(draftStartWatchdogs.get(matchId)); } } catch {}
-    const t = setTimeout(async () => {
-      try {
-        const m = await getOrLoadMatch(matchId);
-        if (!m || m.matchType !== 'draft' || !m.draftState) return;
-        const pr2 = m.draftState.playerReady || { p1: false, p2: false };
-        if (m.draftState.phase === 'waiting' && pr2.p1 === true && pr2.p2 === true && !m.draftState.__startingDraft) {
-          await leaderStartDraft(matchId, playerId);
-        }
-      } catch {}
-      try { draftStartWatchdogs.delete(matchId); } catch {}
-    }, 1500);
-    draftStartWatchdogs.set(matchId, t);
-  }
-  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
-}
-
-async function leaderStartDraft(matchId, requestingPlayerId = null, overrideDraftConfig = null, requestingSocketId = null) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match || match.matchType !== 'draft' || !match.draftState) return;
-  if (match.draftState.phase !== 'waiting') return;
-  if (match.draftState.__startingDraft) return;
-  match.draftState.__startingDraft = true;
-
-  // FIXED T016/T021: Use draft config service for tournament drafts
-  // This ensures cubeId is loaded before pack generation (fixes production bug)
-  if (match.tournamentId && match.matchType === 'draft') {
-    try {
-      await draftConfig.ensureConfigLoaded(prisma, matchId, match, hydrateMatchFromDatabase);
-    } catch (err) {
-      console.warn('[Draft] Failed to ensure config loaded:', err?.message || err);
-    }
-  }
-
-  const room = `match:${match.id}`;
-  // Start with match config; allow client override from leader-approved request
-  let dc;
-  try {
-    dc = await draftConfig.getDraftConfig(prisma, matchId, match);
-  } catch (err) {
-    console.warn('[Draft] Failed to get draft config, using default:', err?.message || err);
-    dc = { setMix: ['Beta'], packCount: 3, packSize: 15 };
-  }
-  if (overrideDraftConfig && typeof overrideDraftConfig === 'object') {
-    try {
-      // Merge and normalize: prefer explicit override fields
-      dc = {
-        ...dc,
-        ...overrideDraftConfig,
-      };
-    } catch {}
-  }
-  // Check if using cube - cubes don't need set-based normalization
-  const usingCube = Boolean(dc.cubeId);
-
-  // Normalize setMix (skip for cubes)
-  const setMix = Array.isArray(dc.setMix) && dc.setMix.length > 0 ? dc.setMix : ['Beta'];
-  // Normalize packCount/packSize
-  const packCount = Math.max(1, Number(dc.packCount) || 3);
-  const packSize = Math.max(8, Number(dc.packSize) || 15);
-
-  // Normalize packCounts: ensure it sums exactly to packCount; if not, generate even distribution across setMix
-  // Skip this for cubes - they don't use set-based pack counts
-  let packCounts = dc && typeof dc.packCounts === 'object' ? { ...dc.packCounts } : undefined;
-  if (!usingCube) {
-    const sumPackCounts = (obj) =>
-      obj ? Object.values(obj).reduce((a, b) => a + (Math.max(0, Number(b) || 0)), 0) : 0;
-    if (!packCounts || sumPackCounts(packCounts) !== packCount) {
-      const counts = {};
-      const n = setMix.length;
-      for (const s of setMix) counts[s] = 0;
-      const base = Math.floor(packCount / n);
-      const rem = packCount % n;
-      setMix.forEach((s, i) => {
-        counts[s] = base + (i < rem ? 1 : 0);
-      });
-      packCounts = counts;
-    }
-  }
-  // Persist normalized config back to match (so followers/clients see canonical config)
-  match.draftConfig = { ...dc, setMix, packCount, packSize, packCounts };
-  try {
-    // Build set sequence from exact packCounts (not needed for cubes)
-    let setSequence = [];
-    if (!usingCube) {
-      if (packCounts && typeof packCounts === 'object') {
-        for (const [name, cnt] of Object.entries(packCounts)) {
-          const c = Math.max(0, Number(cnt) || 0);
-          for (let i = 0; i < c; i++) setSequence.push(name);
-        }
-      }
-      if (setSequence.length !== packCount) {
-        console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
-        // Notify requester if available
-        try {
-          if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: `Draft configuration error: pack counts must sum to ${packCount}` });
-        } catch {}
-        return;
-      }
-    }
-    const currentPacks = [];
-    for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
-      const playerPacks = [];
-      for (let packIdx = 0; packIdx < packCount; packIdx++) {
-        const rng = createRngFromString(`${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`);
-        // Use cube booster generation if cubeId is present, otherwise use set-based generation
-        let picks;
-        let setName = 'Beta'; // Default for regular sets
-        if (usingCube) {
-          picks = await generateCubeBoosterDeterministic(dc.cubeId, rng, packSize);
-        } else {
-          setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
-          picks = await generateBoosterDeterministic(setName, rng, false);
-        }
-        const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
-          id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[playerIdx].slice(-4)}`,
-          name: p.cardName || '',
-          slug: String(p.slug || ''),
-          type: p.type || null,
-          cost: String(p.cost || ''),
-          rarity: p.rarity || 'common',
-          element: p.element || [],
-          // For cubes, use the actual setName from the pick (allows mixed-set packs)
-          // For regular sets, use the setName variable
-          setName: usingCube ? (p.setName || "Unknown") : setName,
-        }));
-        playerPacks.push(cards);
-      }
-      currentPacks.push(playerPacks);
-    }
-    // Prepare draft phases
-    // Ensure draft state arrays are shaped properly
-    if (!Array.isArray(match.draftState.packChoice) || match.draftState.packChoice.length !== match.playerIds.length) {
-      match.draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
-    }
-    if (!Array.isArray(match.draftState.picks) || match.draftState.picks.length !== match.playerIds.length) {
-      match.draftState.picks = Array.from({ length: match.playerIds.length }, () => []);
-    }
-    match.draftState.phase = 'pack_selection';
-    match.draftState.allGeneratedPacks = currentPacks;
-    match.draftState.currentPacks = [];
-    match.draftState.waitingFor = [...match.playerIds];
-    try { console.log(`[Draft] Draft start -> enter pack_selection (round 1)`); } catch {}
-    // Safety: repair invariants before broadcasting
-    try { repairDraftInvariants(match); } catch {}
-    io.to(room).emit('draftUpdate', match.draftState);
-    if (requestingSocketId) { try { io.to(requestingSocketId).emit('draftUpdate', match.draftState); } catch {} }
-    // Also emit matchStarted so clients observing only matchStarted get updated draftState
-    try { io.to(room).emit('matchStarted', { match: getMatchInfo(match) }); } catch {}
-    // Clear any pending watchdog once we transition away from waiting
-    try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
-    try { await persistMatchUpdate(match, null, requestingPlayerId || 'system', Date.now()); } catch {}
-  } catch (e) {
-    console.error(`[Draft] Error starting draft: ${e && e.message ? e.message : String(e)}`);
-    try {
-      if (requestingSocketId) io.to(requestingSocketId).emit('error', { message: 'Failed to start draft' });
-    } catch {}
-  } finally {
-    match.draftState.__startingDraft = false;
-  }
-}
-
-async function leaderMakeDraftPick(matchId, playerId, { cardId, packIndex, pickNumber }) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match || match.matchType !== 'draft' || !match.draftState) return;
-  const draftState = match.draftState;
-  if (draftState.phase !== 'picking') return;
-  if (draftState.packIndex !== packIndex || draftState.pickNumber !== pickNumber) return;
-  if (!draftState.waitingFor.includes(playerId)) return;
-  const playerIndex = match.playerIds.indexOf(playerId);
-  if (playerIndex === -1) return;
-  const currentPack = draftState.currentPacks[playerIndex];
-  if (!currentPack) return;
-  const cardIndex = currentPack.findIndex((card) => card.id === cardId);
-  if (cardIndex === -1) return;
-  const pickedCard = currentPack.splice(cardIndex, 1)[0];
-  draftState.picks[playerIndex].push(pickedCard);
-  draftState.waitingFor = draftState.waitingFor.filter((id) => id !== playerId);
-  if (draftState.waitingFor.length === 0) {
-    if (draftState.pickNumber >= 15 || currentPack.length === 0) {
-      draftState.packIndex++;
-      draftState.pickNumber = 1;
-      const maxPacks = (match.draftConfig && Number(match.draftConfig.packCount)) || 3;
-      if (draftState.packIndex >= maxPacks) {
-        draftState.phase = 'complete';
-        match.status = 'deck_construction';
-      } else {
-        // Next round: re-enter pack selection and wait for choices
-        draftState.pickNumber = 1;
-        draftState.packDirection = draftState.packDirection === 'left' ? 'right' : 'left';
-        draftState.phase = 'pack_selection';
-        draftState.waitingFor = [...match.playerIds];
-        // Clear distributed packs to ensure a clean re-selection each round
-        draftState.currentPacks = [];
-        // Reset choices for this round
-        if (!Array.isArray(draftState.packChoice) || draftState.packChoice.length !== match.playerIds.length) {
-          draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
-        } else {
-          draftState.packChoice = draftState.packChoice.map(() => null);
-        }
-        try { console.log(`[Draft] Enter pack_selection for round ${draftState.packIndex + 1}`); } catch {}
-      }
-    } else {
-      // Pass packs
-      draftState.pickNumber++;
-      draftState.phase = 'passing';
-      const temp = [...draftState.currentPacks];
-      const n = temp.length;
-      if (draftState.packDirection === 'left') {
-        // Rotate left: pack i goes to (i+1) mod n
-        for (let i = 0; i < n; i++) {
-          draftState.currentPacks[(i + 1) % n] = temp[i];
-        }
-      } else {
-        // Rotate right: pack i goes to (i-1+n) mod n
-        for (let i = 0; i < n; i++) {
-          draftState.currentPacks[(i - 1 + n) % n] = temp[i];
-        }
-      }
-      draftState.phase = 'picking';
-      draftState.waitingFor = [...match.playerIds];
-    }
-  }
-  try { repairDraftInvariants(match); } catch {}
-  io.to(`match:${match.id}`).emit('draftUpdate', draftState);
-  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
-}
-
-async function leaderChooseDraftPack(matchId, playerId, { setChoice, packIndex }) {
-  const match = await getOrLoadMatch(matchId);
-  if (!match || match.matchType !== 'draft' || !match.draftState) return;
-  const draftState = match.draftState;
-  const playerIndex = match.playerIds.indexOf(playerId);
-  if (playerIndex === -1) return;
-  if (draftState.phase !== 'pack_selection') return;
-  if (draftState.packChoice[playerIndex] !== null) return;
-  // Honor chosen pack index by swapping it into the current round position
-  const chosenIdx = Math.max(0, Number(packIndex) || 0);
-  const roundIdx = Math.max(0, Number(draftState.packIndex) || 0);
-  const playerPacks = Array.isArray(draftState.allGeneratedPacks?.[playerIndex])
-    ? draftState.allGeneratedPacks[playerIndex]
-    : [];
-  if (Array.isArray(playerPacks) && chosenIdx >= 0 && chosenIdx < playerPacks.length && roundIdx >= 0 && roundIdx < playerPacks.length) {
-    if (chosenIdx !== roundIdx) {
-      const tmp = playerPacks[roundIdx];
-      playerPacks[roundIdx] = playerPacks[chosenIdx];
-      playerPacks[chosenIdx] = tmp;
-    }
-  }
-  draftState.packChoice[playerIndex] = setChoice;
-  const allChoicesMade = draftState.packChoice.every((choice) => choice !== null);
-  if (allChoicesMade && draftState.phase === 'pack_selection') {
-    // Distribute packs based on the chosen order for this round (clone arrays)
-    draftState.currentPacks = draftState.allGeneratedPacks.map((packs) => (packs[draftState.packIndex] ? [...packs[draftState.packIndex]] : []));
-    draftState.phase = 'picking';
-    draftState.waitingFor = [...match.playerIds];
-    try { console.log(`[Draft] All pack choices resolved for round ${draftState.packIndex + 1}. Enter picking.`); } catch {}
-  }
-  try { repairDraftInvariants(match); } catch {}
-  io.to(`match:${match.id}`).emit('draftUpdate', draftState);
-  try { await persistMatchUpdate(match, null, playerId, Date.now()); } catch {}
-}
 
 const jwt = require("jsonwebtoken");
 const {
@@ -979,6 +666,29 @@ const {
 getPersistenceBufferStats = getBufferStats;
 flushAllPersistenceBuffers = flushAll;
 
+const matchDraftService = createMatchDraftService({
+  io,
+  storeRedis,
+  prisma,
+  draftConfig,
+  hydrateMatchFromDatabase,
+  persistMatchUpdate,
+  getOrLoadMatch,
+  getMatchInfo,
+  createRngFromString,
+  generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
+});
+
+const {
+  leaderDraftPlayerReady,
+  leaderStartDraft,
+  leaderMakeDraftPick,
+  leaderChooseDraftPack,
+  updateDraftPresence,
+  clearDraftWatchdog,
+} = matchDraftService;
+
 const {
   ensureInteractionState,
   sanitizeGrantOptions,
@@ -1090,70 +800,12 @@ const {
   broadcastStatisticsUpdate,
 } = tournamentFeature;
 
-// Draft session presence: sessionId -> Map<playerId, { playerId, playerName, isConnected, lastActivity }>
-/** @type {Map<string, Map<string, { playerId: string, playerName: string, isConnected: boolean, lastActivity: number }>>} */
-const draftPresence = new Map();
-
-function getDraftPresenceList(sessionId) {
-  const m = draftPresence.get(sessionId);
-  if (!m) return [];
-  return Array.from(m.values());
-}
-
-function upsertDraftPresence(sessionId, playerId, playerName, isConnected) {
-  let m = draftPresence.get(sessionId);
-  if (!m) { m = new Map(); draftPresence.set(sessionId, m); }
-  const prev = m.get(playerId) || { playerId, playerName: playerName || `Player ${playerId.slice(-4)}`, isConnected: false, lastActivity: 0 };
-  const rec = { playerId, playerName: playerName || prev.playerName, isConnected: !!isConnected, lastActivity: Date.now() };
-  m.set(playerId, rec);
-  return getDraftPresenceList(sessionId);
-}
-
-/**
- * Cluster-wide draft presence using Redis (if available)
- * Maintains per-session per-player connection counts and a canonical state hash.
- * Falls back to in-memory map when Redis is unavailable.
- */
-async function updateDraftPresence(sessionId, playerId, playerName, isConnected) {
-  if (storeRedis) {
-    try {
-      const countsKey = `draft:presence:counts:${sessionId}`;
-      const namesKey = `draft:presence:names:${sessionId}`;
-      const stateKey = `draft:presence:state:${sessionId}`;
-      if (playerName) { await storeRedis.hset(namesKey, playerId, playerName); }
-      if (isConnected === true) {
-        await storeRedis.hincrby(countsKey, playerId, 1);
-      } else if (isConnected === false) {
-        await storeRedis.hincrby(countsKey, playerId, -1);
-      }
-      let cntRaw = await storeRedis.hget(countsKey, playerId);
-      let cnt = Number(cntRaw || 0);
-      if (!Number.isFinite(cnt) || cnt < 0) cnt = 0;
-      const name = (await storeRedis.hget(namesKey, playerId)) || playerName || `Player ${String(playerId).slice(-4)}`;
-      const rec = { playerId, playerName: name, isConnected: cnt > 0, lastActivity: Date.now() };
-      await storeRedis.hset(stateKey, playerId, JSON.stringify(rec));
-      const raw = await storeRedis.hgetall(stateKey);
-      const list = [];
-      for (const k of Object.keys(raw || {})) {
-        try { list.push(JSON.parse(raw[k])); } catch {}
-      }
-      return list;
-    } catch (e) {
-      try { console.warn('[store] draft presence redis failed:', e?.message || e); } catch {}
-    }
-  }
-  // Fallback to local process memory
-  return upsertDraftPresence(sessionId, playerId, playerName, isConnected);
-}
-
 function getVoiceRoomIdForPlayer(player) {
   if (!player) return null;
   if (player.lobbyId) return `lobby:${player.lobbyId}`;
   if (player.matchId) return `match:${player.matchId}`;
   return null;
 }
-/** @type {Map<string, NodeJS.Timeout>} */
-const draftStartWatchdogs = new Map();
 clusterStateReady = true;
 
 // Bot manager for headless CPU clients
@@ -4044,125 +3696,6 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // Helper: start a draft for a match if in waiting phase
-  async function startDraftForMatch(match, requestingPlayer = null) {
-    if (!match || match.matchType !== "draft" || !match.draftState) return;
-    if (match.draftState.phase !== "waiting") return;
-    if (match.draftState.__startingDraft) {
-      console.warn(`[Draft] startDraft already in progress for match ${match.id}.`);
-      return;
-    }
-    match.draftState.__startingDraft = true;
-    const room = `match:${match.id}`;
-    const dc = match.draftConfig || { setMix: ["Beta"], packCount: 3, packSize: 15 };
-    const { setMix, packCount, packSize } = dc;
-    const usingCube = Boolean(dc.cubeId);
-    console.log(
-      `[Draft] startDraft ${
-        requestingPlayer
-          ? `requested by ${requestingPlayer.displayName} (${requestingPlayer.id})`
-          : "(auto)"
-      } in match ${match.id}. phase=${match.draftState?.phase}, config=${JSON.stringify(dc)}`
-    );
-    try {
-      // Build set sequence per pack index: ALWAYS use exact counts (skip for cubes)
-      /** @type {string[]} */
-      let setSequence = [];
-      if (!usingCube) {
-        if (dc.packCounts && typeof dc.packCounts === 'object') {
-          for (const [name, cnt] of Object.entries(dc.packCounts)) {
-            const c = Math.max(0, Number(cnt) || 0);
-            for (let i = 0; i < c; i++) setSequence.push(name);
-          }
-        }
-        if (setSequence.length !== packCount) {
-          // Error: packCounts must match packCount exactly
-          console.error(`[Draft] packCounts sum (${setSequence.length}) does not match packCount (${packCount})`);
-          const s = requestingPlayer
-            ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
-            : null;
-          if (s) s.emit("error", { message: `Draft configuration error: pack counts must sum to ${packCount}` });
-          return;
-        }
-      }
-
-      console.log(
-        `[Draft] Generating packs: players=${match.playerIds.length}, packCount=${packCount}, packSize=${packSize}, setSeq=${usingCube ? 'cube' : setSequence.join(',')}`
-      );
-      const currentPacks = [];
-      for (let playerIdx = 0; playerIdx < match.playerIds.length; playerIdx++) {
-        const playerPacks = [];
-        for (let packIdx = 0; packIdx < packCount; packIdx++) {
-          const rng = createRngFromString(
-            `${match.seed}|${match.playerIds[playerIdx]}|draft|${packIdx}`
-          );
-          // Use cube booster generation if cubeId is present, otherwise use set-based generation
-          let picks;
-          let setName = 'Beta'; // Default for regular sets
-          if (usingCube) {
-            picks = await generateCubeBoosterDeterministic(dc.cubeId, rng, packSize);
-          } else {
-            setName = setSequence[packIdx] || (Array.isArray(setMix) && setMix.length > 0 ? setMix[0] : 'Beta');
-            picks = await generateBoosterDeterministic(setName, rng, false);
-          }
-          const displaySet = usingCube ? (dc.cubeName || "Cube") : setName;
-          const cards = picks.slice(0, packSize).map((p, cardIdx) => ({
-            id: `${String(p.variantId)}_${packIdx}_${cardIdx}_${match.playerIds[
-              playerIdx
-            ].slice(-4)}`,
-            name: p.cardName || "",
-            slug: String(p.slug || ""),
-            type: p.type || null,
-            cost: String(p.cost || ""),
-            rarity: p.rarity || "common",
-            element: p.element || [],
-            setName: displaySet, // Include set or cube information for proper card resolution
-          }));
-          playerPacks.push(cards);
-        }
-        currentPacks.push(playerPacks);
-      }
-
-      // Update draft state
-      match.draftState.phase = "pack_selection"; // Wait for pack choices before distributing
-      match.draftState.allGeneratedPacks = currentPacks; // Store all generated packs
-      match.draftState.currentPacks = []; // Don't distribute packs yet
-      match.draftState.waitingFor = [...match.playerIds]; // Wait for pack choices
-      // Initialize/reset pack choices for all players
-      if (!Array.isArray(match.draftState.packChoice) || match.draftState.packChoice.length !== match.playerIds.length) {
-        match.draftState.packChoice = Array.from({ length: match.playerIds.length }, () => null);
-      } else {
-        match.draftState.packChoice = match.draftState.packChoice.map(() => null);
-      }
-      try { console.log(`[Draft] (legacy helper) start -> enter pack_selection (round 1)`); } catch {}
-
-      const packSizes = match.draftState.currentPacks
-        .map((p) => (Array.isArray(p) ? p.length : 0))
-        .join(",");
-      console.log(
-        `[Draft] Draft started for match ${match.id}. phase=${
-          match.draftState.phase
-        } packIndex=${match.draftState.packIndex} pickNumber=${
-          match.draftState.pickNumber
-        } packSizes=${packSizes} waitingFor=${match.draftState.waitingFor.join(
-          "|"
-        )}`
-      );
-      // Broadcast draft state update
-      io.to(room).emit("draftUpdate", match.draftState);
-      // Persist draft state progress
-      try { persistMatchUpdate(match, null, requestingPlayer?.id || 'system', Date.now()); } catch {}
-    } catch (error) {
-      console.error(`[Draft] Error starting draft: ${error.message}`);
-      const s = requestingPlayer
-        ? io.sockets.sockets.get(players.get(requestingPlayer.id)?.socketId)
-        : null;
-      if (s) s.emit("error", { message: "Failed to start draft" });
-    } finally {
-      match.draftState.__startingDraft = false;
-    }
-  }
-
   // Draft-specific handlers
   socket.on("startDraft", async (payload) => {
     if (!authed) return;
@@ -4307,7 +3840,7 @@ io.on("connection", async (socket) => {
     try { await finalizeMatch(match, payload || {}); } catch (err) {
       try { console.warn('[match] explicit finalize failed', err?.message || err); } catch {}
     }
-    try { if (draftStartWatchdogs.has(match.id)) { clearTimeout(draftStartWatchdogs.get(match.id)); draftStartWatchdogs.delete(match.id); } } catch {}
+    try { clearDraftWatchdog(match.id); } catch {}
   });
 
   socket.on("disconnect", () => {
