@@ -64,15 +64,44 @@ interface MatchGameState extends Record<string, unknown> {
   currentPlayer?: number;
 }
 
-interface InteractionRequestEntry {
+interface InteractionRequestMessage extends Record<string, unknown> {
+  type: "interaction:request";
   requestId: string;
+  matchId: string;
+  from: string;
+  to: string;
+  kind: string;
+  createdAt: number;
+  expiresAt?: number;
+  note?: string;
+  payload?: Record<string, unknown>;
+}
+
+interface InteractionResponseMessage extends Record<string, unknown> {
+  type: "interaction:response";
+  requestId: string;
+  matchId: string;
   from: string;
   to: string;
   kind?: string;
+  decision: string;
+  payload?: Record<string, unknown>;
+  reason?: string;
   createdAt: number;
   expiresAt?: number;
+  respondedAt: number;
+}
+
+interface InteractionRequestEntry {
+  request: InteractionRequestMessage | null;
+  response: InteractionResponseMessage | null;
+  status?: string;
+  proposedGrant?: Record<string, unknown> | null;
+  grant?: GrantRecord | null;
   pendingAction?: MatchPatch | null;
-  result?: unknown;
+  result?: MatchPatch | null;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 interface MatchState {
@@ -86,7 +115,7 @@ interface MatchState {
   draftState?: Record<string, unknown>;
   draftConfig?: Record<string, unknown> | null;
   playerReady?: { p1?: boolean; p2?: boolean };
-  interactionGrants: Map<string, Record<string, unknown>[]>;
+  interactionGrants: Map<string, GrantRecord[]>;
   interactionRequests: Map<string, InteractionRequestEntry>;
   mulliganDone?: Set<string>;
   _autoSeatTimer?: NodeJS.Timeout | null;
