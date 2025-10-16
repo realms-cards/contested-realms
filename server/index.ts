@@ -6,6 +6,7 @@
 const { createBootstrap } = require('./core/bootstrap');
 const { createPersistenceLayer } = require('./core/persistence');
 const { createContainer } = require('./core/container');
+const { registerFeatures } = require('./features');
 const {
   createInteractionModule,
   INTERACTION_VERSION,
@@ -27,8 +28,6 @@ const {
   getOpponentSeat,
   inferLoserId,
 } = require('./modules/match-utils');
-const { createLobbyFeature } = require('./features/lobby');
-const { createTournamentFeature } = require('./features/tournament');
 
 const jwt = require("jsonwebtoken");
 const {
@@ -741,31 +740,28 @@ container.registerValue("playerIdBySocket", playerIdBySocket);
 container.registerValue("prisma", prisma);
 container.registerValue("config", serverConfig);
 
-const lobbyFeature = container.registerFeature("lobby", () =>
-  createLobbyFeature({
-    io,
-    storeRedis,
-    instanceId: INSTANCE_ID,
-    rid,
-    ensurePlayerCached,
-    players,
-    matches,
-    getPlayerInfo,
-    getMatchInfo,
-    lobbyHasHumanPlayers,
-    createRngFromString,
-    generateBoosterDeterministic,
-    startMatchRecording,
-    persistMatchCreated,
-    hydrateMatchFromDatabase,
-    lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
-    lobbyStateChannel: LOBBY_STATE_CHANNEL,
-    cpuBotsEnabled: CPU_BOTS_ENABLED,
-    loadBotClientCtor,
-    port: PORT,
-    isCpuPlayerId,
-  })
-);
+const { lobby: lobbyFeature, tournament: tournamentFeature } = registerFeatures(container, {
+  rid,
+  ensurePlayerCached,
+  players,
+  matches,
+  playerIdBySocket,
+  getPlayerInfo,
+  getMatchInfo,
+  lobbyHasHumanPlayers,
+  createRngFromString,
+  generateBoosterDeterministic,
+  startMatchRecording,
+  persistMatchCreated,
+  hydrateMatchFromDatabase,
+  lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
+  lobbyStateChannel: LOBBY_STATE_CHANNEL,
+  cpuBotsEnabled: CPU_BOTS_ENABLED,
+  loadBotClientCtor,
+  port: PORT,
+  isCpuPlayerId,
+  tournamentBroadcast,
+});
 
 const {
   lobbies,
@@ -781,27 +777,6 @@ const {
   setBotManager,
   upsertLobbyFromSerialized,
 } = lobbyFeature;
-
-const tournamentFeature = container.registerFeature("tournament", () =>
-  createTournamentFeature({
-    io,
-    storeRedis,
-    instanceId: INSTANCE_ID,
-    players,
-    matches,
-    playerIdBySocket,
-    prisma,
-    rid,
-    normalizeSealedConfig,
-    createRngFromString,
-    generateBoosterDeterministic,
-    persistMatchCreated,
-    hydrateMatchFromDatabase,
-    startMatchRecording,
-    getMatchInfo,
-    tournamentBroadcast,
-  })
-);
 
 const {
   broadcastTournamentUpdate,
