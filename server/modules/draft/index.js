@@ -2,4 +2,5 @@
 
 module.exports = {
   config: require("./config"),
+  createMatchDraftService: require("./match").createMatchDraftService,
 };
