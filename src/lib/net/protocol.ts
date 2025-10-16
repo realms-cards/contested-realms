@@ -8,6 +8,7 @@ const PlayerInfoInputSchema = z.object({
   avatar: z.string().optional(),
   avatarUrl: z.string().optional(),
   image: z.string().optional(),
+  seat: z.enum(["p1", "p2"]).optional(),
 });
 
 type PlayerInfoInput = z.infer<typeof PlayerInfoInputSchema>;
@@ -26,11 +27,14 @@ function normalizePlayerInfo(raw: PlayerInfoInput) {
   const avatarCandidate = [raw.avatar, raw.avatarUrl, raw.image]
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .find((value) => value.length > 0);
+  const seat =
+    raw.seat === "p1" || raw.seat === "p2" ? (raw.seat as "p1" | "p2") : null;
 
   return {
     id: raw.id,
     displayName,
     avatarUrl: avatarCandidate ?? null,
+    seat,
   };
 }
 

@@ -7,7 +7,11 @@ import {
 import type { RemoteCursorDragMeta } from "@/lib/game/store/remoteCursor";
 import type { GameTransport } from "@/lib/net/transport";
 
-type MatchPlayer = { id: string; displayName?: string | null };
+type MatchPlayer = {
+  id: string;
+  displayName?: string | null;
+  seat?: PlayerKey | null;
+};
 type MatchLike = {
   playerIds?: string[] | null;
   players?: MatchPlayer[] | null;
@@ -20,7 +24,7 @@ type MessageTransport = GameTransport | null;
 export function usePlayerIdentity(match: MatchLike | null, session: SessionLike) {
   const myPlayerId = (session?.id as string | undefined) || null;
 
-  const orderedPlayerIds = useMemo(() => {
+  const fallbackOrder = useMemo(() => {
     const pids = Array.isArray(match?.playerIds)
       ? (match?.playerIds as string[])
       : null;
@@ -34,15 +38,47 @@ export function usePlayerIdentity(match: MatchLike | null, session: SessionLike)
     return [] as string[];
   }, [match?.playerIds, match?.players]);
 
+  const seatAssignments = useMemo(() => {
+    const map = new Map<string, PlayerKey>();
+    const players = Array.isArray(match?.players) ? match.players : null;
+    if (players) {
+      for (const player of players) {
+        if (!player || typeof player !== "object") continue;
+        const pid = player.id;
+        const seat = (player as { seat?: PlayerKey | null }).seat;
+        if (pid && (seat === "p1" || seat === "p2")) {
+          map.set(pid, seat);
+        }
+      }
+    }
+    if (map.size < 2) {
+      for (let i = 0; i < fallbackOrder.length && i < 2; i++) {
+        const pid = fallbackOrder[i];
+        if (pid && !map.has(pid)) {
+          map.set(pid, i === 0 ? "p1" : "p2");
+        }
+      }
+    }
+    return map;
+  }, [match?.players, fallbackOrder]);
+
+  const orderedPlayerIds = fallbackOrder;
+
   const myPlayerIndex = useMemo(() => {
     if (!myPlayerId) return -1;
     return orderedPlayerIds.indexOf(myPlayerId);
   }, [orderedPlayerIds, myPlayerId]);
 
-  const myPlayerNumber = myPlayerIndex >= 0 ? myPlayerIndex + 1 : null;
-  const myPlayerKey: PlayerKey | null =
-    myPlayerIndex >= 0 && myPlayerIndex < 2
-      ? ((myPlayerIndex === 0 ? "p1" : "p2") as PlayerKey)
+  const myPlayerKey: PlayerKey | null = myPlayerId
+    ? seatAssignments.get(myPlayerId) ?? null
+    : null;
+  const myPlayerNumber =
+    myPlayerKey != null
+      ? myPlayerKey === "p1"
+        ? 1
+        : 2
+      : myPlayerIndex >= 0
+      ? myPlayerIndex + 1
       : null;
 
   const opponentSeat: PlayerKey | null = useMemo(() => {
@@ -51,11 +87,15 @@ export function usePlayerIdentity(match: MatchLike | null, session: SessionLike)
   }, [myPlayerKey]);
 
   const opponentPlayerId: string | null = useMemo(() => {
+    if (!opponentSeat) return null;
+    for (const [pid, seat] of seatAssignments.entries()) {
+      if (seat === opponentSeat) return pid;
+    }
     if (myPlayerIndex < 0) return null;
     if (orderedPlayerIds.length < 2) return null;
-    const opponentIndex = myPlayerIndex === 0 ? 1 : 0;
-    return orderedPlayerIds[opponentIndex] || null;
-  }, [orderedPlayerIds, myPlayerIndex]);
+    const fallbackIndex = myPlayerIndex === 0 ? 1 : 0;
+    return orderedPlayerIds[fallbackIndex] || null;
+  }, [opponentSeat, seatAssignments, myPlayerIndex, orderedPlayerIds]);
 
   return {
     myPlayerId,
