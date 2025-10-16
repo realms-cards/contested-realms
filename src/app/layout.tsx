@@ -7,9 +7,11 @@ import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
+import GlobalLoadingIndicator from "@/components/ui/GlobalLoadingIndicator";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
+import { LoadingProvider } from "@/lib/contexts/LoadingContext";
 import { SoundProvider } from "@/lib/contexts/SoundContext";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
 import { VideoOverlayProvider } from "@/lib/contexts/VideoOverlayContext";
@@ -43,22 +45,26 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${fantaisieArtistique.variable} antialiased`}
         suppressHydrationWarning
       >
-        <ThemeProvider defaultMode="colorful">
-          <SoundProvider>
-            <AuthProvider session={session}>
-              <ThemeScope>
-                <OnlineProvider>
-                  <RealtimeTournamentProvider>
-                    <VideoOverlayProvider>{children}</VideoOverlayProvider>
-                  </RealtimeTournamentProvider>
-                </OnlineProvider>
-              </ThemeScope>
-              {/* Floating user badge on all non-online pages */}
-              <GlobalUserBadge />
-              {/* Theme toggle removed per design: muted colorful is the standard */}
-            </AuthProvider>
-          </SoundProvider>
-        </ThemeProvider>
+        <LoadingProvider>
+          <ThemeProvider defaultMode="colorful">
+            <SoundProvider>
+              <AuthProvider session={session}>
+                <ThemeScope>
+                  <OnlineProvider>
+                    <RealtimeTournamentProvider>
+                      <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                    </RealtimeTournamentProvider>
+                  </OnlineProvider>
+                </ThemeScope>
+                {/* Floating user badge on all non-online pages */}
+                <GlobalUserBadge />
+                {/* Theme toggle removed per design: muted colorful is the standard */}
+              </AuthProvider>
+            </SoundProvider>
+          </ThemeProvider>
+          {/* Global loading indicator (bottom-left corner) */}
+          <GlobalLoadingIndicator />
+        </LoadingProvider>
         <SpeedInsights />
       </body>
     </html>
