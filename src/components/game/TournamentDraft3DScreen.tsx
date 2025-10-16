@@ -852,7 +852,10 @@ export default function TournamentDraft3DScreen({
               return r.json() as Promise<MetaByVariantRow[]>;
             })
             .catch((err) => {
-              console.error(`[TournamentDraft3D] Fetch error:`, err);
+              const isAbort = (ac.signal && ac.signal.aborted) || (err instanceof Error && err.name === "AbortError");
+              if (!isAbort) {
+                console.error(`[TournamentDraft3D] Fetch error:`, err);
+              }
               return [] as MetaByVariantRow[];
             })
         );
@@ -1030,8 +1033,11 @@ export default function TournamentDraft3DScreen({
           Number(s.pickNumber) === Number(inflight.pickNumber);
 
         if (sameRound) {
-          const mySeatPack = Array.isArray(s.currentPacks?.[myPlayerIndex])
-            ? (s.currentPacks[myPlayerIndex] as DraftCard[])
+          const seatCandidate = Array.isArray(s.currentPacks)
+            ? s.currentPacks[myPlayerIndex]
+            : null;
+          const mySeatPack = Array.isArray(seatCandidate)
+            ? (seatCandidate as DraftCard[])
             : [];
           const stillHasCard = mySeatPack.some((c) => c && c.id === inflight.cardId);
           const iAmWaiting = Array.isArray(s.waitingFor) && s.waitingFor.includes(myPlayerId);
