@@ -1371,10 +1371,14 @@ function rid(prefix) {
     .slice(-4)}`;
 }
 
-function getPlayerInfo(playerId) {
+function getPlayerInfo(playerId, seat = null) {
   const p = players.get(playerId);
   if (!p) return null;
-  return { id: p.id, displayName: p.displayName };
+  let seatValue = null;
+  if (seat === "p1" || seat === "p2") {
+    seatValue = seat;
+  }
+  return { id: p.id, displayName: p.displayName, seat: seatValue };
 }
 
 function getPlayerBySocket(socket) {
@@ -1677,13 +1681,21 @@ async function cleanupMatchNow(matchId, reason, force = false) {
 
 // Handle per-player mulligan completion as the cluster leader
 function getMatchInfo(match) {
+  const playerIds = Array.isArray(match.playerIds) ? match.playerIds : [];
+  const playersWithSeat = playerIds
+    .map((playerId, index) => {
+      const seat = index === 0 ? "p1" : index === 1 ? "p2" : null;
+      return getPlayerInfo(playerId, seat);
+    })
+    .filter(Boolean);
+
   return {
     id: match.id,
     lobbyId: match.lobbyId || undefined,
     lobbyName: match.lobbyName || undefined,
     tournamentId: match.tournamentId || undefined,
     draftSessionId: match.draftSessionId || undefined,
-    players: match.playerIds.map(getPlayerInfo).filter(Boolean),
+    players: playersWithSeat,
     status: match.status,
     seed: match.seed,
     turn: match.turn,
