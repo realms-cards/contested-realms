@@ -7,7 +7,7 @@
 - [x] 2.2 Move lobby/matchmaking handlers into `server/features/lobby` with isolated state management helpers.
 - [x] 2.3 Extract tournament/draft/replay services into dedicated subdirectories and publish them via an index barrel _(tournament socket + presence module complete)_.
 - [x] 2.4 Introduce a lightweight dependency registry so feature modules can register handlers without touching the entrypoint.
-- [ ] 2.5 Replace direct imports in the entrypoint with the new module exports and ensure hot reload/dev flow still works.
+- [x] 2.5 Replace direct imports in the entrypoint with the new module exports and ensure hot reload/dev flow still works.
 
 ## 3. TypeScript Enablement
 - [ ] 3.1 Add `server/tsconfig.json`, extend root config, and configure outDir for compiled artifacts.
