@@ -142,7 +142,7 @@ npm run prisma:migrate:deploy
 npm run db:seed   # optional, if you want to refresh/ingest data
 ```
 
-Note: The standalone Socket.IO server (`server/index.js`) loads `.env` via `dotenv`, so it can connect to Postgres when run directly with `node`.
+Note: The standalone Socket.IO server (`server/index.ts`) loads `.env` via `dotenv`. Use `npm run server:dev` during development or `npm run server:start` after running `npm run server:build` to execute the compiled output.
 
 ## Realtime Server & Scaling (Socket.IO)
 
