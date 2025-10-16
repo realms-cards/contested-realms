@@ -5,6 +5,7 @@
 // T019: Import extracted modules
 const { createBootstrap } = require('./core/bootstrap');
 const { createFeatureRegistry } = require('./core/featureRegistry');
+const { createPersistenceLayer } = require('./core/persistence');
 const { tournament: tournamentModules, draft: draftModules, replay } = require('./modules');
 const tournamentBroadcast = tournamentModules.broadcast;
 // T021: Import draft config service
@@ -169,89 +170,6 @@ function collectInteractionRequirements(patch, actorSeat) {
   return {
     needsOpponentZoneWrite: detectOpponentZoneMutation(patch, actorSeat),
   };
-}
-
-function bufferPersistUpdate(matchId, data, action) {
-  if (!PERSIST_IS_WRITE_BEHIND) return;
-  const buf = persistBuffers.get(matchId) || { latestData: null, actions: [], timer: null, lastFlushAt: 0 };
-  buf.latestData = data;
-  if (action) {
-    buf.actions.push(action);
-    if (buf.actions.length > PERSIST_ACTION_BATCH_SIZE * 2) {
-      // prevent unbounded growth
-      buf.actions = buf.actions.slice(-PERSIST_ACTION_BATCH_SIZE * 2);
-    }
-    try { metricsInc('persist.buffer.action', 1); } catch {}
-  }
-  try { metricsInc('persist.buffer.update', 1); } catch {}
-  persistBuffers.set(matchId, buf);
-  schedulePersistFlush(matchId);
-}
-
-function schedulePersistFlush(matchId, dataOverride = null) {
-  if (!PERSIST_IS_WRITE_BEHIND) return;
-  const buf = persistBuffers.get(matchId) || { latestData: null, actions: [], timer: null, lastFlushAt: 0 };
-  if (dataOverride) buf.latestData = dataOverride;
-  if (buf.timer) return; // already scheduled
-  buf.timer = setTimeout(() => flushPersistBuffer(matchId, 'timer'), PERSIST_FLUSH_INTERVAL_MS);
-  persistBuffers.set(matchId, buf);
-  try { metricsInc('persist.flush.scheduled', 1); } catch {}
-}
-
-async function flushPersistBuffer(matchId, reason = 'manual') {
-  const buf = persistBuffers.get(matchId);
-  if (!buf || !buf.latestData) return;
-  // Capture and clear timer first to avoid overlap
-  if (buf.timer) {
-    try { clearTimeout(buf.timer); } catch {}
-    buf.timer = null;
-  }
-  const data = buf.latestData;
-  const actions = buf.actions.splice(0, PERSIST_ACTION_BATCH_SIZE);
-  persistBuffers.set(matchId, buf);
-  try {
-    const t0 = Date.now();
-    try { metricsInc('persist.flush.attempt', 1); } catch {}
-    // Upsert session row
-    await prisma.onlineMatchSession.upsert({
-      where: { id: matchId },
-      create: { id: matchId, ...data },
-      update: data,
-    });
-
-    // Batch actions if any
-    if (actions.length > 0) {
-      const rows = actions.map((a) => ({
-        matchId,
-        playerId: a.playerId || 'system',
-        timestamp: BigInt(Number(a.timestamp || Date.now())),
-        patch: a.patch,
-      }));
-      try {
-        await prisma.onlineMatchAction.createMany({ data: rows });
-        try { metricsInc('persist.actions.createMany.ok', rows.length); } catch {}
-      } catch (e) {
-        // Fallback to individual inserts if createMany fails (e.g., JSON size issues)
-        for (const r of rows) {
-          try { await prisma.onlineMatchAction.create({ data: r }); } catch {}
-        }
-        try { metricsInc('persist.actions.createMany.fallback', rows.length); } catch {}
-      }
-    }
-    try {
-      metricsInc('persist.flush.success', 1);
-      metricsObserveMs('persist.flush.ms', Date.now() - t0);
-    } catch {}
-  } catch (e) {
-    try { console.warn(`[persist] flush failed for ${matchId} (${reason}):`, e?.message || e); } catch {}
-    try { metricsInc('persist.flush.failure', 1); } catch {}
-  } finally {
-    buf.lastFlushAt = Date.now();
-    // If more actions remain, schedule another quick flush
-    if (buf.actions.length > 0) {
-      schedulePersistFlush(matchId);
-    }
-  }
 }
 
 function usePermitForRequirement(match, playerId, actorSeat, requirement, now) {
@@ -849,17 +767,8 @@ function promSafe(name) {
   return String(name).replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
-function getBufferedActionsCount() {
-  try {
-    let total = 0;
-    for (const buf of persistBuffers.values()) {
-      if (buf && Array.isArray(buf.actions)) total += buf.actions.length;
-    }
-    return total;
-  } catch {
-    return 0;
-  }
-}
+let getPersistenceBufferStats = () => ({ bufferCount: 0, bufferedActions: 0 });
+let flushAllPersistenceBuffers = async () => {};
 
 function collectMetricsSnapshot() {
   const now = Date.now();
@@ -869,12 +778,12 @@ function collectMetricsSnapshot() {
   for (const [k, v] of METRICS.hist.entries()) hist[k] = { sum: v.sum, count: v.count, avg: v.count > 0 ? v.sum / v.count : 0 };
   const sockets = (() => { try { return io.of('/').sockets.size; } catch { return 0; } })();
   const mem = process.memoryUsage();
-  const bufferedActions = getBufferedActionsCount();
+  const { bufferCount, bufferedActions } = getPersistenceBufferStats();
   return {
     time: now,
     uptimeSec: Math.floor(process.uptime()),
     matchesCached: typeof matches !== 'undefined' && matches ? matches.size : 0,
-    persistBuffers: persistBuffers.size,
+    persistBuffers: bufferCount,
     bufferedActions,
     socketsConnected: sockets,
     dbReady: !!isReady,
@@ -1394,6 +1303,37 @@ const participantDetails = new Map();
 /** @type {Map<string, { id: string, from: string, to: string, lobbyId: string|null, matchId: string|null, createdAt: number }>} */
 const pendingVoiceRequests = new Map();
 
+const persistence = createPersistenceLayer({
+  prisma,
+  storeRedis,
+  pubClient,
+  metricsInc,
+  metricsObserveMs,
+  matches,
+  hydrateMatchFromDatabase,
+  config: {
+    isWriteBehind: PERSIST_IS_WRITE_BEHIND,
+    flushIntervalMs: PERSIST_FLUSH_INTERVAL_MS,
+    actionBatchSize: PERSIST_ACTION_BATCH_SIZE,
+    maxWaitMs: PERSIST_MAX_WAIT_MS,
+    timeoutMs: PERSIST_TIMEOUT_MS,
+    redisSessionTtlSec: REDIS_SESSION_TTL_SEC,
+  },
+});
+
+const {
+  persistMatchCreated,
+  persistMatchUpdate,
+  persistMatchEnded,
+  recoverActiveMatches,
+  findActiveMatchForPlayer,
+  getBufferStats,
+  flushAll,
+} = persistence;
+
+getPersistenceBufferStats = getBufferStats;
+flushAllPersistenceBuffers = flushAll;
+
 // Global feature flag for CPU bots (default: disabled)
 const CPU_BOTS_ENABLED =
   process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
@@ -1547,208 +1487,6 @@ function getVoiceRoomIdForPlayer(player) {
 /** @type {Map<string, NodeJS.Timeout>} */
 const draftStartWatchdogs = new Map();
 clusterStateReady = true;
-
-/**
- * Redis write-behind buffers per match
- * matchId -> { latestData, actions: [{playerId, timestamp:number, patch}], timer: Timeout|null, lastFlushAt?: number }
- */
-/** @type {Map<string, { latestData: any, actions: Array<{ playerId: string, timestamp: number, patch: any }>, timer?: NodeJS.Timeout|null, lastFlushAt?: number }>} */
-const persistBuffers = new Map();
-
-// -----------------------------
-// Persistence helpers (PostgreSQL via Prisma) and Redis cache
-// -----------------------------
-function toPlainPlayerDecks(playerDecks) {
-  if (!playerDecks || !(playerDecks instanceof Map)) return playerDecks || null;
-  return Object.fromEntries(playerDecks);
-}
-
-function matchToSessionUpsertData(match) {
-  return {
-    lobbyId: match.lobbyId || null,
-    lobbyName: match.lobbyName || null,
-    playerIds: Array.isArray(match.playerIds) ? match.playerIds : [],
-    status: match.status,
-    seed: match.seed,
-    turn: match.turn || null,
-    winnerId: match.winnerId || null,
-    matchType: (match.matchType || "constructed"),
-    sealedConfig: match.sealedConfig || null,
-    draftConfig: match.draftConfig || null,
-    draftState: match.draftState || null,
-    playerDecks: match.playerDecks ? toPlainPlayerDecks(match.playerDecks) : null,
-    sealedPacks: match.sealedPacks || null,
-    game: match.game || null,
-    lastTs: BigInt(Number(match.lastTs || Date.now())),
-  };
-}
-
-async function cacheSessionToRedis(sessionData) {
-  try {
-    const client = storeRedis || pubClient;
-    if (!client) return;
-    const key = `match:session:${sessionData.id}`;
-    await client.set(
-      key,
-      JSON.stringify(sessionData, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)),
-      'EX',
-      REDIS_SESSION_TTL_SEC
-    );
-    try { metricsInc('persist.redis.cache.set', 1); } catch {}
-  } catch {}
-}
-
-async function persistMatchCreated(match) {
-  try {
-    const data = matchToSessionUpsertData(match);
-    await cacheSessionToRedis({ ...data, id: match.id });
-    try { metricsInc('persist.created', 1); } catch {}
-    if (PERSIST_IS_WRITE_BEHIND) {
-      // Schedule an initial snapshot to DB soon after creation
-      try { schedulePersistFlush(match.id, data); } catch {}
-    } else {
-      const createData = { id: match.id, ...data };
-      const updateData = { ...data };
-      await prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        update: updateData,
-        create: createData,
-      });
-    }
-  } catch (e) {
-    try { console.warn(`[persist] create session failed for ${match.id}:`, e?.message || e); } catch {}
-  }
-}
-
-async function persistMatchUpdate(match, patch, playerId, ts) {
-  try {
-    const data = matchToSessionUpsertData(match);
-    await cacheSessionToRedis({ ...data, id: match.id });
-    try {
-      metricsInc('persist.update', 1);
-      if (patch) metricsInc('persist.update.withPatch', 1);
-    } catch {}
-    
-    // Force immediate persistence for tournament matches (no write-behind buffer)
-    // Tournament players may reload at any time and need state preserved immediately
-    const isTournament = Boolean(match.tournamentId);
-    const forceImmediate = isTournament;
-    
-    if (PERSIST_IS_WRITE_BEHIND && !forceImmediate) {
-      // Buffer and schedule a batched flush
-      bufferPersistUpdate(match.id, data, patch ? { playerId: playerId || 'system', timestamp: Number(ts || Date.now()), patch } : null);
-    } else {
-      await prisma.$transaction([
-        prisma.onlineMatchSession.upsert({
-          where: { id: match.id },
-          create: { id: match.id, ...data },
-          update: data
-        }),
-        ...(patch ? [prisma.onlineMatchAction.create({ data: { matchId: match.id, playerId: playerId || 'system', timestamp: BigInt(Number(ts || Date.now())), patch } })] : []),
-      ], { maxWait: PERSIST_MAX_WAIT_MS, timeout: PERSIST_TIMEOUT_MS });
-    }
-  } catch (e) {
-    try { console.warn(`[persist] update session failed for ${match.id}:`, e?.message || e); } catch {}
-  }
-}
-
-async function persistMatchEnded(match) {
-  try {
-    const endData = { status: 'ended', winnerId: match.winnerId || null, lastTs: BigInt(Number(match.lastTs || Date.now())) };
-    try { metricsInc('persist.ended', 1); } catch {}
-    if (PERSIST_IS_WRITE_BEHIND) {
-      // Force-flush any buffered updates first, then write the final end state synchronously
-      try { await flushPersistBuffer(match.id, 'match_end'); } catch {}
-      await prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
-        update: endData
-      });
-    } else {
-      await prisma.onlineMatchSession.upsert({
-        where: { id: match.id },
-        create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
-        update: endData
-      });
-    }
-  } catch (e) {
-    try { console.warn(`[persist] end session failed for ${match.id}:`, e?.message || e); } catch {}
-  }
-}
-
-function rehydrateMatch(row) {
-  try {
-    const m = {
-      id: row.id,
-      lobbyId: row.lobbyId || null,
-      lobbyName: row.lobbyName || null,
-      playerIds: Array.isArray(row.playerIds) ? row.playerIds : [],
-      status: row.status,
-      seed: row.seed,
-      turn: row.turn || null,
-      winnerId: row.winnerId || null,
-      matchType: row.matchType || 'constructed',
-      sealedConfig: row.sealedConfig || null,
-      draftConfig: row.draftConfig || null,
-      playerDecks: row.playerDecks ? new Map(Object.entries(row.playerDecks)) : null,
-      sealedPacks: row.sealedPacks || null,
-      draftState: row.draftState || null,
-      game: row.game || {},
-      lastTs: Number(row.lastTs || 0) || 0,
-    };
-    return m;
-  } catch (e) {
-    try { console.warn(`[persist] rehydrate failed for ${row && row.id ? row.id : 'unknown'}:`, e?.message || e); } catch {}
-    return null;
-  }
-}
-
-async function recoverActiveMatches() {
-  try {
-    const rows = await prisma.onlineMatchSession.findMany({
-      where: { status: { in: ['waiting', 'deck_construction', 'in_progress'] } },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
-    });
-    let count = 0;
-    for (const r of rows) {
-      if (matches.has(r.id)) continue;
-      const m = rehydrateMatch(r);
-      if (m) {
-        // Backfill tournament context for recovered matches
-        try { await hydrateMatchFromDatabase(m.id, m); } catch {}
-        matches.set(m.id, m);
-        count++;
-      }
-    }
-    try { console.log(`[persist] recovered ${count} active match(es) from DB`); } catch {}
-  } catch (e) {
-    try { console.warn(`[persist] recover active matches failed:`, e?.message || e); } catch {}
-  }
-}
-
-async function findActiveMatchForPlayer(playerId) {
-  try {
-    const r = await prisma.onlineMatchSession.findFirst({
-      where: {
-        status: { in: ['waiting', 'deck_construction', 'in_progress'] },
-        playerIds: { has: playerId },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-    if (!r) return null;
-    if (matches.has(r.id)) return matches.get(r.id);
-    const m = rehydrateMatch(r);
-    if (m) {
-      // Backfill tournament context if applicable
-      try { await hydrateMatchFromDatabase(m.id, m); } catch {}
-      matches.set(m.id, m);
-    }
-    return m;
-  } catch {
-    return null;
-  }
-}
 
 // Bot manager for headless CPU clients
 // Initialized after lobby feature wiring so it can access shared state
@@ -5196,10 +4934,8 @@ async function shutdown() {
   try { if (subClient) await subClient.quit(); } catch {}
   // Flush any buffered persists before disconnecting from DB
   try {
-    if (PERSIST_IS_WRITE_BEHIND && persistBuffers.size > 0) {
-      for (const matchId of persistBuffers.keys()) {
-        try { await flushPersistBuffer(matchId, 'shutdown'); } catch {}
-      }
+    if (PERSIST_IS_WRITE_BEHIND) {
+      await flushAllPersistenceBuffers('shutdown');
     }
   } catch {}
   try { await prisma.$disconnect(); } catch {}
