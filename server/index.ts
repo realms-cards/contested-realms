@@ -1,5 +1,5 @@
-// @ts-nocheck
 // Simple Socket.IO server for Sorcery online MVP
+// @ts-nocheck
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
 // T019: Import extracted modules
@@ -61,6 +61,8 @@ type PrismaClient = import("@prisma/client").PrismaClient;
 type IncomingMessage = import("http").IncomingMessage;
 type ServerResponse = import("http").ServerResponse;
 type AnyRecord = Record<string, unknown>;
+type Seat = "p1" | "p2";
+type MatchPatch = Record<string, unknown>;
 type PlayersMap = Map<string, PlayerState>;
 type MatchMap = Map<string, ServerMatchState>;
 type VoiceParticipant = {
@@ -78,6 +80,12 @@ type PendingVoiceRequest = {
   lobbyId: string | null;
   matchId: string | null;
   createdAt: number;
+};
+type DraftPresenceEntry = {
+  playerId: string;
+  playerName: string | null;
+  isConnected: boolean;
+  lastActivity: number;
 };
 type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
 
@@ -127,12 +135,18 @@ interface ServerMatchState extends AnyRecord {
   playerIds: string[];
   status: string;
   matchType: string;
+  lobbyId?: string | null;
+  lobbyName?: string | null;
+  roundId?: string | null;
+  draftSessionId?: string | null;
   draftState?: AnyRecord | null;
   draftConfig?: AnyRecord | null;
   playerDecks?: Map<string, unknown> | null;
   sealedPacks?: AnyRecord | null;
-  game?: (AnyRecord & { winner?: "p1" | "p2" | null; matchEnded?: boolean }) | null;
+  game?: (AnyRecord & { winner?: "p1" | "p2" | null; matchEnded?: boolean; results?: unknown }) | null;
   players?: AnyRecord;
+  seed?: string | null;
+  turn?: string | null;
   lastTs?: number;
   tournamentId?: string | null;
   winnerId?: string | null;
@@ -186,13 +200,6 @@ interface MatchRecordingEntry {
   endTime?: number;
   actions: Array<{ patch: unknown; timestamp: number; playerId: string }>;
   initialState?: AnyRecord;
-}
-
-interface DraftPresenceEntry {
-  playerId: string;
-  playerName: string | null;
-  isConnected: boolean;
-  lastActivity: number;
 }
 
 const safeErrorMessage = (err: unknown): unknown => {
@@ -1118,9 +1125,9 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   storeRedis,
   prisma,
   players,
-  getOrLoadMatch,
+  getOrLoadMatch: getOrLoadMatch as unknown as (matchId: string) => Promise<any>,
   ensurePlayerCached,
-  getMatchInfo,
+  getMatchInfo: getMatchInfo as unknown as (match: any) => unknown,
   rid,
   getSeatForPlayer,
   getOpponentSeat: getOpponentSeatStrict,
@@ -1136,9 +1143,12 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   applyPendingAction,
   emitInteraction,
   emitInteractionResult,
-  mergeEvents,
+  mergeEvents: mergeEvents as unknown as (prev: any[], additions: any[]) => any[],
   dedupePermanents,
-  deepMergeReplaceArrays,
+  deepMergeReplaceArrays: deepMergeReplaceArrays as unknown as (
+    target: Record<string, unknown>,
+    source: Record<string, unknown>
+  ) => Record<string, unknown>,
   applyMovementAndCombat,
   applyTurnStart,
   applyGenesis,
@@ -1413,7 +1423,9 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
 
         // FIXED T015/T023: Use standings service for atomic updates
         try {
-          const playersVal = Array.isArray(tMatch.players)
+          const playersVal: Array<{ id?: string; playerId?: string; userId?: string } | null> = Array.isArray(
+            tMatch.players
+          )
             ? tMatch.players
             : [];
           const playerIds = playersVal
@@ -1581,7 +1593,7 @@ function isPlayerConnected(playerId: string): boolean {
 // -----------------------------
 // Distributed match coordination helpers (Redis)
 // -----------------------------
-async function getOrClaimMatchLeader(matchId) {
+async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
   try {
     if (!storeRedis) return INSTANCE_ID; // single-instance fallback
     const key = `match:leader:${matchId}`;
@@ -1604,8 +1616,8 @@ async function getOrClaimMatchLeader(matchId) {
   }
 }
 
-async function getOrLoadMatch(matchId) {
-  if (matches.has(matchId)) return matches.get(matchId);
+async function getOrLoadMatch(matchId: string): Promise<ServerMatchState | null> {
+  if (matches.has(matchId)) return matches.get(matchId) ?? null;
   // Try Redis cache first
   try {
     if (storeRedis) {
@@ -1633,7 +1645,7 @@ async function getOrLoadMatch(matchId) {
       where: { id: matchId },
     });
     if (row) {
-      const m = rehydrateMatch(row);
+      const m = rehydrateMatch(row as AnyRecord);
       if (m) {
         // Backfill tournament context/decks from Match table if available
         try {
@@ -1755,7 +1767,11 @@ async function getOrLoadMatch(matchId) {
 }
 
 // Permanently remove a match if truly empty (no players, no sockets in room)
-async function cleanupMatchNow(matchId, reason, force = false) {
+async function cleanupMatchNow(
+  matchId: string,
+  reason: string | null,
+  force = false
+): Promise<void> {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
 
@@ -1968,16 +1984,19 @@ async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState
 
 // Deep merge that replaces arrays and merges plain objects.
 // Primitives and nulls overwrite. Undefined in patch leaves value as-is.
-function deepMergeReplaceArrays(base, patch) {
+function deepMergeReplaceArrays(base: unknown, patch: unknown): unknown {
   if (patch === undefined) return base;
   if (patch === null) return null;
   if (Array.isArray(patch)) return patch; // replace arrays fully
   if (typeof patch !== "object") return patch; // primitives overwrite
 
   const baseObj =
-    base && typeof base === "object" && !Array.isArray(base) ? base : {};
-  const out = { ...baseObj };
-  for (const [k, v] of Object.entries(patch)) {
+    base && typeof base === "object" && !Array.isArray(base)
+      ? (base as Record<string, unknown>)
+      : {};
+  const sourceObj = patch as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...baseObj };
+  for (const [k, v] of Object.entries(sourceObj)) {
     const cur = out[k];
     out[k] = deepMergeReplaceArrays(cur, v);
   }
@@ -1986,13 +2005,13 @@ function deepMergeReplaceArrays(base, patch) {
 
 // Normalize permanents arrays without dropping duplicates across the board.
 // Trust client/server sync to resolve identity; allow multiple copies of same cardId.
-function dedupePermanents(per) {
+function dedupePermanents(per: unknown): unknown {
   try {
     if (!per || typeof per !== "object") return per;
-    const out = {};
-    for (const [cell, arrAny] of Object.entries(per)) {
+    const out: Record<string, unknown[]> = {};
+    for (const [cell, arrAny] of Object.entries(per as Record<string, unknown>)) {
       const arr = Array.isArray(arrAny) ? arrAny : [];
-      const next = [];
+      const next: unknown[] = [];
       for (const item of arr) {
         if (!item || typeof item !== "object") continue;
         next.push(item);
@@ -2008,8 +2027,11 @@ function dedupePermanents(per) {
 // Cap for multiplayer console events to avoid unbounded growth
 const MAX_EVENTS = 200;
 // Merge console events by stable key and chronological order, trimming to MAX_EVENTS.
-function mergeEvents(prev, add) {
-  const m = new Map();
+function mergeEvents(
+  prev: Array<Record<string, unknown>> | undefined,
+  add: Array<Record<string, unknown>> | undefined
+): Array<Record<string, unknown>> {
+  const m = new Map<string, Record<string, unknown>>();
   if (Array.isArray(prev)) {
     for (const e of prev) {
       if (!e) continue;
@@ -2022,9 +2044,18 @@ function mergeEvents(prev, add) {
       m.set(`${e.id}|${e.ts}|${e.text}`, e);
     }
   }
-  const merged = Array.from(m.values()).sort(
-    (a, b) => a.ts - b.ts || a.id - b.id
-  );
+  const merged = Array.from(m.values()).sort((a, b) => {
+    const tsRawA = a.ts as number | string | undefined;
+    const tsRawB = b.ts as number | string | undefined;
+    const tsA = typeof tsRawA === "number" ? tsRawA : Number(tsRawA ?? 0);
+    const tsB = typeof tsRawB === "number" ? tsRawB : Number(tsRawB ?? 0);
+    if (tsA !== tsB) return tsA - tsB;
+    const idRawA = a.id as number | string | undefined;
+    const idRawB = b.id as number | string | undefined;
+    const idA = typeof idRawA === "number" ? idRawA : Number(idRawA ?? 0);
+    const idB = typeof idRawB === "number" ? idRawB : Number(idRawB ?? 0);
+    return idA - idB;
+  });
   return merged.length > MAX_EVENTS ? merged.slice(-MAX_EVENTS) : merged;
 }
 
@@ -2103,7 +2134,7 @@ const REQUIRE_JWT = Boolean(
 );
 
 // Enforce NextAuth-signed JWT at connect time
-io.use((socket, next) => {
+io.use((socket: SocketClient, next: (err?: Error) => void) => {
   try {
     const token =
       (socket.handshake &&
@@ -2146,11 +2177,11 @@ io.use((socket, next) => {
   }
 });
 
-io.on("connection", async (socket) => {
+io.on("connection", async (socket: SocketClient) => {
   let authed = false;
   let authUser = null;
   // Track current draft session room for this socket (if any)
-  let currentDraftSessionId = null;
+  let currentDraftSessionId: string | null = null;
   container.applyConnectionHandlers({
     socket,
     isAuthed: () => authed,
