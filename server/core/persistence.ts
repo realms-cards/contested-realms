@@ -468,6 +468,7 @@ const createPersistenceLayerInternal = ({
     persistMatchEnded,
     recoverActiveMatches,
     findActiveMatchForPlayer,
+    rehydrateMatch,
     getBufferStats,
     flushAll,
   };

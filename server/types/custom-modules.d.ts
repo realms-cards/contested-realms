@@ -52,6 +52,18 @@ declare module "./modules/draft/match" {
     updateDraftPresence(sessionId: string, playerId: string, playerName: string | null, isConnected: boolean): Promise<
       DraftPresenceEntry[]
     >;
+    getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
+    leaderDraftPlayerReady(matchId: string, playerId: string, ready: boolean): Promise<void>;
+    leaderStartDraft(
+      matchId: string,
+      requestingPlayerId?: string | null,
+      overrideConfig?: AnyRecord | null,
+      requestingSocketId?: string | null
+    ): Promise<void>;
+    leaderMakeDraftPick(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
+    leaderChooseDraftPack(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
+    clearDraftWatchdog(matchId: string): void;
+    repairDraftInvariants(match: AnyRecord): void;
   };
 }
 

@@ -13,31 +13,30 @@ const {
   INTERACTION_ENFORCEMENT_ENABLED,
   INTERACTION_REQUEST_KINDS,
   INTERACTION_DECISIONS,
-} = require("./modules/interactions");
-const {
-  tournament: tournamentModules,
-  draft: draftModules,
-  replay,
-} = require("./modules");
+} = require("./modules/interactions") as typeof import("./modules/interactions");
+const modules = require("./modules") as typeof import("./modules");
+const tournamentModules = modules.tournament;
+const draftModules = modules.draft;
+const { replay } = modules;
 const tournamentBroadcast = tournamentModules.broadcast;
 // T021: Import draft config service
-const draftConfig = draftModules.config;
-const { createMatchDraftService } = draftModules;
-const { createMatchLeaderService } = require('./modules/match-leader');
+const draftConfig = modules.draft.config;
+const { createMatchDraftService } = modules.draft;
+const { createMatchLeaderService } = require("./modules/match-leader") as typeof import("./modules/match-leader");
 // T023: Import standings service
-const standingsService = tournamentModules.standings;
-const { enrichPatchWithCosts } = require("./modules/card-costs");
+const standingsService = modules.tournament.standings;
+const { enrichPatchWithCosts } = require("./modules/card-costs") as typeof import("./modules/card-costs");
 const {
   getSeatForPlayer,
   getPlayerIdForSeat,
-  getOpponentSeat,
+  getOpponentSeat: getOpponentSeatRaw,
   inferLoserId,
-} = require("./modules/match-utils");
+} = require("./modules/match-utils") as typeof import("./modules/match-utils");
 const {
   normalizeDeckPayload,
   validateDeckCards,
-} = require("./modules/deck-utils");
-const { createLeaderboardService } = require("./modules/leaderboard");
+} = require("./modules/deck-utils") as typeof import("./modules/deck-utils");
+const { createLeaderboardService } = require("./modules/leaderboard") as typeof import("./modules/leaderboard");
 
 const jwt = require("jsonwebtoken");
 const {
@@ -54,6 +53,157 @@ const {
 } = require("./rules");
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 const { buildMatchInfo } = require("./matchInfo");
+
+type SocketServer = import("socket.io").Server;
+type SocketClient = import("socket.io").Socket;
+type RedisClient = import("ioredis").Redis;
+type PrismaClient = import("@prisma/client").PrismaClient;
+type IncomingMessage = import("http").IncomingMessage;
+type ServerResponse = import("http").ServerResponse;
+type AnyRecord = Record<string, unknown>;
+type PlayersMap = Map<string, PlayerState>;
+type MatchMap = Map<string, ServerMatchState>;
+type VoiceParticipant = {
+  id: string;
+  displayName: string | null;
+  lobbyId: string | null;
+  matchId: string | null;
+  roomId: string | null;
+  joinedAt: number;
+};
+type PendingVoiceRequest = {
+  id: string;
+  from: string;
+  to: string;
+  lobbyId: string | null;
+  matchId: string | null;
+  createdAt: number;
+};
+type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
+
+interface MatchDraftService {
+  leaderDraftPlayerReady(matchId: string, playerId: string, ready: boolean): Promise<void>;
+  leaderStartDraft(
+    matchId: string,
+    requestingPlayerId?: string | null,
+    overrideConfig?: AnyRecord | null,
+    requestingSocketId?: string | null
+  ): Promise<void>;
+  leaderMakeDraftPick(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
+  leaderChooseDraftPack(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
+  updateDraftPresence(
+    sessionId: string,
+    playerId: string,
+    playerName: string | null,
+    isConnected: boolean
+  ): Promise<DraftPresenceEntry[]>;
+  getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
+  clearDraftWatchdog(matchId: string): void;
+}
+const getOpponentSeat = (seat: Seat | null | undefined): Seat | null =>
+  seat ? (getOpponentSeatRaw(seat) as Seat | null) : null;
+const getOpponentSeatStrict = (seat: Seat): Seat => {
+  const result = getOpponentSeatRaw(seat);
+  return result === "p1" || result === "p2" ? result : seat === "p1" ? "p2" : "p1";
+};
+const enrichPatchWithCostsSafe = async (
+  patch: MatchPatch | null,
+  prismaClient: PrismaClient
+): Promise<MatchPatch | null> => {
+  if (!patch) return null;
+  return (await enrichPatchWithCosts(patch, prismaClient)) as MatchPatch;
+};
+
+interface PlayerState {
+  id: string;
+  displayName: string;
+  socketId: string | null;
+  lobbyId?: string | null;
+  matchId?: string | null;
+}
+
+interface ServerMatchState extends AnyRecord {
+  id: string;
+  playerIds: string[];
+  status: string;
+  matchType: string;
+  draftState?: AnyRecord | null;
+  draftConfig?: AnyRecord | null;
+  playerDecks?: Map<string, unknown> | null;
+  sealedPacks?: AnyRecord | null;
+  game?: (AnyRecord & { winner?: "p1" | "p2" | null; matchEnded?: boolean }) | null;
+  players?: AnyRecord;
+  lastTs?: number;
+  tournamentId?: string | null;
+  winnerId?: string | null;
+  loserId?: string | null;
+  _finalized?: boolean;
+  _cleanupTimer?: NodeJS.Timeout | null;
+}
+
+interface LobbyState extends AnyRecord {
+  id: string;
+  name: string | null;
+  hostId: string | null;
+  playerIds: Set<string>;
+  status: string;
+  maxPlayers: number;
+  ready: Set<string>;
+  visibility: "open" | "private";
+  plannedMatchType?: string | null;
+  lastActive: number;
+}
+
+interface MetricsSnapshot extends AnyRecord {
+  time: number;
+  uptimeSec: number;
+  matchesCached: number;
+  persistBuffers: number;
+  bufferedActions: number;
+  socketsConnected: number;
+  dbReady: boolean;
+  redisAdapterStatus: string | undefined;
+  storeRedisStatus: string | undefined;
+  memory: {
+    rss: number;
+    heapUsed: number;
+    heapTotal: number;
+    external: number;
+  };
+  counters: Record<string, number>;
+  hist: Record<string, { sum: number; count: number; avg: number }>;
+}
+
+interface MetricsRegistry {
+  counters: Map<string, number>;
+  hist: Map<string, { sum: number; count: number }>;
+}
+
+interface MatchRecordingEntry {
+  matchId: string;
+  playerNames: string[];
+  startTime: number;
+  endTime?: number;
+  actions: Array<{ patch: unknown; timestamp: number; playerId: string }>;
+  initialState?: AnyRecord;
+}
+
+interface DraftPresenceEntry {
+  playerId: string;
+  playerName: string | null;
+  isConnected: boolean;
+  lastActivity: number;
+}
+
+const safeErrorMessage = (err: unknown): unknown => {
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === "string") {
+      return msg;
+    }
+  }
+  return err;
+};
 
 const bootstrap = createBootstrap();
 const {
@@ -108,41 +258,45 @@ const REDIS_SESSION_TTL_SEC = Number(
 );
 
 // Simple in-memory metrics registry (process lifetime)
-const METRICS = {
-  counters: new Map(), // key -> number
-  hist: new Map(), // key -> { sum:number, count:number }
+const METRICS: MetricsRegistry = {
+  counters: new Map<string, number>(),
+  hist: new Map<string, { sum: number; count: number }>(),
 };
-function metricsInc(key, delta = 1) {
+function metricsInc(key: string, delta = 1): void {
   METRICS.counters.set(key, (METRICS.counters.get(key) || 0) + delta);
 }
-function metricsGet(key) {
+function metricsGet(key: string): number {
   return METRICS.counters.get(key) || 0;
 }
-function metricsObserveMs(key, ms) {
+function metricsObserveMs(key: string, ms: number): void {
   const cur = METRICS.hist.get(key) || { sum: 0, count: 0 };
   cur.sum += ms;
   cur.count += 1;
   METRICS.hist.set(key, cur);
 }
 
-function promSafe(name) {
+function promSafe(name: string): string {
   return String(name).replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
-let getPersistenceBufferStats = () => ({ bufferCount: 0, bufferedActions: 0 });
-let flushAllPersistenceBuffers = async () => {};
+let getPersistenceBufferStats: () => { bufferCount: number; bufferedActions: number } = () => ({
+  bufferCount: 0,
+  bufferedActions: 0,
+});
+let flushAllPersistenceBuffers: (reason?: string) => Promise<void> = async () => {};
 
-function collectMetricsSnapshot() {
+function collectMetricsSnapshot(): MetricsSnapshot {
   const now = Date.now();
-  const counters = {};
+  const counters: Record<string, number> = {};
   for (const [k, v] of METRICS.counters.entries()) counters[k] = v;
-  const hist = {};
-  for (const [k, v] of METRICS.hist.entries())
+  const hist: MetricsSnapshot["hist"] = {};
+  for (const [k, v] of METRICS.hist.entries()) {
     hist[k] = {
       sum: v.sum,
       count: v.count,
       avg: v.count > 0 ? v.sum / v.count : 0,
     };
+  }
   const sockets = (() => {
     try {
       return io.of("/").sockets.size;
@@ -173,22 +327,22 @@ function collectMetricsSnapshot() {
   };
 }
 
-function buildPromMetrics() {
+function buildPromMetrics(): string {
   const snap = collectMetricsSnapshot();
-  const lines = [];
-  const pushGauge = (name, value, help) => {
+  const lines: string[] = [];
+  const pushGauge = (name: string, value: unknown, help?: string) => {
     const n = `sorcery_${promSafe(name)}`;
     if (help) lines.push(`# HELP ${n} ${help}`);
     lines.push(`# TYPE ${n} gauge`);
     lines.push(`${n} ${Number(value)}`);
   };
-  const pushCounter = (name, value, help) => {
+  const pushCounter = (name: string, value: unknown, help?: string) => {
     const n = `sorcery_${promSafe(name)}_total`;
     if (help) lines.push(`# HELP ${n} ${help}`);
     lines.push(`# TYPE ${n} counter`);
     lines.push(`${n} ${Number(value)}`);
   };
-  const pushSummary = (name, sum, count, help) => {
+  const pushSummary = (name: string, sum: unknown, count: unknown, help?: string) => {
     const base = `sorcery_${promSafe(name)}`;
     if (help) lines.push(`# HELP ${base} ${help}`);
     lines.push(`# TYPE ${base} summary`);
@@ -251,7 +405,7 @@ function buildPromMetrics() {
     }
   } catch (e) {
     try {
-      console.warn("[tourney] engine init failed:", e?.message || e);
+      console.warn("[tourney] engine init failed:", safeErrorMessage(e));
     } catch {}
   }
 })();
@@ -273,43 +427,43 @@ const LOBBY_STATE_CHANNEL = "lobby:state";
 let clusterStateReady = false; // flip after maps are initialized
 if (storeSub) {
   try {
-    storeSub.subscribe(MATCH_CONTROL_CHANNEL, (err) => {
+    storeSub.subscribe(MATCH_CONTROL_CHANNEL, (err: Error | null) => {
       if (err)
         try {
           console.warn(
             `[store] subscribe ${MATCH_CONTROL_CHANNEL} failed:`,
-            err?.message || err
+            safeErrorMessage(err)
           );
         } catch {}
     });
-    storeSub.subscribe(LOBBY_CONTROL_CHANNEL, (err) => {
+    storeSub.subscribe(LOBBY_CONTROL_CHANNEL, (err: Error | null) => {
       if (err)
         try {
           console.warn(
             `[store] subscribe ${LOBBY_CONTROL_CHANNEL} failed:`,
-            err?.message || err
+            safeErrorMessage(err)
           );
         } catch {}
     });
-    storeSub.subscribe(LOBBY_STATE_CHANNEL, (err) => {
+    storeSub.subscribe(LOBBY_STATE_CHANNEL, (err: Error | null) => {
       if (err)
         try {
           console.warn(
             `[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`,
-            err?.message || err
+            safeErrorMessage(err)
           );
         } catch {}
     });
-    storeSub.subscribe(DRAFT_STATE_CHANNEL, (err) => {
+    storeSub.subscribe(DRAFT_STATE_CHANNEL, (err: Error | null) => {
       if (err)
         try {
           console.warn(
             `[store] subscribe ${DRAFT_STATE_CHANNEL} failed:`,
-            err?.message || err
+            safeErrorMessage(err)
           );
         } catch {}
     });
-    storeSub.on("message", async (channel, message) => {
+    storeSub.on("message", async (channel: string, message: string) => {
       if (!clusterStateReady) return;
       let msg = null;
       try {
@@ -342,15 +496,13 @@ if (storeSub) {
             await leaderHandleInteractionRequest(
               matchId,
               msg.playerId,
-              msg.payload || null,
-              msg.socketId || null
+              msg.payload || null
             );
           } else if (msg.type === "interaction:response" && msg.playerId) {
             await leaderHandleInteractionResponse(
               matchId,
               msg.playerId,
-              msg.payload || null,
-              msg.socketId || null
+              msg.payload || null
             );
           } else if (
             msg.type === "draft:playerReady" &&
@@ -396,7 +548,7 @@ if (storeSub) {
           }
         } catch (e) {
           try {
-            console.warn("[match:control] handler error:", e?.message || e);
+            console.warn("[match:control] handler error:", safeErrorMessage(e));
           } catch {}
         }
         return;
@@ -414,7 +566,7 @@ if (storeSub) {
           io.to(`draft:${sessionId}`).emit("draftUpdate", draftState);
         } catch (e) {
           try {
-            console.warn("[draft] failed to forward state:", e?.message || e);
+            console.warn("[draft] failed to forward state:", safeErrorMessage(e));
           } catch {}
         }
         return;
@@ -431,7 +583,7 @@ if (storeSub) {
           await handleLobbyControlAsLeader(msg);
         } catch (e) {
           try {
-            console.warn("[lobby:control] handler error:", e?.message || e);
+            console.warn("[lobby:control] handler error:", safeErrorMessage(e));
           } catch {}
         }
         return;
@@ -454,11 +606,11 @@ if (storeSub) {
 }
 
 // Basic health endpoints (liveness/readiness) and lightweight HTTP API
-server.on("request", async (req, res) => {
+server.on("request", async (req: IncomingMessage, res: ServerResponse) => {
   try {
     // Helper: dynamic CORS based on SOCKET_CORS_ORIGIN
     const reqOrigin = (req && req.headers && req.headers.origin) || null;
-    const allowCors = () => {
+    const allowCors = (): void => {
       if (
         reqOrigin &&
         (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))
@@ -468,7 +620,7 @@ server.on("request", async (req, res) => {
       }
       res.setHeader("Access-Control-Allow-Credentials", "true");
     };
-    const allowCorsForOptions = () => {
+    const allowCorsForOptions = (): void => {
       allowCors();
       res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
       res.setHeader(
@@ -596,7 +748,7 @@ server.on("request", async (req, res) => {
 
       // Filter out hidden presence via DB, and fetch shortId/avatar
       const ids = candidates.map((c) => c.id);
-      let publicUsers = [];
+      let publicUsers: Array<{ id: string; shortId: string | null; image: string | null }> = [];
       if (ids.length > 0) {
         publicUsers = await prisma.user.findMany({
           where: { id: { in: ids }, presenceHidden: false },
@@ -607,7 +759,7 @@ server.on("request", async (req, res) => {
       const visible = candidates.filter((c) => publicMap.has(c.id));
 
       // Friendship flags (relative to requester)
-      let friendSet = new Set();
+      let friendSet: Set<string> = new Set();
       if (requesterId && visible.length > 0) {
         const fr = await prisma.friendship.findMany({
           where: {
@@ -616,20 +768,20 @@ server.on("request", async (req, res) => {
           },
           select: { targetUserId: true },
         });
-        friendSet = new Set(fr.map((r) => r.targetUserId));
+        friendSet = new Set(fr.map((r: { targetUserId: string }) => r.targetUserId));
       }
 
       // Recent opponents (last 10 results) for prioritization when applicable
-      const freq = new Map();
-      const lastAt = new Map();
+      const freq = new Map<string, number>();
+      const lastAt = new Map<string, number>();
       if (requesterId && sort === "recent") {
-        const recent = await prisma.matchResult.findMany({
+        const recent = (await prisma.matchResult.findMany({
           where: { OR: [{ winnerId: requesterId }, { loserId: requesterId }] },
           orderBy: { completedAt: "desc" },
           take: 10,
-        });
+        })) as Array<Record<string, any>>;
         for (const r of recent) {
-          let oppIds = [];
+          let oppIds: string[] = [];
           try {
             const arr = Array.isArray(r.players)
               ? r.players
@@ -664,16 +816,16 @@ server.on("request", async (req, res) => {
 
       // Compose items
       const items = visible.map((c) => {
-        const u = publicMap.get(c.id) || {};
-        const mcount = freq.has(c.id) ? freq.get(c.id) : null;
+        const u = publicMap.get(c.id);
+        const mcount = freq.has(c.id) ? freq.get(c.id) || null : null;
         const lpa = lastAt.has(c.id)
-          ? new Date(lastAt.get(c.id)).toISOString()
+          ? new Date(lastAt.get(c.id) || 0).toISOString()
           : null;
         return {
           userId: c.id,
-          shortUserId: u.shortId || String(c.id).slice(-8),
+          shortUserId: u?.shortId || String(c.id).slice(-8),
           displayName: c.displayName,
-          avatarUrl: u.image || null,
+          avatarUrl: u?.image || null,
           presence: { online: true, inMatch: false },
           isFriend: requesterId ? friendSet.has(c.id) : false,
           lastPlayedAt: lpa,
@@ -682,14 +834,17 @@ server.on("request", async (req, res) => {
       });
 
       // Sort
-      const alphaSort = (a, b) => {
+      const alphaSort = (
+        a: { displayName?: string | null; userId: string },
+        b: { displayName?: string | null; userId: string }
+      ): number => {
         const an = (a.displayName || "").toLowerCase();
         const bn = (b.displayName || "").toLowerCase();
         if (an < bn) return -1;
         if (an > bn) return 1;
         return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
       };
-      let ordered = items;
+      let ordered = items.slice();
       if (sort === "recent" && requesterId) {
         const groupA = items.filter(
           (it) =>
@@ -728,8 +883,8 @@ server.on("request", async (req, res) => {
       allowCors();
 
       // Collect request body
-      const chunks = [];
-      req.on("data", (chunk) => chunks.push(chunk));
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
       req.on("end", () => {
         try {
           const body = Buffer.concat(chunks).toString();
@@ -826,16 +981,19 @@ server.on("request", async (req, res) => {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true }));
         } catch (err) {
-          console.error("[Tournament] Broadcast error:", err);
+          console.error("[Tournament] Broadcast error:", safeErrorMessage(err));
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(
-            JSON.stringify({ error: "Invalid request", details: err.message })
+            JSON.stringify({
+              error: "Invalid request",
+              details: String(safeErrorMessage(err)),
+            })
           );
         }
       });
 
-      req.on("error", (err) => {
-        console.error("[Tournament] Request error:", err);
+      req.on("error", (err: Error) => {
+        console.error("[Tournament] Request error:", safeErrorMessage(err));
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Server error" }));
       });
@@ -852,7 +1010,7 @@ server.on("request", async (req, res) => {
       res.end(
         JSON.stringify({
           error: "internal_error",
-          message: e && e.message ? e.message : String(e),
+          message: String(safeErrorMessage(e)),
         })
       );
     } catch {}
@@ -862,19 +1020,13 @@ server.on("request", async (req, res) => {
 // In-memory state
 // Players keyed by stable playerId (not socket id)
 /** @type {Map<string, { id: string, displayName: string, socketId: string|null, lobbyId?: string|null, matchId?: string|null }>} */
-const players = new Map();
-/** @type {Map<string, string>} socket.id -> playerId */
-const playerIdBySocket = new Map();
-/** @type {Map<string, { id: string, lobbyId?: string|null, playerIds: string[], status: 'waiting'|'deck_construction'|'in_progress'|'ended', seed: string, turn?: string, winnerId?: string|null, matchType?: 'constructed'|'sealed', sealedConfig?: { packCount: number, setMix: string[], timeLimit: number, constructionStartTime?: number, packCounts?: Record<string, number>, replaceAvatars?: boolean }, playerDecks?: Map<string, any>, sealedPacks?: Record<string, Array<{ id: string, set: string, cards: Array<{ id: string, name: string, set: string, slug: string, type?: string|null, cost?: number|null, rarity: string }> }>> }>} */
-const matches = new Map();
-/** @type {Map<string, { matchId: string, playerNames: string[], startTime: number, endTime?: number, initialState?: any, actions: Array<{ patch: any, timestamp: number, playerId: string }> }>} */
-const matchRecordings = new Map();
-/** @type {Map<string, Set<string>>} voiceRoomId -> set of playerIds participating in WebRTC */
-const rtcParticipants = new Map();
-/** @type {Map<string, { id: string, displayName: string, lobbyId: string|null, matchId: string|null, roomId: string, joinedAt: number }>} playerId -> participant details */
-const participantDetails = new Map();
-/** @type {Map<string, { id: string, from: string, to: string, lobbyId: string|null, matchId: string|null, createdAt: number }>} */
-const pendingVoiceRequests = new Map();
+const players: PlayersMap = new Map();
+const playerIdBySocket: Map<string, string> = new Map();
+const matches: MatchMap = new Map();
+const matchRecordings: Map<string, MatchRecordingEntry> = new Map();
+const rtcParticipants: Map<string, Set<string>> = new Map();
+const participantDetails: Map<string, VoiceParticipant> = new Map();
+const pendingVoiceRequests: Map<string, PendingVoiceRequest> = new Map();
 
 const leaderboardService = createLeaderboardService({
   prisma,
@@ -907,6 +1059,7 @@ const {
   persistMatchEnded,
   recoverActiveMatches,
   findActiveMatchForPlayer,
+  rehydrateMatch,
   getBufferStats,
   flushAll,
 } = persistence;
@@ -926,7 +1079,7 @@ const matchDraftService = createMatchDraftService({
   createRngFromString,
   generateBoosterDeterministic,
   generateCubeBoosterDeterministic,
-});
+}) as MatchDraftService;
 
 const {
   leaderDraftPlayerReady,
@@ -953,14 +1106,14 @@ const {
 } = createInteractionModule({
   io,
   rid,
-  enrichPatchWithCosts,
+  enrichPatchWithCosts: enrichPatchWithCostsSafe,
   deepMergeReplaceArrays,
   finalizeMatch,
   persistMatchUpdate,
   prisma,
 });
 
-const matchLeaderService = createMatchLeaderService({
+const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   io,
   storeRedis,
   prisma,
@@ -970,7 +1123,7 @@ const matchLeaderService = createMatchLeaderService({
   getMatchInfo,
   rid,
   getSeatForPlayer,
-  getOpponentSeat,
+  getOpponentSeat: getOpponentSeatStrict,
   ensureInteractionState,
   purgeExpiredGrants,
   collectInteractionRequirements,
@@ -990,10 +1143,10 @@ const matchLeaderService = createMatchLeaderService({
   applyTurnStart,
   applyGenesis,
   applyKeywordAnnotations,
-  enrichPatchWithCosts,
+  enrichPatchWithCosts: enrichPatchWithCostsSafe,
   recordMatchAction,
   persistMatchUpdate,
-  finalizeMatch,
+  finalizeMatch: finalizeMatch as unknown as (match: unknown, options: Record<string, unknown>) => Promise<void>,
   rulesEnforceMode: RULES_ENFORCE_MODE,
   interactionEnforcementEnabled: INTERACTION_ENFORCEMENT_ENABLED,
   interactionKinds: INTERACTION_REQUEST_KINDS,
@@ -1022,7 +1175,7 @@ function loadBotClientCtor() {
     return mod && mod.BotClient ? mod.BotClient : null;
   } catch (e) {
     try {
-      console.warn("[Bot] BotClient module unavailable:", e?.message || e);
+      console.warn("[Bot] BotClient module unavailable:", safeErrorMessage(e));
     } catch {}
     return null;
   }
@@ -1092,7 +1245,7 @@ const {
   broadcastStatisticsUpdate,
 } = tournamentFeature;
 
-container.initialize().catch((err) => {
+container.initialize().catch((err: unknown) => {
   try {
     console.error(
       "[container] Initialization failed:",
@@ -1103,7 +1256,7 @@ container.initialize().catch((err) => {
   }
 });
 
-function getVoiceRoomIdForPlayer(player) {
+function getVoiceRoomIdForPlayer(player: PlayerState | null | undefined): string | null {
   if (!player) return null;
   if (player.lobbyId) return `lobby:${player.lobbyId}`;
   if (player.matchId) return `match:${player.matchId}`;
@@ -1127,12 +1280,12 @@ setBotManager(botManager);
 // -----------------------------
 // Helpers: CPU detection & cleanup
 // -----------------------------
-function isCpuPlayerId(id) {
+function isCpuPlayerId(id: string | null | undefined): boolean {
   return typeof id === "string" && id.startsWith("cpu_");
 }
 
 // Returns true if there is at least one non-CPU (human) player in the lobby
-function lobbyHasHumanPlayers(lobby) {
+function lobbyHasHumanPlayers(lobby: LobbyState | null | undefined): boolean {
   if (!lobby || !lobby.playerIds || lobby.playerIds.size === 0) return false;
   for (const pid of lobby.playerIds) {
     if (!isCpuPlayerId(pid)) return true;
@@ -1141,7 +1294,7 @@ function lobbyHasHumanPlayers(lobby) {
 }
 
 // Returns true if there is at least one non-CPU (human) player in the match
-function matchHasHumanPlayers(match) {
+function matchHasHumanPlayers(match: ServerMatchState | null | undefined): boolean {
   if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0)
     return false;
   for (const pid of match.playerIds) {
@@ -1150,7 +1303,7 @@ function matchHasHumanPlayers(match) {
   return false;
 }
 
-async function finalizeMatch(match, options = {}) {
+async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): Promise<void> {
   if (!match) return;
   if (match._finalized) {
     if (!match.winnerId && typeof options?.winnerId === "string") {
@@ -1172,7 +1325,7 @@ async function finalizeMatch(match, options = {}) {
     loserSeatOption === "p1" || loserSeatOption === "p2"
       ? loserSeatOption
       : winnerSeat
-      ? getOpponentSeat(winnerSeat)
+      ? getOpponentSeatStrict(winnerSeat)
       : null;
 
   let winnerId =
@@ -1264,7 +1417,7 @@ async function finalizeMatch(match, options = {}) {
             ? tMatch.players
             : [];
           const playerIds = playersVal
-            .map((p) => {
+            .map((p: { id?: string; playerId?: string; userId?: string } | null) => {
               if (p && typeof p === "object") {
                 const id = p.id || p.playerId || p.userId;
                 return typeof id === "string" ? id : null;
@@ -1354,7 +1507,7 @@ async function finalizeMatch(match, options = {}) {
     try {
       console.warn(
         "[tournament] failed to record result into rounds:",
-        err?.message || err
+        safeErrorMessage(err)
       );
     } catch {}
   }
@@ -1365,13 +1518,15 @@ async function finalizeMatch(match, options = {}) {
 // -----------------------------
 // Helpers: deck normalization & validation
 // -----------------------------
-function rid(prefix) {
+function rid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now()
     .toString(36)
     .slice(-4)}`;
 }
 
-function getPlayerInfo(playerId, seat = null) {
+function getPlayerInfo(playerId: string, seat: Seat | null = null):
+  | { id: string; displayName: string; seat: Seat | null }
+  | null {
   const p = players.get(playerId);
   if (!p) return null;
   let seatValue = null;
@@ -1381,20 +1536,21 @@ function getPlayerInfo(playerId, seat = null) {
   return { id: p.id, displayName: p.displayName, seat: seatValue };
 }
 
-function getPlayerBySocket(socket) {
+function getPlayerBySocket(socket: SocketClient | null | undefined): PlayerState | null {
   const pid = playerIdBySocket.get(socket.id);
   if (!pid) return null;
   return players.get(pid) || null;
 }
 
 // Ensure basic player profile is cached locally; fetch displayName from Redis if needed
-async function ensurePlayerCached(playerId) {
-  if (players.has(playerId)) return players.get(playerId);
+async function ensurePlayerCached(playerId: string): Promise<PlayerState> {
+  const cached = players.get(playerId);
+  if (cached) return cached;
   try {
     const dn = storeRedis
       ? await storeRedis.hget(`player:${playerId}`, "displayName")
       : null;
-    const p = {
+    const p: PlayerState = {
       id: playerId,
       displayName: dn || `Player ${String(playerId).slice(-4)}`,
       socketId: null,
@@ -1404,7 +1560,7 @@ async function ensurePlayerCached(playerId) {
     players.set(playerId, p);
     return p;
   } catch {
-    const p = {
+    const p: PlayerState = {
       id: playerId,
       displayName: `Player ${String(playerId).slice(-4)}`,
       socketId: null,
@@ -1416,7 +1572,7 @@ async function ensurePlayerCached(playerId) {
   }
 }
 
-function isPlayerConnected(playerId) {
+function isPlayerConnected(playerId: string): boolean {
   const p = players.get(playerId);
   if (!p || !p.socketId) return false;
   return !!io.sockets.sockets.get(p.socketId);
@@ -1496,34 +1652,30 @@ async function getOrLoadMatch(matchId) {
     });
     if (t) {
       // Extract playerIds from flexible tournament match players JSON
-      const playersJson = t.players;
-      /** @type {string[]} */
-      let playerIds = [];
+      const playersJson = t.players as unknown;
+      let playerIds: string[] = [];
       try {
-        /** @type {any[]} */
-        let arr = [];
+        let arr: unknown[] = [];
         if (Array.isArray(playersJson)) {
           arr = playersJson;
         } else if (playersJson && typeof playersJson === "object") {
-          if (Array.isArray(playersJson.playerIds)) arr = playersJson.playerIds;
-          else if (Array.isArray(playersJson.players))
-            arr = playersJson.players;
-          else arr = [];
+          const json = playersJson as Record<string, unknown>;
+          if (Array.isArray(json.playerIds)) arr = json.playerIds;
+          else if (Array.isArray(json.players)) arr = json.players as unknown[];
         }
-        playerIds = Array.from(
-          new Set(
-            arr
-              .map((it) => {
-                if (typeof it === "string") return it;
-                if (it && typeof it === "object") {
-                  const v = it.id ?? it.playerId ?? it.userId;
-                  return v ? String(v) : null;
-                }
-                return null;
-              })
-              .filter(Boolean)
-          )
-        );
+        const normalized = arr
+          .map((it) => {
+            if (typeof it === "string") return it;
+            if (it && typeof it === "object") {
+              const value = (it as Record<string, unknown>).id ??
+                (it as Record<string, unknown>).playerId ??
+                (it as Record<string, unknown>).userId;
+              return typeof value === "string" ? value : value != null ? String(value) : null;
+            }
+            return null;
+          })
+          .filter((value): value is string => typeof value === "string");
+        playerIds = Array.from(new Set(normalized));
       } catch {}
 
       // Map tournament format/status to session matchType/status
@@ -1680,7 +1832,7 @@ async function cleanupMatchNow(matchId, reason, force = false) {
 
 
 // Handle per-player mulligan completion as the cluster leader
-function getMatchInfo(match) {
+function getMatchInfo(match: ServerMatchState): AnyRecord {
   const playerIds = Array.isArray(match.playerIds) ? match.playerIds : [];
   const playersWithSeat = playerIds
     .map((playerId, index) => {
@@ -1719,7 +1871,7 @@ function getMatchInfo(match) {
   };
 }
 
-async function hydrateMatchFromDatabase(matchId, match) {
+async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState): Promise<void> {
   console.log("[hydrateMatchFromDatabase] Called for match:", {
     matchId,
     matchType: match.matchType,
@@ -1800,7 +1952,7 @@ async function hydrateMatchFromDatabase(matchId, match) {
       } catch (err) {
         console.warn(
           "[Tournament Draft] Failed to load DraftSession:",
-          err?.message || err
+          safeErrorMessage(err)
         );
       }
     }
@@ -1808,7 +1960,7 @@ async function hydrateMatchFromDatabase(matchId, match) {
     try {
       console.warn(
         `[Tournament] Failed to hydrate match ${matchId} from database:`,
-        err?.message || err
+        safeErrorMessage(err)
       );
     } catch {}
   }
@@ -1881,40 +2033,43 @@ function broadcastPlayers() {
   io.emit("playerList", { players: playersArray() });
 }
 
-function startMatchRecording(match) {
+function startMatchRecording(match: ServerMatchState): void {
   const playerNames = match.playerIds.map((pid) => {
     const p = players.get(pid);
     return p ? p.displayName : `Player ${pid}`;
   });
 
-  const recording = {
+  const recording: MatchRecordingEntry = {
     matchId: match.id,
     playerNames,
     startTime: Date.now(),
-    endTime: null,
     initialState: {
-      playerIds: match.playerIds,
-      seed: match.seed,
+      playerIds: [...match.playerIds],
+      seed: (match as AnyRecord).seed ?? null,
       matchType: match.matchType,
       playerDecks: match.playerDecks
         ? Object.fromEntries(match.playerDecks)
-        : null,
+        : undefined,
     },
     actions: [],
   };
 
   matchRecordings.set(match.id, recording);
-  console.log(
-    `[Recording] Started recording match ${
-      match.id
-    } with players: ${playerNames.join(", ")}`
-  );
+  try {
+    console.log(
+      `[Recording] Started recording match ${
+        match.id
+      } with players: ${playerNames.join(", ")}`
+    );
+  } catch {}
 }
 
-function recordMatchAction(matchId, patch, playerId) {
+function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: string): void {
   const recording = matchRecordings.get(matchId);
   if (!recording) {
-    console.log(`[Recording] No recording found for match ${matchId}`);
+    try {
+      console.log(`[Recording] No recording found for match ${matchId}`);
+    } catch {}
     return;
   }
 
@@ -1923,19 +2078,23 @@ function recordMatchAction(matchId, patch, playerId) {
     timestamp: Date.now(),
     playerId,
   });
-  console.log(
-    `[Recording] Recorded action ${recording.actions.length} for match ${matchId} by player ${playerId}`
-  );
+  try {
+    console.log(
+      `[Recording] Recorded action ${recording.actions.length} for match ${matchId} by player ${playerId}`
+    );
+  } catch {}
 }
 
-function finishMatchRecording(matchId) {
+function finishMatchRecording(matchId: string): void {
   const recording = matchRecordings.get(matchId);
   if (!recording) return;
 
   recording.endTime = Date.now();
-  console.log(
-    `[Recording] Finished recording match ${matchId}, total actions: ${recording.actions.length}`
-  );
+  try {
+    console.log(
+      `[Recording] Finished recording match ${matchId}, total actions: ${recording.actions.length}`
+    );
+  } catch {}
 }
 
 const REQUIRE_JWT = Boolean(
@@ -1980,7 +2139,7 @@ io.use((socket, next) => {
   } catch (e) {
     try {
       console.warn("[auth] connect rejected: invalid_token", {
-        message: e?.message || String(e),
+        message: String(safeErrorMessage(e)),
       });
     } catch {}
     return next(new Error("invalid_token"));
@@ -2133,7 +2292,7 @@ io.on("connection", async (socket) => {
             try {
               console.warn(
                 "[draft] failed to mark participant active",
-                err?.message || err
+                safeErrorMessage(err)
               );
             } catch {}
           }
@@ -2170,7 +2329,7 @@ io.on("connection", async (socket) => {
       try {
         socket.emit("draft:error", {
           errorCode: "join_failed",
-          errorMessage: String(e?.message || e),
+          errorMessage: String(safeErrorMessage(e)),
         });
       } catch {}
     }
@@ -2205,7 +2364,7 @@ io.on("connection", async (socket) => {
             try {
               console.warn(
                 "[draft] failed to mark participant disconnected",
-                err?.message || err
+                safeErrorMessage(err)
               );
             } catch {}
           }
@@ -2380,7 +2539,7 @@ io.on("connection", async (socket) => {
       try {
         console.warn(
           "[interaction] request handler error",
-          err?.message || err
+          safeErrorMessage(err)
         );
       } catch {}
     }
@@ -2416,7 +2575,7 @@ io.on("connection", async (socket) => {
       try {
         console.warn(
           "[interaction] response handler error",
-          err?.message || err
+          safeErrorMessage(err)
         );
       } catch {}
     }
@@ -3233,7 +3392,7 @@ io.on("connection", async (socket) => {
       socket.emit("matchRecordingsResponse", { recordings });
     } catch (e) {
       try {
-        console.warn("[Recording] listRecordings failed:", e?.message || e);
+        console.warn("[Recording] listRecordings failed:", safeErrorMessage(e));
       } catch {}
       socket.emit("matchRecordingsResponse", { recordings: [] });
     }
@@ -3268,7 +3427,7 @@ io.on("connection", async (socket) => {
       socket.emit("matchRecordingResponse", { recording });
     } catch (e) {
       try {
-        console.warn("[Recording] loadRecording failed:", e?.message || e);
+        console.warn("[Recording] loadRecording failed:", safeErrorMessage(e));
       } catch {}
       socket.emit("matchRecordingResponse", { error: "Recording not found" });
     }
@@ -3475,7 +3634,7 @@ io.on("connection", async (socket) => {
       await finalizeMatch(match, payload || {});
     } catch (err) {
       try {
-        console.warn("[match] explicit finalize failed", err?.message || err);
+        console.warn("[match] explicit finalize failed", safeErrorMessage(err));
       } catch {}
     }
     try {
@@ -3808,7 +3967,7 @@ setInterval(async () => {
     }
   } catch (e) {
     try {
-      console.warn(`[db] cleanup failed:`, e?.message || e);
+      console.warn(`[db] cleanup failed:`, safeErrorMessage(e));
     } catch {}
   }
 }, 5 * 60 * 1000); // Run every 5 minutes
@@ -3828,7 +3987,7 @@ server.listen(PORT, () => {
     } catch {}
   } catch (e) {
     try {
-      console.error("[db] connection failed:", e?.message || e);
+      console.error("[db] connection failed:", safeErrorMessage(e));
     } catch {}
   }
   try {
@@ -3878,3 +4037,5 @@ async function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+type Seat = "p1" | "p2";
+type MatchPatch = Record<string, unknown>;
