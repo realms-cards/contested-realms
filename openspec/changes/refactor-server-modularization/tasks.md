@@ -3,7 +3,7 @@
 - [x] 1.2 Capture current socket event surface area and background jobs so extractions do not miss handlers.
 
 ## 2. Module Extraction
-- [ ] 2.1 Create `server/core/bootstrap` with startup orchestration (env load, Prisma init, Socket.IO creation).
+- [x] 2.1 Create `server/core/bootstrap` with startup orchestration (env load, Prisma init, Socket.IO creation).
 - [x] 2.2 Move lobby/matchmaking handlers into `server/features/lobby` with isolated state management helpers.
 - [x] 2.3 Extract tournament/draft/replay services into dedicated subdirectories and publish them via an index barrel _(tournament socket + presence module complete)_.
 - [x] 2.4 Introduce a lightweight dependency registry so feature modules can register handlers without touching the entrypoint.

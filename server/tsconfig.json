@@ -15,8 +15,9 @@
     "strict": true,
     "types": ["node"],
     "moduleResolution": "node",
-    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+    "typeRoots": ["./types", "../node_modules/@types"]
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.js"],
+  "include": ["**/*.ts", "**/*.tsx", "**/*.js", "./types/**/*.d.ts"],
   "exclude": ["../dist", "node_modules"]
 }

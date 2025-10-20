@@ -61,6 +61,7 @@ function mapToProtocolTournament(tournament: {
         displayName,
         ready: player.ready ?? false,
         avatarUrl: avatarCandidate ?? null,
+        seat: null,
       };
     }
   );

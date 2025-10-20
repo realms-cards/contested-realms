@@ -1696,6 +1696,7 @@ function getMatchInfo(match) {
     tournamentId: match.tournamentId || undefined,
     draftSessionId: match.draftSessionId || undefined,
     players: playersWithSeat,
+    playerIds,
     status: match.status,
     seed: match.seed,
     turn: match.turn,
