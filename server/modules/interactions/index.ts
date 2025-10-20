@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import {
   getSeatForPlayer,
   getPlayerIdForSeat,
@@ -44,6 +42,9 @@ interface InteractionModuleDeps {
   prisma: any;
 }
 
+type JsonRecord = Record<string, unknown>;
+type MatchPatch = Record<string, unknown>;
+
 export function createInteractionModule({
   io,
   rid,
@@ -53,7 +54,7 @@ export function createInteractionModule({
   persistMatchUpdate,
   prisma,
 }: InteractionModuleDeps) {
-  function ensureInteractionState(match) {
+function ensureInteractionState(match: any): void {
     if (!match) return;
     if (!(match.interactionRequests instanceof Map)) {
       match.interactionRequests = new Map();
@@ -63,27 +64,28 @@ export function createInteractionModule({
     }
   }
 
-  function sanitizeGrantOptions(raw, fallbackSeat) {
+  function sanitizeGrantOptions(raw: any, fallbackSeat: any): any {
     if (!raw || typeof raw !== "object") {
       if (!fallbackSeat) return null;
       return {
         targetSeat: fallbackSeat,
       };
     }
+    const json = raw as JsonRecord;
     const targetSeat =
-      raw.targetSeat === "p1" || raw.targetSeat === "p2" ? raw.targetSeat : fallbackSeat || null;
-    const expiresAt = Number.isFinite(Number(raw.expiresAt)) ? Number(raw.expiresAt) : null;
-    const result = {
+      json.targetSeat === "p1" || json.targetSeat === "p2" ? json.targetSeat : fallbackSeat || null;
+    const expiresAt = Number.isFinite(Number(json.expiresAt)) ? Number(json.expiresAt) : null;
+    const result: Record<string, unknown> = {
       targetSeat,
     };
     if (expiresAt !== null) result.expiresAt = expiresAt;
-    if (raw.singleUse === true) result.singleUse = true;
-    if (raw.allowOpponentZoneWrite === true) result.allowOpponentZoneWrite = true;
-    if (raw.allowRevealOpponentHand === true) result.allowRevealOpponentHand = true;
-    return result;
+    if (json.singleUse === true) result.singleUse = true;
+    if (json.allowOpponentZoneWrite === true) result.allowOpponentZoneWrite = true;
+    if (json.allowRevealOpponentHand === true) result.allowRevealOpponentHand = true;
+    return result as JsonRecord;
   }
 
-  function purgeExpiredGrants(match, now) {
+  function purgeExpiredGrants(match: any, now: number) {
     ensureInteractionState(match);
     if (!match || !(match.interactionGrants instanceof Map)) return;
     for (const [playerId, grants] of match.interactionGrants.entries()) {
@@ -98,7 +100,7 @@ export function createInteractionModule({
     }
   }
 
-  function detectOpponentZoneMutation(patch, actorSeat) {
+  function detectOpponentZoneMutation(patch: any, actorSeat: any): boolean {
     if (!patch || typeof patch !== "object") return false;
     const opponentSeat = getOpponentSeat(actorSeat);
     if (!opponentSeat) return false;
@@ -125,13 +127,13 @@ export function createInteractionModule({
     return false;
   }
 
-  function collectInteractionRequirements(patch, actorSeat) {
+  function collectInteractionRequirements(patch: any, actorSeat: any): any {
     return {
       needsOpponentZoneWrite: detectOpponentZoneMutation(patch, actorSeat),
     };
   }
 
-  function usePermitForRequirement(match, playerId, actorSeat, requirement, now) {
+  function usePermitForRequirement(match: any, playerId: string, actorSeat: any, requirement: string, now: number) {
     ensureInteractionState(match);
     const grants = match.interactionGrants.get(playerId);
     if (!Array.isArray(grants) || grants.length === 0) return null;
@@ -158,7 +160,7 @@ export function createInteractionModule({
     return usableGrant;
   }
 
-  function createGrantRecord(request, response, grantOpts, now) {
+  function createGrantRecord(request: any, response: any, grantOpts: any, now: number) {
     return {
       __grantId: rid("igr"),
       requestId: request.requestId,
@@ -174,7 +176,7 @@ export function createInteractionModule({
     };
   }
 
-  function recordInteractionRequest(match, message, proposedGrant, pendingAction) {
+  function recordInteractionRequest(match: any, message: any, proposedGrant: any, pendingAction: any) {
     ensureInteractionState(match);
     const entry = match.interactionRequests.get(message.requestId) || {};
     const now = message.createdAt || Date.now();
@@ -191,7 +193,7 @@ export function createInteractionModule({
     });
   }
 
-  function recordInteractionResponse(match, response, grantRecord) {
+  function recordInteractionResponse(match: any, response: any, grantRecord: any) {
     ensureInteractionState(match);
     const entry = match.interactionRequests.get(response.requestId) || {};
     const now = response.respondedAt || Date.now();
@@ -221,21 +223,21 @@ export function createInteractionModule({
     match.interactionRequests.set(response.requestId, next);
   }
 
-  function emitInteraction(matchId, message) {
+  function emitInteraction(matchId: string, message: any) {
     const envelope = { type: "interaction", version: INTERACTION_VERSION, message };
     const room = `match:${matchId}`;
     io.to(room).emit("interaction", envelope);
     io.to(room).emit(message.type, message);
   }
 
-  function emitInteractionResult(matchId, result) {
+  function emitInteractionResult(matchId: string, result: any) {
     const room = `match:${matchId}`;
     io.to(room).emit("interaction:result", result);
   }
 
-  function sanitizePendingAction(kind, payload, actorSeat, requestingPlayerId) {
+  function sanitizePendingAction(kind: string, payload: any, actorSeat: any, requestingPlayerId: string) {
     if (!payload || typeof payload !== "object") return null;
-    const safe = {};
+    const safe: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(payload)) {
       if (value === undefined) continue;
       if (key === "grant" || key === "proposedGrant") continue;
@@ -247,7 +249,7 @@ export function createInteractionModule({
     return safe;
   }
 
-  function getTopCards(match, seat, pile, count, from) {
+  function getTopCards(match: any, seat: string, pile: string, count: number, from: string) {
     if (!match || !match.game || !match.game.zones) return [];
     const zones = match.game.zones;
     const seatZones = zones && typeof zones === "object" ? zones[seat] : null;
@@ -260,7 +262,7 @@ export function createInteractionModule({
     return list.slice(0, count);
   }
 
-  async function applyPendingAction(match, entry, now) {
+  async function applyPendingAction(match: any, entry: any, now: number) {
     if (!match || !entry || !entry.pendingAction) return null;
     const { pendingAction, request } = entry;
     if (!pendingAction || typeof pendingAction !== "object") return null;
@@ -284,12 +286,12 @@ export function createInteractionModule({
       }
       const cards = getTopCards(match, seat, pile, count, from).map((card) => {
         if (!card || typeof card !== "object") return {};
-        const out = {};
-        if (card.name) out.name = card.name;
-        if (card.type) out.type = card.type;
-        if (card.slug) out.slug = card.slug;
-        if (Number.isFinite(card.cardId)) out.cardId = Number(card.cardId);
-        if (Number.isFinite(card.variantId)) out.variantId = Number(card.variantId);
+        const out: Record<string, unknown> = {};
+        if ((card as any).name) out.name = (card as any).name;
+        if ((card as any).type) out.type = (card as any).type;
+        if ((card as any).slug) out.slug = (card as any).slug;
+        if (Number.isFinite((card as any).cardId)) out.cardId = Number((card as any).cardId);
+        if (Number.isFinite((card as any).variantId)) out.variantId = Number((card as any).variantId);
         return out;
       });
       return {
@@ -312,12 +314,12 @@ export function createInteractionModule({
       }
       const cards = getTopCards(match, seat, "hand", 99, "top").map((card) => {
         if (!card || typeof card !== "object") return {};
-        const out = {};
-        if (card.name) out.name = card.name;
-        if (card.type) out.type = card.type;
-        if (card.slug) out.slug = card.slug;
-        if (Number.isFinite(card.cardId)) out.cardId = Number(card.cardId);
-        if (Number.isFinite(card.variantId)) out.variantId = Number(card.variantId);
+        const out: Record<string, unknown> = {};
+        if ((card as any).name) out.name = (card as any).name;
+        if ((card as any).type) out.type = (card as any).type;
+        if ((card as any).slug) out.slug = (card as any).slug;
+        if (Number.isFinite((card as any).cardId)) out.cardId = Number((card as any).cardId);
+        if (Number.isFinite((card as any).variantId)) out.variantId = Number((card as any).variantId);
         return out;
       });
       return {

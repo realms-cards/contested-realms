@@ -1,6 +1,40 @@
-// @ts-nocheck
+type MetricsCounterFn = (name: string, delta?: number) => void;
+type MetricsTimerFn = (name: string, durationMs: number) => void;
 
-function createPersistenceLayer({
+interface PersistenceConfig {
+  isWriteBehind: boolean;
+  flushIntervalMs: number;
+  actionBatchSize: number;
+  maxWaitMs: number;
+  timeoutMs: number;
+  redisSessionTtlSec: number;
+}
+
+interface PersistedAction {
+  playerId: string;
+  timestamp: number;
+  patch: unknown;
+}
+
+interface PersistBuffer {
+  latestData: Record<string, unknown> | null;
+  actions: PersistedAction[];
+  timer: NodeJS.Timeout | null;
+  lastFlushAt: number;
+}
+
+interface PersistenceDeps {
+  prisma: any;
+  storeRedis?: any;
+  pubClient?: any;
+  metricsInc: MetricsCounterFn;
+  metricsObserveMs: MetricsTimerFn;
+  matches: Map<string, Record<string, unknown>>;
+  hydrateMatchFromDatabase: (matchId: string, match: Record<string, unknown>) => Promise<void>;
+  config: PersistenceConfig;
+}
+
+const createPersistenceLayerInternal = ({
   prisma,
   storeRedis,
   pubClient,
@@ -9,7 +43,7 @@ function createPersistenceLayer({
   matches,
   hydrateMatchFromDatabase,
   config,
-}) {
+}: PersistenceDeps) => {
   const {
     isWriteBehind,
     flushIntervalMs,
@@ -19,6 +53,16 @@ function createPersistenceLayer({
     redisSessionTtlSec,
   } = config;
 
+  const safeErrorMessage = (err: unknown): unknown => {
+    if (err && typeof err === "object" && "message" in err) {
+      const msg = (err as { message?: unknown }).message;
+      if (typeof msg === "string") {
+        return msg;
+      }
+    }
+    return err;
+  };
+
   /**
    * matchId -> {
    *   latestData,
@@ -27,14 +71,14 @@ function createPersistenceLayer({
    *   lastFlushAt?: number
    * }
    */
-  const persistBuffers = new Map();
+  const persistBuffers: Map<string, PersistBuffer> = new Map();
 
-  function toPlainPlayerDecks(playerDecks) {
+  function toPlainPlayerDecks(playerDecks: unknown) {
     if (!playerDecks || !(playerDecks instanceof Map)) return playerDecks || null;
     return Object.fromEntries(playerDecks);
   }
 
-  function matchToSessionUpsertData(match) {
+  function matchToSessionUpsertData(match: Record<string, any>) {
     return {
       lobbyId: match.lobbyId || null,
       lobbyName: match.lobbyName || null,
@@ -54,7 +98,7 @@ function createPersistenceLayer({
     };
   }
 
-  async function cacheSessionToRedis(sessionData) {
+  async function cacheSessionToRedis(sessionData: Record<string, unknown> & { id: string }) {
     try {
       const client = storeRedis || pubClient;
       if (!client) return;
@@ -71,10 +115,14 @@ function createPersistenceLayer({
     } catch {}
   }
 
-  function bufferPersistUpdate(matchId, data, action) {
+  function bufferPersistUpdate(
+    matchId: string,
+    data: Record<string, unknown>,
+    action: PersistedAction | null
+  ) {
     if (!isWriteBehind) return;
-    const buf =
-      persistBuffers.get(matchId) || {
+    const buf: PersistBuffer =
+      persistBuffers.get(matchId) ?? {
         latestData: null,
         actions: [],
         timer: null,
@@ -97,10 +145,10 @@ function createPersistenceLayer({
     schedulePersistFlush(matchId);
   }
 
-  function schedulePersistFlush(matchId, dataOverride = null) {
+  function schedulePersistFlush(matchId: string, dataOverride: Record<string, unknown> | null = null) {
     if (!isWriteBehind) return;
-    const buf =
-      persistBuffers.get(matchId) || {
+    const buf: PersistBuffer =
+      persistBuffers.get(matchId) ?? {
         latestData: null,
         actions: [],
         timer: null,
@@ -108,14 +156,16 @@ function createPersistenceLayer({
       };
     if (dataOverride) buf.latestData = dataOverride;
     if (buf.timer) return;
-    buf.timer = setTimeout(() => flushPersistBuffer(matchId, "timer"), flushIntervalMs);
+    buf.timer = setTimeout(() => {
+      void flushPersistBuffer(matchId, "timer");
+    }, flushIntervalMs);
     persistBuffers.set(matchId, buf);
     try {
       metricsInc("persist.flush.scheduled", 1);
     } catch {}
   }
 
-  async function flushPersistBuffer(matchId, reason = "manual") {
+  async function flushPersistBuffer(matchId: string, reason = "manual") {
     const buf = persistBuffers.get(matchId);
     if (!buf || !buf.latestData) return;
     if (buf.timer) {
@@ -167,7 +217,7 @@ function createPersistenceLayer({
       } catch {}
     } catch (e) {
       try {
-        console.warn(`[persist] flush failed for ${matchId} (${reason}):`, e?.message || e);
+        console.warn(`[persist] flush failed for ${matchId} (${reason}):`, safeErrorMessage(e));
       } catch {}
       try {
         metricsInc("persist.flush.failure", 1);
@@ -180,7 +230,7 @@ function createPersistenceLayer({
     }
   }
 
-  async function persistMatchCreated(match) {
+  async function persistMatchCreated(match: Record<string, any>) {
     try {
       const data = matchToSessionUpsertData(match);
       await cacheSessionToRedis({ ...data, id: match.id });
@@ -202,12 +252,17 @@ function createPersistenceLayer({
       }
     } catch (e) {
       try {
-        console.warn(`[persist] create session failed for ${match.id}:`, e?.message || e);
+        console.warn(`[persist] create session failed for ${match.id}:`, safeErrorMessage(e));
       } catch {}
     }
   }
 
-  async function persistMatchUpdate(match, patch, playerId, ts) {
+  async function persistMatchUpdate(
+    match: Record<string, any>,
+    patch: Record<string, unknown> | null,
+    playerId: string | null,
+    ts: number
+  ) {
     try {
       const data = matchToSessionUpsertData(match);
       await cacheSessionToRedis({ ...data, id: match.id });
@@ -257,12 +312,12 @@ function createPersistenceLayer({
       }
     } catch (e) {
       try {
-        console.warn(`[persist] update session failed for ${match.id}:`, e?.message || e);
+        console.warn(`[persist] update session failed for ${match.id}:`, safeErrorMessage(e));
       } catch {}
     }
   }
 
-  async function persistMatchEnded(match) {
+  async function persistMatchEnded(match: Record<string, any>) {
     try {
       const endData = {
         status: "ended",
@@ -290,12 +345,12 @@ function createPersistenceLayer({
       }
     } catch (e) {
       try {
-        console.warn(`[persist] end session failed for ${match.id}:`, e?.message || e);
+        console.warn(`[persist] end session failed for ${match.id}:`, safeErrorMessage(e));
       } catch {}
     }
   }
 
-  function rehydrateMatch(row) {
+  function rehydrateMatch(row: Record<string, any>) {
     try {
       const m = {
         id: row.id,
@@ -320,7 +375,7 @@ function createPersistenceLayer({
       try {
         console.warn(
           `[persist] rehydrate failed for ${row && row.id ? row.id : "unknown"}:`,
-          e?.message || e
+          safeErrorMessage(e)
         );
       } catch {}
       return null;
@@ -351,12 +406,12 @@ function createPersistenceLayer({
       } catch {}
     } catch (e) {
       try {
-        console.warn(`[persist] recover active matches failed:`, e?.message || e);
+        console.warn(`[persist] recover active matches failed:`, safeErrorMessage(e));
       } catch {}
     }
   }
 
-  async function findActiveMatchForPlayer(playerId) {
+  async function findActiveMatchForPlayer(playerId: string) {
     try {
       const r = await prisma.onlineMatchSession.findFirst({
         where: {
@@ -380,7 +435,7 @@ function createPersistenceLayer({
     }
   }
 
-  function getBufferedActionsCount() {
+  function getBufferedActionsCount(): number {
     try {
       let total = 0;
       for (const buf of persistBuffers.values()) {
@@ -416,6 +471,6 @@ function createPersistenceLayer({
     getBufferStats,
     flushAll,
   };
-}
+};
 
-module.exports = { createPersistenceLayer };
+module.exports = { createPersistenceLayer: createPersistenceLayerInternal };
