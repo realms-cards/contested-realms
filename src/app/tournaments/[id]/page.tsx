@@ -531,10 +531,12 @@ export default function TournamentDetailsPage() {
     if (currentStatus === "completed" && hasAnyRound) {
       try {
         const key = `tournament_completion_seen_${tournament.id}`;
-        const alreadySeen = localStorage.getItem(key) === "true";
+        const alreadySeen =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem(key) === "true";
         if (!alreadySeen) {
           setShowCompletionModal(true);
-          localStorage.setItem(key, "true");
+          sessionStorage.setItem(key, "true");
         }
       } catch {}
     }
@@ -1734,21 +1736,7 @@ export default function TournamentDetailsPage() {
               }
               return null;
             }
-            return (
-              <div className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20 p-4 flex items-center justify-between">
-                <div className="text-slate-200">
-                  Your match is ready. Join when you are set.
-                </div>
-                <button
-                  onClick={async () => {
-                    await startJoinMatch(String(mid));
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md text-sm"
-                >
-                  Join Match
-                </button>
-              </div>
-            );
+            return null;
           })()}
 
         {/* Current Round Matches */}
