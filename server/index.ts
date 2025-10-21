@@ -1,5 +1,5 @@
-// Simple Socket.IO server for Sorcery online MVP
 // @ts-nocheck
+// Simple Socket.IO server for Sorcery online MVP
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
 // T019: Import extracted modules
@@ -87,6 +87,24 @@ type DraftPresenceEntry = {
   isConnected: boolean;
   lastActivity: number;
 };
+interface NextAuthJwtPayload {
+  uid?: string;
+  sub?: string;
+  name?: string;
+}
+
+interface DraftSessionJoinPayload {
+  sessionId: string;
+}
+
+interface DraftSessionLeavePayload {
+  sessionId?: string | null;
+}
+
+interface TournamentBroadcastPayload {
+  event: string;
+  data: Record<string, unknown>;
+}
 type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
 
 interface MatchDraftService {
@@ -895,7 +913,15 @@ server.on("request", async (req: IncomingMessage, res: ServerResponse) => {
       req.on("end", () => {
         try {
           const body = Buffer.concat(chunks).toString();
-          const { event, data } = JSON.parse(body);
+          const parsed = JSON.parse(body) as Partial<TournamentBroadcastPayload>;
+          const event = typeof parsed.event === "string" ? parsed.event : null;
+          const data =
+            parsed.data && typeof parsed.data === "object"
+              ? (parsed.data as Record<string, unknown>)
+              : {};
+          if (!event) {
+            throw new Error("Missing event");
+          }
 
           // Call the appropriate broadcast function
           switch (event) {
@@ -2136,17 +2162,14 @@ const REQUIRE_JWT = Boolean(
 // Enforce NextAuth-signed JWT at connect time
 io.use((socket: SocketClient, next: (err?: Error) => void) => {
   try {
-    const token =
-      (socket.handshake &&
-        socket.handshake.auth &&
-        socket.handshake.auth.token) ||
-      null;
+    const handshakeAuth = socket.handshake?.auth as { token?: string } | undefined;
+    const token = handshakeAuth?.token ?? null;
     if (token && process.env.NEXTAUTH_SECRET) {
-      const payload = jwt.verify(token, process.env.NEXTAUTH_SECRET);
+      const payload = jwt.verify(token, process.env.NEXTAUTH_SECRET) as NextAuthJwtPayload;
       socket.data = socket.data || {};
       socket.data.authUser = {
-        id: (payload && (payload.uid || payload.sub)) || null,
-        name: payload && payload.name,
+        id: payload?.uid || payload?.sub || null,
+        name: payload?.name,
       };
       return next();
     }
@@ -2292,7 +2315,7 @@ io.on("connection", async (socket: SocketClient) => {
   });
 
   // --- Tournament Draft session rooms + presence ---
-  socket.on("draft:session:join", async (payload = {}) => {
+  socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
     if (!authed) return;
     const sessionId = payload?.sessionId;
     if (!sessionId) return;
@@ -2366,7 +2389,7 @@ io.on("connection", async (socket: SocketClient) => {
     }
   });
 
-  socket.on("draft:session:leave", async (payload = {}) => {
+  socket.on("draft:session:leave", async (payload?: DraftSessionLeavePayload) => {
     const sessionId = payload?.sessionId || currentDraftSessionId;
     if (!sessionId) return;
     try {
