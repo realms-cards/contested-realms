@@ -1958,6 +1958,32 @@ async function cleanupMatchNow(
 
 // Handle per-player mulligan completion as the cluster leader
 function getMatchInfo(match: ServerMatchState): AnyRecord {
+  const serializeSealedPacks = (packs: unknown): Record<string, unknown> | undefined => {
+    if (!packs) return undefined;
+    if (packs instanceof Map) {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of packs.entries()) {
+        out[String(key)] = Array.isArray(value) ? value : value ?? [];
+      }
+      return out;
+    }
+    if (typeof packs === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(packs as Record<string, unknown>)) {
+        out[String(key)] = Array.isArray(value) ? value : value ?? [];
+      }
+      return out;
+    }
+    return undefined;
+  };
+
+  const serializePlayerDecks = (decks: unknown): Record<string, unknown> | undefined => {
+    if (!decks) return undefined;
+    if (decks instanceof Map) return Object.fromEntries(decks);
+    if (typeof decks === "object") return decks as Record<string, unknown>;
+    return undefined;
+  };
+
   const playerIds = Array.isArray(match.playerIds) ? match.playerIds : [];
   const playersWithSeat = playerIds
     .map((playerId, index) => {
@@ -1976,7 +2002,7 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     playerIds,
     status: match.status,
     seed: match.seed,
-    turn: match.turn,
+    turn: match.turn ?? undefined,
     winnerId: match.winnerId ?? null,
     matchType: match.matchType || "constructed",
     sealedConfig: match.sealedConfig
@@ -1988,11 +2014,12 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     deckSubmissions: match.playerDecks
       ? Array.from(match.playerDecks.keys())
       : [],
-    playerDecks: match.playerDecks
-      ? Object.fromEntries(match.playerDecks)
-      : undefined,
-    sealedPacks: match.sealedPacks || undefined,
-    draftState: match.draftState || undefined,
+    playerDecks: serializePlayerDecks(match.playerDecks),
+    sealedPacks: serializeSealedPacks(match.sealedPacks),
+    draftState:
+      match.draftState && typeof match.draftState === "object"
+        ? match.draftState
+        : undefined,
   };
 }
 

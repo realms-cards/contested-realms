@@ -197,20 +197,24 @@ export default function OnlineMatchPage() {
     try {
       if (match?.id && match?.id !== matchId) {
         const serverMatchId = match.id;
-        const key = `force_reload_match_${serverMatchId}`;
-        if (!sessionStorage.getItem(key)) {
+        if (!sessionStorage.getItem(`force_reload_match_${serverMatchId}`)) {
           console.log("[game] Switching to different match - forcing page reload for clean state");
-          sessionStorage.setItem(key, "1");
-          // Clear the old param-based key to prevent stale data
-          const oldKey = `force_reload_match_${matchId}`;
-          sessionStorage.removeItem(oldKey);
-          // Redirect to the server-authoritative match id
-          window.location.replace(`/online/play/${serverMatchId}`);
+          sessionStorage.setItem(`force_reload_match_${serverMatchId}`, "1");
+          sessionStorage.removeItem(`force_reload_match_${matchId}`);
+          history.replaceState(null, "", `/online/play/${serverMatchId}`);
+          hasBootstrapRef.current = false;
+          joinAttemptedForRef.current = null;
+          resyncSentForRef.current = null;
+          rejoinChatSentForRef.current = null;
+          resetDoneForRef.current = null;
+          prevMatchIdRef.current = serverMatchId;
+          prevMatchStatusRef.current = null;
+          useGameStore.getState().resetGameState();
           return;
         } else {
-          // If we've already forced a reload but still have wrong match, reset game state
           console.log("[game] After reload still have wrong match - resetting game state");
           useGameStore.getState().resetGameState();
+          return;
         }
       }
     } catch {}

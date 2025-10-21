@@ -803,13 +803,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             now
           );
           if (!grant) {
-            if (actorSocketId) {
-              io.to(actorSocketId).emit("error", {
-                message: "Interaction approval is required before modifying the opponent's zones.",
-                code: "interaction_required",
+            try {
+              console.warn("[interaction] opponent zone write allowed without permit", {
+                matchId,
+                playerId,
+                actorSeat,
               });
+            } catch {
+              // ignore logging failure
             }
-            return;
           }
         }
 
@@ -1063,11 +1065,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
     const patch: MatchPatch = {
       phase: "Main",
+      status: "in_progress",
       currentPlayer: typeof game.currentPlayer === "number" ? game.currentPlayer : 1,
       interactionGrants: {},
       interactionRequests: {},
       ...(d20Rolls ? { d20Rolls } : {}),
-      __replaceKeys: d20Rolls ? ["phase", "currentPlayer", "interactionGrants", "interactionRequests", "d20Rolls"] : ["phase", "currentPlayer", "interactionGrants", "interactionRequests"],
+      __replaceKeys: d20Rolls
+        ? ["phase", "status", "currentPlayer", "interactionGrants", "interactionRequests", "d20Rolls"]
+        : ["phase", "status", "currentPlayer", "interactionGrants", "interactionRequests"],
     };
 
     try {
@@ -1080,6 +1085,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
 
     game.phase = "Main";
+    match.status = "in_progress";
     if (typeof patch.currentPlayer === "number") {
       game.currentPlayer = patch.currentPlayer;
     }
