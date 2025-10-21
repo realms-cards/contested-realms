@@ -41,6 +41,7 @@ const {
   dedupePermanents,
   mergeEvents,
 } = require("./modules/shared/match-helpers") as typeof import("./modules/shared/match-helpers");
+const { createRequestHandler } = require("./http/request-handler") as typeof import("./http/request-handler");
 const { registerRtcHandlers } = require("./socket/rtc-handlers") as typeof import("./socket/rtc-handlers");
 
 const jwt = require("jsonwebtoken");
@@ -686,454 +687,7 @@ if (storeSub) {
 }
 
 // Basic health endpoints (liveness/readiness) and lightweight HTTP API
-server.on("request", async (req: IncomingMessage, res: ServerResponse) => {
-  try {
-    // Helper: dynamic CORS based on SOCKET_CORS_ORIGIN
-    const reqOrigin = (req && req.headers && req.headers.origin) || null;
-    const allowCors = (): void => {
-      if (
-        reqOrigin &&
-        (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))
-      ) {
-        res.setHeader("Access-Control-Allow-Origin", reqOrigin);
-        res.setHeader("Vary", "Origin");
-      }
-      res.setHeader("Access-Control-Allow-Credentials", "true");
-    };
-    const allowCorsForOptions = (): void => {
-      allowCors();
-      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type, Authorization"
-      );
-    };
 
-    const method = (req && req.method) || "GET";
-    const u = new URL((req && req.url) || "/", "http://localhost");
-    const pathname = u.pathname;
-
-    // Health endpoints
-    if (
-      pathname === "/healthz" ||
-      pathname === "/readyz" ||
-      pathname === "/status"
-    ) {
-      const dbOk = !!isReady;
-      const redisOk = pubClient
-        ? pubClient.status === "ready" || pubClient.status === "connect"
-        : false;
-      const storeOk = storeRedis
-        ? storeRedis.status === "ready" || storeRedis.status === "connect"
-        : false;
-      const body = JSON.stringify({
-        ok: true,
-        db: dbOk,
-        redis: redisOk,
-        store: storeOk,
-        shuttingDown: isShuttingDown,
-        matches: typeof matches !== "undefined" && matches ? matches.size : 0,
-        uptimeSec: Math.floor(process.uptime()),
-      });
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "application/json");
-      res.end(body);
-      return;
-    }
-
-    // Metrics endpoints
-    if (pathname === "/metrics" && method === "GET") {
-      allowCors();
-      try {
-        metricsInc("http.metrics.requests", 1);
-      } catch {}
-      const text = buildPromMetrics();
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-      res.end(text);
-      return;
-    }
-    if (pathname === "/metrics.json" && method === "GET") {
-      allowCors();
-      try {
-        metricsInc("http.metrics_json.requests", 1);
-      } catch {}
-      const snap = collectMetricsSnapshot();
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(snap));
-      return;
-    }
-
-    // Preflight for HTTP API
-    if (method === "OPTIONS") {
-      allowCorsForOptions();
-      res.statusCode = 204;
-      res.end();
-      return;
-    }
-
-    // Lightweight HTTP API: list available players (MVP)
-    if (pathname === "/players/available" && method === "GET") {
-      allowCors();
-
-      // Parse query
-      const q = (u.searchParams.get("q") || "").trim().toLowerCase();
-      const sortParam = (u.searchParams.get("sort") || "recent").toLowerCase();
-      const sort = sortParam === "alphabetical" ? "alphabetical" : "recent";
-      const limit = Math.max(
-        1,
-        Math.min(100, Number(u.searchParams.get("limit") || 100))
-      );
-      let offset = Number(u.searchParams.get("cursor") || 0);
-      if (!Number.isFinite(offset) || offset < 0) offset = 0;
-
-      // Optional: identify requesting user from Authorization: Bearer <token>
-      let requesterId = null;
-      try {
-        const auth = (req.headers && req.headers.authorization) || "";
-        const m = auth.match(/^Bearer\s+(.+)$/i);
-        if (m && process.env.NEXTAUTH_SECRET) {
-          const payload = jwt.verify(m[1], process.env.NEXTAUTH_SECRET);
-          requesterId = String((payload && (payload.uid || payload.sub)) || "");
-        }
-      } catch {}
-
-      try {
-        console.info(
-          `[http] GET /players/available q="${q}" sort=${sort} limit=${limit} cursor=${offset} requester=${
-            requesterId ? String(requesterId).slice(-6) : "anon"
-          }`
-        );
-      } catch {}
-
-      // Build candidate list: online and not in a match
-      const candidates = [];
-      for (const [pid, p] of players.entries()) {
-        if (!p) continue;
-        const online = !!p.socketId;
-        const inMatch = !!p.matchId;
-        // Filter out CPU bots and host accounts (IDs starting with 'cpu_' or 'host_')
-        const isBotOrHost =
-          String(pid).startsWith("cpu_") || String(pid).startsWith("host_");
-        if (online && !inMatch && !isBotOrHost) {
-          if (!q || (p.displayName || "").toLowerCase().includes(q)) {
-            candidates.push({
-              id: pid,
-              displayName: p.displayName || "Player",
-            });
-          }
-        }
-      }
-
-      // Filter out hidden presence via DB, and fetch shortId/avatar
-      const ids = candidates.map((c) => c.id);
-      let publicUsers: Array<{ id: string; shortId: string | null; image: string | null }> = [];
-      if (ids.length > 0) {
-        publicUsers = await prisma.user.findMany({
-          where: { id: { in: ids }, presenceHidden: false },
-          select: { id: true, shortId: true, image: true },
-        });
-      }
-      const publicMap = new Map(publicUsers.map((u) => [u.id, u]));
-      const visible = candidates.filter((c) => publicMap.has(c.id));
-
-      // Friendship flags (relative to requester)
-      let friendSet: Set<string> = new Set();
-      if (requesterId && visible.length > 0) {
-        const fr = await prisma.friendship.findMany({
-          where: {
-            ownerUserId: requesterId,
-            targetUserId: { in: visible.map((v) => v.id) },
-          },
-          select: { targetUserId: true },
-        });
-        friendSet = new Set(fr.map((r: { targetUserId: string }) => r.targetUserId));
-      }
-
-      // Recent opponents (last 10 results) for prioritization when applicable
-      const freq = new Map<string, number>();
-      const lastAt = new Map<string, number>();
-      if (requesterId && sort === "recent") {
-        const recent = (await prisma.matchResult.findMany({
-          where: { OR: [{ winnerId: requesterId }, { loserId: requesterId }] },
-          orderBy: { completedAt: "desc" },
-          take: 10,
-        })) as Array<Record<string, any>>;
-        for (const r of recent) {
-          let oppIds: string[] = [];
-          try {
-            const arr = Array.isArray(r.players)
-              ? r.players
-              : typeof r.players === "string"
-              ? JSON.parse(r.players)
-              : [];
-            if (Array.isArray(arr)) {
-              for (const info of arr) {
-                const oid = info && (info.id || info.playerId || info.uid);
-                if (oid && String(oid) !== String(requesterId))
-                  oppIds.push(String(oid));
-              }
-            }
-          } catch {}
-          // Fallback: if players JSON not helpful, try winner/loser IDs
-          if (oppIds.length === 0) {
-            if (r.winnerId && r.winnerId !== requesterId)
-              oppIds.push(r.winnerId);
-            if (r.loserId && r.loserId !== requesterId) oppIds.push(r.loserId);
-          }
-          const ts = r.completedAt
-            ? new Date(r.completedAt).getTime()
-            : Date.now();
-          for (const oid of oppIds) {
-            const prev = freq.get(oid) || 0;
-            freq.set(oid, prev + 1);
-            const prevTs = lastAt.get(oid) || 0;
-            if (ts > prevTs) lastAt.set(oid, ts);
-          }
-        }
-      }
-
-      // Compose items
-      const items = visible.map((c) => {
-        const u = publicMap.get(c.id);
-        const mcount = freq.has(c.id) ? freq.get(c.id) || null : null;
-        const lpa = lastAt.has(c.id)
-          ? new Date(lastAt.get(c.id) || 0).toISOString()
-          : null;
-        return {
-          userId: c.id,
-          shortUserId: u?.shortId || String(c.id).slice(-8),
-          displayName: c.displayName,
-          avatarUrl: u?.image || null,
-          presence: { online: true, inMatch: false },
-          isFriend: requesterId ? friendSet.has(c.id) : false,
-          lastPlayedAt: lpa,
-          matchCountInLast10: mcount,
-        };
-      });
-
-      // Sort
-      const alphaSort = (
-        a: { displayName?: string | null; userId: string },
-        b: { displayName?: string | null; userId: string }
-      ): number => {
-        const an = (a.displayName || "").toLowerCase();
-        const bn = (b.displayName || "").toLowerCase();
-        if (an < bn) return -1;
-        if (an > bn) return 1;
-        return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
-      };
-      let ordered = items.slice();
-      if (sort === "recent" && requesterId) {
-        const groupA = items.filter(
-          (it) =>
-            typeof it.matchCountInLast10 === "number" &&
-            it.matchCountInLast10 > 0
-        );
-        const groupB = items.filter((it) => !groupA.includes(it));
-        groupA.sort((x, y) => {
-          const c = (y.matchCountInLast10 || 0) - (x.matchCountInLast10 || 0);
-          if (c !== 0) return c;
-          const tx = x.lastPlayedAt ? Date.parse(x.lastPlayedAt) : 0;
-          const ty = y.lastPlayedAt ? Date.parse(y.lastPlayedAt) : 0;
-          if (ty !== tx) return ty - tx;
-          return alphaSort(x, y);
-        });
-        groupB.sort(alphaSort);
-        ordered = groupA.concat(groupB);
-      } else {
-        ordered = items.sort(alphaSort);
-      }
-
-      // Pagination via cursor as offset
-      const total = ordered.length;
-      const page = ordered.slice(offset, offset + limit);
-      const nextCursor = offset + limit < total ? String(offset + limit) : null;
-
-      const body = JSON.stringify({ items: page, nextCursor });
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "application/json");
-      res.end(body);
-      return;
-    }
-
-    // Handle tournament broadcast requests from Next.js API routes
-    if (pathname === "/tournament/broadcast" && method === "POST") {
-      allowCors();
-
-      // Collect request body
-      const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      req.on("end", () => {
-        try {
-          const body = Buffer.concat(chunks).toString();
-          const parsed = JSON.parse(body) as Partial<TournamentBroadcastPayload>;
-          const event = isTournamentBroadcastEvent(parsed.event)
-            ? parsed.event
-            : null;
-          if (!event) {
-            throw new Error("Missing event");
-          }
-
-          const data = normalizeTournamentBroadcastData(parsed.data);
-
-          // Call the appropriate broadcast function
-          switch (event) {
-            case "TOURNAMENT_UPDATED": {
-              const id = toOptionalString(data.id);
-              if (id) {
-                broadcastTournamentUpdate(id, data);
-              }
-              break;
-            }
-            case "PHASE_CHANGED": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              const newPhase = toOptionalString(data.newPhase);
-              if (tournamentId && newPhase) {
-                const { tournamentId: _ti, newPhase: _np, ...additionalData } = data;
-                broadcastPhaseChanged(tournamentId, newPhase, additionalData);
-              }
-              break;
-            }
-            case "ROUND_STARTED": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              const roundNumber = toOptionalNumber(data.roundNumber);
-              const matchesPayload = Array.isArray(data.matches) ? data.matches : null;
-              if (tournamentId && roundNumber !== null && matchesPayload) {
-                broadcastRoundStarted(tournamentId, roundNumber, matchesPayload);
-              }
-              break;
-            }
-            case "PLAYER_JOINED": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              const playerId = toOptionalString(data.playerId);
-              if (tournamentId && playerId) {
-                const playerName = toOptionalString(data.playerName);
-                const currentPlayerCount = toOptionalNumber(data.currentPlayerCount);
-                broadcastPlayerJoined(
-                  tournamentId,
-                  playerId,
-                  playerName ?? undefined,
-                  currentPlayerCount ?? undefined
-                );
-              }
-              break;
-            }
-            case "PLAYER_LEFT": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              const playerId = toOptionalString(data.playerId);
-              if (tournamentId && playerId) {
-                const playerName = toOptionalString(data.playerName);
-                const currentPlayerCount = toOptionalNumber(data.currentPlayerCount);
-                broadcastPlayerLeft(
-                  tournamentId,
-                  playerId,
-                  playerName ?? undefined,
-                  currentPlayerCount ?? undefined
-                );
-              }
-              break;
-            }
-            case "DRAFT_READY": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              const draftSessionId = toOptionalString(data.draftSessionId);
-              if (tournamentId && draftSessionId) {
-                const { tournamentId: _ti, ...rest } = data;
-                broadcastDraftReady(tournamentId, rest);
-              }
-              break;
-            }
-            case "UPDATE_PREPARATION": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              const playerId = toOptionalString(data.playerId);
-              if (tournamentId && playerId) {
-                const preparationStatus = toOptionalString(data.preparationStatus);
-                const readyPlayerCount = toOptionalNumber(data.readyPlayerCount);
-                const totalPlayerCount = toOptionalNumber(data.totalPlayerCount);
-                const deckSubmitted =
-                  typeof data.deckSubmitted === "boolean" ? data.deckSubmitted : undefined;
-                broadcastPreparationUpdate(
-                  tournamentId,
-                  playerId,
-                  preparationStatus ?? undefined,
-                  readyPlayerCount ?? undefined,
-                  totalPlayerCount ?? undefined,
-                  deckSubmitted
-                );
-              }
-              break;
-            }
-            case "STATISTICS_UPDATED": {
-              const tournamentId = toOptionalString(data.tournamentId);
-              if (tournamentId) {
-                broadcastStatisticsUpdate(tournamentId, data);
-              }
-              break;
-            }
-            case "MATCH_ASSIGNED": {
-              // For now, just log - MATCH_ASSIGNED needs player-specific routing
-              console.log("[Tournament] MATCH_ASSIGNED broadcast received");
-              break;
-            }
-            case "matchEnded": {
-              const matchId = toOptionalString(data.matchId);
-              if (matchId) {
-                const match = matches.get(matchId);
-                if (match && Array.isArray(match.playerIds)) {
-                  for (const playerId of match.playerIds) {
-                    const player = players.get(playerId);
-                    if (player && player.matchId === matchId) {
-                      player.matchId = null;
-                    }
-                  }
-                  io.to(`match:${matchId}`).emit("matchEnded", data);
-                  const reason = toOptionalString(data.reason) ?? "unknown_reason";
-                  console.log(`[Match] Ended match ${matchId} due to ${reason}`);
-                }
-              }
-              break;
-            }
-          }
-
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true }));
-        } catch (err) {
-          console.error("[Tournament] Broadcast error:", safeErrorMessage(err));
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(
-            JSON.stringify({
-              error: "Invalid request",
-              details: String(safeErrorMessage(err)),
-            })
-          );
-        }
-      });
-
-      req.on("error", (err: Error) => {
-        console.error("[Tournament] Request error:", safeErrorMessage(err));
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Server error" }));
-      });
-
-      return;
-    }
-
-    // For all other paths, do nothing here; allow Socket.IO and other handlers to respond.
-    return;
-  } catch (e) {
-    try {
-      res.statusCode = 500;
-      res.setHeader("Content-Type", "application/json");
-      res.end(
-        JSON.stringify({
-          error: "internal_error",
-          message: String(safeErrorMessage(e)),
-        })
-      );
-    } catch {}
-  }
-});
 
 // In-memory state
 // Players keyed by stable playerId (not socket id)
@@ -1362,6 +916,34 @@ const {
   broadcastDraftReady,
   broadcastStatisticsUpdate,
 } = tournamentFeature;
+
+const handleHttpRequest = createRequestHandler({
+  io,
+  serverConfig,
+  isReady: () => isReady,
+  collectMetricsSnapshot,
+  buildPromMetrics,
+  metricsInc,
+  matchesMap: matches,
+  players,
+  tournamentBroadcast: {
+    emitTournamentUpdate: broadcastTournamentUpdate,
+    emitPhaseChanged: broadcastPhaseChanged,
+    emitRoundStarted: broadcastRoundStarted,
+    emitPlayerJoined: broadcastPlayerJoined,
+    emitPlayerLeft: broadcastPlayerLeft,
+    emitDraftReady: broadcastDraftReady,
+    emitPreparationUpdate: broadcastPreparationUpdate,
+    emitStatisticsUpdate: broadcastStatisticsUpdate,
+  },
+  normalizeTournamentBroadcastData,
+  isTournamentBroadcastEvent,
+  toOptionalString,
+  toOptionalNumber,
+  safeErrorMessage,
+});
+
+server.on("request", handleHttpRequest);
 
 container.initialize().catch((err: unknown) => {
   try {
@@ -1953,7 +1535,6 @@ async function cleanupMatchNow(
     matches.delete(matchId);
   } catch {}
 }
-
 
 
 // Handle per-player mulligan completion as the cluster leader
