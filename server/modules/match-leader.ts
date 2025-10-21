@@ -3,6 +3,10 @@
 import type { Server as SocketIOServer } from "socket.io";
 import type Redis from "ioredis";
 import type { PrismaClient } from "@prisma/client";
+import type {
+  MatchConsoleEvent,
+  MatchPermanents,
+} from "./shared/match-helpers";
 
 type Seat = "p1" | "p2";
 
@@ -55,14 +59,12 @@ interface PlayerPositionsState {
   p2: PlayerPosition;
 }
 
-interface MatchEvent extends Record<string, unknown> {
-  id?: number | string;
-}
+type MatchEvent = MatchConsoleEvent;
 
 interface MatchGameState extends Record<string, unknown> {
   matchEnded?: boolean;
   d20Rolls?: D20Rolls;
-  permanents?: Record<string, unknown>;
+  permanents?: MatchPermanents | null;
   zones?: ZonesState;
   avatars?: AvatarsState;
   playerPositions?: Partial<PlayerPositionsState>;
@@ -177,12 +179,12 @@ interface MatchLeaderDeps {
     requirement: string,
     now: number
   ) => unknown;
-  mergeEvents: (prev: MatchEvent[], additions: MatchEvent[]) => MatchEvent[];
-  dedupePermanents: (per: unknown) => unknown;
-  deepMergeReplaceArrays: (
-    target: Record<string, unknown>,
-    source: Record<string, unknown>
-  ) => Record<string, unknown>;
+  mergeEvents: (
+    prev: ReadonlyArray<MatchEvent> | undefined,
+    additions: ReadonlyArray<MatchEvent> | undefined
+  ) => MatchEvent[];
+  dedupePermanents: (per: unknown) => MatchPermanents | null | undefined;
+  deepMergeReplaceArrays: <T>(base: T, patch: unknown) => T;
   applyMovementAndCombat: (
     baseState: MatchGameState | undefined,
     patch: MatchPatch,
@@ -568,7 +570,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                 ...patchToApply,
                 d20Rolls: merged,
               };
-              if (!Object.prototype.hasOwnProperty.call(patchToApply, "setupWinner")) {
+              const currentSetupWinner = patchToApply.setupWinner;
+              if (currentSetupWinner !== "p1" && currentSetupWinner !== "p2") {
                 patchToApply = { ...patchToApply, setupWinner: winnerSeat };
               }
               try {
@@ -582,14 +585,17 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               }
               if (match.game) {
                 const existingPhase = match.game.phase;
-                if (
-                  match._autoSeatApplied !== true &&
+                const allPlayersCpu =
+                  Array.isArray(match.playerIds) &&
+                  match.playerIds.length > 0 &&
+                  match.playerIds.every((pid) => isCpuPlayerId(pid));
+                const shouldAutoSeat =
+                  allPlayersCpu &&
                   match.status === "waiting" &&
                   existingPhase !== "Start" &&
-                  existingPhase !== "Main"
-                ) {
-                  const firstPlayer = winnerSeat === "p1" ? 1 : 2;
-                  patchToApply = { ...patchToApply, phase: "Start", currentPlayer: firstPlayer };
+                  existingPhase !== "Main";
+
+                if (shouldAutoSeat) {
                   match._autoSeatApplied = true;
                 }
               }
@@ -808,10 +814,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         }
 
         if (match.game?.permanents) {
-          match.game.permanents = dedupePermanents(match.game.permanents) as Record<
-            string,
-            unknown
-          >;
+          const normalized = dedupePermanents(match.game.permanents);
+          if (normalized) {
+            match.game.permanents = normalized;
+          }
         }
 
         const nextMatchEnded = Boolean(match.game && match.game.matchEnded);
@@ -902,7 +908,57 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
   }
 
+  async function detachPlayerFromMatch(
+    match: MatchState,
+    playerId: string,
+    socketId: string | null
+  ): Promise<void> {
+    if (!Array.isArray(match.playerIds)) return;
+    if (!match.playerIds.includes(playerId)) return;
+
+    match.playerIds = match.playerIds.filter((id) => id !== playerId);
+    const room = `match:${match.id}`;
+
+    if (socketId) {
+      try {
+        await io.in(socketId).socketsLeave(room);
+      } catch (err) {
+        console.warn("[joinMatch] Failed to leave previous match room", {
+          socketId,
+          room,
+          error: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+
+    try {
+      io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+    } catch {
+      // ignore broadcast failures
+    }
+
+    try {
+      await persistMatchUpdate(match, null, playerId, Date.now());
+    } catch (err) {
+      console.warn("[joinMatch] Failed to persist previous match update", {
+        matchId: match.id,
+        playerId,
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
   async function joinMatch(matchId: string, playerId: string, socketId: string): Promise<void> {
+    const playerState = await ensurePlayerCached(playerId);
+    const previousSocketId = playerState.socketId || socketId;
+
+    if (playerState.matchId && playerState.matchId !== matchId) {
+      const previousMatch = await getOrLoadMatch(playerState.matchId);
+      if (previousMatch) {
+        await detachPlayerFromMatch(previousMatch, playerId, previousSocketId);
+      }
+    }
+
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
     if (!Array.isArray(match.playerIds)) {
@@ -911,8 +967,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     if (!match.playerIds.includes(playerId)) {
       match.playerIds.push(playerId);
     }
-    const playerState = await ensurePlayerCached(playerId);
     playerState.matchId = matchId;
+    playerState.socketId = socketId;
 
     const room = `match:${matchId}`;
     try {
@@ -961,14 +1017,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   async function handleMulliganDone(matchId: string, playerId: string): Promise<void> {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
-    if (
-      match.status !== "waiting" &&
-      match.status !== "deck_construction" &&
-      match.status !== "in_progress"
-    ) {
+    if (match.status !== "waiting" && match.status !== "in_progress") {
       return;
     }
-    if (match.game?.phase === "Main") return;
+    const game = match.game;
+    if (!game) return;
+    const currentPhase = game.phase;
+    if (currentPhase !== "Setup" && currentPhase !== "Start") {
+      return;
+    }
 
     if (!(match.mulliganDone instanceof Set)) {
       match.mulliganDone = new Set<string>();
@@ -990,6 +1047,50 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       );
     } catch {
       // ignore logging errors
+    }
+
+    const totalPlayers = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
+    if (match.mulliganDone.size < totalPlayers || totalPlayers === 0) {
+      return;
+    }
+
+    const d20Rolls = game.d20Rolls
+      ? {
+          p1: typeof game.d20Rolls.p1 === "number" ? game.d20Rolls.p1 : null,
+          p2: typeof game.d20Rolls.p2 === "number" ? game.d20Rolls.p2 : null,
+        }
+      : null;
+
+    const patch: MatchPatch = {
+      phase: "Main",
+      currentPlayer: typeof game.currentPlayer === "number" ? game.currentPlayer : 1,
+      interactionGrants: {},
+      interactionRequests: {},
+      ...(d20Rolls ? { d20Rolls } : {}),
+      __replaceKeys: d20Rolls ? ["phase", "currentPlayer", "interactionGrants", "interactionRequests", "d20Rolls"] : ["phase", "currentPlayer", "interactionGrants", "interactionRequests"],
+    };
+
+    try {
+      io.to(`match:${match.id}`).emit("statePatch", {
+        patch,
+        t: Date.now(),
+      });
+    } catch {
+      // ignore broadcast error
+    }
+
+    game.phase = "Main";
+    if (typeof patch.currentPlayer === "number") {
+      game.currentPlayer = patch.currentPlayer;
+    }
+
+    try {
+      await persistMatchUpdate(match, patch, playerId, Date.now());
+    } catch (err) {
+      console.warn("[Setup] Failed to persist mulligan completion advance", {
+        matchId,
+        error: err instanceof Error ? err.message : err,
+      });
     }
   }
 

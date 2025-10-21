@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Simple Socket.IO server for Sorcery online MVP
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
@@ -37,6 +36,12 @@ const {
   validateDeckCards,
 } = require("./modules/deck-utils") as typeof import("./modules/deck-utils");
 const { createLeaderboardService } = require("./modules/leaderboard") as typeof import("./modules/leaderboard");
+const {
+  deepMergeReplaceArrays,
+  dedupePermanents,
+  mergeEvents,
+} = require("./modules/shared/match-helpers") as typeof import("./modules/shared/match-helpers");
+const { registerRtcHandlers } = require("./socket/rtc-handlers") as typeof import("./socket/rtc-handlers");
 
 const jwt = require("jsonwebtoken");
 const {
@@ -54,39 +59,26 @@ const {
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 const { buildMatchInfo } = require("./matchInfo");
 
+import type {
+  AnyRecord,
+  DraftPresenceEntry,
+  MatchPatch,
+  PendingVoiceRequest,
+  PlayerState,
+  Seat,
+  ServerMatchState,
+  VoiceParticipant,
+  LobbyState,
+} from "./types";
+
 type SocketServer = import("socket.io").Server;
 type SocketClient = import("socket.io").Socket;
 type RedisClient = import("ioredis").Redis;
 type PrismaClient = import("@prisma/client").PrismaClient;
 type IncomingMessage = import("http").IncomingMessage;
 type ServerResponse = import("http").ServerResponse;
-type AnyRecord = Record<string, unknown>;
-type Seat = "p1" | "p2";
-type MatchPatch = Record<string, unknown>;
 type PlayersMap = Map<string, PlayerState>;
 type MatchMap = Map<string, ServerMatchState>;
-type VoiceParticipant = {
-  id: string;
-  displayName: string | null;
-  lobbyId: string | null;
-  matchId: string | null;
-  roomId: string | null;
-  joinedAt: number;
-};
-type PendingVoiceRequest = {
-  id: string;
-  from: string;
-  to: string;
-  lobbyId: string | null;
-  matchId: string | null;
-  createdAt: number;
-};
-type DraftPresenceEntry = {
-  playerId: string;
-  playerName: string | null;
-  isConnected: boolean;
-  lastActivity: number;
-};
 interface NextAuthJwtPayload {
   uid?: string;
   sub?: string;
@@ -105,6 +97,115 @@ interface TournamentBroadcastPayload {
   event: string;
   data: Record<string, unknown>;
 }
+
+const TOURNAMENT_BROADCAST_EVENT_NAMES = [
+  "TOURNAMENT_UPDATED",
+  "PHASE_CHANGED",
+  "ROUND_STARTED",
+  "PLAYER_JOINED",
+  "PLAYER_LEFT",
+  "DRAFT_READY",
+  "UPDATE_PREPARATION",
+  "STATISTICS_UPDATED",
+  "MATCH_ASSIGNED",
+  "matchEnded",
+] as const;
+
+type TournamentBroadcastEventName = (typeof TOURNAMENT_BROADCAST_EVENT_NAMES)[number];
+
+const TOURNAMENT_BROADCAST_EVENT_SET: ReadonlySet<string> = new Set(
+  TOURNAMENT_BROADCAST_EVENT_NAMES
+);
+
+interface TournamentBroadcastData extends Record<string, unknown> {
+  id?: string;
+  tournamentId?: string;
+  newPhase?: string;
+  roundNumber?: number;
+  matches?: unknown;
+  playerId?: string;
+  playerName?: string | null;
+  currentPlayerCount?: number;
+  draftSessionId?: string;
+  preparationStatus?: string;
+  readyPlayerCount?: number;
+  totalPlayerCount?: number;
+  deckSubmitted?: boolean;
+  reason?: string;
+  matchId?: string;
+}
+
+type ChatScope = "global" | "lobby" | "match";
+
+interface ChatPayload extends Record<string, unknown> {
+  content?: unknown;
+  scope?: unknown;
+}
+
+const CHAT_SCOPE_VALUES: ReadonlySet<ChatScope> = new Set(["global", "lobby", "match"]);
+
+interface DraggingPayload extends Record<string, unknown> {
+  kind?: unknown;
+  from?: unknown;
+  index?: unknown;
+  who?: unknown;
+  source?: unknown;
+  cardId?: unknown;
+  slug?: unknown;
+  meta?: unknown;
+}
+
+interface DraggingMeta {
+  owner?: number;
+}
+
+interface NormalizedDragging {
+  kind: string;
+  from?: string;
+  index?: number;
+  who?: "p1" | "p2";
+  source?: string;
+  cardId?: number;
+  slug?: string;
+  meta?: DraggingMeta;
+}
+
+interface HighlightPayload extends Record<string, unknown> {
+  cardId?: unknown;
+  slug?: unknown;
+}
+
+function isTournamentBroadcastEvent(value: unknown): value is TournamentBroadcastEventName {
+  return typeof value === "string" && TOURNAMENT_BROADCAST_EVENT_SET.has(value);
+}
+
+function normalizeTournamentBroadcastData(input: unknown): TournamentBroadcastData {
+  if (!input || typeof input !== "object") {
+    return {};
+  }
+  return { ...(input as Record<string, unknown>) };
+}
+
+function isChatScope(value: unknown): value is ChatScope {
+  return typeof value === "string" && CHAT_SCOPE_VALUES.has(value as ChatScope);
+}
+
+function toOptionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))
+    ? Number(value)
+    : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
 type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
 
 interface MatchDraftService {
@@ -139,52 +240,6 @@ const enrichPatchWithCostsSafe = async (
   if (!patch) return null;
   return (await enrichPatchWithCosts(patch, prismaClient)) as MatchPatch;
 };
-
-interface PlayerState {
-  id: string;
-  displayName: string;
-  socketId: string | null;
-  lobbyId?: string | null;
-  matchId?: string | null;
-}
-
-interface ServerMatchState extends AnyRecord {
-  id: string;
-  playerIds: string[];
-  status: string;
-  matchType: string;
-  lobbyId?: string | null;
-  lobbyName?: string | null;
-  roundId?: string | null;
-  draftSessionId?: string | null;
-  draftState?: AnyRecord | null;
-  draftConfig?: AnyRecord | null;
-  playerDecks?: Map<string, unknown> | null;
-  sealedPacks?: AnyRecord | null;
-  game?: (AnyRecord & { winner?: "p1" | "p2" | null; matchEnded?: boolean; results?: unknown }) | null;
-  players?: AnyRecord;
-  seed?: string | null;
-  turn?: string | null;
-  lastTs?: number;
-  tournamentId?: string | null;
-  winnerId?: string | null;
-  loserId?: string | null;
-  _finalized?: boolean;
-  _cleanupTimer?: NodeJS.Timeout | null;
-}
-
-interface LobbyState extends AnyRecord {
-  id: string;
-  name: string | null;
-  hostId: string | null;
-  playerIds: Set<string>;
-  status: string;
-  maxPlayers: number;
-  ready: Set<string>;
-  visibility: "open" | "private";
-  plannedMatchType?: string | null;
-  lastActive: number;
-}
 
 interface MetricsSnapshot extends AnyRecord {
   time: number;
@@ -914,101 +969,131 @@ server.on("request", async (req: IncomingMessage, res: ServerResponse) => {
         try {
           const body = Buffer.concat(chunks).toString();
           const parsed = JSON.parse(body) as Partial<TournamentBroadcastPayload>;
-          const event = typeof parsed.event === "string" ? parsed.event : null;
-          const data =
-            parsed.data && typeof parsed.data === "object"
-              ? (parsed.data as Record<string, unknown>)
-              : {};
+          const event = isTournamentBroadcastEvent(parsed.event)
+            ? parsed.event
+            : null;
           if (!event) {
             throw new Error("Missing event");
           }
 
+          const data = normalizeTournamentBroadcastData(parsed.data);
+
           // Call the appropriate broadcast function
           switch (event) {
-            case "TOURNAMENT_UPDATED":
-              if (data.id) broadcastTournamentUpdate(data.id, data);
+            case "TOURNAMENT_UPDATED": {
+              const id = toOptionalString(data.id);
+              if (id) {
+                broadcastTournamentUpdate(id, data);
+              }
               break;
-            case "PHASE_CHANGED":
-              if (data.tournamentId && data.newPhase) {
-                const { tournamentId, newPhase, ...additionalData } = data;
+            }
+            case "PHASE_CHANGED": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              const newPhase = toOptionalString(data.newPhase);
+              if (tournamentId && newPhase) {
+                const { tournamentId: _ti, newPhase: _np, ...additionalData } = data;
                 broadcastPhaseChanged(tournamentId, newPhase, additionalData);
               }
               break;
-            case "ROUND_STARTED":
-              if (data.tournamentId && data.roundNumber && data.matches) {
-                broadcastRoundStarted(
-                  data.tournamentId,
-                  data.roundNumber,
-                  data.matches
-                );
+            }
+            case "ROUND_STARTED": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              const roundNumber = toOptionalNumber(data.roundNumber);
+              const matchesPayload = Array.isArray(data.matches) ? data.matches : null;
+              if (tournamentId && roundNumber !== null && matchesPayload) {
+                broadcastRoundStarted(tournamentId, roundNumber, matchesPayload);
               }
               break;
-            case "PLAYER_JOINED":
-              if (data.tournamentId) {
+            }
+            case "PLAYER_JOINED": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              const playerId = toOptionalString(data.playerId);
+              if (tournamentId && playerId) {
+                const playerName = toOptionalString(data.playerName);
+                const currentPlayerCount = toOptionalNumber(data.currentPlayerCount);
                 broadcastPlayerJoined(
-                  data.tournamentId,
-                  data.playerId,
-                  data.playerName,
-                  data.currentPlayerCount
+                  tournamentId,
+                  playerId,
+                  playerName ?? undefined,
+                  currentPlayerCount ?? undefined
                 );
               }
               break;
-            case "PLAYER_LEFT":
-              if (data.tournamentId) {
+            }
+            case "PLAYER_LEFT": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              const playerId = toOptionalString(data.playerId);
+              if (tournamentId && playerId) {
+                const playerName = toOptionalString(data.playerName);
+                const currentPlayerCount = toOptionalNumber(data.currentPlayerCount);
                 broadcastPlayerLeft(
-                  data.tournamentId,
-                  data.playerId,
-                  data.playerName,
-                  data.currentPlayerCount
+                  tournamentId,
+                  playerId,
+                  playerName ?? undefined,
+                  currentPlayerCount ?? undefined
                 );
               }
               break;
-            case "DRAFT_READY":
-              if (data.tournamentId && data.draftSessionId) {
-                const { tournamentId, ...rest } = data;
+            }
+            case "DRAFT_READY": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              const draftSessionId = toOptionalString(data.draftSessionId);
+              if (tournamentId && draftSessionId) {
+                const { tournamentId: _ti, ...rest } = data;
                 broadcastDraftReady(tournamentId, rest);
               }
               break;
-            case "UPDATE_PREPARATION":
-              if (data.tournamentId) {
+            }
+            case "UPDATE_PREPARATION": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              const playerId = toOptionalString(data.playerId);
+              if (tournamentId && playerId) {
+                const preparationStatus = toOptionalString(data.preparationStatus);
+                const readyPlayerCount = toOptionalNumber(data.readyPlayerCount);
+                const totalPlayerCount = toOptionalNumber(data.totalPlayerCount);
+                const deckSubmitted =
+                  typeof data.deckSubmitted === "boolean" ? data.deckSubmitted : undefined;
                 broadcastPreparationUpdate(
-                  data.tournamentId,
-                  data.playerId,
-                  data.preparationStatus,
-                  data.readyPlayerCount,
-                  data.totalPlayerCount,
-                  data.deckSubmitted
+                  tournamentId,
+                  playerId,
+                  preparationStatus ?? undefined,
+                  readyPlayerCount ?? undefined,
+                  totalPlayerCount ?? undefined,
+                  deckSubmitted
                 );
               }
               break;
-            case "STATISTICS_UPDATED":
-              if (data.tournamentId) {
-                broadcastStatisticsUpdate(data.tournamentId, data);
+            }
+            case "STATISTICS_UPDATED": {
+              const tournamentId = toOptionalString(data.tournamentId);
+              if (tournamentId) {
+                broadcastStatisticsUpdate(tournamentId, data);
               }
               break;
-            case "MATCH_ASSIGNED":
+            }
+            case "MATCH_ASSIGNED": {
               // For now, just log - MATCH_ASSIGNED needs player-specific routing
               console.log("[Tournament] MATCH_ASSIGNED broadcast received");
               break;
-            case "matchEnded":
-              if (data.matchId) {
-                const match = matches.get(data.matchId);
-                if (match) {
-                  // Clear player associations
-                  for (const playerId of match.playerIds || []) {
+            }
+            case "matchEnded": {
+              const matchId = toOptionalString(data.matchId);
+              if (matchId) {
+                const match = matches.get(matchId);
+                if (match && Array.isArray(match.playerIds)) {
+                  for (const playerId of match.playerIds) {
                     const player = players.get(playerId);
-                    if (player && player.matchId === data.matchId) {
+                    if (player && player.matchId === matchId) {
                       player.matchId = null;
                     }
                   }
-                  // Broadcast to match room
-                  io.to(`match:${data.matchId}`).emit("matchEnded", data);
-                  console.log(
-                    `[Match] Ended match ${data.matchId} due to ${data.reason}`
-                  );
+                  io.to(`match:${matchId}`).emit("matchEnded", data);
+                  const reason = toOptionalString(data.reason) ?? "unknown_reason";
+                  console.log(`[Match] Ended match ${matchId} due to ${reason}`);
                 }
               }
               break;
+            }
           }
 
           res.writeHead(200, { "Content-Type": "application/json" });
@@ -1169,12 +1254,9 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   applyPendingAction,
   emitInteraction,
   emitInteractionResult,
-  mergeEvents: mergeEvents as unknown as (prev: any[], additions: any[]) => any[],
+  mergeEvents,
   dedupePermanents,
-  deepMergeReplaceArrays: deepMergeReplaceArrays as unknown as (
-    target: Record<string, unknown>,
-    source: Record<string, unknown>
-  ) => Record<string, unknown>,
+  deepMergeReplaceArrays,
   applyMovementAndCombat,
   applyTurnStart,
   applyGenesis,
@@ -1562,19 +1644,20 @@ function rid(prefix: string): string {
     .slice(-4)}`;
 }
 
-function getPlayerInfo(playerId: string, seat: Seat | null = null):
-  | { id: string; displayName: string; seat: Seat | null }
-  | null {
+type BasicPlayerInfo = { id: string; displayName: string; seat?: Seat };
+
+function getPlayerInfo(playerId: string, seat: Seat | null = null): BasicPlayerInfo | null {
   const p = players.get(playerId);
   if (!p) return null;
-  let seatValue = null;
+  const info: BasicPlayerInfo = { id: p.id, displayName: p.displayName };
   if (seat === "p1" || seat === "p2") {
-    seatValue = seat;
+    info.seat = seat;
   }
-  return { id: p.id, displayName: p.displayName, seat: seatValue };
+  return info;
 }
 
 function getPlayerBySocket(socket: SocketClient | null | undefined): PlayerState | null {
+  if (!socket) return null;
   const pid = playerIdBySocket.get(socket.id);
   if (!pid) return null;
   return players.get(pid) || null;
@@ -1960,28 +2043,43 @@ async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState
         { matchId, tournamentId: match.tournamentId }
       );
       try {
-        const draftSession = await prisma.draftSession.findFirst({
-          where: { tournamentId: match.tournamentId },
-          select: { settings: true, packConfiguration: true },
-        });
-        if (draftSession) {
-          // Extract cubeId from DraftSession settings
-          const settings = draftSession.settings || {};
-          const cubeId = settings.cubeId;
+          const draftSession = await prisma.draftSession.findFirst({
+            where: { tournamentId: match.tournamentId },
+            select: { settings: true, packConfiguration: true },
+          });
+          if (draftSession) {
+            // Extract cubeId from DraftSession settings
+            const settings =
+              draftSession.settings && typeof draftSession.settings === "object"
+                ? (draftSession.settings as Record<string, unknown>)
+                : {};
+            const cubeId = toOptionalString(settings.cubeId);
 
-          // Build draftConfig from DraftSession
-          const packConfig = draftSession.packConfiguration || [];
-          const packCounts = {};
-          for (const entry of packConfig) {
-            const setId = entry.setId || "Beta";
-            packCounts[setId] =
-              (packCounts[setId] || 0) + (entry.packCount || 0);
-          }
+            // Build draftConfig from DraftSession
+            type DraftPackConfigurationEntry = {
+              setId?: string | null;
+              packCount?: number | null;
+            };
+            const packConfig = Array.isArray(draftSession.packConfiguration)
+              ? (draftSession.packConfiguration as DraftPackConfigurationEntry[])
+              : [];
+            const packCounts: Record<string, number> = {};
+            for (const entry of packConfig) {
+              const setId =
+                entry && typeof entry.setId === "string" && entry.setId
+                  ? entry.setId
+                  : "Beta";
+              const packs =
+                typeof entry?.packCount === "number" && Number.isFinite(entry.packCount)
+                  ? entry.packCount
+                  : 0;
+              packCounts[setId] = (packCounts[setId] || 0) + packs;
+            }
 
-          match.draftConfig = {
-            cubeId: cubeId || undefined,
-            packCounts,
-            packCount:
+            match.draftConfig = {
+              cubeId: cubeId || undefined,
+              packCounts,
+              packCount:
               Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
             packSize: 15,
           };
@@ -2006,83 +2104,6 @@ async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState
       );
     } catch {}
   }
-}
-
-// Deep merge that replaces arrays and merges plain objects.
-// Primitives and nulls overwrite. Undefined in patch leaves value as-is.
-function deepMergeReplaceArrays(base: unknown, patch: unknown): unknown {
-  if (patch === undefined) return base;
-  if (patch === null) return null;
-  if (Array.isArray(patch)) return patch; // replace arrays fully
-  if (typeof patch !== "object") return patch; // primitives overwrite
-
-  const baseObj =
-    base && typeof base === "object" && !Array.isArray(base)
-      ? (base as Record<string, unknown>)
-      : {};
-  const sourceObj = patch as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...baseObj };
-  for (const [k, v] of Object.entries(sourceObj)) {
-    const cur = out[k];
-    out[k] = deepMergeReplaceArrays(cur, v);
-  }
-  return out;
-}
-
-// Normalize permanents arrays without dropping duplicates across the board.
-// Trust client/server sync to resolve identity; allow multiple copies of same cardId.
-function dedupePermanents(per: unknown): unknown {
-  try {
-    if (!per || typeof per !== "object") return per;
-    const out: Record<string, unknown[]> = {};
-    for (const [cell, arrAny] of Object.entries(per as Record<string, unknown>)) {
-      const arr = Array.isArray(arrAny) ? arrAny : [];
-      const next: unknown[] = [];
-      for (const item of arr) {
-        if (!item || typeof item !== "object") continue;
-        next.push(item);
-      }
-      out[cell] = next;
-    }
-    return out;
-  } catch {
-    return per;
-  }
-}
-
-// Cap for multiplayer console events to avoid unbounded growth
-const MAX_EVENTS = 200;
-// Merge console events by stable key and chronological order, trimming to MAX_EVENTS.
-function mergeEvents(
-  prev: Array<Record<string, unknown>> | undefined,
-  add: Array<Record<string, unknown>> | undefined
-): Array<Record<string, unknown>> {
-  const m = new Map<string, Record<string, unknown>>();
-  if (Array.isArray(prev)) {
-    for (const e of prev) {
-      if (!e) continue;
-      m.set(`${e.id}|${e.ts}|${e.text}`, e);
-    }
-  }
-  if (Array.isArray(add)) {
-    for (const e of add) {
-      if (!e) continue;
-      m.set(`${e.id}|${e.ts}|${e.text}`, e);
-    }
-  }
-  const merged = Array.from(m.values()).sort((a, b) => {
-    const tsRawA = a.ts as number | string | undefined;
-    const tsRawB = b.ts as number | string | undefined;
-    const tsA = typeof tsRawA === "number" ? tsRawA : Number(tsRawA ?? 0);
-    const tsB = typeof tsRawB === "number" ? tsRawB : Number(tsRawB ?? 0);
-    if (tsA !== tsB) return tsA - tsB;
-    const idRawA = a.id as number | string | undefined;
-    const idRawB = b.id as number | string | undefined;
-    const idA = typeof idRawA === "number" ? idRawA : Number(idRawA ?? 0);
-    const idB = typeof idRawB === "number" ? idRawB : Number(idRawB ?? 0);
-    return idA - idB;
-  });
-  return merged.length > MAX_EVENTS ? merged.slice(-MAX_EVENTS) : merged;
 }
 
 // T019: Tournament broadcast helpers - now use extracted module
@@ -2211,6 +2232,22 @@ io.on("connection", async (socket: SocketClient) => {
     getPlayerBySocket,
   });
 
+  const rtcHandlers = registerRtcHandlers({
+    io,
+    socket,
+    isAuthed: () => authed,
+    getPlayerBySocket,
+    getPlayerInfo,
+    getVoiceRoomIdForPlayer,
+    players,
+    lobbies,
+    matches,
+    pendingVoiceRequests,
+    rtcParticipants,
+    participantDetails,
+    rid,
+  });
+
   // Read auth result from middleware (fallback to soft-allow if not required)
   if (socket.data && socket.data.authUser) {
     authUser = socket.data.authUser;
@@ -2277,23 +2314,27 @@ io.on("connection", async (socket: SocketClient) => {
     if (player.matchId && matches.has(player.matchId)) {
       socket.join(`match:${player.matchId}`);
       const m = matches.get(player.matchId);
-      socket.emit("matchStarted", { match: getMatchInfo(m) });
+      if (m) {
+        socket.emit("matchStarted", { match: getMatchInfo(m) });
 
-      // If rejoining during an active draft, send current draft state
-      if (
-        m.matchType === "draft" &&
-        m.draftState &&
-        m.draftState.phase !== "waiting"
-      ) {
-        console.log(
-          `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`
-        );
-        socket.emit("draftUpdate", m.draftState);
+        // If rejoining during an active draft, send current draft state
+        if (
+          m.matchType === "draft" &&
+          m.draftState &&
+          m.draftState.phase !== "waiting"
+        ) {
+          console.log(
+            `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`
+          );
+          socket.emit("draftUpdate", m.draftState);
+        }
       }
     } else if (player.lobbyId && lobbies.has(player.lobbyId)) {
       socket.join(`lobby:${player.lobbyId}`);
       const l = lobbies.get(player.lobbyId);
-      socket.emit("joinedLobby", { lobby: getLobbyInfo(l) });
+      if (l) {
+        socket.emit("joinedLobby", { lobby: getLobbyInfo(l) });
+      }
     } else {
       // Server restart recovery path: attach player to an active match from DB if found
       try {
@@ -2583,12 +2624,7 @@ io.on("connection", async (socket: SocketClient) => {
         }
         return;
       }
-      await leaderHandleInteractionRequest(
-        matchId,
-        player.id,
-        payload,
-        socket.id
-      );
+      await leaderHandleInteractionRequest(matchId, player.id, payload);
     } catch (err) {
       try {
         console.warn(
@@ -2619,12 +2655,7 @@ io.on("connection", async (socket: SocketClient) => {
         }
         return;
       }
-      await leaderHandleInteractionResponse(
-        matchId,
-        player.id,
-        payload,
-        socket.id
-      );
+      await leaderHandleInteractionResponse(matchId, player.id, payload);
     } catch (err) {
       try {
         console.warn(
@@ -2635,29 +2666,33 @@ io.on("connection", async (socket: SocketClient) => {
     }
   });
 
-  socket.on("chat", (payload = {}) => {
+  socket.on("chat", (incoming?: ChatPayload) => {
     if (!authed) return;
+    const payload = incoming ?? {};
     const player = getPlayerBySocket(socket);
     if (!player) return;
-    const content = String(
-      payload && payload.content ? payload.content : ""
-    ).slice(0, 500);
+    const rawContent = payload.content;
+    const normalizedContent =
+      typeof rawContent === "string"
+        ? rawContent
+        : rawContent != null
+        ? String(rawContent)
+        : "";
+    const content = normalizedContent.slice(0, 500);
     if (!content) return;
-    const requestedScope =
-      payload && typeof payload.scope === "string" ? payload.scope : null;
+    const requestedScope = isChatScope(payload.scope) ? payload.scope : null;
 
     const from = getPlayerInfo(player.id);
 
     // Global chat: broadcast to all connected clients
     if (requestedScope === "global") {
-      io.emit("chat", { from, content, scope: "global" });
+      io.emit("chat", { from, content, scope: "global" as ChatScope });
       return;
     }
 
     // Room-scoped chat (lobby or match). Prefer requested scope if valid and the player is in that context; otherwise infer from player state.
-    /** @type {'lobby'|'match'} */
-    let scope = "lobby";
-    let room = null;
+    let scope: Exclude<ChatScope, "global"> = "lobby";
+    let room: string | null = null;
 
     if (requestedScope === "match" && player.matchId) {
       scope = "match";
@@ -2741,14 +2776,14 @@ io.on("connection", async (socket: SocketClient) => {
         const position =
           Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
         let dragging = null;
-        if (
-          payload &&
-          typeof payload.dragging === "object" &&
-          payload.dragging
-        ) {
-          const raw = payload.dragging;
-          const kind = typeof raw.kind === "string" ? raw.kind : null;
-          const allowedKinds = new Set([
+        const draggingCandidate =
+          payload && typeof payload.dragging === "object" && payload.dragging
+            ? (payload.dragging as DraggingPayload)
+            : null;
+        if (draggingCandidate) {
+          const kind =
+            typeof draggingCandidate.kind === "string" ? draggingCandidate.kind : null;
+          const allowedKinds: ReadonlySet<NormalizedDragging["kind"]> = new Set([
             "permanent",
             "hand",
             "pile",
@@ -2756,37 +2791,62 @@ io.on("connection", async (socket: SocketClient) => {
             "token",
           ]);
           if (kind && allowedKinds.has(kind)) {
-            const next = { kind };
+            const next: NormalizedDragging = { kind };
             if (kind === "permanent") {
               const from =
-                typeof raw.from === "string" ? raw.from.slice(0, 32) : null;
-              const index = Number.isFinite(Number(raw.index))
-                ? Number(raw.index)
-                : null;
+                typeof draggingCandidate.from === "string"
+                  ? draggingCandidate.from.slice(0, 32)
+                  : null;
+              const indexValue =
+                typeof draggingCandidate.index === "number" && Number.isFinite(draggingCandidate.index)
+                  ? draggingCandidate.index
+                  : typeof draggingCandidate.index === "string"
+                  ? Number(draggingCandidate.index)
+                  : NaN;
+              const index = Number.isFinite(indexValue) ? Number(indexValue) : null;
               if (from) next.from = from;
               if (index !== null) next.index = index;
             }
             if (kind === "avatar") {
-              const who = raw.who === "p1" || raw.who === "p2" ? raw.who : null;
+              const who =
+                draggingCandidate.who === "p1" || draggingCandidate.who === "p2"
+                  ? draggingCandidate.who
+                  : null;
               if (who) next.who = who;
             }
             const source =
-              typeof raw.source === "string" ? raw.source.slice(0, 32) : null;
+              typeof draggingCandidate.source === "string"
+                ? draggingCandidate.source.slice(0, 32)
+                : null;
             if (source) next.source = source;
-            const cardId = Number.isFinite(Number(raw.cardId))
-              ? Number(raw.cardId)
-              : null;
+            const cardIdValue =
+              typeof draggingCandidate.cardId === "number" &&
+              Number.isFinite(draggingCandidate.cardId)
+                ? draggingCandidate.cardId
+                : typeof draggingCandidate.cardId === "string"
+                ? Number(draggingCandidate.cardId)
+                : NaN;
+            const cardId = Number.isFinite(cardIdValue) ? Number(cardIdValue) : null;
             if (cardId !== null) next.cardId = cardId;
             const slug =
-              typeof raw.slug === "string" ? raw.slug.slice(0, 64) : null;
+              typeof draggingCandidate.slug === "string"
+                ? draggingCandidate.slug.slice(0, 64)
+                : null;
             if (slug) next.slug = slug;
-            if (typeof raw.meta === "object" && raw.meta) {
-              const meta = {};
-              if (
-                typeof raw.meta.owner === "number" &&
-                Number.isFinite(raw.meta.owner)
-              ) {
-                meta.owner = Number(raw.meta.owner);
+            const metaRaw =
+              typeof draggingCandidate.meta === "object" && draggingCandidate.meta
+                ? (draggingCandidate.meta as Record<string, unknown>)
+                : null;
+            if (metaRaw) {
+              const meta: DraggingMeta = {};
+              const ownerValue =
+                typeof metaRaw.owner === "number" && Number.isFinite(metaRaw.owner)
+                  ? metaRaw.owner
+                  : typeof metaRaw.owner === "string"
+                  ? Number(metaRaw.owner)
+                  : null;
+              if (ownerValue !== null && Number.isFinite(ownerValue)) {
+                meta.owner = Number(ownerValue);
               }
               if (meta.owner !== undefined) next.meta = meta;
             }
@@ -2798,19 +2858,28 @@ io.on("connection", async (socket: SocketClient) => {
         }
         // Sanitize highlight from payload: expect an object with { cardId?, slug? }
         let highlight = null;
-        if (
-          payload &&
-          typeof payload.highlight === "object" &&
-          payload.highlight
-        ) {
-          const h = payload.highlight;
-          const cardId = Number.isFinite(Number(h.cardId))
-            ? Number(h.cardId)
+        const highlightCandidate =
+          payload && typeof payload.highlight === "object" && payload.highlight
+            ? (payload.highlight as HighlightPayload)
             : null;
+        if (highlightCandidate) {
+          const cardIdValue =
+            typeof highlightCandidate.cardId === "number" &&
+            Number.isFinite(highlightCandidate.cardId)
+              ? highlightCandidate.cardId
+              : typeof highlightCandidate.cardId === "string"
+              ? Number(highlightCandidate.cardId)
+              : NaN;
+          const cardId = Number.isFinite(cardIdValue) ? Number(cardIdValue) : null;
           const slug =
-            typeof h.slug === "string" ? String(h.slug).slice(0, 64) : null;
+            typeof highlightCandidate.slug === "string"
+              ? highlightCandidate.slug.slice(0, 64)
+              : null;
           if (cardId !== null || (slug && slug.length > 0)) {
-            highlight = { cardId, slug };
+            highlight = {
+              ...(cardId !== null ? { cardId } : {}),
+              ...(slug ? { slug } : {}),
+            };
           }
         }
         const out = {
@@ -2834,58 +2903,69 @@ io.on("connection", async (socket: SocketClient) => {
     if (player && player.matchId) {
       const match = await getOrLoadMatch(player.matchId);
       if (match) {
-        const snap = { match: getMatchInfo(match) };
+        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = {
+          match: getMatchInfo(match),
+        };
         // Only include a game snapshot when it's meaningful.
         // During sealed/draft setup the server-side game can be an empty object ({}),
         // while the client has already loaded decks locally. Sending an empty game here
         // would wipe the client state on every resync. Avoid that by requiring either
         // an in-progress match or detectable game content.
         const hasMeaningfulGame = (() => {
-          if (!match || !match.game) return false;
+          const game = match?.game;
+          if (!isRecord(game)) return false;
           if (match.status === "in_progress") return true;
-          if (typeof match.game === "object") {
-            const g = match.game;
-            const keys = Object.keys(g);
-            if (keys.length === 0) return false;
-            // Heuristic: presence of core state indicates a real snapshot (phase alone is not enough)
-            if ("libraries" in g) return true;
-            if ("zones" in g) return true;
-            if ("board" in g) return true;
-            if ("permanents" in g) return true;
-            if ("currentPlayer" in g) return true;
-            // Setup phase with mulligans is meaningful - needed for tournament sealed matches
-            if (g.phase === "Setup" && "mulligans" in g) return true;
-            // Consider avatars meaningful when at least one seat has a card or position
-            try {
-              const a = g.avatars || {};
-              const p1Has = !!(
-                a.p1 &&
-                (a.p1.card ||
-                  (Array.isArray(a.p1.pos) && a.p1.pos.length === 2))
-              );
-              const p2Has = !!(
-                a.p2 &&
-                (a.p2.card ||
-                  (Array.isArray(a.p2.pos) && a.p2.pos.length === 2))
-              );
-              if (p1Has || p2Has) return true;
-            } catch {}
-            // D20 rolls are meaningful during Setup phase - needed for player seat selection
-            if (
-              "d20Rolls" in g &&
-              g.d20Rolls &&
-              typeof g.d20Rolls === "object"
-            ) {
-              const rolls = g.d20Rolls;
-              if (rolls.p1 !== null && rolls.p1 !== undefined) return true;
-              if (rolls.p2 !== null && rolls.p2 !== undefined) return true;
+          const keys = Object.keys(game);
+          if (keys.length === 0) return false;
+          const hasKey = (key: string) => key in game;
+          if (
+            hasKey("libraries") ||
+            hasKey("zones") ||
+            hasKey("board") ||
+            hasKey("permanents") ||
+            hasKey("currentPlayer")
+          ) {
+            return true;
+          }
+          const phase =
+            typeof game["phase"] === "string" ? (game["phase"] as string) : null;
+          if (phase === "Setup" && hasKey("mulligans")) return true;
+          // Consider avatars meaningful when at least one seat has a card or position
+          try {
+            const avatarsRaw = isRecord(game["avatars"])
+              ? (game["avatars"] as Record<string, unknown>)
+              : {};
+            const avatarHasData = (candidate: unknown): boolean => {
+              if (!isRecord(candidate)) return false;
+              const card = candidate["card"];
+              if (card != null) return true;
+              const pos = candidate["pos"];
+              return Array.isArray(pos) && pos.length === 2;
+            };
+            const p1Has = avatarHasData(avatarsRaw["p1"]);
+            const p2Has = avatarHasData(avatarsRaw["p2"]);
+            if (p1Has || p2Has) return true;
+          } catch {}
+          // D20 rolls are meaningful during Setup phase - needed for player seat selection
+          const rollsRaw = isRecord(game["d20Rolls"])
+            ? (game["d20Rolls"] as Record<string, unknown>)
+            : null;
+          if (rollsRaw) {
+            const hasRollValue = (value: unknown): boolean =>
+              typeof value === "number" ||
+              (typeof value === "string" && value.trim().length > 0);
+            if (hasRollValue(rollsRaw["p1"]) || hasRollValue(rollsRaw["p2"])) {
+              return true;
             }
           }
           return false;
         })();
         if (hasMeaningfulGame) {
           // Enrich game state with card costs before sending to client
-          const enrichedGame = await enrichPatchWithCosts(match.game, prisma);
+          const enrichedGame = await enrichPatchWithCostsSafe(
+            (match.game ?? null) as MatchPatch | null,
+            prisma
+          );
           snap.game = enrichedGame;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
@@ -2931,418 +3011,6 @@ io.on("connection", async (socket: SocketClient) => {
     }
   });
 
-  // --- Enhanced WebRTC signaling with participant tracking ---------------
-  // Manages WebRTC participant state and scoped message delivery.
-  // Only participants who have joined WebRTC receive signals.
-  socket.on("rtc:join", () => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    const roomId = getVoiceRoomIdForPlayer(player);
-    if (!roomId) return;
-
-    const playerId = player.id;
-
-    console.log("[RTC][join] join request", {
-      playerId,
-      socket: socket.id,
-      roomId,
-      lobbyId: player.lobbyId || null,
-      matchId: player.matchId || null,
-    });
-
-    if (!rtcParticipants.has(roomId)) {
-      rtcParticipants.set(roomId, new Set());
-    }
-
-    const roomParticipants = rtcParticipants.get(roomId);
-    roomParticipants.add(playerId);
-
-    participantDetails.set(playerId, {
-      id: playerId,
-      displayName: player.displayName,
-      lobbyId: player.lobbyId || null,
-      matchId: player.matchId || null,
-      roomId,
-      joinedAt: Date.now(),
-    });
-
-    const participants = Array.from(roomParticipants)
-      .map((pid) => {
-        const details = participantDetails.get(pid);
-        return details
-          ? {
-              id: details.id,
-              displayName: details.displayName,
-              lobbyId: details.lobbyId,
-              matchId: details.matchId,
-              roomId: details.roomId,
-              joinedAt: details.joinedAt,
-            }
-          : null;
-      })
-      .filter(Boolean);
-
-    roomParticipants.forEach((pid) => {
-      if (pid === playerId) return;
-      const participantPlayer = players.get(pid);
-      if (participantPlayer && participantPlayer.socketId) {
-        io.to(participantPlayer.socketId).emit("rtc:peer-joined", {
-          from: getPlayerInfo(playerId),
-          participants,
-        });
-      }
-    });
-
-    socket.emit("rtc:participants", { participants });
-  });
-
-  socket.on("rtc:signal", (payload = {}) => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    const roomId = getVoiceRoomIdForPlayer(player);
-    if (!roomId) return;
-
-    const playerId = player.id;
-    const data = payload && typeof payload === "object" ? payload.data : null;
-    if (!data) return;
-
-    console.log("[RTC][signal] forwarding signal", {
-      from: playerId,
-      roomId,
-      hasSdp: !!data.sdp,
-      hasCandidate: !!data.candidate,
-    });
-
-    const roomParticipants = rtcParticipants.get(roomId);
-    if (!roomParticipants || !roomParticipants.has(playerId)) return;
-
-    roomParticipants.forEach((pid) => {
-      if (pid === playerId) return;
-      const participantPlayer = players.get(pid);
-      if (participantPlayer && participantPlayer.socketId) {
-        io.to(participantPlayer.socketId).emit("rtc:signal", {
-          from: playerId,
-          data,
-        });
-      }
-    });
-  });
-
-  socket.on("rtc:leave", () => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    const roomId = getVoiceRoomIdForPlayer(player);
-    if (!roomId) return;
-
-    const playerId = player.id;
-
-    const roomParticipants = rtcParticipants.get(roomId);
-    if (roomParticipants) {
-      roomParticipants.delete(playerId);
-
-      if (roomParticipants.size === 0) {
-        rtcParticipants.delete(roomId);
-      }
-
-      const remainingParticipants = Array.from(roomParticipants)
-        .map((pid) => {
-          const details = participantDetails.get(pid);
-          return details
-            ? {
-                id: details.id,
-                displayName: details.displayName,
-                lobbyId: details.lobbyId,
-                matchId: details.matchId,
-                roomId: details.roomId,
-                joinedAt: details.joinedAt,
-              }
-            : null;
-        })
-        .filter(Boolean);
-
-      roomParticipants.forEach((pid) => {
-        const participantPlayer = players.get(pid);
-        if (participantPlayer && participantPlayer.socketId) {
-          io.to(participantPlayer.socketId).emit("rtc:peer-left", {
-            from: playerId,
-            participants: remainingParticipants,
-          });
-        }
-      });
-    }
-
-    participantDetails.delete(playerId);
-  });
-
-  // WebRTC connection failure reporting
-  socket.on("rtc:connection-failed", (payload = {}) => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    const roomId = getVoiceRoomIdForPlayer(player);
-    if (!roomId) return;
-
-    const playerId = player.id;
-    const reason = payload.reason || "unknown";
-    const code = payload.code || "CONNECTION_ERROR";
-
-    console.warn(
-      `WebRTC connection failed for player ${playerId} in ${roomId}: ${reason} (${code})`
-    );
-
-    const roomParticipants = rtcParticipants.get(roomId);
-    if (roomParticipants && roomParticipants.has(playerId)) {
-      roomParticipants.forEach((pid) => {
-        if (pid === playerId) return;
-        const participantPlayer = players.get(pid);
-        if (participantPlayer && participantPlayer.socketId) {
-          io.to(participantPlayer.socketId).emit("rtc:peer-connection-failed", {
-            from: playerId,
-            reason,
-            code,
-            timestamp: Date.now(),
-          });
-        }
-      });
-    }
-
-    socket.emit("rtc:connection-failed-ack", {
-      playerId,
-      matchId: player.matchId || null,
-      roomId,
-      timestamp: Date.now(),
-    });
-  });
-
-  socket.on("rtc:request", (payload = {}) => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    const targetId =
-      payload && typeof payload.targetId === "string" ? payload.targetId : null;
-    const requestedLobbyId =
-      payload && typeof payload.lobbyId === "string" ? payload.lobbyId : null;
-    const requestedMatchId =
-      payload && typeof payload.matchId === "string" ? payload.matchId : null;
-    if (!targetId || targetId === player.id) {
-      console.warn("[RTC][request] invalid target", {
-        from: player.id,
-        targetId,
-        requestedLobbyId,
-        requestedMatchId,
-      });
-      return;
-    }
-
-    const targetPlayer = players.get(targetId);
-    if (!targetPlayer || !targetPlayer.socketId) {
-      console.warn("[RTC][request] target not connected", {
-        from: player.id,
-        targetId,
-      });
-      return;
-    }
-
-    const shareLobby =
-      player.lobbyId &&
-      targetPlayer.lobbyId &&
-      player.lobbyId === targetPlayer.lobbyId;
-    const shareMatch =
-      player.matchId &&
-      targetPlayer.matchId &&
-      player.matchId === targetPlayer.matchId;
-
-    let lobbyId = null;
-    if (requestedLobbyId) {
-      const lobby = lobbies.get(requestedLobbyId);
-      if (
-        lobby &&
-        lobby.playerIds.has(player.id) &&
-        lobby.playerIds.has(targetId)
-      ) {
-        lobbyId = requestedLobbyId;
-      }
-    }
-    if (!lobbyId && shareLobby) {
-      lobbyId = player.lobbyId;
-    }
-
-    let matchId = null;
-    if (requestedMatchId) {
-      const match = matches.get(requestedMatchId);
-      if (
-        match &&
-        Array.isArray(match.playerIds) &&
-        match.playerIds.includes(player.id) &&
-        match.playerIds.includes(targetId)
-      ) {
-        matchId = requestedMatchId;
-      }
-    }
-    if (!matchId && shareMatch) {
-      matchId = player.matchId;
-    }
-
-    if (!lobbyId && !matchId) {
-      console.warn("[RTC][request] rejected - no shared scope", {
-        from: player.id,
-        targetId,
-        requestedLobbyId,
-        requestedMatchId,
-        shareLobby,
-        shareMatch,
-      });
-      return;
-    }
-
-    const requestId = rid("rtc_req");
-
-    pendingVoiceRequests.set(requestId, {
-      id: requestId,
-      from: player.id,
-      to: targetId,
-      lobbyId,
-      matchId,
-      createdAt: Date.now(),
-    });
-
-    console.log("[RTC][request] forwarding request", {
-      requestId,
-      from: player.id,
-      to: targetId,
-      lobbyId,
-      matchId,
-    });
-
-    io.to(targetPlayer.socketId).emit("rtc:request", {
-      requestId,
-      from: getPlayerInfo(player.id),
-      lobbyId,
-      matchId,
-      timestamp: Date.now(),
-    });
-
-    socket.emit("rtc:request:sent", {
-      requestId,
-      targetId,
-      lobbyId,
-      matchId,
-      timestamp: Date.now(),
-    });
-  });
-
-  socket.on("rtc:request:respond", (payload = {}) => {
-    if (!authed) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    const requestId =
-      payload && typeof payload.requestId === "string"
-        ? payload.requestId
-        : null;
-    const requesterId =
-      payload && typeof payload.requesterId === "string"
-        ? payload.requesterId
-        : null;
-    const accepted =
-      payload && typeof payload.accepted === "boolean"
-        ? payload.accepted
-        : false;
-
-    if (!requestId || !requesterId) {
-      console.warn("[RTC][request:respond] missing identifiers", {
-        player: player.id,
-        requestId,
-        requesterId,
-        accepted,
-      });
-      return;
-    }
-
-    const request = pendingVoiceRequests.get(requestId);
-    if (!request) {
-      console.warn("[RTC][request:respond] unknown request", {
-        player: player.id,
-        requestId,
-        requesterId,
-        accepted,
-      });
-      return;
-    }
-    if (request.to !== player.id || request.from !== requesterId) {
-      console.warn("[RTC][request:respond] mismatched request ownership", {
-        player: player.id,
-        request,
-        requesterId,
-      });
-      return;
-    }
-
-    const requesterPlayer = players.get(requesterId);
-    if (!requesterPlayer || !requesterPlayer.socketId) {
-      pendingVoiceRequests.delete(requestId);
-      console.warn("[RTC][request:respond] requester offline", {
-        requestId,
-        requesterId,
-      });
-      return;
-    }
-
-    const sameLobby =
-      request.lobbyId &&
-      player.lobbyId === request.lobbyId &&
-      requesterPlayer.lobbyId === request.lobbyId;
-    const sameMatch =
-      request.matchId &&
-      player.matchId === request.matchId &&
-      requesterPlayer.matchId === request.matchId;
-    if (!sameLobby && !sameMatch) {
-      pendingVoiceRequests.delete(requestId);
-      return;
-    }
-
-    pendingVoiceRequests.delete(requestId);
-
-    const responsePayload = {
-      requestId,
-      from: getPlayerInfo(player.id),
-      lobbyId: request.lobbyId,
-      matchId: request.matchId,
-      accepted,
-      timestamp: Date.now(),
-    };
-
-    console.log("[RTC][request:respond]", {
-      requestId,
-      requesterId,
-      responder: player.id,
-      accepted,
-      lobbyId: request.lobbyId,
-      matchId: request.matchId,
-    });
-
-    io.to(requesterPlayer.socketId).emit(
-      accepted ? "rtc:request:accepted" : "rtc:request:declined",
-      responsePayload
-    );
-
-    // Confirm to responder so UI can clear state
-    socket.emit("rtc:request:ack", responsePayload);
-
-    if (accepted) {
-      // Also let responder's client handle unified acceptance flow
-      socket.emit("rtc:request:accepted", responsePayload);
-    }
-  });
-
   // Submit sealed deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
     if (!authed) return;
@@ -3351,9 +3019,13 @@ io.on("connection", async (socket: SocketClient) => {
     const match = matches.get(player.matchId);
     if (!match || match.status !== "deck_construction") return;
     if (match.matchType !== "sealed") return;
+    if (!(match.playerDecks instanceof Map)) {
+      match.playerDecks = new Map<string, unknown>();
+    }
+    const playerDecks = match.playerDecks;
 
     // Idempotency: if this player already submitted, ignore duplicates
-    if (match.playerDecks && match.playerDecks.has(player.id)) {
+    if (playerDecks.has(player.id)) {
       return;
     }
 
@@ -3369,7 +3041,7 @@ io.on("connection", async (socket: SocketClient) => {
     }
 
     // Store the player's deck
-    match.playerDecks.set(player.id, cards);
+    playerDecks.set(player.id, cards);
 
     // Lightweight ack so client UI can flip instantly
     try {
@@ -3383,9 +3055,7 @@ io.on("connection", async (socket: SocketClient) => {
     } catch {}
 
     // Check if all players have submitted decks
-    const allSubmitted = match.playerIds.every((pid) =>
-      match.playerDecks.has(pid)
-    );
+    const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
 
     // Broadcast deck submission update
     const room = `match:${match.id}`;
@@ -3421,15 +3091,23 @@ io.on("connection", async (socket: SocketClient) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     try {
-      const allRecordings = await replay.listRecordings(prisma, { limit: 200 });
+      const allRecordings = (await replay.listRecordings(prisma, {
+        limit: 200,
+      })) as Array<Record<string, unknown>>;
 
       // Filter out bot matches (those with CPU bots or host accounts)
       // Only admins should see bot matches (via admin endpoints)
       const recordings = allRecordings.filter((recording) => {
-        if (!Array.isArray(recording.playerIds)) return true;
+        const playerIds = Array.isArray(recording.playerIds)
+          ? (recording.playerIds as unknown[])
+          : null;
+        if (!playerIds) return true;
         // Exclude if any player is a bot (ID starts with 'cpu_' or 'host_')
-        return !recording.playerIds.some((id) => {
-          const pid = String(id || "");
+        return !playerIds.some((playerId) => {
+          const pid =
+            typeof playerId === "string"
+              ? playerId
+              : String(playerId ?? "");
           return pid.startsWith("cpu_") || pid.startsWith("host_");
         });
       });
@@ -3604,11 +3282,15 @@ io.on("connection", async (socket: SocketClient) => {
     if (!player || !player.matchId) return;
 
     const match = matches.get(player.matchId);
-    if (!match || !match.playerDecks) return;
+    if (!match) return;
+    if (!(match.playerDecks instanceof Map)) {
+      match.playerDecks = new Map<string, unknown>();
+    }
+    const playerDecks = match.playerDecks;
     if (match.matchType !== "draft") return;
 
     // Idempotency: ignore duplicate submissions by the same player
-    if (match.playerDecks.has(player.id)) return;
+    if (playerDecks.has(player.id)) return;
 
     // Validate and store the submitted deck cards
     const deckRaw = payload && payload.deck ? payload.deck : payload;
@@ -3620,7 +3302,7 @@ io.on("connection", async (socket: SocketClient) => {
       });
       return;
     }
-    match.playerDecks.set(player.id, cards);
+    playerDecks.set(player.id, cards);
 
     // Lightweight ack so client UI can flip instantly
     try {
@@ -3638,9 +3320,7 @@ io.on("connection", async (socket: SocketClient) => {
     );
 
     // Check if all players have submitted decks
-    const allSubmitted = match.playerIds.every((pid) =>
-      match.playerDecks.has(pid)
-    );
+    const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
     if (allSubmitted && match.status === "deck_construction") {
       console.log(
         `[Match] All draft decks submitted for match ${match.id}, transitioning to waiting (setup)`
@@ -3702,6 +3382,8 @@ io.on("connection", async (socket: SocketClient) => {
     const player = players.get(pid);
     playerIdBySocket.delete(socket.id);
 
+    rtcHandlers.handleDisconnect(player ?? null);
+
     // Update draft presence on disconnect (cluster-aware)
     try {
       if (currentDraftSessionId) {
@@ -3723,118 +3405,57 @@ io.on("connection", async (socket: SocketClient) => {
       }
     } catch {}
 
-    for (const [requestId, request] of Array.from(
-      pendingVoiceRequests.entries()
-    )) {
-      if (request.from === pid || request.to === pid) {
-        pendingVoiceRequests.delete(requestId);
-        const otherId = request.from === pid ? request.to : request.from;
-        const otherPlayer = players.get(otherId);
-        if (otherPlayer && otherPlayer.socketId) {
-          console.log("[RTC][request:cancelled] disconnect cleanup", {
-            requestId,
-            cancelledBy: pid,
-            other: otherId,
-          });
-          io.to(otherPlayer.socketId).emit("rtc:request:cancelled", {
-            requestId,
-            cancelledBy: pid,
-            lobbyId: request.lobbyId,
-            matchId: request.matchId,
-            timestamp: Date.now(),
-          });
-        }
-      }
-    }
-
-    // Clean up WebRTC participant state on disconnect
-    const participantInfo = participantDetails.get(pid);
-    const roomId =
-      participantInfo?.roomId ||
-      (player ? getVoiceRoomIdForPlayer(player) : null);
-    if (roomId) {
-      const roomParticipants = rtcParticipants.get(roomId);
-      if (roomParticipants && roomParticipants.has(pid)) {
-        roomParticipants.delete(pid);
-
-        if (roomParticipants.size === 0) {
-          rtcParticipants.delete(roomId);
-        }
-
-        const remainingParticipants = Array.from(roomParticipants)
-          .map((participantId) => {
-            const details = participantDetails.get(participantId);
-            return details
-              ? {
-                  id: details.id,
-                  displayName: details.displayName,
-                  lobbyId: details.lobbyId,
-                  matchId: details.matchId,
-                  roomId: details.roomId,
-                  joinedAt: details.joinedAt,
-                }
-              : null;
-          })
-          .filter(Boolean);
-
-        roomParticipants.forEach((participantId) => {
-          const participantPlayer = players.get(participantId);
-          if (participantPlayer && participantPlayer.socketId) {
-            io.to(participantPlayer.socketId).emit("rtc:peer-left", {
-              from: pid,
-              participants: remainingParticipants,
-            });
-          }
-        });
-      }
-    }
-
-    participantDetails.delete(pid);
-
     if (player) {
       // If the player was in a lobby, remove them immediately to prevent ghost lobbies
       if (player.lobbyId && lobbies.has(player.lobbyId)) {
         const lobby = lobbies.get(player.lobbyId);
-        lobby.playerIds.delete(player.id);
-        lobby.ready.delete(player.id);
-        // If now empty or CPU-only, close and cleanup bots; otherwise if host left, reassign preferring humans
-        if (lobby.playerIds.size === 0 || !lobbyHasHumanPlayers(lobby)) {
-          lobby.status = "closed";
-          try {
-            botManager.cleanupBotsForLobby(lobby.id);
-          } catch {}
-          lobbies.delete(lobby.id);
-          // Replicate deletion cluster-wide
-          try {
-            publishLobbyDelete(lobby.id);
-          } catch {}
-          broadcastLobbies();
-        } else if (lobby.hostId === player.id) {
-          const remaining = Array.from(lobby.playerIds);
-          const humanNext =
-            remaining.find((id) => !isCpuPlayerId(id)) || remaining[0];
-          lobby.hostId = humanNext;
-          lobby.ready.clear();
-          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
-            lobby: getLobbyInfo(lobby),
-          });
-          // Replicate update cluster-wide
-          try {
-            publishLobbyState(lobby);
-          } catch {}
-          broadcastLobbies();
+        if (!lobby) {
+          lobbies.delete(player.lobbyId);
+          player.lobbyId = null;
         } else {
-          io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
-            lobby: getLobbyInfo(lobby),
-          });
-          // Replicate update cluster-wide
-          try {
-            publishLobbyState(lobby);
-          } catch {}
-          broadcastLobbies();
+          lobby.playerIds.delete(player.id);
+          lobby.ready.delete(player.id);
+          // If now empty or CPU-only, close and cleanup bots; otherwise if host left, reassign preferring humans
+          if (lobby.playerIds.size === 0 || !lobbyHasHumanPlayers(lobby)) {
+            lobby.status = "closed";
+            try {
+              botManager.cleanupBotsForLobby(lobby.id);
+            } catch {}
+            lobbies.delete(lobby.id);
+            // Replicate deletion cluster-wide
+            try {
+              publishLobbyDelete(lobby.id);
+            } catch {}
+            broadcastLobbies();
+          } else if (lobby.hostId === player.id) {
+            const remaining: string[] = Array.from(lobby.playerIds);
+            const humanNext =
+              remaining.find((pid) => !isCpuPlayerId(pid)) ??
+              remaining[0] ??
+              null;
+            lobby.hostId = humanNext;
+            lobby.ready.clear();
+            io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
+              lobby: getLobbyInfo(lobby),
+            });
+            // Replicate update cluster-wide
+            try {
+              publishLobbyState(lobby);
+            } catch {}
+            broadcastLobbies();
+          } else {
+            io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
+              lobby: getLobbyInfo(lobby),
+            });
+            // Replicate update cluster-wide
+            try {
+              publishLobbyState(lobby);
+            } catch {}
+            broadcastLobbies();
+          }
+          // Clear association last so future logic sees player out of lobby
+          player.lobbyId = null;
         }
-        // Clear association last so future logic sees player out of lobby
-        player.lobbyId = null;
       }
 
       // Clean up bot-only matches immediately when any player disconnects
@@ -4065,10 +3686,10 @@ async function shutdown() {
   } catch {}
   const timer = setTimeout(() => process.exit(0), timeout);
   try {
-    await new Promise((resolve) => io.close(() => resolve()));
+    await new Promise<void>((resolve) => io.close(() => resolve()));
   } catch {}
   try {
-    await new Promise((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   } catch {}
   try {
     if (pubClient) await pubClient.quit();
@@ -4091,5 +3712,3 @@ async function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
-type Seat = "p1" | "p2";
-type MatchPatch = Record<string, unknown>;
