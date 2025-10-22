@@ -43,6 +43,8 @@ const {
 } = require("./modules/shared/match-helpers") as typeof import("./modules/shared/match-helpers");
 const { createRequestHandler } = require("./http/request-handler") as typeof import("./http/request-handler");
 const { registerRtcHandlers } = require("./socket/rtc-handlers") as typeof import("./socket/rtc-handlers");
+const { registerPubSubListeners } = require("./socket/pubsub-listeners") as typeof import("./socket/pubsub-listeners");
+const { startMaintenanceTimers } = require("./maintenance/timers") as typeof import("./maintenance/timers");
 
 const jwt = require("jsonwebtoken");
 const {
@@ -506,185 +508,6 @@ const INACTIVE_MATCH_CLEANUP_MS = Number(
 const LOBBY_CONTROL_CHANNEL = "lobby:control";
 const LOBBY_STATE_CHANNEL = "lobby:state";
 let clusterStateReady = false; // flip after maps are initialized
-if (storeSub) {
-  try {
-    storeSub.subscribe(MATCH_CONTROL_CHANNEL, (err: Error | null) => {
-      if (err)
-        try {
-          console.warn(
-            `[store] subscribe ${MATCH_CONTROL_CHANNEL} failed:`,
-            safeErrorMessage(err)
-          );
-        } catch {}
-    });
-    storeSub.subscribe(LOBBY_CONTROL_CHANNEL, (err: Error | null) => {
-      if (err)
-        try {
-          console.warn(
-            `[store] subscribe ${LOBBY_CONTROL_CHANNEL} failed:`,
-            safeErrorMessage(err)
-          );
-        } catch {}
-    });
-    storeSub.subscribe(LOBBY_STATE_CHANNEL, (err: Error | null) => {
-      if (err)
-        try {
-          console.warn(
-            `[store] subscribe ${LOBBY_STATE_CHANNEL} failed:`,
-            safeErrorMessage(err)
-          );
-        } catch {}
-    });
-    storeSub.subscribe(DRAFT_STATE_CHANNEL, (err: Error | null) => {
-      if (err)
-        try {
-          console.warn(
-            `[store] subscribe ${DRAFT_STATE_CHANNEL} failed:`,
-            safeErrorMessage(err)
-          );
-        } catch {}
-    });
-    storeSub.on("message", async (channel: string, message: string) => {
-      if (!clusterStateReady) return;
-      let msg = null;
-      try {
-        msg = JSON.parse(message);
-      } catch {
-        return;
-      }
-      if (channel === MATCH_CONTROL_CHANNEL) {
-        if (!msg || !msg.type) return;
-        const { matchId } = msg;
-        if (!matchId) return;
-        try {
-          const leader = await getOrClaimMatchLeader(matchId);
-          if (leader !== INSTANCE_ID) return;
-        } catch {
-          return;
-        }
-        try {
-          if (msg.type === "join" && msg.playerId && msg.socketId) {
-            await ensurePlayerCached(msg.playerId);
-            await leaderJoinMatch(matchId, msg.playerId, msg.socketId);
-          } else if (msg.type === "action" && msg.playerId) {
-            await leaderApplyAction(
-              matchId,
-              msg.playerId,
-              msg.patch || null,
-              msg.socketId || null
-            );
-          } else if (msg.type === "interaction:request" && msg.playerId) {
-            await leaderHandleInteractionRequest(
-              matchId,
-              msg.playerId,
-              msg.payload || null
-            );
-          } else if (msg.type === "interaction:response" && msg.playerId) {
-            await leaderHandleInteractionResponse(
-              matchId,
-              msg.playerId,
-              msg.payload || null
-            );
-          } else if (
-            msg.type === "draft:playerReady" &&
-            typeof msg.ready === "boolean" &&
-            msg.playerId
-          ) {
-            await leaderDraftPlayerReady(matchId, msg.playerId, !!msg.ready);
-          } else if (msg.type === "draft:start" && msg.playerId) {
-            const m = await getOrLoadMatch(matchId);
-            if (!m || m.matchType !== "draft" || !m.draftState) return;
-            if (m.draftState.phase !== "waiting") {
-              // Already started: broadcast current state to sync clients
-              try {
-                io.to(`match:${m.id}`).emit("draftUpdate", m.draftState);
-              } catch {}
-            } else {
-              await leaderStartDraft(
-                matchId,
-                msg.playerId,
-                msg.draftConfig || null,
-                msg.socketId || null
-              );
-            }
-          } else if (msg.type === "draft:pick" && msg.playerId && msg.cardId) {
-            await leaderMakeDraftPick(matchId, msg.playerId, {
-              cardId: msg.cardId,
-              packIndex: Number(msg.packIndex || 0),
-              pickNumber: Number(msg.pickNumber || 1),
-            });
-          } else if (
-            msg.type === "draft:choosePack" &&
-            msg.playerId &&
-            msg.setChoice
-          ) {
-            await leaderChooseDraftPack(matchId, msg.playerId, {
-              setChoice: msg.setChoice,
-              packIndex: Number(msg.packIndex || 0),
-            });
-          } else if (msg.type === "mulligan:done" && msg.playerId) {
-            await leaderHandleMulliganDone(matchId, msg.playerId);
-          } else if (msg.type === "match:cleanup" && msg.reason) {
-            await cleanupMatchNow(matchId, msg.reason, !!msg.force);
-          }
-        } catch (e) {
-          try {
-            console.warn("[match:control] handler error:", safeErrorMessage(e));
-          } catch {}
-        }
-        return;
-      }
-      if (channel === DRAFT_STATE_CHANNEL) {
-        // Forward tournament draft session updates to room subscribers
-        // Skip echo: if this instance published the message, it already emitted locally
-        try {
-          const { sessionId, draftState, instanceId } = msg || {};
-          if (!sessionId) return;
-          if (instanceId && instanceId === INSTANCE_ID) {
-            // This is an echo of our own publish - skip re-broadcast
-            return;
-          }
-          io.to(`draft:${sessionId}`).emit("draftUpdate", draftState);
-        } catch (e) {
-          try {
-            console.warn("[draft] failed to forward state:", safeErrorMessage(e));
-          } catch {}
-        }
-        return;
-      }
-      if (channel === LOBBY_CONTROL_CHANNEL) {
-        if (!msg || !msg.type) return;
-        try {
-          const leader = await getOrClaimLobbyLeader();
-          if (leader !== INSTANCE_ID) return;
-        } catch {
-          return;
-        }
-        try {
-          await handleLobbyControlAsLeader(msg);
-        } catch (e) {
-          try {
-            console.warn("[lobby:control] handler error:", safeErrorMessage(e));
-          } catch {}
-        }
-        return;
-      }
-      if (channel === LOBBY_STATE_CHANNEL) {
-        if (!msg) return;
-        if (msg.type === "upsert" && msg.lobby && msg.lobby.id) {
-          try {
-            upsertLobbyFromSerialized(msg.lobby);
-          } catch {}
-        } else if (msg.type === "delete" && msg.id) {
-          try {
-            lobbies.delete(msg.id);
-          } catch {}
-        }
-        return;
-      }
-    });
-  } catch {}
-}
 
 // Basic health endpoints (liveness/readiness) and lightweight HTTP API
 
@@ -906,6 +729,37 @@ const {
   upsertLobbyFromSerialized,
 } = lobbyFeature;
 
+registerPubSubListeners({
+  subscriber: storeSub,
+  io,
+  instanceId: INSTANCE_ID,
+  channels: {
+    matchControl: MATCH_CONTROL_CHANNEL,
+    lobbyControl: LOBBY_CONTROL_CHANNEL,
+    lobbyState: LOBBY_STATE_CHANNEL,
+    draftState: DRAFT_STATE_CHANNEL,
+  },
+  isClusterReady: () => clusterStateReady,
+  safeErrorMessage,
+  getOrClaimMatchLeader,
+  ensurePlayerCached,
+  leaderJoinMatch,
+  leaderApplyAction,
+  leaderHandleInteractionRequest,
+  leaderHandleInteractionResponse,
+  leaderDraftPlayerReady,
+  getOrLoadMatch,
+  leaderStartDraft,
+  leaderMakeDraftPick,
+  leaderChooseDraftPack,
+  leaderHandleMulliganDone,
+  cleanupMatchNow,
+  getOrClaimLobbyLeader,
+  handleLobbyControlAsLeader,
+  upsertLobbyFromSerialized,
+  lobbies,
+});
+
 const {
   broadcastTournamentUpdate,
   broadcastPhaseChanged,
@@ -920,6 +774,7 @@ const {
 const handleHttpRequest = createRequestHandler({
   io,
   serverConfig,
+  prisma,
   isReady: () => isReady,
   collectMetricsSnapshot,
   buildPromMetrics,
@@ -3096,164 +2951,24 @@ io.on("connection", async (socket: SocketClient) => {
   });
 });
 
-// Periodic cleanup: trim CPU-only lobbies and bot-only matches; keep human lobbies/matches alive
-setInterval(() => {
-  // Clean up CPU-only lobbies
-  for (const lobby of lobbies.values()) {
-    if (lobby.status !== "open") continue;
-    // Close CPU-only lobbies immediately
-    if (!lobbyHasHumanPlayers(lobby)) {
-      lobby.status = "closed";
-      try {
-        botManager.cleanupBotsForLobby(lobby.id);
-      } catch {}
-      lobbies.delete(lobby.id);
-      broadcastLobbies();
-      continue;
-    }
-  }
-
-  // Clean up bot-only matches that are completed or have been idle
-  for (const match of matches.values()) {
-    try {
-      if (!match) continue;
-
-      // Skip matches with human players
-      if (matchHasHumanPlayers(match)) continue;
-
-      // Clean up bot-only matches that are completed or have been inactive for 5+ minutes
-      const age = Date.now() - (Number(match.lastTs) || Date.now());
-      const shouldCleanup =
-        match.status === "completed" || age >= 5 * 60 * 1000;
-
-      if (shouldCleanup) {
-        console.log(
-          `[Match] Periodic cleanup of bot-only match ${match.id} (status=${
-            match.status
-          }, age=${Math.floor(age / 1000)}s)`
-        );
-        cleanupMatchNow(match.id, "bot_only_periodic", true).catch((err) => {
-          console.warn(`[Match] Failed to cleanup bot match ${match.id}:`, err);
-        });
-      }
-    } catch (err) {
-      console.warn("[Match] Error in bot match periodic cleanup:", err);
-    }
-  }
-}, 30 * 1000);
-
-// Periodic cleanup: remove stale matches (waiting matches after 10min, any match inactive after configured timeout)
-setInterval(async () => {
-  const now = Date.now();
-
-  for (const match of matches.values()) {
-    try {
-      if (!match) continue;
-
-      const age = now - (Number(match.lastTs) || now);
-
-      // Rule 1: Cleanup waiting matches after 10 minutes (existing logic)
-      if (match.status === "waiting" && age >= STALE_WAITING_MS) {
-        const room = `match:${match.id}`;
-        let roomEmpty = true;
-        try {
-          if (typeof io.in(room).allSockets === "function") {
-            const sockets = await io.in(room).allSockets();
-            roomEmpty = !sockets || sockets.size === 0;
-          }
-        } catch {}
-        if (!roomEmpty) continue;
-
-        try {
-          const leader = await getOrClaimMatchLeader(match.id);
-          if (leader && leader !== INSTANCE_ID) {
-            if (storeRedis)
-              await storeRedis.publish(
-                MATCH_CONTROL_CHANNEL,
-                JSON.stringify({
-                  type: "match:cleanup",
-                  matchId: match.id,
-                  reason: "stale_waiting",
-                  force: true,
-                })
-              );
-            continue;
-          }
-          await cleanupMatchNow(match.id, "stale_waiting", true);
-        } catch {}
-        continue;
-      }
-
-      // Rule 2: Cleanup ANY match (including in_progress/deck_construction) inactive beyond configured timeout
-      if (age >= INACTIVE_MATCH_CLEANUP_MS) {
-        // Skip active tournament matches (they have their own lifecycle)
-        if (match.tournamentId) continue;
-
-        const room = `match:${match.id}`;
-        let roomEmpty = true;
-        try {
-          if (typeof io.in(room).allSockets === "function") {
-            const sockets = await io.in(room).allSockets();
-            roomEmpty = !sockets || sockets.size === 0;
-          }
-        } catch {}
-        if (!roomEmpty) continue;
-
-        try {
-          const leader = await getOrClaimMatchLeader(match.id);
-          if (leader && leader !== INSTANCE_ID) {
-            if (storeRedis)
-              await storeRedis.publish(
-                MATCH_CONTROL_CHANNEL,
-                JSON.stringify({
-                  type: "match:cleanup",
-                  matchId: match.id,
-                  reason: "inactive_timeout",
-                  force: true,
-                })
-              );
-            continue;
-          }
-          try {
-            console.log(
-              `[match] cleanup inactive match ${match.id} (status: ${
-                match.status
-              }, age: ${Math.round(age / 1000 / 60)}min)`
-            );
-          } catch {}
-          await cleanupMatchNow(match.id, "inactive_timeout", true);
-        } catch {}
-      }
-    } catch {}
-  }
-}, 60 * 1000);
-
-// Database cleanup: remove old completed/cancelled/ended matches from database
-setInterval(async () => {
-  try {
-    const CLEANUP_THRESHOLD = new Date(Date.now() - INACTIVE_MATCH_CLEANUP_MS);
-
-    // Delete completed/cancelled/ended matches older than configured timeout
-    const result = await prisma.onlineMatchSession.deleteMany({
-      where: {
-        status: { in: ["completed", "cancelled", "ended"] },
-        updatedAt: { lt: CLEANUP_THRESHOLD },
-      },
-    });
-
-    if (result.count > 0) {
-      try {
-        console.log(
-          `[db] cleaned up ${result.count} old match(es) from database`
-        );
-      } catch {}
-    }
-  } catch (e) {
-    try {
-      console.warn(`[db] cleanup failed:`, safeErrorMessage(e));
-    } catch {}
-  }
-}, 5 * 60 * 1000); // Run every 5 minutes
+startMaintenanceTimers({
+  lobbies,
+  matches,
+  botManager,
+  broadcastLobbies,
+  lobbyHasHumanPlayers,
+  matchHasHumanPlayers,
+  cleanupMatchNow,
+  getOrClaimMatchLeader,
+  instanceId: INSTANCE_ID,
+  io,
+  storeRedis,
+  matchControlChannel: MATCH_CONTROL_CHANNEL,
+  staleWaitingMs: STALE_WAITING_MS,
+  inactiveMatchCleanupMs: INACTIVE_MATCH_CLEANUP_MS,
+  prisma,
+  safeErrorMessage,
+});
 
 server.listen(PORT, () => {
   console.log(
