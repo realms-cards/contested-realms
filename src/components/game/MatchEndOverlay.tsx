@@ -12,6 +12,7 @@ interface MatchEndOverlayProps {
   onLeave?: () => void;
   onLeaveLobby?: () => void;
   leaveLabel?: string;
+  allowContinue?: boolean;
 }
 
 export default function MatchEndOverlay({
@@ -22,7 +23,8 @@ export default function MatchEndOverlay({
   onClose,
   onLeave,
   onLeaveLobby,
-  leaveLabel
+  leaveLabel,
+  allowContinue = true,
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -40,10 +42,12 @@ export default function MatchEndOverlay({
     }
   };
 
+  const canContinue = allowContinue && typeof onClose === "function";
+
   return (
     <div 
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur flex items-center justify-center"
-      onClick={onClose}
+      onClick={canContinue ? onClose : undefined}
     >
       <div 
         className="bg-zinc-900/95 text-white rounded-3xl ring-1 ring-white/20 shadow-2xl p-8 text-center max-w-md w-full mx-4"
@@ -124,13 +128,15 @@ export default function MatchEndOverlay({
 
         {/* Action Buttons */}
         <div className="space-y-3">
-          <button
-            onClick={onClose}
-            className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
-          >
-            Continue Examining Board
-          </button>
-          
+          {canContinue && (
+            <button
+              onClick={onClose}
+              className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
+            >
+              Continue Examining Board
+            </button>
+          )}
+
           {onLeave && (
             <button
               onClick={handleLeaveMatch}
@@ -142,7 +148,9 @@ export default function MatchEndOverlay({
         </div>
 
         <div className="mt-4 text-xs opacity-60">
-          The match has ended. Players can still examine the board.
+          {canContinue
+            ? "The match has ended. Players can still examine the board."
+            : "The match has ended. Please return to continue your event."}
         </div>
       </div>
     </div>

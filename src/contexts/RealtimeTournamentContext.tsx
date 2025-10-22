@@ -137,9 +137,62 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }, [currentTournament?.id]);
   const isRefreshingRef = useRef(false);
   // Refs to latest hook instances so handlers can call without re-declaring
-  const prepHookRef = useRef<ReturnType<typeof useTournamentPreparation> | null>(null);
-  const statsHookRef = useRef<ReturnType<typeof useTournamentStatistics> | null>(null);
-  const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(null);
+const prepHookRef = useRef<ReturnType<typeof useTournamentPreparation> | null>(null);
+const statsHookRef = useRef<ReturnType<typeof useTournamentStatistics> | null>(null);
+const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(null);
+const statsRefreshQueueRef = useRef<{
+  standings: boolean;
+  matches: boolean;
+  rounds: boolean;
+  overview: boolean;
+  timer: number | null;
+}>({ standings: false, matches: false, rounds: false, overview: false, timer: null });
+
+const queueStatisticsRefresh = useCallback(
+  (options: { standings?: boolean; matches?: boolean; rounds?: boolean; overview?: boolean }) => {
+    const queue = statsRefreshQueueRef.current;
+    if (options.standings) queue.standings = true;
+    if (options.matches) queue.matches = true;
+    if (options.rounds) queue.rounds = true;
+    if (options.overview) queue.overview = true;
+
+    const run = () => {
+      const actions = statsHookRef.current?.actions;
+      queue.timer = null;
+      const flags = { ...queue };
+      queue.standings = queue.matches = queue.rounds = queue.overview = false;
+      if (!actions) return;
+      const tasks: Promise<unknown>[] = [];
+      if (flags.standings) tasks.push(actions.refreshStandings());
+      if (flags.matches) tasks.push(actions.refreshMatches());
+      if (flags.rounds) tasks.push(actions.refreshRounds());
+      if (flags.overview) tasks.push(actions.refreshStatistics());
+      if (tasks.length > 0) {
+        void Promise.allSettled(tasks);
+      }
+    };
+
+    if (typeof window === "undefined") {
+      run();
+      return;
+    }
+
+    if (queue.timer != null) return;
+    queue.timer = window.setTimeout(run, 250);
+  },
+  []
+);
+
+useEffect(() => {
+  const ref = statsRefreshQueueRef;
+  return () => {
+    const queue = ref.current;
+    if (queue.timer != null) {
+      clearTimeout(queue.timer);
+      queue.timer = null;
+    }
+  };
+}, []);
   
   // Hooks below need socket connectivity; we'll initialize them after setting up handlers and socket
 
@@ -191,24 +244,36 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
 
   // Socket event handlers
   const handleTournamentUpdated = useCallback((data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
-    
-    setTournaments(prev => 
-      prev.map(t => t.id === data.id ? { 
-        ...t, 
-        ...data, 
-        status: data.status as TournamentInfo['status'] || t.status 
-      } : t)
+    setTournaments((prev) =>
+      prev.map((t) => {
+        if (t.id !== data.id) return t;
+        const next = { ...t } as TournamentInfo & Record<string, unknown>;
+        for (const [key, value] of Object.entries(data)) {
+          if (value !== undefined) {
+            next[key] = value as unknown;
+          }
+        }
+        if (data.status !== undefined) {
+          next.status = data.status as TournamentInfo["status"];
+        }
+        return next as TournamentInfo;
+      })
     );
-    
-    setCurrentTournamentState(prev => {
+
+    setCurrentTournamentState((prev) => {
       if (!prev || prev.id !== data.id) return prev;
-      return {
-        ...prev,
-        ...data,
-        status: data.status as TournamentInfo['status'] || prev.status
-      };
+      const next = { ...prev } as typeof prev & Record<string, unknown>;
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) {
+          next[key] = value as unknown;
+        }
+      }
+      if (data.status !== undefined) {
+        (next as { status: TournamentInfo["status"] }).status = data.status as TournamentInfo["status"];
+      }
+      return next as typeof prev;
     });
-    
+
     setLastUpdated(new Date().toISOString());
   }, []);
 
@@ -380,19 +445,18 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     console.log('Statistics updated:', data);
 
     if (currentTournament?.id === data.tournamentId) {
-      const statsActions = statsHookRef.current?.actions;
-      if (statsActions) {
-        void statsActions.refreshStatistics();
-        void statsActions.refreshStandings();
-        void statsActions.refreshMatches();
-        void statsActions.refreshRounds();
-      }
+      queueStatisticsRefresh({
+        standings: true,
+        matches: true,
+        rounds: true,
+        overview: true,
+      });
     }
-  }, [currentTournament]);
+  }, [currentTournament, queueStatisticsRefresh]);
 
-  const handleRoundStarted = useCallback((data: {
-    tournamentId: string;
-    roundNumber: number;
+  const handleRoundStarted = useCallback((data: { 
+    tournamentId: string; 
+    roundNumber: number; 
     matches: Array<{
       id: string;
       player1Id: string;
@@ -403,16 +467,15 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }) => {
     console.log('Round started:', data);
 
-    // Refresh statistics to get new matches, rounds, and standings
     if (currentTournament?.id === data.tournamentId) {
-      const statsActions = statsHookRef.current?.actions;
-      if (statsActions) {
-        void statsActions.refreshStatistics();
-        void statsActions.refreshMatches();
-        void statsActions.refreshStandings();
-      }
+      queueStatisticsRefresh({
+        standings: true,
+        matches: true,
+        rounds: true,
+        overview: true,
+      });
     }
-  }, [currentTournament]);
+  }, [currentTournament, queueStatisticsRefresh]);
 
   const handleMatchAssigned = useCallback((data: { 
     tournamentId: string; 
@@ -422,10 +485,10 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     lobbyName: string; 
   }) => {
     console.log('Match assigned:', data);
-    
-    // Show notification or update UI to indicate match assignment
-    // This could trigger a toast notification or modal
-  }, []);
+    if (currentTournament?.id === data.tournamentId) {
+      queueStatisticsRefresh({ standings: true, matches: true });
+    }
+  }, [currentTournament, queueStatisticsRefresh]);
 
   const handleSocketError = useCallback((error: { 
     code: string; 

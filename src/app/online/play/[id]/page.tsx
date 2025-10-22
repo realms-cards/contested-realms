@@ -1046,11 +1046,10 @@ export default function OnlineMatchPage() {
   // Match end overlay
   const [matchEndOverlayOpen, setMatchEndOverlayOpen] =
     useState<boolean>(false);
-  const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] =
-    useState<boolean>(false);
   // Store selectors for match end state and winner must be declared before effects that depend on them
   const matchEnded = useGameStore((s) => s.matchEnded);
   const winner = useGameStore((s) => s.winner);
+  const prevEndedRef = useRef(false);
 
   // Frozen context for the match end overlay so results don't change if roster updates
   const [finalEndContext, setFinalEndContext] = useState<
@@ -1215,10 +1214,11 @@ export default function OnlineMatchPage() {
   const endedByMatchStatus = match?.status === "ended";
   useEffect(() => {
     const ended = endedByMatchStatus || matchEnded;
-    if (ended && !matchEndOverlayOpen && !matchEndOverlayDismissed) {
+    if (ended && !matchEndOverlayOpen) {
       setMatchEndOverlayOpen(true);
     }
-  }, [endedByMatchStatus, matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
+    prevEndedRef.current = ended;
+  }, [endedByMatchStatus, matchEnded, matchEndOverlayOpen]);
 
   // When the overlay first opens, snapshot the end-of-match context to keep it stable
   useEffect(() => {
@@ -1231,7 +1231,7 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     // Reset the overlay states when the match ID changes (new match)
     setMatchEndOverlayOpen(false);
-    setMatchEndOverlayDismissed(false);
+    prevEndedRef.current = false;
     setFinalEndContext(null);
   }, [matchId]);
 
@@ -1312,6 +1312,8 @@ export default function OnlineMatchPage() {
     // Polar angle measured from +Y (straight up) downward
     return Math.atan(zOffset / dist);
   }, [matW, matH]);
+  const boardInteractionMode =
+    endedByMatchStatus || matchEnded ? "spectator" : "normal";
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
     if (!c) return;
@@ -1682,7 +1684,6 @@ export default function OnlineMatchPage() {
             myPlayerKey={finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey}
             onClose={() => {
               setMatchEndOverlayOpen(false);
-              setMatchEndOverlayDismissed(true);
             }}
             onLeave={() => {
               leaveMatch();
@@ -1724,7 +1725,7 @@ export default function OnlineMatchPage() {
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board />
+                  <Board interactionMode={boardInteractionMode} />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}

@@ -17,6 +17,7 @@ import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import type { SearchResult } from "@/lib/deckEditor/search";
 import Board from "@/lib/game/Board";
+import { useGameStore } from "@/lib/game/store";
 import {
   toCardMetaMap,
   mergeCardMetaMaps,
@@ -81,6 +82,10 @@ export default function EnhancedOnlineDraft3DScreen({
   );
 
   const rtc = voice?.rtc ?? null;
+
+  useEffect(() => {
+    useGameStore.getState().resetGameState();
+  }, []);
 
   // Enhanced 3D Draft UI state (ported from single-player)
   const [orbitLocked, setOrbitLocked] = useState(false);
@@ -1526,7 +1531,7 @@ export default function EnhancedOnlineDraft3DScreen({
           />
 
           <Physics gravity={[0, -9.81, 0]}>
-            <Board noRaycast={true} />
+            <Board noRaycast={true} interactionMode="spectator" />
           </Physics>
 
           {/* Seat Video planes at player positions (fixed orientation toward board) */}
@@ -1774,7 +1779,7 @@ export default function EnhancedOnlineDraft3DScreen({
             makeDefault
             target={[0, 0, 0]}
             enabled={!orbitLocked}
-            enablePan
+            enablePan={false}
             enableRotate={false}
             enableZoom
             enableDamping
@@ -1782,10 +1787,10 @@ export default function EnhancedOnlineDraft3DScreen({
             screenSpacePanning
             panSpeed={1.2}
             zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
+            minDistance={6}
+            maxDistance={18}
+            minPolarAngle={Math.PI / 3}
+            maxPolarAngle={Math.PI / 2.4}
             mouseButtons={{
               LEFT: MOUSE.PAN,
               MIDDLE: MOUSE.DOLLY,

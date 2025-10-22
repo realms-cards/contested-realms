@@ -8,6 +8,7 @@ import { MOUSE } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import Board from "@/lib/game/Board";
+import { useGameStore } from "@/lib/game/store";
 
 interface EditorCanvasProps {
   children?: React.ReactNode;
@@ -22,6 +23,10 @@ interface PanBoundsProps {
 }
 
 export default function EditorCanvas({ children, orbitLocked = false }: EditorCanvasProps) {
+  useEffect(() => {
+    useGameStore.getState().resetGameState();
+  }, []);
+
   return (
     <div className="absolute inset-0 w-full h-full">
       <Canvas
@@ -38,7 +43,7 @@ export default function EditorCanvas({ children, orbitLocked = false }: EditorCa
         <ambientLight intensity={0.8} />
         <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
         <Physics gravity={[0, -9.81, 0]}>
-          <Board />
+          <Board interactionMode="spectator" />
           {children}
         </Physics>
         <OrbitControls
@@ -58,10 +63,10 @@ export default function EditorCanvas({ children, orbitLocked = false }: EditorCa
           screenSpacePanning
           panSpeed={1.2}
           zoomSpeed={0.75}
-          minDistance={1}
-          maxDistance={36}
-          minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.05}
+          minDistance={6}
+          maxDistance={18}
+          minPolarAngle={Math.PI / 3}
+          maxPolarAngle={Math.PI / 2.4}
         />
         {/* Clamp panning to board bounds */}
         <PanBounds minX={-8} maxX={8} minZ={-6} maxZ={8} />

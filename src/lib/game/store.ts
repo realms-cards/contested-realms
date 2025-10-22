@@ -1536,7 +1536,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   pendingPatches: [],
   // Centralized, safe patch sender. Returns true if sent immediately, false if queued.
   trySendPatch: (patch) => {
-    const tr = get().transport;
+    const state = get();
+    if (state.matchEnded) {
+      console.debug("[net] trySendPatch: blocked after match ended");
+      return false;
+    }
+    const tr = state.transport;
     if (!patch || typeof patch !== "object") return false;
     // Sanitize to prevent illegal opponent mutations in online play
     const actorKey = get().actorKey;
@@ -3062,6 +3067,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Note: No automatic draw; drawing is manual via drawFrom.
   endTurn: () => {
     const s = get();
+    if (s.matchEnded) {
+      console.debug("[game] endTurn ignored after match ended");
+      return;
+    }
     get().pushHistory();
     const cur = s.currentPlayer;
     get().log(`P${cur} ends the turn`);
