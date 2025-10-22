@@ -77,13 +77,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Transform to match protocol format
-    const tournamentInfo = {
+  const tournamentInfo = {
       id: tournament.id,
       name: tournament.name,
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
       currentPlayers: tournament.registrations.length,
+      creatorId: tournament.creatorId,
       registeredPlayers: tournament.registrations.map(reg => {
         const prep = (reg.preparationData as Record<string, unknown> | null) || {};
         return {

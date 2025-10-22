@@ -184,10 +184,10 @@ export default function OnlineLifeCounters({
   matchId = null,
 }: OnlineLifeCountersProps) {
   // In online multiplayer, both players can modify life totals
-  const canModifyLife = !!myPlayerKey;
+  const matchEnded = useGameStore((s) => s.matchEnded);
+  const canModifyLife = !!myPlayerKey && !matchEnded;
   const p1LifeState = useGameStore((s) => s.players.p1.lifeState);
   const p2LifeState = useGameStore((s) => s.players.p2.lifeState);
-  const matchEnded = useGameStore((s) => s.matchEnded);
   const tieGame = useGameStore((s) => s.tieGame);
   const sendInteractionRequest = useGameStore((s) => s.sendInteractionRequest);
 

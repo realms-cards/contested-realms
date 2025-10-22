@@ -422,15 +422,24 @@ export class SocketTransport implements GameTransport {
     }
 
     console.log("[Transport] Socket connected, emitting joinMatch");
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const onMatch = (payload: unknown) => {
         console.log("[Transport] Received matchStarted:", payload);
         const parsed = Protocol.MatchStartedPayload.parse(payload);
         this.dispatch("matchStarted", parsed);
         s.off("matchStarted", onMatch);
+        s.off("match:error", onError);
         resolve();
       };
+      const onError = (payload: unknown) => {
+        const err = payload as { matchId?: string; message?: string };
+        if (!err || err.matchId !== matchId) return;
+        s.off("matchStarted", onMatch);
+        s.off("match:error", onError);
+        reject(new Error(err.message || "Unable to join match"));
+      };
       s.on("matchStarted", onMatch);
+      s.on("match:error", onError);
       const payload = Protocol.JoinMatchPayload.parse({ matchId });
       console.log("[Transport] Emitting joinMatch with payload:", payload);
       s.emit("joinMatch", payload);

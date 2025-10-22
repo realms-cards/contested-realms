@@ -914,6 +914,19 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
   match.lastTs = now;
   match._finalized = true;
 
+  const detachedPlayers = Array.isArray(match.playerIds)
+    ? [...match.playerIds]
+    : [];
+  for (const pid of detachedPlayers) {
+    const pState = players.get(pid);
+    if (pState && pState.matchId === match.id) {
+      pState.matchId = null;
+      // Keep sockets connected so players can review the final board,
+      // but ensure server-side state no longer treats them as in-match.
+    }
+  }
+  broadcastPlayers();
+
   const room = `match:${match.id}`;
   io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
   try {
@@ -1961,6 +1974,17 @@ io.on("connection", async (socket: SocketClient) => {
     if (!matchId) return;
     const player = getPlayerBySocket(socket);
     if (!player) return;
+    const matchSnapshot = matches.get(matchId);
+    if (matchSnapshot && matchSnapshot.status === "ended") {
+      try {
+        socket.emit("match:error", {
+          matchId,
+          code: "closed",
+          message: "This match has already ended.",
+        });
+      } catch {}
+      return;
+    }
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
@@ -2039,6 +2063,7 @@ io.on("connection", async (socket: SocketClient) => {
         } catch {}
       }
     }
+    broadcastPlayers();
   });
 
   socket.on("action", async (payload) => {

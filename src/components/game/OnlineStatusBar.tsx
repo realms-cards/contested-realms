@@ -22,9 +22,10 @@ export default function OnlineStatusBar({
   const endTurn = useGameStore((s) => s.endTurn);
   const undo = useGameStore((s) => s.undo);
   const history = useGameStore((s) => s.history);
+  const matchEnded = useGameStore((s) => s.matchEnded);
 
   // Check if this player can control the current turn
-  const canControlTurn = myPlayerNumber === currentPlayer;
+  const canControlTurn = myPlayerNumber === currentPlayer && !matchEnded;
   const currentPlayerName = currentPlayer === 1 ? playerNames.p1 : playerNames.p2;
   const isMyTurn = myPlayerNumber === currentPlayer;
 
