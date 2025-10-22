@@ -1,14 +1,15 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { MOUSE } from "three";
+import { MOUSE, TOUCH } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { NumberBadge } from "@/components/game/manacost";
@@ -28,6 +29,7 @@ import MouseTracker from "@/lib/game/components/MouseTracker";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG } from "@/lib/game/constants";
 import { createStackHoverState } from "@/lib/game/stackHover";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 // --- Draft data types (mirrors /draft 2D) ---
 // Types moved to src/lib/game/cardSorting.ts
@@ -1005,16 +1007,19 @@ export default function Draft3DPage() {
             screenSpacePanning
             panSpeed={1.2}
             zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
+            minDistance={2}
+            maxDistance={28}
+            minPolarAngle={0.05}
+            maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.PAN,
-              MIDDLE: MOUSE.DOLLY,
+              LEFT: MOUSE.ROTATE,
+              MIDDLE: MOUSE.PAN,
               RIGHT: MOUSE.ROTATE,
             }}
+            touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
           />
+          <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
+          <KeyboardPanControls enabled={!orbitLocked} />
         </Canvas>
       </div>
 
@@ -1644,4 +1649,60 @@ export default function Draft3DPage() {
       </div>
     </div>
   );
+}
+
+function ClampOrbitTarget({
+  bounds,
+}: {
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}) {
+  const { controls, camera, invalidate } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+    camera: state.camera,
+    invalidate: state.invalidate,
+  }));
+
+  useEffect(() => {
+    if (!controls) return;
+    let offset = camera.position.clone().sub(controls.target.clone());
+
+    const updateOffset = () => {
+      offset = camera.position.clone().sub(controls.target.clone());
+    };
+
+    const clampTarget = () => {
+      const target = controls.target;
+      const clampedX = Math.max(bounds.minX, Math.min(bounds.maxX, target.x));
+      const clampedZ = Math.max(bounds.minZ, Math.min(bounds.maxZ, target.z));
+      if (clampedX !== target.x || clampedZ !== target.z) {
+        target.set(clampedX, target.y, clampedZ);
+        camera.position.copy(target.clone().add(offset));
+        controls.update();
+        invalidate();
+      }
+    };
+
+    controls.addEventListener("start", updateOffset);
+    controls.addEventListener("change", clampTarget);
+    return () => {
+      controls.removeEventListener("start", updateOffset);
+      controls.removeEventListener("change", clampTarget);
+    };
+  }, [bounds.maxX, bounds.maxZ, bounds.minX, bounds.minZ, camera, controls, invalidate]);
+
+  return null;
+}
+
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }

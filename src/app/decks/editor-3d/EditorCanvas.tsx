@@ -4,11 +4,12 @@ import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import React, { useEffect } from "react";
-import { MOUSE } from "three";
+import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import Board from "@/lib/game/Board";
 import { useGameStore } from "@/lib/game/store";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 interface EditorCanvasProps {
   children?: React.ReactNode;
@@ -54,20 +55,22 @@ export default function EditorCanvas({ children, orbitLocked = false }: EditorCa
           enablePan={!orbitLocked}
           enableZoom
           mouseButtons={{
-            LEFT: MOUSE.PAN,
-            MIDDLE: MOUSE.DOLLY,
+            LEFT: MOUSE.ROTATE,
+            MIDDLE: MOUSE.PAN,
             RIGHT: MOUSE.ROTATE,
           }}
+          touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
           enableDamping
           dampingFactor={0.08}
           screenSpacePanning
           panSpeed={1.2}
           zoomSpeed={0.75}
-          minDistance={1}
-          maxDistance={36}
-          minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.05}
+          minDistance={2}
+          maxDistance={28}
+          minPolarAngle={0.05}
+          maxPolarAngle={0.35}
         />
+        <KeyboardPanControls enabled={!orbitLocked} />
         {/* Clamp panning to board bounds */}
         <PanBounds minX={-8} maxX={8} minZ={-6} maxZ={8} />
       </Canvas>
@@ -115,5 +118,13 @@ function PanBounds({ minX, maxX, minZ, maxZ }: PanBoundsProps) {
       );
     };
   }, [controls, camera, minX, maxX, minZ, maxZ, invalidate]);
+  return null;
+}
+
+function KeyboardPanControls({ enabled = true, step = 0.4 }: { enabled?: boolean; step?: number }) {
+  const { controls } = useThree((s) => ({
+    controls: s.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
   return null;
 }
