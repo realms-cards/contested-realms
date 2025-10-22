@@ -1,0 +1,240 @@
+"use strict";
+
+import type { PrismaClient } from "@prisma/client";
+import type { Redis } from "ioredis";
+import type { Server as SocketIOServer } from "socket.io";
+
+import type { AnyRecord, LobbyState, ServerMatchState } from "../types";
+
+export interface MaintenanceTimerDeps {
+  lobbies: Map<string, LobbyState>;
+  matches: Map<string, ServerMatchState>;
+  botManager: {
+    cleanupBotsForLobby: (lobbyId: string) => void;
+  };
+  broadcastLobbies: () => void;
+  lobbyHasHumanPlayers: (
+    lobby: LobbyState | null | undefined
+  ) => boolean;
+  matchHasHumanPlayers: (
+    match: ServerMatchState | null | undefined
+  ) => boolean;
+  cleanupMatchNow: (
+    matchId: string,
+    reason: string,
+    force: boolean
+  ) => Promise<void>;
+  getOrClaimMatchLeader: (matchId: string) => Promise<string | null>;
+  instanceId: string;
+  io: SocketIOServer;
+  storeRedis: Redis | null;
+  matchControlChannel: string;
+  staleWaitingMs: number;
+  inactiveMatchCleanupMs: number;
+  prisma: PrismaClient;
+  safeErrorMessage: (err: unknown) => unknown;
+}
+
+export function startMaintenanceTimers({
+  lobbies,
+  matches,
+  botManager,
+  broadcastLobbies,
+  lobbyHasHumanPlayers,
+  matchHasHumanPlayers,
+  cleanupMatchNow,
+  getOrClaimMatchLeader,
+  instanceId,
+  io,
+  storeRedis,
+  matchControlChannel,
+  staleWaitingMs,
+  inactiveMatchCleanupMs,
+  prisma,
+  safeErrorMessage,
+}: MaintenanceTimerDeps): NodeJS.Timeout[] {
+  const timers: NodeJS.Timeout[] = [];
+
+  timers.push(
+    setInterval(() => {
+      for (const lobby of lobbies.values()) {
+        if (!lobby || lobby.status !== "open") continue;
+        if (!lobbyHasHumanPlayers(lobby)) {
+          lobby.status = "closed";
+          try {
+            botManager.cleanupBotsForLobby(lobby.id);
+          } catch {
+            // Ignore bot cleanup errors
+          }
+          lobbies.delete(lobby.id);
+          broadcastLobbies();
+        }
+      }
+
+      for (const match of matches.values()) {
+        if (!match) continue;
+        if (matchHasHumanPlayers(match)) continue;
+
+        const age =
+          Date.now() - (Number(match.lastTs) || Date.now());
+        const shouldCleanup =
+          match.status === "completed" || age >= 5 * 60 * 1000;
+
+        if (shouldCleanup) {
+          try {
+            console.log(
+              `[Match] Periodic cleanup of bot-only match ${match.id} (status=${match.status}, age=${Math.floor(
+                age / 1000
+              )}s)`
+            );
+          } catch {
+            // Ignore logging failures
+          }
+          cleanupMatchNow(match.id, "bot_only_periodic", true).catch(
+            (err) => {
+              try {
+                console.warn(
+                  `[Match] Failed to cleanup bot match ${match.id}:`,
+                  err
+                );
+              } catch {
+                // Ignore logging failures
+              }
+            }
+          );
+        }
+      }
+    }, 30 * 1000)
+  );
+
+  timers.push(
+    setInterval(async () => {
+      const now = Date.now();
+
+      for (const match of matches.values()) {
+        if (!match) continue;
+
+        const age = now - (Number(match.lastTs) || now);
+
+        if (match.status === "waiting" && age >= staleWaitingMs) {
+          const room = `match:${match.id}`;
+          let roomEmpty = true;
+          try {
+            if (typeof io.in(room).allSockets === "function") {
+              const sockets = await io.in(room).allSockets();
+              roomEmpty = !sockets || sockets.size === 0;
+            }
+          } catch {
+            // Ignore room inspection errors
+          }
+          if (!roomEmpty) continue;
+
+          try {
+            const leader = await getOrClaimMatchLeader(match.id);
+            if (leader && leader !== instanceId) {
+              if (storeRedis) {
+                await storeRedis.publish(
+                  matchControlChannel,
+                  JSON.stringify({
+                    type: "match:cleanup",
+                    matchId: match.id,
+                    reason: "stale_waiting",
+                    force: true,
+                  } satisfies AnyRecord)
+                );
+              }
+              continue;
+            }
+            await cleanupMatchNow(match.id, "stale_waiting", true);
+          } catch {
+            // Ignore cleanup errors; logging handled downstream
+          }
+          continue;
+        }
+
+        if (age >= inactiveMatchCleanupMs) {
+          if (match.tournamentId) continue;
+
+          const room = `match:${match.id}`;
+          let roomEmpty = true;
+          try {
+            if (typeof io.in(room).allSockets === "function") {
+              const sockets = await io.in(room).allSockets();
+              roomEmpty = !sockets || sockets.size === 0;
+            }
+          } catch {
+            // Ignore room inspection errors
+          }
+          if (!roomEmpty) continue;
+
+          try {
+            const leader = await getOrClaimMatchLeader(match.id);
+            if (leader && leader !== instanceId) {
+              if (storeRedis) {
+                await storeRedis.publish(
+                  matchControlChannel,
+                  JSON.stringify({
+                    type: "match:cleanup",
+                    matchId: match.id,
+                    reason: "inactive_timeout",
+                    force: true,
+                  } satisfies AnyRecord)
+                );
+              }
+              continue;
+            }
+            try {
+              console.log(
+                `[match] cleanup inactive match ${match.id} (status: ${match.status}, age: ${Math.round(
+                  age / 1000 / 60
+                )}min)`
+              );
+            } catch {
+              // Ignore logging failures
+            }
+            await cleanupMatchNow(match.id, "inactive_timeout", true);
+          } catch {
+            // Ignore cleanup errors; downstream logs capture failures
+          }
+        }
+      }
+    }, 60 * 1000)
+  );
+
+  timers.push(
+    setInterval(async () => {
+      try {
+        const threshold = new Date(
+          Date.now() - inactiveMatchCleanupMs
+        );
+        const result = await prisma.onlineMatchSession.deleteMany({
+          where: {
+            status: { in: ["completed", "cancelled", "ended"] },
+            updatedAt: { lt: threshold },
+          },
+        });
+
+        if (result.count > 0) {
+          try {
+            console.log(
+              `[db] cleaned up ${result.count} old match(es) from database`
+            );
+          } catch {
+            // Ignore logging failures
+          }
+        }
+      } catch (err) {
+        try {
+          console.warn(
+            `[db] cleanup failed:`,
+            safeErrorMessage(err)
+          );
+        } catch {
+          // Ignore logging failures
+        }
+      }
+    }, 5 * 60 * 1000)
+  );
+
+  return timers;
+}

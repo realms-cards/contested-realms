@@ -2,6 +2,9 @@
 
 import type { IncomingMessage, ServerResponse } from "http";
 
+import type { PrismaClient } from "@prisma/client";
+import jwt from "jsonwebtoken";
+
 import type { AnyRecord, PlayerState } from "../types";
 
 export interface RequestHandlerDeps {
@@ -9,6 +12,7 @@ export interface RequestHandlerDeps {
   serverConfig: {
     corsOrigins: string[];
   };
+  prisma: PrismaClient;
   isReady: () => boolean;
   collectMetricsSnapshot: () => AnyRecord;
   buildPromMetrics: () => string;
@@ -60,9 +64,15 @@ export interface RequestHandlerDeps {
   safeErrorMessage: (err: unknown) => unknown;
 }
 
+interface NextAuthJwtPayload {
+  uid?: string;
+  sub?: string;
+}
+
 export function createRequestHandler(deps: RequestHandlerDeps) {
   const {
     serverConfig,
+    prisma,
     isReady,
     collectMetricsSnapshot,
     buildPromMetrics,
@@ -149,6 +159,227 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         allowCorsForOptions(res, reqOrigin);
         res.statusCode = 204;
         res.end();
+        return;
+      }
+
+      if (pathname === "/players/available" && method === "GET") {
+        allowCors(res, reqOrigin);
+
+        const qRaw = (u.searchParams.get("q") || "").trim().toLowerCase();
+        const sortParam = (u.searchParams.get("sort") || "recent").toLowerCase();
+        const sort = sortParam === "alphabetical" ? "alphabetical" : "recent";
+        const limitRaw = Number(u.searchParams.get("limit") || 100);
+        const limit = Math.max(
+          1,
+          Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 100)
+        );
+        let offset = Number(u.searchParams.get("cursor") || 0);
+        if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+        let requesterId: string | null = null;
+        try {
+          const auth = (req.headers && req.headers.authorization) || "";
+          const match = auth.match(/^Bearer\s+(.+)$/i);
+          if (match && process.env.NEXTAUTH_SECRET) {
+            const payload = jwt.verify(
+              match[1],
+              process.env.NEXTAUTH_SECRET
+            ) as NextAuthJwtPayload;
+            requesterId =
+              (payload && payload.uid && String(payload.uid)) ||
+              (payload && payload.sub && String(payload.sub)) ||
+              null;
+          }
+        } catch {
+          requesterId = null;
+        }
+
+        try {
+          console.info(
+            `[http] GET /players/available q="${qRaw}" sort=${sort} limit=${limit} cursor=${offset} requester=${
+              requesterId ? String(requesterId).slice(-6) : "anon"
+            }`
+          );
+        } catch {
+          // Ignore logging errors
+        }
+
+        const candidates: Array<{ id: string; displayName: string }> = [];
+        for (const [playerId, player] of players.entries()) {
+          if (!player) continue;
+          if (!player.socketId || player.matchId) continue;
+          const name = player.displayName || "Player";
+          if (!qRaw || name.toLowerCase().includes(qRaw)) {
+            candidates.push({ id: playerId, displayName: name });
+          }
+        }
+
+        const ids = candidates.map((c) => c.id);
+        const publicUsers: Array<{
+          id: string;
+          shortId: string | null;
+          image: string | null;
+        }> =
+          ids.length > 0
+            ? await prisma.user.findMany({
+                where: { id: { in: ids }, presenceHidden: false },
+                select: { id: true, shortId: true, image: true },
+              })
+            : [];
+        const publicMap = new Map<string, { id: string; shortId: string | null; image: string | null }>(
+          publicUsers.map((user) => [user.id, user])
+        );
+        const visible = candidates.filter((c) => publicMap.has(c.id));
+
+        let friendSet = new Set<string>();
+        if (requesterId && visible.length > 0) {
+          const friendships: Array<{ targetUserId: string }> = await prisma.friendship.findMany({
+            where: {
+              ownerUserId: requesterId,
+              targetUserId: { in: visible.map((v) => v.id) },
+            },
+            select: { targetUserId: true },
+          });
+          friendSet = new Set(
+            friendships.map((entry: { targetUserId: string }) => entry.targetUserId)
+          );
+        }
+
+        const freq = new Map<string, number>();
+        const lastAt = new Map<string, number>();
+        if (requesterId && sort === "recent") {
+          const recent = await prisma.matchResult.findMany({
+            where: {
+              OR: [{ winnerId: requesterId }, { loserId: requesterId }],
+            },
+            orderBy: { completedAt: "desc" },
+            take: 10,
+            select: {
+              winnerId: true,
+              loserId: true,
+              completedAt: true,
+              players: true,
+            },
+          });
+          for (const result of recent) {
+            const opponentIds: string[] = [];
+            try {
+              const raw = (result as AnyRecord).players;
+              const arr = Array.isArray(raw)
+                ? raw
+                : typeof raw === "string"
+                ? JSON.parse(raw)
+                : [];
+              if (Array.isArray(arr)) {
+                for (const info of arr) {
+                  if (!info || typeof info !== "object") continue;
+                  const candidateId =
+                    (info as AnyRecord).id ||
+                    (info as AnyRecord).playerId ||
+                    (info as AnyRecord).uid;
+                  const normalized = candidateId
+                    ? String(candidateId)
+                    : null;
+                  if (normalized && normalized !== requesterId) {
+                    opponentIds.push(normalized);
+                  }
+                }
+              }
+            } catch {
+              // Ignore JSON parse issues
+            }
+            if (opponentIds.length === 0) {
+              const { winnerId, loserId } = result;
+              if (winnerId && winnerId !== requesterId) {
+                opponentIds.push(winnerId);
+              }
+              if (loserId && loserId !== requesterId) {
+                opponentIds.push(loserId);
+              }
+            }
+            const ts = result.completedAt
+              ? new Date(result.completedAt).getTime()
+              : Date.now();
+            for (const oid of opponentIds) {
+              const previous = freq.get(oid) || 0;
+              freq.set(oid, previous + 1);
+              const prevTs = lastAt.get(oid) || 0;
+              if (ts > prevTs) lastAt.set(oid, ts);
+            }
+          }
+        }
+
+        const items = visible.map((candidate) => {
+          const user = publicMap.get(candidate.id) as
+            | {
+                id: string;
+                shortId: string | null;
+                image: string | null;
+              }
+            | undefined;
+          const matchCount = freq.has(candidate.id)
+            ? freq.get(candidate.id)
+            : null;
+          const lastPlayedAt = lastAt.has(candidate.id)
+            ? new Date(lastAt.get(candidate.id) || Date.now()).toISOString()
+            : null;
+          return {
+            userId: candidate.id,
+            shortUserId:
+              (user && user.shortId) || candidate.id.slice(-8),
+            displayName: candidate.displayName,
+            avatarUrl: (user && user.image) || null,
+            presence: { online: true, inMatch: false },
+            isFriend: requesterId ? friendSet.has(candidate.id) : false,
+            lastPlayedAt,
+            matchCountInLast10: matchCount,
+          };
+        });
+
+        const alphaSort = (
+          a: { displayName: string; userId: string },
+          b: { displayName: string; userId: string }
+        ): number => {
+          const an = (a.displayName || "").toLowerCase();
+          const bn = (b.displayName || "").toLowerCase();
+          if (an < bn) return -1;
+          if (an > bn) return 1;
+          if (a.userId < b.userId) return -1;
+          if (a.userId > b.userId) return 1;
+          return 0;
+        };
+
+        let ordered = items;
+        if (sort === "recent" && requesterId) {
+          const groupA = items.filter(
+            (item) =>
+              typeof item.matchCountInLast10 === "number" &&
+              (item.matchCountInLast10 || 0) > 0
+          );
+          const groupB = items.filter((item) => !groupA.includes(item));
+          groupA.sort((x, y) => {
+            const delta =
+              (y.matchCountInLast10 || 0) - (x.matchCountInLast10 || 0);
+            if (delta !== 0) return delta;
+            const tx = x.lastPlayedAt ? Date.parse(x.lastPlayedAt) : 0;
+            const ty = y.lastPlayedAt ? Date.parse(y.lastPlayedAt) : 0;
+            if (ty !== tx) return ty - tx;
+            return alphaSort(x, y);
+          });
+          groupB.sort(alphaSort);
+          ordered = groupA.concat(groupB);
+        } else {
+          ordered = items.slice().sort(alphaSort);
+        }
+
+        const total = ordered.length;
+        const page = ordered.slice(offset, offset + limit);
+        const nextCursor =
+          offset + limit < total ? String(offset + limit) : null;
+
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ items: page, nextCursor }));
         return;
       }
 

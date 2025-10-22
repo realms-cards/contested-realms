@@ -177,19 +177,116 @@ function createLobbyFeature(deps) {
 
   function normalizeDraftConfig(config) {
     if (!config || typeof config !== "object") return null;
-    return {
-      packCount: Math.max(1, Number(config.packCount) || 3),
-      pickCount:
-        Number.isFinite(config.pickCount) && config.pickCount > 0
-          ? Number(config.pickCount)
-          : 15,
-      timer: Math.max(10, Number(config.timer) || 75),
-      format:
-        typeof config.format === "string" ? config.format : "standard_2player",
-      cardSource: Array.isArray(config.cardSource)
-        ? config.cardSource.slice(0, 8)
-        : [],
+    const asObj = config;
+    const packConfiguration = Array.isArray(asObj.packConfiguration)
+      ? asObj.packConfiguration
+          .map((entry) => {
+            if (!entry || typeof entry !== "object") return null;
+            const setId =
+              typeof entry.setId === "string"
+                ? entry.setId
+                : String(entry.setId || "").trim();
+            const packCount = Number(entry.packCount);
+            if (!setId) return null;
+            return {
+              setId,
+              packCount:
+                Number.isFinite(packCount) && packCount > 0
+                  ? Math.floor(packCount)
+                  : 0,
+            };
+          })
+          .filter((entry) => entry !== null)
+      : null;
+
+    const packCounts = {};
+    if (packConfiguration && packConfiguration.length > 0) {
+      for (const entry of packConfiguration) {
+        if (!entry) continue;
+        packCounts[entry.setId] =
+          (packCounts[entry.setId] || 0) + entry.packCount;
+      }
+    }
+    if (asObj.packCounts && typeof asObj.packCounts === "object") {
+      for (const [setIdRaw, countRaw] of Object.entries(asObj.packCounts)) {
+        const setId = String(setIdRaw || "").trim();
+        const count = Number(countRaw);
+        if (!setId) continue;
+        packCounts[setId] =
+          (packCounts[setId] || 0) +
+          (Number.isFinite(count) && count > 0 ? Math.floor(count) : 0);
+      }
+    }
+
+    let setMix = Array.isArray(asObj.setMix)
+      ? asObj.setMix
+          .map((setId) => String(setId || "").trim())
+          .filter(Boolean)
+      : [];
+    if (setMix.length === 0) {
+      setMix = Object.keys(packCounts);
+    }
+    if (setMix.length === 0 && packConfiguration && packConfiguration.length) {
+      setMix = packConfiguration.map((entry) => entry.setId).filter(Boolean);
+    }
+    if (setMix.length === 0) {
+      setMix = ["Beta"];
+    }
+
+    const packCountSum = Object.values(packCounts).reduce(
+      (sum, value) =>
+        sum + (Number.isFinite(value) ? Number(value) : 0),
+      0
+    );
+    const packCount =
+      packCountSum > 0
+        ? packCountSum
+        : Number.isFinite(Number(asObj.packCount)) &&
+          Number(asObj.packCount) > 0
+        ? Math.floor(Number(asObj.packCount))
+        : setMix.length;
+
+    const packSize =
+      Number.isFinite(Number(asObj.packSize)) && Number(asObj.packSize) > 0
+        ? Math.floor(Number(asObj.packSize))
+        : 15;
+
+    const normalized = {
+      setMix,
+      packCount,
+      packSize,
     };
+
+    if (Object.keys(packCounts).length > 0) {
+      normalized.packCounts = packCounts;
+    }
+    if (packConfiguration && packConfiguration.length > 0) {
+      normalized.packConfiguration = packConfiguration;
+    }
+
+    if (Number.isFinite(Number(asObj.timePerPick))) {
+      normalized.timePerPick = Number(asObj.timePerPick);
+    }
+    if (Number.isFinite(Number(asObj.deckBuildingTime))) {
+      normalized.deckBuildingTime = Number(asObj.deckBuildingTime);
+    }
+
+    const pickCount =
+      Number.isFinite(Number(asObj.pickCount)) && Number(asObj.pickCount) > 0
+        ? Math.floor(Number(asObj.pickCount))
+        : 15;
+    normalized.pickCount = pickCount;
+
+    normalized.timer = Math.max(10, Number(asObj.timer) || 75);
+    normalized.format =
+      typeof asObj.format === "string"
+        ? asObj.format
+        : "standard_2player";
+    normalized.cardSource = Array.isArray(asObj.cardSource)
+      ? asObj.cardSource.slice(0, 8)
+      : [];
+
+    return normalized;
   }
 
   function findOpenLobby() {
