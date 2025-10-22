@@ -568,13 +568,13 @@ export default function PlayPage() {
           mouseButtons={
             cameraMode === "topdown"
               ? {
-                  LEFT: THREE.MOUSE.PAN,
-                  MIDDLE: THREE.MOUSE.DOLLY,
-                  RIGHT: THREE.MOUSE.PAN,
+                  LEFT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.PAN,
+                  RIGHT: THREE.MOUSE.ROTATE,
                 }
               : {
-                  LEFT: THREE.MOUSE.PAN,
-                  MIDDLE: THREE.MOUSE.DOLLY,
+                  LEFT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.PAN,
                   RIGHT: THREE.MOUSE.ROTATE,
                 }
           }

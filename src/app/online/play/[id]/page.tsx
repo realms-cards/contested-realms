@@ -1,11 +1,12 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import CardPreview from "@/components/game/CardPreview";
@@ -18,6 +19,7 @@ import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
@@ -1129,10 +1131,17 @@ export default function OnlineMatchPage() {
     matW = baseGridH * MAT_RATIO;
   }
   const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
-  const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
-  // Extract store-derived dependencies for effects to satisfy ESLint
-  const playersState = useGameStore((s) => s.players);
-  const currentPlayerState = useGameStore((s) => s.currentPlayer);
+const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+// Extract store-derived dependencies for effects to satisfy ESLint
+const playersState = useGameStore((s) => s.players);
+const currentPlayerState = useGameStore((s) => s.currentPlayer);
+const canPanCamera =
+  !resyncing &&
+  !dragFromHand &&
+  !dragFromPile &&
+  !selected &&
+  !selectedPermanent &&
+  !selectedAvatar;
 
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1801,44 +1810,26 @@ export default function OnlineMatchPage() {
                   ref={controlsRef}
                   makeDefault
                   target={[0, 0, 0]}
-                  mouseButtons={
-                    cameraMode === "topdown"
-                      ? {
-                          LEFT: THREE.MOUSE.PAN,
-                          MIDDLE: THREE.MOUSE.DOLLY,
-                          RIGHT: THREE.MOUSE.PAN,
-                        }
-                      : {
-                          LEFT: THREE.MOUSE.PAN,
-                          MIDDLE: THREE.MOUSE.DOLLY,
-                          RIGHT: THREE.MOUSE.ROTATE,
-                        }
-                  }
-                  enabled={
-                    !resyncing &&
-                    !dragFromHand &&
-                    !dragFromPile &&
-                    !selected &&
-                    !selectedPermanent &&
-                    !selectedAvatar
-                  }
-                  enablePan={
-                    !resyncing &&
-                    !dragFromHand &&
-                    !dragFromPile &&
-                    !selected &&
-                    !selectedPermanent &&
-                    !selectedAvatar
-                  }
-                  enableRotate={
-                    !resyncing &&
-                    !dragFromHand &&
-                    !dragFromPile &&
-                    !selected &&
-                    !selectedPermanent &&
-                    !selectedAvatar &&
-                    cameraMode !== "topdown"
-                  }
+          mouseButtons={
+            cameraMode === "topdown"
+              ? {
+                  LEFT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.PAN,
+                  RIGHT: THREE.MOUSE.ROTATE,
+                }
+              : {
+                  LEFT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.PAN,
+                  RIGHT: THREE.MOUSE.ROTATE,
+                }
+          }
+          touches={{
+            ONE: THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.PAN,
+          }}
+                  enabled={canPanCamera}
+                  enablePan={canPanCamera}
+                  enableRotate={canPanCamera && cameraMode !== "topdown"}
                   enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                   enableDamping={false}
                   onChange={clampControls}
@@ -1855,6 +1846,7 @@ export default function OnlineMatchPage() {
                   minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
                   maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
                 />
+                <KeyboardPanControls enabled={canPanCamera} />
               </Canvas>
             </div>
           )}
@@ -1919,4 +1911,12 @@ export default function OnlineMatchPage() {
         )}
       </div>
   );
+}
+
+function KeyboardPanControls({ enabled = true, step = 0.4 }: { enabled?: boolean; step?: number }) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }

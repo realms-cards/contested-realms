@@ -6,7 +6,7 @@ import { Physics } from "@react-three/rapier";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MOUSE } from "three";
+import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
@@ -35,6 +35,7 @@ import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import type { DraftCard } from "@/types/draft";
 import { useGameStore } from "@/lib/game/store";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 const TournamentPresenceOverlay = dynamic(
   () => import("@/components/tournament/TournamentPresenceOverlay"),
@@ -1697,17 +1698,19 @@ export default function TournamentDraft3DScreen({
             screenSpacePanning
             panSpeed={1.2}
             zoomSpeed={0.75}
-            minDistance={6}
-            maxDistance={18}
+            minDistance={2}
+            maxDistance={28}
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.PAN,
-              MIDDLE: MOUSE.DOLLY,
+              LEFT: MOUSE.ROTATE,
+              MIDDLE: MOUSE.PAN,
               RIGHT: MOUSE.ROTATE,
             }}
+            touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
+          <KeyboardPanControls enabled={!orbitLocked} />
         </Canvas>
       </div>
 
@@ -2127,5 +2130,19 @@ function ClampOrbitTarget({
     };
   }, [bounds.maxX, bounds.maxZ, bounds.minX, bounds.minZ, camera, controls, invalidate]);
 
+  return null;
+}
+
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
   return null;
 }
