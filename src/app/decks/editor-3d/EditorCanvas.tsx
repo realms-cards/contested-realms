@@ -63,10 +63,10 @@ export default function EditorCanvas({ children, orbitLocked = false }: EditorCa
           screenSpacePanning
           panSpeed={1.2}
           zoomSpeed={0.75}
-          minDistance={6}
-          maxDistance={18}
-          minPolarAngle={Math.PI / 3}
-          maxPolarAngle={Math.PI / 2.4}
+          minDistance={1}
+          maxDistance={36}
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI / 2.05}
         />
         {/* Clamp panning to board bounds */}
         <PanBounds minX={-8} maxX={8} minZ={-6} maxZ={8} />

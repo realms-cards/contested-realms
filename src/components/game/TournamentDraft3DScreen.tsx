@@ -1688,7 +1688,7 @@ export default function TournamentDraft3DScreen({
             makeDefault
             target={[0, 0, 0]}
             enabled={!orbitLocked}
-            enablePan={false}
+            enablePan
             enableRotate={false}
             enableZoom
             enableDamping
@@ -1696,10 +1696,10 @@ export default function TournamentDraft3DScreen({
             screenSpacePanning
             panSpeed={1.2}
             zoomSpeed={0.75}
-            minDistance={6}
-            maxDistance={18}
-            minPolarAngle={Math.PI / 3}
-            maxPolarAngle={Math.PI / 2.4}
+            minDistance={1}
+            maxDistance={36}
+            minPolarAngle={0}
+            maxPolarAngle={Math.PI / 2.05}
             mouseButtons={{
               LEFT: MOUSE.PAN,
               MIDDLE: MOUSE.DOLLY,
