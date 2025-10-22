@@ -35,9 +35,151 @@ function createTournamentFeature(deps) {
   const startMatchRecording = deps.startMatchRecording;
   const getMatchInfo = deps.getMatchInfo;
   const tournamentBroadcast = deps.tournamentBroadcast;
+  const EVENT_NAME_ALIASES = {
+    "tournament:updated": "TOURNAMENT_UPDATED",
+    "tournament:phase:changed": "PHASE_CHANGED",
+    "tournament:round:started": "ROUND_STARTED",
+    "tournament:match:assigned": "MATCH_ASSIGNED",
+    "tournament:statistics:updated": "STATISTICS_UPDATED",
+    "tournament:player:joined": "PLAYER_JOINED",
+    "tournament:player:left": "PLAYER_LEFT",
+    "tournament:draft:ready": "DRAFT_READY",
+    "tournament:preparation:update": "UPDATE_PREPARATION",
+    "tournament:error": "TOURNAMENT_ERROR",
+  };
+  const SNAPSHOT_EVENT_NAMES = new Set([
+    "tournament:updated",
+    "tournament:phase:changed",
+    "tournament:round:started",
+    "tournament:statistics:updated",
+    "tournament:draft:ready",
+    "tournament:preparation:update",
+    "tournament:presence",
+  ]);
+  /** @type {Map<string, Map<string, any>>} tournamentId -> Map<eventName, payload> */
+  const tournamentSnapshots = new Map();
+
+  function clonePayload(payload) {
+    if (!payload || typeof payload !== "object") return payload;
+    try {
+      return structuredClone(payload);
+    } catch {
+      try {
+        return JSON.parse(JSON.stringify(payload));
+      } catch {
+        return payload;
+      }
+    }
+  }
+
+  function setSnapshot(tournamentId, eventName, payload) {
+    if (!SNAPSHOT_EVENT_NAMES.has(eventName)) return;
+    let eventMap = tournamentSnapshots.get(tournamentId);
+    if (!eventMap) {
+      eventMap = new Map();
+      tournamentSnapshots.set(tournamentId, eventMap);
+    }
+    eventMap.set(eventName, clonePayload(payload));
+  }
+
+  function emitToSocket(socketInstance, eventName, payload, opts = {}) {
+    const includeLegacy = opts.includeLegacy !== false;
+    try {
+      socketInstance.emit(eventName, payload);
+      if (includeLegacy && EVENT_NAME_ALIASES[eventName]) {
+        socketInstance.emit(EVENT_NAME_ALIASES[eventName], payload);
+      }
+    } catch (err) {
+      console.warn("[Tournament] Failed to emit to socket:", err?.message || err);
+    }
+  }
+
+  function emitToTournamentRoom(tournamentId, eventName, payload, opts = {}) {
+    const skipLegacy = opts.skipLegacy === true;
+    const skipSnapshot = opts.skipSnapshot === true;
+    const room = `tournament:${tournamentId}`;
+    try {
+      io.to(room).emit(eventName, payload);
+      if (!skipLegacy && EVENT_NAME_ALIASES[eventName]) {
+        io.to(room).emit(EVENT_NAME_ALIASES[eventName], payload);
+      }
+    } catch (err) {
+      console.warn("[Tournament] Failed to emit event:", eventName, err?.message || err);
+    }
+    if (!skipSnapshot) {
+      setSnapshot(tournamentId, eventName, payload);
+    }
+  }
+
+  function replaySnapshotsForSocket(socketInstance, tournamentId) {
+    const eventMap = tournamentSnapshots.get(tournamentId);
+    if (!eventMap || eventMap.size === 0) return false;
+    for (const [eventName, payload] of eventMap.entries()) {
+      emitToSocket(socketInstance, eventName, payload);
+    }
+    return true;
+  }
+
+  async function loadAndSendInitialSnapshot(socketInstance, tournamentId) {
+    let sent = replaySnapshotsForSocket(socketInstance, tournamentId);
+    if (sent) return;
+    try {
+      const tournament = await prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        include: {
+          registrations: {
+            include: { player: { select: { id: true, name: true, shortId: true } } },
+          },
+        },
+      });
+      if (!tournament) return;
+      const registeredPlayers = Array.isArray(tournament.registrations)
+        ? tournament.registrations.map((registration) => ({
+            id: registration.playerId,
+            displayName:
+              registration.player?.name ||
+              registration.player?.shortId ||
+              registration.playerId,
+            preparationStatus: registration.preparationStatus,
+            deckSubmitted: registration.deckSubmitted,
+          }))
+        : [];
+      const payload = {
+        id: tournament.id,
+        name: tournament.name,
+        format: tournament.format,
+        status: tournament.status,
+        maxPlayers: tournament.maxPlayers,
+        currentPlayers: tournament.registrations?.length || 0,
+        creatorId: tournament.creatorId,
+        settings: tournament.settings,
+        createdAt: tournament.createdAt?.toISOString?.() || null,
+        startedAt: tournament.startedAt?.toISOString?.() || null,
+        completedAt: tournament.completedAt?.toISOString?.() || null,
+        registeredPlayers,
+      };
+      setSnapshot(tournamentId, "tournament:updated", payload);
+      emitToSocket(socketInstance, "tournament:updated", payload);
+    } catch (err) {
+      console.warn(
+        "[Tournament] Failed to load initial snapshot:",
+        err?.message || err
+      );
+    }
+  }
+
 
   /** @type {Map<string, Map<string, { playerId: string, playerName: string|null, isConnected: boolean, lastActivity: number }>>} */
   const tournamentPresence = new Map();
+  function emitTournamentPresence(tournamentId, playersList) {
+    const payload = {
+      tournamentId,
+      players: playersList,
+    };
+    emitToTournamentRoom(tournamentId, "tournament:presence", payload, {
+      skipLegacy: true,
+    });
+  }
 
   function getTournamentPresenceList(tournamentId) {
     const m = tournamentPresence.get(tournamentId);
@@ -70,22 +212,70 @@ function createTournamentFeature(deps) {
 
   function broadcastTournamentUpdate(tournamentId, data) {
     tournamentBroadcast.emitTournamentUpdate(io, tournamentId, data);
+    emitToTournamentRoom(tournamentId, "tournament:updated", data, {
+      skipLegacy: true,
+    });
   }
 
   function broadcastPhaseChanged(tournamentId, newPhase, additionalData = {}) {
+    const payload = {
+      tournamentId,
+      newPhase,
+      newStatus: newPhase,
+      timestamp: new Date().toISOString(),
+      ...additionalData,
+    };
+    if (typeof payload.newStatus !== "string") {
+      payload.newStatus = newPhase;
+    }
     tournamentBroadcast.emitPhaseChanged(io, tournamentId, newPhase, additionalData);
+    emitToTournamentRoom(tournamentId, "tournament:phase:changed", payload, {
+      skipLegacy: true,
+    });
   }
 
   function broadcastRoundStarted(tournamentId, roundNumber, roundMatches) {
     tournamentBroadcast.emitRoundStarted(io, tournamentId, roundNumber, roundMatches);
+    emitToTournamentRoom(
+      tournamentId,
+      "tournament:round:started",
+      {
+        tournamentId,
+        roundNumber,
+        matches: roundMatches,
+      },
+      { skipLegacy: true }
+    );
   }
 
   function broadcastPlayerJoined(tournamentId, playerId, playerName, currentPlayerCount) {
     tournamentBroadcast.emitPlayerJoined(io, tournamentId, playerId, playerName, currentPlayerCount);
+    emitToTournamentRoom(
+      tournamentId,
+      "tournament:player:joined",
+      {
+        tournamentId,
+        playerId,
+        playerName,
+        currentPlayerCount,
+      },
+      { skipLegacy: true, skipSnapshot: true }
+    );
   }
 
   function broadcastPlayerLeft(tournamentId, playerId, playerName, currentPlayerCount) {
     tournamentBroadcast.emitPlayerLeft(io, tournamentId, playerId, playerName, currentPlayerCount);
+    emitToTournamentRoom(
+      tournamentId,
+      "tournament:player:left",
+      {
+        tournamentId,
+        playerId,
+        playerName,
+        currentPlayerCount,
+      },
+      { skipLegacy: true, skipSnapshot: true }
+    );
   }
 
   function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted = false) {
@@ -98,14 +288,45 @@ function createTournamentFeature(deps) {
       totalPlayerCount,
       deckSubmitted
     );
+    emitToTournamentRoom(
+      tournamentId,
+      "tournament:preparation:update",
+      {
+        tournamentId,
+        playerId,
+        preparationStatus,
+        readyPlayerCount,
+        totalPlayerCount,
+        deckSubmitted,
+      },
+      { skipLegacy: true }
+    );
   }
 
   function broadcastDraftReady(tournamentId, payload) {
     tournamentBroadcast.emitDraftReady(io, tournamentId, payload);
+    emitToTournamentRoom(
+      tournamentId,
+      "tournament:draft:ready",
+      {
+        tournamentId,
+        ...payload,
+      },
+      { skipLegacy: true }
+    );
   }
 
   function broadcastStatisticsUpdate(tournamentId, statistics) {
     tournamentBroadcast.emitStatisticsUpdate(io, tournamentId, statistics);
+    emitToTournamentRoom(
+      tournamentId,
+      "tournament:statistics:updated",
+      {
+        tournamentId,
+        ...statistics,
+      },
+      { skipLegacy: true }
+    );
   }
 
   function registerSocketHandlers({ socket, isAuthed, getPlayerBySocket }) {
@@ -132,9 +353,11 @@ function createTournamentFeature(deps) {
         const name = player?.displayName || null;
         if (pid) {
           const list = upsertTournamentPresence(tournamentId, pid, name, true);
-          io.to(`tournament:${tournamentId}`).emit("tournament:presence", { tournamentId, players: list });
+          emitTournamentPresence(tournamentId, list);
         }
       } catch {}
+
+      await loadAndSendInitialSnapshot(socket, tournamentId);
     });
 
     socket.on("tournament:leave", async (payload) => {
@@ -162,7 +385,7 @@ function createTournamentFeature(deps) {
             players.get(pid)?.displayName || null,
             false
           );
-          io.to(`tournament:${tournamentId}`).emit("tournament:presence", { tournamentId, players: list });
+          emitTournamentPresence(tournamentId, list);
         }
       } catch {}
     });
@@ -358,7 +581,7 @@ function createTournamentFeature(deps) {
           include: { registrations: true },
         });
         if (tournament) {
-          socket.emit("TOURNAMENT_UPDATED", {
+          const payload = {
             id: tournament.id,
             name: tournament.name,
             format: tournament.format,
@@ -370,7 +593,9 @@ function createTournamentFeature(deps) {
             createdAt: tournament.createdAt.toISOString(),
             startedAt: tournament.startedAt?.toISOString() || null,
             completedAt: tournament.completedAt?.toISOString() || null,
-          });
+          };
+          emitToSocket(socket, "tournament:updated", payload);
+          setSnapshot(tournamentId, "tournament:updated", payload);
         }
       } catch (err) {
         console.error("[Tournament] Failed to send initial state:", err);
@@ -385,13 +610,11 @@ function createTournamentFeature(deps) {
       console.log(`[Tournament] Socket ${socket.id} left tournament ${tournamentId}`);
     });
 
-    socket.on("UPDATE_PREPARATION", async (payload) => {
+    async function handlePreparationUpdate(payload) {
       const { tournamentId, preparationData } = payload || {};
       if (!tournamentId) return;
-
       const pid = playerIdBySocket.get(socket.id);
       if (!pid) return;
-
       try {
         const registration = await prisma.tournamentRegistration.findUnique({
           where: {
@@ -401,7 +624,6 @@ function createTournamentFeature(deps) {
             },
           },
         });
-
         if (!registration) return;
 
         await prisma.tournamentRegistration.update({
@@ -420,18 +642,31 @@ function createTournamentFeature(deps) {
           prisma.tournamentRegistration.count({ where: { tournamentId } }),
         ]);
 
-        io.to(`tournament:${tournamentId}`).emit("UPDATE_PREPARATION", {
+        broadcastPreparationUpdate(
           tournamentId,
-          playerId: pid,
-          preparationStatus: preparationData?.isComplete ? "completed" : "inProgress",
-          deckSubmitted: Boolean(preparationData?.deckSubmitted),
-          readyPlayerCount: readyCount,
-          totalPlayerCount: totalCount,
-        });
+          pid,
+          preparationData?.isComplete ? "completed" : "inProgress",
+          readyCount,
+          totalCount,
+          Boolean(preparationData?.deckSubmitted)
+        );
       } catch (err) {
         console.error("[Tournament] Preparation update failed:", err);
+        emitToSocket(
+          socket,
+          "tournament:error",
+          {
+            code: "PREPARATION_UPDATE_FAILED",
+            message: "Failed to update tournament preparation status",
+            details: err?.message || String(err),
+          },
+          { includeLegacy: true }
+        );
       }
-    });
+    }
+
+    socket.on("tournament:preparation:update", handlePreparationUpdate);
+    socket.on("UPDATE_PREPARATION", handlePreparationUpdate);
 
     socket.on("disconnect", () => {
       const pid = playerIdBySocket.get(socket.id);
@@ -445,7 +680,7 @@ function createTournamentFeature(deps) {
               players.get(pid)?.displayName || null,
               false
             );
-            io.to(`tournament:${tid}`).emit("tournament:presence", { tournamentId: tid, players: list });
+            emitTournamentPresence(tid, list);
           }
         }
       } catch {}
