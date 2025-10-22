@@ -243,6 +243,49 @@ useEffect(() => {
   }, [requestedTournamentId, tournaments]);
 
   // Socket event handlers
+  const refreshTournaments = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    setError(null);
+    setLoading(true);
+    try {
+      // Only fetch active tournaments (registering, preparing, active)
+      // Limit to recent 6 tournaments to avoid loading all history
+      const response = await fetch('/api/tournaments?status=registering,preparing,active&limit=6');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch tournaments');
+      }
+      const tournamentsData = await response.json() as TournamentInfo[];
+      setTournaments(tournamentsData);
+      setLastUpdated(new Date().toISOString());
+      const ctId = currentTournamentIdRef.current;
+      if (ctId) {
+        const updatedCurrent = tournamentsData.find(t => t.id === ctId);
+        if (updatedCurrent) setCurrentTournament(updatedCurrent);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
+      setError(message);
+    } finally {
+      isRefreshingRef.current = false;
+      setLoading(false);
+    }
+  }, [setCurrentTournament]);
+
+  // Debounced refresher to coalesce bursts
+  const refreshTimeoutRef = useRef<number | null>(null);
+  const refreshTournamentsDebounced = useCallback((delay = 300) => {
+    if (refreshTimeoutRef.current != null) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+    refreshTimeoutRef.current = window.setTimeout(() => {
+      refreshTimeoutRef.current = null;
+      void refreshTournaments();
+    }, delay);
+  }, [refreshTournaments]);
+
   const handleTournamentUpdated = useCallback((data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
     setTournaments((prev) =>
       prev.map((t) => {
@@ -259,6 +302,7 @@ useEffect(() => {
         return next as TournamentInfo;
       })
     );
+    refreshTournamentsDebounced(250);
 
     setCurrentTournamentState((prev) => {
       if (!prev || prev.id !== data.id) return prev;
@@ -275,7 +319,7 @@ useEffect(() => {
     });
 
     setLastUpdated(new Date().toISOString());
-  }, []);
+  }, [refreshTournamentsDebounced]);
 
   const handlePresenceUpdated = useCallback((data: {
     tournamentId: string;
@@ -352,7 +396,6 @@ useEffect(() => {
     currentPlayerCount: number; 
   }) => {
     console.log('Player joined tournament:', data);
-    // Update the specific tournament in our global list, including registeredPlayers when present
     setTournaments(prev => prev.map(t => {
       if (t.id !== data.tournamentId) return t;
       const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
@@ -360,6 +403,7 @@ useEffect(() => {
       const updated = [...without, { id: data.playerId, displayName: data.playerName, ready: false }];
       return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
     }));
+    refreshTournamentsDebounced(250);
     // Update current tournament if it matches
     setCurrentTournamentState(prev => {
       if (!prev || prev.id !== data.tournamentId) return prev;
@@ -373,7 +417,8 @@ useEffect(() => {
       playerJoinedCount: prev.playerJoinedCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, []);
+    queueStatisticsRefresh({ standings: true, overview: true });
+  }, [refreshTournamentsDebounced, queueStatisticsRefresh]);
 
   const handlePlayerLeft = useCallback((data: { 
     tournamentId: string;
@@ -388,6 +433,7 @@ useEffect(() => {
       const updated = reg.filter(p => p.id !== data.playerId);
       return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
     }));
+    refreshTournamentsDebounced(250);
     setCurrentTournamentState(prev => {
       if (!prev || prev.id !== data.tournamentId) return prev;
       const reg = (prev as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
@@ -399,7 +445,8 @@ useEffect(() => {
       playerLeftCount: prev.playerLeftCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, []);
+    queueStatisticsRefresh({ standings: true, overview: true });
+  }, [refreshTournamentsDebounced, queueStatisticsRefresh]);
 
   const handlePreparationUpdate = useCallback((data: { 
     tournamentId: string; 
@@ -411,7 +458,6 @@ useEffect(() => {
   }) => {
     console.log('Preparation update:', data);
     const isReady = data.preparationStatus === 'ready' || data.deckSubmitted === true;
-    // Update local list to reflect per-player ready flag when available
     setTournaments(prev => prev.map(t => {
       if (t.id !== data.tournamentId) return t;
       const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers;
@@ -419,6 +465,7 @@ useEffect(() => {
       const updated = reg.map(p => p.id === data.playerId ? { ...p, ready: isReady, deckSubmitted: Boolean(data.deckSubmitted) } : p);
       return { ...(t as unknown as Record<string, unknown>), registeredPlayers: updated } as unknown as TournamentInfo;
     }));
+    refreshTournamentsDebounced(250);
     // Update current tournament mirror if present
     if (currentTournament?.id === data.tournamentId) {
       const reg = (currentTournament as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers;
@@ -439,7 +486,8 @@ useEffect(() => {
       preparationUpdateCount: prev.preparationUpdateCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, [currentTournament]);
+    queueStatisticsRefresh({ standings: true, overview: true });
+  }, [currentTournament, refreshTournamentsDebounced, queueStatisticsRefresh]);
 
   const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
     console.log('Statistics updated:', data);
@@ -561,6 +609,17 @@ useEffect(() => {
     });
   }, [socket]);
 
+  // Fallback polling: keep list fresh even if socket events are missed
+  // Only poll when the realtime socket is disconnected
+  useEffect(() => {
+    if (isConnected) return;
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void refreshTournaments();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [isConnected, refreshTournaments]);
+
   // Auto-join current tournament when socket connects or when the id changes
   useEffect(() => {
     if (!isConnected) return;
@@ -583,60 +642,6 @@ useEffect(() => {
   }, [isConnected]);
 
   // Tournament management functions
-  const refreshTournaments = useCallback(async () => {
-    if (isRefreshingRef.current) return;
-    isRefreshingRef.current = true;
-    setError(null);
-    setLoading(true);
-    try {
-      // Only fetch active tournaments (registering, preparing, active)
-      // Limit to recent 6 tournaments to avoid loading all history
-      const response = await fetch('/api/tournaments?status=registering,preparing,active&limit=6');
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch tournaments');
-      }
-      const tournamentsData = await response.json() as TournamentInfo[];
-      setTournaments(tournamentsData);
-      setLastUpdated(new Date().toISOString());
-      const ctId = currentTournamentIdRef.current;
-      if (ctId) {
-        const updatedCurrent = tournamentsData.find(t => t.id === ctId);
-        if (updatedCurrent) setCurrentTournament(updatedCurrent);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
-      setError(message);
-    } finally {
-      isRefreshingRef.current = false;
-      setLoading(false);
-    }
-  }, [setCurrentTournament]);
-
-  // Debounced refresher to coalesce bursts
-  const refreshTimeoutRef = useRef<number | null>(null);
-  const refreshTournamentsDebounced = useCallback((delay = 300) => {
-    if (refreshTimeoutRef.current != null) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
-    refreshTimeoutRef.current = window.setTimeout(() => {
-      refreshTimeoutRef.current = null;
-      void refreshTournaments();
-    }, delay);
-  }, [refreshTournaments]);
-
-  // Fallback polling: keep list fresh even if socket events are missed
-  // Fallback polling only when socket is not connected
-  useEffect(() => {
-    if (isConnected) return;
-    const id = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      void refreshTournaments();
-    }, 15000);
-    return () => clearInterval(id);
-  }, [isConnected, refreshTournaments]);
-
   const createTournament = useCallback(async (config: {
     name: string;
     format: 'sealed' | 'draft' | 'constructed';
