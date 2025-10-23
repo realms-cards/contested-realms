@@ -23,7 +23,10 @@ interface PanBoundsProps {
   maxZ: number;
 }
 
-export default function EditorCanvas({ children, orbitLocked = false }: EditorCanvasProps) {
+export default function EditorCanvas({
+  children,
+  orbitLocked = false,
+}: EditorCanvasProps) {
   useEffect(() => {
     useGameStore.getState().resetGameState();
   }, []);
@@ -55,11 +58,10 @@ export default function EditorCanvas({ children, orbitLocked = false }: EditorCa
           enablePan={!orbitLocked}
           enableZoom
           mouseButtons={{
-            LEFT: MOUSE.ROTATE,
             MIDDLE: MOUSE.PAN,
             RIGHT: MOUSE.ROTATE,
           }}
-          touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
+          touches={{ TWO: TOUCH.PAN }}
           enableDamping
           dampingFactor={0.08}
           screenSpacePanning
@@ -121,7 +123,13 @@ function PanBounds({ minX, maxX, minZ, maxZ }: PanBoundsProps) {
   return null;
 }
 
-function KeyboardPanControls({ enabled = true, step = 0.4 }: { enabled?: boolean; step?: number }) {
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
   const { controls } = useThree((s) => ({
     controls: s.controls as OrbitControlsImpl | undefined,
   }));

@@ -929,6 +929,26 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
 
   const room = `match:${match.id}`;
   io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+  // Also broadcast a minimal state patch with match end flags so all clients
+  // immediately reflect the end-of-match state (drives victory/defeat overlay).
+  // This is redundant with the actor's final patch but ensures the opponent
+  // receives matchEnded/winner even if their local check didn't run.
+  try {
+    const endPatch = {
+      matchEnded: true,
+      // Explicitly normalize to "p1" | "p2" | null for the client reducer
+      winner: (winnerSeat === "p1" || winnerSeat === "p2") ? (winnerSeat as "p1" | "p2") : null,
+    };
+    io.to(room).emit("statePatch", { patch: endPatch, t: now });
+    // Also emit an explicit event for compatibility with clients that rely on a
+    // status transition rather than the game patch (older builds or dropped patch).
+    io.to(room).emit("matchEnded", {
+      matchId: match.id,
+      winnerId: winnerId || null,
+      result: isDraw ? "draw" : "win",
+      reason: (options && typeof options.reason === "string" ? options.reason : "normal_end"),
+    });
+  } catch {}
   try {
     botManager.cleanupBotsAfterMatch(match);
   } catch {}
@@ -979,7 +999,7 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
           },
         });
 
-        // FIXED T015/T023: Use standings service for atomic updates
+        // Use standings service for atomic updates; failures shouldn't prevent round completion
         try {
           const playersVal: Array<{ id?: string; playerId?: string; userId?: string } | null> = Array.isArray(
             tMatch.players
@@ -1010,14 +1030,13 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
             }
           }
         } catch (err) {
-          // Standings service handles retry logic internally
+          // Standings service handles retry logic internally; proceed with round completion
           console.error(
             "[Match] Failed to update standings:",
             err && typeof err === "object" && "message" in err
-              ? err.message
+              ? (err as Error).message
               : err
           );
-          throw err; // Re-throw to prevent marking match as complete
         }
 
         // If part of a round, possibly mark the round complete and (optionally) the tournament
@@ -3058,5 +3077,9 @@ async function shutdown() {
   process.exit(0);
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+process.on("SIGTERM", () => {
+  void shutdown();
+});
+process.on("SIGINT", () => {
+  void shutdown();
+});

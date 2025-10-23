@@ -1,21 +1,54 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import AsciiBottomArt from "@/components/ui/AsciiBottomArt";
 import AsciiLogo from "@/components/ui/AsciiLogo";
 import AsciiPanel from "@/components/ui/AsciiPanel";
 import OtherRealms from "@/components/ui/OtherRealms";
 
 export default function Home() {
+  const [showAlphaBanner, setShowAlphaBanner] = useState(true);
   // Set home page title
   useEffect(() => {
     document.title = "Realms.cards";
+    try {
+      const dismissed =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("sorcery:alphaBannerDismissed")
+          : null;
+      if (dismissed === "1") setShowAlphaBanner(false);
+    } catch {}
   }, []);
 
   return (
     <div className="h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-center px-5 relative overflow-hidden">
       <div className="relative z-10 max-w-5xl w-full text-center space-y-8 pt-10 pb-12">
+        {showAlphaBanner && (
+          <div className="max-w-5xl mx-auto">
+            <div className="bg-orange-900/50 border border-orange-500/50 text-orange-100 rounded-md px-4 py-3 flex items-center justify-between shadow">
+              <p className="text-sm md:text-base font-medium">
+                Currently in Open Alpha - Data might be lost in the future - back up your decks!
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.localStorage.setItem(
+                      "sorcery:alphaBannerDismissed",
+                      "1",
+                    );
+                  } catch {}
+                  setShowAlphaBanner(false);
+                }}
+                className="ml-4 inline-flex items-center rounded px-2 py-1 text-orange-100/90 hover:text-white hover:bg-orange-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+                aria-label="Dismiss banner"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
         {/* ASCII Logotype */}
         <AsciiLogo className="max-w-4xl mx-auto" />
 

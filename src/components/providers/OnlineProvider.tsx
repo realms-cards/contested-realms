@@ -728,6 +728,18 @@ export default function OnlineProvider({
           phase: patch.phase,
           keys: Object.keys(patch)
         });
+        try {
+          const endedFlag =
+            Object.prototype.hasOwnProperty.call(patch, "matchEnded") &&
+            Boolean((patch as { matchEnded?: unknown }).matchEnded);
+          if (endedFlag) {
+            setMatch((prev) => {
+              if (!prev) return prev;
+              if (prev.status === "ended") return prev;
+              return { ...prev, status: "ended" } as MatchInfo;
+            });
+          }
+        } catch {}
         queueServerPatch(p.patch, p.t);
       }),
       transport.on("chat", (p) =>
@@ -855,11 +867,29 @@ export default function OnlineProvider({
       }),
       transport.on("matchEnded", (p) => {
         console.log("[online] Match ended", p);
-        // Clear match state when server notifies match has ended
         const currMatch = matchRef.current;
         if (currMatch && p.matchId === currMatch.id) {
-          setMatch(null);
-          useGameStore.getState().log(`Match ended: ${p.reason || 'unknown reason'}`);
+          setMatch((prev) => {
+            if (!prev || prev.id !== currMatch.id) return prev;
+            const next: MatchInfo & Record<string, unknown> = { ...prev, status: "ended" };
+            if (p && typeof p === "object" && "winnerId" in p && p.winnerId) {
+              next.winnerId = (p as { winnerId: string }).winnerId;
+            }
+            if (p && typeof p === "object" && "result" in p) {
+              const resultValue = (p as { result?: unknown }).result;
+              if (
+                resultValue === "win" ||
+                resultValue === "loss" ||
+                resultValue === "draw"
+              ) {
+                next.result = resultValue;
+              } else if (resultValue === null) {
+                next.result = null;
+              }
+            }
+            return next as MatchInfo;
+          });
+          useGameStore.getState().log(`Match ended: ${p.reason || "unknown reason"}`);
         }
       }),
       transport.on("error", (p) => {
@@ -1000,45 +1030,35 @@ export default function OnlineProvider({
       }
     },
     startMatch: (matchConfig?: StartMatchConfig) => {
-      transport.startMatch(matchConfig);
+      try {
+        transport.startMatch(matchConfig);
+      } catch {}
     },
     joinMatch: async (id: string) => {
       try {
         // Clear any previously declined rejoin flag for this match
         try {
-          localStorage.removeItem(`sorcery:declinedRejoin:${id}`);
+          const key = `sorcery:declinedRejoin:${id}`;
+          localStorage.removeItem(key);
         } catch {}
-      } catch {}
-      await transport.joinMatch(id);
+        await transport.joinMatch(id);
+      } catch {
+        // Simple retry and resync to mitigate transient race conditions
+        try {
+          setTimeout(() => {
+            transport.joinMatch(id).catch(() => {});
+          }, 800);
+          setTimeout(() => {
+            transport.resync();
+          }, 1200);
+        } catch {}
+      }
     },
     leaveMatch: () => {
       try {
-        const myName = me?.displayName || "A player";
-        const matchId = match?.id;
-
-        // Send a chat message to notify other players
-        if (me) {
-          transport.sendChat(`${myName} has left the match.`, "match");
-        }
-
-        // Tell the server we've left the match so it doesn't prompt rejoin on reconnect
-        try {
-          transport.leaveMatch();
-        } catch {}
-
-        // Persist declined rejoin decision locally for this match
-        if (matchId) {
-          try {
-            localStorage.setItem(`sorcery:declinedRejoin:${matchId}`, "1");
-          } catch {}
-        }
-
-        // Clear match state
-        setMatch(null);
-
-        // Log the leave event locally
-        useGameStore.getState().log(`You left the match.`);
+        transport.leaveMatch();
       } catch {}
+      setMatch(null);
     },
     sendChat: (msg: string, scope?: ChatScope) => {
       if (!msg.trim()) return;

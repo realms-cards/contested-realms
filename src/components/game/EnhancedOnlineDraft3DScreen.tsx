@@ -1167,7 +1167,13 @@ export default function EnhancedOnlineDraft3DScreen({
   // Create sorted stack positions using the shared editor-3d logic
   const stackPositions = useMemo(() => {
     if (!isSortingEnabled) return null;
-    return computeStackPositions(pick3D, layoutMetaByCardId, isSortingEnabled, true, { sortMode });
+    return computeStackPositions(
+      pick3D,
+      layoutMetaByCardId,
+      isSortingEnabled,
+      true,
+      { sortMode }
+    );
   }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
   // Calculate stack sizes for hitbox optimization (from single-player)
@@ -1433,83 +1439,92 @@ export default function EnhancedOnlineDraft3DScreen({
           <div className="text-center">
             <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Players</h3>
-              <div className="space-y-3">
-                {Object.entries(playerNames).map(([key, name]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-slate-300">{name}</span>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={
-                          playerReadyStates[
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-slate-800 rounded-lg p-6">
+                <h3 className="text-xl font-semibold text-white mb-4">
+                  Players
+                </h3>
+                <div className="space-y-3">
+                  {Object.entries(playerNames).map(([key, name]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="text-slate-300">{name}</span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={
+                            playerReadyStates[
+                              key as keyof typeof playerReadyStates
+                            ]
+                              ? "text-green-400"
+                              : "text-slate-400"
+                          }
+                        >
+                          {playerReadyStates[
                             key as keyof typeof playerReadyStates
                           ]
-                            ? "text-green-400"
-                            : "text-slate-400"
-                        }
-                      >
-                        {playerReadyStates[
-                          key as keyof typeof playerReadyStates
-                        ]
-                          ? "Ready"
-                          : "Not Ready"}
-                      </span>
-                      {myPlayerKey === key &&
-                        !playerReadyStates[
-                          key as keyof typeof playerReadyStates
-                        ] && (
-                          <button
-                            onClick={handleToggleReady}
-                            className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            Ready
-                          </button>
-                        )}
+                            ? "Ready"
+                            : "Not Ready"}
+                        </span>
+                        {myPlayerKey === key &&
+                          !playerReadyStates[
+                            key as keyof typeof playerReadyStates
+                          ] && (
+                            <button
+                              onClick={handleToggleReady}
+                              className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              Ready
+                            </button>
+                          )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">
-                Draft Settings
-              </h3>
-              <div className="space-y-2 text-slate-300">
-                <div>
-                  {match?.draftConfig?.cubeId
-                    ? `Cube: ${match?.draftConfig?.cubeName ?? "Custom Cube"}`
-                    : `Sets: ${(match?.draftConfig?.setMix ?? ["Beta"]).join(
-                        ", "
-                      )}`}
+                  ))}
                 </div>
-                <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
-                <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
-                <div>Players: 2</div>
+              </div>
+
+              <div className="bg-slate-800 rounded-lg p-6">
+                <h3 className="text-xl font-semibold text-white mb-4">
+                  Draft Settings
+                </h3>
+                <div className="space-y-2 text-slate-300">
+                  <div>
+                    {match?.draftConfig?.cubeId
+                      ? `Cube: ${match?.draftConfig?.cubeName ?? "Custom Cube"}`
+                      : `Sets: ${(match?.draftConfig?.setMix ?? ["Beta"]).join(
+                          ", "
+                        )}`}
+                  </div>
+                  <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
+                  <div>
+                    Pack size: {match?.draftConfig?.packSize ?? 15} cards
+                  </div>
+                  <div>Players: 2</div>
+                </div>
               </div>
             </div>
+
+            {error && (
+              <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleStartDraft}
+              disabled={
+                loading || !playerReadyStates.p1 || !playerReadyStates.p2
+              }
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              {loading
+                ? "Starting Draft..."
+                : !playerReadyStates.p1 || !playerReadyStates.p2
+                ? "Waiting for both players to be ready..."
+                : "Start Draft"}
+            </button>
           </div>
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
-              {error}
-            </div>
-          )}
-
-          <button
-            onClick={handleStartDraft}
-            disabled={loading || !playerReadyStates.p1 || !playerReadyStates.p2}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            {loading
-              ? "Starting Draft..."
-              : !playerReadyStates.p1 || !playerReadyStates.p2
-              ? "Waiting for both players to be ready..."
-              : "Start Draft"}
-          </button>
-        </div>
         </div>
       </div>
     );
@@ -1582,7 +1597,9 @@ export default function EnhancedOnlineDraft3DScreen({
                 getTopRenderOrder={getTopRenderOrder}
                 transitionEnabled
                 transitionKey={`${draftState.packIndex}:${draftState.pickNumber}`}
-                passDirection={draftState.packDirection === "right" ? "right" : "left"}
+                passDirection={
+                  draftState.packDirection === "right" ? "right" : "left"
+                }
                 transitionDurationMs={480}
                 onHoverInfo={(info) => {
                   if (info) {
@@ -1794,11 +1811,10 @@ export default function EnhancedOnlineDraft3DScreen({
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.ROTATE,
               MIDDLE: MOUSE.PAN,
               RIGHT: MOUSE.ROTATE,
             }}
-            touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
+            touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
@@ -2281,7 +2297,15 @@ function ClampOrbitTarget({
       controls.removeEventListener("start", updateOffset);
       controls.removeEventListener("change", clampTarget);
     };
-  }, [bounds.maxX, bounds.maxZ, bounds.minX, bounds.minZ, camera, controls, invalidate]);
+  }, [
+    bounds.maxX,
+    bounds.maxZ,
+    bounds.minX,
+    bounds.minZ,
+    camera,
+    controls,
+    invalidate,
+  ]);
 
   return null;
 }

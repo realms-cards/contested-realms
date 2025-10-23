@@ -147,6 +147,8 @@ const statsRefreshQueueRef = useRef<{
   overview: boolean;
   timer: number | null;
 }>({ standings: false, matches: false, rounds: false, overview: false, timer: null });
+const detailRefreshTimersRef = useRef<Record<string, number>>({});
+const lastDetailFetchAtRef = useRef<Record<string, number>>({});
 
 const queueStatisticsRefresh = useCallback(
   (options: { standings?: boolean; matches?: boolean; rounds?: boolean; overview?: boolean }) => {
@@ -193,6 +195,95 @@ useEffect(() => {
     }
   };
 }, []);
+
+  const refreshTournamentDetail = useCallback((id: string | null | undefined, delay = 200, opts?: { force?: boolean }) => {
+    if (!id) return;
+    if (typeof window === "undefined") {
+      void fetch(`/api/tournaments/${id}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((detail) => {
+          if (!detail) return;
+          setTournaments((prev) => {
+            let found = false;
+            const next = prev.map((t) => {
+              if (t.id === detail.id) {
+                found = true;
+                return detail as TournamentInfo;
+              }
+              return t;
+            });
+            if (!found) {
+              return [...next, detail as TournamentInfo];
+            }
+            return next;
+          });
+          setCurrentTournamentState((prev) =>
+            prev && prev.id === (detail as TournamentInfo).id ? (detail as TournamentInfo) : prev
+          );
+        })
+        .catch((err) => {
+          console.warn("[RealtimeTournamentContext] Failed to refresh tournament detail", err);
+        });
+      return;
+    }
+
+    // Throttle: enforce a minimum interval per tournament id unless forced
+    const now = Date.now();
+    const last = lastDetailFetchAtRef.current[id] || 0;
+    const minInterval = 1000;
+    if (!(opts && opts.force) && now - last < minInterval) {
+      return;
+    }
+    lastDetailFetchAtRef.current[id] = now;
+
+    const timers = detailRefreshTimersRef.current;
+    const existing = timers[id];
+    if (existing != null) {
+      window.clearTimeout(existing);
+    }
+
+    const handle = window.setTimeout(async () => {
+      delete timers[id];
+      try {
+        const res = await fetch(`/api/tournaments/${id}`);
+        if (!res.ok) return;
+        const detail = (await res.json()) as TournamentInfo;
+        setTournaments((prev) => {
+          let found = false;
+          const next = prev.map((t) => {
+            if (t.id === detail.id) {
+              found = true;
+              return detail;
+            }
+            return t;
+          });
+          if (!found) return [...next, detail];
+          return next;
+        });
+        setCurrentTournamentState((prev) => {
+          if (!prev || prev.id !== detail.id) return prev;
+          return detail;
+        });
+      } catch (err) {
+        console.warn("[RealtimeTournamentContext] Failed to refresh tournament detail", err);
+      }
+    }, delay);
+    timers[id] = handle;
+  }, []);
+
+  useEffect(() => {
+    const timersRef = detailRefreshTimersRef;
+    return () => {
+      const timers = timersRef.current;
+      for (const key of Object.keys(timers)) {
+        const handle = timers[key];
+        if (handle != null) {
+          window.clearTimeout(handle);
+        }
+        delete timers[key];
+      }
+    };
+  }, []);
   
   // Hooks below need socket connectivity; we'll initialize them after setting up handlers and socket
 
@@ -208,13 +299,16 @@ useEffect(() => {
       const found = tournaments.find(t => t.id === id) || null;
       return found ?? prev ?? null;
     });
-  }, [tournaments]);
+    // Force a clean snapshot on explicit navigation/selection
+    refreshTournamentDetail(id, 100, { force: true });
+  }, [tournaments, refreshTournamentDetail]);
 
   const handleDraftReady = useCallback((data: { tournamentId: string; draftSessionId: string; totalPlayers?: number }) => {
     setCurrentTournamentState((prev) => {
       if (!prev || prev.id !== data.tournamentId) return prev;
       return { ...(prev as unknown as Record<string, unknown>), draftSessionId: data.draftSessionId } as unknown as TournamentInfo;
     });
+    refreshTournamentDetail(data.tournamentId, 150);
 
     if (!currentUserId) return;
 
@@ -230,7 +324,7 @@ useEffect(() => {
     if (pathname?.startsWith(targetPath)) return;
 
     router.replace(`${targetPath}?tournament=${data.tournamentId}`);
-  }, [activeTournamentId, currentTournament, currentUserId, pathname, router]);
+  }, [activeTournamentId, currentTournament, currentUserId, pathname, refreshTournamentDetail, router]);
 
   useEffect(() => {
     if (!requestedTournamentId) return;
@@ -240,7 +334,9 @@ useEffect(() => {
       if (prev && prev.id === found.id) return prev;
       return found;
     });
-  }, [requestedTournamentId, tournaments]);
+    // Force a clean snapshot when the requested tournament becomes available
+    refreshTournamentDetail(requestedTournamentId, 120, { force: true });
+  }, [refreshTournamentDetail, requestedTournamentId, tournaments]);
 
   // Socket event handlers
   const refreshTournaments = useCallback(async () => {
@@ -262,7 +358,17 @@ useEffect(() => {
       const ctId = currentTournamentIdRef.current;
       if (ctId) {
         const updatedCurrent = tournamentsData.find(t => t.id === ctId);
-        if (updatedCurrent) setCurrentTournament(updatedCurrent);
+        if (updatedCurrent) {
+          // Merge shallow list data into existing detail without dropping fields like creatorId
+          setCurrentTournamentState((prev) => {
+            if (!prev || prev.id !== ctId) return updatedCurrent as TournamentInfo;
+            return { ...prev, ...updatedCurrent } as TournamentInfo;
+          });
+        }
+        // Only force a heavy detail refresh when list shows major phases
+        if (updatedCurrent && (updatedCurrent.status === 'active' || updatedCurrent.status === 'completed')) {
+          refreshTournamentDetail(ctId, 150, { force: true });
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
@@ -271,7 +377,7 @@ useEffect(() => {
       isRefreshingRef.current = false;
       setLoading(false);
     }
-  }, [setCurrentTournament]);
+  }, [refreshTournamentDetail, setCurrentTournament]);
 
   // Debounced refresher to coalesce bursts
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -317,9 +423,9 @@ useEffect(() => {
       }
       return next as typeof prev;
     });
-
+    // Avoid heavy detail fetch here; rely on local merge + stats refresh
     setLastUpdated(new Date().toISOString());
-  }, [refreshTournamentsDebounced]);
+  }, [refreshTournamentDetail, refreshTournamentsDebounced]);
 
   const handlePresenceUpdated = useCallback((data: {
     tournamentId: string;
@@ -382,12 +488,16 @@ useEffect(() => {
       phasesHookRef.current.actions.updatePhase(data.newStatus as TournamentInfo['status']);
     }
     
+    // Only force a heavy detail refresh when transitioning into major phases
+    if (data.newStatus === 'active' || data.newStatus === 'completed') {
+      refreshTournamentDetail(data.tournamentId, 200, { force: true });
+    }
     setRealtimeEvents(prev => ({
       ...prev,
       phaseChangeCount: prev.phaseChangeCount + 1,
       lastEventTime: data.timestamp
     }));
-  }, [preparationId]);
+  }, [preparationId, refreshTournamentDetail]);
 
   const handlePlayerJoined = useCallback((data: { 
     tournamentId: string;
@@ -418,7 +528,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [refreshTournamentsDebounced, queueStatisticsRefresh]);
+  }, [queueStatisticsRefresh, refreshTournamentDetail, refreshTournamentsDebounced]);
 
   const handlePlayerLeft = useCallback((data: { 
     tournamentId: string;
@@ -446,7 +556,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [refreshTournamentsDebounced, queueStatisticsRefresh]);
+  }, [queueStatisticsRefresh, refreshTournamentDetail, refreshTournamentsDebounced]);
 
   const handlePreparationUpdate = useCallback((data: { 
     tournamentId: string; 
@@ -487,7 +597,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [currentTournament, refreshTournamentsDebounced, queueStatisticsRefresh]);
+  }, [currentTournament, refreshTournamentDetail, refreshTournamentsDebounced, queueStatisticsRefresh]);
 
   const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
     console.log('Statistics updated:', data);
@@ -500,7 +610,8 @@ useEffect(() => {
         overview: true,
       });
     }
-  }, [currentTournament, queueStatisticsRefresh]);
+    // Skip heavy detail refresh; statistics hooks will fetch targeted data
+  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
   const handleRoundStarted = useCallback((data: { 
     tournamentId: string; 
@@ -523,7 +634,7 @@ useEffect(() => {
         overview: true,
       });
     }
-  }, [currentTournament, queueStatisticsRefresh]);
+  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
   const handleMatchAssigned = useCallback((data: { 
     tournamentId: string; 
@@ -536,7 +647,7 @@ useEffect(() => {
     if (currentTournament?.id === data.tournamentId) {
       queueStatisticsRefresh({ standings: true, matches: true });
     }
-  }, [currentTournament, queueStatisticsRefresh]);
+  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
   const handleSocketError = useCallback((error: { 
     code: string; 
