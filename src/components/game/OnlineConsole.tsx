@@ -275,7 +275,7 @@ export default function OnlineConsole({
             {activeTab === 'events' && (
               <div
                 ref={eventsRef}
-                className="flex-1 overflow-y-auto px-3 py-3 text-xs space-y-1 min-h-0"
+                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
               >
                 {events.length === 0 && (
                   <div className="opacity-60">No events yet</div>
@@ -318,7 +318,7 @@ export default function OnlineConsole({
               <>
                 <div
                   ref={chatRef}
-                  className="flex-1 overflow-y-auto px-3 py-3 text-xs space-y-1 min-h-0"
+                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
                 >
                   {matchChat.length === 0 && (
                     <div className="opacity-60">No messages</div>
