@@ -82,6 +82,9 @@ interface RealtimeTournamentContextValue {
   tournamentPresence: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
   // Presence selector for arbitrary tournament id
   getPresenceFor: (tournamentId: string | null) => Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+  // Current user's assignment for quick CTA
+  assignedMatchId: string | null;
+  assignedOpponentName: string | null;
   
   // Global state
   loading: boolean;
@@ -111,6 +114,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     lastEventTime: null as string | null
   });
   const [presenceByTournament, setPresenceByTournament] = useState<Record<string, Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>>>({});
+  const [assignedMatch, setAssignedMatch] = useState<{ matchId: string; opponentName: string | null } | null>(null);
   // Track which tournament we've already joined on this connection to avoid spam re-joins
   const joinedTournamentIdRef = useRef<string | null>(null);
 
@@ -633,6 +637,14 @@ useEffect(() => {
         rounds: true,
         overview: true,
       });
+      // Derive my assignment immediately from payload
+      if (currentUserId) {
+        const mine = data.matches.find(m => m.player1Id === currentUserId || m.player2Id === currentUserId);
+        if (mine) {
+          const opp = mine.player1Id === currentUserId ? mine.player2Name : mine.player1Name;
+          setAssignedMatch({ matchId: String(mine.id), opponentName: opp ?? null });
+        }
+      }
     }
   }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
@@ -646,7 +658,21 @@ useEffect(() => {
     console.log('Match assigned:', data);
     if (currentTournament?.id === data.tournamentId) {
       queueStatisticsRefresh({ standings: true, matches: true });
+      // Treat this as an assignment for the current user
+      setAssignedMatch({ matchId: String(data.matchId), opponentName: data.opponentName ?? null });
     }
+    // Broadcast a browser event for UI surfaces (e.g., Join CTA on details page)
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tournament:matchAssigned', {
+          detail: {
+            tournamentId: data.tournamentId,
+            matchId: data.matchId,
+            opponentName: data.opponentName ?? null,
+          },
+        }));
+      }
+    } catch {}
   }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
   const handleSocketError = useCallback((error: { 
@@ -1041,6 +1067,8 @@ useEffect(() => {
     realtimeEvents,
     tournamentPresence: activeTournamentId ? (presenceByTournament[activeTournamentId] || []) : [],
     getPresenceFor: (tournamentId: string | null) => (tournamentId ? (presenceByTournament[tournamentId] || []) : []),
+    assignedMatchId: assignedMatch?.matchId ?? null,
+    assignedOpponentName: assignedMatch?.opponentName ?? null,
     loading,
     error,
     lastUpdated,

@@ -313,9 +313,9 @@ export default function GameToolbox({
           </div>
         );
       })()}
-      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg w-80">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-          <div className="text-sm font-semibold">Toolbox</div>
+      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg w-72 sm:w-80 max-w-[92vw]">
+        <div className="flex items-center justify-between px-2 py-1.5 sm:px-3 sm:py-2 border-b border-white/10">
+          <div className="text-xs sm:text-sm font-semibold">Toolbox</div>
           <button
             className="text-xs rounded bg-white/10 hover:bg-white/20 px-2 py-0.5"
             onClick={() => setOpen((o) => !o)}
@@ -324,7 +324,7 @@ export default function GameToolbox({
           </button>
         </div>
         {open && (
-          <div className="p-3 space-y-3 text-sm">
+          <div className="p-2 sm:p-3 space-y-3 text-xs sm:text-sm">
             {/* Instant Spell (request when not your turn) */}
             {showInstantRequest && (
               <div>
@@ -354,7 +354,7 @@ export default function GameToolbox({
                   <option value="top">Top</option>
                   <option value="bottom">Bottom</option>
                 </select>
-                <input type="number" min={1} max={10} value={drawCount} onChange={(e) => setDrawCount(Number(e.target.value))} className="w-14 bg-white/10 rounded px-2 py-1" />
+                <input type="number" min={1} max={10} value={drawCount} onChange={(e) => setDrawCount(Number(e.target.value))} className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1" />
               </div>
               <button
                 className={`w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40`}
@@ -382,7 +382,7 @@ export default function GameToolbox({
                   <option value="top">Top</option>
                   <option value="bottom">Bottom</option>
                 </select>
-                <input type="number" min={1} max={20} value={peekCount} onChange={(e) => setPeekCount(Number(e.target.value))} className="w-14 bg-white/10 rounded px-2 py-1" />
+                <input type="number" min={1} max={20} value={peekCount} onChange={(e) => setPeekCount(Number(e.target.value))} className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1" />
               </div>
               <button
                 className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
@@ -440,9 +440,9 @@ export default function GameToolbox({
       )}
       {d20Open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="relative w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-6 text-white">
+          <div className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Toolbox D20 Roll</h3>
+              <h3 className="text-base sm:text-lg font-semibold">Toolbox D20 Roll</h3>
               <button
                 className="text-sm text-zinc-400 hover:text-white"
                 onClick={() => {
@@ -454,7 +454,7 @@ export default function GameToolbox({
                 ✕
               </button>
             </div>
-            <div className="bg-black/40 rounded-xl ring-1 ring-white/10" style={{ height: "260px" }}>
+            <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
               <Canvas camera={{ position: [0, 0, 4], fov: 60 }}>
                 <ambientLight intensity={0.5} />
                 <directionalLight position={[5, 5, 5]} intensity={0.7} />

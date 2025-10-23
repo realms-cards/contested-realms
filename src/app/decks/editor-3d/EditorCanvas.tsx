@@ -7,6 +7,7 @@ import React, { useEffect } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import Board from "@/lib/game/Board";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
@@ -58,8 +59,8 @@ export default function EditorCanvas({
           enablePan={!orbitLocked}
           enableZoom
           mouseButtons={{
-            MIDDLE: MOUSE.PAN,
-            RIGHT: MOUSE.ROTATE,
+            MIDDLE: MOUSE.DOLLY,
+            RIGHT: MOUSE.PAN,
           }}
           touches={{ TWO: TOUCH.PAN }}
           enableDamping
@@ -69,12 +70,16 @@ export default function EditorCanvas({
           zoomSpeed={0.75}
           minDistance={2}
           maxDistance={28}
+          rotateSpeed={0}
+          minAzimuthAngle={0}
+          maxAzimuthAngle={0}
           minPolarAngle={0.05}
           maxPolarAngle={0.35}
         />
         <KeyboardPanControls enabled={!orbitLocked} />
         {/* Clamp panning to board bounds */}
         <PanBounds minX={-8} maxX={8} minZ={-6} maxZ={8} />
+        <TrackpadOrbitAdapter />
       </Canvas>
     </div>
   );

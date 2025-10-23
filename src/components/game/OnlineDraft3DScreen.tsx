@@ -42,6 +42,7 @@ import {
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 
 // Import new draft sync system
 
@@ -1287,13 +1288,15 @@ export default function OnlineDraft3DScreen({
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              MIDDLE: MOUSE.PAN,
-              RIGHT: MOUSE.ROTATE,
+              LEFT: MOUSE.PAN,
+              MIDDLE: MOUSE.DOLLY,
+              RIGHT: MOUSE.PAN,
             }}
             touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
+          <TrackpadOrbitAdapter />
         </Canvas>
       </div>
 

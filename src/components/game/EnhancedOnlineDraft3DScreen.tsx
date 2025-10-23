@@ -16,6 +16,7 @@ import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import type { SearchResult } from "@/lib/deckEditor/search";
 import Board from "@/lib/game/Board";
 import { useGameStore } from "@/lib/game/store";
@@ -1811,13 +1812,15 @@ export default function EnhancedOnlineDraft3DScreen({
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              MIDDLE: MOUSE.PAN,
-              RIGHT: MOUSE.ROTATE,
+              LEFT: MOUSE.PAN,
+              MIDDLE: MOUSE.DOLLY,
+              RIGHT: MOUSE.PAN,
             }}
             touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
+          <TrackpadOrbitAdapter />
         </Canvas>
       </div>
 
