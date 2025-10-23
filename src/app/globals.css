@@ -125,3 +125,25 @@ input, textarea, select, button,
     transform: rotate(360deg);
   }
 }
+
+/* Minimal, consistent scrollbar styling (applied explicitly via class) */
+.thin-scrollbar {
+  /* Ensure the scrollbar area is always reserved to avoid layout shift */
+  scrollbar-gutter: stable both-edges;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
