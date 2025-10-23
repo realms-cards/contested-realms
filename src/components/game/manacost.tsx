@@ -34,39 +34,51 @@ export function NumberBadge({
   const radius = 50 - strokeWidth / 2 - 1; // 1 unit of breathing room inside
 
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
+    <div
       role="img"
       aria-label={`Number ${value}`}
       className={className}
-      style={{ display: "block" }}
+      style={{
+        width: size,
+        height: size,
+        display: "inline-block",
+        position: "relative",
+      }}
     >
-      <circle
-        cx={50}
-        cy={50}
-        r={radius}
-        fill="#000"
-        stroke="#6B7280"
-        strokeWidth={strokeWidth}
-        fillOpacity={backgroundOpacity}
-      />
-      <text
-        x={50}
-        y={50}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="#fff"
-        fontWeight={800}
-        fontSize={fontScale * 100}
+      <svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 100 100"
+        style={{ display: "block" }}
+      >
+        <circle
+          cx={50}
+          cy={50}
+          r={radius}
+          fill="#000"
+          stroke="#6B7280"
+          strokeWidth={strokeWidth}
+          fillOpacity={backgroundOpacity}
+        />
+      </svg>
+      <span
         className="font-fantaisie select-none"
-        dy="0.1em"
-        style={{ userSelect: "none" }}
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          color: "#fff",
+          fontWeight: 800,
+          fontSize: fontScale * size,
+          lineHeight: 1,
+          userSelect: "none",
+          pointerEvents: "none",
+        }}
       >
         {value}
-      </text>
-    </svg>
+      </span>
+    </div>
   );
 }
 

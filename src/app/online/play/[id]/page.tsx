@@ -139,6 +139,11 @@ export default function OnlineMatchPage() {
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
   const tournamentDeckSubmittedRef = useRef<string | null>(null);
+  // Lightweight retry helpers for tournament deck fetch/submission
+  const deckFetchAttemptsRef = useRef<number>(0);
+  const deckRetryTimerRef = useRef<number | null>(null);
+  const [tournamentDeckRetry, setTournamentDeckRetry] = useState(0);
+  const lastTournamentIdRef = useRef<string | null>(null);
   // Track if this page initiated a tournament bootstrap for the current route id
   const hasBootstrapRef = useRef<boolean>(false);
   // Guard to ensure we only reset local game state once per match in this page session,
@@ -407,30 +412,29 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (prepared) return;
     
-    // For matches already in progress, skip deck loading - the server snapshot contains all game state
-    // Check both status AND game phase to detect if gameplay has started
-    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
-    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
-    
-    // Only skip deck loading if we have in_progress status AND Main phase
-    // "Start" phase is still setup (mulligan), so we need to load decks
-    const gameStarted = match?.status === "in_progress" && gamePhase === "Main";
-    
-    if (gameStarted) {
-      console.log("[match] Match already in progress with valid phase, skipping deck load (using server snapshot)", {
+    // If a resync is underway, wait for it to deliver the authoritative server snapshot
+    // before doing any local deck loading.
+    if (resyncing) {
+      return;
+    }
+
+    // If the server reports the match is in progress, do not auto-load a deck; the resync snapshot
+    // will restore the correct zones/hands.
+    if (match?.status === "in_progress") {
+      console.log("[match] Match in progress; skipping deck load (will use server snapshot)", {
         status: match?.status,
-        phase: gamePhase,
-        hasGameState
       });
       setPrepared(true);
       return;
     }
-    
-    // If match has game state with Setup phase AND is not waiting/deck_construction,
-    // wait for the phase to advance (reconnecting to an in-progress match)
-    if (hasGameState && gamePhase === "Setup" && 
+
+    // For reconnect edge cases: if we already have a server game snapshot in Setup phase and the match
+    // is not in waiting/deck_construction, prefer waiting for the server to advance.
+    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
+    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
+    if (hasGameState && gamePhase === "Setup" &&
         match?.status !== "waiting" && match?.status !== "deck_construction") {
-      console.log("[match] Match has game state in Setup phase (reconnecting) - waiting for server snapshot");
+      console.log("[match] Server provided Setup-phase game; waiting for snapshot advance");
       return;
     }
     
@@ -607,7 +611,7 @@ export default function OnlineMatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [prepared, match, match?.playerDecks, me?.id, myPlayerKey, storeActorKey, tournamentId]);
+  }, [prepared, match, matchId, match?.playerDecks, me?.id, myPlayerKey, storeActorKey, tournamentId, resyncing]);
 
   // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
   useEffect(() => {
@@ -617,6 +621,12 @@ export default function OnlineMatchPage() {
     if (match?.matchType !== "constructed") return;
     if (match?.status !== "waiting" && match?.status !== "deck_construction") return;
     if (!me?.id || !myPlayerKey) return;
+
+    // Reset attempts if tournament context changed
+    if (lastTournamentIdRef.current !== tournamentId) {
+      deckFetchAttemptsRef.current = 0;
+      lastTournamentIdRef.current = tournamentId;
+    }
 
     const currentDeck =
       (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
@@ -709,8 +719,26 @@ export default function OnlineMatchPage() {
         }
 
         console.log("[match] Built deck with", deck.length, "cards");
-        if (deck.length === 0 || cancelled) {
-          console.error("[match] Deck is empty, not submitting!");
+        if (cancelled) return;
+        if (deck.length === 0) {
+          // Graceful, bounded retry to handle brief propagation delays
+          if (deckFetchAttemptsRef.current < 3) {
+            deckFetchAttemptsRef.current += 1;
+            try {
+              if (deckRetryTimerRef.current != null) {
+                clearTimeout(deckRetryTimerRef.current);
+                deckRetryTimerRef.current = null;
+              }
+              deckRetryTimerRef.current = window.setTimeout(() => {
+                setTournamentDeckRetry((n) => n + 1);
+              }, 600);
+            } catch {}
+            console.warn(
+              `[match] Viewer deck empty (attempt ${deckFetchAttemptsRef.current}/3), retrying shortly...`
+            );
+            return;
+          }
+          console.error("[match] Deck is empty after retries, not submitting!");
           return;
         }
 
@@ -754,6 +782,7 @@ export default function OnlineMatchPage() {
     myPlayerKey,
     storeActorKey,
     prepared,
+    tournamentDeckRetry,
   ]);
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
@@ -1337,19 +1366,27 @@ const canPanCamera =
     const t = c.target;
     const cam = (c as unknown as { object: THREE.PerspectiveCamera }).object;
     const offset = cam.position.clone().sub(t.clone());
+    // Extend bounds by the planar offset so that when tilted/zoomed out,
+    // you can reach the opposite baseline by panning the target beyond the board edge.
+    const marginX = Math.abs(offset.x);
+    const marginZ = Math.abs(offset.z);
+    const minX = -halfW - marginX;
+    const maxX = halfW + marginX;
+    const minZ = -halfH - marginZ;
+    const maxZ = halfH + marginZ;
     let changed = false;
-    if (t.x < -halfW) {
-      t.x = -halfW;
+    if (t.x < minX) {
+      t.x = minX;
       changed = true;
-    } else if (t.x > halfW) {
-      t.x = halfW;
+    } else if (t.x > maxX) {
+      t.x = maxX;
       changed = true;
     }
-    if (t.z < -halfH) {
-      t.z = -halfH;
+    if (t.z < minZ) {
+      t.z = minZ;
       changed = true;
-    } else if (t.z > halfH) {
-      t.z = halfH;
+    } else if (t.z > maxZ) {
+      t.z = maxZ;
       changed = true;
     }
     if (t.y !== 0) {
@@ -1746,7 +1783,7 @@ const canPanCamera =
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board interactionMode={boardInteractionMode} />
+                  <Board interactionMode={boardInteractionMode} enableBoardPings />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}

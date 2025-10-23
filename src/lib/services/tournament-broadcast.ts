@@ -5,8 +5,17 @@
 
 import { prisma } from '@/lib/prisma';
 
-// Use the same URL as WebSocket connections, but for HTTP broadcast endpoint
+// Use the same URL as WebSocket connections, but ensure we post to the server origin (no socket path)
 const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010';
+function getBroadcastBase(urlLike: string | undefined): string {
+  try {
+    const u = new URL(String(urlLike || 'http://localhost:3010'));
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return 'http://localhost:3010';
+  }
+}
+const BROADCAST_BASE = getBroadcastBase(SOCKET_SERVER_URL);
 
 // T026: Broadcast with health monitoring and retry logic
 async function broadcastToSocket(event: string, data: Record<string, unknown>, retryCount = 0) {
@@ -14,7 +23,7 @@ async function broadcastToSocket(event: string, data: Record<string, unknown>, r
   const start = Date.now();
 
   try {
-    const response = await fetch(`${SOCKET_SERVER_URL}/tournament/broadcast`, {
+    const response = await fetch(`${BROADCAST_BASE}/tournament/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event, data }),
@@ -35,7 +44,7 @@ async function broadcastToSocket(event: string, data: Record<string, unknown>, r
         data: {
           eventType: event,
           tournamentId: typeof data === 'object' && data !== null && 'tournamentId' in data ? String(data.tournamentId) : null,
-          targetUrl: `${SOCKET_SERVER_URL}/tournament/broadcast`,
+          targetUrl: `${BROADCAST_BASE}/tournament/broadcast`,
           success: true,
           statusCode: response.status,
           retryCount,
@@ -58,7 +67,7 @@ async function broadcastToSocket(event: string, data: Record<string, unknown>, r
         data: {
           eventType: event,
           tournamentId: typeof data === 'object' && data !== null && 'tournamentId' in data ? String(data.tournamentId) : null,
-          targetUrl: `${SOCKET_SERVER_URL}/tournament/broadcast`,
+          targetUrl: `${BROADCAST_BASE}/tournament/broadcast`,
           success: false,
           statusCode: null,
           errorMessage,

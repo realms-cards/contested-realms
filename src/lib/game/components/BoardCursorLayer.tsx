@@ -1,9 +1,9 @@
 "use client";
 
-import { Html } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useLoader } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import type { Group } from "three";
+import { TextureLoader, SRGBColorSpace, Color } from "three";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import {
   REMOTE_CURSOR_TTL_MS,
@@ -11,7 +11,7 @@ import {
   type RemoteCursorState,
 } from "@/lib/game/store";
 
-const CURSOR_HEIGHT = 0.18;
+const CURSOR_HEIGHT = 0.04; // hover slightly above the board so it can be occluded by cards
 const PULSE_SPEED = 6;
 const BASE_SCALE = 1;
 
@@ -26,6 +26,12 @@ function cursorColor(entry: RemoteCursorState): string {
 function CursorMarker({ entry }: { entry: RemoteCursorState }) {
   const pointerRef = useRef<Group>(null);
   const color = cursorColor(entry);
+  const tex = useLoader(TextureLoader, "/gamecursor-skeleton.svg");
+
+  if (tex && tex.colorSpace !== SRGBColorSpace) {
+    tex.colorSpace = SRGBColorSpace;
+    tex.needsUpdate = true;
+  }
 
   useFrame(({ clock }) => {
     if (!entry.position) return;
@@ -40,31 +46,42 @@ function CursorMarker({ entry }: { entry: RemoteCursorState }) {
 
   return (
     <group position={[entry.position.x, CURSOR_HEIGHT, entry.position.z]} ref={pointerRef}>
-      <Html
-        center
-        transform
-        position={[0, 0.04, 0]}
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          style={{
-            width: 24,
-            height: 24,
-            backgroundColor: color,
-            opacity: 0.5,
-            WebkitMaskImage: 'url(/gamecursor-skeleton.svg)',
-            WebkitMaskRepeat: 'no-repeat',
-            WebkitMaskSize: 'contain',
-            WebkitMaskPosition: 'center',
-            maskImage: 'url(/gamecursor-skeleton.svg)',
-            maskRepeat: 'no-repeat',
-            maskSize: 'contain',
-            maskPosition: 'center',
-            borderRadius: 4,
-            boxShadow: '0 0 4px rgba(0,0,0,0.35)'
-          }}
-        />
-      </Html>
+      <group rotation-x={-Math.PI / 2}>
+        <mesh renderOrder={6}>
+          <planeGeometry args={[0.36, 0.36]} />
+          <shaderMaterial
+            key={color}
+            transparent
+            depthTest
+            depthWrite={false}
+            uniforms={{
+              uColor: { value: new Color(color) },
+              uTex: { value: tex },
+              uOpacity: { value: 0.7 },
+            }}
+            vertexShader={`
+              varying vec2 vUv;
+              void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `}
+            fragmentShader={`
+              uniform vec3 uColor;
+              uniform sampler2D uTex;
+              uniform float uOpacity;
+              varying vec2 vUv;
+              void main() {
+                vec4 smp = texture2D(uTex, vUv);
+                float lum = dot(smp.rgb, vec3(0.299, 0.587, 0.114));
+                float a = (1.0 - lum) * smp.a * uOpacity;
+                if (a < 0.01) discard;
+                gl_FragColor = vec4(uColor, a);
+              }
+            `}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }

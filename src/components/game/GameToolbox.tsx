@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
+import { Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
@@ -270,6 +271,11 @@ export default function GameToolbox({
     } catch {}
   };
 
+  const collapsed = !open;
+  const containerWidthClass = collapsed ? "w-56 sm:w-64" : "w-72 sm:w-80";
+  const headerPaddingClass = collapsed ? "px-2 py-1" : "px-2 py-1.5 sm:px-3 sm:py-2";
+  const toggleBtnPaddingClass = collapsed ? "px-1.5 py-0.5" : "px-2 py-0.5";
+
   return (
     <div className="absolute bottom-3 right-3 z-20 text-white">
       {/* Instant permission indicator */}
@@ -313,17 +319,28 @@ export default function GameToolbox({
           </div>
         );
       })()}
-      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg w-72 sm:w-80 max-w-[92vw]">
-        <div className="flex items-center justify-between px-2 py-1.5 sm:px-3 sm:py-2 border-b border-white/10">
-          <div className="text-xs sm:text-sm font-semibold">Toolbox</div>
-          <button
-            className="text-xs rounded bg-white/10 hover:bg-white/20 px-2 py-0.5"
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? "Hide" : "Show"}
-          </button>
-        </div>
-        {open && (
+      {!open ? (
+        <button
+          className="rounded bg-white/10 hover:bg-white/20 p-1.5 ring-1 ring-white/10 shadow-lg transition-colors"
+          onClick={() => setOpen(true)}
+          aria-label="Show toolbox"
+          title="Toolbox"
+        >
+          <Wrench className="w-4 h-4" />
+        </button>
+      ) : (
+        <div className={`bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg ${containerWidthClass} max-w-[92vw] transition-all`}>
+          <div className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}>
+            <div className="text-xs sm:text-sm font-semibold">Toolbox</div>
+            <button
+              className={`text-xs rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
+              onClick={() => setOpen(false)}
+              aria-label="Hide toolbox"
+              title="Hide"
+            >
+              Hide
+            </button>
+          </div>
           <div className="p-2 sm:p-3 space-y-3 text-xs sm:text-sm">
             {/* Instant Spell (request when not your turn) */}
             {showInstantRequest && (
@@ -428,16 +445,16 @@ export default function GameToolbox({
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {peekDialog && (
+      {peekDialog ? (
         <HandPeekDialog
-          title={peekDialog.title}
+          title={peekDialog.title ?? ""}
           cards={peekDialog.cards}
           onClose={closePeekDialog}
         />
-      )}
+      ) : null}
       {d20Open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white">
