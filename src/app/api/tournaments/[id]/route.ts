@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         standings: true,
         rounds: {
           include: {
-            matches: true
+            matches: { select: { id: true } }
           },
           orderBy: { roundNumber: 'asc' }
         }
@@ -120,7 +120,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return new Response(JSON.stringify(tournamentInfo), {
       status: 200,
-      headers: { 'content-type': 'application/json' }
+      headers: {
+        'content-type': 'application/json',
+        // Short-lived private cache to reduce DB load during bursts
+        'Cache-Control': 'private, max-age=3',
+      }
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';

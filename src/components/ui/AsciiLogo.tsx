@@ -45,7 +45,7 @@ export default function AsciiLogo({ className = "" }: { className?: string }) {
 
   return (
     <div className={`${className} select-none`}>
-      <AsciiSvg text={logo} className="text-white/90" />
+      <AsciiSvg text={logo} className="text-white/90" padBottomLines={2} />
     </div>
   );
 }

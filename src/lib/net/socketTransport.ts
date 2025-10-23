@@ -24,6 +24,10 @@ import type {
   UIUpdateEvent 
 } from "@/types/draft-3d-events";
 
+const RECONNECT_ATTEMPTS_ENV = Number(process.env.NEXT_PUBLIC_WS_RECONNECT_ATTEMPTS);
+const RECONNECT_DELAY_MAX_ENV = Number(process.env.NEXT_PUBLIC_WS_RECONNECT_DELAY_MAX);
+const WS_TIMEOUT_ENV = Number(process.env.NEXT_PUBLIC_WS_TIMEOUT_MS);
+
 // --- Helper normalization: tolerate older servers or partial sealed config ---
 function normalizeSealedConfigClient(sc: unknown): unknown {
   if (!sc || typeof sc !== 'object') return null;
@@ -53,18 +57,147 @@ function normalizeSealedConfigClient(sc: unknown): unknown {
   return { packCount, setMix, timeLimit, constructionStartTime, ...(pcOut ? { packCounts: pcOut } : {}), replaceAvatars };
 }
 
+function normalizeMatchInfoClient(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== "object") return null;
+  const match = { ...(input as Record<string, unknown>) };
+
+  const coerceOptionalStringField = (key: string) => {
+    const value = match[key];
+    if (value == null) {
+      delete match[key];
+      return;
+    }
+    if (typeof value !== "string") {
+      try {
+        match[key] = String(value);
+      } catch {
+        delete match[key];
+      }
+    }
+  };
+
+  const coerceNullableStringField = (key: string) => {
+    const value = match[key];
+    if (value == null) {
+      match[key] = null;
+      return;
+    }
+    if (typeof value !== "string") {
+      try {
+        match[key] = String(value);
+      } catch {
+        match[key] = null;
+      }
+    }
+  };
+
+  ["id", "lobbyId", "lobbyName", "tournamentId", "draftSessionId", "seed", "turn"].forEach(
+    coerceOptionalStringField
+  );
+  coerceNullableStringField("winnerId");
+
+  const arrayFromUnknown = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value;
+    if (value instanceof Map) return Array.from(value.values());
+    if (value && typeof value === "object") {
+      return Object.values(value as Record<string, unknown>);
+    }
+    return [];
+  };
+
+  const mapToRecord = (value: unknown): Record<string, unknown> | undefined => {
+    if (!value) return undefined;
+    if (value instanceof Map) return Object.fromEntries(value);
+    if (Array.isArray(value)) {
+      const entries = value.filter((item): item is [string, unknown] => Array.isArray(item) && item.length === 2 && typeof item[0] === "string");
+      if (entries.length > 0) return Object.fromEntries(entries);
+      return undefined;
+    }
+    if (typeof value === "object") return value as Record<string, unknown>;
+    return undefined;
+  };
+
+  const sanitizePlayers = (value: unknown): unknown[] => {
+    const arr = arrayFromUnknown(value);
+    return arr
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const player = { ...(entry as Record<string, unknown>) };
+        if (player.id != null && typeof player.id !== "string") {
+          player.id = String(player.id);
+        }
+        if (player.displayName != null && typeof player.displayName !== "string") {
+          player.displayName = String(player.displayName);
+        }
+        if (player.seat != null && typeof player.seat !== "string") {
+          player.seat = String(player.seat);
+        }
+        if (player.id == null || player.displayName == null) return null;
+        return player;
+      })
+      .filter((p): p is Record<string, unknown> => p !== null);
+  };
+
+  const players = sanitizePlayers(match.players);
+  match.players = players;
+
+  const playerIds = arrayFromUnknown(match.playerIds).map((id) => String(id));
+  match.playerIds = playerIds;
+
+  const deckSubmissions = arrayFromUnknown(match.deckSubmissions)
+    .map((id) => String(id))
+    .filter((id) => id.length > 0);
+  if (deckSubmissions.length > 0) {
+    match.deckSubmissions = deckSubmissions;
+  } else {
+    delete match.deckSubmissions;
+  }
+
+  const playerDecks = mapToRecord(match.playerDecks);
+  if (playerDecks) {
+    match.playerDecks = playerDecks;
+  } else {
+    delete match.playerDecks;
+  }
+
+  const sealedPacks = mapToRecord(match.sealedPacks);
+  if (sealedPacks) {
+    match.sealedPacks = sealedPacks;
+  } else {
+    delete match.sealedPacks;
+  }
+
+  if (match.sealedConfig !== undefined) {
+    match.sealedConfig = normalizeSealedConfigClient(match.sealedConfig);
+  }
+
+  if (match.matchType != null && typeof match.matchType !== "string") {
+    try {
+      match.matchType = String(match.matchType);
+    } catch {
+      delete match.matchType;
+    }
+  }
+
+  if (match.status != null && typeof match.status !== "string") {
+    try {
+      match.status = String(match.status);
+    } catch {
+      delete match.status;
+    }
+  }
+
+  return match;
+}
+
 function normalizeMatchStartedPayload(payload: unknown): unknown {
   try {
     if (!payload || typeof payload !== 'object') return payload;
     const p = payload as { match?: Record<string, unknown> };
     if (!p.match) return payload;
-    const m = p.match;
-    const sc = m.sealedConfig as unknown;
-    if (sc !== undefined) {
-      const fixed = normalizeSealedConfigClient(sc);
-      return { ...p, match: { ...m, sealedConfig: fixed } };
-    }
-    return payload;
+    const sanitized = normalizeMatchInfoClient(p.match);
+    if (!sanitized) return payload;
+    return { ...p, match: sanitized };
   } catch {
     return payload;
   }
@@ -75,13 +208,9 @@ function normalizeResyncResponsePayload(payload: unknown): unknown {
     if (!payload || typeof payload !== 'object') return payload;
     const p = payload as { snapshot?: { match?: Record<string, unknown> } };
     if (!p.snapshot || !p.snapshot.match) return payload;
-    const m = p.snapshot.match;
-    const sc = m.sealedConfig as unknown;
-    if (sc !== undefined) {
-      const fixed = normalizeSealedConfigClient(sc);
-      return { ...p, snapshot: { ...p.snapshot, match: { ...m, sealedConfig: fixed } } };
-    }
-    return payload;
+    const sanitized = normalizeMatchInfoClient(p.snapshot.match);
+    if (!sanitized) return payload;
+    return { ...p, snapshot: { ...p.snapshot, match: sanitized } };
   } catch {
     return payload;
   }
@@ -91,8 +220,15 @@ export class SocketTransport implements GameTransport {
   private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
   private socket?: Socket;
   private reconnectionAttempts = 0;
-  private maxReconnectionAttempts = 5;
+  private maxReconnectionAttempts =
+    Number.isFinite(RECONNECT_ATTEMPTS_ENV) && RECONNECT_ATTEMPTS_ENV > 0
+      ? RECONNECT_ATTEMPTS_ENV
+      : Number.POSITIVE_INFINITY;
   private reconnectionDelay = 1000; // Start with 1 second
+  private reconnectionDelayMax =
+    Number.isFinite(RECONNECT_DELAY_MAX_ENV) && RECONNECT_DELAY_MAX_ENV > 0
+      ? RECONNECT_DELAY_MAX_ENV
+      : 30000;
   private connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
   private isIntentionalDisconnect = false;
   private genericHandlers: Map<string, Set<(payload: unknown) => void>> = new Map();
@@ -116,7 +252,7 @@ export class SocketTransport implements GameTransport {
     const defaultUrl = "http://localhost:3010";
     const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
     const path = process.env.NEXT_PUBLIC_WS_PATH || undefined;
-    const transportsEnv = (process.env.NEXT_PUBLIC_WS_TRANSPORTS || 'websocket')
+    const transportsEnv = (process.env.NEXT_PUBLIC_WS_TRANSPORTS || 'websocket,polling')
       .split(',')
       .map(s => s.trim())
       .filter(Boolean) as Array<'polling' | 'websocket'>;
@@ -135,9 +271,15 @@ export class SocketTransport implements GameTransport {
     } catch {}
 
     const socket = io(url, {
-      transports: transportsEnv.length ? transportsEnv : ["websocket"],
+      transports: transportsEnv.length ? transportsEnv : ["websocket", "polling"],
       autoConnect: true,
       path,
+      reconnection: true,
+      reconnectionAttempts: Number.isFinite(this.maxReconnectionAttempts) ? this.maxReconnectionAttempts : undefined,
+      reconnectionDelay: this.reconnectionDelay,
+      reconnectionDelayMax: this.reconnectionDelayMax,
+      timeout: Number.isFinite(WS_TIMEOUT_ENV) && WS_TIMEOUT_ENV > 5000 ? WS_TIMEOUT_ENV : 45000,
+      withCredentials: true,
       auth: token ? { token } : undefined,
     }) as Socket;
 
@@ -708,11 +850,21 @@ export class SocketTransport implements GameTransport {
       console.log(`[Transport] Disconnected: ${reason}`);
       this.connectionState = 'disconnected';
       
-      if (!this.isIntentionalDisconnect && reason === 'io server disconnect') {
-        // Server initiated disconnect, attempt reconnection
-        this.attemptReconnection(opts);
-      } else if (!this.isIntentionalDisconnect && reason === 'transport close') {
-        // Network issue, attempt reconnection
+      if (!this.isIntentionalDisconnect) {
+        const shouldRetry = reason === 'io server disconnect' ||
+          reason === 'transport close' ||
+          reason === 'transport error' ||
+          reason === 'ping timeout';
+        if (shouldRetry) {
+          this.attemptReconnection(opts);
+        }
+      }
+    });
+
+    socket.on('connect_error', (error: Error) => {
+      console.warn('[Transport] Connect error:', error);
+      if (!this.isIntentionalDisconnect) {
+        this.connectionState = 'reconnecting';
         this.attemptReconnection(opts);
       }
     });
@@ -736,7 +888,10 @@ export class SocketTransport implements GameTransport {
   }
 
   private attemptReconnection(opts: { playerId?: string; displayName: string }): void {
-    if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
+    if (
+      Number.isFinite(this.maxReconnectionAttempts) &&
+      this.reconnectionAttempts >= this.maxReconnectionAttempts
+    ) {
       console.error('[Transport] Max reconnection attempts reached');
       return;
     }
@@ -744,14 +899,16 @@ export class SocketTransport implements GameTransport {
     this.connectionState = 'reconnecting';
     this.reconnectionAttempts++;
     
-    console.log(`[Transport] Attempting reconnection ${this.reconnectionAttempts}/${this.maxReconnectionAttempts} in ${this.reconnectionDelay}ms`);
+    const maxLabel = Number.isFinite(this.maxReconnectionAttempts) ? this.maxReconnectionAttempts : "∞";
+    console.log(`[Transport] Attempting reconnection ${this.reconnectionAttempts}/${maxLabel} in ${this.reconnectionDelay}ms`);
     
     setTimeout(() => {
       if (this.connectionState === 'reconnecting' && !this.isIntentionalDisconnect) {
         this.connect(opts).catch(error => {
           console.warn(`[Transport] Reconnection attempt ${this.reconnectionAttempts} failed:`, error);
           // Exponential backoff
-          this.reconnectionDelay = Math.min(this.reconnectionDelay * 2, 30000);
+          this.reconnectionDelay = Math.min(this.reconnectionDelay * 1.5, this.reconnectionDelayMax);
+          this.connectionState = 'reconnecting';
         });
       }
     }, this.reconnectionDelay);

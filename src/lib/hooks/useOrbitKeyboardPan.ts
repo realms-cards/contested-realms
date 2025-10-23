@@ -44,17 +44,30 @@ export function useOrbitKeyboardPan(
       if (pressed.has("KeyS")) dy += 1;
 
       if (dx !== 0 || dy !== 0) {
-        if (typeof panFn === "function") {
-          panFn(dx * panStep, dy * panStep);
-        } else {
-          if (dx !== 0 && typeof controlsAny.panLeft === "function") {
-            controlsAny.panLeft(dx * (panStep / 10));
-          }
-          if (dy !== 0 && typeof controlsAny.panUp === "function") {
-            controlsAny.panUp(dy * (panStep / 10));
-          }
+        // OrbitControls from drei uses the target property directly
+        // We need to modify the target position instead of using pan methods
+        const currentTarget = controls.target;
+
+        // Calculate screen-space panning based on camera position
+        const camera = controlsAny.object;
+        if (camera && camera.position) {
+          const cameraDirection = new Vector3()
+            .copy(camera.position)
+            .sub(currentTarget)
+            .normalize();
+
+          // Get right vector (perpendicular to camera direction)
+          const right = new Vector3(1, 0, 0);
+          const up = new Vector3(0, 1, 0);
+
+          // For top-down camera, pan in XZ plane
+          const panDelta = new Vector3();
+          panDelta.x += dx * panStep * 0.1;
+          panDelta.z += dy * panStep * 0.1;
+
+          currentTarget.add(panDelta);
+          controls.update();
         }
-        controls.update();
       }
 
       if (pressed.size > 0) {

@@ -58,19 +58,24 @@ export default function Draft3DPage() {
   useEffect(() => {
     async function loadCubes() {
       try {
-        const resp = await fetch('/api/cubes');
+        const resp = await fetch("/api/cubes");
         if (!resp.ok) return;
         const data = await resp.json();
         const allCubes = [
-          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
-          ...(data.publicCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
+          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({
+            id: c.id,
+            name: c.name,
+          })),
+          ...(data.publicCubes || []).map(
+            (c: { id: string; name: string }) => ({ id: c.id, name: c.name })
+          ),
         ];
         setCubes(allCubes);
         if (allCubes.length > 0) {
           setCubeId(allCubes[0].id);
         }
       } catch (e) {
-        console.warn('Failed to load cubes:', e);
+        console.warn("Failed to load cubes:", e);
       }
     }
     loadCubes();
@@ -136,7 +141,7 @@ export default function Draft3DPage() {
 
       // Validate cube selection if cube mode is enabled
       if (useCube && !cubeId) {
-        setError('Please select a cube for cube draft mode');
+        setError("Please select a cube for cube draft mode");
         setStarting(false);
         return;
       }
@@ -151,14 +156,18 @@ export default function Draft3DPage() {
       setPickNumber(1);
       setPackChoice([null, null, null]);
 
-      let packsA: BoosterCard[][], packsB: BoosterCard[][], packsC: BoosterCard[][];
+      let packsA: BoosterCard[][],
+        packsB: BoosterCard[][],
+        packsC: BoosterCard[][];
 
       // Cube draft mode - generate all packs from the same cube
       if (useCube && cubeId) {
-        const resp = await fetch(`/api/booster?cube=${encodeURIComponent(cubeId)}&count=${players * 3}`);
+        const resp = await fetch(
+          `/api/booster?cube=${encodeURIComponent(cubeId)}&count=${players * 3}`
+        );
         const data = await resp.json();
         if (!resp.ok) {
-          throw new Error(data?.error || 'Failed to generate cube boosters');
+          throw new Error(data?.error || "Failed to generate cube boosters");
         }
 
         const allPacks: BoosterCard[][] = data.packs || [];
@@ -205,17 +214,14 @@ export default function Draft3DPage() {
             dataC?.error || `Failed to generate boosters for ${setC}`
           );
 
-        packsA = (dataA.packs || []).map(
-          (pack: BoosterCard[]) =>
-            (pack || []).map((c) => ({ ...c, setName: setA }))
+        packsA = (dataA.packs || []).map((pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setA }))
         );
-        packsB = (dataB.packs || []).map(
-          (pack: BoosterCard[]) =>
-            (pack || []).map((c) => ({ ...c, setName: setB }))
+        packsB = (dataB.packs || []).map((pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setB }))
         );
-        packsC = (dataC.packs || []).map(
-          (pack: BoosterCard[]) =>
-            (pack || []).map((c) => ({ ...c, setName: setC }))
+        packsC = (dataC.packs || []).map((pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setC }))
         );
       }
 
@@ -1012,11 +1018,10 @@ export default function Draft3DPage() {
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.ROTATE,
               MIDDLE: MOUSE.PAN,
               RIGHT: MOUSE.ROTATE,
             }}
-            touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
+            touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
@@ -1148,7 +1153,9 @@ export default function Draft3DPage() {
                 <div className="flex flex-wrap items-end gap-3 text-white">
                   {[0, 1, 2].map((i) => (
                     <label key={`set-${i}`} className="flex flex-col gap-1">
-                      <span className="text-xs opacity-80">Pack {i + 1} Set</span>
+                      <span className="text-xs opacity-80">
+                        Pack {i + 1} Set
+                      </span>
                       <select
                         value={setNames[i]}
                         onChange={(e) =>
@@ -1460,9 +1467,9 @@ export default function Draft3DPage() {
         </div>
 
         {/* Card preview (hover) */}
-      {hoverPreview && !orbitLocked && (
-        <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
-      )}
+        {hoverPreview && !orbitLocked && (
+          <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
+        )}
 
         {/* Pack selection overlay at start of each round */}
         {needsPackChoice && (
@@ -1688,7 +1695,15 @@ function ClampOrbitTarget({
       controls.removeEventListener("start", updateOffset);
       controls.removeEventListener("change", clampTarget);
     };
-  }, [bounds.maxX, bounds.maxZ, bounds.minX, bounds.minZ, camera, controls, invalidate]);
+  }, [
+    bounds.maxX,
+    bounds.maxZ,
+    bounds.minX,
+    bounds.minZ,
+    camera,
+    controls,
+    invalidate,
+  ]);
 
   return null;
 }

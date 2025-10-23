@@ -19,7 +19,6 @@ import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
-import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
@@ -45,6 +44,7 @@ import {
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
   useBoardPingListener,
@@ -1698,10 +1698,10 @@ const canPanCamera =
               leaveMatch();
             }}
             onLeaveLobby={() => {
-              leaveLobby();
               if (tournamentId) {
                 router.push(`/tournaments/${tournamentId}`);
               } else {
+                leaveLobby();
                 router.push("/online/lobby");
               }
             }}

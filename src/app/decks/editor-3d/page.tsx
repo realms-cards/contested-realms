@@ -150,6 +150,7 @@ function AuthenticatedDeckEditor() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [waitingForOtherPlayers, setWaitingForOtherPlayers] = useState(false);
+  const [waitingOverlayStage, setWaitingOverlayStage] = useState<"submitting" | "waiting">("waiting");
   const [orbitLocked, setOrbitLocked] = useState(false);
 
   // Clear transient errors when auth status changes to authenticated
@@ -1683,12 +1684,15 @@ function AuthenticatedDeckEditor() {
       const matchName = searchParams?.get("matchName");
       const sealedDeckName = matchName
         ? `${matchName} (Sealed)`
-        : `sealed_opponent_${today}`;
+      : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
 
       // Determine submission mode (match vs tournament)
       const matchId = searchParams?.get("matchId");
       const tournamentId = searchParams?.get("tournament");
+
+      setWaitingOverlayStage("submitting");
+      setWaitingForOtherPlayers(true);
 
       if (tournamentId && !matchId) {
         // Tournament submission workflow
@@ -1697,11 +1701,11 @@ function AuthenticatedDeckEditor() {
         for (const c of deckCards) {
           counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
         }
-        const deckList = Array.from(counts.entries()).map(([cardId, quantity]) => ({ cardId: String(cardId), quantity }));
+      const deckList = Array.from(counts.entries()).map(([cardId, quantity]) => ({ cardId: String(cardId), quantity }));
 
-        // Submit to tournament preparation API
-        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}/preparation/submit`, {
-          method: 'POST',
+      // Submit to tournament preparation API
+      const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}/preparation/submit`, {
+        method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             preparationData: {
@@ -1720,6 +1724,7 @@ function AuthenticatedDeckEditor() {
 
         // Mark local submission for UX consistency
         try { localStorage.setItem(`sealed_submitted_tournament_${tournamentId}`, 'true'); } catch {}
+        setWaitingOverlayStage("waiting");
       } else if (matchId) {
         // Match-based submission workflow
         // Mark deck as submitted to prevent redirect loop
@@ -1742,6 +1747,7 @@ function AuthenticatedDeckEditor() {
             JSON.stringify(deckCards)
           );
         }
+        setWaitingOverlayStage("waiting");
       } else {
         throw new Error('Missing match ID or tournament ID for sealed submission');
       }
@@ -1759,9 +1765,6 @@ function AuthenticatedDeckEditor() {
         }
       } catch {}
 
-      // Show submission/waiting overlay for tournament or match coordination
-      setWaitingForOtherPlayers(true);
-
       // Navigate back to tournament or match page
       if (tournamentId && !matchId) {
         setTimeout(() => {
@@ -1775,6 +1778,7 @@ function AuthenticatedDeckEditor() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setWaitingForOtherPlayers(false);
     } finally {
       setSaving(false);
     }
@@ -1821,6 +1825,9 @@ function AuthenticatedDeckEditor() {
       const matchId = searchParams?.get("matchId");
       const tournamentId = searchParams?.get("tournament");
 
+      setWaitingOverlayStage("submitting");
+      setWaitingForOtherPlayers(true);
+
       if (tournamentId && !matchId) {
         // Tournament submission workflow
         // Group by cardId to build tournament deckList format
@@ -1849,6 +1856,7 @@ function AuthenticatedDeckEditor() {
           throw new Error(err?.error || 'Failed to submit tournament draft deck');
         }
         try { localStorage.setItem(`draft_submitted_tournament_${tournamentId}`, 'true'); } catch {}
+        setWaitingOverlayStage("waiting");
       } else if (matchId) {
         // Match-based submission workflow
         // Mark deck as submitted to prevent redirect loop
@@ -1868,6 +1876,7 @@ function AuthenticatedDeckEditor() {
           // Fallback: save to localStorage for the match page to pick up
           localStorage.setItem(`draftDeck_${matchId}`, JSON.stringify(deckCards));
         }
+        setWaitingOverlayStage("waiting");
       } else {
         throw new Error('Missing match ID or tournament ID for draft submission');
       }
@@ -1887,9 +1896,6 @@ function AuthenticatedDeckEditor() {
         }
       } catch {}
 
-      // Show waiting overlay
-      setWaitingForOtherPlayers(true);
-
       // Navigate back to tournament or match page
       if (tournamentId && !matchId) {
         setTimeout(() => {
@@ -1903,6 +1909,7 @@ function AuthenticatedDeckEditor() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setWaitingForOtherPlayers(false);
     } finally {
       setSaving(false);
     }
@@ -3330,28 +3337,53 @@ function AuthenticatedDeckEditor() {
 
         {/* Waiting overlay for deck submission */}
         {waitingForOtherPlayers && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Deck Submitted!
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin"
+                  aria-hidden="true"
+                />
+                <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">
+                  {waitingOverlayStage === "submitting"
+                    ? "Submitting deck..."
+                    : "Deck submitted!"}
                 </h2>
-                <p className="text-gray-600 mb-4">
-                  Waiting for other players to submit their decks...
+                <p className="text-gray-600">
+                  {waitingOverlayStage === "submitting"
+                    ? "Validating your deck and syncing with the event server. Please keep this window open."
+                    : searchParams?.get("tournament") && !searchParams?.get("matchId")
+                      ? "Waiting for other players to submit their decks..."
+                      : "Returning you to the match momentarily."}
                 </p>
-                <div className="text-sm text-gray-500">
-                  You will be redirected to the match page shortly.
-                </div>
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    className="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    onClick={() => goBackToMatch(searchParams?.get("matchId"))}
-                  >
-                    Return to Match Now
-                  </button>
-                </div>
+                {waitingOverlayStage === "waiting" && (
+                  <div className="text-sm text-gray-500">
+                    {searchParams?.get("tournament") && !searchParams?.get("matchId")
+                      ? "The page will refresh automatically when the tournament advances."
+                      : "If nothing happens, you can jump back manually."}
+                  </div>
+                )}
+                {waitingOverlayStage === "waiting" && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        const tournamentId = searchParams?.get("tournament");
+                        const matchId = searchParams?.get("matchId");
+                        if (tournamentId && !matchId) {
+                          window.location.href = `/tournaments/${encodeURIComponent(tournamentId)}`;
+                        } else {
+                          goBackToMatch(matchId);
+                        }
+                      }}
+                    >
+                      {searchParams?.get("tournament") && !searchParams?.get("matchId")
+                        ? "Return to Tournament Now"
+                        : "Return to Match Now"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -11,23 +11,34 @@ import type { Group } from "three";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
-import { WaitingOverlay, useWaitingOverlay } from "@/components/draft/WaitingOverlay";
+import {
+  WaitingOverlay,
+  useWaitingOverlay,
+} from "@/components/draft/WaitingOverlay";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
-import { useDeckPersistence, useSubmissionCoordination } from "@/lib/draft/hooks/useDeckPersistence";
+import {
+  useDeckPersistence,
+  useSubmissionCoordination,
+} from "@/lib/draft/hooks/useDeckPersistence";
 import { useDraftSync, usePickTimer } from "@/lib/draft/hooks/useDraftSync";
 import Board from "@/lib/game/Board";
 import { toCardMetaMap, type ApiCardMetaRow } from "@/lib/game/cardMeta";
-import { 
-  type Pick3D, 
+import {
+  type Pick3D,
   type BoosterCard,
   type CardMeta,
-  computeStackPositions
+  computeStackPositions,
 } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { MAT_PIXEL_W, MAT_PIXEL_H, CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+import {
+  MAT_PIXEL_W,
+  MAT_PIXEL_H,
+  CARD_LONG,
+  CARD_SHORT,
+} from "@/lib/game/constants";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
@@ -42,14 +53,14 @@ interface DraftCard {
   slug: string;
   type?: string;
   cost?: string;
-  rarity?: 'common' | 'uncommon' | 'rare' | 'mythic' | string;
+  rarity?: "common" | "uncommon" | "rare" | "mythic" | string;
   setName?: string; // Set information from server
 }
 
 // Player ready message type
 type PlayerReadyMessage = CustomMessage & {
-  type: 'playerReady';
-  playerKey: 'p1' | 'p2';
+  type: "playerReady";
+  playerKey: "p1" | "p2";
   ready: boolean;
 };
 
@@ -91,7 +102,11 @@ function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
-  onHoverStart?: (card: { slug: string; name: string; type: string | null }) => void;
+  onHoverStart?: (card: {
+    slug: string;
+    name: string;
+    type: string | null;
+  }) => void;
   onHoverEnd?: () => void;
   lockUpright?: boolean;
   onClick?: () => void;
@@ -117,7 +132,9 @@ function DraggableCard3D({
     ref.current.position.set(wx, lift ? 0.25 : 0.002, wz);
   }, []);
 
-  const rotZ = (isSite ? -Math.PI / 2 : 0) + (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
+  const rotZ =
+    (isSite ? -Math.PI / 2 : 0) +
+    (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
   return (
     <group ref={ref} position={[x, 0.002, z]}>
       <mesh
@@ -151,7 +168,8 @@ function DraggableCard3D({
               }
             };
             window.addEventListener("pointerup", earlyUp, { once: true });
-            upCleanupRef.current = () => window.removeEventListener("pointerup", earlyUp);
+            upCleanupRef.current = () =>
+              window.removeEventListener("pointerup", earlyUp);
           }
         }}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
@@ -178,7 +196,8 @@ function DraggableCard3D({
               }
             };
             window.addEventListener("pointerup", handleUp, { once: true });
-            upCleanupRef.current = () => window.removeEventListener("pointerup", handleUp);
+            upCleanupRef.current = () =>
+              window.removeEventListener("pointerup", handleUp);
           }
           if (dragging.current) {
             e.stopPropagation();
@@ -206,7 +225,7 @@ function DraggableCard3D({
           }
           if (onDrop && wasDragging) onDrop(wx, wz);
           onRelease?.(wx, wz, wasDragging);
-          
+
           // Handle click (when not dragging)
           if (!wasDragging && onClick) {
             onClick();
@@ -215,7 +234,11 @@ function DraggableCard3D({
         onPointerOver={() => {
           if (disabled) return;
           onHoverChange?.(true);
-          onHoverStart?.({ slug, name: cardName ?? slug, type: cardType ?? null });
+          onHoverStart?.({
+            slug,
+            name: cardName ?? slug,
+            type: cardType ?? null,
+          });
         }}
         onPointerOut={() => {
           onHoverChange?.(false);
@@ -223,7 +246,12 @@ function DraggableCard3D({
         }}
       >
         <boxGeometry args={[CARD_SHORT * 1.05, 0.02, CARD_LONG * 1.05]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+        />
       </mesh>
 
       <group>
@@ -268,7 +296,10 @@ export default function OnlineDraft3DScreen({
 
   const myPlayerIndex = myPlayerKey === "p1" ? 0 : 1;
   const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
-  const myPlayerId = useMemo(() => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null, [me?.id, match?.players, myPlayerIndex]);
+  const myPlayerId = useMemo(
+    () => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null,
+    [me?.id, match?.players, myPlayerIndex]
+  );
 
   useEffect(() => {
     useGameStore.getState().resetGameState();
@@ -278,12 +309,21 @@ export default function OnlineDraft3DScreen({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [orbitLocked, setOrbitLocked] = useState(false);
-  const [hoverPreview, setHoverPreview] = useState<{ slug: string; name: string; type: string | null } | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<{
+    slug: string;
+    name: string;
+    type: string | null;
+  } | null>(null);
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [ready, setReady] = useState(false);
-  const [playerReadyStates, setPlayerReadyStates] = useState<{p1: boolean, p2: boolean}>({p1: false, p2: false});
+  const [playerReadyStates, setPlayerReadyStates] = useState<{
+    p1: boolean;
+    p2: boolean;
+  }>({ p1: false, p2: false });
   const [usedPacks, setUsedPacks] = useState<number[]>([]); // Track which pack indices have been used
-  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<number | null>(null); // Track if we've shown overlay for current round
+  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<
+    number | null
+  >(null); // Track if we've shown overlay for current round
 
   // Render order counter for stacking
   const roCounterRef = useRef(1500);
@@ -294,7 +334,8 @@ export default function OnlineDraft3DScreen({
 
   // Arrange current pack into a hand-style fan
   const packLayout = useMemo(() => {
-    const pack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+    const pack = (draftState.currentPacks?.[myPlayerIndex] ||
+      []) as DraftCard[];
     const n = pack.length;
     if (n === 0) return [] as { x: number; z: number; rot: number }[];
     const maxAngle = Math.min(0.85, (n - 1) * 0.09);
@@ -314,40 +355,55 @@ export default function OnlineDraft3DScreen({
   }, [draftState.currentPacks, myPlayerIndex]);
 
   // Staging flow
-  const [staged, setStaged] = useState<{ card: DraftCard; x: number; z: number } | null>(null);
+  const [staged, setStaged] = useState<{
+    card: DraftCard;
+    x: number;
+    z: number;
+  } | null>(null);
   const [readyIdx, setReadyIdx] = useState<number | null>(null);
-  
+
   // 3D state for picked cards on the board
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
-  
+
   // Card metadata for proper sorting (same as editor-3d)
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
-  
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
+    {}
+  );
+
   // Convert DraftCard to BoosterCard format for Pick3D
-  const draftCardToBoosterCard = useCallback((card: DraftCard): BoosterCard => ({
-    variantId: 0, // Not available in draft context
-    slug: card.slug,
-    finish: "Standard" as const,
-    product: "Draft",
-    rarity: (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") || "Ordinary",
-    type: card.type || null,
-    cardId: parseInt(card.id) || 0,
-    cardName: card.cardName || card.name,
-    setName: card.setName || "Beta", // Include set information from server
-  }), []);
+  const draftCardToBoosterCard = useCallback(
+    (card: DraftCard): BoosterCard => ({
+      variantId: 0, // Not available in draft context
+      slug: card.slug,
+      finish: "Standard" as const,
+      product: "Draft",
+      rarity:
+        (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") ||
+        "Ordinary",
+      type: card.type || null,
+      cardId: parseInt(card.id) || 0,
+      cardName: card.cardName || card.name,
+      setName: card.setName || "Beta", // Include set information from server
+    }),
+    []
+  );
   const PICK_CENTER = { x: 0, z: 0 };
   const PICK_RADIUS = CARD_LONG * 0.6;
 
   // Whether it's my turn to pick according to the server
   const amPicker = useMemo(() => {
-    return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
+    return (
+      draftState.phase === "picking" &&
+      !!myPlayerId &&
+      draftState.waitingFor.includes(myPlayerId)
+    );
   }, [draftState.phase, draftState.waitingFor, myPlayerId]);
 
   // Set screen type for video overlay
   useEffect(() => {
-    updateScreenType('draft-3d');
+    updateScreenType("draft-3d");
     return undefined;
   }, [updateScreenType]);
 
@@ -356,39 +412,55 @@ export default function OnlineDraft3DScreen({
   // TODO(draft-online): Wire playerSync to visualize presence/hover states.
   // const playerSync = usePlayerSync();
   const pickTimer = usePickTimer();
-  
+
   // Deck persistence system
-  const deckPersistence = useDeckPersistence(matchId || 'default-session', myPlayerKey);
-  const submissionCoordination = useSubmissionCoordination(matchId || 'default-session', myPlayerKey);
-  
+  const deckPersistence = useDeckPersistence(
+    matchId || "default-session",
+    myPlayerKey
+  );
+  const submissionCoordination = useSubmissionCoordination(
+    matchId || "default-session",
+    myPlayerKey
+  );
+
   // Waiting overlay integration
   const waitingState = useWaitingOverlay({
-    getWaitingState: () => submissionCoordination.waitingState
+    getWaitingState: () => submissionCoordination.waitingState,
   });
 
-  const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+  const myPack = (draftState.currentPacks?.[myPlayerIndex] ||
+    []) as DraftCard[];
   const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
   const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
-  
-  console.log(`[DraftClient 3D] Component state - myPlayerKey:${myPlayerKey} packChoiceOverlay:${packChoiceOverlay} packIndex:${draftState.packIndex} myPackSize:${myPack.length}`);
+
+  console.log(
+    `[DraftClient 3D] Component state - myPlayerKey:${myPlayerKey} packChoiceOverlay:${packChoiceOverlay} packIndex:${draftState.packIndex} myPackSize:${myPack.length}`
+  );
 
   // Initialize draft state from match on component mount (for rejoining players)
   useEffect(() => {
     if (match?.draftState) {
-      console.log(`[DraftClient 3D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`);
+      console.log(
+        `[DraftClient 3D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`
+      );
       setDraftState(match.draftState);
-      
+
       // Clear staged pick and reset ready state when rejoining during picking phase
       if (match.draftState.phase === "picking") {
-        console.log(`[DraftClient 3D] Clearing staged pick and ready state for rejoin during picking phase`);
+        console.log(
+          `[DraftClient 3D] Clearing staged pick and ready state for rejoin during picking phase`
+        );
         setStaged(null);
         setReady(false);
       }
-      
+
       // Rebuild pick3D array from existing picks for visual board representation
-      const existingPicks = (match.draftState.picks[myPlayerIndex] || []) as DraftCard[];
+      const existingPicks = (match.draftState.picks[myPlayerIndex] ||
+        []) as DraftCard[];
       if (existingPicks.length > 0) {
-        console.log(`[DraftClient 3D] Rebuilding ${existingPicks.length} picked cards for 3D board display`);
+        console.log(
+          `[DraftClient 3D] Rebuilding ${existingPicks.length} picked cards for 3D board display`
+        );
         const rebuiltPick3D: Pick3D[] = existingPicks.map((card, idx) => ({
           id: idx + 1,
           card: draftCardToBoosterCard(card),
@@ -410,58 +482,76 @@ export default function OnlineDraft3DScreen({
       setDraftState(state);
       {
         const myPackSize = (state.currentPacks?.[myPlayerIndex] || []).length;
-        console.log(`[DraftClient 3D] draftUpdate: phase=${state.phase} pack=${state.packIndex} pick=${state.pickNumber} myPack=${myPackSize} waitingFor=${state.waitingFor?.length ?? 0}`);
+        console.log(
+          `[DraftClient 3D] draftUpdate: phase=${state.phase} pack=${
+            state.packIndex
+          } pick=${state.pickNumber} myPack=${myPackSize} waitingFor=${
+            state.waitingFor?.length ?? 0
+          }`
+        );
       }
-      
+
       // Clear staged pick when new pack arrives (similar to 2D version)
       if (state.phase === "picking") {
-        console.log(`[DraftClient 3D] resetStaging <- phase=${state.phase} pack=${state.packIndex} pick=${state.pickNumber}`);
+        console.log(
+          `[DraftClient 3D] resetStaging <- phase=${state.phase} pack=${state.packIndex} pick=${state.pickNumber}`
+        );
         setStaged(null);
         setReady(false);
       }
-      
+
       // Handle draft completion and transition to editor-3d
       if (state.phase === "complete") {
         const mine = (state.picks[myPlayerIndex] || []) as DraftCard[];
-        console.log(`[DraftClient 3D] Draft complete! Picked ${mine.length} cards`);
-        
+        console.log(
+          `[DraftClient 3D] Draft complete! Picked ${mine.length} cards`
+        );
+
         // Save draft picks to local storage for deck building
         try {
           if (matchId) {
-            localStorage.setItem(`draftedCards_${matchId}`, JSON.stringify(mine));
-            console.log(`[DraftClient 3D] Draft data saved to localStorage for matchId: ${matchId}`);
+            localStorage.setItem(
+              `draftedCards_${matchId}`,
+              JSON.stringify(mine)
+            );
+            console.log(
+              `[DraftClient 3D] Draft data saved to localStorage for matchId: ${matchId}`
+            );
           }
         } catch (err) {
           console.error(`[DraftClient 3D] Failed to save draft data:`, err);
         }
-        
+
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
           if (matchId) {
             router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
           }
         }, 600);
-        
+
         onDraftComplete(mine);
       }
     };
 
     const handlePlayerReady = (message: CustomMessage) => {
-      if (message.type === 'playerReady') {
+      if (message.type === "playerReady") {
         const readyMessage = message as PlayerReadyMessage;
-        setPlayerReadyStates(prev => ({ ...prev, [readyMessage.playerKey]: readyMessage.ready }));
+        setPlayerReadyStates((prev) => ({
+          ...prev,
+          [readyMessage.playerKey]: readyMessage.ready,
+        }));
       }
     };
 
     const offDraft = transport.on("draftUpdate", handleDraftUpdate);
     const offMessage = transport.on("message", handlePlayerReady);
-    
+
     return () => {
       try {
         offDraft();
         offMessage?.();
       } catch (err) {
-        console.warn('Error cleaning up transport listeners:', err);
+        console.warn("Error cleaning up transport listeners:", err);
       }
     };
   }, [transport, myPlayerIndex, onDraftComplete, matchId, router]);
@@ -489,7 +579,17 @@ export default function OnlineDraft3DScreen({
       params.set("ids", Array.from(ids).join(","));
       return fetch(`/api/cards/meta?${params.toString()}`)
         .then((r) => r.json())
-        .then((rows: { cardId: number; cost: number | null; thresholds: Record<string, number> | null; attack: number | null; defence: number | null }[]) => rows);
+        .then(
+          (
+            rows: {
+              cardId: number;
+              cost: number | null;
+              thresholds: Record<string, number> | null;
+              attack: number | null;
+              defence: number | null;
+            }[]
+          ) => rows
+        );
     });
 
     Promise.all(requests)
@@ -509,18 +609,18 @@ export default function OnlineDraft3DScreen({
     // If already ready, ignore
     if (playerReadyStates[myPlayerKey]) return;
 
-    setPlayerReadyStates(prev => ({ ...prev, [myPlayerKey]: true }));
-    
+    setPlayerReadyStates((prev) => ({ ...prev, [myPlayerKey]: true }));
+
     // Notify other player of ready state change
     try {
       const message: PlayerReadyMessage = {
-        type: 'playerReady',
+        type: "playerReady",
         playerKey: myPlayerKey,
-        ready: true
+        ready: true,
       };
       await transport.sendMessage?.(message);
     } catch (err) {
-      console.error('Failed to send ready state:', err);
+      console.error("Failed to send ready state:", err);
     }
   }, [transport, match, myPlayerKey, playerReadyStates]);
 
@@ -528,12 +628,20 @@ export default function OnlineDraft3DScreen({
   const handleStartDraft = useCallback(async () => {
     if (!transport || !match) return;
     if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
-    
+
     setError(null);
     setLoading(true);
     try {
-      const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
-      console.log(`[DraftClient 3D] startDraft -> match=${match.id} cfg=${JSON.stringify(draftConfig)}`);
+      const draftConfig = match.draftConfig ?? {
+        setMix: ["Beta"],
+        packCount: 3,
+        packSize: 15,
+      };
+      console.log(
+        `[DraftClient 3D] startDraft -> match=${match.id} cfg=${JSON.stringify(
+          draftConfig
+        )}`
+      );
       await transport.startDraft?.({ matchId: match.id, draftConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start draft");
@@ -545,47 +653,74 @@ export default function OnlineDraft3DScreen({
   // Handle pack selection and notify server
   const handlePackChoice = useCallback(
     async (packIndex: number) => {
-      console.log(`[DraftClient 3D] handlePackChoice called - packIndex:${packIndex} transport:${!!transport} match:${!!match}`);
-      
+      console.log(
+        `[DraftClient 3D] handlePackChoice called - packIndex:${packIndex} transport:${!!transport} match:${!!match}`
+      );
+
       if (!transport || !match) {
-        console.error(`[DraftClient 3D] Cannot choose pack - transport:${!!transport} match:${!!match}`);
+        console.error(
+          `[DraftClient 3D] Cannot choose pack - transport:${!!transport} match:${!!match}`
+        );
         return;
       }
 
-      console.log(`[DraftClient 3D] Pack ${packIndex + 1} selected for round ${draftState.packIndex + 1}`);
-      
+      console.log(
+        `[DraftClient 3D] Pack ${packIndex + 1} selected for round ${
+          draftState.packIndex + 1
+        }`
+      );
+
       // Send pack choice to server
       try {
         // Determine the set choice based on pack index
-        const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15, packCounts: {} };
+        const draftConfig = match.draftConfig ?? {
+          setMix: ["Beta"],
+          packCount: 3,
+          packSize: 15,
+          packCounts: {},
+        };
         // Build actual pack sequence from packCounts
         const packSequence: string[] = [];
-        if (draftConfig.packCounts && typeof draftConfig.packCounts === 'object') {
-          for (const [setName, count] of Object.entries(draftConfig.packCounts)) {
+        if (
+          draftConfig.packCounts &&
+          typeof draftConfig.packCounts === "object"
+        ) {
+          for (const [setName, count] of Object.entries(
+            draftConfig.packCounts
+          )) {
             for (let i = 0; i < count; i++) {
               packSequence.push(setName);
             }
           }
         }
         // Use the exact set for this pack index, or fallback to setMix
-        const setChoice = packSequence[packIndex] || draftConfig.setMix[Math.min(packIndex, draftConfig.setMix.length - 1)] || "Beta";
-        
-        console.log(`[DraftClient 3D] chooseDraftPack -> setChoice=${setChoice} packIndex=${draftState.packIndex} match=${match.id}`);
-        
+        const setChoice =
+          packSequence[packIndex] ||
+          draftConfig.setMix[
+            Math.min(packIndex, draftConfig.setMix.length - 1)
+          ] ||
+          "Beta";
+
+        console.log(
+          `[DraftClient 3D] chooseDraftPack -> setChoice=${setChoice} packIndex=${draftState.packIndex} match=${match.id}`
+        );
+
         if (transport.chooseDraftPack) {
           transport.chooseDraftPack({
             matchId: match.id,
             setChoice,
-            packIndex: draftState.packIndex
+            packIndex: draftState.packIndex,
           });
         } else {
-          console.error(`[DraftClient 3D] chooseDraftPack method not available on transport`);
+          console.error(
+            `[DraftClient 3D] chooseDraftPack method not available on transport`
+          );
         }
       } catch (err) {
         console.error(`[DraftClient 3D] chooseDraftPack error:`, err);
       }
 
-      setUsedPacks(prev => [...prev, packIndex]);
+      setUsedPacks((prev) => [...prev, packIndex]);
       setPackChoiceOverlay(false);
     },
     [draftState.packIndex, transport, match]
@@ -613,7 +748,9 @@ export default function OnlineDraft3DScreen({
         try {
           const result = await draftSync.makePickAttempt(stagedCard.id);
           if (!result.success) {
-            console.error(`[DraftClient 3D] New sync pick failed: ${result.message}`);
+            console.error(
+              `[DraftClient 3D] New sync pick failed: ${result.message}`
+            );
             setReady(false);
             return;
           }
@@ -624,7 +761,9 @@ export default function OnlineDraft3DScreen({
         }
       } else {
         if (!transport.makeDraftPick) {
-          console.error(`[DraftClient 3D] transport.makeDraftPick is not available!`);
+          console.error(
+            `[DraftClient 3D] transport.makeDraftPick is not available!`
+          );
           return;
         }
 
@@ -679,7 +818,10 @@ export default function OnlineDraft3DScreen({
       try {
         await deckPersistence.addStandardCards([stagedCard.id]);
       } catch (err) {
-        console.warn(`[DraftClient 3D] Failed to add drafted card to persistence:`, err);
+        console.warn(
+          `[DraftClient 3D] Failed to add drafted card to persistence:`,
+          err
+        );
       }
 
       setStaged(null);
@@ -701,24 +843,35 @@ export default function OnlineDraft3DScreen({
   useEffect(() => {
     if (draftState.phase === "picking" && amPicker) {
       setReady(false);
-      
+
       // Show pack choice overlay at the start of each pack (only once per round)
-      if (draftState.pickNumber === 1 && !packChoiceOverlay && shownPackOverlayForRound !== draftState.packIndex) {
-        console.log(`[DraftClient 3D] Showing pack choice overlay for pack ${draftState.packIndex + 1}`);
+      if (
+        draftState.pickNumber === 1 &&
+        !packChoiceOverlay &&
+        shownPackOverlayForRound !== draftState.packIndex
+      ) {
+        console.log(
+          `[DraftClient 3D] Showing pack choice overlay for pack ${
+            draftState.packIndex + 1
+          }`
+        );
         setPackChoiceOverlay(true);
         setShownPackOverlayForRound(draftState.packIndex);
         return; // Don't auto-pick when pack choice is needed
       }
-      
+
       // Auto-pick if only one card left in pack
-      const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as DraftCard[];
+      const myPack = (draftState.currentPacks?.[myPlayerIndex] ||
+        []) as DraftCard[];
       if (myPack.length === 1 && !staged && !ready) {
         const lastCard = myPack[0];
-        console.log(`[DraftClient 3D] Auto-picking last card: ${lastCard.name} (${lastCard.id})`);
-        
+        console.log(
+          `[DraftClient 3D] Auto-picking last card: ${lastCard.name} (${lastCard.id})`
+        );
+
         // Stage the card first
         setStaged({ card: lastCard, x: 0, z: 0 });
-        
+
         // Then auto-pick it after a short delay
         setTimeout(() => {
           if (!transport || !match) return;
@@ -747,21 +900,22 @@ export default function OnlineDraft3DScreen({
     handlePickAndPass,
   ]);
 
-
   // Keyboard event handling for spacebar pick and pass
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Only handle spacebar when a card is staged and it's the player's turn
-      if (event.code === 'Space' && staged && amPicker && !ready) {
+      if (event.code === "Space" && staged && amPicker && !ready) {
         event.preventDefault();
-        console.log(`[DraftClient 3D] Spacebar pressed - triggering pick and pass`);
+        console.log(
+          `[DraftClient 3D] Spacebar pressed - triggering pick and pass`
+        );
         handlePickAndPass();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [staged, amPicker, ready, handlePickAndPass]);
 
@@ -772,10 +926,10 @@ export default function OnlineDraft3DScreen({
 
   // Need pack choice at the start of each pack (like offline draft) - but only before any picks are made
   const needsPackChoice =
-    draftState.phase === "picking" && 
-    amPicker && 
-    draftState.pickNumber === 1 && 
-    !staged && 
+    draftState.phase === "picking" &&
+    amPicker &&
+    draftState.pickNumber === 1 &&
+    !staged &&
     shownPackOverlayForRound !== draftState.packIndex;
 
   // UI: Lobby (phase waiting)
@@ -792,7 +946,13 @@ export default function OnlineDraft3DScreen({
                 <div className="flex items-center justify-between">
                   <span className="text-slate-300">{playerNames.p1}</span>
                   <div className="flex items-center gap-2">
-                    <span className={playerReadyStates.p1 ? "text-green-400" : "text-slate-400"}>
+                    <span
+                      className={
+                        playerReadyStates.p1
+                          ? "text-green-400"
+                          : "text-slate-400"
+                      }
+                    >
                       {playerReadyStates.p1 ? "Ready" : "Not Ready"}
                     </span>
                     {myPlayerKey === "p1" && !playerReadyStates.p1 && (
@@ -808,7 +968,13 @@ export default function OnlineDraft3DScreen({
                 <div className="flex items-center justify-between">
                   <span className="text-slate-300">{playerNames.p2}</span>
                   <div className="flex items-center gap-2">
-                    <span className={playerReadyStates.p2 ? "text-green-400" : "text-slate-400"}>
+                    <span
+                      className={
+                        playerReadyStates.p2
+                          ? "text-green-400"
+                          : "text-slate-400"
+                      }
+                    >
                       {playerReadyStates.p2 ? "Ready" : "Not Ready"}
                     </span>
                     {myPlayerKey === "p2" && !playerReadyStates.p2 && (
@@ -825,9 +991,13 @@ export default function OnlineDraft3DScreen({
             </div>
 
             <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Draft Settings</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Draft Settings
+              </h3>
               <div className="space-y-2 text-slate-300">
-                <div>Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}</div>
+                <div>
+                  Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}
+                </div>
                 <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
                 <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
                 <div>Players: 2</div>
@@ -836,7 +1006,9 @@ export default function OnlineDraft3DScreen({
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">{error}</div>
+            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+              {error}
+            </div>
           )}
 
           <button
@@ -844,12 +1016,11 @@ export default function OnlineDraft3DScreen({
             disabled={loading || !playerReadyStates.p1 || !playerReadyStates.p2}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
-            {loading 
-              ? "Starting Draft..." 
-              : (!playerReadyStates.p1 || !playerReadyStates.p2)
-                ? "Waiting for both players to be ready..."
-                : "Start Draft"
-            }
+            {loading
+              ? "Starting Draft..."
+              : !playerReadyStates.p1 || !playerReadyStates.p2
+              ? "Waiting for both players to be ready..."
+              : "Start Draft"}
           </button>
         </div>
       </div>
@@ -858,11 +1029,15 @@ export default function OnlineDraft3DScreen({
 
   // Pack choice overlay - show all 3 packs visually
   if (packChoiceOverlay && draftState.packIndex < 3) {
-    console.log(`[DraftClient 3D] Rendering pack choice overlay - packIndex:${draftState.packIndex}`);
-    
+    console.log(
+      `[DraftClient 3D] Rendering pack choice overlay - packIndex:${draftState.packIndex}`
+    );
+
     // Add debugging for button clicks
     const debugHandlePackChoice = (packIndex: number) => {
-      console.log(`[DraftClient 3D] Pack button clicked - packIndex:${packIndex}`);
+      console.log(
+        `[DraftClient 3D] Pack button clicked - packIndex:${packIndex}`
+      );
       handlePackChoice(packIndex);
     };
     // Build actual pack sequence from packCounts
@@ -874,10 +1049,13 @@ export default function OnlineDraft3DScreen({
       }
     }
     // Fallback to setMix if packCounts is empty
-    const availableSets = packSequence.length > 0 ? packSequence : (match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"]);
+    const availableSets =
+      packSequence.length > 0
+        ? packSequence
+        : match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"];
     // Always show 3 packs, one for each round
-    const packs = [0, 1, 2]; 
-    
+    const packs = [0, 1, 2];
+
     return (
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
@@ -887,7 +1065,9 @@ export default function OnlineDraft3DScreen({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
               const isUsed = usedPacks.includes(packIdx);
-              const setName = availableSets[packIdx] || availableSets[packIdx % availableSets.length]; // Cycle through available sets
+              const setName =
+                availableSets[packIdx] ||
+                availableSets[packIdx % availableSets.length]; // Cycle through available sets
               const assetName = (() => {
                 const s = (setName || "").toLowerCase();
                 if (s.includes("arthur")) return "arthurian-booster.png";
@@ -895,20 +1075,24 @@ export default function OnlineDraft3DScreen({
                 if (s.includes("beta")) return "alphabeta-booster.png";
                 return "alphabeta-booster.png"; // Default
               })();
-              
+
               return (
                 <button
                   key={`pack-opt-${packIdx}`}
                   onClick={() => !isUsed && debugHandlePackChoice(packIdx)}
                   disabled={isUsed}
                   className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left ${
-                    isUsed ? "opacity-40 cursor-not-allowed" : "hover:bg-black/50"
+                    isUsed
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-black/50"
                   }`}
                   aria-label={`${isUsed ? "Used" : "Open"} pack ${packIdx + 1}`}
                 >
-                  <div className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
-                    !isUsed ? "group-hover:ring-white/30" : ""
-                  }`}>
+                  <div
+                    className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
+                      !isUsed ? "group-hover:ring-white/30" : ""
+                    }`}
+                  >
                     {assetName ? (
                       <Image
                         src={`/api/assets/${assetName}`}
@@ -945,13 +1129,21 @@ export default function OnlineDraft3DScreen({
     <div className="fixed inset-0 w-screen h-screen">
       {/* 3D Stage */}
       <div className="absolute inset-0 w-full h-full">
-        <Canvas camera={{ position: [0, 10, 0], fov: 50 }} shadows gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}>
+        <Canvas
+          camera={{ position: [0, 10, 0], fov: 50 }}
+          shadows
+          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+        >
           <color attach="background" args={["#0b0b0c"]} />
           <ambientLight intensity={0.8} />
-          <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
+          <directionalLight
+            position={[10, 12, 8]}
+            intensity={1.35}
+            castShadow
+          />
 
           <Physics gravity={[0, -9.81, 0]}>
-          <Board interactionMode="spectator" />
+            <Board interactionMode="spectator" />
           </Physics>
 
           <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
@@ -985,7 +1177,11 @@ export default function OnlineDraft3DScreen({
                     onClick={() => {
                       if (!amPicker) return;
                       console.log(
-                        `[DraftClient 3D] clickStage -> cardId=${c.id} name=${c.cardName ?? c.name} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+                        `[DraftClient 3D] clickStage -> cardId=${c.id} name=${
+                          c.cardName ?? c.name
+                        } pack=${draftState.packIndex} pick=${
+                          draftState.pickNumber
+                        }`
                       );
                       // Stage the card at a position slightly away from center
                       const stageX = pos.x + 0.5;
@@ -993,22 +1189,32 @@ export default function OnlineDraft3DScreen({
                       setStaged({ card: c, x: stageX, z: stageZ });
                     }}
                     onDragMove={(wx, wz) => {
-                      const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                      const d = Math.hypot(
+                        wx - PICK_CENTER.x,
+                        wz - PICK_CENTER.z
+                      );
                       if (d > PICK_RADIUS) setReadyIdx(idx);
                       else if (readyIdx === idx) setReadyIdx(null);
                     }}
                     onRelease={(wx, wz, wasDragging) => {
                       if (!wasDragging) return;
-                      const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                      const d = Math.hypot(
+                        wx - PICK_CENTER.x,
+                        wz - PICK_CENTER.z
+                      );
                       if (d > PICK_RADIUS) {
                         console.log(
-                          `[DraftClient 3D] stagePick -> cardId=${c.id} name=${c.cardName ?? c.name} pack=${draftState.packIndex} pick=${draftState.pickNumber} at=(${wx.toFixed(
-                            2
-                          )},${wz.toFixed(2)})`
+                          `[DraftClient 3D] stagePick -> cardId=${c.id} name=${
+                            c.cardName ?? c.name
+                          } pack=${draftState.packIndex} pick=${
+                            draftState.pickNumber
+                          } at=(${wx.toFixed(2)},${wz.toFixed(2)})`
                         );
                         setStaged({ card: c, x: wx, z: wz });
                       } else if (staged?.card?.id === c.id) {
-                        console.log(`[DraftClient 3D] unstagePick -> cardId=${c.id}`);
+                        console.log(
+                          `[DraftClient 3D] unstagePick -> cardId=${c.id}`
+                        );
                         setStaged(null);
                       }
                     }}
@@ -1022,12 +1228,26 @@ export default function OnlineDraft3DScreen({
           {pick3D.length > 0 && (
             <group>
               {pick3D.map((p) => {
-                const stackPos = stackedPositions?.get(p.id) || { x: p.x, z: p.z, stackIndex: 0, isVisible: true };
+                const stackPos = stackedPositions?.get(p.id) || {
+                  x: p.x,
+                  z: p.z,
+                  stackIndex: 0,
+                  isVisible: true,
+                };
                 if (!stackPos.isVisible) return null;
-                
-                const isSite = (p.card.type || "").toLowerCase().includes("site");
+
+                const isSite = (p.card.type || "")
+                  .toLowerCase()
+                  .includes("site");
                 return (
-                  <group key={`pick-${p.id}`} position={[stackPos.x, 0.01 + stackPos.stackIndex * 0.01, stackPos.z]}>
+                  <group
+                    key={`pick-${p.id}`}
+                    position={[
+                      stackPos.x,
+                      0.01 + stackPos.stackIndex * 0.01,
+                      stackPos.z,
+                    ]}
+                  >
                     <CardPlane
                       slug={p.card.slug}
                       width={isSite ? CARD_LONG : CARD_SHORT}
@@ -1036,7 +1256,11 @@ export default function OnlineDraft3DScreen({
                       elevation={0.01 + stackPos.stackIndex * 0.01}
                       onPointerOver={() => {
                         if (!orbitLocked)
-                          setHoverPreview({ slug: p.card.slug, name: p.card.cardName, type: p.card.type });
+                          setHoverPreview({
+                            slug: p.card.slug,
+                            name: p.card.cardName,
+                            type: p.card.type,
+                          });
                       }}
                       onPointerOut={() => setHoverPreview(null)}
                     />
@@ -1062,8 +1286,11 @@ export default function OnlineDraft3DScreen({
             maxDistance={28}
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
-            mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.PAN, RIGHT: MOUSE.ROTATE }}
-            touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.PAN }}
+            mouseButtons={{
+              MIDDLE: MOUSE.PAN,
+              RIGHT: MOUSE.ROTATE,
+            }}
+            touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
@@ -1076,14 +1303,21 @@ export default function OnlineDraft3DScreen({
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
           <div className="text-3xl font-fantaisie text-white">Draft</div>
           <div className="text-white/80">
-            Pack {draftState.packIndex + 1} / 3 • Pick {draftState.pickNumber} / 15
+            Pack {draftState.packIndex + 1} / 3 • Pick {draftState.pickNumber} /
+            15
             {draftState.phase === "passing" && (
-              <span> • Passing {draftState.packDirection === "left" ? "Left" : "Right"}</span>
+              <span>
+                {" "}
+                • Passing{" "}
+                {draftState.packDirection === "left" ? "Left" : "Right"}
+              </span>
             )}
           </div>
           <div className="ml-auto flex items-center gap-4 text-slate-300">
             <div>Your picks: {myPicks.length}</div>
-            <div>{playerNames[opponentKey]} picks: {oppPicks.length}</div>
+            <div>
+              {playerNames[opponentKey]} picks: {oppPicks.length}
+            </div>
             {pick3D.length > 0 && (
               <button
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
@@ -1103,13 +1337,18 @@ export default function OnlineDraft3DScreen({
         {/* Pick status + actions */}
         <div className="max-w-7xl mx-auto px-4">
           {(() => {
-            console.log(`[DraftClient 3D] Render state - staged:${!!staged} phase:${draftState.phase} ready:${ready} amPicker:${amPicker}`);
+            console.log(
+              `[DraftClient 3D] Render state - staged:${!!staged} phase:${
+                draftState.phase
+              } ready:${ready} amPicker:${amPicker}`
+            );
             return null;
           })()}
           {staged ? (
             <div className="flex items-center justify-between bg-blue-900/50 border border-blue-500 rounded-lg p-3">
               <div className="text-blue-200">
-                Staged: <span className="font-semibold">{staged.card.name}</span>
+                Staged:{" "}
+                <span className="font-semibold">{staged.card.name}</span>
               </div>
               <div className="flex items-center gap-3">
                 {needsPackChoice && (
@@ -1124,14 +1363,17 @@ export default function OnlineDraft3DScreen({
             </div>
           ) : draftState.phase === "passing" ? (
             <div className="bg-yellow-900/50 border border-yellow-500 rounded-lg p-3 text-yellow-200">
-              Passing packs {draftState.packDirection === "left" ? "left" : "right"}...
+              Passing packs{" "}
+              {draftState.packDirection === "left" ? "left" : "right"}...
             </div>
           ) : draftState.phase === "picking" && !amPicker ? (
             <div className="bg-slate-800/70 border border-slate-600 rounded-lg p-3 text-slate-200 text-center">
               Waiting for other players to pick...
             </div>
           ) : (
-            <div className="text-slate-400 text-center">Drag a card beyond the center ring to stage your pick</div>
+            <div className="text-slate-400 text-center">
+              Drag a card beyond the center ring to stage your pick
+            </div>
           )}
         </div>
 
@@ -1139,8 +1381,24 @@ export default function OnlineDraft3DScreen({
         {hoverPreview?.slug && (
           <div className="absolute right-3 top-20 z-30 pointer-events-none">
             <div className="relative">
-              <div className={`relative ${(hoverPreview.type || "").toLowerCase().includes("site") ? "aspect-[4/3] h-[300px] md:h-[380px]" : "aspect-[3/4] w-[300px] md:w-[380px]"} rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}>
-                <Image src={`/api/images/${hoverPreview.slug}`} alt={hoverPreview.name} fill sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw" className={`${(hoverPreview.type || "").toLowerCase().includes("site") ? "object-contain rotate-90" : "object-contain"}`} />
+              <div
+                className={`relative ${
+                  (hoverPreview.type || "").toLowerCase().includes("site")
+                    ? "aspect-[4/3] h-[300px] md:h-[380px]"
+                    : "aspect-[3/4] w-[300px] md:w-[380px]"
+                } rounded-xl overflow-hidden ring-1 ring-white/20 shadow-2xl`}
+              >
+                <Image
+                  src={`/api/images/${hoverPreview.slug}`}
+                  alt={hoverPreview.name}
+                  fill
+                  sizes="(max-width:640px) 40vw, (max-width:1024px) 25vw, 20vw"
+                  className={`${
+                    (hoverPreview.type || "").toLowerCase().includes("site")
+                      ? "object-contain rotate-90"
+                      : "object-contain"
+                  }`}
+                />
               </div>
               <button
                 className="pointer-events-auto absolute -top-2 -right-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 ring-1 ring-white/10"
@@ -1172,7 +1430,7 @@ export default function OnlineDraft3DScreen({
                         setHoverPreview({
                           slug: card.slug,
                           name: card.name || card.cardName || `Card ${card.id}`,
-                          type: card.type ?? null
+                          type: card.type ?? null,
                         });
                       }}
                       onMouseLeave={() => setHoverPreview(null)}
@@ -1203,7 +1461,7 @@ export default function OnlineDraft3DScreen({
           Choose Pack {draftState.packIndex + 1}
         </button>
       )}
-      
+
       {/* Pick & Pass button (bottom-center) */}
       {staged && (
         <button
@@ -1213,9 +1471,19 @@ export default function OnlineDraft3DScreen({
           }}
           disabled={ready || !amPicker}
           className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors shadow-lg"
-          onMouseOver={() => console.log(`[DraftClient 3D] Button hover - disabled:${ready || !amPicker}`)}
+          onMouseOver={() =>
+            console.log(
+              `[DraftClient 3D] Button hover - disabled:${ready || !amPicker}`
+            )
+          }
         >
-          {amPicker ? (ready ? `Waiting for ${draftState.waitingFor.length - 1} other player${draftState.waitingFor.length - 1 === 1 ? '' : 's'}...` : "Pick & Pass") : "Waiting..."}
+          {amPicker
+            ? ready
+              ? `Waiting for ${draftState.waitingFor.length - 1} other player${
+                  draftState.waitingFor.length - 1 === 1 ? "" : "s"
+                }...`
+              : "Pick & Pass"
+            : "Waiting..."}
         </button>
       )}
 
@@ -1223,11 +1491,11 @@ export default function OnlineDraft3DScreen({
       <WaitingOverlay
         waitingState={waitingState}
         onCancel={() => {
-          console.log('[OnlineDraft3DScreen] Waiting overlay cancelled');
-          submissionCoordination.updateSubmissionStatus('failed');
+          console.log("[OnlineDraft3DScreen] Waiting overlay cancelled");
+          submissionCoordination.updateSubmissionStatus("failed");
         }}
         onDismiss={() => {
-          console.log('[OnlineDraft3DScreen] Waiting overlay dismissed');
+          console.log("[OnlineDraft3DScreen] Waiting overlay dismissed");
         }}
       />
 
@@ -1235,15 +1503,22 @@ export default function OnlineDraft3DScreen({
       {draftSync.isConnected && (
         <div className="fixed top-4 right-4 z-40 bg-black/80 text-white px-3 py-1 rounded-lg text-sm">
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${
-              draftSync.connectionQuality === 'excellent' ? 'bg-green-500' :
-              draftSync.connectionQuality === 'good' ? 'bg-yellow-500' :
-              draftSync.connectionQuality === 'poor' ? 'bg-orange-500' :
-              'bg-red-500'
-            }`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                draftSync.connectionQuality === "excellent"
+                  ? "bg-green-500"
+                  : draftSync.connectionQuality === "good"
+                  ? "bg-yellow-500"
+                  : draftSync.connectionQuality === "poor"
+                  ? "bg-orange-500"
+                  : "bg-red-500"
+              }`}
+            />
             <span>Sync: {draftSync.connectionQuality}</span>
             {draftSync.syncLatency > 0 && (
-              <span className="text-xs text-gray-400">({draftSync.syncLatency}ms)</span>
+              <span className="text-xs text-gray-400">
+                ({draftSync.syncLatency}ms)
+              </span>
             )}
           </div>
           {draftSync.waitingForPlayers && (
@@ -1267,10 +1542,7 @@ export default function OnlineDraft3DScreen({
       )}
 
       {/* Video Overlay */}
-      <GlobalVideoOverlay 
-        position="top-right"
-        showUserAvatar={true}
-      />
+      <GlobalVideoOverlay position="top-right" showUserAvatar={true} />
     </div>
   );
 }
@@ -1312,7 +1584,15 @@ function ClampOrbitTarget({
       controls.removeEventListener("start", updateOffset);
       controls.removeEventListener("change", clampTarget);
     };
-  }, [bounds.maxX, bounds.maxZ, bounds.minX, bounds.minZ, camera, controls, invalidate]);
+  }, [
+    bounds.maxX,
+    bounds.maxZ,
+    bounds.minX,
+    bounds.minZ,
+    camera,
+    controls,
+    invalidate,
+  ]);
 
   return null;
 }

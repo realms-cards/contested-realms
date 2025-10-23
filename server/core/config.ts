@@ -24,8 +24,12 @@ export function parseBoolean(value: unknown, fallback = false): boolean {
 export function buildServerConfig(envOverrides: Record<string, unknown> = {}): ServerConfig {
   const env = { ...process.env, ...envOverrides };
   const port = env.PORT ? Number(env.PORT) : 3010;
-  const pingIntervalMs = Number(env.SOCKET_PING_INTERVAL_MS || 15000);
-  const pingTimeoutMs = Number(env.SOCKET_PING_TIMEOUT_MS || 30000);
+  const pingIntervalRaw = Number(env.SOCKET_PING_INTERVAL_MS);
+  const pingTimeoutRaw = Number(env.SOCKET_PING_TIMEOUT_MS);
+  const pingIntervalMs =
+    Number.isFinite(pingIntervalRaw) && pingIntervalRaw > 0 ? pingIntervalRaw : 25000;
+  const pingTimeoutMs =
+    Number.isFinite(pingTimeoutRaw) && pingTimeoutRaw > 0 ? pingTimeoutRaw : 90000;
   const redisUrl =
     (typeof env.REDIS_URL === "string" && env.REDIS_URL) ||
     (typeof env.SOCKET_REDIS_URL === "string" && env.SOCKET_REDIS_URL) ||

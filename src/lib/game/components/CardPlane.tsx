@@ -83,6 +83,73 @@ function CardFallback({
   );
 }
 
+function CardBackFallback({
+  width,
+  height,
+  rotationZ = 0,
+  elevation = 0.001,
+  upright = false,
+  renderOrder = 0,
+  interactive = true,
+  depthWrite = true,
+  depthTest = true,
+  opacity = 1.0,
+  onContextMenu,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+  onClick,
+  preferRaster = false,
+}: CardPlaneProps) {
+  const backTex = useCardTexture({ textureUrl: "/api/assets/cardback_spellbook.png", preferRaster });
+  if (!backTex) {
+    return (
+      <CardFallback
+        width={width}
+        height={height}
+        rotationZ={rotationZ}
+        elevation={elevation}
+        upright={upright}
+        renderOrder={renderOrder}
+        interactive={interactive}
+        depthWrite={depthWrite}
+        depthTest={depthTest}
+        opacity={opacity}
+        onContextMenu={onContextMenu}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+        onClick={onClick}
+      />
+    );
+  }
+  return (
+    <mesh
+      rotation-x={upright ? 0 : -Math.PI / 2}
+      rotation-z={rotationZ}
+      position={[0, elevation, 0]}
+      raycast={interactive ? undefined : noopRaycast}
+      renderOrder={renderOrder}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+      onPointerOver={onPointerOver}
+      onPointerOut={onPointerOut}
+      onClick={onClick}
+      castShadow
+    >
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial
+        map={backTex}
+        toneMapped={false}
+        depthWrite={depthWrite}
+        depthTest={depthTest}
+        transparent={true}
+        opacity={opacity}
+      />
+    </mesh>
+  );
+}
+
 const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProps) {
   const {
     slug,
@@ -123,7 +190,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
   });
   
   if (!tex) {
-    return <CardFallback {...props} />;
+    return <CardBackFallback {...props} />;
   }
 
   // Note: Do not mutate shared Texture rotation here; it is cached and shared across consumers.
@@ -162,7 +229,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
 
 export default function CardPlane(props: CardPlaneProps) {
   return (
-    <Suspense fallback={<CardFallback {...props} />}>
+    <Suspense fallback={<CardBackFallback {...props} />}> 
       <CardWithTexture {...props} />
     </Suspense>
   );

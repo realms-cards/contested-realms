@@ -137,7 +137,11 @@ export async function GET(req: NextRequest) {
 
     return new Response(JSON.stringify(tournamentInfos), {
       status: 200,
-      headers: { 'content-type': 'application/json' }
+      headers: {
+        'content-type': 'application/json',
+        // Short-lived private cache to reduce DB load during bursts
+        'Cache-Control': 'private, max-age=3',
+      }
     });
   } catch (e: unknown) {
     console.error('Error fetching tournaments:', e);

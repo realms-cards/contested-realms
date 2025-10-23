@@ -11,6 +11,7 @@ interface UseSocketOptions {
   autoConnect?: boolean;
   reconnection?: boolean;
   reconnectionDelay?: number;
+  reconnectionDelayMax?: number;
   reconnectionAttempts?: number;
   timeout?: number;
   path?: string; // Optional custom socket.io path (e.g., '/api/socket')
@@ -28,13 +29,17 @@ const DEFAULT_OPTIONS: UseSocketOptions = (() => {
   const url = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010';
   const path = process.env.NEXT_PUBLIC_WS_PATH || undefined;
   const transportsEnv = (process.env.NEXT_PUBLIC_WS_TRANSPORTS || '').split(',').map(s => s.trim()).filter(Boolean) as Array<'polling' | 'websocket'>;
+  const reconnectAttemptsEnv = Number(process.env.NEXT_PUBLIC_WS_RECONNECT_ATTEMPTS);
+  const timeoutEnv = Number(process.env.NEXT_PUBLIC_WS_TIMEOUT_MS);
+  const reconnectDelayMaxEnv = Number(process.env.NEXT_PUBLIC_WS_RECONNECT_DELAY_MAX);
   return {
     url,
     autoConnect: true,
     reconnection: true,
     reconnectionDelay: 1000,
-    reconnectionAttempts: 5,
-    timeout: 20000,
+    reconnectionDelayMax: Number.isFinite(reconnectDelayMaxEnv) && reconnectDelayMaxEnv > 0 ? reconnectDelayMaxEnv : 30000,
+    reconnectionAttempts: Number.isFinite(reconnectAttemptsEnv) && reconnectAttemptsEnv > 0 ? reconnectAttemptsEnv : Number.POSITIVE_INFINITY,
+    timeout: Number.isFinite(timeoutEnv) && timeoutEnv > 5000 ? timeoutEnv : 45000,
     path,
     // Allow polling fallback by default to ensure server bootstraps via HTTP before WS upgrade
     transports: transportsEnv.length ? transportsEnv : ['websocket', 'polling'],
@@ -91,9 +96,11 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
         reconnection: opts.reconnection,
         reconnectionDelay: opts.reconnectionDelay,
         reconnectionAttempts: opts.reconnectionAttempts,
+        reconnectionDelayMax: opts.reconnectionDelayMax,
         timeout: opts.timeout,
         path: opts.path,
         transports: opts.transports,
+        withCredentials: true,
         auth: token ? { token } : undefined,
       });
 
@@ -183,7 +190,7 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
     init();
 
     return () => { cancelled = true; };
-  }, [opts.url, opts.autoConnect, opts.reconnection, opts.reconnectionDelay, opts.reconnectionAttempts, opts.timeout, opts.path, opts.transports]);
+  }, [opts.url, opts.autoConnect, opts.reconnection, opts.reconnectionDelay, opts.reconnectionDelayMax, opts.reconnectionAttempts, opts.timeout, opts.path, opts.transports]);
 
   return socket;
 }

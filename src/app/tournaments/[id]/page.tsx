@@ -346,6 +346,7 @@ export default function TournamentDetailsPage() {
     }>
   >([]);
   const [viewerDeckLoaded, setViewerDeckLoaded] = useState(false);
+  const viewerDeckHashRef = useRef<string | null>(null);
   const [checkedDirect, setCheckedDirect] = useState(false);
   const [showDeckDetails, setShowDeckDetails] = useState(false);
   // Constructed preparation state
@@ -366,6 +367,10 @@ export default function TournamentDetailsPage() {
   const constructedPanelRef = useRef<HTMLDivElement | null>(null);
   const [constructedModalOpen, setConstructedModalOpen] = useState(false);
   const [includePublicDecks, setIncludePublicDecks] = useState(false);
+
+  const tId = tournament?.id ?? null;
+  const tStatus = tournament?.status ?? null;
+  const tFormat = tournament?.format ?? null;
 
   // Fallback: if list hasn't provided the tournament yet, attempt fetching by id directly once
   useEffect(() => {
@@ -419,37 +424,37 @@ export default function TournamentDetailsPage() {
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
 
-  // Load viewer deck card metadata when available (from socket detail or by fetching detail endpoint)
+  // Load viewer deck card metadata when available (from context detail only)
   useEffect(() => {
     (async () => {
       try {
-        if (viewerDeckLoaded) return;
-        let deck: Array<{ cardId: string; quantity: number }> | null = null;
-        const fromContext =
-          (
-            tournament as unknown as {
-              viewerDeck?: Array<{ cardId: string; quantity: number }>;
-            }
-          ).viewerDeck || null;
-        if (fromContext && fromContext.length) {
-          deck = fromContext;
-        } else if (tournament?.id) {
-          const resDetail = await fetch(
-            `/api/tournaments/${encodeURIComponent(tournament.id)}`
-          );
-          if (resDetail.ok) {
-            const detail = await resDetail.json();
-            if (Array.isArray(detail?.viewerDeck))
-              deck = detail.viewerDeck as Array<{
-                cardId: string;
-                quantity: number;
-              }>;
+        const fromContext = (
+          tournament as unknown as {
+            viewerDeck?: Array<{ cardId: string; quantity: number }>;
           }
-        }
-        if (!deck || deck.length === 0) {
+        )?.viewerDeck || null;
+
+        // If no deck in context, mark as loaded once to avoid repeated fetch attempts from context churn
+        if (!fromContext || fromContext.length === 0) {
           setViewerDeckCards([]);
+          if (!viewerDeckLoaded) setViewerDeckLoaded(true);
           return;
         }
+
+        // Build a stable hash of the deck composition to avoid reprocessing unchanged lists
+        const deck = fromContext.map((it) => ({
+          cardId: String(it.cardId),
+          quantity: Math.max(0, Number(it.quantity) || 0),
+        }));
+        const hash = JSON.stringify(
+          [...deck].sort((a, b) => a.cardId.localeCompare(b.cardId))
+        );
+        if (viewerDeckHashRef.current === hash) {
+          if (!viewerDeckLoaded) setViewerDeckLoaded(true);
+          return;
+        }
+        viewerDeckHashRef.current = hash;
+
         const ids = Array.from(
           new Set(
             deck
@@ -459,6 +464,7 @@ export default function TournamentDetailsPage() {
         );
         if (!ids.length) {
           setViewerDeckCards([]);
+          if (!viewerDeckLoaded) setViewerDeckLoaded(true);
           return;
         }
         const res = await fetch(
@@ -513,9 +519,10 @@ export default function TournamentDetailsPage() {
           })
           .sort((a, b) => a.name.localeCompare(b.name));
         setViewerDeckCards(merged);
-        setViewerDeckLoaded(true);
+        if (!viewerDeckLoaded) setViewerDeckLoaded(true);
       } catch {
         setViewerDeckCards([]);
+        if (!viewerDeckLoaded) setViewerDeckLoaded(true);
       }
     })();
   }, [tournament, tournament?.id, viewerDeckLoaded]);
@@ -550,9 +557,9 @@ export default function TournamentDetailsPage() {
       try {
         setConstructedError(null);
         if (
-          !tournament ||
-          tournament.status !== "preparing" ||
-          tournament.format !== "constructed"
+          !tId ||
+          tStatus !== "preparing" ||
+          tFormat !== "constructed"
         )
           return;
         if (!isRegistered) return;
@@ -560,9 +567,7 @@ export default function TournamentDetailsPage() {
         // Ensure preparation has started (ignore errors if already started)
         try {
           await fetch(
-            `/api/tournaments/${encodeURIComponent(
-              tournament.id
-            )}/preparation/start`,
+            `/api/tournaments/${encodeURIComponent(tId)}/preparation/start`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -571,7 +576,7 @@ export default function TournamentDetailsPage() {
         } catch {}
         const res = await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tournament.id
+            tId
           )}/preparation/constructed/decks?includePublic=${
             includePublicDecks ? "true" : "false"
           }`
@@ -620,10 +625,9 @@ export default function TournamentDetailsPage() {
       }
     })();
   }, [
-    tournament,
-    tournament?.id,
-    tournament?.status,
-    tournament?.format,
+    tId,
+    tStatus,
+    tFormat,
     isRegistered,
     includePublicDecks,
   ]);
