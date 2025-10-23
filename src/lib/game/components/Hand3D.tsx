@@ -700,13 +700,17 @@ export default function Hand3D({
         const baseScale = HAND_CARD_SCALE;
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
-        const baseRenderOrder = isSite ? 1000 : 2000;
-        const renderOrder = !showCardBacks && hoverWeight > 0.5 ? 3000 : baseRenderOrder + i;
+        const baseRenderOrder = showCardBacks ? -5 : (isSite ? 1000 : 2000);
+        const renderOrder = showCardBacks
+          ? baseRenderOrder + i
+          : hoverWeight > 0.5
+          ? 3000
+          : baseRenderOrder + i;
         const handInstanceKey = `hand:${owner}:${originalIndex}`;
         const remoteHighlightColor = getRemoteHighlightColor(c, {
           instanceKey: handInstanceKey,
         });
-        const cardRotationZ = showCardBacks ? 0 : (isSite ? -rot - Math.PI / 2 : -rot);
+        const cardRotationZ = showCardBacks ? (isSite ? -Math.PI / 2 : 0) : (isSite ? -rot - Math.PI / 2 : -rot);
         const glowWidth = CARD_SHORT + 0.25;
         const glowHeight = CARD_LONG + 0.35;
         return (
@@ -830,8 +834,8 @@ export default function Hand3D({
                 height={CARD_LONG}
                 rotationZ={cardRotationZ}
                 upright
-                depthWrite={false}
-                depthTest={false}
+                depthWrite={showCardBacks ? true : false}
+                depthTest={showCardBacks ? true : false}
                 renderOrder={renderOrder}
                 interactive={!isDragging && !showCardBacks}
                 elevation={0.002 + 0.018 * (hoverWeight || 0)}

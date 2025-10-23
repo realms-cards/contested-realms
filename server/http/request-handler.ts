@@ -493,9 +493,31 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 }
                 break;
               }
-              case "MATCH_ASSIGNED":
-                console.log("[Tournament] MATCH_ASSIGNED broadcast received");
+              case "MATCH_ASSIGNED": {
+                const tournamentId = toOptionalString(data.tournamentId);
+                const playerId = toOptionalString(data.playerId);
+                const matchId = toOptionalString(data.matchId);
+                const opponentId = toOptionalString(data.opponentId);
+                const opponentName = toOptionalString(data.opponentName);
+                const lobbyName = toOptionalString(data.lobbyName);
+                if (tournamentId && playerId && matchId) {
+                  const payload = {
+                    tournamentId,
+                    matchId,
+                    opponentId,
+                    opponentName,
+                    lobbyName: lobbyName || undefined,
+                  } as AnyRecord;
+                  try {
+                    const p = players.get(playerId) as unknown as { socketId?: string } | undefined;
+                    const sid = typeof p?.socketId === 'string' ? (p!.socketId as string) : null;
+                    if (typeof sid === 'string' && sid.length > 0) {
+                      deps.io.to(sid as string).emit("MATCH_ASSIGNED", payload);
+                    }
+                  } catch {}
+                }
                 break;
+              }
               case "matchEnded": {
                 const matchId = toOptionalString(data.matchId);
                 if (matchId) {

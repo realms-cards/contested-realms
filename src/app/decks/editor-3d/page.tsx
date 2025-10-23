@@ -1691,6 +1691,8 @@ function AuthenticatedDeckEditor() {
       const matchId = searchParams?.get("matchId");
       const tournamentId = searchParams?.get("tournament");
 
+      // Ensure the "Standard cards" overlay is closed and show the submission overlay
+      try { setTournamentControlsVisible(false); } catch {}
       setWaitingOverlayStage("submitting");
       setWaitingForOtherPlayers(true);
 
@@ -1825,6 +1827,8 @@ function AuthenticatedDeckEditor() {
       const matchId = searchParams?.get("matchId");
       const tournamentId = searchParams?.get("tournament");
 
+      // Ensure the "Standard cards" overlay is closed and show the submission overlay
+      try { setTournamentControlsVisible(false); } catch {}
       setWaitingOverlayStage("submitting");
       setWaitingForOtherPlayers(true);
 
