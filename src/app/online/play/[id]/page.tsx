@@ -29,6 +29,7 @@ import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import Board from "@/lib/game/Board";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import Hand3D from "@/lib/game/components/Hand3D";
@@ -328,7 +329,12 @@ export default function OnlineMatchPage() {
   const storeSetupWinner = useGameStore((s) => s.setupWinner);
   const storeD20Rolls = useGameStore((s) => s.d20Rolls);
   const storeActorKey = useGameStore((s) => s.actorKey);
-  const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup" && !setupOpen;
+  const storeMatchEnded = useGameStore((s) => s.matchEnded);
+  const showToolbox =
+    match?.status === "in_progress" &&
+    serverPhase !== "Setup" &&
+    !setupOpen &&
+    !storeMatchEnded;
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
 
@@ -1329,6 +1335,8 @@ const canPanCamera =
     const halfW = matW / 2;
     const halfH = matH / 2;
     const t = c.target;
+    const cam = (c as unknown as { object: THREE.PerspectiveCamera }).object;
+    const offset = cam.position.clone().sub(t.clone());
     let changed = false;
     if (t.x < -halfW) {
       t.x = -halfW;
@@ -1348,7 +1356,10 @@ const canPanCamera =
       t.y = 0;
       changed = true;
     }
-    if (changed) c.update();
+    if (changed) {
+      cam.position.copy(t.clone().add(offset));
+      c.update();
+    }
   }, [matW, matH]);
 
   // Handle draft completion
@@ -1706,6 +1717,7 @@ const canPanCamera =
               }
             }}
             leaveLabel={tournamentId ? "Return to Tournament" : undefined}
+            allowContinue={false}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}
@@ -1810,26 +1822,14 @@ const canPanCamera =
                   ref={controlsRef}
                   makeDefault
                   target={[0, 0, 0]}
-          mouseButtons={
-            cameraMode === "topdown"
-              ? {
-                  LEFT: THREE.MOUSE.ROTATE,
-                  MIDDLE: THREE.MOUSE.PAN,
-                  RIGHT: THREE.MOUSE.ROTATE,
-                }
-              : {
-                  LEFT: THREE.MOUSE.ROTATE,
-                  MIDDLE: THREE.MOUSE.PAN,
-                  RIGHT: THREE.MOUSE.ROTATE,
-                }
-          }
-          touches={{
-            ONE: THREE.TOUCH.ROTATE,
-            TWO: THREE.TOUCH.PAN,
-          }}
+                  mouseButtons={{
+                    MIDDLE: THREE.MOUSE.DOLLY,
+                    RIGHT: THREE.MOUSE.PAN,
+                  }}
+                  touches={{ TWO: THREE.TOUCH.PAN }}
                   enabled={canPanCamera}
                   enablePan={canPanCamera}
-                  enableRotate={canPanCamera && cameraMode !== "topdown"}
+                  enableRotate={false}
                   enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                   enableDamping={false}
                   onChange={clampControls}
@@ -1847,6 +1847,7 @@ const canPanCamera =
                   maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
                 />
                 <KeyboardPanControls enabled={canPanCamera} />
+                <TrackpadOrbitAdapter />
               </Canvas>
             </div>
           )}

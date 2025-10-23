@@ -36,6 +36,7 @@ import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import type { DraftCard } from "@/types/draft";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 
 const TournamentPresenceOverlay = dynamic(
   () => import("@/components/tournament/TournamentPresenceOverlay"),
@@ -1774,6 +1775,7 @@ export default function TournamentDraft3DScreen({
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
+          <TrackpadOrbitAdapter />
         </Canvas>
       </div>
 

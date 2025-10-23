@@ -1056,6 +1056,16 @@ export default function OnlineProvider({
     },
     leaveMatch: () => {
       try {
+        // If leaving an already-ended match, set a local suppression flag
+        const m = matchRef.current;
+        if (m && m.id && m.status === "ended") {
+          try {
+            const key = `sorcery:declinedRejoin:${m.id}`;
+            localStorage.setItem(key, "1");
+          } catch {}
+        }
+      } catch {}
+      try {
         transport.leaveMatch();
       } catch {}
       setMatch(null);

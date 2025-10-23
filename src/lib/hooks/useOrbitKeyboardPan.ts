@@ -1,19 +1,24 @@
 import { useEffect } from "react";
 import type { OrbitControls } from "three-stdlib";
-import { Vector3 } from "three";
+import { Vector3, Spherical } from "three";
 
 type Options = {
   enabled?: boolean;
   panStep?: number;
 };
 
-const PAN_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD"]);
+const PAN_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"]);
 
 function shouldIgnoreTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON";
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    tag === "BUTTON"
+  );
 }
 
 export function useOrbitKeyboardPan(
@@ -28,45 +33,68 @@ export function useOrbitKeyboardPan(
     const pressed = new Set<string>();
     let frame: number | null = null;
     const controlsAny = controls as OrbitControls & {
-      panLeft?: (deltaX: number) => void;
-      panUp?: (deltaY: number) => void;
       update?: () => void;
-      object?: { isPerspectiveCamera?: boolean; position?: Vector3 };
+      object?: { position?: Vector3 };
+      minPolarAngle?: number;
+      maxPolarAngle?: number;
     };
-    const panFn = (controlsAny as unknown as { pan?: (deltaX: number, deltaY: number) => void }).pan;
 
     const tick = () => {
       let dx = 0;
       let dy = 0;
       if (pressed.has("KeyA")) dx += 1;
       if (pressed.has("KeyD")) dx -= 1;
-      if (pressed.has("KeyW")) dy -= 1;
-      if (pressed.has("KeyS")) dy += 1;
+      if (pressed.has("KeyS")) dy -= 1;
+      if (pressed.has("KeyW")) dy += 1;
 
       if (dx !== 0 || dy !== 0) {
-        // OrbitControls from drei uses the target property directly
-        // We need to modify the target position instead of using pan methods
-        const currentTarget = controls.target;
-
-        // Calculate screen-space panning based on camera position
-        const camera = controlsAny.object;
-        if (camera && camera.position) {
-          const cameraDirection = new Vector3()
-            .copy(camera.position)
-            .sub(currentTarget)
-            .normalize();
-
-          // Get right vector (perpendicular to camera direction)
-          const right = new Vector3(1, 0, 0);
+        // Pan relative to camera orientation on the XZ plane
+        const t = controls.target as Vector3;
+        const cam = controlsAny.object as unknown as
+          | ({ position: Vector3; getWorldDirection?: (v: Vector3) => Vector3 })
+          | undefined;
+        if (cam && cam.position) {
+          const forward = new Vector3();
+          if (typeof cam.getWorldDirection === "function") {
+            cam.getWorldDirection(forward);
+          } else {
+            forward.copy(t).sub(cam.position);
+          }
+          forward.y = 0;
+          if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
+          forward.normalize();
+          // Right vector: up × forward (right-handed)
           const up = new Vector3(0, 1, 0);
+          const right = new Vector3().crossVectors(up, forward).normalize();
 
-          // For top-down camera, pan in XZ plane
-          const panDelta = new Vector3();
-          panDelta.x += dx * panStep * 0.1;
-          panDelta.z += dy * panStep * 0.1;
+          const scale = panStep * 0.1;
+          const panDelta = new Vector3()
+            .addScaledVector(right, dx * scale)
+            .addScaledVector(forward, dy * scale);
 
-          currentTarget.add(panDelta);
-          controls.update();
+          t.add(panDelta);
+          cam.position.add(panDelta);
+          controls.update?.();
+        }
+      }
+
+      const tiltUp = pressed.has("KeyQ");
+      const tiltDown = pressed.has("KeyE");
+      if (tiltUp || tiltDown) {
+        const t = controls.target as Vector3;
+        const cam = controlsAny.object;
+        if (cam && cam.position) {
+          const offset = new Vector3().copy(cam.position).sub(t);
+          const sph = new Spherical().setFromVector3(offset);
+          const minPhi = controlsAny.minPolarAngle ?? 0;
+          const maxPhi = controlsAny.maxPolarAngle ?? Math.PI;
+          const step = 0.02;
+          sph.phi += tiltDown ? step : -step;
+          if (sph.phi < minPhi) sph.phi = minPhi;
+          if (sph.phi > maxPhi) sph.phi = maxPhi;
+          offset.setFromSpherical(sph);
+          cam.position.copy(new Vector3().copy(t).add(offset));
+          controls.update?.();
         }
       }
 

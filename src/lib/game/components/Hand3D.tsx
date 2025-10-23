@@ -84,6 +84,28 @@ export default function Hand3D({
   const hoverTimeoutRef = useRef<number | null>(null);
   // Hand card preview enabled for testing
   const HAND_PREVIEW_ENABLED = true;
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+
+  useEffect(() => {
+    try {
+      const m = window.matchMedia("(pointer: coarse)");
+      setIsCoarsePointer(m.matches);
+      const handler = (e: MediaQueryListEvent) => setIsCoarsePointer(e.matches);
+      if (typeof m.addEventListener === "function") {
+        m.addEventListener("change", handler);
+        return () => m.removeEventListener("change", handler);
+      } else {
+        const anyM = m as unknown as {
+          addListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+          removeListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+        };
+        anyM.addListener?.(handler);
+        return () => anyM.removeListener?.(handler);
+      }
+    } catch {
+      return;
+    }
+  }, []);
 
   // Hand cycling: focus index target and smoothed value
   const focusTargetRef = useRef(0);
@@ -149,6 +171,27 @@ export default function Hand3D({
       }
     };
   }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount, overCardsArea]);
+  useEffect(() => {
+    function onTouch(e: TouchEvent) {
+      const t = e.touches[0] || e.changedTouches?.[0];
+      if (!t) return;
+      const h = window.innerHeight || 1;
+      const inBottomZone = t.clientY >= h * HAND_ZONE_TOP_FRAC;
+      const inHandZone = inBottomZone || overCardsArea;
+      lastMousePosRef.current = { x: t.clientX, y: t.clientY };
+      setMouseInHandZone(inHandZone);
+      if (inHandZone && hoverCleanupTimeoutRef.current) {
+        window.clearTimeout(hoverCleanupTimeoutRef.current);
+        hoverCleanupTimeoutRef.current = null;
+      }
+    }
+    window.addEventListener("touchstart", onTouch, { passive: true } as AddEventListenerOptions);
+    window.addEventListener("touchmove", onTouch, { passive: true } as AddEventListenerOptions);
+    return () => {
+      window.removeEventListener("touchstart", onTouch as EventListener);
+      window.removeEventListener("touchmove", onTouch as EventListener);
+    };
+  }, [setMouseInHandZone, overCardsArea]);
   // Clear local hand drag start when mouse is released anywhere
   useEffect(() => {
     const onUp = () => {
@@ -184,9 +227,14 @@ export default function Hand3D({
 
     // Use mouseInZone as trigger to initially show cards, then rely on overCardsArea to keep them visible
     // Allow hand to show during drags for card returns
-    const targetShown = showCardBacks
-      ? 1 // Opponent card backs always shown
-      : (overCardsArea || mouseInZone) ? 1 : 0; // Show when over cards or in bottom zone (including during drags)
+    let targetShown = showCardBacks ? 1 : (overCardsArea || mouseInZone) ? 1 : 0;
+    if (!showCardBacks && isCoarsePointer) {
+      if (dragFromHand && selected && selected.who === owner) {
+        const hScr = window.innerHeight || 1;
+        const inReturnZone = lastMousePosRef.current.y >= hScr * 0.7;
+        targetShown = inReturnZone ? 1 : 0;
+      }
+    }
 
     // Always use smooth reveal logic - allow hand to stay visible during drags for card returns
     const k = 0.35; // Increased from 0.25 for even more responsive hand reveal animation

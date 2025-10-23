@@ -6,16 +6,14 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef, useMemo } from "react";
+import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreview from "@/components/game/CardPreview";
 import type { Digit } from "@/components/game/manacost";
 import { NumberBadge } from "@/components/game/manacost";
+import TournamentRoster from "@/components/tournament/TournamentRoster";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 
-const TournamentPresenceOverlay = dynamic(
-  () => import("@/components/tournament/TournamentPresenceOverlay"),
-  { ssr: false }
-);
 
 const TournamentInviteModal = dynamic(
   () => import("@/components/tournament/TournamentInviteModal"),
@@ -62,8 +60,6 @@ export default function TournamentDetailsPage() {
     loading: rtLoading,
     error: rtError,
     lastUpdated,
-    socket: tournamentSocket,
-    sendTournamentChat,
   } = useRealtimeTournaments();
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -71,88 +67,33 @@ export default function TournamentDetailsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardPreviewData | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
-
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<
-    Array<{ from: string; content: string; timestamp: number }>
-  >([]);
-  const [chatInput, setChatInput] = useState("");
-  const chatRef = useRef<HTMLDivElement | null>(null);
-  const [isChatVisible, setIsChatVisible] = useState(false);
-
-  // Track chat section visibility using Intersection Observer
-  useEffect(() => {
-    if (!chatRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          setIsChatVisible(entry.isIntersecting);
-        });
-      },
-      { threshold: 0.1 } // Consider visible if 10% is in viewport
-    );
-
-    observer.observe(chatRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [chatRef.current]);
-
-  // Socket chat handlers
-  useEffect(() => {
-    if (!tournamentSocket || !tournamentId) return;
-
-    const handleChatMessage = (data: {
-      tournamentId: string;
-      from: string;
-      content: string;
-      timestamp: number;
-    }) => {
-      if (data.tournamentId === tournamentId) {
-        setChatMessages((prev) => [
-          ...prev,
-          { from: data.from, content: data.content, timestamp: data.timestamp },
-        ]);
-
-        // Show toast notification if chat is not visible and message is from another player
-        const currentUserName = session?.user?.name || session?.user?.email?.split('@')[0] || 'You';
-        if (!isChatVisible && data.from !== currentUserName) {
-          setToast(`💬 ${data.from}: ${data.content.slice(0, 50)}${data.content.length > 50 ? '...' : ''}`);
-          setTimeout(() => setToast(null), 4000);
-        }
-      }
-    };
-
-    tournamentSocket.on("TOURNAMENT_CHAT", handleChatMessage);
-
-    return () => {
-      tournamentSocket.off("TOURNAMENT_CHAT", handleChatMessage);
-    };
-  }, [tournamentSocket, tournamentId, isChatVisible, session?.user?.name, session?.user?.email]);
-
-  // Auto-scroll chat
-  useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }
-  }, [chatMessages]);
-
-  // Send chat message
-  const sendChatMessage = () => {
-    if (!tournamentId || !chatInput.trim()) return;
-
-    sendTournamentChat(tournamentId, chatInput);
-
-    setChatInput("");
-  };
+  
 
   const [activeTab, setActiveTab] = useState<
     "overview" | "standings" | "rounds"
   >("overview");
   // Round/match flow helpers
   const [startingRound, setStartingRound] = useState(false);
+
+  // Local match assignment banner (instant without full refresh)
+  const [assigned, setAssigned] = useState<{ matchId: string; opponentName: string | null } | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail as
+        | { tournamentId?: string; matchId?: string; opponentName?: string | null }
+        | undefined;
+      if (!d || !d.matchId) return;
+      if (String(d.tournamentId) !== String(tournamentId)) return;
+      setAssigned({ matchId: String(d.matchId), opponentName: d.opponentName ?? null });
+    };
+    window.addEventListener("tournament:matchAssigned", handler as EventListener);
+    return () => window.removeEventListener("tournament:matchAssigned", handler as EventListener);
+  }, [tournamentId]);
+
+  // Context-provided assignment (from realtime handlers)
+  const { assignedMatchId: rtAssignedMatchId, assignedOpponentName: rtAssignedOpponentName } = useRealtimeTournaments();
+
+  // (Removed) fallback: we derive CTA directly in the banner using rtAssignedMatchId or myAssignedMatchId
 
   // Tournament completion celebration
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -333,6 +274,47 @@ export default function TournamentDetailsPage() {
     statistics?.matches,
     activeRoundNumber,
   ]);
+
+  // Fallback: if we have an assignment derived from context or statistics, set local banner state.
+  useEffect(() => {
+    if (assigned?.matchId) return;
+    const mid = rtAssignedMatchId || myAssignedMatchId;
+    if (!mid) return;
+    const match = (statistics?.matches || []).find((m) => String(m.id) === String(mid));
+    const players = Array.isArray((match as { players?: Array<{ id: string; name?: string }> } | null)?.players)
+      ? (((match as { players?: Array<{ id: string; name?: string }> } | null)?.players as Array<{ id: string; name?: string }>) ?? [])
+      : [];
+    const me = session?.user?.id || null;
+    const opp = players.find((p) => p.id !== me)?.name || null;
+    setAssigned({ matchId: String(mid), opponentName: opp });
+  }, [assigned?.matchId, rtAssignedMatchId, myAssignedMatchId, statistics?.matches, session?.user?.id]);
+
+  // Also re-sync when the page becomes visible or gains focus (covers missed socket events)
+  useEffect(() => {
+    const sync = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const mid = assigned?.matchId || rtAssignedMatchId || myAssignedMatchId;
+      if (!mid) return;
+      const match = (statistics?.matches || []).find((m) => String(m.id) === String(mid));
+      const players = Array.isArray((match as { players?: Array<{ id: string; name?: string }> } | null)?.players)
+        ? (((match as { players?: Array<{ id: string; name?: string }> } | null)?.players as Array<{ id: string; name?: string }>) ?? [])
+        : [];
+      const me = session?.user?.id || null;
+      const opp = players.find((p) => p.id !== me)?.name || null;
+      setAssigned({ matchId: String(mid), opponentName: opp });
+    };
+    if (typeof window !== "undefined") {
+      document.addEventListener("visibilitychange", sync);
+      window.addEventListener("focus", sync);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        document.removeEventListener("visibilitychange", sync);
+        window.removeEventListener("focus", sync);
+      }
+    };
+  }, [assigned?.matchId, rtAssignedMatchId, myAssignedMatchId, statistics?.matches, session?.user?.id]);
+
   const [viewerDeckCards, setViewerDeckCards] = useState<
     Array<{
       cardId: number;
@@ -988,13 +970,8 @@ export default function TournamentDetailsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white relative">
-      {/* Presence overlay (hover to open) */}
-      <div className="absolute top-3 left-3 z-[3000]">
-        <TournamentPresenceOverlay
-          tournamentId={tournamentId}
-          position="top-left"
-        />
-      </div>
+      {/* Floating tournament dock (Chat/Events/Players) */}
+      <FloatingChat tournamentId={tournamentId} />
       {/* Toast overlay */}
       {toast && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded bg-black/70 border border-white/20 text-sm shadow-lg">
@@ -1074,6 +1051,28 @@ export default function TournamentDetailsPage() {
       )}
 
       <div className="max-w-5xl mx-auto p-6 space-y-6">
+        {/* Instant Join CTA when match is assigned */}
+        {(() => {
+          const joinableId = (assigned?.matchId || rtAssignedMatchId || myAssignedMatchId) ?? null;
+          if (!joinableId || tournament.status === "completed") return null;
+          const isCompleted = (statistics?.matches || []).some((m) => String(m.id) === String(joinableId) && (m.status === "completed" || m.completedAt));
+          if (isCompleted) return null;
+          const oppName = assigned?.opponentName || rtAssignedOpponentName || null;
+          return (
+          <div className="mb-6 rounded-lg border border-emerald-600 bg-emerald-900/40 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
+            <div className="text-emerald-100 text-sm">
+              Match assigned{oppName ? ` vs ${oppName}` : ""}. You can join now.
+            </div>
+            <button
+              onClick={() => startJoinMatch(String(joinableId))}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md text-sm"
+            >
+              Join Match
+            </button>
+          </div>
+          );
+        })()}
+
         {/* Creator Controls: Start next round banner at top */}
         {tournament.status === "active" && isCreator && !activeRound && maxRoundNumber < (tournament.settings.totalRounds || 3) && (
           <div className="mb-6 rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
@@ -1928,6 +1927,10 @@ export default function TournamentDetailsPage() {
           </div>
         </div>
 
+        {/* Prominent Players roster for hosts/moderation (below stats) */}
+        <div className="mb-6">
+          <TournamentRoster tournamentId={tournamentId} />
+        </div>
         {/* Tabs */}
         <div className="border-b border-slate-700 mb-8">
           <nav className="flex space-x-8">
@@ -2548,51 +2551,7 @@ export default function TournamentDetailsPage() {
             </div>
           )}
 
-        {/* Tournament Chat */}
-        {isRegistered && (
-          <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4 mt-6">
-            <h3 className="text-lg font-semibold mb-3">Tournament Chat</h3>
-
-            <div
-              ref={chatRef}
-              className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1 mb-3 bg-slate-800/50 rounded p-2"
-            >
-              {chatMessages.length === 0 && (
-                <div className="opacity-60 text-center py-4">
-                  No messages yet
-                </div>
-              )}
-              {chatMessages.map((m, i) => (
-                <div key={i} className="opacity-90">
-                  <span className="font-medium text-emerald-400">{m.from}</span>
-                  : {m.content}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Type a message to tournament participants"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && tournamentSocket) {
-                    sendChatMessage();
-                  }
-                }}
-                disabled={!tournamentSocket}
-              />
-              <button
-                className="rounded bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={sendChatMessage}
-                disabled={!tournamentSocket || !chatInput.trim()}
-              >
-                Send
-              </button>
-            </div>
-          </div>
-        )}
+        
 
         {/* Tournament Completion Celebration Modal */}
         {showCompletionModal &&

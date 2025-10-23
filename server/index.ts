@@ -978,9 +978,8 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
         include: { tournament: true, round: true },
       });
       if (tMatch) {
-        const gameResults = Array.isArray(match?.game?.results)
-          ? match.game.results
-          : [];
+        const res = (match.game as AnyRecord | null | undefined)?.results;
+        const gameResults = Array.isArray(res) ? (res as unknown[]) : [];
         const matchResults = {
           winnerId: winnerId || null,
           loserId: loserId || null,
@@ -1718,7 +1717,7 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
 
 io.on("connection", async (socket: SocketClient) => {
   let authed = false;
-  let authUser = null;
+  let authUser: { id?: string; name?: string } | null = null;
   // Track current draft session room for this socket (if any)
   let currentDraftSessionId: string | null = null;
   container.applyConnectionHandlers({
@@ -2250,10 +2249,7 @@ io.on("connection", async (socket: SocketClient) => {
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
-        const idx = Array.isArray(match?.playerIds)
-          ? match.playerIds.indexOf(player.id)
-          : 0;
-        const playerKey = idx === 1 ? "p2" : "p1";
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
         const x = Number(payload && payload.position && payload.position.x);
         const z = Number(payload && payload.position && payload.position.z);
         if (!Number.isFinite(x) || !Number.isFinite(z)) return;
@@ -2272,10 +2268,7 @@ io.on("connection", async (socket: SocketClient) => {
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
-        const idx = Array.isArray(match?.playerIds)
-          ? match.playerIds.indexOf(player.id)
-          : 0;
-        const playerKey = idx === 1 ? "p2" : "p1";
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
         const positionPayload =
           payload && payload.position ? payload.position : null;
         const x = Number(positionPayload && positionPayload.x);
