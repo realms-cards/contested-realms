@@ -275,6 +275,7 @@ export default function OnlineConsole({
             {activeTab === 'events' && (
               <div
                 ref={eventsRef}
+                data-allow-wheel="true"
                 className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
               >
                 {events.length === 0 && (
@@ -318,6 +319,7 @@ export default function OnlineConsole({
               <>
                 <div
                   ref={chatRef}
+                  data-allow-wheel="true"
                   className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
                 >
                   {matchChat.length === 0 && (

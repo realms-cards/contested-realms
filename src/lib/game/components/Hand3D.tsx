@@ -456,6 +456,14 @@ export default function Hand3D({
   useEffect(() => {
     if (showCardBacks) return;
     const onWheel = (e: WheelEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t) {
+        let el: HTMLElement | null = t;
+        while (el && el !== document.body) {
+          if (el.getAttribute && el.getAttribute("data-allow-wheel") === "true") return;
+          el = el.parentElement as HTMLElement | null;
+        }
+      }
       if (!mouseInZone || dragFromHand || dragFromPile) return;
       if (sortedHand.length === 0) return;
       e.preventDefault();
