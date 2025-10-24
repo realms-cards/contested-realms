@@ -1,7 +1,6 @@
 "use strict";
 
 import type { Server as SocketIOServer, Socket } from "socket.io";
-
 import type {
   LobbyState,
   PendingVoiceRequest,

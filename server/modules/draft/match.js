@@ -106,7 +106,7 @@ function createMatchDraftService({
         } else if (isConnected === false) {
           await storeRedis.hincrby(countsKey, playerId, -1);
         }
-        let rawCount = await storeRedis.hget(countsKey, playerId);
+        const rawCount = await storeRedis.hget(countsKey, playerId);
         let count = Number(rawCount || 0);
         if (!Number.isFinite(count) || count < 0) count = 0;
         const resolvedName =

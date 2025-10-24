@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
-import type { Server, Socket } from "socket.io";
 import type Redis from "ioredis";
+import type { Server, Socket } from "socket.io";
 
 type AnyRecord = Record<string, unknown>;
 

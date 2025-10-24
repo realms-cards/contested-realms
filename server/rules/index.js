@@ -670,8 +670,8 @@ function applyMovementAndCombat(prevGame, action, playerId, context) {
       if (!afterArr || afterArr.length === 0) {
         continue;
       }
-      let mine = [];
-      let theirs = [];
+      const mine = [];
+      const theirs = [];
       for (const it of afterArr) {
         try {
           if (Number(it.owner) === 1 || Number(it.owner) === 2) {

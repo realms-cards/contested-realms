@@ -121,7 +121,7 @@ function createTournamentFeature(deps) {
   }
 
   async function loadAndSendInitialSnapshot(socketInstance, tournamentId) {
-    let sent = replaySnapshotsForSocket(socketInstance, tournamentId);
+    const sent = replaySnapshotsForSocket(socketInstance, tournamentId);
     if (sent) return;
     try {
       const tournament = await prisma.tournament.findUnique({
@@ -507,7 +507,7 @@ function createTournamentFeature(deps) {
                 sc.packCounts && typeof sc.packCounts === "object" ? sc.packCounts : null;
               const replaceAvatars = !!sc.replaceAvatars;
               /** @type {string[]} */
-              let sets = [];
+              const sets = [];
               if (packCounts) {
                 for (const [setName, cnt] of Object.entries(packCounts)) {
                   const c = Math.max(0, Number(cnt) || 0);

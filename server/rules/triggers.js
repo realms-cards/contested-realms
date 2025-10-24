@@ -1,8 +1,8 @@
 // Trigger scaffolding: currently implements a minimal Genesis trigger skeleton
 // The trigger attaches a simple event into the patch when a permanent with 'Genesis' is placed.
 
-const { getKeywordsForCard, getKeywordDefinition } = require('./keywords');
 const { draw } = require('./effects');
+const { getKeywordsForCard, getKeywordDefinition } = require('./keywords');
 
 function getPlayerKey(match, playerId) {
   if (!match || !Array.isArray(match.playerIds)) return null;

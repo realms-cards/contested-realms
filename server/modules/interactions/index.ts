@@ -1,3 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: This module handles dynamic game state and interaction payloads with varying structures.
+// Using 'any' types here is intentional to maintain runtime flexibility while the type system
+// is being gradually improved. Future work should introduce proper discriminated unions and
+// type guards to replace 'any' with 'unknown' + type narrowing.
+
 import {
   getSeatForPlayer,
   getPlayerIdForSeat,

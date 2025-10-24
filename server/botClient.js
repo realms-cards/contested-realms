@@ -1,8 +1,8 @@
 // Headless CPU Bot Client for Sorcery MVP
 // Connects to the Socket.IO game server as a normal client and performs basic actions
 
-const { io } = require("socket.io-client");
 const path = require("path");
+const { io } = require("socket.io-client");
 
 // Lazy-loaded card database from data/cards_raw.json
 let _CARDS_DB = null;
@@ -874,7 +874,7 @@ class BotClient {
       const variants = Array.isArray(chosen?.variants) ? chosen.variants : [];
       const pickStandard = (pred) => variants.find((x) => String(x?.finish) === 'Standard' && pred(String(x?.product || '').toLowerCase()));
       // Preference order: Standard Booster > Standard Draft Kit > any Standard > any
-      let v = pickStandard((p) => p.includes('booster'))
+      const v = pickStandard((p) => p.includes('booster'))
            || pickStandard((p) => p.includes('draft_kit') || p.includes('draft kit'))
            || variants.find((x) => String(x?.finish) === 'Standard')
            || variants[0];

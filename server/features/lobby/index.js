@@ -587,7 +587,7 @@ function createLobbyFeature(deps) {
               : null;
           const replaceAvatars = !!sc.replaceAvatars;
 
-          let sets = [];
+          const sets = [];
           if (packCounts) {
             for (const [setName, cnt] of Object.entries(packCounts)) {
               const c = Math.max(0, Number(cnt) || 0);
@@ -949,7 +949,7 @@ function createLobbyFeature(deps) {
     if (msg.type === "startMatch") {
       const { playerId, matchType, sealedConfig, draftConfig } = msg;
       const p = await ensurePlayerCached(playerId);
-      let lobby = findLobbyForPlayer(playerId, p.lobbyId);
+      const lobby = findLobbyForPlayer(playerId, p.lobbyId);
       if (!lobby) return;
       try {
         p.lobbyId = lobby.id;
