@@ -831,7 +831,7 @@ export default function Hand3D({
                     0.01,
                   ]}
                 />
-                <meshBasicMaterial transparent opacity={0} /> {/* Invisible */}
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} /> {/* Invisible */}
               </mesh>
             )}
 
