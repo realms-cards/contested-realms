@@ -19,8 +19,6 @@ import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import type { SearchResult } from "@/lib/deckEditor/search";
 import Board from "@/lib/game/Board";
-import { useGameStore } from "@/lib/game/store";
-import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import {
   toCardMetaMap,
   mergeCardMetaMaps,
@@ -36,7 +34,9 @@ import {
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
 import { CARD_LONG } from "@/lib/game/constants";
+import { useGameStore } from "@/lib/game/store";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";

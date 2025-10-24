@@ -49,21 +49,6 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
   const lastPathRef = useRef<string | null>(null);
   const navigationLoadingRef = useRef(false);
 
-  const actuallyShowIndicator = useCallback(() => {
-    isVisible.current = true;
-    setIsLoading(true);
-
-    // Set 30-second timeout fallback
-    if (timeoutTimer.current) {
-      clearTimeout(timeoutTimer.current);
-    }
-    timeoutTimer.current = setTimeout(() => {
-      console.warn("[LoadingContext] Loading timeout reached (30s), auto-stopping");
-      refCount.current = 0;
-      actuallyHideIndicator();
-    }, 30000);
-  }, []);
-
   const actuallyHideIndicator = useCallback(() => {
     if (timeoutTimer.current) {
       clearTimeout(timeoutTimer.current);
@@ -84,6 +69,21 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [setIsLoading]);
+
+  const actuallyShowIndicator = useCallback(() => {
+    isVisible.current = true;
+    setIsLoading(true);
+
+    // Set 30-second timeout fallback
+    if (timeoutTimer.current) {
+      clearTimeout(timeoutTimer.current);
+    }
+    timeoutTimer.current = setTimeout(() => {
+      console.warn("[LoadingContext] Loading timeout reached (30s), auto-stopping");
+      refCount.current = 0;
+      actuallyHideIndicator();
+    }, 30000);
+  }, [actuallyHideIndicator]);
 
   const startLoading = useCallback(() => {
     refCount.current += 1;

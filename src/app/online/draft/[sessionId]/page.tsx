@@ -3,8 +3,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import FloatingChat from "@/components/chat/FloatingChat";
 import { useOnline } from "@/app/online/online-context";
+import FloatingChat from "@/components/chat/FloatingChat";
 import TournamentDraft3DScreen from "@/components/game/TournamentDraft3DScreen";
 
 type DraftParticipant = {
