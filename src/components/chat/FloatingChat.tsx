@@ -246,6 +246,26 @@ export default function FloatingChat({ tournamentId, mode = "panel" }: FloatingC
           <MessageCircle className="w-5 h-5 text-white" />
         </button>
       )}
+      {mode === "bubble" && toast && !open && (
+        <div
+          className="fixed z-[5002] bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out"
+          style={{
+            left: `calc(env(safe-area-inset-left, 0px) + 16px)`,
+            bottom: `calc(env(safe-area-inset-bottom, 0px) + 86px)`,
+          }}
+          onClick={() => {
+            setOpen(true);
+            setToast(null);
+            setActiveTab("chat");
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">💬</span>
+            <span className="font-medium truncate max-w-[60vw]">{toast}</span>
+            <span className="text-xs opacity-75 ml-auto">Click to view</span>
+          </div>
+        </div>
+      )}
       {(mode !== "bubble" || open) && content}
     </>,
     document.body
