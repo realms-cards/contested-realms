@@ -95,7 +95,7 @@ export default function AsciiSvg({
     } catch {
       // ignore
     }
-  }, [cols, fontSize, text, charWidth]);
+  }, [cols, fontSize, text, charWidth, contentViewWidth, measuredCharWidth]);
 
   const cw = measuredCharWidth ?? charWidth;
   const rows = lines.length + padTopLines + padBottomLines;

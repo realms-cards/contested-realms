@@ -17,6 +17,7 @@ import {
 } from "@/components/draft/WaitingOverlay";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
   useDeckPersistence,
   useSubmissionCoordination,
@@ -39,10 +40,9 @@ import {
   CARD_LONG,
   CARD_SHORT,
 } from "@/lib/game/constants";
-import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
-import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
+import type { DraftState, CustomMessage } from "@/lib/net/transport";
 
 // Import new draft sync system
 

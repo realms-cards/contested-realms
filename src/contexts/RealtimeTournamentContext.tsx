@@ -381,7 +381,7 @@ useEffect(() => {
       isRefreshingRef.current = false;
       setLoading(false);
     }
-  }, [refreshTournamentDetail, setCurrentTournament]);
+  }, [refreshTournamentDetail]);
 
   // Debounced refresher to coalesce bursts
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -429,7 +429,7 @@ useEffect(() => {
     });
     // Avoid heavy detail fetch here; rely on local merge + stats refresh
     setLastUpdated(new Date().toISOString());
-  }, [refreshTournamentDetail, refreshTournamentsDebounced]);
+  }, [refreshTournamentsDebounced]);
 
   const handlePresenceUpdated = useCallback((data: {
     tournamentId: string;
@@ -532,7 +532,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentDetail, refreshTournamentsDebounced]);
+  }, [queueStatisticsRefresh, refreshTournamentsDebounced]);
 
   const handlePlayerLeft = useCallback((data: { 
     tournamentId: string;
@@ -560,7 +560,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentDetail, refreshTournamentsDebounced]);
+  }, [queueStatisticsRefresh, refreshTournamentsDebounced]);
 
   const handlePreparationUpdate = useCallback((data: { 
     tournamentId: string; 
@@ -601,7 +601,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [currentTournament, refreshTournamentDetail, refreshTournamentsDebounced, queueStatisticsRefresh]);
+  }, [currentTournament, refreshTournamentsDebounced, queueStatisticsRefresh]);
 
   const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
     console.log('Statistics updated:', data);
@@ -615,7 +615,7 @@ useEffect(() => {
       });
     }
     // Skip heavy detail refresh; statistics hooks will fetch targeted data
-  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
+  }, [currentTournament, queueStatisticsRefresh]);
 
   const handleRoundStarted = useCallback((data: { 
     tournamentId: string; 
@@ -646,7 +646,7 @@ useEffect(() => {
         }
       }
     }
-  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
+  }, [currentTournament, currentUserId, queueStatisticsRefresh]);
 
   const handleMatchAssigned = useCallback((data: { 
     tournamentId: string; 
@@ -673,7 +673,7 @@ useEffect(() => {
         }));
       }
     } catch {}
-  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
+  }, [currentTournament, queueStatisticsRefresh]);
 
   const handleSocketError = useCallback((error: { 
     code: string; 

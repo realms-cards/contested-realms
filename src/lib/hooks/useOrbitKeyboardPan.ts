@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import type { OrbitControls } from "three-stdlib";
 import { Vector3, Spherical } from "three";
+import type { OrbitControls } from "three-stdlib";
 
 type Options = {
   enabled?: boolean;

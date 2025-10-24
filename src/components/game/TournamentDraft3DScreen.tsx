@@ -16,6 +16,7 @@ import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import type { SearchResult } from "@/lib/deckEditor/search";
 import Board from "@/lib/game/Board";
 import type { ApiCardMetaRow } from "@/lib/game/cardMeta";
@@ -36,7 +37,6 @@ import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import type { DraftCard } from "@/types/draft";
-import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 
 const TournamentPresenceOverlay = dynamic(
   () => import("@/components/tournament/TournamentPresenceOverlay"),
