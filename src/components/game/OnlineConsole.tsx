@@ -168,21 +168,26 @@ export default function OnlineConsole({
     }
   })();
 
+  const collapsed = !consoleOpen;
+  const containerWidth = collapsed ? "w-64" : "w-80";
+  const headerPadding = collapsed ? "px-2 py-1" : "px-3 py-2";
+  const tabBtnPadding = collapsed ? "px-2 py-0.5" : "px-2 py-1";
+
   return (
     <div
       className={`absolute ${positionClasses} z-10 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white w-80`}
+      } text-white ${containerWidth} transition-all`}
     >
-      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
+      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow transition-all">
         {/* Header with tabs */}
         <div 
-          className="flex items-center justify-between px-3 py-2 text-sm border-b border-white/10 select-none"
+          className={`flex items-center justify-between ${headerPadding} text-sm border-b border-white/10 select-none`}
           onContextMenu={(e) => e.preventDefault()}
         >
           <div className="flex items-center gap-2">
             <button
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
                 activeTab === 'events' 
                   ? 'bg-white/20 text-white' 
                   : 'hover:bg-white/10 opacity-70'
@@ -207,7 +212,7 @@ export default function OnlineConsole({
             </button>
             {!hideChat && (
               <button
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
                   activeTab === 'chat' 
                     ? 'bg-white/20 text-white' 
                     : 'hover:bg-white/10 opacity-70'
@@ -234,7 +239,7 @@ export default function OnlineConsole({
           </div>
           
           <div className="flex items-center gap-1">
-            {!hideLeaveButton && (
+            {!hideLeaveButton && consoleOpen && (
               <button
                 className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
                 onClick={handleLeaveMatch}
@@ -265,12 +270,13 @@ export default function OnlineConsole({
 
         {/* Content */}
         {consoleOpen && (
-          <div className="max-h-64">
+          <div className="h-64 flex flex-col">
             {/* Events Tab */}
             {activeTab === 'events' && (
               <div
                 ref={eventsRef}
-                className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-64"
+                data-allow-wheel="true"
+                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
               >
                 {events.length === 0 && (
                   <div className="opacity-60">No events yet</div>
@@ -313,7 +319,8 @@ export default function OnlineConsole({
               <>
                 <div
                   ref={chatRef}
-                  className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-48"
+                  data-allow-wheel="true"
+                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
                 >
                   {matchChat.length === 0 && (
                     <div className="opacity-60">No messages</div>

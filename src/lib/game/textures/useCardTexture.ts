@@ -99,36 +99,63 @@ function assertBlockAligned(tex: Texture, url: string) {
 // Ensure a canonical orientation each time we hand a texture to a consumer.
 function normalizeTexture(
   t: Texture,
-  kind: "ktx2" | "raster",
+  _kind: "ktx2" | "raster",
   gl?: WebGLRenderer
 ) {
+  let changed = false;
   // Color space consistency
-  t.colorSpace = SRGBColorSpace;
-
+  if (t.colorSpace !== SRGBColorSpace) {
+    t.colorSpace = SRGBColorSpace;
+    changed = true;
+  }
   // Reset any transforms that might have been mutated by previous users.
-  t.rotation = 0;
+  if (t.rotation !== 0) {
+    t.rotation = 0;
+    changed = true;
+  }
   // Some code sets center to (0.5, 0.5) for rotations; reset to default
-  t.center.set(0, 0);
+  if (t.center.x !== 0 || t.center.y !== 0) {
+    t.center.set(0, 0);
+    changed = true;
+  }
   // Horizontal orientation must never be mirrored for cards
-  t.repeat.x = 1;
-  t.offset.x = 0;
+  if (t.repeat.x !== 1) {
+    t.repeat.x = 1;
+    changed = true;
+  }
+  if (t.offset.x !== 0) {
+    t.offset.x = 0;
+    changed = true;
+  }
 
   // Keep flipY disabled to avoid GPU-driver specific flips.
   // Invert via UV: repeat.y = -1, offset.y = 1.
-  t.flipY = false;
-  t.repeat.y = -1;
-  t.offset.y = 1;
+  if (t.flipY !== false) {
+    t.flipY = false;
+    changed = true;
+  }
+  if (t.repeat.y !== -1) {
+    t.repeat.y = -1;
+    changed = true;
+  }
+  if (t.offset.y !== 1) {
+    t.offset.y = 1;
+    changed = true;
+  }
 
   // Improve readability of card text/details (use moderate anisotropy to save memory)
   if (gl) {
     try {
       const maxAniso = gl.capabilities.getMaxAnisotropy();
-      // Reduce from 8 to 4 to save GPU memory
-      if (maxAniso && maxAniso > 1) t.anisotropy = Math.min(4, maxAniso);
+      const desired = maxAniso && maxAniso > 1 ? Math.min(4, maxAniso) : 0;
+      if (desired && t.anisotropy !== desired) {
+        t.anisotropy = desired;
+        changed = true;
+      }
     } catch {}
   }
 
-  t.needsUpdate = true;
+  if (changed) t.needsUpdate = true;
 }
 
 // --- Soft eviction policy (keep-after-release) ---
@@ -349,12 +376,17 @@ export function useCardTexture({
     // Track cancellation only; cleanup will release any held texture.
 
     async function load() {
-      setTex(null);
-
-      // Attempt KTX2 first if a suitable URL is provided
+      // Determine whether we already have the target texture in cache.
       const lastFailure = ktx2FailureTimes.get(ktx2Url);
       const canRetryKtx2 =
         !lastFailure || Date.now() - lastFailure >= KTX2_RETRY_DELAY_MS;
+      const candidateKeys: string[] = [];
+      if (ktx2Url && gl && canRetryKtx2) candidateKeys.push(ktx2Url);
+      if (baseUrl) candidateKeys.push(baseUrl);
+      const hasCached = candidateKeys.some((k) => textureCache.has(k));
+      // Only clear the current texture if we don't already have the new one cached.
+      if (!hasCached) setTex(null);
+
       if (ktx2Url && gl && canRetryKtx2) {
         if (lastFailure) {
           // Allow a retry by clearing the stale timestamp.

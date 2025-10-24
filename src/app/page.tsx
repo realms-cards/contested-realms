@@ -1,33 +1,66 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import AsciiBottomArt from "@/components/ui/AsciiBottomArt";
 import AsciiLogo from "@/components/ui/AsciiLogo";
 import AsciiPanel from "@/components/ui/AsciiPanel";
 import OtherRealms from "@/components/ui/OtherRealms";
 
 export default function Home() {
+  const [showAlphaBanner, setShowAlphaBanner] = useState(true);
   // Set home page title
   useEffect(() => {
     document.title = "Realms.cards";
+    try {
+      const dismissed =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("sorcery:alphaBannerDismissed")
+          : null;
+      if (dismissed === "1") setShowAlphaBanner(false);
+    } catch {}
   }, []);
 
   return (
-    <div className="h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-center px-5 relative overflow-hidden">
-      <div className="relative z-10 max-w-5xl w-full text-center space-y-8 pt-10 pb-12">
+    <div className="min-h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-start px-5 relative overflow-x-hidden overflow-y-auto">
+      <div className="relative z-10 max-w-6xl w-full text-center space-y-6 md:space-y-7 pt-8 md:pt-10 pb-10 md:pb-12">
+        {showAlphaBanner && (
+          <div className="max-w-5xl mx-auto">
+            <div className="bg-orange-900/50 border border-orange-500/50 text-orange-100 rounded-md px-4 py-3 flex items-center justify-between shadow">
+              <p className="text-sm md:text-base font-medium">
+                Currently in Open Alpha - Data might be lost in the future - back up your decks!
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.localStorage.setItem(
+                      "sorcery:alphaBannerDismissed",
+                      "1",
+                    );
+                  } catch {}
+                  setShowAlphaBanner(false);
+                }}
+                className="ml-4 inline-flex items-center rounded px-2 py-1 text-orange-100/90 hover:text-white hover:bg-orange-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+                aria-label="Dismiss banner"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
         {/* ASCII Logotype */}
         <AsciiLogo className="max-w-4xl mx-auto" />
 
         {/* Primary Navigation */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 xl:gap-6 max-w-6xl mx-auto">
           {/* Local Hotseat */}
-          <AsciiPanel>
+          <AsciiPanel className="p-5 md:p-6">
             <Link
               href="/play"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >
-              <div className="flex items-center justify-center py-7">
+              <div className="flex items-center justify-center py-5 md:py-6">
                 <h3 className="text-2xl font-semibold tracking-wide">
                   Local Hotseat
                 </h3>
@@ -36,12 +69,12 @@ export default function Home() {
           </AsciiPanel>
 
           {/* Contest a Realm (Online) */}
-          <AsciiPanel>
+          <AsciiPanel className="p-5 md:p-6">
             <Link
               href="/online/lobby"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >
-              <div className="flex items-center justify-center py-7">
+              <div className="flex items-center justify-center py-5 md:py-6">
                 <h3 className="text-2xl font-semibold tracking-wide">
                   Online Realms
                 </h3>
@@ -51,35 +84,35 @@ export default function Home() {
         </div>
 
         {/* Secondary Links */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-5xl mx-auto">
-          <AsciiPanel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 max-w-6xl mx-auto">
+          <AsciiPanel className="p-4 md:p-5">
             <Link
               href="/draft-3d"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >
-              <div className="flex items-center justify-center py-4">
+              <div className="flex items-center justify-center py-3 md:py-4">
                 <h4 className="text-lg font-semibold tracking-wide">
                   Draft Simulator
                 </h4>
               </div>
             </Link>
           </AsciiPanel>
-          <AsciiPanel>
+          <AsciiPanel className="p-4 md:p-5">
             <Link
               href="/decks"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >
-              <div className="flex items-center justify-center py-4">
+              <div className="flex items-center justify-center py-3 md:py-4">
                 <h4 className="text-lg font-semibold tracking-wide">Decks</h4>
               </div>
             </Link>
           </AsciiPanel>
-          <AsciiPanel>
+          <AsciiPanel className="p-4 md:p-5">
             <Link
               href="/cubes"
               className="group block hover:scale-[1.02] transition-transform duration-200"
             >
-              <div className="flex items-center justify-center py-4">
+              <div className="flex items-center justify-center py-3 md:py-4">
                 <h4 className="text-lg font-semibold tracking-wide">Cubes</h4>
               </div>
             </Link>
@@ -87,7 +120,7 @@ export default function Home() {
         </div>
 
         {/* Other Realms (wide bottom element) */}
-        <div className="max-w-5xl mx-auto cursor-pointer">
+        <div className="max-w-6xl mx-auto cursor-pointer">
           <OtherRealms />
         </div>
 

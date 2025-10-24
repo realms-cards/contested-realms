@@ -1,11 +1,12 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import CardPreview from "@/components/game/CardPreview";
@@ -28,6 +29,7 @@ import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import Board from "@/lib/game/Board";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import Hand3D from "@/lib/game/components/Hand3D";
@@ -43,6 +45,7 @@ import {
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
   useBoardPingListener,
@@ -136,6 +139,11 @@ export default function OnlineMatchPage() {
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
   const tournamentDeckSubmittedRef = useRef<string | null>(null);
+  // Lightweight retry helpers for tournament deck fetch/submission
+  const deckFetchAttemptsRef = useRef<number>(0);
+  const deckRetryTimerRef = useRef<number | null>(null);
+  const [tournamentDeckRetry, setTournamentDeckRetry] = useState(0);
+  const lastTournamentIdRef = useRef<string | null>(null);
   // Track if this page initiated a tournament bootstrap for the current route id
   const hasBootstrapRef = useRef<boolean>(false);
   // Guard to ensure we only reset local game state once per match in this page session,
@@ -197,20 +205,24 @@ export default function OnlineMatchPage() {
     try {
       if (match?.id && match?.id !== matchId) {
         const serverMatchId = match.id;
-        const key = `force_reload_match_${serverMatchId}`;
-        if (!sessionStorage.getItem(key)) {
+        if (!sessionStorage.getItem(`force_reload_match_${serverMatchId}`)) {
           console.log("[game] Switching to different match - forcing page reload for clean state");
-          sessionStorage.setItem(key, "1");
-          // Clear the old param-based key to prevent stale data
-          const oldKey = `force_reload_match_${matchId}`;
-          sessionStorage.removeItem(oldKey);
-          // Redirect to the server-authoritative match id
-          window.location.replace(`/online/play/${serverMatchId}`);
+          sessionStorage.setItem(`force_reload_match_${serverMatchId}`, "1");
+          sessionStorage.removeItem(`force_reload_match_${matchId}`);
+          history.replaceState(null, "", `/online/play/${serverMatchId}`);
+          hasBootstrapRef.current = false;
+          joinAttemptedForRef.current = null;
+          resyncSentForRef.current = null;
+          rejoinChatSentForRef.current = null;
+          resetDoneForRef.current = null;
+          prevMatchIdRef.current = serverMatchId;
+          prevMatchStatusRef.current = null;
+          useGameStore.getState().resetGameState();
           return;
         } else {
-          // If we've already forced a reload but still have wrong match, reset game state
           console.log("[game] After reload still have wrong match - resetting game state");
           useGameStore.getState().resetGameState();
+          return;
         }
       }
     } catch {}
@@ -322,7 +334,12 @@ export default function OnlineMatchPage() {
   const storeSetupWinner = useGameStore((s) => s.setupWinner);
   const storeD20Rolls = useGameStore((s) => s.d20Rolls);
   const storeActorKey = useGameStore((s) => s.actorKey);
-  const showToolbox = match?.status === "in_progress" && serverPhase !== "Setup" && !setupOpen;
+  const storeMatchEnded = useGameStore((s) => s.matchEnded);
+  const showToolbox =
+    match?.status === "in_progress" &&
+    serverPhase !== "Setup" &&
+    !setupOpen &&
+    !storeMatchEnded;
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
 
@@ -395,30 +412,29 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (prepared) return;
     
-    // For matches already in progress, skip deck loading - the server snapshot contains all game state
-    // Check both status AND game phase to detect if gameplay has started
-    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
-    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
-    
-    // Only skip deck loading if we have in_progress status AND Main phase
-    // "Start" phase is still setup (mulligan), so we need to load decks
-    const gameStarted = match?.status === "in_progress" && gamePhase === "Main";
-    
-    if (gameStarted) {
-      console.log("[match] Match already in progress with valid phase, skipping deck load (using server snapshot)", {
+    // If a resync is underway, wait for it to deliver the authoritative server snapshot
+    // before doing any local deck loading.
+    if (resyncing) {
+      return;
+    }
+
+    // If the server reports the match is in progress, do not auto-load a deck; the resync snapshot
+    // will restore the correct zones/hands.
+    if (match?.status === "in_progress") {
+      console.log("[match] Match in progress; skipping deck load (will use server snapshot)", {
         status: match?.status,
-        phase: gamePhase,
-        hasGameState
       });
       setPrepared(true);
       return;
     }
-    
-    // If match has game state with Setup phase AND is not waiting/deck_construction,
-    // wait for the phase to advance (reconnecting to an in-progress match)
-    if (hasGameState && gamePhase === "Setup" && 
+
+    // For reconnect edge cases: if we already have a server game snapshot in Setup phase and the match
+    // is not in waiting/deck_construction, prefer waiting for the server to advance.
+    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
+    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
+    if (hasGameState && gamePhase === "Setup" &&
         match?.status !== "waiting" && match?.status !== "deck_construction") {
-      console.log("[match] Match has game state in Setup phase (reconnecting) - waiting for server snapshot");
+      console.log("[match] Server provided Setup-phase game; waiting for snapshot advance");
       return;
     }
     
@@ -595,7 +611,7 @@ export default function OnlineMatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [prepared, match, match?.playerDecks, me?.id, myPlayerKey, storeActorKey, tournamentId]);
+  }, [prepared, match, matchId, match?.playerDecks, me?.id, myPlayerKey, storeActorKey, tournamentId, resyncing]);
 
   // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
   useEffect(() => {
@@ -605,6 +621,12 @@ export default function OnlineMatchPage() {
     if (match?.matchType !== "constructed") return;
     if (match?.status !== "waiting" && match?.status !== "deck_construction") return;
     if (!me?.id || !myPlayerKey) return;
+
+    // Reset attempts if tournament context changed
+    if (lastTournamentIdRef.current !== tournamentId) {
+      deckFetchAttemptsRef.current = 0;
+      lastTournamentIdRef.current = tournamentId;
+    }
 
     const currentDeck =
       (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
@@ -697,8 +719,26 @@ export default function OnlineMatchPage() {
         }
 
         console.log("[match] Built deck with", deck.length, "cards");
-        if (deck.length === 0 || cancelled) {
-          console.error("[match] Deck is empty, not submitting!");
+        if (cancelled) return;
+        if (deck.length === 0) {
+          // Graceful, bounded retry to handle brief propagation delays
+          if (deckFetchAttemptsRef.current < 3) {
+            deckFetchAttemptsRef.current += 1;
+            try {
+              if (deckRetryTimerRef.current != null) {
+                clearTimeout(deckRetryTimerRef.current);
+                deckRetryTimerRef.current = null;
+              }
+              deckRetryTimerRef.current = window.setTimeout(() => {
+                setTournamentDeckRetry((n) => n + 1);
+              }, 600);
+            } catch {}
+            console.warn(
+              `[match] Viewer deck empty (attempt ${deckFetchAttemptsRef.current}/3), retrying shortly...`
+            );
+            return;
+          }
+          console.error("[match] Deck is empty after retries, not submitting!");
           return;
         }
 
@@ -742,6 +782,7 @@ export default function OnlineMatchPage() {
     myPlayerKey,
     storeActorKey,
     prepared,
+    tournamentDeckRetry,
   ]);
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
@@ -1042,11 +1083,10 @@ export default function OnlineMatchPage() {
   // Match end overlay
   const [matchEndOverlayOpen, setMatchEndOverlayOpen] =
     useState<boolean>(false);
-  const [matchEndOverlayDismissed, setMatchEndOverlayDismissed] =
-    useState<boolean>(false);
   // Store selectors for match end state and winner must be declared before effects that depend on them
   const matchEnded = useGameStore((s) => s.matchEnded);
   const winner = useGameStore((s) => s.winner);
+  const prevEndedRef = useRef(false);
 
   // Frozen context for the match end overlay so results don't change if roster updates
   const [finalEndContext, setFinalEndContext] = useState<
@@ -1126,10 +1166,17 @@ export default function OnlineMatchPage() {
     matW = baseGridH * MAT_RATIO;
   }
   const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
-  const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
-  // Extract store-derived dependencies for effects to satisfy ESLint
-  const playersState = useGameStore((s) => s.players);
-  const currentPlayerState = useGameStore((s) => s.currentPlayer);
+const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+// Extract store-derived dependencies for effects to satisfy ESLint
+const playersState = useGameStore((s) => s.players);
+const currentPlayerState = useGameStore((s) => s.currentPlayer);
+const canPanCamera =
+  !resyncing &&
+  !dragFromHand &&
+  !dragFromPile &&
+  !selected &&
+  !selectedPermanent &&
+  !selectedAvatar;
 
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1211,10 +1258,11 @@ export default function OnlineMatchPage() {
   const endedByMatchStatus = match?.status === "ended";
   useEffect(() => {
     const ended = endedByMatchStatus || matchEnded;
-    if (ended && !matchEndOverlayOpen && !matchEndOverlayDismissed) {
+    if (ended && !matchEndOverlayOpen) {
       setMatchEndOverlayOpen(true);
     }
-  }, [endedByMatchStatus, matchEnded, matchEndOverlayOpen, matchEndOverlayDismissed]);
+    prevEndedRef.current = ended;
+  }, [endedByMatchStatus, matchEnded, matchEndOverlayOpen]);
 
   // When the overlay first opens, snapshot the end-of-match context to keep it stable
   useEffect(() => {
@@ -1227,7 +1275,7 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     // Reset the overlay states when the match ID changes (new match)
     setMatchEndOverlayOpen(false);
-    setMatchEndOverlayDismissed(false);
+    prevEndedRef.current = false;
     setFinalEndContext(null);
   }, [matchId]);
 
@@ -1308,32 +1356,47 @@ export default function OnlineMatchPage() {
     // Polar angle measured from +Y (straight up) downward
     return Math.atan(zOffset / dist);
   }, [matW, matH]);
+  const boardInteractionMode =
+    endedByMatchStatus || matchEnded ? "spectator" : "normal";
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
     if (!c) return;
     const halfW = matW / 2;
     const halfH = matH / 2;
     const t = c.target;
+    const cam = (c as unknown as { object: THREE.PerspectiveCamera }).object;
+    const offset = cam.position.clone().sub(t.clone());
+    // Extend bounds by the planar offset so that when tilted/zoomed out,
+    // you can reach the opposite baseline by panning the target beyond the board edge.
+    const marginX = Math.abs(offset.x);
+    const marginZ = Math.abs(offset.z);
+    const minX = -halfW - marginX;
+    const maxX = halfW + marginX;
+    const minZ = -halfH - marginZ;
+    const maxZ = halfH + marginZ;
     let changed = false;
-    if (t.x < -halfW) {
-      t.x = -halfW;
+    if (t.x < minX) {
+      t.x = minX;
       changed = true;
-    } else if (t.x > halfW) {
-      t.x = halfW;
+    } else if (t.x > maxX) {
+      t.x = maxX;
       changed = true;
     }
-    if (t.z < -halfH) {
-      t.z = -halfH;
+    if (t.z < minZ) {
+      t.z = minZ;
       changed = true;
-    } else if (t.z > halfH) {
-      t.z = halfH;
+    } else if (t.z > maxZ) {
+      t.z = maxZ;
       changed = true;
     }
     if (t.y !== 0) {
       t.y = 0;
       changed = true;
     }
-    if (changed) c.update();
+    if (changed) {
+      cam.position.copy(t.clone().add(offset));
+      c.update();
+    }
   }, [matW, matH]);
 
   // Handle draft completion
@@ -1678,20 +1741,20 @@ export default function OnlineMatchPage() {
             myPlayerKey={finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey}
             onClose={() => {
               setMatchEndOverlayOpen(false);
-              setMatchEndOverlayDismissed(true);
             }}
             onLeave={() => {
               leaveMatch();
             }}
             onLeaveLobby={() => {
-              leaveLobby();
               if (tournamentId) {
                 router.push(`/tournaments/${tournamentId}`);
               } else {
+                leaveLobby();
                 router.push("/online/lobby");
               }
             }}
             leaveLabel={tournamentId ? "Return to Tournament" : undefined}
+            allowContinue={false}
           />
 
           {/* 3D Board Canvas - fills entire viewport */}
@@ -1720,7 +1783,7 @@ export default function OnlineMatchPage() {
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board />
+                  <Board interactionMode={boardInteractionMode} enableBoardPings />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}
@@ -1796,44 +1859,14 @@ export default function OnlineMatchPage() {
                   ref={controlsRef}
                   makeDefault
                   target={[0, 0, 0]}
-                  mouseButtons={
-                    cameraMode === "topdown"
-                      ? {
-                          LEFT: THREE.MOUSE.PAN,
-                          MIDDLE: THREE.MOUSE.DOLLY,
-                          RIGHT: THREE.MOUSE.PAN,
-                        }
-                      : {
-                          LEFT: THREE.MOUSE.PAN,
-                          MIDDLE: THREE.MOUSE.DOLLY,
-                          RIGHT: THREE.MOUSE.ROTATE,
-                        }
-                  }
-                  enabled={
-                    !resyncing &&
-                    !dragFromHand &&
-                    !dragFromPile &&
-                    !selected &&
-                    !selectedPermanent &&
-                    !selectedAvatar
-                  }
-                  enablePan={
-                    !resyncing &&
-                    !dragFromHand &&
-                    !dragFromPile &&
-                    !selected &&
-                    !selectedPermanent &&
-                    !selectedAvatar
-                  }
-                  enableRotate={
-                    !resyncing &&
-                    !dragFromHand &&
-                    !dragFromPile &&
-                    !selected &&
-                    !selectedPermanent &&
-                    !selectedAvatar &&
-                    cameraMode !== "topdown"
-                  }
+                  mouseButtons={{
+                    MIDDLE: THREE.MOUSE.DOLLY,
+                    RIGHT: THREE.MOUSE.PAN,
+                  }}
+                  touches={{ TWO: THREE.TOUCH.PAN }}
+                  enabled={canPanCamera}
+                  enablePan={canPanCamera}
+                  enableRotate={false}
                   enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                   enableDamping={false}
                   onChange={clampControls}
@@ -1850,6 +1883,8 @@ export default function OnlineMatchPage() {
                   minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
                   maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
                 />
+                <KeyboardPanControls enabled={canPanCamera} />
+                <TrackpadOrbitAdapter />
               </Canvas>
             </div>
           )}
@@ -1914,4 +1949,12 @@ export default function OnlineMatchPage() {
         )}
       </div>
   );
+}
+
+function KeyboardPanControls({ enabled = true, step = 0.4 }: { enabled?: boolean; step?: number }) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }

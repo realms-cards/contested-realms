@@ -128,9 +128,9 @@ export default function OnlineD20Screen({
   };
 
   return (
-    <div className="w-full max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
+    <div className="w-full max-w-[92vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">
       <div className="mb-6 text-center">
-        <div className="text-lg font-semibold mb-1 font-fantaisie text-xl">
+        <div className="text-base sm:text-lg font-semibold mb-1 font-fantaisie sm:text-xl">
           Roll D20
         </div>
         <div className="text-sm opacity-80">
@@ -149,10 +149,7 @@ export default function OnlineD20Screen({
       </div>
 
       {/* 3D Canvas for dice rolling */}
-      <div
-        className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6"
-        style={{ height: "300px" }}
-      >
+      <div className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6 h-[42vh] min-h-[240px] sm:h-[300px]">
         <Canvas camera={{ position: [0, 0, 4], fov: 60 }}>
           <ambientLight intensity={0.4} />
           <directionalLight position={[5, 5, 5]} intensity={0.8} />
@@ -244,15 +241,15 @@ export default function OnlineD20Screen({
                 <div className="text-sm text-green-400 font-medium">
                   Choose your seat:
                 </div>
-                <div className="flex gap-4 justify-center">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                   <button
-                    className="bg-green-600 hover:bg-green-700 rounded px-6 py-2 text-sm font-medium transition-colors"
+                    className="bg-green-600 hover:bg-green-700 rounded px-4 py-2 sm:px-6 text-sm font-medium transition-colors"
                     onClick={() => handleChoose("p1")}
                   >
                     Take Player 1 Seat (Goes First)
                   </button>
                   <button
-                    className="bg-blue-600 hover:bg-blue-700 rounded px-6 py-2 text-sm font-medium transition-colors"
+                    className="bg-blue-600 hover:bg-blue-700 rounded px-4 py-2 sm:px-6 text-sm font-medium transition-colors"
                     onClick={() => handleChoose("p2")}
                   >
                     Take Player 2 Seat (Goes Second)

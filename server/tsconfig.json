@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../dist/server",
+    "rootDir": ".",
+    "module": "commonjs",
+    "target": "ES2019",
+    "lib": ["esnext"],
+    "noEmit": false,
+    "allowJs": true,
+    "checkJs": false,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["node"],
+    "moduleResolution": "node",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+    "typeRoots": ["./types", "../node_modules/@types"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.js", "./types/**/*.d.ts"],
+  "exclude": ["../dist", "node_modules"]
+}

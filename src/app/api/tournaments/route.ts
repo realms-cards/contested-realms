@@ -137,7 +137,11 @@ export async function GET(req: NextRequest) {
 
     return new Response(JSON.stringify(tournamentInfos), {
       status: 200,
-      headers: { 'content-type': 'application/json' }
+      headers: {
+        'content-type': 'application/json',
+        // Short-lived private cache to reduce DB load during bursts
+        'Cache-Control': 'private, max-age=3',
+      }
     });
   } catch (e: unknown) {
     console.error('Error fetching tournaments:', e);
@@ -163,12 +167,63 @@ export async function POST(req: NextRequest) {
     const isPrivate = Boolean(body?.isPrivate);
     // Accept sealed/draft config from either top-level or nested in `settings`
     const incomingSettings = (body?.settings as Record<string, unknown> | undefined) || {};
-    const sealedConfig = (body?.sealedConfig as unknown)
+    let sealedConfig = (body?.sealedConfig as unknown)
       ?? (incomingSettings?.sealedConfig as unknown)
       ?? null;
-    const draftConfig = (body?.draftConfig as unknown)
+    let draftConfig = (body?.draftConfig as unknown)
       ?? (incomingSettings?.draftConfig as unknown)
       ?? null;
+
+    // Validate and normalize sealedConfig
+    if (sealedConfig && typeof sealedConfig === 'object') {
+      const config = sealedConfig as Record<string, unknown>;
+      // Validate timeLimit if provided
+      if (config.timeLimit !== undefined && config.timeLimit !== null) {
+        const timeLimit = Number(config.timeLimit);
+        if (isNaN(timeLimit) || timeLimit < 10 || timeLimit > 90) {
+          return new Response(JSON.stringify({
+            error: 'Sealed time limit must be between 10 and 90 minutes'
+          }), { status: 400 });
+        }
+        config.timeLimit = timeLimit;
+      } else {
+        // Default to 40 minutes if not provided
+        config.timeLimit = 40;
+      }
+      sealedConfig = config;
+    }
+
+    // Validate and normalize draftConfig
+    if (draftConfig && typeof draftConfig === 'object') {
+      const config = draftConfig as Record<string, unknown>;
+      // Validate pickTimeLimit if provided
+      if (config.pickTimeLimit !== undefined && config.pickTimeLimit !== null) {
+        const pickTimeLimit = Number(config.pickTimeLimit);
+        if (isNaN(pickTimeLimit) || pickTimeLimit < 30 || pickTimeLimit > 300) {
+          return new Response(JSON.stringify({
+            error: 'Draft pick time limit must be between 30 and 300 seconds'
+          }), { status: 400 });
+        }
+        config.pickTimeLimit = pickTimeLimit;
+      } else {
+        // Default to 60 seconds if not provided
+        config.pickTimeLimit = 60;
+      }
+      // Validate constructionTimeLimit if provided
+      if (config.constructionTimeLimit !== undefined && config.constructionTimeLimit !== null) {
+        const constructionTimeLimit = Number(config.constructionTimeLimit);
+        if (isNaN(constructionTimeLimit) || constructionTimeLimit < 10 || constructionTimeLimit > 60) {
+          return new Response(JSON.stringify({
+            error: 'Draft construction time limit must be between 10 and 60 minutes'
+          }), { status: 400 });
+        }
+        config.constructionTimeLimit = constructionTimeLimit;
+      } else {
+        // Default to 20 minutes if not provided
+        config.constructionTimeLimit = 20;
+      }
+      draftConfig = config;
+    }
 
     console.log("Creating tournament:", { name, format, matchType, maxPlayers, isPrivate, creatorId: session.user.id });
 

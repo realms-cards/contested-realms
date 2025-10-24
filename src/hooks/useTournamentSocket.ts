@@ -264,6 +264,22 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       eventsRef.current.onError?.(error);
     };
 
+    const handleJoinedAck = (data: { tournamentId?: string }) => {
+      const tournamentId = data?.tournamentId;
+      if (!tournamentId) return;
+      currentTournamentRef.current = tournamentId;
+      console.log('[useTournamentSocket] Joined tournament room', tournamentId);
+    };
+
+    const handleLeftAck = (data: { tournamentId?: string }) => {
+      const tournamentId = data?.tournamentId;
+      if (!tournamentId) return;
+      if (currentTournamentRef.current === tournamentId) {
+        currentTournamentRef.current = null;
+      }
+      console.log('[useTournamentSocket] Left tournament room', tournamentId);
+    };
+
     // Register event listeners (with uppercase fallbacks for legacy server broadcasts)
     const cleanups = [
       registerEvent(TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED, (data: unknown) => handleTournamentUpdated(data as { id: string; name?: string; status?: string; [key: string]: unknown })),
@@ -278,6 +294,8 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       registerEvent(TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED, (data: unknown) => handlePresenceUpdated(data as { tournamentId: string; players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>; })),
       // Also listen to legacy/lowercase server event used by our Socket.IO server
       registerEvent('tournament:presence', (data: unknown) => handlePresenceUpdated(data as { tournamentId: string; players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>; })),
+      registerEvent('tournament:joined', (data: unknown) => handleJoinedAck(data as { tournamentId?: string })),
+      registerEvent('tournament:left', (data: unknown) => handleLeftAck(data as { tournamentId?: string })),
       registerEvent(TOURNAMENT_SOCKET_EVENTS.ERROR, (error: unknown) => handleError(error as { code: string; message: string; details?: string })),
     ];
 

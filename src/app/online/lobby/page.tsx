@@ -61,6 +61,7 @@ function mapToProtocolTournament(tournament: {
         displayName,
         ready: player.ready ?? false,
         avatarUrl: avatarCandidate ?? null,
+        seat: null,
       };
     }
   );
@@ -647,11 +648,11 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     if (matchType === "draft") {
       if (draftConfig.cubeId) {
         const label = draftConfig.cubeName || "Custom Cube";
-        return `Planned: Draft • Cube: ${label} • Packs: ${draftConfig.packCount} • Pack size: ${draftConfig.packSize}`;
+        return `Planned: Draft • Cube: ${label} • Packs: ${draftConfig.packCount}`;
       }
       const entries = Object.entries(draftConfig.packCounts || {}).filter(([, c]) => c > 0);
       const mix = entries.length ? entries.map(([s, c]) => `${s}×${c}`).join(", ") : draftConfig.setMix.join(", ");
-      return `Planned: Draft • Mix: ${mix} • Packs: ${draftConfig.packCount} • Pack size: ${draftConfig.packSize}`;
+      return `Planned: Draft • Mix: ${mix} • Packs: ${draftConfig.packCount}`;
     }
     const totalPacks = Object.values(sealedConfig.packCounts).reduce(
       (sum, count) => sum + count,
@@ -1259,69 +1260,54 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                           </p>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-3 items-end">
-                        <div>
-                          <label className="block text-xs font-medium mb-2">
-                            Number of Packs
-                          </label>
-                          <select
-                            value={draftConfig.packCount}
-                            onChange={(e) => {
-                              const nextCount = parseInt(e.target.value) || 3;
-                              setDraftConfig((prev) => {
-                                if (draftUseCube) {
-                                  const cube =
-                                    availableCubes.find((entry) => entry.id === (selectedCubeId ?? prev.cubeId ?? "")) ?? null;
-                                  const label = cube?.name ?? prev.cubeName ?? null;
-                                  return {
-                                    ...prev,
-                                    packCount: nextCount,
-                                    packCounts: label ? { [label]: nextCount } : {},
-                                    setMix: label ? [label] : prev.setMix,
-                                  };
-                                }
-                                const total = Object.values(prev.packCounts).reduce((s, c) => s + c, 0);
-                                const packs = { ...prev.packCounts };
-                                if (total > nextCount) {
-                                  const order = ["Arthurian Legends", "Beta"];
-                                  let excess = total - nextCount;
-                                  for (const name of order) {
-                                    const take = Math.min(excess, packs[name] || 0);
-                                    if (take > 0) {
-                                      packs[name] = (packs[name] || 0) - take;
-                                      excess -= take;
-                                    }
-                                    if (excess <= 0) break;
-                                  }
-                                } else if (total < nextCount) {
-                                  packs["Beta"] = (packs["Beta"] || 0) + (nextCount - total);
-                                }
+                      <div>
+                        <label className="block text-xs font-medium mb-2">
+                          Number of Packs
+                        </label>
+                        <select
+                          value={draftConfig.packCount}
+                          onChange={(e) => {
+                            const nextCount = parseInt(e.target.value) || 3;
+                            setDraftConfig((prev) => {
+                              if (draftUseCube) {
+                                const cube =
+                                  availableCubes.find((entry) => entry.id === (selectedCubeId ?? prev.cubeId ?? "")) ?? null;
+                                const label = cube?.name ?? prev.cubeName ?? null;
                                 return {
                                   ...prev,
                                   packCount: nextCount,
-                                  packCounts: packs,
+                                  packCounts: label ? { [label]: nextCount } : {},
+                                  setMix: label ? [label] : prev.setMix,
                                 };
-                              });
-                            }}
-                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                          >
-                            <option value={3}>3 Packs</option>
-                            <option value={4}>4 Packs</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-2">
-                            Pack Size
-                          </label>
-                          <input
-                            type="number"
-                            min="12"
-                            max="18"
-                            value={draftConfig.packSize}
-                            onChange={(e) => setDraftConfig((prev) => ({ ...prev, packSize: parseInt(e.target.value) || 15 }))}
-                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                          />
-                        </div>
+                              }
+                              const total = Object.values(prev.packCounts).reduce((s, c) => s + c, 0);
+                              const packs = { ...prev.packCounts };
+                              if (total > nextCount) {
+                                const order = ["Arthurian Legends", "Beta"];
+                                let excess = total - nextCount;
+                                for (const name of order) {
+                                  const take = Math.min(excess, packs[name] || 0);
+                                  if (take > 0) {
+                                    packs[name] = (packs[name] || 0) - take;
+                                    excess -= take;
+                                  }
+                                  if (excess <= 0) break;
+                                }
+                              } else if (total < nextCount) {
+                                packs["Beta"] = (packs["Beta"] || 0) + (nextCount - total);
+                              }
+                              return {
+                                ...prev,
+                                packCount: nextCount,
+                                packCounts: packs,
+                              };
+                            });
+                          }}
+                          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        >
+                          <option value={3}>3 Packs</option>
+                          <option value={4}>4 Packs</option>
+                        </select>
                       </div>
                       {!draftUseCube && (
                         <div>

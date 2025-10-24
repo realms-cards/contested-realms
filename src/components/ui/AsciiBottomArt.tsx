@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import AsciiSvg from "@/components/ui/AsciiSvg";
 
 /**
@@ -48,7 +49,12 @@ export default function AsciiBottomArt({
     };
   }, []);
 
-  if (error || !art) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || error || !art) {
     return null;
   }
 
@@ -58,6 +64,10 @@ export default function AsciiBottomArt({
     right: 0,
     bottom: 0,
     overflow: "hidden",
+    display: "flex",
+    alignItems: "flex-end",
+    width: "100%",
+    height: "100%",
   };
   if (typeof maxVh === "number" && maxVh > 0) {
     containerStyle.maxHeight = `${maxVh}vh`;
@@ -65,7 +75,7 @@ export default function AsciiBottomArt({
     containerStyle.height = "100vh";
   }
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-0 pointer-events-none select-none ${className}`}
       aria-hidden
@@ -73,11 +83,12 @@ export default function AsciiBottomArt({
     >
       <AsciiSvg
         text={art}
-        className={`w-full h-full ${opacityClass}`}
-        padBottomLines={4}
-        preserveAspectRatio="xMidYMax slice"
-        style={{ display: "block", width: "100%", height: "100%" }}
+        className={`w-full h-auto ${opacityClass}`}
+        padBottomLines={0}
+        preserveAspectRatio="xMidYMax meet"
+        style={{ display: "block", width: "100%", height: "auto" }}
       />
-    </div>
+    </div>,
+    document.body
   );
 }

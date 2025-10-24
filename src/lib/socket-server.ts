@@ -28,6 +28,9 @@ export function initializeSocket(server: HTTPServer): SocketIOServer {
 
   console.log('Initializing Socket.IO server...');
 
+  const pingTimeoutEnv = Number(process.env.SOCKET_PING_TIMEOUT_MS);
+  const pingIntervalEnv = Number(process.env.SOCKET_PING_INTERVAL_MS);
+
   io = new SocketIOServer(server, {
     path: '/api/socket',
     addTrailingSlash: false,
@@ -39,8 +42,8 @@ export function initializeSocket(server: HTTPServer): SocketIOServer {
       credentials: true
     },
     transports: ['websocket', 'polling'],
-    pingTimeout: 60000,
-    pingInterval: 25000
+    pingTimeout: Number.isFinite(pingTimeoutEnv) && pingTimeoutEnv > 0 ? pingTimeoutEnv : 90000,
+    pingInterval: Number.isFinite(pingIntervalEnv) && pingIntervalEnv > 0 ? pingIntervalEnv : 25000
   });
 
   // Initialize tournament socket service

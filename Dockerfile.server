@@ -1,25 +1,43 @@
-# Minimal runtime image for the Socket.IO server with Prisma and Redis adapter
-FROM node:22-alpine AS base
+# Builder image: install dev deps and compile the server
+FROM node:22-alpine AS builder
 
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 
-# Install dependencies first (use npm ci for reproducible installs)
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
-# Copy only what's needed for the server
+COPY tsconfig.json ./tsconfig.json
 COPY prisma ./prisma
 COPY server ./server
 COPY bots ./bots
 COPY data ./data
 COPY scripts ./scripts
 
-# Generate Prisma client inside the container
-RUN ./node_modules/.bin/prisma generate
+RUN rm -f server/tsconfig.tsbuildinfo
+RUN npm run server:build
+RUN test -f dist/server/index.js
 
-# Expose the Socket.IO server port
+# Production image: only runtime deps + compiled output
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy compiled artifacts and required assets
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/data ./data
+COPY --from=builder /app/bots ./bots
+COPY --from=builder /app/scripts ./scripts
+
+# Generate Prisma client with production deps
+RUN npm run prisma:generate
+RUN test -f dist/server/index.js
+
 EXPOSE 3010
 
-# Default command: start the Socket.IO server
-CMD ["node", "server/index.js"]
+CMD ["node", "scripts/server-start.js"]

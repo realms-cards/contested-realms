@@ -1536,7 +1536,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   pendingPatches: [],
   // Centralized, safe patch sender. Returns true if sent immediately, false if queued.
   trySendPatch: (patch) => {
-    const tr = get().transport;
+    const state = get();
+    if (state.matchEnded) {
+      // Allow the final end-of-match patch containing matchEnded/winner fields
+      // to pass through so the server can finalize and broadcast results.
+      try {
+        const p = patch as ServerPatchT;
+        const hasEndInfo =
+          p && typeof p === "object" && ("matchEnded" in p || "winner" in p);
+        if (!hasEndInfo) {
+          console.debug("[net] trySendPatch: blocked after match ended");
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+    const tr = state.transport;
     if (!patch || typeof patch !== "object") return false;
     // Sanitize to prevent illegal opponent mutations in online play
     const actorKey = get().actorKey;
@@ -3062,6 +3078,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Note: No automatic draw; drawing is manual via drawFrom.
   endTurn: () => {
     const s = get();
+    if (s.matchEnded) {
+      console.debug("[game] endTurn ignored after match ended");
+      return;
+    }
     get().pushHistory();
     const cur = s.currentPlayer;
     get().log(`P${cur} ends the turn`);

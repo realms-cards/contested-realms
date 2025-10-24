@@ -82,6 +82,9 @@ interface RealtimeTournamentContextValue {
   tournamentPresence: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
   // Presence selector for arbitrary tournament id
   getPresenceFor: (tournamentId: string | null) => Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+  // Current user's assignment for quick CTA
+  assignedMatchId: string | null;
+  assignedOpponentName: string | null;
   
   // Global state
   loading: boolean;
@@ -111,6 +114,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     lastEventTime: null as string | null
   });
   const [presenceByTournament, setPresenceByTournament] = useState<Record<string, Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>>>({});
+  const [assignedMatch, setAssignedMatch] = useState<{ matchId: string; opponentName: string | null } | null>(null);
   // Track which tournament we've already joined on this connection to avoid spam re-joins
   const joinedTournamentIdRef = useRef<string | null>(null);
 
@@ -137,9 +141,153 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }, [currentTournament?.id]);
   const isRefreshingRef = useRef(false);
   // Refs to latest hook instances so handlers can call without re-declaring
-  const prepHookRef = useRef<ReturnType<typeof useTournamentPreparation> | null>(null);
-  const statsHookRef = useRef<ReturnType<typeof useTournamentStatistics> | null>(null);
-  const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(null);
+const prepHookRef = useRef<ReturnType<typeof useTournamentPreparation> | null>(null);
+const statsHookRef = useRef<ReturnType<typeof useTournamentStatistics> | null>(null);
+const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(null);
+const statsRefreshQueueRef = useRef<{
+  standings: boolean;
+  matches: boolean;
+  rounds: boolean;
+  overview: boolean;
+  timer: number | null;
+}>({ standings: false, matches: false, rounds: false, overview: false, timer: null });
+const detailRefreshTimersRef = useRef<Record<string, number>>({});
+const lastDetailFetchAtRef = useRef<Record<string, number>>({});
+
+const queueStatisticsRefresh = useCallback(
+  (options: { standings?: boolean; matches?: boolean; rounds?: boolean; overview?: boolean }) => {
+    const queue = statsRefreshQueueRef.current;
+    if (options.standings) queue.standings = true;
+    if (options.matches) queue.matches = true;
+    if (options.rounds) queue.rounds = true;
+    if (options.overview) queue.overview = true;
+
+    const run = () => {
+      const actions = statsHookRef.current?.actions;
+      queue.timer = null;
+      const flags = { ...queue };
+      queue.standings = queue.matches = queue.rounds = queue.overview = false;
+      if (!actions) return;
+      const tasks: Promise<unknown>[] = [];
+      if (flags.standings) tasks.push(actions.refreshStandings());
+      if (flags.matches) tasks.push(actions.refreshMatches());
+      if (flags.rounds) tasks.push(actions.refreshRounds());
+      if (flags.overview) tasks.push(actions.refreshStatistics());
+      if (tasks.length > 0) {
+        void Promise.allSettled(tasks);
+      }
+    };
+
+    if (typeof window === "undefined") {
+      run();
+      return;
+    }
+
+    if (queue.timer != null) return;
+    queue.timer = window.setTimeout(run, 250);
+  },
+  []
+);
+
+useEffect(() => {
+  const ref = statsRefreshQueueRef;
+  return () => {
+    const queue = ref.current;
+    if (queue.timer != null) {
+      clearTimeout(queue.timer);
+      queue.timer = null;
+    }
+  };
+}, []);
+
+  const refreshTournamentDetail = useCallback((id: string | null | undefined, delay = 200, opts?: { force?: boolean }) => {
+    if (!id) return;
+    if (typeof window === "undefined") {
+      void fetch(`/api/tournaments/${id}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((detail) => {
+          if (!detail) return;
+          setTournaments((prev) => {
+            let found = false;
+            const next = prev.map((t) => {
+              if (t.id === detail.id) {
+                found = true;
+                return detail as TournamentInfo;
+              }
+              return t;
+            });
+            if (!found) {
+              return [...next, detail as TournamentInfo];
+            }
+            return next;
+          });
+          setCurrentTournamentState((prev) =>
+            prev && prev.id === (detail as TournamentInfo).id ? (detail as TournamentInfo) : prev
+          );
+        })
+        .catch((err) => {
+          console.warn("[RealtimeTournamentContext] Failed to refresh tournament detail", err);
+        });
+      return;
+    }
+
+    // Throttle: enforce a minimum interval per tournament id unless forced
+    const now = Date.now();
+    const last = lastDetailFetchAtRef.current[id] || 0;
+    const minInterval = 1000;
+    if (!(opts && opts.force) && now - last < minInterval) {
+      return;
+    }
+    lastDetailFetchAtRef.current[id] = now;
+
+    const timers = detailRefreshTimersRef.current;
+    const existing = timers[id];
+    if (existing != null) {
+      window.clearTimeout(existing);
+    }
+
+    const handle = window.setTimeout(async () => {
+      delete timers[id];
+      try {
+        const res = await fetch(`/api/tournaments/${id}`);
+        if (!res.ok) return;
+        const detail = (await res.json()) as TournamentInfo;
+        setTournaments((prev) => {
+          let found = false;
+          const next = prev.map((t) => {
+            if (t.id === detail.id) {
+              found = true;
+              return detail;
+            }
+            return t;
+          });
+          if (!found) return [...next, detail];
+          return next;
+        });
+        setCurrentTournamentState((prev) => {
+          if (!prev || prev.id !== detail.id) return prev;
+          return detail;
+        });
+      } catch (err) {
+        console.warn("[RealtimeTournamentContext] Failed to refresh tournament detail", err);
+      }
+    }, delay);
+    timers[id] = handle;
+  }, []);
+
+  useEffect(() => {
+    const timersRef = detailRefreshTimersRef;
+    return () => {
+      const timers = timersRef.current;
+      for (const key of Object.keys(timers)) {
+        const handle = timers[key];
+        if (handle != null) {
+          window.clearTimeout(handle);
+        }
+        delete timers[key];
+      }
+    };
+  }, []);
   
   // Hooks below need socket connectivity; we'll initialize them after setting up handlers and socket
 
@@ -155,13 +303,16 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       const found = tournaments.find(t => t.id === id) || null;
       return found ?? prev ?? null;
     });
-  }, [tournaments]);
+    // Force a clean snapshot on explicit navigation/selection
+    refreshTournamentDetail(id, 100, { force: true });
+  }, [tournaments, refreshTournamentDetail]);
 
   const handleDraftReady = useCallback((data: { tournamentId: string; draftSessionId: string; totalPlayers?: number }) => {
     setCurrentTournamentState((prev) => {
       if (!prev || prev.id !== data.tournamentId) return prev;
       return { ...(prev as unknown as Record<string, unknown>), draftSessionId: data.draftSessionId } as unknown as TournamentInfo;
     });
+    refreshTournamentDetail(data.tournamentId, 150);
 
     if (!currentUserId) return;
 
@@ -177,7 +328,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     if (pathname?.startsWith(targetPath)) return;
 
     router.replace(`${targetPath}?tournament=${data.tournamentId}`);
-  }, [activeTournamentId, currentTournament, currentUserId, pathname, router]);
+  }, [activeTournamentId, currentTournament, currentUserId, pathname, refreshTournamentDetail, router]);
 
   useEffect(() => {
     if (!requestedTournamentId) return;
@@ -187,30 +338,98 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       if (prev && prev.id === found.id) return prev;
       return found;
     });
-  }, [requestedTournamentId, tournaments]);
+    // Force a clean snapshot when the requested tournament becomes available
+    refreshTournamentDetail(requestedTournamentId, 120, { force: true });
+  }, [refreshTournamentDetail, requestedTournamentId, tournaments]);
 
   // Socket event handlers
+  const refreshTournaments = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    setError(null);
+    setLoading(true);
+    try {
+      // Only fetch active tournaments (registering, preparing, active)
+      // Limit to recent 6 tournaments to avoid loading all history
+      const response = await fetch('/api/tournaments?status=registering,preparing,active&limit=6');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch tournaments');
+      }
+      const tournamentsData = await response.json() as TournamentInfo[];
+      setTournaments(tournamentsData);
+      setLastUpdated(new Date().toISOString());
+      const ctId = currentTournamentIdRef.current;
+      if (ctId) {
+        const updatedCurrent = tournamentsData.find(t => t.id === ctId);
+        if (updatedCurrent) {
+          // Merge shallow list data into existing detail without dropping fields like creatorId
+          setCurrentTournamentState((prev) => {
+            if (!prev || prev.id !== ctId) return updatedCurrent as TournamentInfo;
+            return { ...prev, ...updatedCurrent } as TournamentInfo;
+          });
+        }
+        // Only force a heavy detail refresh when list shows major phases
+        if (updatedCurrent && (updatedCurrent.status === 'active' || updatedCurrent.status === 'completed')) {
+          refreshTournamentDetail(ctId, 150, { force: true });
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
+      setError(message);
+    } finally {
+      isRefreshingRef.current = false;
+      setLoading(false);
+    }
+  }, [refreshTournamentDetail, setCurrentTournament]);
+
+  // Debounced refresher to coalesce bursts
+  const refreshTimeoutRef = useRef<number | null>(null);
+  const refreshTournamentsDebounced = useCallback((delay = 300) => {
+    if (refreshTimeoutRef.current != null) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+    refreshTimeoutRef.current = window.setTimeout(() => {
+      refreshTimeoutRef.current = null;
+      void refreshTournaments();
+    }, delay);
+  }, [refreshTournaments]);
+
   const handleTournamentUpdated = useCallback((data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
-    
-    setTournaments(prev => 
-      prev.map(t => t.id === data.id ? { 
-        ...t, 
-        ...data, 
-        status: data.status as TournamentInfo['status'] || t.status 
-      } : t)
+    setTournaments((prev) =>
+      prev.map((t) => {
+        if (t.id !== data.id) return t;
+        const next = { ...t } as TournamentInfo & Record<string, unknown>;
+        for (const [key, value] of Object.entries(data)) {
+          if (value !== undefined) {
+            next[key] = value as unknown;
+          }
+        }
+        if (data.status !== undefined) {
+          next.status = data.status as TournamentInfo["status"];
+        }
+        return next as TournamentInfo;
+      })
     );
-    
-    setCurrentTournamentState(prev => {
+    refreshTournamentsDebounced(250);
+
+    setCurrentTournamentState((prev) => {
       if (!prev || prev.id !== data.id) return prev;
-      return {
-        ...prev,
-        ...data,
-        status: data.status as TournamentInfo['status'] || prev.status
-      };
+      const next = { ...prev } as typeof prev & Record<string, unknown>;
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) {
+          next[key] = value as unknown;
+        }
+      }
+      if (data.status !== undefined) {
+        (next as { status: TournamentInfo["status"] }).status = data.status as TournamentInfo["status"];
+      }
+      return next as typeof prev;
     });
-    
+    // Avoid heavy detail fetch here; rely on local merge + stats refresh
     setLastUpdated(new Date().toISOString());
-  }, []);
+  }, [refreshTournamentDetail, refreshTournamentsDebounced]);
 
   const handlePresenceUpdated = useCallback((data: {
     tournamentId: string;
@@ -273,12 +492,16 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       phasesHookRef.current.actions.updatePhase(data.newStatus as TournamentInfo['status']);
     }
     
+    // Only force a heavy detail refresh when transitioning into major phases
+    if (data.newStatus === 'active' || data.newStatus === 'completed') {
+      refreshTournamentDetail(data.tournamentId, 200, { force: true });
+    }
     setRealtimeEvents(prev => ({
       ...prev,
       phaseChangeCount: prev.phaseChangeCount + 1,
       lastEventTime: data.timestamp
     }));
-  }, [preparationId]);
+  }, [preparationId, refreshTournamentDetail]);
 
   const handlePlayerJoined = useCallback((data: { 
     tournamentId: string;
@@ -287,7 +510,6 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     currentPlayerCount: number; 
   }) => {
     console.log('Player joined tournament:', data);
-    // Update the specific tournament in our global list, including registeredPlayers when present
     setTournaments(prev => prev.map(t => {
       if (t.id !== data.tournamentId) return t;
       const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
@@ -295,6 +517,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       const updated = [...without, { id: data.playerId, displayName: data.playerName, ready: false }];
       return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
     }));
+    refreshTournamentsDebounced(250);
     // Update current tournament if it matches
     setCurrentTournamentState(prev => {
       if (!prev || prev.id !== data.tournamentId) return prev;
@@ -308,7 +531,8 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       playerJoinedCount: prev.playerJoinedCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, []);
+    queueStatisticsRefresh({ standings: true, overview: true });
+  }, [queueStatisticsRefresh, refreshTournamentDetail, refreshTournamentsDebounced]);
 
   const handlePlayerLeft = useCallback((data: { 
     tournamentId: string;
@@ -323,6 +547,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       const updated = reg.filter(p => p.id !== data.playerId);
       return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
     }));
+    refreshTournamentsDebounced(250);
     setCurrentTournamentState(prev => {
       if (!prev || prev.id !== data.tournamentId) return prev;
       const reg = (prev as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
@@ -334,7 +559,8 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       playerLeftCount: prev.playerLeftCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, []);
+    queueStatisticsRefresh({ standings: true, overview: true });
+  }, [queueStatisticsRefresh, refreshTournamentDetail, refreshTournamentsDebounced]);
 
   const handlePreparationUpdate = useCallback((data: { 
     tournamentId: string; 
@@ -346,7 +572,6 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }) => {
     console.log('Preparation update:', data);
     const isReady = data.preparationStatus === 'ready' || data.deckSubmitted === true;
-    // Update local list to reflect per-player ready flag when available
     setTournaments(prev => prev.map(t => {
       if (t.id !== data.tournamentId) return t;
       const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers;
@@ -354,6 +579,7 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       const updated = reg.map(p => p.id === data.playerId ? { ...p, ready: isReady, deckSubmitted: Boolean(data.deckSubmitted) } : p);
       return { ...(t as unknown as Record<string, unknown>), registeredPlayers: updated } as unknown as TournamentInfo;
     }));
+    refreshTournamentsDebounced(250);
     // Update current tournament mirror if present
     if (currentTournament?.id === data.tournamentId) {
       const reg = (currentTournament as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers;
@@ -374,25 +600,26 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
       preparationUpdateCount: prev.preparationUpdateCount + 1,
       lastEventTime: new Date().toISOString()
     }));
-  }, [currentTournament]);
+    queueStatisticsRefresh({ standings: true, overview: true });
+  }, [currentTournament, refreshTournamentDetail, refreshTournamentsDebounced, queueStatisticsRefresh]);
 
   const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
     console.log('Statistics updated:', data);
 
     if (currentTournament?.id === data.tournamentId) {
-      const statsActions = statsHookRef.current?.actions;
-      if (statsActions) {
-        void statsActions.refreshStatistics();
-        void statsActions.refreshStandings();
-        void statsActions.refreshMatches();
-        void statsActions.refreshRounds();
-      }
+      queueStatisticsRefresh({
+        standings: true,
+        matches: true,
+        rounds: true,
+        overview: true,
+      });
     }
-  }, [currentTournament]);
+    // Skip heavy detail refresh; statistics hooks will fetch targeted data
+  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
-  const handleRoundStarted = useCallback((data: {
-    tournamentId: string;
-    roundNumber: number;
+  const handleRoundStarted = useCallback((data: { 
+    tournamentId: string; 
+    roundNumber: number; 
     matches: Array<{
       id: string;
       player1Id: string;
@@ -403,16 +630,23 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }) => {
     console.log('Round started:', data);
 
-    // Refresh statistics to get new matches, rounds, and standings
     if (currentTournament?.id === data.tournamentId) {
-      const statsActions = statsHookRef.current?.actions;
-      if (statsActions) {
-        void statsActions.refreshStatistics();
-        void statsActions.refreshMatches();
-        void statsActions.refreshStandings();
+      queueStatisticsRefresh({
+        standings: true,
+        matches: true,
+        rounds: true,
+        overview: true,
+      });
+      // Derive my assignment immediately from payload
+      if (currentUserId) {
+        const mine = data.matches.find(m => m.player1Id === currentUserId || m.player2Id === currentUserId);
+        if (mine) {
+          const opp = mine.player1Id === currentUserId ? mine.player2Name : mine.player1Name;
+          setAssignedMatch({ matchId: String(mine.id), opponentName: opp ?? null });
+        }
       }
     }
-  }, [currentTournament]);
+  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
   const handleMatchAssigned = useCallback((data: { 
     tournamentId: string; 
@@ -422,10 +656,24 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     lobbyName: string; 
   }) => {
     console.log('Match assigned:', data);
-    
-    // Show notification or update UI to indicate match assignment
-    // This could trigger a toast notification or modal
-  }, []);
+    if (currentTournament?.id === data.tournamentId) {
+      queueStatisticsRefresh({ standings: true, matches: true });
+      // Treat this as an assignment for the current user
+      setAssignedMatch({ matchId: String(data.matchId), opponentName: data.opponentName ?? null });
+    }
+    // Broadcast a browser event for UI surfaces (e.g., Join CTA on details page)
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tournament:matchAssigned', {
+          detail: {
+            tournamentId: data.tournamentId,
+            matchId: data.matchId,
+            opponentName: data.opponentName ?? null,
+          },
+        }));
+      }
+    } catch {}
+  }, [currentTournament, queueStatisticsRefresh, refreshTournamentDetail]);
 
   const handleSocketError = useCallback((error: { 
     code: string; 
@@ -498,6 +746,17 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     });
   }, [socket]);
 
+  // Fallback polling: keep list fresh even if socket events are missed
+  // Only poll when the realtime socket is disconnected
+  useEffect(() => {
+    if (isConnected) return;
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void refreshTournaments();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [isConnected, refreshTournaments]);
+
   // Auto-join current tournament when socket connects or when the id changes
   useEffect(() => {
     if (!isConnected) return;
@@ -520,60 +779,6 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }, [isConnected]);
 
   // Tournament management functions
-  const refreshTournaments = useCallback(async () => {
-    if (isRefreshingRef.current) return;
-    isRefreshingRef.current = true;
-    setError(null);
-    setLoading(true);
-    try {
-      // Only fetch active tournaments (registering, preparing, active)
-      // Limit to recent 6 tournaments to avoid loading all history
-      const response = await fetch('/api/tournaments?status=registering,preparing,active&limit=6');
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch tournaments');
-      }
-      const tournamentsData = await response.json() as TournamentInfo[];
-      setTournaments(tournamentsData);
-      setLastUpdated(new Date().toISOString());
-      const ctId = currentTournamentIdRef.current;
-      if (ctId) {
-        const updatedCurrent = tournamentsData.find(t => t.id === ctId);
-        if (updatedCurrent) setCurrentTournament(updatedCurrent);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
-      setError(message);
-    } finally {
-      isRefreshingRef.current = false;
-      setLoading(false);
-    }
-  }, [setCurrentTournament]);
-
-  // Debounced refresher to coalesce bursts
-  const refreshTimeoutRef = useRef<number | null>(null);
-  const refreshTournamentsDebounced = useCallback((delay = 300) => {
-    if (refreshTimeoutRef.current != null) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
-    refreshTimeoutRef.current = window.setTimeout(() => {
-      refreshTimeoutRef.current = null;
-      void refreshTournaments();
-    }, delay);
-  }, [refreshTournaments]);
-
-  // Fallback polling: keep list fresh even if socket events are missed
-  // Fallback polling only when socket is not connected
-  useEffect(() => {
-    if (isConnected) return;
-    const id = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      void refreshTournaments();
-    }, 15000);
-    return () => clearInterval(id);
-  }, [isConnected, refreshTournaments]);
-
   const createTournament = useCallback(async (config: {
     name: string;
     format: 'sealed' | 'draft' | 'constructed';
@@ -862,6 +1067,8 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     realtimeEvents,
     tournamentPresence: activeTournamentId ? (presenceByTournament[activeTournamentId] || []) : [],
     getPresenceFor: (tournamentId: string | null) => (tournamentId ? (presenceByTournament[tournamentId] || []) : []),
+    assignedMatchId: assignedMatch?.matchId ?? null,
+    assignedOpponentName: assignedMatch?.opponentName ?? null,
     loading,
     error,
     lastUpdated,

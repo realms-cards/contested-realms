@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useCallback, useRef } from "react";
+import FloatingChat from "@/components/chat/FloatingChat";
 import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
 
 type DraftParticipant = { playerId: string; playerName: string; seatNumber: number; status: string };
@@ -135,6 +136,7 @@ export default function TournamentDraftPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      <FloatingChat tournamentId={tournamentId} mode="bubble" />
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Tournament Draft</h1>

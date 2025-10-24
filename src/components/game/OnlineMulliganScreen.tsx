@@ -73,7 +73,7 @@ export default function OnlineMulliganScreen({
   };
 
   return (
-    <div className="w-full max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
+    <div className="w-full max-w-[92vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">
       <div className="mb-4 text-center">
         <div className="text-lg font-semibold mb-1">
           Mulligan Phase
@@ -99,7 +99,7 @@ export default function OnlineMulliganScreen({
         </div>
         
         {myHand.length > 0 ? (
-          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-16 min-h-[200px]">
+          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-10 sm:pt-16 min-h-[160px] sm:min-h-[200px]">
             {myHand.map((card, i) => {
               const isSite = (card.type || "").toLowerCase().includes("site");
               const isSelected = selected.includes(i);
@@ -120,7 +120,7 @@ export default function OnlineMulliganScreen({
                 >
                   <div
                     className={`relative ${
-                      isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
+                      isSite ? "aspect-[4/3] w-24 sm:w-32" : "aspect-[3/4] w-20 sm:w-24"
                     } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                       isSelected ? "opacity-70" : ""
                     } ${
@@ -131,7 +131,7 @@ export default function OnlineMulliganScreen({
                       src={`/api/images/${card.slug}`}
                       alt={card.name}
                       fill
-                      sizes="120px"
+                      sizes="(max-width: 640px) 96px, 120px"
                       className={`object-contain ${
                         isSite ? "rotate-90" : ""
                       }`}
@@ -171,7 +171,7 @@ export default function OnlineMulliganScreen({
             
             {(done || myMulligans === 0) && (
               <button
-                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${submitted ? "bg-green-700/60 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
+                className={`rounded px-3 py-2 sm:px-4 text-sm font-medium transition-colors ${submitted ? "bg-green-700/60 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
                 onClick={handleFinalize}
                 disabled={submitted}
                 title={submitted ? "Waiting for other players to finish mulligans" : undefined}

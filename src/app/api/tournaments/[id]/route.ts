@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         standings: true,
         rounds: {
           include: {
-            matches: true
+            matches: { select: { id: true } }
           },
           orderBy: { roundNumber: 'asc' }
         }
@@ -49,15 +49,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const prep = viewerReg.preparationData as unknown as Record<string, unknown>;
         const sealed = (prep?.sealed as { deckList?: Array<{ cardId: string; quantity: number }> } | undefined);
         const draft = (prep?.draft as { deckList?: Array<{ cardId: string; quantity: number }> } | undefined);
-        const constructed = (prep?.constructed as { deckId?: string } | undefined);
+        const constructed = (prep?.constructed as { deckId?: string; deckList?: Array<{ cardId: string; quantity: number }> } | undefined);
 
-        // For sealed/draft, use deckList directly
-        const list = sealed?.deckList || draft?.deckList || null;
+        // Prefer explicit deck lists when available (sealed/draft/constructed)
+        const list = sealed?.deckList || draft?.deckList || constructed?.deckList || null;
         if (Array.isArray(list)) {
           viewerDeck = list.map(it => ({ cardId: String(it.cardId), quantity: Number(it.quantity) || 0 }));
         }
 
-        // For constructed, fetch the deck from database
+        // Fallback for constructed: fetch the selected deck from database and aggregate
         if (!viewerDeck && constructed?.deckId) {
           const deck = await prisma.deck.findUnique({
             where: { id: constructed.deckId },
@@ -77,13 +77,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Transform to match protocol format
-    const tournamentInfo = {
+  const tournamentInfo = {
       id: tournament.id,
       name: tournament.name,
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
       currentPlayers: tournament.registrations.length,
+      creatorId: tournament.creatorId,
       registeredPlayers: tournament.registrations.map(reg => {
         const prep = (reg.preparationData as Record<string, unknown> | null) || {};
         return {
@@ -119,7 +120,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return new Response(JSON.stringify(tournamentInfo), {
       status: 200,
-      headers: { 'content-type': 'application/json' }
+      headers: {
+        'content-type': 'application/json',
+        // Short-lived private cache to reduce DB load during bursts
+        'Cache-Control': 'private, max-age=3',
+      }
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
