@@ -1,12 +1,13 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MOUSE } from "three";
+import { MOUSE, TOUCH } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
@@ -29,10 +30,13 @@ import {
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
 import { CARD_LONG } from "@/lib/game/constants";
+import { useGameStore } from "@/lib/game/store";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
 import type { DraftCard } from "@/types/draft";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 
 const TournamentPresenceOverlay = dynamic(
   () => import("@/components/tournament/TournamentPresenceOverlay"),
@@ -82,6 +86,10 @@ export default function TournamentDraft3DScreen({
     waitingFor: [],
   });
 
+  useEffect(() => {
+    useGameStore.getState().resetGameState();
+  }, []);
+
   const myPlayerIndex = mySeatNumber - 1; // seatNumber is 1-based, array index is 0-based
   const rtc = voice?.rtc ?? null;
 
@@ -95,6 +103,8 @@ export default function TournamentDraft3DScreen({
     number | null
   >(null);
   const [packSequence, setPackSequence] = useState<string[]>([]); // tournament-configured sets per round
+  const [showDeckConstructionOverlay, setShowDeckConstructionOverlay] =
+    useState(false);
 
   // Enhanced hand and HUD state
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
@@ -785,7 +795,9 @@ export default function TournamentDraft3DScreen({
         if (!c?.slug) continue;
         if (!needsMeta(c.slug)) continue;
         const setName = c.setName || null;
-        console.log(`[TournamentDraft3D] Need meta for pack card: ${c.slug} (set: ${setName})`);
+        console.log(
+          `[TournamentDraft3D] Need meta for pack card: ${c.slug} (set: ${setName})`
+        );
         ensureGroup(setName).add(c.slug);
       }
       // Slugs from already picked cards – only if meta is still missing
@@ -794,7 +806,9 @@ export default function TournamentDraft3DScreen({
         if (!s) continue;
         if (!needsMeta(s)) continue;
         const setName = (p.card.setName as string | undefined) || null;
-        console.log(`[TournamentDraft3D] Need meta for picked card: ${s} (set: ${setName}, cardId: ${p.card.cardId})`);
+        console.log(
+          `[TournamentDraft3D] Need meta for picked card: ${s} (set: ${setName}, cardId: ${p.card.cardId})`
+        );
         ensureGroup(setName).add(s);
       }
 
@@ -813,15 +827,22 @@ export default function TournamentDraft3DScreen({
         reqEntries.push([setName, Array.from(slugs).sort()]);
       }
       if (reqEntries.length === 0) {
-        console.log("[TournamentDraft3D] No metadata needed, all cards already have meta");
+        console.log(
+          "[TournamentDraft3D] No metadata needed, all cards already have meta"
+        );
         return;
       }
       const reqKey = JSON.stringify(reqEntries);
       if (reqKey === lastMetaReqKeyRef.current) {
-        console.log("[TournamentDraft3D] Metadata request deduped (same as last request)");
+        console.log(
+          "[TournamentDraft3D] Metadata request deduped (same as last request)"
+        );
         return;
       }
-      console.log(`[TournamentDraft3D] Requesting metadata for ${reqEntries.length} set groups:`, reqEntries);
+      console.log(
+        `[TournamentDraft3D] Requesting metadata for ${reqEntries.length} set groups:`,
+        reqEntries
+      );
       lastMetaReqKeyRef.current = reqKey;
 
       // Abort inflight request, if any
@@ -844,15 +865,24 @@ export default function TournamentDraft3DScreen({
             signal: ac.signal,
           })
             .then((r) => {
-              console.log(`[TournamentDraft3D] Fetch response status: ${r.status} ${r.statusText}`);
+              console.log(
+                `[TournamentDraft3D] Fetch response status: ${r.status} ${r.statusText}`
+              );
               if (!r.ok) {
-                console.error(`[TournamentDraft3D] Fetch failed with status ${r.status}`);
+                console.error(
+                  `[TournamentDraft3D] Fetch failed with status ${r.status}`
+                );
                 return [] as MetaByVariantRow[];
               }
               return r.json() as Promise<MetaByVariantRow[]>;
             })
             .catch((err) => {
-              console.error(`[TournamentDraft3D] Fetch error:`, err);
+              const isAbort =
+                (ac.signal && ac.signal.aborted) ||
+                (err instanceof Error && err.name === "AbortError");
+              if (!isAbort) {
+                console.error(`[TournamentDraft3D] Fetch error:`, err);
+              }
               return [] as MetaByVariantRow[];
             })
         );
@@ -862,15 +892,21 @@ export default function TournamentDraft3DScreen({
         .then((chunks) => {
           if (ac.signal.aborted) return;
           const rows = chunks.flat();
-          console.log(`[TournamentDraft3D] Metadata fetch completed: ${rows.length} rows returned`);
+          console.log(
+            `[TournamentDraft3D] Metadata fetch completed: ${rows.length} rows returned`
+          );
           if (!rows || rows.length === 0) {
-            console.warn("[TournamentDraft3D] No metadata rows returned from API");
+            console.warn(
+              "[TournamentDraft3D] No metadata rows returned from API"
+            );
             return;
           }
           const newSlugMap: Record<string, number> = {};
           const metaRows: ApiCardMetaRow[] = rows.map((r: MetaByVariantRow) => {
             newSlugMap[r.slug] = Number(r.cardId) || 0;
-            console.log(`[TournamentDraft3D] Mapping ${r.slug} -> cardId ${r.cardId}, cost: ${r.cost}, atk/def: ${r.attack}/${r.defence}`);
+            console.log(
+              `[TournamentDraft3D] Mapping ${r.slug} -> cardId ${r.cardId}, cost: ${r.cost}, atk/def: ${r.attack}/${r.defence}`
+            );
             return {
               cardId: Number(r.cardId) || 0,
               cost: r.cost ?? null,
@@ -884,7 +920,11 @@ export default function TournamentDraft3DScreen({
           // Update slug->cardId map
           setSlugToCardId((prev) => {
             const updated = { ...prev, ...newSlugMap };
-            console.log(`[TournamentDraft3D] Updated slugToCardId map, now has ${Object.keys(updated).length} entries`);
+            console.log(
+              `[TournamentDraft3D] Updated slugToCardId map, now has ${
+                Object.keys(updated).length
+              } entries`
+            );
             return updated;
           });
 
@@ -892,7 +932,11 @@ export default function TournamentDraft3DScreen({
           const incoming = toCardMetaMap(metaRows);
           setMetaByCardId((prev) => {
             const merged = mergeCardMetaMaps(prev, incoming);
-            console.log(`[TournamentDraft3D] Merged metadata, now has ${Object.keys(merged).length} cardIds with meta`);
+            console.log(
+              `[TournamentDraft3D] Merged metadata, now has ${
+                Object.keys(merged).length
+              } cardIds with meta`
+            );
             return merged;
           });
 
@@ -1011,12 +1055,20 @@ export default function TournamentDraft3DScreen({
       }
 
       // Reject out-of-order updates using sequence number (pack*1000 + pick)
-      const currentSeq = (Number(draftStateRef.current?.packIndex) || 0) * 1000 +
-                         (Number(draftStateRef.current?.pickNumber) || 0);
-      const newSeq = (Number(s.packIndex) || 0) * 1000 + (Number(s.pickNumber) || 0);
+      const currentSeq =
+        (Number(draftStateRef.current?.packIndex) || 0) * 1000 +
+        (Number(draftStateRef.current?.pickNumber) || 0);
+      const newSeq =
+        (Number(s.packIndex) || 0) * 1000 + (Number(s.pickNumber) || 0);
 
-      if (draftStateRef.current?.phase === "picking" && s.phase === "picking" && newSeq < currentSeq) {
-        console.warn(`[TournamentDraft3D] Rejecting out-of-order update: currentSeq=${currentSeq} newSeq=${newSeq} (pack ${s.packIndex} pick ${s.pickNumber})`);
+      if (
+        draftStateRef.current?.phase === "picking" &&
+        s.phase === "picking" &&
+        newSeq < currentSeq
+      ) {
+        console.warn(
+          `[TournamentDraft3D] Rejecting out-of-order update: currentSeq=${currentSeq} newSeq=${newSeq} (pack ${s.packIndex} pick ${s.pickNumber})`
+        );
         return;
       }
 
@@ -1030,22 +1082,32 @@ export default function TournamentDraft3DScreen({
           Number(s.pickNumber) === Number(inflight.pickNumber);
 
         if (sameRound) {
-          const mySeatPack = Array.isArray(s.currentPacks?.[myPlayerIndex])
-            ? (s.currentPacks[myPlayerIndex] as DraftCard[])
+          const seatCandidate = Array.isArray(s.currentPacks)
+            ? s.currentPacks[myPlayerIndex]
+            : null;
+          const mySeatPack = Array.isArray(seatCandidate)
+            ? (seatCandidate as DraftCard[])
             : [];
-          const stillHasCard = mySeatPack.some((c) => c && c.id === inflight.cardId);
-          const iAmWaiting = Array.isArray(s.waitingFor) && s.waitingFor.includes(myPlayerId);
+          const stillHasCard = mySeatPack.some(
+            (c) => c && c.id === inflight.cardId
+          );
+          const iAmWaiting =
+            Array.isArray(s.waitingFor) && s.waitingFor.includes(myPlayerId);
 
           // If server still has our card and we're still waiting, the pick wasn't processed
           if (stillHasCard && iAmWaiting) {
             const timeSincePick = Date.now() - pickInFlightSinceRef.current;
             if (timeSincePick < 2000) {
               // Too soon - this is likely a stale broadcast racing with our pick
-              console.log(`[TournamentDraft3D] Ignoring stale pre-pick update (${timeSincePick}ms old)`);
+              console.log(
+                `[TournamentDraft3D] Ignoring stale pre-pick update (${timeSincePick}ms old)`
+              );
               return;
             } else {
               // Too long - pick might have been lost, re-emit once
-              console.warn(`[TournamentDraft3D] Pick not confirmed after ${timeSincePick}ms, re-emitting`);
+              console.warn(
+                `[TournamentDraft3D] Pick not confirmed after ${timeSincePick}ms, re-emitting`
+              );
               try {
                 transport?.emit("makeTournamentDraftPick", {
                   sessionId: draftSessionId,
@@ -1084,6 +1146,8 @@ export default function TournamentDraft3DScreen({
         console.log(
           `[TournamentDraft3D] Draft complete! Picked ${mine.length} cards`
         );
+
+        setShowDeckConstructionOverlay(true);
 
         try {
           if (draftSessionId) {
@@ -1133,7 +1197,7 @@ export default function TournamentDraft3DScreen({
         console.log(`[TournamentDraft3D] Calling onDraftComplete callback...`);
         setTimeout(() => {
           onDraftComplete(mine);
-        }, 600);
+        }, 1200);
       }
     };
 
@@ -1175,7 +1239,9 @@ export default function TournamentDraft3DScreen({
 
       // Add picked card to 3D board display immediately
       const boosterCard = draftCardToBoosterCard(card);
-      console.log(`[TournamentDraft3D] Adding pick: slug=${boosterCard.slug} cardId=${boosterCard.cardId} type=${boosterCard.type} cardName=${boosterCard.cardName}`);
+      console.log(
+        `[TournamentDraft3D] Adding pick: slug=${boosterCard.slug} cardId=${boosterCard.cardId} type=${boosterCard.type} cardName=${boosterCard.cardName}`
+      );
       const optimisticPickId = nextPickId;
       const newPick: Pick3D = {
         id: optimisticPickId,
@@ -1291,11 +1357,23 @@ export default function TournamentDraft3DScreen({
 
   const picksByType = useMemo(() => {
     const counts = { creatures: 0, spells: 0, sites: 0, avatars: 0 };
-    console.log(`[TournamentDraft3D] Calculating picksByType for ${pick3D.length} picks, metaByCardId has ${Object.keys(metaByCardId).length} entries`);
+    console.log(
+      `[TournamentDraft3D] Calculating picksByType for ${
+        pick3D.length
+      } picks, metaByCardId has ${Object.keys(metaByCardId).length} entries`
+    );
     for (const pick of pick3D) {
       const meta = metaByCardId[pick.card.cardId];
       const category = categorizeCard(pick.card, meta);
-      console.log(`[TournamentDraft3D] Pick ${pick.card.slug} (cardId ${pick.card.cardId}): meta=${meta ? `cost:${meta.cost} atk:${meta.attack} def:${meta.defence}` : 'NO META'} -> category: ${category}`);
+      console.log(
+        `[TournamentDraft3D] Pick ${pick.card.slug} (cardId ${
+          pick.card.cardId
+        }): meta=${
+          meta
+            ? `cost:${meta.cost} atk:${meta.attack} def:${meta.defence}`
+            : "NO META"
+        } -> category: ${category}`
+      );
       counts[category as keyof typeof counts]++;
     }
     console.log(`[TournamentDraft3D] Final counts:`, counts);
@@ -1456,7 +1534,7 @@ export default function TournamentDraft3DScreen({
           />
 
           <Physics gravity={[0, -9.81, 0]}>
-            <Board noRaycast={true} />
+            <Board noRaycast={true} interactionMode="spectator" />
           </Physics>
 
           <MouseTracker
@@ -1685,16 +1763,19 @@ export default function TournamentDraft3DScreen({
             screenSpacePanning
             panSpeed={1.2}
             zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
+            minDistance={2}
+            maxDistance={28}
+            minPolarAngle={0.05}
+            maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.PAN,
-              MIDDLE: MOUSE.DOLLY,
+              MIDDLE: MOUSE.PAN,
               RIGHT: MOUSE.ROTATE,
             }}
+            touches={{ TWO: TOUCH.PAN }}
           />
+          <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
+          <KeyboardPanControls enabled={!orbitLocked} />
+          <TrackpadOrbitAdapter />
         </Canvas>
       </div>
 
@@ -2070,7 +2151,86 @@ export default function TournamentDraft3DScreen({
           userAvatarUrl={undefined}
           rtc={rtc}
         />
+        {showDeckConstructionOverlay && (
+          <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm text-white px-6 text-center">
+            <div className="flex flex-col items-center gap-4 max-w-md">
+              <div
+                className="h-12 w-12 rounded-full border-2 border-white/30 border-t-white animate-spin"
+                aria-hidden="true"
+              />
+              <h2 className="text-2xl font-semibold">Draft complete</h2>
+              <p className="text-base text-white/80">
+                Preparing the deck construction phase. You&apos;ll be moved to
+                the editor in just a moment.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function ClampOrbitTarget({
+  bounds,
+}: {
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}) {
+  const { controls, camera, invalidate } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+    camera: state.camera,
+    invalidate: state.invalidate,
+  }));
+
+  useEffect(() => {
+    if (!controls) return;
+    let offset = camera.position.clone().sub(controls.target.clone());
+
+    const updateOffset = () => {
+      offset = camera.position.clone().sub(controls.target.clone());
+    };
+
+    const clampTarget = () => {
+      const target = controls.target;
+      const clampedX = Math.max(bounds.minX, Math.min(bounds.maxX, target.x));
+      const clampedZ = Math.max(bounds.minZ, Math.min(bounds.maxZ, target.z));
+      if (clampedX !== target.x || clampedZ !== target.z) {
+        target.set(clampedX, target.y, clampedZ);
+        camera.position.copy(target.clone().add(offset));
+        controls.update();
+        invalidate();
+      }
+    };
+
+    controls.addEventListener("start", updateOffset);
+    controls.addEventListener("change", clampTarget);
+    return () => {
+      controls.removeEventListener("start", updateOffset);
+      controls.removeEventListener("change", clampTarget);
+    };
+  }, [
+    bounds.maxX,
+    bounds.maxZ,
+    bounds.minX,
+    bounds.minZ,
+    camera,
+    controls,
+    invalidate,
+  ]);
+
+  return null;
+}
+
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }

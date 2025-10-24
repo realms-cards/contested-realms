@@ -1,14 +1,15 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { MOUSE } from "three";
+import { MOUSE, TOUCH } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { NumberBadge } from "@/components/game/manacost";
@@ -28,6 +29,7 @@ import MouseTracker from "@/lib/game/components/MouseTracker";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG } from "@/lib/game/constants";
 import { createStackHoverState } from "@/lib/game/stackHover";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 // --- Draft data types (mirrors /draft 2D) ---
 // Types moved to src/lib/game/cardSorting.ts
@@ -56,19 +58,24 @@ export default function Draft3DPage() {
   useEffect(() => {
     async function loadCubes() {
       try {
-        const resp = await fetch('/api/cubes');
+        const resp = await fetch("/api/cubes");
         if (!resp.ok) return;
         const data = await resp.json();
         const allCubes = [
-          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
-          ...(data.publicCubes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })),
+          ...(data.myCubes || []).map((c: { id: string; name: string }) => ({
+            id: c.id,
+            name: c.name,
+          })),
+          ...(data.publicCubes || []).map(
+            (c: { id: string; name: string }) => ({ id: c.id, name: c.name })
+          ),
         ];
         setCubes(allCubes);
         if (allCubes.length > 0) {
           setCubeId(allCubes[0].id);
         }
       } catch (e) {
-        console.warn('Failed to load cubes:', e);
+        console.warn("Failed to load cubes:", e);
       }
     }
     loadCubes();
@@ -134,7 +141,7 @@ export default function Draft3DPage() {
 
       // Validate cube selection if cube mode is enabled
       if (useCube && !cubeId) {
-        setError('Please select a cube for cube draft mode');
+        setError("Please select a cube for cube draft mode");
         setStarting(false);
         return;
       }
@@ -149,14 +156,18 @@ export default function Draft3DPage() {
       setPickNumber(1);
       setPackChoice([null, null, null]);
 
-      let packsA: BoosterCard[][], packsB: BoosterCard[][], packsC: BoosterCard[][];
+      let packsA: BoosterCard[][],
+        packsB: BoosterCard[][],
+        packsC: BoosterCard[][];
 
       // Cube draft mode - generate all packs from the same cube
       if (useCube && cubeId) {
-        const resp = await fetch(`/api/booster?cube=${encodeURIComponent(cubeId)}&count=${players * 3}`);
+        const resp = await fetch(
+          `/api/booster?cube=${encodeURIComponent(cubeId)}&count=${players * 3}`
+        );
         const data = await resp.json();
         if (!resp.ok) {
-          throw new Error(data?.error || 'Failed to generate cube boosters');
+          throw new Error(data?.error || "Failed to generate cube boosters");
         }
 
         const allPacks: BoosterCard[][] = data.packs || [];
@@ -203,17 +214,14 @@ export default function Draft3DPage() {
             dataC?.error || `Failed to generate boosters for ${setC}`
           );
 
-        packsA = (dataA.packs || []).map(
-          (pack: BoosterCard[]) =>
-            (pack || []).map((c) => ({ ...c, setName: setA }))
+        packsA = (dataA.packs || []).map((pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setA }))
         );
-        packsB = (dataB.packs || []).map(
-          (pack: BoosterCard[]) =>
-            (pack || []).map((c) => ({ ...c, setName: setB }))
+        packsB = (dataB.packs || []).map((pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setB }))
         );
-        packsC = (dataC.packs || []).map(
-          (pack: BoosterCard[]) =>
-            (pack || []).map((c) => ({ ...c, setName: setC }))
+        packsC = (dataC.packs || []).map((pack: BoosterCard[]) =>
+          (pack || []).map((c) => ({ ...c, setName: setC }))
         );
       }
 
@@ -1005,16 +1013,18 @@ export default function Draft3DPage() {
             screenSpacePanning
             panSpeed={1.2}
             zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
+            minDistance={2}
+            maxDistance={28}
+            minPolarAngle={0.05}
+            maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.PAN,
-              MIDDLE: MOUSE.DOLLY,
+              MIDDLE: MOUSE.PAN,
               RIGHT: MOUSE.ROTATE,
             }}
+            touches={{ TWO: TOUCH.PAN }}
           />
+          <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
+          <KeyboardPanControls enabled={!orbitLocked} />
         </Canvas>
       </div>
 
@@ -1143,7 +1153,9 @@ export default function Draft3DPage() {
                 <div className="flex flex-wrap items-end gap-3 text-white">
                   {[0, 1, 2].map((i) => (
                     <label key={`set-${i}`} className="flex flex-col gap-1">
-                      <span className="text-xs opacity-80">Pack {i + 1} Set</span>
+                      <span className="text-xs opacity-80">
+                        Pack {i + 1} Set
+                      </span>
                       <select
                         value={setNames[i]}
                         onChange={(e) =>
@@ -1455,9 +1467,9 @@ export default function Draft3DPage() {
         </div>
 
         {/* Card preview (hover) */}
-      {hoverPreview && !orbitLocked && (
-        <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
-      )}
+        {hoverPreview && !orbitLocked && (
+          <CardPreviewOverlay card={hoverPreview} anchor="top-left" />
+        )}
 
         {/* Pack selection overlay at start of each round */}
         {needsPackChoice && (
@@ -1644,4 +1656,68 @@ export default function Draft3DPage() {
       </div>
     </div>
   );
+}
+
+function ClampOrbitTarget({
+  bounds,
+}: {
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}) {
+  const { controls, camera, invalidate } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+    camera: state.camera,
+    invalidate: state.invalidate,
+  }));
+
+  useEffect(() => {
+    if (!controls) return;
+    let offset = camera.position.clone().sub(controls.target.clone());
+
+    const updateOffset = () => {
+      offset = camera.position.clone().sub(controls.target.clone());
+    };
+
+    const clampTarget = () => {
+      const target = controls.target;
+      const clampedX = Math.max(bounds.minX, Math.min(bounds.maxX, target.x));
+      const clampedZ = Math.max(bounds.minZ, Math.min(bounds.maxZ, target.z));
+      if (clampedX !== target.x || clampedZ !== target.z) {
+        target.set(clampedX, target.y, clampedZ);
+        camera.position.copy(target.clone().add(offset));
+        controls.update();
+        invalidate();
+      }
+    };
+
+    controls.addEventListener("start", updateOffset);
+    controls.addEventListener("change", clampTarget);
+    return () => {
+      controls.removeEventListener("start", updateOffset);
+      controls.removeEventListener("change", clampTarget);
+    };
+  }, [
+    bounds.maxX,
+    bounds.maxZ,
+    bounds.minX,
+    bounds.minZ,
+    camera,
+    controls,
+    invalidate,
+  ]);
+
+  return null;
+}
+
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }

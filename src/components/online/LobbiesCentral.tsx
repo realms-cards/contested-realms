@@ -223,6 +223,8 @@ export type CreateTournamentConfig = {
     packSize: number;
     packCounts: Record<string, number>;
     cubeId?: string;
+    pickTimeLimit?: number;
+    constructionTimeLimit?: number;
   };
 };
 
@@ -340,9 +342,10 @@ export default function LobbiesCentral({
   const [sealedReplaceAvatars, setSealedReplaceAvatars] = useState<boolean>(false);
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
   const [draftBoosters, setDraftBoosters] = useState<string[]>(["Beta", "Arthurian Legends", "Arthurian Legends"]);
-  const [draftPackSize, setDraftPackSize] = useState<number>(15);
   const [draftUseCube, setDraftUseCube] = useState<boolean>(false);
   const [draftCubeId, setDraftCubeId] = useState<string>("");
+  const [draftPickTimeLimit, setDraftPickTimeLimit] = useState<number>(60);
+  const [draftConstructionTimeLimit, setDraftConstructionTimeLimit] = useState<number>(20);
   const [userCubes, setUserCubes] = useState<Array<{ id: string; name: string; cardCount: number }>>([]);
   const [loadingCubes, setLoadingCubes] = useState(false);
 
@@ -1367,17 +1370,6 @@ export default function LobbiesCentral({
                           </button>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-xs opacity-80 mb-1">Pack Size</label>
-                        <input
-                          type="number"
-                          min={8}
-                          max={20}
-                          value={draftPackSize}
-                          onChange={(e) => setDraftPackSize(Math.max(8, Math.min(20, parseInt(e.target.value) || 15)))}
-                          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                        />
-                      </div>
                       <div className="space-y-2">
                         {draftBoosters.map((setName, idx) => (
                           <div key={`draft-booster-${idx}`} className="flex items-center gap-2">
@@ -1431,9 +1423,37 @@ export default function LobbiesCentral({
                       </p>
                     </div>
                   )}
+
+                  {/* Draft Time Limits */}
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Pick Time Limit (sec)</label>
+                      <input
+                        type="number"
+                        min={30}
+                        max={300}
+                        step={15}
+                        value={draftPickTimeLimit}
+                        onChange={(e) => setDraftPickTimeLimit(Math.max(30, Math.min(300, parseInt(e.target.value) || 60)))}
+                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs opacity-80 mb-1">Construction Time (min)</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={60}
+                        step={5}
+                        value={draftConstructionTimeLimit}
+                        onChange={(e) => setDraftConstructionTimeLimit(Math.max(10, Math.min(60, parseInt(e.target.value) || 20)))}
+                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
-              
+
               <div>
                 <label className="block text-xs font-medium mb-2">Max Players</label>
                 <select
@@ -1492,9 +1512,11 @@ export default function LobbiesCentral({
                         payload.draftConfig = {
                           setMix: [],
                           packCount: draftBoosterCount,
-                          packSize: draftPackSize,
+                          packSize: 15,
                           packCounts: {},
                           cubeId: draftCubeId,
+                          pickTimeLimit: draftPickTimeLimit,
+                          constructionTimeLimit: draftConstructionTimeLimit,
                         };
                       } else {
                         // Convert booster array to packCounts format
@@ -1506,8 +1528,10 @@ export default function LobbiesCentral({
                         payload.draftConfig = {
                           setMix: mix.length ? mix : ['Beta'],
                           packCount: draftBoosterCount,
-                          packSize: draftPackSize,
+                          packSize: 15,
                           packCounts,
+                          pickTimeLimit: draftPickTimeLimit,
+                          constructionTimeLimit: draftConstructionTimeLimit,
                         };
                       }
                     }

@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import FloatingChat from "@/components/chat/FloatingChat";
 import { useOnline } from "@/app/online/online-context";
 import TournamentDraft3DScreen from "@/components/game/TournamentDraft3DScreen";
 
@@ -282,6 +283,9 @@ export default function TournamentDraftSessionPage() {
   // Show waiting screen
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      {draftSession?.tournamentId && (
+        <FloatingChat tournamentId={draftSession.tournamentId} mode="bubble" />
+      )}
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-6">Tournament Draft Session</h1>
 

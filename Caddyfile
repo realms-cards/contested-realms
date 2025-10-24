@@ -6,5 +6,15 @@
     }
     # Temporarily disable load balancing - send all traffic to server1
     # TODO: Implement proper sticky sessions for Socket.IO
-    reverse_proxy server1:3010
+    reverse_proxy {
+        to server1:3010
+        to server2:3010
+        lb_policy round_robin
+        health_uri /healthz
+        transport http {
+            read_timeout 3m
+            write_timeout 3m
+        }
+        flush_interval -1
+    }
 }

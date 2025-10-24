@@ -1,0 +1,15 @@
+:3010 {
+    log
+    encode zstd gzip
+    header {
+        -Server
+    }
+    reverse_proxy {
+        to server1:3010
+        transport http {
+            read_timeout 3m
+            write_timeout 3m
+        }
+        flush_interval -1
+    }
+}

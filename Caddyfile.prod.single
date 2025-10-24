@@ -1,0 +1,89 @@
+{
+    email kingofthe@realms.cards
+}
+
+# Admin route gating shared snippet – import inside the site that proxies Next.js.
+# Usage example (uncomment and adjust upstream):
+# realms.cards {
+#     import admin-ip-guard
+#     route {
+#         handle @admin-allowlist {
+#             reverse_proxy frontend:3000
+#         }
+#         handle @admin {
+#             respond "forbidden" 403
+#         }
+#         handle {
+#             reverse_proxy frontend:3000
+#         }
+#     }
+# }
+(admin-ip-guard) {
+    @admin path /admin* /api/admin/*
+    @admin-allowlist {
+        path /admin* /api/admin/*
+        remote_ip 127.0.0.1/32 {$ADMIN_IP_ACCESSLIST}
+    }
+}
+
+ws.realms.cards {
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+
+    # Remove server header but preserve WebSocket upgrade headers
+    header {
+        -Server
+        # CORS for the apex frontend
+        Access-Control-Allow-Origin "https://realms.cards"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+        Access-Control-Allow-Credentials false
+    }
+
+    @preflight {
+        method OPTIONS
+        path /socket.io/*
+    }
+    respond @preflight 204
+
+    # Restrict metrics endpoints by source IP (set METRICS_IP_ALLOWLIST in env for extra CIDRs)
+    @metrics {
+        path /metrics /metrics.json
+    }
+    @metrics-allowlist {
+        path /metrics /metrics.json
+        remote_ip 127.0.0.1/32 {$METRICS_IP_ALLOWLIST}
+    }
+
+    route {
+        # Allowed metrics (whitelist)
+        handle @metrics-allowlist {
+            reverse_proxy {
+                to server1:3010
+                transport http {
+                    read_timeout 30s
+                    write_timeout 30s
+                }
+            }
+        }
+        # Deny non-whitelisted metrics
+        handle @metrics {
+            respond "forbidden" 403
+        }
+        # Default: WebSockets reverse proxy to a single Socket.IO server
+        handle {
+            reverse_proxy {
+                to server1:3010
+                transport http {
+                    read_timeout 3m
+                    write_timeout 3m
+                }
+                health_uri /healthz
+                # Explicitly flush responses for WebSocket
+                flush_interval -1
+            }
+        }
+    }
+}
