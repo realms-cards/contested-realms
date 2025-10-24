@@ -24,8 +24,11 @@ interface PersistBuffer {
 }
 
 interface PersistenceDeps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   prisma: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   storeRedis?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pubClient?: any;
   metricsInc: MetricsCounterFn;
   metricsObserveMs: MetricsTimerFn;
@@ -78,6 +81,7 @@ const createPersistenceLayerInternal = ({
     return Object.fromEntries(playerDecks);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function matchToSessionUpsertData(match: Record<string, any>) {
     return {
       lobbyId: match.lobbyId || null,
@@ -230,6 +234,7 @@ const createPersistenceLayerInternal = ({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function persistMatchCreated(match: Record<string, any>) {
     try {
       const data = matchToSessionUpsertData(match);
@@ -258,6 +263,7 @@ const createPersistenceLayerInternal = ({
   }
 
   async function persistMatchUpdate(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     match: Record<string, any>,
     patch: Record<string, unknown> | null,
     playerId: string | null,
@@ -317,6 +323,7 @@ const createPersistenceLayerInternal = ({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function persistMatchEnded(match: Record<string, any>) {
     try {
       const endData = {
@@ -350,6 +357,7 @@ const createPersistenceLayerInternal = ({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function rehydrateMatch(row: Record<string, any>) {
     try {
       const m = {

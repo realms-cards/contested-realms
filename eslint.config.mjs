@@ -17,9 +17,10 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      "dist/**", // Ignore compiled server code (uses CommonJS)
+      "bots/**", // Ignore bot engine (uses CommonJS)
       "next-env.d.ts",
       "scripts/**",
-      "server/**",
       "public/ktx2/**", // Ignore third-party transcoder files
       // Ignore tests and spec files
       "tests/**",
@@ -33,6 +34,13 @@ const eslintConfig = [
       "test-*.js",
     ],
   },
+  // Allow require() in server .js files (CommonJS modules)
+  {
+    files: ["server/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
   {
     rules: {
       // Enforce stronger TypeScript practices to prevent regressions
@@ -41,33 +49,45 @@ const eslintConfig = [
       "@typescript-eslint/prefer-as-const": "error", // Encourage 'as const' over literal types
       "@typescript-eslint/no-non-null-assertion": "warn", // Discourage ! operator
       "@typescript-eslint/explicit-function-return-type": "off", // Allow inference for better DX
-      
+
       // Code quality rules to maintain improvements
       "prefer-const": "error", // Enforce const over let when possible
       "no-var": "error", // No var declarations
       "object-shorthand": "error", // Use shorthand object syntax
-      
+
       // Import/export best practices
       "import/no-unused-modules": "off", // Can be noisy in development
-      "import/order": ["warn", {
-        "groups": ["builtin", "external", "internal", ["parent", "sibling"], "index"],
-        "newlines-between": "never",
-        "alphabetize": { "order": "asc" }
-      }],
-      
+      "import/order": [
+        "warn",
+        {
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            ["parent", "sibling"],
+            "index",
+          ],
+          "newlines-between": "never",
+          alphabetize: { order: "asc" },
+        },
+      ],
+
       // React/Next.js specific improvements
       "react/jsx-no-useless-fragment": "warn",
       "react/self-closing-comp": "warn",
-      
+
       // Performance and correctness
       "react-hooks/exhaustive-deps": "warn", // Keep dependency warnings visible
-      
+
       // Three.js and React Three Fiber best practices
       // Encourage proper disposal of Three.js resources
-      "no-unused-expressions": ["error", { 
-        "allowShortCircuit": true, 
-        "allowTernary": true 
-      }],
+      "no-unused-expressions": [
+        "error",
+        {
+          allowShortCircuit: true,
+          allowTernary: true,
+        },
+      ],
       // Ensure Three.js objects are properly managed
       "no-global-assign": "error",
     },

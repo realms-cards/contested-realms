@@ -1,12 +1,11 @@
 import http from "http";
-import { Server } from "socket.io";
+import type { PrismaClient } from "@prisma/client";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
-import type { PrismaClient } from "@prisma/client";
-
+import { Server } from "socket.io";
 import { buildServerConfig, type ServerConfig } from "../config";
-import { createPrismaClient } from "../prisma";
 import { createLogger } from "../logger";
+import { createPrismaClient } from "../prisma";
 
 export interface RedisClients {
   pubClient: Redis | null;
@@ -35,8 +34,10 @@ const storeLogger = createLogger("store");
 
 export function loadEnv(): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require("dotenv").config();
+    // Dynamically import dotenv for optional loading
+    import("dotenv").then((dotenv) => dotenv.config()).catch(() => {
+      // Ignore missing dotenv in production environments
+    });
   } catch {
     // Ignore missing dotenv in production environments
   }

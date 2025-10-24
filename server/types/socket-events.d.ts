@@ -1,14 +1,14 @@
 import type {
+  InteractionEnvelope,
+  InteractionRequestMessage,
+  InteractionResponseMessage,
+} from "../src/lib/net/interactions";
+import type {
   ClientEventMap,
   JoinedLobbyPayloadT,
   LeftLobbyPayloadT,
   PlayerInfo,
 } from "../src/lib/net/protocol";
-import type {
-  InteractionEnvelope,
-  InteractionRequestMessage,
-  InteractionResponseMessage,
-} from "../src/lib/net/interactions";
 import type {
   CustomMessage,
   DraftState,

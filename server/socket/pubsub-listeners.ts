@@ -2,7 +2,6 @@
 
 import type { Redis } from "ioredis";
 import type { Server as SocketIOServer } from "socket.io";
-
 import type { AnyRecord, LobbyState, ServerMatchState } from "../types";
 
 export interface PubSubListenerDeps {

@@ -11,6 +11,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
+import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
@@ -1512,6 +1513,7 @@ export default function TournamentDraft3DScreen({
   // Main 3D draft UI (similar to EnhancedOnlineDraft3DScreen but adapted)
   return (
     <div className="fixed inset-0 w-screen h-screen">
+      <FloatingChat tournamentId={tournamentId} mode="bubble" />
       <div className="absolute inset-0 w-full h-full">
         <Canvas
           camera={{ position: [0, 10, 0], fov: 50 }}

@@ -1,8 +1,8 @@
 "use strict";
 
-import type { Server as SocketIOServer } from "socket.io";
-import type Redis from "ioredis";
 import type { PrismaClient } from "@prisma/client";
+import type Redis from "ioredis";
+import type { Server as SocketIOServer } from "socket.io";
 import type {
   MatchConsoleEvent,
   MatchPermanents,
@@ -638,7 +638,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           };
         }
 
-        let baseForMerge: MatchGameState = match.game ? { ...match.game } : {};
+        const baseForMerge: MatchGameState = match.game ? { ...match.game } : {};
 
         if (isSnapshot && replaceKeys.length > 0) {
           for (const key of replaceKeys) {
@@ -795,6 +795,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const shouldEnforceInteraction =
           interactionEnforcementEnabled && match.status === "in_progress" && !isSnapshot;
         if (shouldEnforceInteraction && requirements.needsOpponentZoneWrite) {
+          // eslint-disable-next-line react-hooks/rules-of-hooks
           const grant = usePermitForRequirement(
             match,
             playerId,

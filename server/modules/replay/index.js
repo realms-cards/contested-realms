@@ -139,7 +139,7 @@ async function loadRecording(prisma, matchId) {
     playerId: a.playerId || "system",
   }));
 
-  let initialState = {
+  const initialState = {
     playerIds: Array.isArray(session?.playerIds) ? session.playerIds : [],
     seed: session?.seed || "",
     matchType: session?.matchType || "constructed",

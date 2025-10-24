@@ -17,6 +17,7 @@ import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
+import FloatingChat from "@/components/chat/FloatingChat";
 import { TournamentControls } from "@/components/deck-editor";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import {
@@ -2736,6 +2737,11 @@ function AuthenticatedDeckEditor() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen">
+      {(() => {
+        const tournamentId = searchParams?.get("tournament") || null;
+        if (!tournamentId) return null;
+        return <FloatingChat tournamentId={tournamentId} mode="bubble" />;
+      })()}
       {/* Tournament presence overlay if launched from a tournament context */}
       {(() => {
         const tournamentId = searchParams?.get("tournament") || null;

@@ -2,65 +2,93 @@
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
 // T019: Import extracted modules
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createBootstrap } = require("./core/bootstrap");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createPersistenceLayer } = require("./core/persistence");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createContainer } = require("./core/container");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { registerFeatures } = require("./features");
 const {
   createInteractionModule,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   INTERACTION_VERSION,
   INTERACTION_ENFORCEMENT_ENABLED,
   INTERACTION_REQUEST_KINDS,
   INTERACTION_DECISIONS,
-} = require("./modules/interactions") as typeof import("./modules/interactions");
-const modules = require("./modules") as typeof import("./modules");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+} = require("./modules/interactions");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const modules = require("./modules");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createMatchLeaderService } = require("./modules/match-leader");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { enrichPatchWithCosts } = require("./modules/card-costs");
+const {
+  getSeatForPlayer,
+  getPlayerIdForSeat,
+  getOpponentSeat: getOpponentSeatRaw,
+  inferLoserId,
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+} = require("./modules/match-utils");
+const {
+  normalizeDeckPayload,
+  validateDeckCards,
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+} = require("./modules/deck-utils");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createLeaderboardService } = require("./modules/leaderboard");
+const {
+  deepMergeReplaceArrays,
+  dedupePermanents,
+  mergeEvents,
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+} = require("./modules/shared/match-helpers");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createRequestHandler } = require("./http/request-handler");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { registerRtcHandlers } = require("./socket/rtc-handlers");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { registerPubSubListeners } = require("./socket/pubsub-listeners");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { startMaintenanceTimers } = require("./maintenance/timers");
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const jwt = require("jsonwebtoken");
+const {
+  createRngFromString,
+  generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+} = require("./booster");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { BotManager } = require("./botManager");
+const {
+  applyTurnStart,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  validateAction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  ensureCosts,
+  applyMovementAndCombat,
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+} = require("./rules");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-require-imports
+const { buildMatchInfo } = require("./matchInfo");
+
 const tournamentModules = modules.tournament;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const draftModules = modules.draft;
 const { replay } = modules;
 const tournamentBroadcast = tournamentModules.broadcast;
 // T021: Import draft config service
 const draftConfig = modules.draft.config;
 const { createMatchDraftService } = modules.draft;
-const { createMatchLeaderService } = require("./modules/match-leader") as typeof import("./modules/match-leader");
 // T023: Import standings service
 const standingsService = modules.tournament.standings;
-const { enrichPatchWithCosts } = require("./modules/card-costs") as typeof import("./modules/card-costs");
-const {
-  getSeatForPlayer,
-  getPlayerIdForSeat,
-  getOpponentSeat: getOpponentSeatRaw,
-  inferLoserId,
-} = require("./modules/match-utils") as typeof import("./modules/match-utils");
-const {
-  normalizeDeckPayload,
-  validateDeckCards,
-} = require("./modules/deck-utils") as typeof import("./modules/deck-utils");
-const { createLeaderboardService } = require("./modules/leaderboard") as typeof import("./modules/leaderboard");
-const {
-  deepMergeReplaceArrays,
-  dedupePermanents,
-  mergeEvents,
-} = require("./modules/shared/match-helpers") as typeof import("./modules/shared/match-helpers");
-const { createRequestHandler } = require("./http/request-handler") as typeof import("./http/request-handler");
-const { registerRtcHandlers } = require("./socket/rtc-handlers") as typeof import("./socket/rtc-handlers");
-const { registerPubSubListeners } = require("./socket/pubsub-listeners") as typeof import("./socket/pubsub-listeners");
-const { startMaintenanceTimers } = require("./maintenance/timers") as typeof import("./maintenance/timers");
-
-const jwt = require("jsonwebtoken");
-const {
-  createRngFromString,
-  generateBoosterDeterministic,
-  generateCubeBoosterDeterministic,
-} = require("./booster");
-const { BotManager } = require("./botManager");
-const {
-  applyTurnStart,
-  validateAction,
-  ensureCosts,
-  applyMovementAndCombat,
-} = require("./rules");
-const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
-const { buildMatchInfo } = require("./matchInfo");
 
 import type {
   AnyRecord,
@@ -74,11 +102,15 @@ import type {
   LobbyState,
 } from "./types";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type SocketServer = import("socket.io").Server;
 type SocketClient = import("socket.io").Socket;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type RedisClient = import("ioredis").Redis;
 type PrismaClient = import("@prisma/client").PrismaClient;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type IncomingMessage = import("http").IncomingMessage;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type ServerResponse = import("http").ServerResponse;
 type PlayersMap = Map<string, PlayerState>;
 type MatchMap = Map<string, ServerMatchState>;
@@ -96,6 +128,7 @@ interface DraftSessionLeavePayload {
   sessionId?: string | null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface TournamentBroadcastPayload {
   event: string;
   data: Record<string, unknown>;
@@ -230,6 +263,7 @@ interface MatchDraftService {
   getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
   clearDraftWatchdog(matchId: string): void;
 }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const getOpponentSeat = (seat: Seat | null | undefined): Seat | null =>
   seat ? (getOpponentSeatRaw(seat) as Seat | null) : null;
 const getOpponentSeatStrict = (seat: Seat): Seat => {
@@ -299,6 +333,7 @@ const {
 const { pubClient, subClient, storeRedis, storeSub } = redis;
 const PORT = serverConfig.port;
 const INSTANCE_ID = serverConfig.instanceId;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CORS_ORIGINS = Array.isArray(serverConfig.corsOrigins)
   ? serverConfig.corsOrigins
   : [serverConfig.corsOrigins].filter(Boolean);
@@ -315,6 +350,7 @@ let isShuttingDown = false;
 const RULES_ENFORCE_MODE = (
   process.env.RULES_ENFORCE_MODE || "off"
 ).toLowerCase();
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const RULES_HELPERS_ENABLED = !(
   process.env.RULES_HELPERS_ENABLED === "0" ||
   (process.env.RULES_HELPERS_ENABLED || "").toLowerCase() === "false"
@@ -348,6 +384,7 @@ const METRICS: MetricsRegistry = {
 function metricsInc(key: string, delta = 1): void {
   METRICS.counters.set(key, (METRICS.counters.get(key) || 0) + delta);
 }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function metricsGet(key: string): number {
   return METRICS.counters.get(key) || 0;
 }
@@ -613,8 +650,10 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   storeRedis,
   prisma,
   players,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getOrLoadMatch: getOrLoadMatch as unknown as (matchId: string) => Promise<any>,
   ensurePlayerCached,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getMatchInfo: getMatchInfo as unknown as (match: any) => unknown,
   rid,
   getSeatForPlayer,
@@ -666,6 +705,7 @@ const CPU_BOTS_ENABLED =
 function loadBotClientCtor() {
   if (!CPU_BOTS_ENABLED) return null;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require("../bots/headless-bot-client");
     return mod && mod.BotClient ? mod.BotClient : null;
   } catch (e) {
@@ -1161,6 +1201,7 @@ async function ensurePlayerCached(playerId: string): Promise<PlayerState> {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function isPlayerConnected(playerId: string): boolean {
   const p = players.get(playerId);
   if (!p || !p.socketId) return false;
