@@ -207,6 +207,7 @@ function getOpponentSiteKeys(state, seat) {
 }
 
 // T044: Count opponent's sites for strategy decisions
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function countOpponentSites(state, seat) {
   return getOpponentSiteKeys(state, seat).length;
 }
@@ -319,6 +320,7 @@ function getCardThresholds(card) {
   } catch { return null; }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function hasThresholds(state, seat, req) {
   if (!req) return true;
   const have = countThresholdsForSeat(state, seat);
@@ -377,6 +379,7 @@ function getAvatar(state, seat) {
 }
 
 // Tap avatar to draw a site (cannot play a site afterward because avatar is tapped)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function drawFromAtlasWithTapPatch(state, seat) {
   const z = getZones(state, seat);
   const src = Array.isArray(z.atlas) ? [...z.atlas] : [];
@@ -611,6 +614,7 @@ function isSpellCard(card) {
   return false;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function isAuraCard(card) {
   if (!card || !card.type) return false;
   const cardType = String(card.type).toLowerCase();
@@ -1277,7 +1281,8 @@ function extractThreatDeployment(state, seat) {
 // T007: Life Pressure Feature - damage potential against opponent
 function extractLifePressure(state, seat) {
   const myNum = seatNum(seat);
-  const opp = otherSeat(seat);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _opp = otherSeat(seat);
   const oppAvatarPos = getOpponentAvatarPos(state, seat);
   const per = (state && state.permanents) || {};
   let pressure = 0;
@@ -1306,6 +1311,7 @@ function extractLifePressure(state, seat) {
 }
 
 // T008: Anti-Pattern Penalties - detect degenerate behaviors
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function extractAntiPatterns(state, prevState, seat, candidateAction) {
   let penalty = 0;
   const ownedSites = countOwnedManaSites(state, seat);
@@ -1330,13 +1336,15 @@ function extractAntiPatterns(state, prevState, seat, candidateAction) {
 }
 
 // T010/T061: Phase-Based Weight Modifiers - AGGRESSIVE strategy that builds toward opponent
-function getStrategicModifiers(state, seat, theta) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getStrategicModifiers(state, seat, _theta) {
   const stateModel = buildGameStateModel(state, seat);
   const turnNumber = stateModel.turnState.turnNumber;
   const ownedSites = countOwnedManaSites(state, seat);
   const boardDev = extractBoardDevelopment(state, seat);
   const opp = otherSeat(seat);
-  const oppLife = stateModel.avatarStatus[opp].life;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _oppLife = stateModel.avatarStatus[opp].life;
   const myLife = stateModel.avatarStatus[seat].life;
   const oppThreatDeploy = extractThreatDeployment(state, opp);
 
@@ -1839,7 +1847,7 @@ function search(state, seat, theta, rng, options) {
             s = s + cardBonus;
           }
         }
-      } catch (e) {
+      } catch {
         // Silently fall back to generic evaluation if card evaluation fails
       }
     }
