@@ -826,14 +826,71 @@ const handleHttpRequest = createRequestHandler({
   matchesMap: matches,
   players,
   tournamentBroadcast: {
-    emitTournamentUpdate: broadcastTournamentUpdate,
-    emitPhaseChanged: broadcastPhaseChanged,
-    emitRoundStarted: broadcastRoundStarted,
-    emitPlayerJoined: broadcastPlayerJoined,
-    emitPlayerLeft: broadcastPlayerLeft,
-    emitDraftReady: broadcastDraftReady,
-    emitPreparationUpdate: broadcastPreparationUpdate,
-    emitStatisticsUpdate: broadcastStatisticsUpdate,
+    emitTournamentUpdate: (_io: SocketServer, tournamentId: string, data: AnyRecord) =>
+      broadcastTournamentUpdate(tournamentId, data),
+    emitPhaseChanged: (
+      _io: SocketServer,
+      tournamentId: string,
+      newPhase: string,
+      additionalData?: AnyRecord
+    ) => broadcastPhaseChanged(tournamentId, newPhase, additionalData),
+    emitRoundStarted: (
+      _io: SocketServer,
+      tournamentId: string,
+      roundNumber: number,
+      matchesPayload: unknown
+    ) => broadcastRoundStarted(tournamentId, roundNumber, matchesPayload as AnyRecord[]),
+    emitPlayerJoined: (
+      _io: SocketServer,
+      tournamentId: string,
+      playerId: string,
+      playerName: string | undefined,
+      currentPlayerCount: number | undefined
+    ) => broadcastPlayerJoined(
+      tournamentId,
+      playerId,
+      playerName ?? "",
+      typeof currentPlayerCount === "number" ? currentPlayerCount : 0
+    ),
+    emitPlayerLeft: (
+      _io: SocketServer,
+      tournamentId: string,
+      playerId: string,
+      playerName: string | undefined,
+      currentPlayerCount: number | undefined
+    ) => broadcastPlayerLeft(
+      tournamentId,
+      playerId,
+      playerName ?? "",
+      typeof currentPlayerCount === "number" ? currentPlayerCount : 0
+    ),
+    emitDraftReady: (
+      _io: SocketServer,
+      tournamentId: string,
+      payload: AnyRecord
+    ) => broadcastDraftReady(tournamentId, payload),
+    emitPreparationUpdate: (
+      _io: SocketServer,
+      tournamentId: string,
+      playerId: string,
+      preparationStatus: string | undefined,
+      readyPlayerCount: number | undefined,
+      totalPlayerCount: number | undefined,
+      deckSubmitted?: boolean
+    ) =>
+      broadcastPreparationUpdate(
+        tournamentId,
+        playerId,
+        preparationStatus ?? "inProgress",
+        typeof readyPlayerCount === "number" ? readyPlayerCount : 0,
+        typeof totalPlayerCount === "number" ? totalPlayerCount : 0,
+        !!deckSubmitted
+      ),
+    emitStatisticsUpdate: (
+      _io: SocketServer,
+      tournamentId: string,
+      statistics: AnyRecord
+    ) => broadcastStatisticsUpdate(tournamentId, statistics),
   },
   normalizeTournamentBroadcastData,
   isTournamentBroadcastEvent,
@@ -1403,7 +1460,9 @@ async function cleanupMatchNow(
     match.status === "waiting" ||
     match.status === "deck_construction"
   ) {
-    if (match.tournamentId) {
+    const botOnly = !matchHasHumanPlayers(match);
+    // Allow cleanup for bot-only matches even if they are tournament matches
+    if (match.tournamentId && !botOnly) {
       try {
         console.log(
           `[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`
@@ -1411,8 +1470,9 @@ async function cleanupMatchNow(
       } catch {}
       return;
     }
-    // Also protect any in-progress match (tournament or not) to preserve game state for reconnects
-    if (match.status === "in_progress") {
+    // Also protect any in-progress match (tournament or not) to preserve game state for reconnects,
+    // except when the match is bot-only (bots can be cleaned by timers/force)
+    if (match.status === "in_progress" && !botOnly) {
       try {
         console.log(`[match] cleanup blocked for in-progress match ${matchId}`);
       } catch {}
