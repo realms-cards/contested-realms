@@ -103,6 +103,36 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   }
 
+  // Normalize incoming event names and accept a few aliases to avoid brittle 400s
+  const EVENT_ALIAS_MAP: Record<string, string> = {
+    "tournament:updated": "TOURNAMENT_UPDATED",
+    "tournament:phase:changed": "PHASE_CHANGED",
+    "tournament:round:started": "ROUND_STARTED",
+    "tournament:player:joined": "PLAYER_JOINED",
+    "tournament:player:left": "PLAYER_LEFT",
+    "tournament:draft:ready": "DRAFT_READY",
+    "tournament:preparation:update": "UPDATE_PREPARATION",
+    "tournament:statistics:updated": "STATISTICS_UPDATED",
+    "tournament:match:assigned": "MATCH_ASSIGNED",
+    // Common variations
+    "matchended": "matchEnded",
+  };
+
+  function normalizeEventName(raw: unknown): string | null {
+    if (typeof raw !== "string") return null;
+    const s = raw.trim();
+    if (!s) return null;
+    // Exact match first
+    if (isTournamentBroadcastEvent(s)) return s;
+    // Case-insensitive canonicalization
+    const upper = s.toUpperCase();
+    if (isTournamentBroadcastEvent(upper)) return upper;
+    // Aliases (case-insensitive keys)
+    const alias = EVENT_ALIAS_MAP[s] || EVENT_ALIAS_MAP[s.toLowerCase()] || EVENT_ALIAS_MAP[upper];
+    if (alias && isTournamentBroadcastEvent(alias)) return alias;
+    return null;
+  }
+
   return async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const reqOrigin = (req && req.headers && req.headers.origin) || null;
@@ -388,13 +418,18 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         req.on("end", () => {
           try {
             const body = Buffer.concat(chunks).toString();
-            const parsed = JSON.parse(body) as { event?: string; data?: Record<string, unknown> };
-            const event = isTournamentBroadcastEvent(parsed.event) ? parsed.event : null;
+            const parsed = JSON.parse(body) as AnyRecord;
+            const rawEvent = (parsed && (parsed.event ?? parsed.type ?? parsed.name)) as unknown;
+            const event = normalizeEventName(rawEvent);
             if (!event) {
-              throw new Error("Missing event");
+              throw new Error(
+                `Missing or invalid event${typeof rawEvent === "string" ? `: ${rawEvent}` : ""}`
+              );
             }
 
-            const data = normalizeTournamentBroadcastData(parsed.data);
+            const data = normalizeTournamentBroadcastData(
+              (parsed && (parsed.data ?? parsed.payload)) as unknown
+            );
 
             switch (event) {
               case "TOURNAMENT_UPDATED": {
@@ -535,11 +570,12 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 break;
               }
             }
-
+            try { metricsInc("http.tournament.broadcast.ok", 1); } catch {}
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ success: true }));
           } catch (err) {
             console.error("[Tournament] Broadcast error:", safeErrorMessage(err));
+            try { metricsInc("http.tournament.broadcast.error", 1); } catch {}
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({

@@ -1264,12 +1264,27 @@ const canPanCamera =
     prevEndedRef.current = ended;
   }, [endedByMatchStatus, matchEnded, matchEndOverlayOpen]);
 
-  // When the overlay first opens, snapshot the end-of-match context to keep it stable
+  // When the overlay opens, freeze the context only once the authoritative result is known.
+  // If we initially saw a null winner (transient) and later receive a concrete winner, upgrade once.
   useEffect(() => {
-    if (matchEndOverlayOpen && !finalEndContext) {
-      setFinalEndContext({ winner, playerNames, myPlayerKey });
-    }
-  }, [matchEndOverlayOpen, finalEndContext, winner, playerNames, myPlayerKey]);
+    if (!matchEndOverlayOpen) return;
+
+    setFinalEndContext((prev) => {
+      if (prev) {
+        if (prev.winner == null && (winner === "p1" || winner === "p2")) {
+          return { ...prev, winner };
+        }
+        return prev;
+      }
+      if (
+        matchEnded &&
+        (winner === "p1" || winner === "p2" || winner === null)
+      ) {
+        return { winner, playerNames, myPlayerKey };
+      }
+      return prev ?? null;
+    });
+  }, [matchEndOverlayOpen, matchEnded, winner, playerNames, myPlayerKey]);
 
   // Reset match end overlay when joining a new match
   useEffect(() => {
