@@ -3363,10 +3363,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => {
       get().pushHistory();
 
-      const isSpellslinger =
-        (s.avatars[who]?.card?.name || "").toLowerCase() === "spellslinger";
+      const avatarName = (s.avatars[who]?.card?.name || "").toLowerCase();
+      const isSpellslinger = avatarName === "spellslinger";
+      const isPathfinder = avatarName === "pathfinder";
       const sbCount = spellbookCount ?? (isSpellslinger ? 4 : 3);
-      const atCount = atlasCount ?? 3;
+      const atCount = atlasCount ?? (isPathfinder ? 0 : 3);
       const sb = [...s.zones[who].spellbook];
       const at = [...s.zones[who].atlas];
       const hand = [...s.zones[who].hand];
@@ -4413,10 +4414,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           newHand.push(c);
         }
       };
-      const isSpellslinger =
-        (s.avatars[who]?.card?.name || "").toLowerCase() === "spellslinger";
+      const avatarName = (s.avatars[who]?.card?.name || "").toLowerCase();
+      const isSpellslinger = avatarName === "spellslinger";
+      const isPathfinder = avatarName === "pathfinder";
       const sbCount = isSpellslinger ? 4 : 3;
-      const atCount = 3;
+      const atCount = isPathfinder ? 0 : 3;
       drawN(sb, sbCount);
       drawN(at, atCount);
       const m = { ...s.mulligans, [who]: s.mulligans[who] - 1 };
