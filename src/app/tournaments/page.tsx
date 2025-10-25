@@ -41,6 +41,8 @@ export default function TournamentsPage() {
     loading: rtLoading,
     error: rtError,
   } = useRealtimeTournaments();
+  // Only block with a full-screen loader on the very first load
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +123,13 @@ export default function TournamentsPage() {
       router.push("/auth/signin?callbackUrl=/tournaments");
     }
   }, [status, router]);
+
+  // Mark initial load complete once auth resolved and realtime layer finished its first hydration
+  useEffect(() => {
+    if (!initialLoaded && status !== "loading" && !rtLoading) {
+      setInitialLoaded(true);
+    }
+  }, [initialLoaded, status, rtLoading]);
 
   // Fetch available cubes for cube draft option
   useEffect(() => {
@@ -340,7 +349,7 @@ export default function TournamentsPage() {
     }
   };
 
-  if (status === "loading" || rtLoading) {
+  if (status === "loading" || (rtLoading && !initialLoaded)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournaments...</div>
