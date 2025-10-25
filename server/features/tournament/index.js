@@ -336,6 +336,13 @@ function createTournamentFeature(deps) {
     socket.on("tournament:join", async (payload) => {
       const tournamentId = payload?.tournamentId;
       if (!tournamentId) return;
+      // Idempotency guard: if this socket already joined, acknowledge and skip
+      if (currentTournamentIds.has(tournamentId)) {
+        try {
+          socket.emit("tournament:joined", { tournamentId });
+        } catch {}
+        return;
+      }
 
       console.log(`[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`);
       await socket.join(`tournament:${tournamentId}`);

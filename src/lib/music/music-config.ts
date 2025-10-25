@@ -57,9 +57,9 @@ export const MUSIC_TRACKS: MusicTrack[] = [
  */
 export const MUSIC_DEFAULTS = {
   /** Default volume level (0-1 range) */
-  volume: 0.1,
+  volume: 0.3,
   /** Default enabled state */
-  enabled: true,
+  enabled: false,
   /** Default expanded state (collapsed = icon only) */
   expanded: false,
 } as const;
