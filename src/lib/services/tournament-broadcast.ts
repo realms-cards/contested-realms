@@ -33,7 +33,56 @@ async function broadcastToSocket(event: string, data: Record<string, unknown>, r
     const latency = Date.now() - start;
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Try to capture server-provided error details to aid diagnosis
+      let errorDetail = '';
+      try {
+        const text = await response.text();
+        if (text) {
+          try {
+            const json = JSON.parse(text) as { error?: unknown; details?: unknown };
+            const errMsg = typeof json.error === 'string' ? json.error : '';
+            const detMsg = typeof json.details === 'string' ? json.details : JSON.stringify(json.details ?? '');
+            errorDetail = [errMsg, detMsg].filter(Boolean).join(' | ');
+          } catch {
+            errorDetail = text;
+          }
+        }
+      } catch {
+        // ignore body read failures
+      }
+
+      const composedMessage = `HTTP ${response.status}: ${response.statusText}${errorDetail ? ` - ${errorDetail}` : ''}`;
+
+      // T031: Record failure to monitoring table with status code
+      try {
+        await prisma.socketBroadcastHealth.create({
+          data: {
+            eventType: event,
+            tournamentId:
+              typeof data === 'object' && data !== null && 'tournamentId' in data
+                ? String((data as Record<string, unknown>).tournamentId)
+                : null,
+            targetUrl: `${BROADCAST_BASE}/tournament/broadcast`,
+            success: false,
+            statusCode: response.status,
+            errorMessage: composedMessage,
+            retryCount,
+            latencyMs: latency,
+            timestamp: new Date(),
+          },
+        });
+      } catch (healthErr) {
+        console.warn('[Broadcast] Failed to log health data:', healthErr instanceof Error ? healthErr.message : String(healthErr));
+      }
+
+      // Do not retry on 4xx client errors
+      if (response.status >= 400 && response.status < 500) {
+        console.warn('[Broadcast] Not retrying due to client error:', { event, status: response.status, retryCount });
+        return;
+      }
+
+      // Throw to trigger retry logic for 5xx/timeouts via catch block below
+      throw new Error(composedMessage);
     }
 
     console.log('[Broadcast] Success:', { event, latency, retryCount });

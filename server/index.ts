@@ -337,6 +337,10 @@ const INSTANCE_ID = serverConfig.instanceId;
 const CORS_ORIGINS = Array.isArray(serverConfig.corsOrigins)
   ? serverConfig.corsOrigins
   : [serverConfig.corsOrigins].filter(Boolean);
+// Provide Prisma to broadcast service for audit logging
+try {
+  tournamentBroadcast.setPrismaClient?.(prisma);
+} catch {}
 // Optional: start periodic pruning of old replay actions/sessions
 try {
   replay.setupReplayRetentionPruner?.(prisma);
