@@ -77,7 +77,7 @@ export function startMaintenanceTimers({
         const age =
           Date.now() - (Number(match.lastTs) || Date.now());
         const shouldCleanup =
-          match.status === "completed" || age >= 5 * 60 * 1000;
+          match.status === "completed" || age >= 10 * 60 * 1000;
 
         if (shouldCleanup) {
           try {

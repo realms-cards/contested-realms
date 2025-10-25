@@ -543,10 +543,12 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                   } as AnyRecord;
                   try {
                     const p = players.get(playerId) as unknown as { socketId?: string } | undefined;
-                    const sid = typeof p?.socketId === 'string' ? (p!.socketId as string) : null;
+                    const sid = typeof p?.socketId === 'string' ? (p.socketId as string) : null;
                     if (typeof sid === 'string' && sid.length > 0) {
                       deps.io.to(sid as string).emit("MATCH_ASSIGNED", payload);
                     }
+                    // Fallback: also emit to the tournament room so clients listening there can react
+                    deps.io.to(`tournament:${tournamentId}`).emit("MATCH_ASSIGNED", { playerId, ...payload });
                   } catch {}
                 }
                 break;
