@@ -41,14 +41,18 @@ function normalizeSealedConfigClient(sc: unknown): unknown {
   const entries = Object.entries(packCounts);
   for (const [, v] of entries) sum += Number(n(v)) || 0;
   const rawPackCount = n(obj.packCount);
-  const packCount = Number.isFinite(rawPackCount) && rawPackCount > 0 ? Math.floor(rawPackCount) : (sum > 0 ? sum : 6);
+  const candidatePackCount = Number.isFinite(rawPackCount) && rawPackCount > 0 ? Math.floor(rawPackCount) : (sum > 0 ? sum : 6);
+  // Clamp to protocol bounds (3..8)
+  const packCount = Math.max(3, Math.min(8, candidatePackCount));
   let setMix: string[] = Array.isArray(obj.setMix) ? (obj.setMix as unknown[]).filter((s) => typeof s === 'string') as string[] : [];
   if (setMix.length === 0) {
     setMix = entries.filter(([, v]) => (Number(n(v)) || 0) > 0).map(([k]) => String(k));
   }
   if (setMix.length === 0) setMix = ['Beta'];
   const rawTimeLimit = n(obj.timeLimit);
-  const timeLimit = Number.isFinite(rawTimeLimit) && rawTimeLimit > 0 ? Math.floor(rawTimeLimit) : 40;
+  const candidateTime = Number.isFinite(rawTimeLimit) && rawTimeLimit > 0 ? Math.floor(rawTimeLimit) : 40;
+  // Clamp to protocol bounds (15..90)
+  const timeLimit = Math.max(15, Math.min(90, candidateTime));
   const cstRaw = n(obj.constructionStartTime);
   const constructionStartTime = Number.isFinite(cstRaw) && cstRaw > 0 ? Math.floor(cstRaw) : Date.now();
   const replaceAvatars = !!obj.replaceAvatars;
@@ -566,8 +570,9 @@ export class SocketTransport implements GameTransport {
     console.log("[Transport] Socket connected, emitting joinMatch");
     return new Promise((resolve, reject) => {
       const onMatch = (payload: unknown) => {
-        console.log("[Transport] Received matchStarted:", payload);
-        const parsed = Protocol.MatchStartedPayload.parse(payload);
+        const fixed = normalizeMatchStartedPayload(payload);
+        console.log("[Transport] Received matchStarted (normalized)", fixed);
+        const parsed = Protocol.MatchStartedPayload.parse(fixed);
         this.dispatch("matchStarted", parsed);
         s.off("matchStarted", onMatch);
         s.off("match:error", onError);
