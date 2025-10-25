@@ -28,7 +28,8 @@ export default function Home() {
           <div className="max-w-5xl mx-auto">
             <div className="bg-orange-900/50 border border-orange-500/50 text-orange-100 rounded-md px-4 py-3 flex items-center justify-between shadow">
               <p className="text-sm md:text-base font-medium">
-                Currently in Open Alpha - Data might be lost in the future - back up your decks!
+                Currently in Open Alpha - Data might be lost in the future -
+                back up your decks!
               </p>
               <button
                 type="button"
@@ -36,7 +37,7 @@ export default function Home() {
                   try {
                     window.localStorage.setItem(
                       "sorcery:alphaBannerDismissed",
-                      "1",
+                      "1"
                     );
                   } catch {}
                   setShowAlphaBanner(false);
@@ -53,8 +54,8 @@ export default function Home() {
         <AsciiLogo className="max-w-4xl mx-auto" />
 
         {/* Primary Navigation */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 xl:gap-6 max-w-6xl mx-auto">
-          {/* Local Hotseat */}
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-5 xl:gap-6 max-w-6xl mx-auto">
+          {/* Local Hotseat 
           <AsciiPanel className="p-5 md:p-6">
             <Link
               href="/play"
@@ -67,9 +68,10 @@ export default function Home() {
               </div>
             </Link>
           </AsciiPanel>
+          */}
 
           {/* Contest a Realm (Online) */}
-          <AsciiPanel className="p-5 md:p-6">
+          <AsciiPanel className="w-full p-5 md:p-6">
             <Link
               href="/online/lobby"
               className="group block hover:scale-[1.02] transition-transform duration-200"
