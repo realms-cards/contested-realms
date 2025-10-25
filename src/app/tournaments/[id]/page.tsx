@@ -74,6 +74,8 @@ export default function TournamentDetailsPage() {
   >("overview");
   // Round/match flow helpers
   const [startingRound, setStartingRound] = useState(false);
+  // Only block with a full-screen loading overlay on the very first load
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
   // Local match assignment banner (instant without full refresh)
   const [assigned, setAssigned] = useState<{ matchId: string; opponentName: string | null } | null>(null);
@@ -184,6 +186,13 @@ export default function TournamentDetailsPage() {
           | undefined) ||
         fallbackTournament ||
         null;
+
+  // Mark as loaded after we have either any derived tournament or the realtime layer has produced an update
+  useEffect(() => {
+    if (!initialLoaded && (derivedTournament || lastUpdated)) {
+      setInitialLoaded(true);
+    }
+  }, [initialLoaded, derivedTournament, lastUpdated]);
 
   useEffect(() => {
     if (
@@ -923,7 +932,7 @@ export default function TournamentDetailsPage() {
     }
   };
 
-  if (status === "loading" || rtLoading) {
+  if (status === "loading" || (rtLoading && !initialLoaded)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournament...</div>
@@ -952,7 +961,7 @@ export default function TournamentDetailsPage() {
   }
 
   // Avoid flashing "not found" before the realtime context hydrates and direct check completes
-  if (!derivedTournament && (!lastUpdated || !checkedDirect || rtLoading)) {
+  if (!derivedTournament && (!lastUpdated || !checkedDirect) && !initialLoaded) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournament...</div>
@@ -1052,26 +1061,7 @@ export default function TournamentDetailsPage() {
 
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         {/* Instant Join CTA when match is assigned */}
-        {(() => {
-          const joinableId = (assigned?.matchId || rtAssignedMatchId || myAssignedMatchId) ?? null;
-          if (!joinableId || tournament.status === "completed") return null;
-          const isCompleted = (statistics?.matches || []).some((m) => String(m.id) === String(joinableId) && (m.status === "completed" || m.completedAt));
-          if (isCompleted) return null;
-          const oppName = assigned?.opponentName || rtAssignedOpponentName || null;
-          return (
-          <div className="mb-6 rounded-lg border border-emerald-600 bg-emerald-900/40 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
-            <div className="text-emerald-100 text-sm">
-              Match assigned{oppName ? ` vs ${oppName}` : ""}. You can join now.
-            </div>
-            <button
-              onClick={() => startJoinMatch(String(joinableId))}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md text-sm"
-            >
-              Join Match
-            </button>
-          </div>
-          );
-        })()}
+        {null}
 
         {/* Creator Controls: Start next round banner at top */}
         {tournament.status === "active" && isCreator && !activeRound && maxRoundNumber < (tournament.settings.totalRounds || 3) && (

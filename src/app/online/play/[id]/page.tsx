@@ -152,6 +152,7 @@ export default function OnlineMatchPage() {
   // Local submission flags to reflect immediate client-side submission before server ack
   const [localSealedSubmitted, setLocalSealedSubmitted] = useState(false);
   const [localDraftSubmitted, setLocalDraftSubmitted] = useState(false);
+  const waitingResetDoneRef = useRef<string | null>(null);
 
   // Get player nicknames (constrained to 2 players for game engine compatibility)
   const playerNames = useMatchPlayerNames(match);
@@ -229,9 +230,11 @@ export default function OnlineMatchPage() {
 
     if (match?.id === matchId) {
       console.log("[joinMatch effect] Already in correct match");
-      // Arrived or already in: clear join attempt flag
-      if (joinAttemptedForRef.current === matchId)
-        joinAttemptedForRef.current = null;
+      if (joinAttemptedForRef.current !== matchId) {
+        console.log("[joinMatch effect] Ensuring server-side room join");
+        joinAttemptedForRef.current = matchId;
+        void joinMatch(matchId);
+      }
       return;
     }
     if (joinAttemptedForRef.current === matchId) {
@@ -785,6 +788,20 @@ export default function OnlineMatchPage() {
     tournamentDeckRetry,
   ]);
 
+  useEffect(() => {
+    if (!matchId || match?.id !== matchId) return;
+    if (resyncing) return;
+    const hasServerGameState = !!(match as unknown as { game?: unknown })?.game;
+    if ((match?.status === "waiting" || match?.status === "deck_construction") && !hasServerGameState) {
+      if (waitingResetDoneRef.current !== matchId) {
+        try {
+          useGameStore.getState().resetGameState();
+        } catch {}
+        waitingResetDoneRef.current = matchId;
+      }
+    }
+  }, [matchId, match, match?.id, match?.status, resyncing]);
+
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
   useEffect(() => {
@@ -1011,16 +1028,16 @@ export default function OnlineMatchPage() {
     } else if (shouldShowDraft) {
       desired = false;
     } else if (gameActuallyStarted) {
-      // Match already in Main phase - skip setup overlay entirely
       desired = false;
-      // Mark setup steps as complete so we don't get stuck in the setup flow
       if (!prepared) setPrepared(true);
       if (!d20RollingComplete) setD20RollingComplete(true);
-    } else if (d20Complete && !d20RollingComplete && serverPhase === "Start") {
-      // D20 rolling AND seat selection complete on server (phase moved to Start) - skip the D20 screen
-      setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
+      if (!gameActuallyStarted && serverPhase !== "Setup") {
+        try { useGameStore.getState().setPhase("Setup"); } catch {}
+      }
+    } else if (d20Complete && !d20RollingComplete && serverPhase === "Start") {
+      setD20RollingComplete(true);
     } else if (!prepared) {
       desired = true;
     }
@@ -1257,6 +1274,36 @@ const canPanCamera =
     // Do not close overlay or advance phase locally.
     // finalizeMulligan() already notified the server via transport.mulliganDone().
     // Wait for server 'matchStarted' and/or 'statePatch' to flip status/phase.
+    try {
+      const phase = useGameStore.getState().phase;
+      if (phase === "Main") return;
+    } catch {}
+
+    try {
+      window.setTimeout(() => {
+        try {
+          const phaseNow = useGameStore.getState().phase;
+          const inProgress = match?.status === "in_progress";
+          if (phaseNow !== "Main" && !inProgress) {
+            try {
+              const tr = useGameStore.getState().transport as unknown as { mulliganDone?: () => void } | null;
+              if (tr && typeof tr.mulliganDone === "function") tr.mulliganDone();
+            } catch {}
+            try {
+              if (matchId) {
+                void joinMatch(matchId);
+              }
+            } catch {}
+            try {
+              if (resyncSentForRef.current !== matchId) {
+                resync();
+                resyncSentForRef.current = matchId;
+              }
+            } catch {}
+          }
+        } catch {}
+      }, 1500);
+    } catch {}
   }
 
   // Show match end overlay when match ends (server status or local store), but only if not already dismissed
