@@ -119,6 +119,7 @@ interface MatchState {
   matchType: string;
   status: string;
   playerIds: string[];
+  playerDecks?: Map<string, unknown> | null;
   tournamentId?: string | null;
   lastTs?: number;
   game?: MatchGameState;
@@ -1020,9 +1021,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   async function handleMulliganDone(matchId: string, playerId: string): Promise<void> {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
-    if (match.status !== "waiting" && match.status !== "in_progress") {
-      return;
-    }
+    // Allow sealed tournament matches to proceed from deck_construction if both decks are present
+    const decks = match.playerDecks instanceof Map ? match.playerDecks : null;
+    const allDecksSubmitted = !!(
+      decks && Array.isArray(match.playerIds) && match.playerIds.every((pid) => decks.has(pid))
+    );
+    const canProceedStatus =
+      match.status === "waiting" ||
+      match.status === "in_progress" ||
+      (match.status === "deck_construction" && match.matchType === "sealed" && allDecksSubmitted);
+    if (!canProceedStatus) return;
     const game = match.game;
     if (!game) return;
     const currentPhase = game.phase;
@@ -1099,6 +1107,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         error: err instanceof Error ? err.message : err,
       });
     }
+
+    // Also emit updated match info so clients update match.status immediately
+    try {
+      io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
+    } catch {}
   }
 
   async function handleInteractionRequest(

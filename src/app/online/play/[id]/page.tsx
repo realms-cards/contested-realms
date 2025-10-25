@@ -792,12 +792,16 @@ export default function OnlineMatchPage() {
     if (!match) return;
 
     // Auto-redirect to sealed editor when joining sealed match during deck construction
-    // But only if we haven't submitted a deck yet (prefer server-confirmed check).
+    // But only if we haven't submitted a deck yet (prefer server-confirmed check) AND not a tournament match.
     if (
       match.status === "deck_construction" &&
       match.matchType === "sealed" &&
       !hasSubmittedSealedDeck
     ) {
+      // For tournament matches, do NOT redirect; wait for deck attachment and show preparation panel
+      if (tournamentId) {
+        return;
+      }
       // Clear game state before opening sealed editor
       useGameStore.getState().resetGameState();
 
@@ -880,6 +884,7 @@ export default function OnlineMatchPage() {
     hasSubmittedDraftDeck,
     me?.id,
     myPlayerId,
+    tournamentId,
   ]);
 
   // Listen for sealed deck submissions via postMessage (when editor opened in a new window)

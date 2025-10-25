@@ -2074,7 +2074,22 @@ io.on("connection", async (socket: SocketClient) => {
     if (!player || !player.matchId) return;
     const matchId = player.matchId;
     try {
+      console.log("[Setup] mulliganDone recv", {
+        matchId,
+        playerId: player.id,
+        instance: INSTANCE_ID,
+      });
+    } catch {}
+    try {
       const leader = await getOrClaimMatchLeader(matchId);
+      try {
+        console.log("[Setup] mulliganDone leader decision", {
+          matchId,
+          leader,
+          instance: INSTANCE_ID,
+          forwarded: leader && leader !== INSTANCE_ID,
+        });
+      } catch {}
       if (leader && leader !== INSTANCE_ID) {
         if (storeRedis)
           await storeRedis.publish(
@@ -2659,6 +2674,11 @@ io.on("connection", async (socket: SocketClient) => {
       });
     } catch {}
 
+    // Persist updated playerDecks
+    try {
+      persistMatchUpdate(match, null, player.id, Date.now());
+    } catch {}
+
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
 
@@ -2683,6 +2703,9 @@ io.on("connection", async (socket: SocketClient) => {
       }
 
       io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+      try {
+        persistMatchUpdate(match, null, player.id, Date.now());
+      } catch {}
     }
   });
 
