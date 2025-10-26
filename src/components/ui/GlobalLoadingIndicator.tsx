@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 
 const FADE_DURATION_MS = 400;
-const SPINNER_CHARS = ["✵", "⎈", "❇︎", "*", "⚙︎", "⌾"];
+const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"];
 
 /**
  * GlobalLoadingIndicator renders an ASCII-styled spinner that mirrors the
@@ -53,7 +53,7 @@ export default function GlobalLoadingIndicator() {
         "fixed",
         "bottom-4",
         "left-4",
-        "z-[9999]",
+        "z-[99999]",
         "transition-opacity",
         "duration-200",
         "ease-out",
@@ -73,7 +73,10 @@ export default function GlobalLoadingIndicator() {
       aria-label="Loading"
       className={containerClasses}
     >
-      <span className="text-3xl opacity-50" aria-hidden="true">
+      <span
+        className="text-4xl sm:text-5xl md:text-6xl opacity-60"
+        aria-hidden="true"
+      >
         {SPINNER_CHARS[charIndex]}
       </span>
     </div>
