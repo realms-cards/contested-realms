@@ -8,7 +8,6 @@ import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
-import GlobalLoadingIndicator from "@/components/ui/GlobalLoadingIndicator";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
@@ -82,8 +81,6 @@ export default async function RootLayout({
               </AuthProvider>
             </SoundProvider>
           </ThemeProvider>
-          {/* Global loading indicator (bottom-left corner) */}
-          <GlobalLoadingIndicator />
         </LoadingProvider>
         <SpeedInsights />
       </body>

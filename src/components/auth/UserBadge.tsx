@@ -14,6 +14,7 @@ import React, {
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
+import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -33,6 +34,7 @@ export default function UserBadge({
   className?: string;
   showPresence?: boolean;
 }) {
+  const { isLoading: isGlobalLoading } = useLoadingContext();
   const { data: session, status, update: updateSession } = useSession();
   const user = session?.user;
   const userEmailVerifiedRaw = (user as { emailVerified?: string | Date | null } | undefined)?.emailVerified ?? null;
@@ -57,6 +59,16 @@ export default function UserBadge({
   const [verificationSending, setVerificationSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [joinedTournament, setJoinedTournament] = useState<{ id: string; name: string } | null>(null);
+
+  const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"] as const;
+  const [spinnerIndex, setSpinnerIndex] = useState(0);
+  useEffect(() => {
+    if (!isGlobalLoading) return;
+    const id = window.setInterval(() => {
+      setSpinnerIndex((i) => (i + 1) % SPINNER_CHARS.length);
+    }, 150);
+    return () => window.clearInterval(id);
+  }, [isGlobalLoading, SPINNER_CHARS.length]);
 
   const handleOpenSettings = useCallback(() => {
     setProfileSuccess(null);
@@ -200,7 +212,8 @@ export default function UserBadge({
     };
   }, [open, session?.user]);
 
-  // Loading shimmer (minimal): avoid floating placeholder to prevent gray pill flash
+  // Loading shimmer is handled by cross-fading the spinner over the avatar below.
+
   if (status === "loading") {
     if (variant === "floating") return null;
     return (
@@ -416,16 +429,28 @@ export default function UserBadge({
           : `pointer-events-auto relative ${className}`
       }
     >
-      {/* Collapsed trigger: avatar only */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/30"
-        title={user?.name || "User"}
-      >
-        {avatar}
-      </button>
+      {/* Collapsed trigger: avatar with cross-fade spinner overlay */}
+      <div className="relative w-8 h-8">
+        <div
+          className={`absolute inset-0 grid place-items-center pointer-events-none transition-opacity duration-300 ease-out ${
+            isGlobalLoading ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden="true"
+        >
+          <span className="text-xl opacity-70">{SPINNER_CHARS[spinnerIndex]}</span>
+        </div>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          className={`rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/30 transition-opacity duration-300 ease-out ${
+            isGlobalLoading ? "opacity-0 pointer-events-none" : "opacity-100"
+          }`}
+          title={user?.name || "User"}
+        >
+          {avatar}
+        </button>
+      </div>
 
       {open && (
         <div className="absolute right-0 top-[calc(100%+0.5rem)] z-[75] min-w-[220px] origin-top-right">

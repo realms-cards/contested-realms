@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 
@@ -11,10 +12,17 @@ const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"];
  * Next.js dev helper position and vibe. It fades in/out smoothly while
  * remaining non-blocking for user interaction.
  */
-export default function GlobalLoadingIndicator() {
+export default function GlobalLoadingIndicator({
+  position = "default",
+  className = "",
+}: {
+  position?: "default" | "badge";
+  className?: string;
+} = {}) {
   const { isLoading } = useLoadingContext();
   const [shouldRender, setShouldRender] = useState(isLoading);
   const [charIndex, setCharIndex] = useState(0);
+  const pathname = usePathname();
 
   // Handle fade out delay
   useEffect(() => {
@@ -46,21 +54,28 @@ export default function GlobalLoadingIndicator() {
     return () => clearInterval(interval);
   }, [isLoading]);
 
-  const containerClasses = useMemo(
-    () =>
-      [
-        "pointer-events-none",
-        "fixed",
-        "bottom-4",
-        "left-4",
-        "z-[99999]",
-        "transition-opacity",
-        "duration-200",
-        "ease-out",
-        isLoading ? "opacity-100" : "opacity-0",
-      ].join(" "),
-    [isLoading]
-  );
+  const containerClasses = useMemo(() => {
+    const pos =
+      position === "badge"
+        ? ["fixed", "top-3", "right-4", "z-[90]"]
+        : ["fixed", "bottom-[100px]", "left-4", "z-[99999]"];
+    return [
+      "pointer-events-none",
+      ...pos,
+      "transition-opacity",
+      "duration-200",
+      "ease-out",
+      isLoading ? "opacity-100" : "opacity-0",
+      className,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }, [isLoading, position, className]);
+
+  const isOnlineSection = pathname?.startsWith("/online");
+  if (position === "default" && isLoading && !isOnlineSection) {
+    return null;
+  }
 
   if (!shouldRender && !isLoading) {
     return null;
@@ -73,12 +88,20 @@ export default function GlobalLoadingIndicator() {
       aria-label="Loading"
       className={containerClasses}
     >
-      <span
-        className="text-4xl sm:text-5xl md:text-6xl opacity-60"
-        aria-hidden="true"
-      >
-        {SPINNER_CHARS[charIndex]}
-      </span>
+      {position === "badge" ? (
+        <span className="block w-8 h-8 grid place-items-center">
+          <span className="text-xl opacity-70" aria-hidden="true">
+            {SPINNER_CHARS[charIndex]}
+          </span>
+        </span>
+      ) : (
+        <span
+          className="text-4xl sm:text-5xl md:text-6xl opacity-60"
+          aria-hidden="true"
+        >
+          {SPINNER_CHARS[charIndex]}
+        </span>
+      )}
     </div>
   );
 }
