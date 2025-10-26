@@ -6,6 +6,7 @@ export type TokenDef = {
   fileBase: string; // without extension; assets live under /api/assets/tokens/{fileBase}.ktx2
   size: TokenSize;
   siteReplacement?: boolean; // true for tokens meant to replace sites (rotate like sites)
+  textureRotation?: number;
 };
 
 // Registry of known tokens. Extend this list as new tokens are added.
@@ -18,7 +19,7 @@ export const TOKEN_DEFS: TokenDef[] = [
   { key: "Frog", name: "Frog", fileBase: "Frog", size: "small" },
   { key: "Stealth", name: "Stealth", fileBase: "Stealth", size: "small" },
   { key: "Tawny", name: "Tawny", fileBase: "Tawny", size: "small" },
-  { key: "Rubble", name: "Rubble", fileBase: "Rubble", size: "normal", siteReplacement: true },
+  { key: "Rubble", name: "Rubble", fileBase: "Rubble", size: "normal", siteReplacement: true, textureRotation: -Math.PI / 2 },
 ];
 
 export const TOKEN_BY_KEY = Object.fromEntries(
@@ -30,8 +31,8 @@ export const TOKEN_BY_NAME = Object.fromEntries(
 ) as Record<string, TokenDef>;
 
 export function tokenTextureUrl(def: TokenDef): string {
-  // Ask for raster with ?ktx2=1 so the API swaps to KTX2 seamlessly
-  return `/api/assets/tokens/${def.fileBase}.png?ktx2=1`;
+  // Return canonical PNG path; useCardTexture decides whether to upgrade to KTX2.
+  return `/api/assets/tokens/${def.fileBase}.png`;
 }
 
 // Simple deterministic id base for tokens (negative ids to avoid clashing with real cards)

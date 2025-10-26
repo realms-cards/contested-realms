@@ -146,17 +146,11 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
               const radius = 1.35;
               const px = Math.sin(angle) * radius;
               const pz = Math.cos(angle) * radius * (owner === "p2" ? 1 : -1);
-              let w = def.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
-              let h = def.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
-              // Swap dimensions for site replacement tokens so they appear landscape when rotated
-              if (def.siteReplacement) {
-                [w, h] = [h, w];
-              }
+              const w = def.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
+              const h = def.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
-              // For rubble, don't apply texture rotation since the card is already rotated
-              const textureRotation = 0;
 
               return (
                 <group key={def.key} position={[px, 0, pz]}>
@@ -196,12 +190,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                     slug={""}
                     textureUrl={tex}
                     forceTextureUrl
+                    preferRaster
                     width={w}
                     height={h}
                     rotationZ={rotZ + rotated}
                     elevation={0.005}
                     renderOrder={650}
-                    textureRotation={textureRotation}
                     onPointerOver={() => bumpInteractClock()}
                   />
                 </group>
@@ -231,17 +225,11 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                   ];
             return big.map((def, i) => {
               const [px, pz] = centers[i] || [0, baseZ];
-              let w = CARD_SHORT;
-              let h = CARD_LONG;
-              // Swap dimensions for site replacement tokens so they appear landscape when rotated
-              if (def.siteReplacement) {
-                [w, h] = [h, w];
-              }
+              const w = CARD_SHORT;
+              const h = CARD_LONG;
               const tex = tokenTextureUrl(def);
               // Match board orientation; Rubble gets site-like -90°
               const rotated = def.siteReplacement ? -Math.PI / 2 : 0;
-              // Don't apply texture rotation - the card rotation handles orientation
-              const textureRotation = 0;
               return (
                 <group key={`big-${def.key}`} position={[px, 0, pz]}>
                   <mesh
@@ -271,12 +259,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                     slug={""}
                     textureUrl={tex}
                     forceTextureUrl
+                    preferRaster
                     width={w}
                     height={h}
-                    rotationZ={rotZ}
+                    rotationZ={rotZ + rotated}
                     elevation={0.01}
                     renderOrder={660}
-                    textureRotation={textureRotation}
                     onPointerOver={() => bumpInteractClock()}
                   />
                 </group>

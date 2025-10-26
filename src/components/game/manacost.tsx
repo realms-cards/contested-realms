@@ -20,6 +20,7 @@ export interface NumberBadgeProps {
   className?: string;
   /** Background circle opacity (0–1). Default 1. */
   backgroundOpacity?: number;
+  textAsSvg?: boolean;
 }
 
 export function NumberBadge({
@@ -29,6 +30,7 @@ export function NumberBadge({
   fontScale = 0.62,
   className,
   backgroundOpacity = 1,
+  textAsSvg = false,
 }: NumberBadgeProps) {
   // viewBox is 100x100; compute a radius that leaves room for the stroke
   const radius = 50 - strokeWidth / 2 - 1; // 1 unit of breathing room inside
@@ -60,24 +62,41 @@ export function NumberBadge({
           strokeWidth={strokeWidth}
           fillOpacity={backgroundOpacity}
         />
+        {textAsSvg && (
+          <text
+            x={50}
+            y={50}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#fff"
+            fontWeight={800}
+            fontSize={fontScale * 100}
+            className="font-fantaisie select-none"
+            style={{ pointerEvents: "none", userSelect: "none" }}
+          >
+            {value}
+          </text>
+        )}
       </svg>
-      <span
-        className="font-fantaisie select-none"
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          color: "#fff",
-          fontWeight: 800,
-          fontSize: fontScale * size,
-          lineHeight: 1,
-          userSelect: "none",
-          pointerEvents: "none",
-        }}
-      >
-        {value}
-      </span>
+      {!textAsSvg && (
+        <span
+          className="font-fantaisie select-none"
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: fontScale * size,
+            lineHeight: 1,
+            userSelect: "none",
+            pointerEvents: "none",
+          }}
+        >
+          {value}
+        </span>
+      )}
     </div>
   );
 }

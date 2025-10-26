@@ -212,9 +212,16 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     const t = tex.clone();
     t.center.set(0.5, 0.5);
     t.rotation = textureRotation;
+    // Special-case: token pile uses preferRaster and token textures; rotate without UV invert to prevent smear/stripes.
+    const isTokenTexture = (props.textureUrl || "").includes("/tokens/") || (props.slug || "").startsWith("token:");
+    if (props.preferRaster && isTokenTexture) {
+      // Undo the Y-invert applied during normalization for this rotated clone
+      t.repeat.y = 1;
+      t.offset.y = 0;
+    }
     t.needsUpdate = true;
     return t;
-  }, [tex, textureRotation]);
+  }, [tex, textureRotation, props.preferRaster, props.textureUrl, props.slug]);
   useEffect(() => {
     return () => {
       if (instancedMap && instancedMap !== tex) {
