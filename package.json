@@ -41,6 +41,8 @@
     "assets:webp": "node scripts/convert-webp.js",
     "assets:webp:out": "node scripts/convert-webp.js --input data --outDir data-webp",
     "assets:ascii:export": "node scripts/render-ascii-svg.js",
+    "assets:pwa:icons": "node scripts/generate-pwa-icons.js",
+    "assets:pwa:screens": "node scripts/generate-pwa-screenshots.js",
     "bot:add": "node scripts/add-cpu-bot.js",
     "bots:spawn": "node scripts/spawn-bots.js",
     "sim:tournament": "node scripts/simulate-tournament.js",

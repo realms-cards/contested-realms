@@ -532,6 +532,8 @@ export default function Board({
   // Track a world-space ghost position while dragging (legacy state - setter used to clear on drop)
   const [, setGhost] = useState<{ x: number; z: number } | null>(null);
   const hoverTimer = useRef<number | null>(null);
+  const touchPreviewTimerRef = useRef<number | null>(null);
+  const touchContextTimerRef = useRef<number | null>(null);
   const [dragAvatar, setDragAvatar] = useState<"p1" | "p2" | null>(null);
   const avatarDragStartRef = useRef<{
     who: "p1" | "p2";
@@ -697,6 +699,16 @@ export default function Board({
     hoverTimer.current = null;
     setPreviewCard(null);
   }
+  const clearTouchTimers = useCallback(() => {
+    if (touchPreviewTimerRef.current) {
+      window.clearTimeout(touchPreviewTimerRef.current);
+      touchPreviewTimerRef.current = null;
+    }
+    if (touchContextTimerRef.current) {
+      window.clearTimeout(touchContextTimerRef.current);
+      touchContextTimerRef.current = null;
+    }
+  }, []);
 
   // --- Remote cursor telemetry (position + dragging meta + highlight) ---
   const lastCursorRef = useRef<RemoteCursorState | null>(null);
@@ -1456,6 +1468,26 @@ export default function Board({
                         {site.card?.slug ? (
                           <group
                             position={[edgeOffset.x, 0, edgeOffset.z]}
+                            onPointerDown={(e) => {
+                              if (dragFromHand || dragFromPile) return;
+                              const pe = e.nativeEvent as PointerEvent | undefined;
+                              if (pe && (pe as PointerEvent).pointerType === "touch") {
+                                clearTouchTimers();
+                                const cx = e.clientX;
+                                const cy = e.clientY;
+                                if (site.card) {
+                                  touchPreviewTimerRef.current = window.setTimeout(() => {
+                                    beginHoverPreview(site.card);
+                                  }, 180) as unknown as number;
+                                }
+                                touchContextTimerRef.current = window.setTimeout(() => {
+                                  openContextMenu(
+                                    { kind: "site", x, y },
+                                    { x: cx, y: cy }
+                                  );
+                                }, 500) as unknown as number;
+                              }
+                            }}
                             onPointerOver={(e) => {
                               if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
@@ -1465,6 +1497,13 @@ export default function Board({
                               if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
                               clearHoverPreview();
+                              clearTouchTimers();
+                            }}
+                            onPointerMove={(e) => {
+                              const pe = e.nativeEvent as PointerEvent | undefined;
+                              if (pe && (pe as PointerEvent).pointerType === "touch") {
+                                clearTouchTimers();
+                              }
                             }}
                             onDoubleClick={(e) => {
                               if (dragFromHand || dragFromPile) return;
@@ -1504,6 +1543,21 @@ export default function Board({
                             rotation-z={rotZ}
                             position={[edgeOffset.x, 0.001, edgeOffset.z]}
                             castShadow
+                            onPointerDown={(e) => {
+                              if (dragFromHand || dragFromPile) return;
+                              const pe = e.nativeEvent as PointerEvent | undefined;
+                              if (pe && (pe as PointerEvent).pointerType === "touch") {
+                                clearTouchTimers();
+                                const cx = e.clientX;
+                                const cy = e.clientY;
+                                touchContextTimerRef.current = window.setTimeout(() => {
+                                  openContextMenu(
+                                    { kind: "site", x, y },
+                                    { x: cx, y: cy }
+                                  );
+                                }, 500) as unknown as number;
+                              }
+                            }}
                             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                               if (isSpectator) return;
                               e.stopPropagation();
@@ -1640,6 +1694,22 @@ export default function Board({
                             clearHoverPreview();
                             return;
                           }
+                          const pe = e.nativeEvent as PointerEvent | undefined;
+                          if (pe && (pe as PointerEvent).pointerType === "touch") {
+                            clearTouchTimers();
+                            const cx = e.clientX;
+                            const cy = e.clientY;
+                            touchPreviewTimerRef.current = window.setTimeout(() => {
+                              beginHoverPreview(p.card);
+                            }, 180) as unknown as number;
+                            touchContextTimerRef.current = window.setTimeout(() => {
+                              useGameStore.getState().selectPermanent(key, idx);
+                              openContextMenu(
+                                { kind: "permanent", at: key, index: idx },
+                                { x: cx, y: cy }
+                              );
+                            }, 500) as unknown as number;
+                          }
                           if (e.button === 0) {
                             e.stopPropagation();
                             useGameStore.getState().selectPermanent(key, idx);
@@ -1670,6 +1740,7 @@ export default function Board({
                           ) {
                             dragStartRef.current = null;
                           }
+                          clearTouchTimers();
                         }}
                         onDoubleClick={(e) => {
                           if (dragFromHand || dragFromPile) return;
@@ -1682,6 +1753,10 @@ export default function Board({
                           if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                           if (tokenSiteReplace) return; // no drag for Rubble
                           e.stopPropagation();
+                          const pe = e.nativeEvent as PointerEvent | undefined;
+                          if (pe && (pe as PointerEvent).pointerType === "touch") {
+                            clearTouchTimers();
+                          }
                           // Always feed cursor telemetry with current world coordinates
                           handlePointerMove(e.point.x, e.point.z);
                           if (isSpectator) return;
@@ -1703,8 +1778,7 @@ export default function Board({
                               dist > DRAG_THRESHOLD
                             ) {
                               setDragging({ from: key, index: idx });
-                              setDragFromHand(true);
-                              setGhost(null);
+                              dragStartRef.current = null;
                               // No ghost for board permanent drags; just move the body
                               draggedBody.current =
                                 bodyMap.current.get(`perm:${key}:${idx}`) ||
@@ -1745,6 +1819,7 @@ export default function Board({
                             return;
                           }
                           e.stopPropagation();
+                          clearTouchTimers();
                           if (
                             dragging &&
                             dragging.from === key &&
@@ -2233,6 +2308,24 @@ export default function Board({
                       }
                       // Only start potential drag on left-click
                       if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
+                      const pe = e.nativeEvent as PointerEvent | undefined;
+                      if (pe && (pe as PointerEvent).pointerType === "touch") {
+                        clearTouchTimers();
+                        const cx = e.clientX;
+                        const cy = e.clientY;
+                        if (a.card) {
+                          touchPreviewTimerRef.current = window.setTimeout(() => {
+                            beginHoverPreview(a.card);
+                          }, 180) as unknown as number;
+                        }
+                        touchContextTimerRef.current = window.setTimeout(() => {
+                          selectAvatar(who);
+                          openContextMenu(
+                            { kind: "avatar", who },
+                            { x: cx, y: cy }
+                          );
+                        }, 500) as unknown as number;
+                      }
                       if (e.button === 0) {
                         e.stopPropagation();
                         selectAvatar(who);
@@ -2261,6 +2354,7 @@ export default function Board({
                       ) {
                         avatarDragStartRef.current = null;
                       }
+                      clearTouchTimers();
                     }}
                     onDoubleClick={(e) => {
                       if (dragFromHand || dragFromPile) return;
@@ -2272,6 +2366,10 @@ export default function Board({
                     onPointerMove={(e) => {
                       if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                       e.stopPropagation();
+                      const pe = e.nativeEvent as PointerEvent | undefined;
+                      if (pe && (pe as PointerEvent).pointerType === "touch") {
+                        clearTouchTimers();
+                      }
                       handlePointerMove(e.point.x, e.point.z);
                       if (isSpectator) {
                         return;

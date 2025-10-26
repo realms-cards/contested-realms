@@ -168,15 +168,41 @@ export default function TrackpadOrbitAdapter() {
     const LONG_PRESS_MS = 500;
     const MOVE_CANCEL_PX = 10;
     const dispatchContextMenu = (clientX: number, clientY: number) => {
-      const evt = new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
-        clientX,
-        clientY,
-        button: 2,
-        buttons: 2,
-      });
-      gl.domElement.dispatchEvent(evt);
+      try {
+        if (typeof PointerEvent !== "undefined") {
+          const down = new PointerEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+            clientX,
+            clientY,
+            pointerType: "touch",
+            button: 2,
+            buttons: 2,
+          });
+          gl.domElement.dispatchEvent(down);
+          const up = new PointerEvent("pointerup", {
+            bubbles: true,
+            cancelable: true,
+            clientX,
+            clientY,
+            pointerType: "touch",
+            button: 2,
+            buttons: 0,
+          });
+          gl.domElement.dispatchEvent(up);
+        }
+      } catch {}
+      try {
+        const cm = new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX,
+          clientY,
+          button: 2,
+          buttons: 2,
+        });
+        gl.domElement.dispatchEvent(cm);
+      } catch {}
     };
 
     const handleTouchStart = (event: TouchEvent) => {
