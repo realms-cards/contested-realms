@@ -1,5 +1,5 @@
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 // Google fonts disabled for offline/CI builds
 import localFont from "next/font/local";
 import "./globals.css";
@@ -30,6 +30,24 @@ const fantaisieArtistique = localFont({
 export const metadata: Metadata = {
   title: "Realms.cards",
   description: "",
+  manifest: "/manifest.webmanifest",
+  themeColor: "#111111",
+  appleWebApp: {
+    capable: true,
+    title: "Realms.cards",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({
