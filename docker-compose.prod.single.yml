@@ -59,6 +59,55 @@ services:
       retries: 20
       start_period: 10s
 
+  turn:
+    image: instrumentisto/coturn:latest
+    container_name: sorcery-turn
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - TURN_REALM=${TURN_REALM:-turn.realms.cards}
+      - TURN_USERNAME=${TURN_USERNAME:-turnuser}
+      - TURN_PASSWORD=${TURN_PASSWORD:-turnpass}
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
+    volumes:
+      - caddy_data:/data:ro
+      - caddy_config:/config:ro
+    depends_on:
+      - caddy
+    command: >
+      sh -c '
+        CERT_DIR=/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${TURN_REALM}
+        CERT_FILE="$CERT_DIR/$TURN_REALM.crt"
+        KEY_FILE="$CERT_DIR/$TURN_REALM.key"
+        if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+          echo "[turn] TLS cert not found, starting without TLS (3478 only)";
+          exec turnserver \
+            --listening-port=3478 \
+            --fingerprint \
+            --lt-cred-mech \
+            --user=${TURN_USERNAME}:${TURN_PASSWORD} \
+            --realm=${TURN_REALM} \
+            --min-port=49160 --max-port=49200 \
+            --no-tls --no-dtls --no-cli;
+        else
+          echo "[turn] Using TLS certificate at $CERT_FILE";
+          exec turnserver \
+            --listening-port=3478 \
+            --tls-listening-port=5349 \
+            --fingerprint \
+            --lt-cred-mech \
+            --user=${TURN_USERNAME}:${TURN_PASSWORD} \
+            --realm=${TURN_REALM} \
+            --min-port=49160 --max-port=49200 \
+            --cert=$CERT_FILE --pkey=$KEY_FILE \
+            --no-cli;
+        fi'
+
   # Public entrypoint: TLS + reverse-proxy to single server
   caddy:
     image: caddy:2-alpine

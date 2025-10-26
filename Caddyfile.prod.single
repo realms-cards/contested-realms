@@ -2,6 +2,15 @@
     email kingofthe@realms.cards
 }
 
+turn.realms.cards {
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+
+    respond /healthz 200
+}
+
 # Admin route gating shared snippet – import inside the site that proxies Next.js.
 # Usage example (uncomment and adjust upstream):
 # realms.cards {
