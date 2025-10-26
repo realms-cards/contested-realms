@@ -155,6 +155,21 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
     return undefined;
   }, [pathname, searchParams, startLoading, stopLoading]);
 
+  useEffect(() => {
+    const onStart = () => startLoading();
+    const onStop = () => stopLoading();
+    if (typeof document !== "undefined") {
+      document.addEventListener("app:loading:start", onStart as unknown as EventListener);
+      document.addEventListener("app:loading:stop", onStop as unknown as EventListener);
+    }
+    return () => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("app:loading:start", onStart as unknown as EventListener);
+        document.removeEventListener("app:loading:stop", onStop as unknown as EventListener);
+      }
+    };
+  }, [startLoading, stopLoading]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
