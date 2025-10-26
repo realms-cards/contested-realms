@@ -31,7 +31,6 @@ export const metadata: Metadata = {
   title: "Realms.cards",
   description: "",
   manifest: "/manifest.webmanifest",
-  themeColor: "#111111",
   appleWebApp: {
     capable: true,
     title: "Realms.cards",
@@ -48,6 +47,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   viewportFit: "cover",
+  themeColor: "#111111",
 };
 
 export default async function RootLayout({
