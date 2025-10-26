@@ -10,6 +10,7 @@ import type {
   VoiceOutgoingRequest,
   VoiceRequestPeer,
 } from "@/app/online/online-context";
+import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { useGameStore } from "@/lib/game/store";
 import type {
@@ -32,6 +33,7 @@ export default function OnlineProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { startLoading: startGlobalLoading, stopLoading: stopGlobalLoading } = useLoadingContext();
   const { data: session, status: sessionStatus } = useSession();
   const [connected, setConnected] = useState<boolean>(false);
   const [lobby, setLobby] = useState<LobbyInfo | null>(null);
@@ -129,6 +131,46 @@ export default function OnlineProvider({
       }
     };
   }, [transport]);
+
+  const connLoadingActiveRef = useRef<boolean>(false);
+  const connLoadingTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") {
+      if (connLoadingTimerRef.current) {
+        window.clearTimeout(connLoadingTimerRef.current);
+        connLoadingTimerRef.current = null;
+      }
+      if (connLoadingActiveRef.current) {
+        stopGlobalLoading();
+        connLoadingActiveRef.current = false;
+      }
+      return;
+    }
+    if (!connected) {
+      if (connLoadingTimerRef.current) {
+        window.clearTimeout(connLoadingTimerRef.current);
+      }
+      connLoadingTimerRef.current = window.setTimeout(() => {
+        startGlobalLoading();
+        connLoadingActiveRef.current = true;
+      }, 300);
+    } else {
+      if (connLoadingTimerRef.current) {
+        window.clearTimeout(connLoadingTimerRef.current);
+        connLoadingTimerRef.current = null;
+      }
+      if (connLoadingActiveRef.current) {
+        stopGlobalLoading();
+        connLoadingActiveRef.current = false;
+      }
+    }
+    return () => {
+      if (connLoadingTimerRef.current) {
+        window.clearTimeout(connLoadingTimerRef.current);
+        connLoadingTimerRef.current = null;
+      }
+    };
+  }, [connected, sessionStatus, startGlobalLoading, stopGlobalLoading]);
 
   // Resolve the HTTP origin for the Socket server (for REST-like endpoints)
   const getSocketHttpOrigin = useCallback((): string => {
@@ -569,6 +611,33 @@ export default function OnlineProvider({
       setVoicePlaybackEnabled(true);
     }
   }, [voiceState]);
+
+  const resyncLoadingActiveRef = useRef<boolean>(false);
+  const resyncStopDelayRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (resyncing) {
+      if (!resyncLoadingActiveRef.current) {
+        startGlobalLoading();
+        resyncLoadingActiveRef.current = true;
+      }
+    } else {
+      if (resyncLoadingActiveRef.current) {
+        if (resyncStopDelayRef.current) {
+          window.clearTimeout(resyncStopDelayRef.current);
+        }
+        resyncStopDelayRef.current = window.setTimeout(() => {
+          stopGlobalLoading();
+          resyncLoadingActiveRef.current = false;
+        }, 50);
+      }
+    }
+    return () => {
+      if (resyncStopDelayRef.current) {
+        window.clearTimeout(resyncStopDelayRef.current);
+        resyncStopDelayRef.current = null;
+      }
+    };
+  }, [resyncing, startGlobalLoading, stopGlobalLoading]);
 
   // Monotonic token to guard resync state across overlapping attempts
   const resyncGenRef = useRef<number>(0);

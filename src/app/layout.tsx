@@ -6,6 +6,7 @@ import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
+import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
 import GlobalLoadingIndicator from "@/components/ui/GlobalLoadingIndicator";
 import ThemeScope from "@/components/ui/ThemeScope";
@@ -46,6 +47,7 @@ export default async function RootLayout({
         suppressHydrationWarning
       >
         <LoadingProvider>
+          <GlobalNetworkLoadingBridge />
           <ThemeProvider defaultMode="colorful">
             <SoundProvider>
               <AuthProvider session={session}>
