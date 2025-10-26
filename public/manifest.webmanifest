@@ -4,7 +4,7 @@
   "id": "/?source=pwa",
   "start_url": "/?source=pwa",
   "scope": "/",
-  "display_override": ["fullscreen", "standalone"],
+  "display_override": ["fullscreen", "window-controls-overlay", "standalone", "minimal-ui"],
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#111111",

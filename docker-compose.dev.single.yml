@@ -68,6 +68,27 @@ services:
     expose:
       - "3010"
 
+  turn:
+    image: instrumentisto/coturn:latest
+    container_name: sorcery-turn
+    restart: unless-stopped
+    environment:
+      - TURN_USERNAME=${TURN_USERNAME:-devuser}
+      - TURN_PASSWORD=${TURN_PASSWORD:-devpass}
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
+    command: >
+      turnserver
+        --listening-port=3478
+        --fingerprint
+        --lt-cred-mech
+        --user=${TURN_USERNAME:-devuser}:${TURN_PASSWORD:-devpass}
+        --realm=localhost
+        --min-port=49160 --max-port=49200
+        --no-tls --no-dtls --no-cli
+
   # Caddy reverse proxy to single server
   caddy:
     image: caddy:2-alpine
