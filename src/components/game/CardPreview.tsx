@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
-import { TOKEN_BY_KEY } from "@/lib/game/tokens";
+import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
 type Anchor = "top-right" | "bottom-right" | "top-left" | "bottom-left";
 
@@ -160,6 +160,16 @@ export default function CardPreview({
 
   if (!slug) return null;
 
+  // Resolve image src: tokens are not served by /api/images; use assets path
+  const imageSrc = (() => {
+    if (isToken) {
+      const key = slug.split(":")[1]?.toLowerCase() || "";
+      const def = TOKEN_BY_KEY[key];
+      if (def) return tokenTextureUrl(def);
+    }
+    return `/api/images/${slug}`;
+  })();
+
   const toBottomAnchor = (a: Anchor): Anchor => {
     if (a === "top-left" || a === "bottom-left") return "bottom-left";
     return "bottom-right";
@@ -198,7 +208,7 @@ export default function CardPreview({
       <div className="relative">
         <div className={`relative ${base}`} style={{ width }}>
           <Image
-            src={`/api/images/${slug}`}
+            src={imageSrc}
             alt={card?.name || "Card preview"}
             fill
             className={`${
