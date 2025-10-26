@@ -75,40 +75,24 @@ services:
       - caddy_config:/config:ro
     depends_on:
       - caddy
-    entrypoint: ["/bin/sh", "-lc"]
-    command: |
-      REALM="$${TURN_REALM:-turn.realms.cards}"
-      USERNAME="$${TURN_USERNAME:-turnuser}"
-      PASSWORD="$${TURN_PASSWORD:-turnpass}"
-      CERT_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.crt" | head -n1)
-      KEY_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.key" | head -n1)
-      set -- $(hostname -i); PRIV_IP=$1
-      if [ -n "$${PUBLIC_IP}" ]; then EXT="--external-ip=$${PUBLIC_IP}/$${PRIV_IP}"; else EXT=""; fi
-      if [ -z "$${CERT_FILE}" ] || [ -z "$${KEY_FILE}" ]; then
-        echo "[turn] TLS cert not found, starting without TLS (3478 only)"
-        exec turnserver \
-          --listening-port=3478 \
-          --fingerprint \
-          --lt-cred-mech \
-          --user="$${USERNAME}:$${PASSWORD}" \
-          --realm="$${REALM}" \
-          --min-port=49160 --max-port=49200 \
-          --no-tls --no-dtls --no-cli --no-daemon \
-          --log-file=stdout --verbose $${EXT}
-      else
-        echo "[turn] Using TLS certificate at $${CERT_FILE}"
-        exec turnserver \
-          --listening-port=3478 \
-          --tls-listening-port=5349 \
-          --fingerprint \
-          --lt-cred-mech \
-          --user="$${USERNAME}:$${PASSWORD}" \
-          --realm="$${REALM}" \
-          --min-port=49160 --max-port=49200 \
-          --cert="$${CERT_FILE}" --pkey="$${KEY_FILE}" \
-          --no-cli --no-daemon \
-          --log-file=stdout --verbose $${EXT}
-      fi
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - >-
+        REALM="$${TURN_REALM:-turn.realms.cards}"; 
+        USERNAME="$${TURN_USERNAME:-turnuser}"; 
+        PASSWORD="$${TURN_PASSWORD:-turnpass}"; 
+        CERT_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.crt" | head -n1); 
+        KEY_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.key" | head -n1); 
+        set -- $(hostname -i); PRIV_IP=$1; 
+        if [ -n "$${PUBLIC_IP}" ]; then EXT="--external-ip=$${PUBLIC_IP}/$${PRIV_IP}"; else EXT=""; fi; 
+        if [ -z "$${CERT_FILE}" ] || [ -z "$${KEY_FILE}" ]; then 
+          echo "[turn] TLS cert not found, starting without TLS (3478 only)"; 
+          exec turnserver --listening-port=3478 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --no-tls --no-dtls --no-cli --no-daemon --log-file=stdout --verbose $${EXT}; 
+        else 
+          echo "[turn] Using TLS certificate at $${CERT_FILE}"; 
+          exec turnserver --listening-port=3478 --tls-listening-port=5349 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --cert="$${CERT_FILE}" --pkey="$${KEY_FILE}" --no-cli --no-daemon --log-file=stdout --verbose $${EXT}; 
+        fi
 
   # Public entrypoint: TLS + reverse-proxy to single server
   caddy:
