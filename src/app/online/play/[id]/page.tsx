@@ -1217,9 +1217,7 @@ const canPanCamera =
         // Natural 2D view: almost top-down from the player's side, slightly tilted
         // Keep altitude high enough to see the whole mat, but offset slightly in Z
         const dist = Math.max(matW, matH) * 1.1;
-        const zOffset = Math.min(6, Math.max(1.5, dist * 0.08));
-        const side = myPlayerNumber === 2 ? -1 : 1;
-        cam.position.set(0, dist, side * zOffset);
+        cam.position.set(0, dist, 0);
       } else {
         // Reasonable default orbit position based on seat (slightly offset)
         cam.position.set(0, 10, myPlayerNumber === 2 ? -5 : 5);
@@ -1417,12 +1415,7 @@ const canPanCamera =
 
   // Compute natural tilt angle for 2D mode based on extents
   // Constrain polar angle in 2D to a fixed small tilt that matches gotoBaseline('topdown')
-  const naturalTiltAngle = useMemo(() => {
-    const dist = Math.max(matW, matH) * 1.1;
-    const zOffset = Math.min(6, Math.max(1.5, dist * 0.08));
-    // Polar angle measured from +Y (straight up) downward
-    return Math.atan(zOffset / dist);
-  }, [matW, matH]);
+  const naturalTiltAngle = useMemo(() => 0, []);
   const boardInteractionMode =
     endedByMatchStatus || matchEnded ? "spectator" : "normal";
   const clampControls = useCallback(() => {

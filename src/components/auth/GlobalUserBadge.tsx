@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import UserBadge from "@/components/auth/UserBadge";
+ 
 
 /**
  * GlobalUserBadge
