@@ -7,7 +7,14 @@ import {
   CuboidCollider,
   useAfterPhysicsStep,
 } from "@react-three/rapier";
-import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Suspense,
+} from "react";
 import {
   SRGBColorSpace,
   Raycaster,
@@ -140,14 +147,16 @@ export default function Board({
   const setLastPointerWorldPos = useGameStore((s) => s.setLastPointerWorldPos);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const playFromPileTo = useGameStore((s) => s.playFromPileTo);
-  const getRemoteHighlightColor = useGameStore((s) => s.getRemoteHighlightColor);
+  const getRemoteHighlightColor = useGameStore(
+    (s) => s.getRemoteHighlightColor
+  );
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const actorKey = useGameStore((s) => s.actorKey);
   const remoteCursors = useGameStore((s) => s.remoteCursors);
   const localPlayerId = useGameStore((s) => s.localPlayerId);
   const avatars = useGameStore((s) => s.avatars);
-  const overlayBlocking = useGameStore(
-    (s) => Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
+  const overlayBlocking = useGameStore((s) =>
+    Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
   );
   // Counter actions
   const incrementPermanentCounter = useGameStore(
@@ -163,7 +172,11 @@ export default function Board({
     targetPermanent: { at: string; index: number; card: CardRef };
     dropCoords: { x: number; y: number };
     fromPile?: boolean;
-    pileInfo?: { who: "p1" | "p2"; from: "tokens" | "spellbook" | "atlas" | "graveyard"; card: CardRef } | null;
+    pileInfo?: {
+      who: "p1" | "p2";
+      from: "tokens" | "spellbook" | "atlas" | "graveyard";
+      card: CardRef;
+    } | null;
   } | null>(null);
 
   // Helper to check if a token can be attached
@@ -182,11 +195,11 @@ export default function Board({
   // Removed baseline-shift helper to ensure only the moved card changes position
 
   // Continuously update the drag ghost position based on cursor ray -> ground plane (y=0)
-useFrame(() => {
-  // Only drive ghost while dragging a card from hand/pile (not board/avatars)
-  if (
-    dragFromHand &&
-    !dragAvatar &&
+  useFrame(() => {
+    // Only drive ghost while dragging a card from hand/pile (not board/avatars)
+    if (
+      dragFromHand &&
+      !dragAvatar &&
       !dragging &&
       (selected || dragFromPile?.card) &&
       ghostGroupRef.current &&
@@ -234,8 +247,14 @@ useFrame(() => {
     matW = baseGridH * MAT_RATIO;
   }
 
-  const offsetX = useMemo(() => -((board.size.w - 1) * TILE_SIZE) / 2, [board.size.w]);
-  const offsetY = useMemo(() => -((board.size.h - 1) * TILE_SIZE) / 2, [board.size.h]);
+  const offsetX = useMemo(
+    () => -((board.size.w - 1) * TILE_SIZE) / 2,
+    [board.size.w]
+  );
+  const offsetY = useMemo(
+    () => -((board.size.h - 1) * TILE_SIZE) / 2,
+    [board.size.h]
+  );
 
   const cells = useMemo(() => {
     const out: { x: number; y: number; key: string }[] = [];
@@ -259,6 +278,7 @@ useFrame(() => {
       height: number;
       textureUrl?: string;
       forceTextureUrl?: boolean;
+      textureRotation?: number;
     };
 
     if (overlayBlocking) {
@@ -299,16 +319,14 @@ useFrame(() => {
           w = CARD_SHORT * 0.5;
           h = CARD_LONG * 0.5;
         }
-        if (isToken && tokenDef?.siteReplacement) {
-          const tmp = w;
-          w = h;
-          h = tmp;
-        }
 
-        // Orientation like board permanents (owner-facing + tap + tilt)
+        // Orientation like board permanents (owner-facing + site-like -90° + tap + tilt)
         const ownerRot = p.owner === 1 ? 0 : Math.PI;
-        // Match local permanent orientation logic (site replacement handled by width/height swap)
-        const rotZ = ownerRot + (p.tapped ? Math.PI / 2 : 0) + (p.tilt || 0);
+        const rotZ =
+          ownerRot +
+          (tokenDef?.siteReplacement ? -Math.PI / 2 : 0) +
+          (p.tapped ? Math.PI / 2 : 0) +
+          (p.tilt || 0);
 
         const color =
           entry.playerKey === "p1"
@@ -329,8 +347,11 @@ useFrame(() => {
           color,
           width: w,
           height: h,
-          textureUrl: isToken && tokenDef ? tokenTextureUrl(tokenDef) : undefined,
+          textureUrl:
+            isToken && tokenDef ? tokenTextureUrl(tokenDef) : undefined,
           forceTextureUrl: Boolean(isToken && tokenDef),
+          textureRotation:
+            isToken && tokenDef ? tokenDef.textureRotation ?? 0 : 0,
         });
       }
     } catch {}
@@ -398,7 +419,15 @@ useFrame(() => {
     } catch {}
 
     return drags;
-  }, [overlayBlocking, remoteCursors, localPlayerId, offsetX, offsetY, board.size.w, board.size.h]);
+  }, [
+    overlayBlocking,
+    remoteCursors,
+    localPlayerId,
+    offsetX,
+    offsetY,
+    board.size.w,
+    board.size.h,
+  ]);
 
   const { remoteAvatarDrags, remoteAvatarDragSet } = useMemo(() => {
     type RemoteAvatarDrag = {
@@ -682,7 +711,10 @@ useFrame(() => {
       instanceKey?: string | null
     ) => {
       if (!card) return null;
-      const slug = typeof card.slug === "string" && card.slug.length > 0 ? card.slug : null;
+      const slug =
+        typeof card.slug === "string" && card.slug.length > 0
+          ? card.slug
+          : null;
       const cardId = Number.isFinite(card.cardId) ? Number(card.cardId) : null;
       const type = (card.type || "").toLowerCase();
       const isToken = type.includes("token");
@@ -691,7 +723,8 @@ useFrame(() => {
         if (!slug) return null;
       }
       // For tokens dragged from hand, synthesize a unique negative id so we can highlight only that instance.
-      const baseId = cardId ?? -Math.abs(Number(card.variantId ?? (Date.now() % 1000)));
+      const baseId =
+        cardId ?? -Math.abs(Number(card.variantId ?? Date.now() % 1000));
       const syntheticId = baseId || -1;
       return {
         slug,
@@ -748,7 +781,7 @@ useFrame(() => {
       return null;
     }
     // Avatar drag (local-only UI state here)
-    if ((dragAvatar as unknown as string | null)) {
+    if (dragAvatar as unknown as string | null) {
       return { kind: "avatar", who: dragAvatar };
     }
     // Prefer explicit board permanent drag metadata over generic flags
@@ -768,19 +801,27 @@ useFrame(() => {
     return Number.isFinite(n) ? Number(n.toFixed(3)) : 0;
   }
 
-  function positionsEqual(a: RemoteCursorState["position"], b: RemoteCursorState["position"]) {
+  function positionsEqual(
+    a: RemoteCursorState["position"],
+    b: RemoteCursorState["position"]
+  ) {
     if (!a && !b) return true;
     if (!a || !b) return false;
     return a.x === b.x && a.z === b.z;
   }
 
-  function draggingEquals(a: RemoteCursorDragMeta | null, b: RemoteCursorDragMeta | null) {
+  function draggingEquals(
+    a: RemoteCursorDragMeta | null,
+    b: RemoteCursorDragMeta | null
+  ) {
     if (a === b) return true;
     if (!a || !b) return false;
     if (a.kind !== b.kind) return false;
     switch (a.kind) {
       case "permanent":
-        return b.kind === "permanent" && a.from === b.from && a.index === b.index;
+        return (
+          b.kind === "permanent" && a.from === b.from && a.index === b.index
+        );
       case "hand":
         return b.kind === "hand";
       case "pile":
@@ -794,56 +835,63 @@ useFrame(() => {
     }
   }
 
-  const sendCursor = useCallback((position: { x: number; z: number } | null) => {
-    if (isSpectator) {
-      return;
-    }
-    const s = useGameStore.getState();
-    const playerId = s.localPlayerId;
-    if (!playerId) return;
-    const tr = s.transport;
-    if (!tr?.sendMessage) return;
-
-    const highlight = resolveHighlight();
-
-    const payload: RemoteCursorState = {
-      playerId,
-      playerKey: s.actorKey,
-      position: position ? { x: round3(position.x), z: round3(position.z) } : null,
-      dragging: resolveDraggingMeta(),
-      highlight,
-      ts: Date.now(),
-      displayName: undefined,
-    };
-
-    const prev = lastCursorRef.current;
-    const now = Date.now();
-    if (
-      prev &&
-      positionsEqual(prev.position, payload.position) &&
-      draggingEquals(prev.dragging, payload.dragging) &&
-      ((prev.highlight?.slug || null) === (payload.highlight?.slug || null)) &&
-      ((prev.highlight?.cardId || null) === (payload.highlight?.cardId || null)) &&
-      ((prev.highlight?.instanceKey || null) === (payload.highlight?.instanceKey || null))
-    ) {
-      // unchanged
-      lastCursorRef.current = { ...payload };
-      return;
-    }
-    if (now - lastCursorSentAtRef.current < 45) {
-      lastCursorRef.current = { ...payload };
-      return;
-    }
-    lastCursorRef.current = { ...payload };
-    lastCursorSentAtRef.current = now;
-    try {
-      tr.sendMessage({ type: "boardCursor", ...payload });
-    } catch (err) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[cursor] send failed", err);
+  const sendCursor = useCallback(
+    (position: { x: number; z: number } | null) => {
+      if (isSpectator) {
+        return;
       }
-    }
-  }, [isSpectator, resolveDraggingMeta, resolveHighlight]);
+      const s = useGameStore.getState();
+      const playerId = s.localPlayerId;
+      if (!playerId) return;
+      const tr = s.transport;
+      if (!tr?.sendMessage) return;
+
+      const highlight = resolveHighlight();
+
+      const payload: RemoteCursorState = {
+        playerId,
+        playerKey: s.actorKey,
+        position: position
+          ? { x: round3(position.x), z: round3(position.z) }
+          : null,
+        dragging: resolveDraggingMeta(),
+        highlight,
+        ts: Date.now(),
+        displayName: undefined,
+      };
+
+      const prev = lastCursorRef.current;
+      const now = Date.now();
+      if (
+        prev &&
+        positionsEqual(prev.position, payload.position) &&
+        draggingEquals(prev.dragging, payload.dragging) &&
+        (prev.highlight?.slug || null) === (payload.highlight?.slug || null) &&
+        (prev.highlight?.cardId || null) ===
+          (payload.highlight?.cardId || null) &&
+        (prev.highlight?.instanceKey || null) ===
+          (payload.highlight?.instanceKey || null)
+      ) {
+        // unchanged
+        lastCursorRef.current = { ...payload };
+        return;
+      }
+      if (now - lastCursorSentAtRef.current < 45) {
+        lastCursorRef.current = { ...payload };
+        return;
+      }
+      lastCursorRef.current = { ...payload };
+      lastCursorSentAtRef.current = now;
+      try {
+        tr.sendMessage({ type: "boardCursor", ...payload });
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[cursor] send failed", err);
+        }
+      }
+    },
+    [isSpectator, resolveDraggingMeta, resolveHighlight]
+  );
 
   const handlePointerMove = useCallback(
     (x: number, z: number) => {
@@ -872,36 +920,49 @@ useFrame(() => {
   // Re-emit cursor when drag or highlight changes (using last known position)
   useEffect(() => {
     sendCursor(lastPointerRef.current ?? null);
-  }, [actorKey, dragAvatar, dragging, previewCard, selected, selectedPermanent, sendCursor]);
+  }, [
+    actorKey,
+    dragAvatar,
+    dragging,
+    previewCard,
+    selected,
+    selectedPermanent,
+    sendCursor,
+  ]);
 
-  const emitBoardPing = useCallback((position: { x: number; z: number } | null) => {
-    if (!position || isSpectator) return;
-    const x = Number(position.x);
-    const z = Number(position.z);
-    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-    const { actorKey, pushBoardPing, transport } = useGameStore.getState();
-    const seat = actorKey === "p1" || actorKey === "p2" ? actorKey : "p1";
-    const id = `ping_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
-    const ts = Date.now();
-    try {
-      pushBoardPing({
-        id,
-        position: { x, z },
-        playerId: null,
-        playerKey: seat,
-        ts,
-      });
-    } catch {}
-    try {
-      transport?.sendMessage?.({
-        type: "boardPing",
-        id,
-        position: { x, z },
-        playerKey: seat,
-        ts,
-      });
-    } catch {}
-  }, [isSpectator]);
+  const emitBoardPing = useCallback(
+    (position: { x: number; z: number } | null) => {
+      if (!position || isSpectator) return;
+      const x = Number(position.x);
+      const z = Number(position.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      const { actorKey, pushBoardPing, transport } = useGameStore.getState();
+      const seat = actorKey === "p1" || actorKey === "p2" ? actorKey : "p1";
+      const id = `ping_${Math.random()
+        .toString(36)
+        .slice(2, 8)}_${Date.now().toString(36)}`;
+      const ts = Date.now();
+      try {
+        pushBoardPing({
+          id,
+          position: { x, z },
+          playerId: null,
+          playerKey: seat,
+          ts,
+        });
+      } catch {}
+      try {
+        transport?.sendMessage?.({
+          type: "boardPing",
+          id,
+          position: { x, z },
+          playerKey: seat,
+          ts,
+        });
+      } catch {}
+    },
+    [isSpectator]
+  );
 
   // Global keyboard: Space to ping at current pointer position
   useEffect(() => {
@@ -1039,7 +1100,8 @@ useFrame(() => {
                 }}
                 onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
                   if (isSpectator) return;
-                  if (dragFromHand || dragFromPile || dragging || dragAvatar) return;
+                  if (dragFromHand || dragFromPile || dragging || dragAvatar)
+                    return;
                   e.stopPropagation();
                   emitBoardPing({ x: e.point.x, z: e.point.z });
                 }}
@@ -1140,13 +1202,18 @@ useFrame(() => {
                   if (dragFromHand) {
                     // Debug logging for drag cancellation
                     if (process.env.NODE_ENV !== "production") {
-                      console.debug(`[Board] Drag from hand - mouseInHandZone:`, mouseInHandZone);
+                      console.debug(
+                        `[Board] Drag from hand - mouseInHandZone:`,
+                        mouseInHandZone
+                      );
                     }
 
                     // Check if mouse is in hand zone - if so, cancel the drag instead of playing
                     if (mouseInHandZone) {
                       // Cancel the drag - return card to hand
-                      console.debug(`[Board] Cancelling drag - returning to hand`);
+                      console.debug(
+                        `[Board] Cancelling drag - returning to hand`
+                      );
                       setDragFromHand(false);
                       setGhost(null);
                       lastDropAt.current = Date.now();
@@ -1161,14 +1228,21 @@ useFrame(() => {
                     // Check if we're dropping an attachable token on a tile with permanents
                     const draggedCard = selected || dragFromPile?.card;
                     if (draggedCard) {
-                      const cardType = ((draggedCard as CardRef).type || "").toLowerCase();
+                      const cardType = (
+                        (draggedCard as CardRef).type || ""
+                      ).toLowerCase();
                       const isToken = cardType.includes("token");
-                      const tokenName = ((draggedCard as CardRef).name || "").toLowerCase();
+                      const tokenName = (
+                        (draggedCard as CardRef).name || ""
+                      ).toLowerCase();
 
                       // Check if this is an attachable token and there are non-token permanents at this location
                       if (isToken && isAttachableToken(tokenName)) {
                         const nonTokenPermanents = toItems.filter(
-                          item => !((item.card.type || "").toLowerCase().includes("token"))
+                          (item) =>
+                            !(item.card.type || "")
+                              .toLowerCase()
+                              .includes("token")
                         );
 
                         if (nonTokenPermanents.length > 0) {
@@ -1180,14 +1254,19 @@ useFrame(() => {
 
                           nonTokenPermanents.forEach((perm) => {
                             const realIdx = toItems.indexOf(perm);
-                            const startX = -((Math.max(toItems.length, 1) - 1) * spacing) / 2;
+                            const startX =
+                              -((Math.max(toItems.length, 1) - 1) * spacing) /
+                              2;
                             const owner = perm.owner;
-                            const zBase = owner === 1
-                              ? -TILE_SIZE * 0.5 + marginZ
-                              : TILE_SIZE * 0.5 - marginZ;
+                            const zBase =
+                              owner === 1
+                                ? -TILE_SIZE * 0.5 + marginZ
+                                : TILE_SIZE * 0.5 - marginZ;
                             const xPos = startX + realIdx * spacing;
-                            const permX = pos[0] + xPos + (perm.offset?.[0] ?? 0);
-                            const permZ = pos[2] + zBase + (perm.offset?.[1] ?? 0);
+                            const permX =
+                              pos[0] + xPos + (perm.offset?.[0] ?? 0);
+                            const permZ =
+                              pos[2] + zBase + (perm.offset?.[1] ?? 0);
 
                             const distance = Math.sqrt(
                               Math.pow(wx - permX, 2) + Math.pow(wz - permZ, 2)
@@ -1195,22 +1274,39 @@ useFrame(() => {
 
                             if (distance < closestDistance) {
                               closestDistance = distance;
-                              closestPermanent = { at: dropKey, index: realIdx, card: perm.card };
+                              closestPermanent = {
+                                at: dropKey,
+                                index: realIdx,
+                                card: perm.card,
+                              };
                             }
                           });
 
                           // If we found a close permanent (within reasonable distance), show dialog
-                          if (closestPermanent && closestDistance < TILE_SIZE * 0.5) {
+                          if (
+                            closestPermanent &&
+                            closestDistance < TILE_SIZE * 0.5
+                          ) {
                             // Store whether this was from hand or pile before clearing state
                             const wasFromPile = !!dragFromPile?.card;
-                            const pileInfo = dragFromPile?.card ? dragFromPile as { who: "p1" | "p2"; from: "tokens" | "spellbook" | "atlas" | "graveyard"; card: CardRef } : null;
+                            const pileInfo = dragFromPile?.card
+                              ? (dragFromPile as {
+                                  who: "p1" | "p2";
+                                  from:
+                                    | "tokens"
+                                    | "spellbook"
+                                    | "atlas"
+                                    | "graveyard";
+                                  card: CardRef;
+                                })
+                              : null;
 
                             setAttachmentDialog({
                               token: draggedCard as CardRef,
                               targetPermanent: closestPermanent,
                               dropCoords: { x, y },
                               fromPile: wasFromPile,
-                              pileInfo
+                              pileInfo,
                             });
                             setDragFromHand(false);
                             setGhost(null);
@@ -1331,9 +1427,12 @@ useFrame(() => {
                       playerPos.position
                     );
                     const siteInstanceKey = `site:${x},${y}`;
-                    const siteRemoteColor = getRemoteHighlightColor(site.card ?? null, {
-                      instanceKey: siteInstanceKey,
-                    });
+                    const siteRemoteColor = getRemoteHighlightColor(
+                      site.card ?? null,
+                      {
+                        instanceKey: siteInstanceKey,
+                      }
+                    );
                     const siteGlowColor =
                       siteRemoteColor ??
                       (site.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
@@ -1463,7 +1562,7 @@ useFrame(() => {
                   // Orientation: bottom toward owner; Rubble (site-like token) adds -90° like sites
                   const rotZ =
                     (owner === 1 ? 0 : Math.PI) +
-                    (tokenSiteReplace ? Math.PI * 2 : 0) +
+                    (tokenSiteReplace ? -Math.PI / 2 : 0) +
                     (p.tapped ? Math.PI / 2 : 0) +
                     (p.tilt || 0);
                   const offX = p.offset?.[0] ?? 0;
@@ -1481,9 +1580,12 @@ useFrame(() => {
                   const yPos = isBurrowed ? 0.0005 : 0.25;
 
                   const permanentInstanceKey = `perm:${key}:${idx}`;
-                  const remotePermanentColor = getRemoteHighlightColor(p.card ?? null, {
-                    instanceKey: permanentInstanceKey,
-                  });
+                  const remotePermanentColor = getRemoteHighlightColor(
+                    p.card ?? null,
+                    {
+                      instanceKey: permanentInstanceKey,
+                    }
+                  );
                   const permanentGlowColor =
                     remotePermanentColor ??
                     (owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
@@ -1594,14 +1696,19 @@ useFrame(() => {
                             const dx = e.point.x - sx;
                             const dz = e.point.z - sz;
                             const dist = Math.hypot(dx, dz);
-                            const heldFor = Date.now() - dragStartRef.current.time;
-                            if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
+                            const heldFor =
+                              Date.now() - dragStartRef.current.time;
+                            if (
+                              heldFor >= DRAG_HOLD_MS &&
+                              dist > DRAG_THRESHOLD
+                            ) {
                               setDragging({ from: key, index: idx });
                               setDragFromHand(true);
                               setGhost(null);
                               // No ghost for board permanent drags; just move the body
                               draggedBody.current =
-                                bodyMap.current.get(`perm:${key}:${idx}`) || null;
+                                bodyMap.current.get(`perm:${key}:${idx}`) ||
+                                null;
                               if (draggedBody.current) {
                                 moveDraggedBody(e.point.x, e.point.z, true);
                               }
@@ -1741,34 +1848,25 @@ useFrame(() => {
                           }}
                         >
                           {isToken ? (
-                            (() => {
-                              let w =
+                            <CardPlane
+                              slug={""}
+                              textureUrl={
+                                tokenDef ? tokenTextureUrl(tokenDef) : undefined
+                              }
+                              forceTextureUrl
+                              width={
                                 tokenDef && tokenDef.size === "small"
                                   ? CARD_SHORT * 0.5
-                                  : CARD_SHORT;
-                              let h =
+                                  : CARD_SHORT
+                              }
+                              height={
                                 tokenDef && tokenDef.size === "small"
                                   ? CARD_LONG * 0.5
-                                  : CARD_LONG;
-                              // Swap dimensions for site replacement tokens so they appear landscape when rotated
-                              if (tokenSiteReplace) {
-                                [w, h] = [h, w];
+                                  : CARD_LONG
                               }
-                              const texUrl = tokenDef
-                                ? tokenTextureUrl(tokenDef)
-                                : undefined;
-                              return (
-                                <CardPlane
-                                  slug={""}
-                                  textureUrl={texUrl}
-                                  forceTextureUrl
-                                  width={w}
-                                  height={h}
-                                  rotationZ={rotZ}
-                                  elevation={0.02}
-                                />
-                              );
-                            })()
+                              rotationZ={rotZ}
+                              elevation={0.02}
+                            />
                           ) : p.card.slug ? (
                             <>
                               {renderPermanentGlow && (
@@ -1789,6 +1887,11 @@ useFrame(() => {
                                 renderOrder={isBurrowed ? -10 : 0}
                                 depthWrite={!isBurrowed}
                                 depthTest={true}
+                                textureUrl={
+                                  !p.card?.slug
+                                    ? "/api/assets/air.png"
+                                    : undefined
+                                }
                               />
                             </>
                           ) : (
@@ -1836,6 +1939,7 @@ useFrame(() => {
                                           size={8}
                                           strokeWidth={2}
                                           backgroundOpacity={0.5}
+                                          textAsSvg
                                         />
                                       ))}
                                     </div>
@@ -1882,20 +1986,34 @@ useFrame(() => {
                             );
 
                             return attachedTokens.map((token, attachIdx) => {
-                              const tokenName = (token.card.name || "").toLowerCase();
+                              const tokenName = (
+                                token.card.name || ""
+                              ).toLowerCase();
                               const attachTokenDef = TOKEN_BY_NAME[tokenName];
 
                               // Position attached tokens slightly offset on the card
-                              const offsetX = CARD_SHORT * 0.3 * (attachIdx - (attachedTokens.length - 1) / 2);
+                              const offsetX =
+                                CARD_SHORT *
+                                0.3 *
+                                (attachIdx - (attachedTokens.length - 1) / 2);
                               const offsetZ = -CARD_LONG * 0.3;
 
                               if (attachTokenDef) {
                                 const texUrl = tokenTextureUrl(attachTokenDef);
-                                const tokenW = attachTokenDef.size === "small" ? CARD_SHORT * 0.4 : CARD_SHORT * 0.6;
-                                const tokenH = attachTokenDef.size === "small" ? CARD_LONG * 0.4 : CARD_LONG * 0.6;
+                                const tokenW =
+                                  attachTokenDef.size === "small"
+                                    ? CARD_SHORT * 0.4
+                                    : CARD_SHORT * 0.6;
+                                const tokenH =
+                                  attachTokenDef.size === "small"
+                                    ? CARD_LONG * 0.4
+                                    : CARD_LONG * 0.6;
 
                                 return (
-                                  <group key={`attached-${attachIdx}`} position={[offsetX, 0.05, offsetZ]}>
+                                  <group
+                                    key={`attached-${attachIdx}`}
+                                    position={[offsetX, 0.05, offsetZ]}
+                                  >
                                     <CardPlane
                                       slug=""
                                       textureUrl={texUrl}
@@ -1995,6 +2113,9 @@ useFrame(() => {
                 elevation={0.001}
                 renderOrder={530}
                 interactive={false}
+                textureUrl={d.textureUrl}
+                forceTextureUrl={Boolean(d.textureUrl)}
+                textureRotation={d.textureRotation ?? 0}
               />
             </group>
           ))}
@@ -2022,7 +2143,9 @@ useFrame(() => {
                 elevation={0.001}
                 renderOrder={550}
                 interactive={false}
-                textureUrl={d.slug ? undefined : "/api/assets/cardback_spellbook.png"}
+                textureUrl={
+                  d.slug ? undefined : "/api/assets/cardback_spellbook.png"
+                }
               />
             </group>
           ))}
@@ -2253,7 +2376,9 @@ useFrame(() => {
                             height={CARD_LONG}
                             rotationZ={rotZ}
                             elevation={0}
-                            color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
+                            color={
+                              who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2
+                            }
                             renderOrder={-100}
                           />
                         )}
@@ -2368,7 +2493,8 @@ useFrame(() => {
             token={attachmentDialog.token as CardRef}
             targetPermanent={attachmentDialog.targetPermanent}
             onConfirm={() => {
-              const { token, targetPermanent, dropCoords, fromPile, pileInfo } = attachmentDialog;
+              const { token, targetPermanent, dropCoords, fromPile, pileInfo } =
+                attachmentDialog;
 
               // Play the token at the target location
               if (!fromPile && selected) {
@@ -2390,9 +2516,12 @@ useFrame(() => {
                 let tokenIndex = -1;
                 for (let i = items.length - 1; i >= 0; i--) {
                   const item = items[i];
-                  if ((item.card.type || "").toLowerCase().includes("token") &&
-                      (item.card.name || "").toLowerCase() === ((token as CardRef).name || "").toLowerCase() &&
-                      !item.attachedTo) {
+                  if (
+                    (item.card.type || "").toLowerCase().includes("token") &&
+                    (item.card.name || "").toLowerCase() ===
+                      ((token as CardRef).name || "").toLowerCase() &&
+                    !item.attachedTo
+                  ) {
                     tokenIndex = i;
                     break;
                   }
@@ -2402,13 +2531,19 @@ useFrame(() => {
                   // Use the store's attach action
                   const store = useGameStore.getState();
                   if (store.attachTokenToPermanent) {
-                    store.attachTokenToPermanent(dropKey, tokenIndex, targetPermanent.index);
+                    store.attachTokenToPermanent(
+                      dropKey,
+                      tokenIndex,
+                      targetPermanent.index
+                    );
                   }
                 }
               }, 200); // Increase timeout slightly for better reliability
 
               setAttachmentDialog(null);
-              try { playCardPlay(); } catch {}
+              try {
+                playCardPlay();
+              } catch {}
             }}
             onCancel={() => {
               const { dropCoords, fromPile, pileInfo } = attachmentDialog;
@@ -2424,7 +2559,9 @@ useFrame(() => {
                 store.dragFromPile = null;
               }
               setAttachmentDialog(null);
-              try { playCardPlay(); } catch {}
+              try {
+                playCardPlay();
+              } catch {}
             }}
           />
         </Html>

@@ -16,7 +16,9 @@ async function listRecordings(prisma, opts = {}) {
 
   // Fetch sessions for these matchIds (for createdAt/matchType fallback)
   const sessionsForResults = finishedIds.length
-    ? await prisma.onlineMatchSession.findMany({ where: { id: { in: finishedIds } } })
+    ? await prisma.onlineMatchSession.findMany({
+        where: { id: { in: finishedIds } },
+      })
     : [];
   const sessionById = new Map(sessionsForResults.map((s) => [s.id, s]));
 
@@ -24,22 +26,32 @@ async function listRecordings(prisma, opts = {}) {
   let finishedCountsById = new Map();
   if (finishedIds.length) {
     const grouped = await prisma.onlineMatchAction.groupBy({
-      by: ['matchId'],
+      by: ["matchId"],
       where: { matchId: { in: finishedIds } },
       _count: { _all: true },
     });
-    finishedCountsById = new Map(grouped.map((g) => [g.matchId, g._count._all]));
+    finishedCountsById = new Map(
+      grouped.map((g) => [g.matchId, g._count._all])
+    );
   }
 
   const finishedSummaries = results.map((mr, i) => {
     const session = sessionById.get(mr.matchId);
     const playerNames = Array.isArray(mr.players)
-      ? mr.players.map((p) => p && typeof p === "object" ? (p.displayName || p.id) : "Player")
+      ? mr.players.map((p) =>
+          p && typeof p === "object" ? p.displayName || p.id : "Player"
+        )
       : [];
     const playerIds = Array.isArray(mr.players)
-      ? mr.players.map((p) => (p && typeof p === "object" ? p.id : null)).filter(Boolean)
-      : (Array.isArray(session?.playerIds) ? session.playerIds : []);
-    const endTime = mr.completedAt ? new Date(mr.completedAt).getTime() : undefined;
+      ? mr.players
+          .map((p) => (p && typeof p === "object" ? p.id : null))
+          .filter(Boolean)
+      : Array.isArray(session?.playerIds)
+      ? session.playerIds
+      : [];
+    const endTime = mr.completedAt
+      ? new Date(mr.completedAt).getTime()
+      : undefined;
     let startTime;
     if (mr.completedAt && mr.duration != null) {
       startTime = endTime - Number(mr.duration) * 1000;
@@ -48,7 +60,7 @@ async function listRecordings(prisma, opts = {}) {
     } else {
       startTime = endTime || Date.now();
     }
-    const matchType = (mr.format || session?.matchType || "constructed");
+    const matchType = mr.format || session?.matchType || "constructed";
     return {
       matchId: mr.matchId,
       playerNames,
@@ -74,11 +86,16 @@ async function listRecordings(prisma, opts = {}) {
   // Resolve display names for fallback sessions in a single query
   const allIds = Array.from(
     new Set(
-      fallbackSessions.flatMap((s) => (Array.isArray(s.playerIds) ? s.playerIds : []))
+      fallbackSessions.flatMap((s) =>
+        Array.isArray(s.playerIds) ? s.playerIds : []
+      )
     )
   );
   const users = allIds.length
-    ? await prisma.user.findMany({ where: { id: { in: allIds } }, select: { id: true, name: true } })
+    ? await prisma.user.findMany({
+        where: { id: { in: allIds } },
+        select: { id: true, name: true },
+      })
     : [];
   const nameById = new Map(users.map((u) => [u.id, u.name || u.id]));
 
@@ -86,18 +103,22 @@ async function listRecordings(prisma, opts = {}) {
   if (fallbackSessions.length) {
     const ids = fallbackSessions.map((s) => s.id);
     const grouped = await prisma.onlineMatchAction.groupBy({
-      by: ['matchId'],
+      by: ["matchId"],
       where: { matchId: { in: ids } },
       _count: { _all: true },
     });
-    fallbackCountsById = new Map(grouped.map((g) => [g.matchId, g._count._all]));
+    fallbackCountsById = new Map(
+      grouped.map((g) => [g.matchId, g._count._all])
+    );
   }
 
   const fallbackSummaries = fallbackSessions.map((s, i) => {
     const playerIds = Array.isArray(s.playerIds) ? s.playerIds : [];
     const playerNames = playerIds.map((pid) => nameById.get(pid) || pid);
     const endTime = s.updatedAt ? new Date(s.updatedAt).getTime() : undefined;
-    const startTime = s.createdAt ? new Date(s.createdAt).getTime() : (endTime || Date.now());
+    const startTime = s.createdAt
+      ? new Date(s.createdAt).getTime()
+      : endTime || Date.now();
     const matchType = s.matchType || "constructed";
     return {
       matchId: s.id,
@@ -127,7 +148,9 @@ async function listRecordings(prisma, opts = {}) {
  * Applies a cut to start from the first setup roll/winner patch when available.
  */
 async function loadRecording(prisma, matchId) {
-  const session = await prisma.onlineMatchSession.findUnique({ where: { id: matchId } });
+  const session = await prisma.onlineMatchSession.findUnique({
+    where: { id: matchId },
+  });
   const actionsRows = await prisma.onlineMatchAction.findMany({
     where: { matchId },
     orderBy: { timestamp: "asc" },
@@ -150,9 +173,13 @@ async function loadRecording(prisma, matchId) {
   const mr = await prisma.matchResult.findFirst({ where: { matchId } });
   let playerNames = [];
   if (mr && Array.isArray(mr.players)) {
-    playerNames = mr.players.map((p) => (p && typeof p === "object" ? (p.displayName || p.id) : "Player"));
-    if ((!initialState.playerIds || initialState.playerIds.length === 0)) {
-      const ids = mr.players.map((p) => (p && typeof p === "object" ? p.id : null)).filter(Boolean);
+    playerNames = mr.players.map((p) =>
+      p && typeof p === "object" ? p.displayName || p.id : "Player"
+    );
+    if (!initialState.playerIds || initialState.playerIds.length === 0) {
+      const ids = mr.players
+        .map((p) => (p && typeof p === "object" ? p.id : null))
+        .filter(Boolean);
       initialState.playerIds = ids;
     }
   } else if (initialState.playerIds && initialState.playerIds.length > 0) {
@@ -166,7 +193,9 @@ async function loadRecording(prisma, matchId) {
 
   const endTime = mr?.completedAt
     ? new Date(mr.completedAt).getTime()
-    : (session?.updatedAt ? new Date(session.updatedAt).getTime() : undefined);
+    : session?.updatedAt
+    ? new Date(session.updatedAt).getTime()
+    : undefined;
   let startTime;
   if (mr?.completedAt && mr.duration != null) {
     startTime = endTime - Number(mr.duration) * 1000;
@@ -202,7 +231,11 @@ function findSetupStartIndex(actions) {
     if (!p || typeof p !== "object") continue;
     if (p.setupWinner === "p1" || p.setupWinner === "p2") return i;
     const dr = p.d20Rolls;
-    if (dr && (dr.p1 !== null && dr.p1 !== undefined || dr.p2 !== null && dr.p2 !== undefined)) {
+    if (
+      dr &&
+      ((dr.p1 !== null && dr.p1 !== undefined) ||
+        (dr.p2 !== null && dr.p2 !== undefined))
+    ) {
       return i;
     }
   }
@@ -230,11 +263,17 @@ function setupReplayRetentionPruner(prisma, options = {}) {
       if (!ids.length) return;
 
       // Delete actions for those matchIds
-      await prisma.onlineMatchAction.deleteMany({ where: { matchId: { in: ids } } });
+      await prisma.onlineMatchAction.deleteMany({
+        where: { matchId: { in: ids } },
+      });
       // Optionally delete session rows that are stale
-      await prisma.onlineMatchSession.deleteMany({ where: { id: { in: ids }, updatedAt: { lt: thresholdDate } } });
+      await prisma.onlineMatchSession.deleteMany({
+        where: { id: { in: ids }, updatedAt: { lt: thresholdDate } },
+      });
     } catch (e) {
-      try { console.warn('[replay] retention prune failed:', e?.message || e); } catch {}
+      try {
+        console.warn("[replay] retention prune failed:", e?.message || e);
+      } catch {}
     }
   }
 
