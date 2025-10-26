@@ -66,8 +66,8 @@ export default function TrackpadOrbitAdapter() {
       const rect = gl.domElement.getBoundingClientRect();
       const px = event.clientX - rect.left;
       const py = event.clientY - rect.top;
-      const ndcX = (px / size.width) * 2 - 1;
-      const ndcY = -(py / size.height) * 2 + 1;
+      const ndcX = (px / rect.width) * 2 - 1;
+      const ndcY = -(py / rect.height) * 2 + 1;
       // Pinch-to-zoom (Chrome/Safari ctrl+wheel): zoom to cursor
       if (event.ctrlKey) {
         const d = camera.position.distanceTo(controls.target);
@@ -90,11 +90,12 @@ export default function TrackpadOrbitAdapter() {
         return;
       }
 
-      const ndc2X = ndcX + (event.deltaX / size.width) * 2;
-      const ndc2Y = ndcY - (event.deltaY / size.height) * 2;
+      const ndc2X = ndcX + (event.deltaX / rect.width) * 2;
+      const ndc2Y = ndcY - (event.deltaY / rect.height) * 2;
       const p1 = getWorldPointOnPlane(ndcX, ndcY);
       const p2 = getWorldPointOnPlane(ndc2X, ndc2Y);
-      tmpVec.copy(p1).sub(p2);
+      const panScale = rect.width > rect.height ? 0.9 : 1;
+      tmpVec.copy(p1).sub(p2).multiplyScalar(panScale);
       (controls.target as THREE.Vector3).add(tmpVec);
       camera.position.add(tmpVec);
       controls.update();
@@ -130,12 +131,17 @@ export default function TrackpadOrbitAdapter() {
         const rect = gl.domElement.getBoundingClientRect();
         const px = typeof ev.clientX === "number" ? ev.clientX - rect.left : rect.width / 2;
         const py = typeof ev.clientY === "number" ? ev.clientY - rect.top : rect.height / 2;
-        const ndcX = (px / size.width) * 2 - 1;
-        const ndcY = -(py / size.height) * 2 + 1;
+        const ndcX = (px / rect.width) * 2 - 1;
+        const ndcY = -(py / rect.height) * 2 + 1;
 
         // Convert gesture factor to camera distance scale; factor>1 means zoom in on Safari
         const d = camera.position.distanceTo(controls.target);
         let scale = 1 / Math.max(1e-6, factor);
+        const isLandscape = rect.width > rect.height;
+        if (isLandscape) {
+          // Ease zoom response slightly in landscape for smoother feel
+          scale = Math.pow(scale, 0.9);
+        }
         const minD = (controls.minDistance ?? 0.1) / Math.max(d, 1e-6);
         const maxD = (controls.maxDistance ?? 1e6) / Math.max(d, 1e-6);
         scale = Math.max(minD, Math.min(maxD, scale));
@@ -266,22 +272,29 @@ export default function TrackpadOrbitAdapter() {
         const rect = gl.domElement.getBoundingClientRect();
         const px = cx - rect.left;
         const py = cy - rect.top;
-        const ndcX = (px / size.width) * 2 - 1;
-        const ndcY = -(py / size.height) * 2 + 1;
+        const ndcX = (px / rect.width) * 2 - 1;
+        const ndcY = -(py / rect.height) * 2 + 1;
 
         // Pan by center delta
         const lastC = twoTouchRef.current.lastCenter || { x: cx, y: cy };
-        const ndc2X = ndcX + ((cx - lastC.x) / size.width) * 2;
-        const ndc2Y = ndcY - ((cy - lastC.y) / size.height) * 2;
+        const ndc2X = ndcX + ((cx - lastC.x) / rect.width) * 2;
+        const ndc2Y = ndcY - ((cy - lastC.y) / rect.height) * 2;
         const p1 = getWorldPointOnPlane(ndcX, ndcY);
         const p2 = getWorldPointOnPlane(ndc2X, ndc2Y);
-        tmpVec.copy(p1).sub(p2);
+        const isLandscape = rect.width > rect.height;
+        const panScale = isLandscape ? 0.85 : 1;
+        tmpVec.copy(p1).sub(p2).multiplyScalar(panScale);
         (controls.target as THREE.Vector3).add(tmpVec);
         camera.position.add(tmpVec);
 
         // Pinch zoom to center
         const lastD = twoTouchRef.current.lastDist ?? dist;
         let scale = lastD / Math.max(1e-6, dist);
+        const isLandscapeZoom = rect.width > rect.height;
+        if (isLandscapeZoom) {
+          // Ease zoom response slightly in landscape for smoother feel
+          scale = Math.pow(scale, 0.9);
+        }
         const currentDist = camera.position.distanceTo(controls.target);
         const minD = (controls.minDistance ?? 0.1) / Math.max(currentDist, 1e-6);
         const maxD = (controls.maxDistance ?? 1e6) / Math.max(currentDist, 1e-6);
