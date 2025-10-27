@@ -2563,7 +2563,9 @@ export default function Board({
                 width={CARD_SHORT}
                 height={CARD_LONG}
                 rotationZ={d.rotZ}
-                elevation={0.001}
+                elevation={0.002}
+                polygonOffsetUnits={-1.25}
+                polygonOffsetFactor={-0.75}
                 renderOrder={550}
                 interactive={false}
                 textureUrl={
@@ -2899,6 +2901,9 @@ export default function Board({
                         width={CARD_SHORT}
                         height={CARD_LONG}
                         rotationZ={rotZ}
+                        elevation={dragAvatar === who ? DRAG_LIFT + 0.002 : 0.002}
+                        polygonOffsetUnits={-1.25}
+                        polygonOffsetFactor={-0.75}
                         textureUrl={
                           activeCard || cachedCard
                             ? undefined
