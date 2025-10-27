@@ -2,7 +2,6 @@
 
 import { OrbitControls, Text } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Physics } from "@/lib/game/physics";
 import { RigidBody } from "@react-three/rapier";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -17,6 +16,7 @@ import {
   computeStackPositions
 } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
+import { Physics } from "@/lib/game/physics";
 import { DraftState, TransportEventMap } from "@/lib/net/transport";
 
 type Card = {

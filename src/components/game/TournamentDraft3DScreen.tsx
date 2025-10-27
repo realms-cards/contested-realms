@@ -2,7 +2,6 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Physics } from "@/lib/game/physics";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,6 +32,7 @@ import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
 import { CARD_LONG } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
+import { Physics } from "@/lib/game/physics";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";

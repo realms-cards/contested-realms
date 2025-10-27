@@ -1050,11 +1050,6 @@ function createPermanentsPatch(per: Permanents): ServerPatchT {
   } as ServerPatchT;
 }
 
-type PatchSignatureEntry = {
-  fields: string[];
-  expiresAt: number;
-};
-
 const PATCH_SIGNATURE_TTL_MS = 7_000;
 const PATCH_SIGNATURE_FIELDS = [
   "permanents",
@@ -1069,6 +1064,11 @@ const PATCH_SIGNATURE_FIELDS = [
 ] as const;
 
 type TrackedPatchField = (typeof PATCH_SIGNATURE_FIELDS)[number];
+
+type PatchSignatureEntry = {
+  expiresAt: number;
+  fields: TrackedPatchField[];
+};
 
 const pendingPatchSignatures = new Map<string, PatchSignatureEntry[]>();
 
@@ -1088,31 +1088,10 @@ function registerPatchSignature(id: string, fields: string[]) {
   prunePatchSignatures(now);
   const list = pendingPatchSignatures.get(id) ?? [];
   list.push({
-    fields: [...fields],
     expiresAt: now + PATCH_SIGNATURE_TTL_MS,
+    fields: [...(fields as TrackedPatchField[])],
   });
   pendingPatchSignatures.set(id, list);
-}
-
-function peekPatchSignature(id: string): PatchSignatureEntry | null {
-  const now = Date.now();
-  prunePatchSignatures(now);
-  const list = pendingPatchSignatures.get(id);
-  if (!list || list.length === 0) return null;
-  const entry = list[0];
-  return entry ?? null;
-}
-
-function shiftPatchSignature(id: string): PatchSignatureEntry | null {
-  const now = Date.now();
-  prunePatchSignatures(now);
-  const list = pendingPatchSignatures.get(id);
-  if (!list || list.length === 0) return null;
-  const entry = list.shift() ?? null;
-  if (!entry) return null;
-  if (list.length === 0) pendingPatchSignatures.delete(id);
-  else pendingPatchSignatures.set(id, list);
-  return entry;
 }
 
 function normalizeForSignature(value: unknown): unknown {
@@ -1178,31 +1157,21 @@ function makePatchSignature(
 }
 
 function filterEchoPatchIfAny(
-  patch: ServerPatchT,
-  state: GameState
+  patch: ServerPatchT
 ): { patch: ServerPatchT | null; matched: boolean } {
   const signature = makePatchSignature(patch);
   if (!signature) return { patch, matched: false };
-  const entry = peekPatchSignature(signature.id);
+  prunePatchSignatures(Date.now());
+  const list = pendingPatchSignatures.get(signature.id);
+  if (!list || list.length === 0) return { patch, matched: false };
+  const entry = list.shift() ?? null;
+  if (list.length === 0) pendingPatchSignatures.delete(signature.id);
+  else pendingPatchSignatures.set(signature.id, list);
   if (!entry) return { patch, matched: false };
-  for (const field of entry.fields) {
-    if (!Object.prototype.hasOwnProperty.call(patch, field)) {
-      return { patch, matched: false };
-    }
-    const currentValue = (state as unknown as Record<string, unknown>)[field];
-    if (currentValue === undefined) {
-      return { patch, matched: false };
-    }
-    const incomingValue = (patch as Record<string, unknown>)[field];
-    const normIncoming = normalizeForSignature(incomingValue);
-    const normCurrent = normalizeForSignature(currentValue);
-    if (stableSerialize(normIncoming) !== stableSerialize(normCurrent)) {
-      return { patch, matched: false };
-    }
-  }
+  const fields = entry.fields ?? [];
   let mutated = false;
   const filtered: ServerPatchT = { ...patch };
-  for (const field of entry.fields) {
+  for (const field of fields) {
     if (field in filtered) {
       delete filtered[field as keyof ServerPatchT];
       mutated = true;
@@ -1211,18 +1180,15 @@ function filterEchoPatchIfAny(
   if (!mutated) {
     return { patch, matched: false };
   }
-  if (!shiftPatchSignature(signature.id)) {
-    return { patch, matched: false };
-  }
   try {
     console.debug("[net] filtered echo patch", {
-      fields: entry.fields,
+      fields,
       remainingKeys: Object.keys(filtered).filter((key) => key !== "__replaceKeys"),
     });
   } catch {}
   if (Array.isArray(filtered.__replaceKeys)) {
     const remaining = filtered.__replaceKeys.filter(
-      (key) => !entry.fields.includes(key as TrackedPatchField)
+      (key) => !fields.includes(key as TrackedPatchField)
     );
     if (remaining.length > 0) filtered.__replaceKeys = remaining;
     else delete filtered.__replaceKeys;
@@ -2282,7 +2248,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ? incoming.__replaceKeys
         : null;
       if (!replaceKeysCandidateInitial || replaceKeysCandidateInitial.length === 0) {
-      const echoResult = filterEchoPatchIfAny(incoming, s);
+        const echoResult = filterEchoPatchIfAny(incoming);
         if (echoResult.matched) {
           if (!echoResult.patch) {
             if (typeof t === "number") {

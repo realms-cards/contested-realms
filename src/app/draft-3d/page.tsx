@@ -2,7 +2,6 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Physics } from "@/lib/game/physics";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +28,7 @@ import MouseTracker from "@/lib/game/components/MouseTracker";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG } from "@/lib/game/constants";
 import { createStackHoverState } from "@/lib/game/stackHover";
+import { Physics } from "@/lib/game/physics";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 // --- Draft data types (mirrors /draft 2D) ---

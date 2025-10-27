@@ -2,7 +2,6 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Physics } from "@/lib/game/physics";
 import React, { useEffect } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
@@ -10,6 +9,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import Board from "@/lib/game/Board";
 import { useGameStore } from "@/lib/game/store";
+import { Physics } from "@/lib/game/physics";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 interface EditorCanvasProps {

@@ -93,7 +93,7 @@ export default function TournamentDetailsPage() {
   }, [tournamentId]);
 
   // Context-provided assignment (from realtime handlers)
-  const { assignedMatchId: rtAssignedMatchId, assignedOpponentName: rtAssignedOpponentName } = useRealtimeTournaments();
+  const { assignedMatchId: rtAssignedMatchId } = useRealtimeTournaments();
 
   // (Removed) fallback: we derive CTA directly in the banner using rtAssignedMatchId or myAssignedMatchId
 

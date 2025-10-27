@@ -1830,7 +1830,6 @@ export default function Board({
               {/* Permanents on this tile */}
               {(() => {
                 const items = permanents[key] || [];
-                const marginZ = STACK_MARGIN_Z; // distance from bottom/top edge
                 return items.map((p, idx) => {
                   const remoteDragSet = remotePermanentDragLookup.get(key);
                   if (remoteDragSet?.has(idx)) {

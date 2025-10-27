@@ -2,7 +2,6 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Physics } from "@/lib/game/physics";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import CardPreview from "@/components/game/CardPreview";
@@ -29,6 +28,7 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
+import { Physics } from "@/lib/game/physics";
 import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {
