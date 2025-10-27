@@ -1701,8 +1701,8 @@ export default function Board({
                         {renderSiteGlow && (
                           <group position={[edgeOffset.x, 0, edgeOffset.z]}>
                             <CardOutline
-                              width={CARD_SHORT + 0.3}
-                              height={CARD_LONG + 0.4}
+                              width={CARD_SHORT}
+                              height={CARD_LONG}
                               rotationZ={rotZ}
                               elevation={0.0001}
                               color={siteGlowColor}
@@ -2489,8 +2489,8 @@ export default function Board({
           {remoteHandDrags.map((d) => (
             <group key={d.key} position={[d.pos.x, 0.33, d.pos.z]}>
               <CardOutline
-                width={CARD_SHORT + 0.18}
-                height={CARD_LONG + 0.24}
+                width={CARD_SHORT}
+                height={CARD_LONG}
                 rotationZ={d.rotZ}
                 elevation={0.0001}
                 color={d.color}
@@ -2548,8 +2548,8 @@ export default function Board({
           {remoteAvatarDrags.map((d) => (
             <group key={d.key} position={[d.pos.x, 0.26, d.pos.z]}>
               <CardOutline
-                width={CARD_SHORT + 0.3}
-                height={CARD_LONG + 0.4}
+                width={CARD_SHORT}
+                height={CARD_LONG}
                 rotationZ={d.rotZ}
                 elevation={0.0001}
                 color={d.color}
@@ -2643,8 +2643,8 @@ export default function Board({
                   />
                   {isSel && !isHandVisible && !hideAvatar && (
                     <CardOutline
-                      width={CARD_SHORT + 0.3}
-                      height={CARD_LONG + 0.4}
+                      width={CARD_SHORT}
+                      height={CARD_LONG}
                       rotationZ={rotZ}
                       elevation={0.0001}
                       color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
@@ -3050,8 +3050,8 @@ export default function Board({
                 (p.tilt || 0);
               const slug = isToken ? "" : p.card.slug || "";
               const textureUrl = isToken && tokenDef ? tokenTextureUrl(tokenDef) : undefined;
-              const glowW = w + 0.3;
-              const glowH = h + 0.4;
+              const glowW = w;
+              const glowH = h;
               const glowColor = p.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
               return (
                 <>
