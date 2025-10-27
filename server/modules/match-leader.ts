@@ -872,7 +872,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         const enrichedPatchToApply =
           (await enrichPatchWithCosts(patchToApply, prisma)) ?? patchToApply;
-        io.to(matchRoom).emit("statePatch", { patch: enrichedPatchToApply, t: now });
+
+        // Exclude sender from statePatch broadcast to prevent echo overwrites
+        const sender = players.get(playerId);
+        const senderSocketId = sender?.socketId;
+        if (senderSocketId) {
+          io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedPatchToApply, t: now });
+        } else {
+          io.to(matchRoom).emit("statePatch", { patch: enrichedPatchToApply, t: now });
+        }
 
         await persistMatchUpdate(match, patchToApply, playerId, now);
 
@@ -889,7 +897,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         }
       } else {
         const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
-        io.to(matchRoom).emit("statePatch", { patch: enrichedPatch, t: now });
+
+        // Exclude sender from statePatch broadcast to prevent echo overwrites
+        const sender = players.get(playerId);
+        const senderSocketId = sender?.socketId;
+        if (senderSocketId) {
+          io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedPatch, t: now });
+        } else {
+          io.to(matchRoom).emit("statePatch", { patch: enrichedPatch, t: now });
+        }
+
         await persistMatchUpdate(match, patch ?? null, playerId, now);
       }
     } catch (error) {
@@ -897,7 +914,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         patchInput ?? null,
         prisma
       );
-      io.to(matchRoom).emit("statePatch", { patch: enrichedIncoming, t: Date.now() });
+
+      // Exclude sender from statePatch broadcast to prevent echo overwrites
+      const sender = players.get(playerId);
+      const senderSocketId = sender?.socketId;
+      if (senderSocketId) {
+        io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedIncoming, t: Date.now() });
+      } else {
+        io.to(matchRoom).emit("statePatch", { patch: enrichedIncoming, t: Date.now() });
+      }
+
       if (error instanceof Error) {
         console.warn("[match] leaderApplyAction error", error.message);
       }
@@ -1085,10 +1111,20 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     };
 
     try {
-      io.to(`match:${match.id}`).emit("statePatch", {
-        patch,
-        t: Date.now(),
-      });
+      // Exclude sender from statePatch broadcast to prevent echo overwrites
+      const sender = players.get(playerId);
+      const senderSocketId = sender?.socketId;
+      if (senderSocketId) {
+        io.to(`match:${match.id}`).except(senderSocketId).emit("statePatch", {
+          patch,
+          t: Date.now(),
+        });
+      } else {
+        io.to(`match:${match.id}`).emit("statePatch", {
+          patch,
+          t: Date.now(),
+        });
+      }
     } catch {
       // ignore broadcast error
     }
