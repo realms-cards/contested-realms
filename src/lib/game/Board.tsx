@@ -15,6 +15,7 @@ import {
   useState,
   Suspense,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   SRGBColorSpace,
   Raycaster,
@@ -2077,7 +2078,9 @@ export default function Board({
                 heldFor >= DRAG_HOLD_MS &&
                 dist > DRAG_THRESHOLD
               ) {
-                setDragging({ from: key, index: idx });
+                flushSync(() => {
+                  setDragging({ from: key, index: idx });
+                });
                 dragStartRef.current = null;
                 if (process.env.NODE_ENV !== "production") {
                   console.debug(
@@ -2742,7 +2745,9 @@ export default function Board({
                         const heldFor =
                           Date.now() - avatarDragStartRef.current.time;
                         if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
-                          setDragAvatar(who);
+                          flushSync(() => {
+                            setDragAvatar(who);
+                          });
                           setGhost(null);
                           if (process.env.NODE_ENV !== "production") {
                             console.debug(`[drag] avatar:start ${who}`);
