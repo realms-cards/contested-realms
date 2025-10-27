@@ -210,6 +210,9 @@ export default function Board({
 
   // Continuously update the drag ghost position based on cursor ray -> ground plane (y=0)
   useFrame(() => {
+    // Reset frame-level body access tracker to prevent Rapier aliasing
+    bodiesAccessedThisFrame.current.clear();
+    
     // Only drive ghost while dragging a card from hand/pile (not board/avatars)
     if (
       dragFromHand &&
@@ -563,6 +566,7 @@ export default function Board({
   const hoverTimer = useRef<number | null>(null);
   const touchPreviewTimerRef = useRef<number | null>(null);
   const touchContextTimerRef = useRef<number | null>(null);
+  const hoverClearTimerRef = useRef<number | null>(null);
   const [dragAvatar, setDragAvatar] = useState<"p1" | "p2" | null>(null);
   const avatarDragStartRef = useRef<{
     who: "p1" | "p2";
@@ -585,6 +589,8 @@ export default function Board({
   // Map of cellKey:index -> RigidBody to drive during drag
   const bodyMap = useRef<Map<string, BodyApi>>(new Map());
   const draggedBody = useRef<BodyApi | null>(null);
+  // Track bodies accessed this frame to prevent Rapier aliasing
+  const bodiesAccessedThisFrame = useRef<Set<string>>(new Set());
   // Target world position for the currently dragged body (applied after physics step)
   const dragTarget = useRef<{ x: number; z: number; lift: boolean } | null>(
     null
@@ -620,15 +626,18 @@ export default function Board({
       }
       return;
     }
+    // Add a small delay to make snap less aggressive and improve placement precision
     requestAnimationFrame(() => {
-      const prev = pendingSnaps.current.get(id);
-      const attempts = prev ? Math.max(prev.attempts, 8) : 8;
-      pendingSnaps.current.set(id, { x, z, attempts, delay: 1 });
-      if (process.env.NODE_ENV !== "production") {
-        console.debug(
-          `[snap] queue ${id} -> x=${Number(x).toFixed(2)} z=${Number(z).toFixed(2)}`
-        );
-      }
+      requestAnimationFrame(() => {
+        const prev = pendingSnaps.current.get(id);
+        const attempts = prev ? Math.max(prev.attempts, 8) : 8;
+        pendingSnaps.current.set(id, { x, z, attempts, delay: 1 });
+        if (process.env.NODE_ENV !== "production") {
+          console.debug(
+            `[snap] queue ${id} -> x=${Number(x).toFixed(2)} z=${Number(z).toFixed(2)}`
+          );
+        }
+      });
     });
   }
 
@@ -668,6 +677,16 @@ export default function Board({
         }
         const snapApi = bodyMap.current.get(id);
         if (snapApi) {
+          // Skip if this body was already accessed this frame (prevents Rapier aliasing)
+          if (bodiesAccessedThisFrame.current.has(id)) {
+            if (process.env.NODE_ENV !== "production") {
+              console.debug(`[snap] skip-frame-access ${id}`);
+            }
+            pendingSnaps.current.delete(id);
+            continue;
+          }
+          bodiesAccessedThisFrame.current.add(id);
+          
           // Don't snap the body we're actively dragging in this frame
           if (snapApi === draggedBody.current) {
             if (process.env.NODE_ENV !== "production") {
@@ -677,8 +696,14 @@ export default function Board({
             continue;
           }
           try {
-            // Apply snap as a direct translation in beforeStep without changing body type
-            snapApi.setTranslation({ x: job.x, y: 0.25, z: job.z }, false);
+            // Temporarily set kinematic to snap precisely, then restore dynamic next tick
+            snapApi.setBodyType("kinematicPosition", false);
+            snapApi.setNextKinematicTranslation({ x: job.x, y: 0.25, z: job.z });
+            setTimeout(() => {
+              try {
+                snapApi.setBodyType("dynamic", true);
+              } catch {}
+            }, 0);
             if (process.env.NODE_ENV !== "production") {
               console.debug(
                 `[snap] apply ${id} -> x=${Number(job.x).toFixed(2)} z=${Number(
@@ -765,15 +790,27 @@ export default function Board({
 
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+    if (hoverClearTimerRef.current) {
+      window.clearTimeout(hoverClearTimerRef.current);
+      hoverClearTimerRef.current = null;
+    }
     if (!card?.slug) return;
     hoverTimer.current = window.setTimeout(() => {
       setPreviewCard(card || null);
-    }, 10);
+    }, 120);
   }
   function clearHoverPreview() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
     setPreviewCard(null);
+  }
+  function clearHoverPreviewDebounced(delay = 80) {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+    if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+    hoverClearTimerRef.current = window.setTimeout(() => {
+      hoverClearTimerRef.current = null;
+      setPreviewCard(null);
+    }, delay) as unknown as number;
   }
   const clearTouchTimers = useCallback(() => {
     if (touchPreviewTimerRef.current) {
@@ -1075,6 +1112,8 @@ export default function Board({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [emitBoardPing, isSpectator]);
+
+  // removed global pointerup fallback; drops are handled by tiles/cards precisely
 
   return (
     <group>
@@ -1615,7 +1654,7 @@ export default function Board({
                             onPointerOut={(e) => {
                               if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
-                              clearHoverPreview();
+                              clearHoverPreviewDebounced();
                               clearTouchTimers();
                             }}
                             onPointerMove={(e) => {
@@ -1748,535 +1787,555 @@ export default function Board({
                     permanentPosition?.state === "burrowed" ||
                     permanentPosition?.state === "submerged";
 
-                  // Adjust Y position: normal cards at 0.25, burrowed cards at 0.0005 (below sites at 0.001)
-                  // This puts burrowed cards under sites but still visible
-                  const yPos = isBurrowed ? 0.0005 : 0.25;
+    // Adjust Y position: normal cards at 0.25, burrowed cards at 0.0005 (below sites at 0.001)
+    // This puts burrowed cards under sites but still visible
+    const yPos = isBurrowed ? 0.0005 : 0.25;
 
-                  const permanentInstanceKey = `perm:${key}:${idx}`;
-                  const remotePermanentColor = getRemoteHighlightColor(
-                    p.card ?? null,
-                    {
-                      instanceKey: permanentInstanceKey,
-                    }
+    const permanentInstanceKey = p.instanceId ?? `perm:${key}:${idx}`;
+    const remotePermanentColor = getRemoteHighlightColor(
+      p.card ?? null,
+      {
+        instanceKey: permanentInstanceKey,
+      }
+    );
+    const permanentGlowColor =
+      remotePermanentColor ??
+      (owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
+    const renderPermanentGlow =
+      !isHandVisible && (isSel || !!remotePermanentColor);
+    const isLocalDragGhost =
+      USE_GHOST_ONLY_BOARD_DRAG &&
+      dragging &&
+      dragging.from === key &&
+      dragging.index === idx;
+    const showPermanentGlow = renderPermanentGlow && !isLocalDragGhost;
+
+    return (
+      <RigidBody
+        key={`perm-${key}-${idx}`}
+        ref={(api) => {
+          const id = (p.instanceId ?? `perm:${key}:${idx}`) as string;
+          try {
+            if (api) {
+              bodyMap.current.set(id, api as unknown as BodyApi);
+              if (process.env.NODE_ENV !== "production") {
+                console.debug(`[physics] Body mapped: ${id} for card ${p.card.name} at ${key}[${idx}]`);
+              }
+            } else {
+              bodyMap.current.delete(id);
+              if (process.env.NODE_ENV !== "production") {
+                console.debug(`[physics] Body unmapped: ${id} for card ${p.card.name} at ${key}[${idx}]`);
+              }
+            }
+          } catch (error) {
+            console.warn(
+              `[physics] Failed to update body map for ${id}:`,
+              error
+            );
+          }
+        }}
+        type={tokenSiteReplace ? "fixed" : "dynamic"}
+        ccd
+        colliders={false}
+        position={[0 + offX, yPos, zBase + offZ]}
+        linearDamping={2}
+        angularDamping={2}
+        canSleep={false}
+        enabledRotations={[false, true, false]}
+      >
+        <CuboidCollider
+          args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
+          friction={0.9}
+          restitution={0}
+        />
+        <group
+          visible={!isLocalDragGhost}
+          onPointerDown={(e) => {
+            if (isSpectator) {
+              e.stopPropagation();
+              return;
+            }
+            // Only start potential drag on left-click
+            if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
+            if (tokenSiteReplace) {
+              // Rubble behaves like a site for movement: no drag start
+              e.stopPropagation();
+              useGameStore.getState().selectPermanent(key, idx);
+              clearHoverPreview();
+              return;
+            }
+            const pe = e.nativeEvent as PointerEvent | undefined;
+            if (pe && (pe as PointerEvent).pointerType === "touch") {
+              clearTouchTimers();
+              const cx = e.clientX;
+              const cy = e.clientY;
+              touchPreviewTimerRef.current = window.setTimeout(() => {
+                beginHoverPreview(p.card);
+              }, 180) as unknown as number;
+              touchContextTimerRef.current = window.setTimeout(() => {
+                useGameStore.getState().selectPermanent(key, idx);
+                openContextMenu(
+                  { kind: "permanent", at: key, index: idx },
+                  { x: cx, y: cy }
+                );
+              }, 500) as unknown as number;
+            }
+            if (e.button === 0) {
+              e.stopPropagation();
+              useGameStore.getState().selectPermanent(key, idx);
+              if (!isSpectator && actorKey) {
+                const mine =
+                  (actorKey === "p1" && owner === 1) ||
+                  (actorKey === "p2" && owner === 2);
+                if (!mine) {
+                  if (process.env.NODE_ENV !== "production") {
+                    console.debug(
+                      `[drag] perm:denied ${key}[${idx}] owner=${owner} actor=${actorKey}`
+                    );
+                  }
+                  clearHoverPreview();
+                  return;
+                }
+              }
+              // wait for small hold + movement before starting drag
+              dragStartRef.current = {
+                at: key,
+                index: idx,
+                start: [e.point.x, e.point.z],
+                time: Date.now(),
+              };
+              if (process.env.NODE_ENV !== "production") {
+                console.debug(`[drag] perm:down ${key}[${idx}]`);
+              }
+              clearHoverPreview();
+            }
+          }}
+          onPointerOver={(e) => {
+            if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+            e.stopPropagation();
+            beginHoverPreview(p.card);
+          }}
+          onPointerOut={(e) => {
+            if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+            e.stopPropagation();
+            clearHoverPreviewDebounced();
+            // cancel pending drag if pointer leaves before threshold
+            if (
+              dragStartRef.current &&
+              dragStartRef.current.at === key &&
+              dragStartRef.current.index === idx
+            ) {
+              dragStartRef.current = null;
+            }
+            clearTouchTimers();
+          }}
+          onDoubleClick={(e) => {
+            if (dragFromHand || dragFromPile) return;
+            if (tokenSiteReplace) return;
+            if (isSpectator) return;
+            e.stopPropagation();
+            emitBoardPing({ x: e.point.x, z: e.point.z });
+          }}
+          onPointerMove={(e) => {
+            if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
+            if (tokenSiteReplace) return; // no drag for Rubble
+            e.stopPropagation();
+            const pe = e.nativeEvent as PointerEvent | undefined;
+            if (pe && (pe as PointerEvent).pointerType === "touch") {
+              clearTouchTimers();
+            }
+            // Always feed cursor telemetry with current world coordinates
+            handlePointerMove(e.point.x, e.point.z);
+            if (isSpectator) return;
+            // Start dragging once hold + threshold exceeded
+            if (
+              !dragging &&
+              dragStartRef.current &&
+              dragStartRef.current.at === key &&
+              dragStartRef.current.index === idx
+            ) {
+              const [sx, sz] = dragStartRef.current.start;
+              const dx = e.point.x - sx;
+              const dz = e.point.z - sz;
+              const dist = Math.hypot(dx, dz);
+              const heldFor =
+                Date.now() - dragStartRef.current.time;
+              if (
+                heldFor >= DRAG_HOLD_MS &&
+                dist > DRAG_THRESHOLD
+              ) {
+                setDragging({ from: key, index: idx });
+                dragStartRef.current = null;
+                if (process.env.NODE_ENV !== "production") {
+                  console.debug(
+                    `[drag] perm:start ${key}[${idx}] held=${heldFor} dist=${dist.toFixed(
+                      2
+                    )}`
                   );
-                  const permanentGlowColor =
-                    remotePermanentColor ??
-                    (owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
-                  const renderPermanentGlow =
-                    !isHandVisible && (isSel || !!remotePermanentColor);
+                }
+                if (USE_GHOST_ONLY_BOARD_DRAG) {
+                  lastBoardGhostPosRef.current.x = e.point.x;
+                  lastBoardGhostPosRef.current.z = e.point.z;
+                  if (boardGhostRef.current) {
+                    boardGhostRef.current.position.set(
+                      e.point.x,
+                      0.26,
+                      e.point.z
+                    );
+                  }
+                }
+                // Start visual drag. If ghost-only mode, do not move body.
+                if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                  const bodyId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
+                  // Skip if this body was already accessed this frame
+                  if (bodiesAccessedThisFrame.current.has(bodyId)) {
+                    if (process.env.NODE_ENV !== "production") {
+                      console.debug(`[drag] skip-frame-access ${bodyId}`);
+                    }
+                    draggedBody.current = null;
+                  } else {
+                    bodiesAccessedThisFrame.current.add(bodyId);
+                    draggedBody.current = bodyMap.current.get(bodyId) || null;
+                    if (draggedBody.current) {
+                      try {
+                        draggedBody.current.setBodyType(
+                          "kinematicPosition",
+                          false
+                        );
+                      } catch {}
+                      moveDraggedBody(e.point.x, e.point.z, true);
+                    }
+                  }
+                } else {
+                  draggedBody.current = null;
+                }
+              }
+            } else if (
+              dragging &&
+              dragging.from === key &&
+              dragging.index === idx &&
+              draggedBody.current &&
+              !USE_GHOST_ONLY_BOARD_DRAG
+            ) {
+              // While dragging and pointer is over the card, continue driving it (no ghost)
+              moveDraggedBody(e.point.x, e.point.z, true);
+            }
+          }}
+          onPointerUp={(e) => {
+            if (e.button !== 0) return; // ignore non-left button releases
+            if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
+            if (tokenSiteReplace) {
+              e.stopPropagation();
+              return;
+            }
+            if (isSpectator) {
+              e.stopPropagation();
+              return;
+            }
+            e.stopPropagation();
+            clearTouchTimers();
+            if (dragging) {
+              // Drop the currently dragged permanent based on pointer world position
+              const wx = e.point.x;
+              const wz = e.point.z;
+              let tx = Math.round((wx - offsetX) / TILE_SIZE);
+              let ty = Math.round((wz - offsetY) / TILE_SIZE);
+              tx = Math.max(0, Math.min(board.size.w - 1, tx));
+              ty = Math.max(0, Math.min(board.size.h - 1, ty));
+              const dropKey = `${tx},${ty}`;
+              const tileX = offsetX + tx * TILE_SIZE;
+              const tileZ = offsetY + ty * TILE_SIZE;
+              const marginZ = TILE_SIZE * 0.1;
+              const spacing = TILE_SIZE * 0.28;
+              const draggedOwner =
+                permanents[dragging.from]?.[dragging.index]?.owner ?? 1;
+              const draggedInstId =
+                permanents[dragging.from]?.[dragging.index]?.instanceId || null;
+              const zBase =
+                draggedOwner === 1
+                  ? -TILE_SIZE * 0.5 + marginZ
+                  : TILE_SIZE * 0.5 - marginZ;
+              if (process.env.NODE_ENV !== "production") {
+                console.debug(
+                  `[drop] perm ${dragging.from}->${dropKey} wx=${wx.toFixed(2)} wz=${wz.toFixed(2)}`
+                );
+              }
+              if (dragging.from === dropKey) {
+                // Staying on same tile: baseline uses current count and original index
+                const baseX = tileX + (-((Math.max((permanents[dropKey] || []).length, 1) - 1) * spacing) / 2 + dragging.index * spacing);
+                const baseZ = tileZ + zBase;
+                const offX = wx - baseX;
+                const offZ = wz - baseZ;
+                dragTarget.current = null;
+                draggedBody.current = null;
+                requestAnimationFrame(() => {
+                  setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
+                });
+                if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                  const targetId = (draggedInstId || `perm:${dropKey}:${dragging.index}`) as string;
+                  snapBodyTo(targetId, wx, wz);
+                }
+              } else {
+                // Moving to another tile: baseline uses new count and index at end
+                const toItems = permanents[dropKey] || [];
+                const newIndex = toItems.length;
+                const startX = -((Math.max(newIndex + 1, 1) - 1) * spacing) / 2;
+                const baseX = tileX + (startX + newIndex * spacing);
+                const baseZ = tileZ + zBase;
+                const offX = wx - baseX;
+                const offZ = wz - baseZ;
+                // No direct body API here; snap queue will position after render
+                dragTarget.current = null;
+                draggedBody.current = null;
+                requestAnimationFrame(() => {
+                  moveSelectedPermanentToWithOffset(tx, ty, [offX, offZ]);
+                });
+                if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                  const targetId = (draggedInstId || `perm:${dropKey}:${newIndex}`) as string;
+                  snapBodyTo(targetId, wx, wz);
+                }
+              }
+              setDragging(null);
+              setDragFromHand(false);
+              setGhost(null);
+              dragStartRef.current = null;
+              lastDropAt.current = Date.now();
+              draggedBody.current = null;
+              return;
+            }
+          }}
+        >
+          {/* Selection / remote highlight glow */}
+          {showPermanentGlow && (
+            <CardGlow
+              width={
+                (tokenDef && tokenDef.size === "small"
+                  ? CARD_SHORT * 0.5
+                  : CARD_SHORT) + 0.3
+              }
+              height={
+                (tokenDef && tokenDef.size === "small"
+                  ? CARD_LONG * 0.5
+                  : CARD_LONG) + 0.4
+              }
+              rotationZ={rotZ}
+              elevation={0}
+              color={permanentGlowColor}
+              renderOrder={-100}
+            />
+          )}
+          <group
+            visible={true}
+            onClick={(e) => {
+              if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+              e.stopPropagation();
+              if (isSpectator) return;
+              // If dragging this item, ignore clicks
+              if (
+                dragging &&
+                dragging.from === key &&
+                dragging.index === idx
+              )
+                return;
+              // Left-click selects only; context menu via right-click
+              useGameStore.getState().selectPermanent(key, idx);
+            }}
+            onContextMenu={(e: ThreeEvent<PointerEvent>) => {
+              if (isSpectator) return;
+              e.stopPropagation();
+              e.nativeEvent.preventDefault();
+              // Ensure the permanent is selected before opening the menu
+              useGameStore.getState().selectPermanent(key, idx);
+              openContextMenu(
+                { kind: "permanent", at: key, index: idx },
+                { x: e.clientX, y: e.clientY }
+              );
+            }}
+          >
+            {isToken ? (
+              <CardPlane
+                slug={""}
+                textureUrl={
+                  tokenDef ? tokenTextureUrl(tokenDef) : undefined
+                }
+                forceTextureUrl
+                width={
+                  tokenDef && tokenDef.size === "small"
+                    ? CARD_SHORT * 0.5
+                    : CARD_SHORT
+                }
+                height={
+                  tokenDef && tokenDef.size === "small"
+                    ? CARD_LONG * 0.5
+                    : CARD_LONG
+                }
+                rotationZ={rotZ}
+                elevation={0.02}
+              />
+            ) : p.card.slug ? (
+              <>
+                {showPermanentGlow && (
+                  <CardGlow
+                    width={CARD_SHORT}
+                    height={CARD_LONG}
+                    rotationZ={rotZ}
+                    elevation={0}
+                    color={permanentGlowColor}
+                    renderOrder={-100}
+                  />
+                )}
+                <CardPlane
+                  slug={p.card?.slug || ""}
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={rotZ}
+                  renderOrder={isBurrowed ? -10 : 100}
+                  depthWrite={!isBurrowed}
+                  depthTest={true}
+                  textureUrl={
+                    !p.card?.slug ? "/api/assets/air.png" : undefined
+                  }
+                />
+              </>
+            ) : (
+              <CardPlane
+                slug={p.card?.slug || ""}
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={rotZ}
+                renderOrder={isBurrowed ? -10 : 100}
+                depthWrite={!isBurrowed}
+                depthTest={true}
+                textureUrl={
+                  !p.card?.slug
+                    ? "/api/assets/air.png"
+                    : undefined
+                }
+              />
+            )}
+            {/* Counter overlay (follows card) */}
+            {(() => {
+              const count = Math.max(0, Number(p.counters || 0));
+              if (count <= 0) return null;
+              const digits = Math.floor(count)
+                .toString()
+                .split("")
+                .map((d) => Number(d) as Digit);
+              // Left side center: place the badge center on the left edge so it sits half-in/half-out
+              const leftEdgeX = -CARD_SHORT * 0.5; // center on left edge
+              const centerZ = 0;
+              return (
+                <Html
+                  position={[leftEdgeX, 0.004, centerZ]}
+                  transform
+                  rotation-x={-Math.PI / 2}
+                  rotation-z={rotZ}
+                  zIndexRange={[0, 0]}
+                >
+                  <div className="pointer-events-auto select-none">
+                    <div className="relative inline-flex group">
+                      <div className="flex items-center gap-0.5">
+                        {digits.map((d, i) => (
+                          <NumberBadge
+                            key={i}
+                            value={d}
+                            size={8}
+                            strokeWidth={2}
+                            backgroundOpacity={0.5}
+                            textAsSvg
+                          />
+                        ))}
+                      </div>
+                      {/* Overlay click zones: top half increment, bottom half decrement */}
+                      <div className="absolute inset-0 flex flex-col opacity-80">
+                        <button
+                          type="button"
+                          aria-label="Increment counter"
+                          title="Increment counter"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            incrementPermanentCounter(key, idx);
+                          }}
+                          className="flex-1 transition-opacity rounded-t-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30"
+                        >
+                          <span className="sr-only">+</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Decrement counter"
+                          title="Decrement counter"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            decrementPermanentCounter(key, idx);
+                          }}
+                          className="flex-1 transition-opacity rounded-b-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30"
+                        >
+                          <span className="sr-only">-</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </Html>
+              );
+            })()}
+
+            {/* Render attached tokens on top of this permanent */}
+            {(() => {
+              const attachedTokens = items.filter(
+                (item) =>
+                  item.attachedTo &&
+                  item.attachedTo.at === key &&
+                  item.attachedTo.index === idx
+              );
+
+              return attachedTokens.map((token, attachIdx) => {
+                const tokenName = (
+                  token.card.name || ""
+                ).toLowerCase();
+                const attachTokenDef = TOKEN_BY_NAME[tokenName];
+
+                // Position attached tokens slightly offset on the card
+                const offsetX =
+                  CARD_SHORT *
+                  0.3 *
+                  (attachIdx - (attachedTokens.length - 1) / 2);
+                const offsetZ = -CARD_LONG * 0.3;
+
+                if (attachTokenDef) {
+                  const texUrl = tokenTextureUrl(attachTokenDef);
+                  const tokenW =
+                    attachTokenDef.size === "small"
+                      ? CARD_SHORT * 0.4
+                      : CARD_SHORT * 0.6;
+                  const tokenH =
+                    attachTokenDef.size === "small"
+                      ? CARD_LONG * 0.4
+                      : CARD_LONG * 0.6;
 
                   return (
-                    <RigidBody
-                      key={`perm-${key}-${idx}`}
-                      ref={(api) => {
-                        const id = `perm:${key}:${idx}`;
-                        try {
-                          if (api) {
-                            bodyMap.current.set(id, api as unknown as BodyApi);
-                          } else {
-                            bodyMap.current.delete(id);
-                          }
-                        } catch (error) {
-                          console.warn(
-                            `[physics] Failed to update body map for ${id}:`,
-                            error
-                          );
-                        }
-                      }}
-                      type={tokenSiteReplace ? "fixed" : "dynamic"}
-                      ccd
-                      colliders={false}
-                      position={[0 + offX, yPos, zBase + offZ]}
-                      linearDamping={2}
-                      angularDamping={2}
-                      canSleep={false}
-                      enabledRotations={[false, true, false]}
+                    <group
+                      key={`attached-${attachIdx}`}
+                      position={[offsetX, 0.05, offsetZ]}
                     >
-                      {/* Thin box collider to let cards stack physically */}
-                      <CuboidCollider
-                        args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
-                        friction={0.9}
-                        restitution={0}
+                      <CardPlane
+                        slug=""
+                        textureUrl={texUrl}
+                        forceTextureUrl
+                        width={tokenW}
+                        height={tokenH}
+                        rotationZ={0}
+                        elevation={0.02}
+                        renderOrder={700 + attachIdx}
                       />
-                      <group
-                        onPointerDown={(e) => {
-                          if (isSpectator) {
-                            e.stopPropagation();
-                            return;
-                          }
-                          // Only start potential drag on left-click
-                          if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
-                          if (tokenSiteReplace) {
-                            // Rubble behaves like a site for movement: no drag start
-                            e.stopPropagation();
-                            useGameStore.getState().selectPermanent(key, idx);
-                            clearHoverPreview();
-                            return;
-                          }
-                          const pe = e.nativeEvent as PointerEvent | undefined;
-                          if (pe && (pe as PointerEvent).pointerType === "touch") {
-                            clearTouchTimers();
-                            const cx = e.clientX;
-                            const cy = e.clientY;
-                            touchPreviewTimerRef.current = window.setTimeout(() => {
-                              beginHoverPreview(p.card);
-                            }, 180) as unknown as number;
-                            touchContextTimerRef.current = window.setTimeout(() => {
-                              useGameStore.getState().selectPermanent(key, idx);
-                              openContextMenu(
-                                { kind: "permanent", at: key, index: idx },
-                                { x: cx, y: cy }
-                              );
-                            }, 500) as unknown as number;
-                          }
-                          if (e.button === 0) {
-                            e.stopPropagation();
-                            useGameStore.getState().selectPermanent(key, idx);
-                            if (!isSpectator && actorKey) {
-                              const mine =
-                                (actorKey === "p1" && owner === 1) ||
-                                (actorKey === "p2" && owner === 2);
-                              if (!mine) {
-                                if (process.env.NODE_ENV !== "production") {
-                                  console.debug(
-                                    `[drag] perm:denied ${key}[${idx}] owner=${owner} actor=${actorKey}`
-                                  );
-                                }
-                                clearHoverPreview();
-                                return;
-                              }
-                            }
-                            // wait for small hold + movement before starting drag
-                            dragStartRef.current = {
-                              at: key,
-                              index: idx,
-                              start: [e.point.x, e.point.z],
-                              time: Date.now(),
-                            };
-                            if (process.env.NODE_ENV !== "production") {
-                              console.debug(`[drag] perm:down ${key}[${idx}]`);
-                            }
-                            clearHoverPreview();
-                          }
-                        }}
-                        onPointerOver={(e) => {
-                          if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
-                          e.stopPropagation();
-                          beginHoverPreview(p.card);
-                        }}
-                        onPointerOut={(e) => {
-                          if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
-                          e.stopPropagation();
-                          clearHoverPreview();
-                          // cancel pending drag if pointer leaves before threshold
-                          if (
-                            dragStartRef.current &&
-                            dragStartRef.current.at === key &&
-                            dragStartRef.current.index === idx
-                          ) {
-                            dragStartRef.current = null;
-                          }
-                          clearTouchTimers();
-                        }}
-                        onDoubleClick={(e) => {
-                          if (dragFromHand || dragFromPile) return;
-                          if (tokenSiteReplace) return;
-                          if (isSpectator) return;
-                          e.stopPropagation();
-                          emitBoardPing({ x: e.point.x, z: e.point.z });
-                        }}
-                        onPointerMove={(e) => {
-                          if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
-                          if (tokenSiteReplace) return; // no drag for Rubble
-                          e.stopPropagation();
-                          const pe = e.nativeEvent as PointerEvent | undefined;
-                          if (pe && (pe as PointerEvent).pointerType === "touch") {
-                            clearTouchTimers();
-                          }
-                          // Always feed cursor telemetry with current world coordinates
-                          handlePointerMove(e.point.x, e.point.z);
-                          if (isSpectator) return;
-                          // Start dragging once hold + threshold exceeded
-                          if (
-                            !dragging &&
-                            dragStartRef.current &&
-                            dragStartRef.current.at === key &&
-                            dragStartRef.current.index === idx
-                          ) {
-                            const [sx, sz] = dragStartRef.current.start;
-                            const dx = e.point.x - sx;
-                            const dz = e.point.z - sz;
-                            const dist = Math.hypot(dx, dz);
-                            const heldFor =
-                              Date.now() - dragStartRef.current.time;
-                            if (
-                              heldFor >= DRAG_HOLD_MS &&
-                              dist > DRAG_THRESHOLD
-                            ) {
-                              setDragging({ from: key, index: idx });
-                              dragStartRef.current = null;
-                              if (process.env.NODE_ENV !== "production") {
-                                console.debug(
-                                  `[drag] perm:start ${key}[${idx}] held=${heldFor} dist=${dist.toFixed(
-                                    2
-                                  )}`
-                                );
-                              }
-                              // Start visual drag. If ghost-only mode, do not move body.
-                              if (!USE_GHOST_ONLY_BOARD_DRAG) {
-                                draggedBody.current =
-                                  bodyMap.current.get(`perm:${key}:${idx}`) ||
-                                  null;
-                                if (draggedBody.current) {
-                                  moveDraggedBody(e.point.x, e.point.z, true);
-                                }
-                              } else {
-                                draggedBody.current = null;
-                              }
-                            }
-                          } else if (
-                            dragging &&
-                            dragging.from === key &&
-                            dragging.index === idx &&
-                            draggedBody.current &&
-                            !USE_GHOST_ONLY_BOARD_DRAG
-                          ) {
-                            // While dragging and pointer is over the card, continue driving it (no ghost)
-                            moveDraggedBody(e.point.x, e.point.z, true);
-                          }
-                        }}
-                        onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                          if (isSpectator) return;
-                          e.stopPropagation();
-                          e.nativeEvent.preventDefault();
-                          useGameStore.getState().selectPermanent(key, idx);
-                          openContextMenu(
-                            { kind: "permanent", at: key, index: idx },
-                            { x: e.clientX, y: e.clientY }
-                          );
-                        }}
-                        onPointerUp={(e) => {
-                          if (e.button !== 0) return; // ignore non-left button releases
-                          if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
-                          if (tokenSiteReplace) {
-                            e.stopPropagation();
-                            return;
-                          }
-                          if (isSpectator) {
-                            e.stopPropagation();
-                            return;
-                          }
-                          e.stopPropagation();
-                          clearTouchTimers();
-                          if (
-                            dragging &&
-                            dragging.from === key &&
-                            dragging.index === idx
-                          ) {
-                            // Compute nearest tile from world position and preserve exact world drop
-                            const wx = e.point.x;
-                            const wz = e.point.z;
-                            let tx = Math.round((wx - offsetX) / TILE_SIZE);
-                            let ty = Math.round((wz - offsetY) / TILE_SIZE);
-                            tx = Math.max(0, Math.min(board.size.w - 1, tx));
-                            ty = Math.max(0, Math.min(board.size.h - 1, ty));
-                            const dropKey = `${tx},${ty}`;
-                            if (process.env.NODE_ENV !== "production") {
-                              console.debug(
-                                `[drop] perm ${dragging.from}->${dropKey} at=${key}[${idx}] wx=${wx.toFixed(
-                                  2
-                                )} wz=${wz.toFixed(2)}`
-                              );
-                            }
-                            const tileX = offsetX + tx * TILE_SIZE;
-                            const tileZ = offsetY + ty * TILE_SIZE;
-                            const marginZ = TILE_SIZE * 0.1;
-                            const owner = permanents[key]?.[idx]?.owner ?? 1;
-                            const zBase =
-                              owner === 1
-                                ? -TILE_SIZE * 0.5 + marginZ
-                                : TILE_SIZE * 0.5 - marginZ;
-                            if (dragging.from === dropKey) {
-                              // Staying on same tile: compute baseline using current count and index
-                              const baseX = tileX;
-                              const baseZ = tileZ + zBase;
-                              const offX = wx - baseX;
-                              const offZ = wz - baseZ;
-                              dragTarget.current = null;
-                              draggedBody.current = null;
-                              setPermanentOffset(dropKey, idx, [offX, offZ]);
-                              snapBodyTo(`perm:${dropKey}:${idx}`, wx, wz);
-                            } else {
-                              // Moving to another tile: baseline uses new count and new index at end
-                              const toItems = permanents[dropKey] || [];
-                              const newIndex = toItems.length;
-                              const baseX = tileX;
-                              const baseZ = tileZ + zBase;
-                              const offX = wx - baseX;
-                              const offZ = wz - baseZ;
-                              dragTarget.current = null;
-                              draggedBody.current = null;
-                              moveSelectedPermanentToWithOffset(tx, ty, [
-                                offX,
-                                offZ,
-                              ]);
-                              snapBodyTo(`perm:${dropKey}:${newIndex}`, wx, wz);
-                            }
-                            setDragging(null);
-                            setDragFromHand(false);
-                            setGhost(null);
-                            dragStartRef.current = null;
-                            lastDropAt.current = Date.now();
-                            draggedBody.current = null;
-                          }
-                        }}
-                      >
-                        {/* Selection / remote highlight glow */}
-                        {renderPermanentGlow &&
-                          !(
-                            USE_GHOST_ONLY_BOARD_DRAG &&
-                            dragging &&
-                            dragging.from === key &&
-                            dragging.index === idx
-                          ) && (
-                          <CardGlow
-                            width={
-                              (tokenDef && tokenDef.size === "small"
-                                ? CARD_SHORT * 0.5
-                                : CARD_SHORT) + 0.3
-                            }
-                            height={
-                              (tokenDef && tokenDef.size === "small"
-                                ? CARD_LONG * 0.5
-                                : CARD_LONG) + 0.4
-                            }
-                            rotationZ={rotZ}
-                            elevation={0}
-                            color={permanentGlowColor}
-                            renderOrder={-100}
-                          />
-                        )}
-                        <group
-                          visible={
-                            !(
-                              USE_GHOST_ONLY_BOARD_DRAG &&
-                              dragging &&
-                              dragging.from === key &&
-                              dragging.index === idx
-                            )
-                          }
-                          onClick={(e) => {
-                            if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
-                            e.stopPropagation();
-                            if (isSpectator) return;
-                            // If dragging this item, ignore clicks
-                            if (
-                              dragging &&
-                              dragging.from === key &&
-                              dragging.index === idx
-                            )
-                              return;
-                            // Left-click selects only; context menu via right-click
-                            useGameStore.getState().selectPermanent(key, idx);
-                          }}
-                          onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                            if (isSpectator) return;
-                            e.stopPropagation();
-                            e.nativeEvent.preventDefault();
-                            // Ensure the permanent is selected before opening the menu
-                            useGameStore.getState().selectPermanent(key, idx);
-                            openContextMenu(
-                              { kind: "permanent", at: key, index: idx },
-                              { x: e.clientX, y: e.clientY }
-                            );
-                          }}
-                        >
-                          {isToken ? (
-                            <CardPlane
-                              slug={""}
-                              textureUrl={
-                                tokenDef ? tokenTextureUrl(tokenDef) : undefined
-                              }
-                              forceTextureUrl
-                              width={
-                                tokenDef && tokenDef.size === "small"
-                                  ? CARD_SHORT * 0.5
-                                  : CARD_SHORT
-                              }
-                              height={
-                                tokenDef && tokenDef.size === "small"
-                                  ? CARD_LONG * 0.5
-                                  : CARD_LONG
-                              }
-                              rotationZ={rotZ}
-                              elevation={0.02}
-                            />
-                          ) : p.card.slug ? (
-                            <>
-                              {renderPermanentGlow && (
-                                <CardGlow
-                                  width={CARD_SHORT}
-                                  height={CARD_LONG}
-                                  rotationZ={rotZ}
-                                  elevation={0}
-                                  color={permanentGlowColor}
-                                  renderOrder={-100}
-                                />
-                              )}
-                              <CardPlane
-                                slug={p.card?.slug || ""}
-                                width={CARD_SHORT}
-                                height={CARD_LONG}
-                                rotationZ={rotZ}
-                                renderOrder={isBurrowed ? -10 : 0}
-                                depthWrite={!isBurrowed}
-                                depthTest={true}
-                                textureUrl={
-                                  !p.card?.slug
-                                    ? "/api/assets/air.png"
-                                    : undefined
-                                }
-                              />
-                            </>
-                          ) : (
-                            <CardPlane
-                              slug={p.card?.slug || ""}
-                              width={CARD_SHORT}
-                              height={CARD_LONG}
-                              rotationZ={rotZ}
-                              renderOrder={isBurrowed ? -10 : 0}
-                              depthWrite={!isBurrowed}
-                              depthTest={true}
-                              textureUrl={
-                                !p.card?.slug
-                                  ? "/api/assets/air.png"
-                                  : undefined
-                              }
-                            />
-                          )}
-                          {/* Counter overlay (follows card) */}
-                          {(() => {
-                            const count = Math.max(0, Number(p.counters || 0));
-                            if (count <= 0) return null;
-                            const digits = Math.floor(count)
-                              .toString()
-                              .split("")
-                              .map((d) => Number(d) as Digit);
-                            // Left side center: place the badge center on the left edge so it sits half-in/half-out
-                            const leftEdgeX = -CARD_SHORT * 0.5; // center on left edge
-                            const centerZ = 0;
-                            return (
-                              <Html
-                                position={[leftEdgeX, 0.004, centerZ]}
-                                transform
-                                rotation-x={-Math.PI / 2}
-                                rotation-z={rotZ}
-                                zIndexRange={[0, 0]}
-                              >
-                                <div className="pointer-events-auto select-none">
-                                  <div className="relative inline-flex group">
-                                    <div className="flex items-center gap-0.5">
-                                      {digits.map((d, i) => (
-                                        <NumberBadge
-                                          key={i}
-                                          value={d}
-                                          size={8}
-                                          strokeWidth={2}
-                                          backgroundOpacity={0.5}
-                                          textAsSvg
-                                        />
-                                      ))}
-                                    </div>
-                                    {/* Overlay click zones: top half increment, bottom half decrement */}
-                                    <div className="absolute inset-0 flex flex-col opacity-80">
-                                      <button
-                                        type="button"
-                                        aria-label="Increment counter"
-                                        title="Increment counter"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          incrementPermanentCounter(key, idx);
-                                        }}
-                                        className="flex-1 transition-opacity rounded-t-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30"
-                                      >
-                                        <span className="sr-only">+</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        aria-label="Decrement counter"
-                                        title="Decrement counter"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          decrementPermanentCounter(key, idx);
-                                        }}
-                                        className="flex-1 transition-opacity rounded-b-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30"
-                                      >
-                                        <span className="sr-only">-</span>
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </Html>
-                            );
-                          })()}
-
-                          {/* Render attached tokens on top of this permanent */}
-                          {(() => {
-                            const attachedTokens = items.filter(
-                              (item) =>
-                                item.attachedTo &&
-                                item.attachedTo.at === key &&
-                                item.attachedTo.index === idx
-                            );
-
-                            return attachedTokens.map((token, attachIdx) => {
-                              const tokenName = (
-                                token.card.name || ""
-                              ).toLowerCase();
-                              const attachTokenDef = TOKEN_BY_NAME[tokenName];
-
-                              // Position attached tokens slightly offset on the card
-                              const offsetX =
-                                CARD_SHORT *
-                                0.3 *
-                                (attachIdx - (attachedTokens.length - 1) / 2);
-                              const offsetZ = -CARD_LONG * 0.3;
-
-                              if (attachTokenDef) {
-                                const texUrl = tokenTextureUrl(attachTokenDef);
-                                const tokenW =
-                                  attachTokenDef.size === "small"
-                                    ? CARD_SHORT * 0.4
-                                    : CARD_SHORT * 0.6;
-                                const tokenH =
-                                  attachTokenDef.size === "small"
-                                    ? CARD_LONG * 0.4
-                                    : CARD_LONG * 0.6;
-
-                                return (
-                                  <group
-                                    key={`attached-${attachIdx}`}
-                                    position={[offsetX, 0.05, offsetZ]}
-                                  >
-                                    <CardPlane
-                                      slug=""
-                                      textureUrl={texUrl}
-                                      forceTextureUrl
-                                      width={tokenW}
-                                      height={tokenH}
-                                      rotationZ={0}
-                                      elevation={0.02}
-                                      renderOrder={700 + attachIdx}
-                                    />
-                                  </group>
-                                );
-                              }
-                              return null;
-                            });
-                          })()}
-                        </group>
-                      </group>
-                    </RigidBody>
+                    </group>
+                  );
+                }
+                return null;
+              });
+            })()}
+          </group>
+        </group>
+      </RigidBody>
                   );
                 });
               })()}
@@ -2410,6 +2469,8 @@ export default function Board({
         const offZ = a.offset?.[1] ?? 0;
         const worldX = baseX + offX;
         const worldZ = baseZ + offZ;
+        const hideAvatar =
+          USE_GHOST_ONLY_BOARD_DRAG && dragAvatar === who;
         // Avatars should behave like board permanents: render exactly at world drop position
         return (
           <group key={`avatar-${who}`}>
@@ -2459,7 +2520,7 @@ export default function Board({
                     friction={0.9}
                     restitution={0}
                   />
-                  {isSel && !isHandVisible && (
+                  {isSel && !isHandVisible && !hideAvatar && (
                     <CardGlow
                       width={CARD_SHORT + 0.3}
                       height={CARD_LONG + 0.4}
@@ -2470,6 +2531,7 @@ export default function Board({
                     />
                   )}
                   <group
+                    visible={!hideAvatar}
                     onPointerDown={(e) => {
                       if (isSpectator) {
                         e.stopPropagation();
@@ -2571,12 +2633,32 @@ export default function Board({
                           if (process.env.NODE_ENV !== "production") {
                             console.debug(`[drag] avatar:start ${who}`);
                           }
+                          if (USE_GHOST_ONLY_BOARD_DRAG) {
+                            lastBoardGhostPosRef.current.x = e.point.x;
+                            lastBoardGhostPosRef.current.z = e.point.z;
+                            if (boardGhostRef.current) {
+                              boardGhostRef.current.position.set(
+                                e.point.x,
+                                0.26,
+                                e.point.z
+                              );
+                            }
+                          }
                           if (!USE_GHOST_ONLY_BOARD_DRAG) {
                             // Move the real body during drag
-                            draggedBody.current =
-                              bodyMap.current.get(`avatar:${who}`) || null;
-                            if (draggedBody.current) {
-                              moveDraggedBody(e.point.x, e.point.z, true);
+                            const avatarId = `avatar:${who}`;
+                            // Skip if this body was already accessed this frame
+                            if (bodiesAccessedThisFrame.current.has(avatarId)) {
+                              if (process.env.NODE_ENV !== "production") {
+                                console.debug(`[drag] avatar:skip-frame-access ${avatarId}`);
+                              }
+                              draggedBody.current = null;
+                            } else {
+                              bodiesAccessedThisFrame.current.add(avatarId);
+                              draggedBody.current = bodyMap.current.get(avatarId) || null;
+                              if (draggedBody.current) {
+                                moveDraggedBody(e.point.x, e.point.z, true);
+                              }
                             }
                           } else {
                             // Ghost-only: don't move a body
@@ -2649,7 +2731,7 @@ export default function Board({
                     }}
                   >
                     <group
-                      visible={!(USE_GHOST_ONLY_BOARD_DRAG && dragAvatar === who)}
+                      visible={true}
                       onClick={(e) => {
                         if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                         e.stopPropagation();
@@ -2673,12 +2755,12 @@ export default function Board({
                     >
                       {(selectedAvatar === who || dragAvatar === who) &&
                         !isHandVisible &&
-                        !(USE_GHOST_ONLY_BOARD_DRAG && dragAvatar === who) && (
+                        !hideAvatar && (
                           <CardGlow
                             width={CARD_SHORT}
                             height={CARD_LONG}
                             rotationZ={rotZ}
-                            elevation={0}
+                            elevation={dragAvatar === who ? DRAG_LIFT : 0}
                             color={
                               who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2
                             }
@@ -2790,7 +2872,7 @@ export default function Board({
         )}
 
       {/* Local ghost while dragging permanents or avatars on the board */}
-      {(dragging || dragAvatar) && (
+      {(dragFromHand || dragFromPile || (USE_GHOST_ONLY_BOARD_DRAG && (dragging || dragAvatar))) && (
         <group
           ref={boardGhostRef}
           position={[lastBoardGhostPosRef.current.x, 0.26, lastBoardGhostPosRef.current.z]}

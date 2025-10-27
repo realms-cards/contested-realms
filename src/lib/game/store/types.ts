@@ -129,6 +129,7 @@ export type AvatarState = EntityBase<CardRef | null> & {
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
+  instanceId?: string | null;
   // Optional attachment to a permanent at the same tile
   attachedTo?: { at: CellKey; index: number } | null;
   // Generic numeric counter displayed on the card (e.g., +1 counters)
