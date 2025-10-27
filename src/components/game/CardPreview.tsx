@@ -194,8 +194,9 @@ export default function CardPreview({
     }
   })();
 
-  const base =
-    "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
+  const base = isSite
+    ? "aspect-[4/3] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10"
+    : "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
 
   // Use simple Image component instead of 3D Canvas to avoid WebGL context leaks
   // The tournament draft was creating hundreds of WebGL contexts and crashing browsers
@@ -210,7 +211,9 @@ export default function CardPreview({
             alt={card?.name || "Card preview"}
             fill
             className={`${
-              isSite ? "object-contain origin-center rotate-90" : "object-cover"
+              isSite
+                ? "object-contain scale-150 rotate-90 origin-center"
+                : "object-cover"
             } object-center`}
             sizes={`${Math.round(width)}px`}
             priority
