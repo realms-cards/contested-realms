@@ -242,9 +242,12 @@ export default function PlayPage() {
     if (mode === "topdown") {
       const dist = Math.max(matW, matH) * 1.1;
       cam.position.set(0, dist, 0);
+      cam.up.set(0, 0, -1);
     } else {
       cam.position.set(0, 10, 5);
+      cam.up.set(0, 1, 0);
     }
+    cam.lookAt(0, 0, 0);
     c.update();
   }
 

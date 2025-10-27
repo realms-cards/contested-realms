@@ -2176,7 +2176,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const source = replaceKeys.has("permanents")
           ? (p.permanents as Permanents)
           : deepMergeReplaceArrays(s.permanents, p.permanents);
-        next.permanents = dedupePermanents(source) as GameState["permanents"];
+        next.permanents = source as GameState["permanents"];
       }
       if (p.mulligans !== undefined) {
         next.mulligans = replaceKeys.has("mulligans")
@@ -4049,21 +4049,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         toKey,
         null
       );
-      const perSanitized =
-        (dedupePermanents(per) ?? per) as Permanents;
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Moved '${movedName}' to #${cellNo}`);
       {
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            permanents: perSanitized as GameState["permanents"],
+            permanents: (per ?? s.permanents) as GameState["permanents"],
           };
           get().trySendPatch(patch);
         }
       }
       return {
-        permanents: perSanitized,
+        permanents: per,
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
@@ -4094,13 +4092,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         toKey,
         offset
       );
-      const perSanitized =
-        (dedupePermanents(per) ?? per) as Permanents;
 
       console.log("[store] moveSelectedPermanentToWithOffset AFTER ->", {
         movedName,
-        fromPermanents: (perSanitized[fromKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
-        toPermanents: (perSanitized[toKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
+        fromPermanents: (per[fromKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
+        toPermanents: (per[toKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
       });
 
       const cellNo = y * s.board.size.w + x + 1;
@@ -4109,7 +4105,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            permanents: perSanitized as GameState["permanents"],
+            permanents: (per ?? s.permanents) as GameState["permanents"],
           };
           console.log("[store] Sending patch to server ->", {
             patchKeys: Object.keys(patch),
@@ -4122,7 +4118,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
       return {
-        permanents: perSanitized,
+        permanents: per,
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),

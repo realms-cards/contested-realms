@@ -16,20 +16,9 @@ function ensureRapierInit(): Promise<void> {
   initPromise = import("@dimforge/rapier3d-compat")
     .then(async (module) => {
       const maybeInit = module?.init;
-      if (typeof maybeInit !== "function") {
-        return;
+      if (typeof maybeInit === "function") {
+        await maybeInit();
       }
-      const originalInit = maybeInit.bind(module);
-      module.init = (options?: unknown) => {
-        if (options === undefined || options === null) {
-          return originalInit({});
-        }
-        if (typeof options !== "object") {
-          return originalInit({ module_or_path: options });
-        }
-        return originalInit(options as Record<string, unknown>);
-      };
-      await module.init({});
     })
     .catch((err) => {
       if (process.env.NODE_ENV !== "production") {
