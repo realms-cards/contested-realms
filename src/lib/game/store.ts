@@ -1044,6 +1044,227 @@ function dedupePermanents(
   return out;
 }
 
+function createPermanentsPatch(per: Permanents): ServerPatchT {
+  return {
+    permanents: per as GameState["permanents"],
+  } as ServerPatchT;
+}
+
+type PatchSignatureEntry = {
+  fields: string[];
+  expiresAt: number;
+};
+
+const PATCH_SIGNATURE_TTL_MS = 7_000;
+const PATCH_SIGNATURE_FIELDS = [
+  "permanents",
+  "zones",
+  "board",
+  "avatars",
+  "permanentPositions",
+  "permanentAbilities",
+  "sitePositions",
+  "playerPositions",
+  "resources",
+] as const;
+
+type TrackedPatchField = (typeof PATCH_SIGNATURE_FIELDS)[number];
+
+const pendingPatchSignatures = new Map<string, PatchSignatureEntry[]>();
+
+function prunePatchSignatures(now: number) {
+  for (const [key, entries] of pendingPatchSignatures.entries()) {
+    const filtered = entries.filter((entry) => entry.expiresAt > now);
+    if (filtered.length === 0) {
+      pendingPatchSignatures.delete(key);
+    } else if (filtered.length !== entries.length) {
+      pendingPatchSignatures.set(key, filtered);
+    }
+  }
+}
+
+function registerPatchSignature(id: string, fields: string[]) {
+  const now = Date.now();
+  prunePatchSignatures(now);
+  const list = pendingPatchSignatures.get(id) ?? [];
+  list.push({
+    fields: [...fields],
+    expiresAt: now + PATCH_SIGNATURE_TTL_MS,
+  });
+  pendingPatchSignatures.set(id, list);
+}
+
+function peekPatchSignature(id: string): PatchSignatureEntry | null {
+  const now = Date.now();
+  prunePatchSignatures(now);
+  const list = pendingPatchSignatures.get(id);
+  if (!list || list.length === 0) return null;
+  const entry = list[0];
+  return entry ?? null;
+}
+
+function shiftPatchSignature(id: string): PatchSignatureEntry | null {
+  const now = Date.now();
+  prunePatchSignatures(now);
+  const list = pendingPatchSignatures.get(id);
+  if (!list || list.length === 0) return null;
+  const entry = list.shift() ?? null;
+  if (!entry) return null;
+  if (list.length === 0) pendingPatchSignatures.delete(id);
+  else pendingPatchSignatures.set(id, list);
+  return entry;
+}
+
+function normalizeForSignature(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForSignature(item));
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const entries = Object.entries(record)
+      .filter(([key, val]) => val !== undefined && key !== "cost")
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of entries) {
+      out[key] = normalizeForSignature(val);
+    }
+    return out;
+  }
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) return "NaN";
+    if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+  }
+  return value;
+}
+
+function stableSerialize(value: unknown): string {
+  if (value === null) return "null";
+  const t = typeof value;
+  if (t === "string") return JSON.stringify(value);
+  if (t === "number") return Number.isFinite(value as number) ? String(value) : JSON.stringify(value);
+  if (t === "boolean") return value ? "true" : "false";
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(",")}]`;
+  }
+  if (t === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    return `{${entries
+      .map(([key, val]) => `${JSON.stringify(key)}:${stableSerialize(val)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function makePatchSignature(
+  patch: ServerPatchT
+): { id: string; fields: TrackedPatchField[] } | null {
+  if (!patch || typeof patch !== "object") return null;
+  const parts: string[] = [];
+  const fields: TrackedPatchField[] = [];
+  for (const field of PATCH_SIGNATURE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(patch, field)) continue;
+    const raw = (patch as Record<string, unknown>)[field];
+    if (raw === undefined) continue;
+    const normalized = normalizeForSignature(raw);
+    parts.push(`${field}:${stableSerialize(normalized)}`);
+    fields.push(field);
+  }
+  if (parts.length === 0) return null;
+  return {
+    id: parts.join("|"),
+    fields,
+  };
+}
+
+function filterEchoPatchIfAny(
+  patch: ServerPatchT,
+  state: GameState
+): { patch: ServerPatchT | null; matched: boolean } {
+  const signature = makePatchSignature(patch);
+  if (!signature) return { patch, matched: false };
+  const entry = peekPatchSignature(signature.id);
+  if (!entry) return { patch, matched: false };
+  for (const field of entry.fields) {
+    if (!Object.prototype.hasOwnProperty.call(patch, field)) {
+      return { patch, matched: false };
+    }
+    const currentValue = (state as unknown as Record<string, unknown>)[field];
+    if (currentValue === undefined) {
+      return { patch, matched: false };
+    }
+    const incomingValue = (patch as Record<string, unknown>)[field];
+    const normIncoming = normalizeForSignature(incomingValue);
+    const normCurrent = normalizeForSignature(currentValue);
+    if (stableSerialize(normIncoming) !== stableSerialize(normCurrent)) {
+      return { patch, matched: false };
+    }
+  }
+  let mutated = false;
+  const filtered: ServerPatchT = { ...patch };
+  for (const field of entry.fields) {
+    if (field in filtered) {
+      delete filtered[field as keyof ServerPatchT];
+      mutated = true;
+    }
+  }
+  if (!mutated) {
+    return { patch, matched: false };
+  }
+  if (!shiftPatchSignature(signature.id)) {
+    return { patch, matched: false };
+  }
+  try {
+    console.debug("[net] filtered echo patch", {
+      fields: entry.fields,
+      remainingKeys: Object.keys(filtered).filter((key) => key !== "__replaceKeys"),
+    });
+  } catch {}
+  if (Array.isArray(filtered.__replaceKeys)) {
+    const remaining = filtered.__replaceKeys.filter(
+      (key) => !entry.fields.includes(key as TrackedPatchField)
+    );
+    if (remaining.length > 0) filtered.__replaceKeys = remaining;
+    else delete filtered.__replaceKeys;
+  }
+  const remainingKeys = Object.keys(filtered).filter(
+    (key) => key !== "__replaceKeys"
+  );
+  if (remainingKeys.length === 0) {
+    return { patch: null, matched: true };
+  }
+  return { patch: filtered, matched: true };
+}
+
+function cloneSeatZones(z: Zones | undefined): Zones | null {
+  if (!z) return null;
+  return {
+    spellbook: [...z.spellbook],
+    atlas: [...z.atlas],
+    hand: [...z.hand],
+    graveyard: [...z.graveyard],
+    battlefield: [...z.battlefield],
+    banished: [...z.banished],
+  };
+}
+
+function createZonesPatchFor(
+  zones: GameState["zones"],
+  seats: keyof GameState["zones"] | Array<keyof GameState["zones"]>
+): ServerPatchT | null {
+  if (!zones) return null;
+  const seatList = Array.isArray(seats) ? seats : [seats];
+  const payload: Partial<GameState["zones"]> = {};
+  for (const seat of seatList) {
+    const seatZones = cloneSeatZones(zones[seat]);
+    if (!seatZones) continue;
+    payload[seat] = seatZones;
+  }
+  return Object.keys(payload).length > 0
+    ? ({ zones: payload as GameState["zones"] } as ServerPatchT)
+    : null;
+}
+
 // Merge console events by stable key and chronological order, trimming to MAX_EVENTS.
 function mergeEvents(prev: GameEvent[], add: GameEvent[]): GameEvent[] {
   const m = new Map<string, GameEvent>();
@@ -1606,6 +1827,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isAuthoritativeSnapshot = !!(
       replaceKeysCandidate && replaceKeysCandidate.length > 0
     );
+    let signatureInfo: ReturnType<typeof makePatchSignature> | null = null;
     if (!isAuthoritativeSnapshot) {
       try {
         const p = patch as ServerPatchT;
@@ -1669,6 +1891,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         toSend = sanitized;
       } catch {}
+      signatureInfo = makePatchSignature(toSend);
     }
     if (process.env.NODE_ENV !== "production") {
       try {
@@ -1690,6 +1913,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     try {
       tr.sendAction(toSend);
+      if (signatureInfo && signatureInfo.fields.length > 0) {
+        registerPatchSignature(signatureInfo.id, signatureInfo.fields);
+      }
       // Mark last local action timestamp so undo can wait for server ack ordering
       set({ lastLocalActionTs: Date.now() });
       return true;
@@ -1721,6 +1947,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const isAuthoritativeSnapshot = !!(
           replaceKeysCandidate && replaceKeysCandidate.length > 0
         );
+        let signatureInfo: ReturnType<typeof makePatchSignature> | null = null;
         if (!isAuthoritativeSnapshot) {
           try {
             const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
@@ -1782,6 +2009,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             toSend = sanitized;
           } catch {}
         }
+        if (!isAuthoritativeSnapshot) {
+          signatureInfo = makePatchSignature(toSend);
+        }
         if (process.env.NODE_ENV !== "production") {
           try {
             if (toSend.avatars && typeof toSend.avatars === "object") {
@@ -1794,6 +2024,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         // Send each patch
         tr.sendAction(toSend);
+        if (signatureInfo && signatureInfo.fields.length > 0) {
+          registerPatchSignature(signatureInfo.id, signatureInfo.fields);
+        }
       } catch (err) {
         sentAll = false;
         try {
@@ -2044,7 +2277,27 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (typeof t === "number" && t < (s.lastServerTs ?? 0))
         return s as GameState;
 
-      const p = patch as ServerPatchT;
+      let incoming = patch as ServerPatchT;
+      const replaceKeysCandidateInitial = Array.isArray(incoming.__replaceKeys)
+        ? incoming.__replaceKeys
+        : null;
+      if (!replaceKeysCandidateInitial || replaceKeysCandidateInitial.length === 0) {
+      const echoResult = filterEchoPatchIfAny(incoming, s);
+        if (echoResult.matched) {
+          if (!echoResult.patch) {
+            if (typeof t === "number") {
+              const lastTsEcho = Math.max(s.lastServerTs ?? 0, t);
+              if (lastTsEcho !== (s.lastServerTs ?? 0)) {
+                return { ...s, lastServerTs: lastTsEcho } as GameState;
+              }
+            }
+            return s as GameState;
+          }
+          incoming = echoResult.patch;
+        }
+      }
+
+      const p = incoming as ServerPatchT;
       const next: Partial<GameState> = {};
       const replaceKeys = new Set<string>(
         Array.isArray(p.__replaceKeys) ? p.__replaceKeys : []
@@ -2700,7 +2953,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
       {
         const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
+          ...createPermanentsPatch(per),
         };
         get().trySendPatch(patch);
       }
@@ -2729,7 +2982,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
       {
         const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
+          ...createPermanentsPatch(per),
         };
         get().trySendPatch(patch);
       }
@@ -2757,12 +3010,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           cur.card.name
         }' at #${cellNo} (now ${nextCount})`
       );
-      {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
-      }
+      get().trySendPatch(createPermanentsPatch(per));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -2786,10 +3034,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         );
       }
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -2826,10 +3071,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         );
       }
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -2850,10 +3092,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Removed counter from '${cur.card.name}' at #${cellNo}`);
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -2868,10 +3107,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       per[at] = list;
       get().log(`Detached token '${token.card.name}'`);
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -3618,18 +3854,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
       per[key] = arr;
       get().log(`${who.toUpperCase()} plays '${card.name}' at #${cellNo}`);
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...s.zones[who], hand },
+      } as GameState["zones"];
 
       {
-        const tr = get().transport;
-        if (tr) {
-          const patch: ServerPatchT = {
-            zones: {
-              ...s.zones,
-              [who]: { ...s.zones[who], hand },
-            } as GameState["zones"],
-            permanents: per as GameState["permanents"],
-          };
-          get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
+        const zonePatch = createZonesPatchFor(zonesNext, who);
+        if (zonePatch) {
+          get().trySendPatch(zonePatch);
         }
       }
 
@@ -3641,7 +3875,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (e0) nextInteractionLog[consumeInstantId] = { ...e0, status: "expired", updatedAt: Date.now() } as typeof e0;
       }
       return {
-        zones: { ...s.zones, [who]: { ...s.zones[who], hand } },
+        zones: zonesNext,
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,
@@ -3846,22 +4080,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(
         `${who.toUpperCase()} plays '${card.name}' from ${from} at #${cellNo}`
       );
+      const zonesNext =
+        from !== "tokens"
+          ? ({
+              ...s.zones,
+              [who]: { ...z, [pileName as keyof Zones]: pile },
+            } as GameState["zones"])
+          : null;
 
       {
-        const tr = get().transport;
-        if (tr) {
-          const zonesNext =
-            from !== "tokens"
-              ? ({
-                  ...s.zones,
-                  [who]: { ...z, [pileName as keyof Zones]: pile },
-                } as GameState["zones"])
-              : s.zones;
-          const patch: ServerPatchT = {
-            permanents: per as GameState["permanents"],
-            ...(from !== "tokens" ? { zones: zonesNext } : {}),
-          };
-          get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
+        if (zonesNext) {
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
 
@@ -3873,13 +4106,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (e0) nextInteractionLog[consumeInstantId] = { ...e0, status: "expired", updatedAt: Date.now() } as typeof e0;
       }
       return {
-        zones:
-          from !== "tokens"
-            ? ({
-                ...s.zones,
-                [who]: { ...z, [pileName as keyof Zones]: pile },
-              } as GameState["zones"])
-            : s.zones,
+        zones: zonesNext ?? s.zones,
         permanents: per,
         dragFromPile: null,
         dragFromHand: false,
@@ -4054,9 +4281,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = {
-            permanents: (per ?? s.permanents) as GameState["permanents"],
-          };
+          const patch = createPermanentsPatch(per ?? s.permanents);
           get().trySendPatch(patch);
         }
       }
@@ -4104,9 +4329,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = {
-            permanents: (per ?? s.permanents) as GameState["permanents"],
-          };
+          const patch = createPermanentsPatch(per ?? s.permanents);
           console.log("[store] Sending patch to server ->", {
             patchKeys: Object.keys(patch),
             permanentsKeys: Object.keys(patch.permanents || {}),
@@ -4133,9 +4356,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = {
-            permanents: per as GameState["permanents"],
-          };
+          const patch = createPermanentsPatch(per);
           get().trySendPatch(patch);
         }
       }
@@ -4170,10 +4391,7 @@ per[at] = arr;
         }' at #${cellNo}`
       );
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -4225,12 +4443,13 @@ per[at] = arr;
           item.card.name
         }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
+      const zonesNext = zones as GameState["zones"];
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-          zones: zones as GameState["zones"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
+        const zonePatch = createZonesPatchFor(zonesNext, owner);
+        if (zonePatch) {
+          get().trySendPatch(zonePatch);
+        }
       }
       return { permanents: per, zones } as Partial<GameState> as GameState;
     }),
@@ -4314,10 +4533,7 @@ per[at] = arr;
         `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
       );
       {
-        const patch: ServerPatchT = {
-          permanents: per as GameState["permanents"],
-        };
-        get().trySendPatch(patch);
+        get().trySendPatch(createPermanentsPatch(per));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),

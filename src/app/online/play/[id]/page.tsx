@@ -793,14 +793,19 @@ export default function OnlineMatchPage() {
     if (resyncing) return;
     const hasServerGameState = !!(match as unknown as { game?: unknown })?.game;
     if ((match?.status === "waiting" || match?.status === "deck_construction") && !hasServerGameState) {
-      if (waitingResetDoneRef.current !== matchId) {
+      // Allow repeated resets even if matchId is the same, by keying on status/snapshot presence
+      const resetKey = `${matchId}:waiting:${hasServerGameState ? 1 : 0}`;
+      if (waitingResetDoneRef.current !== resetKey) {
         try {
           useGameStore.getState().resetGameState();
         } catch {}
-        waitingResetDoneRef.current = matchId;
+        // Also reset local setup wizard flags so we show the deck loader again
+        setPrepared(false);
+        setD20RollingComplete(false);
+        waitingResetDoneRef.current = resetKey;
       }
     }
-  }, [matchId, match, match?.id, match?.status, resyncing]);
+  }, [matchId, match, match?.id, match?.status, resyncing, setPrepared]);
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)

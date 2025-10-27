@@ -15,9 +15,15 @@ function ensureRapierInit(): Promise<void> {
   }
   initPromise = import("@dimforge/rapier3d-compat")
     .then(async (module) => {
-      const maybeInit = module?.init;
-      if (typeof maybeInit === "function") {
-        await maybeInit();
+      const initFn =
+        typeof module?.init === "function"
+          ? module.init
+          : typeof (module as unknown as { default?: unknown }).default ===
+              "function"
+            ? ((module as unknown as { default: () => Promise<void> }).default)
+            : null;
+      if (initFn) {
+        await initFn();
       }
     })
     .catch((err) => {
