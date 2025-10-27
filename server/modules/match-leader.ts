@@ -1111,20 +1111,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     };
 
     try {
-      // Exclude sender from statePatch broadcast to prevent echo overwrites
-      const sender = players.get(playerId);
-      const senderSocketId = sender?.socketId;
-      if (senderSocketId) {
-        io.to(`match:${match.id}`).except(senderSocketId).emit("statePatch", {
-          patch,
-          t: Date.now(),
-        });
-      } else {
-        io.to(`match:${match.id}`).emit("statePatch", {
-          patch,
-          t: Date.now(),
-        });
-      }
+      // Broadcast to the entire room, including the sender, so both clients
+      // advance phase locally without relying on a resync.
+      io.to(`match:${match.id}`).emit("statePatch", {
+        patch,
+        t: Date.now(),
+      });
     } catch {
       // ignore broadcast error
     }

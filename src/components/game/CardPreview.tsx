@@ -201,9 +201,7 @@ export default function CardPreview({
   // The tournament draft was creating hundreds of WebGL contexts and crashing browsers
   return (
     <div
-      className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className} ${
-        isSite ? "left-2 rotate-90" : "object-cover"
-      }`}
+      className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
     >
       <div className="relative">
         <div className={`relative ${base}`} style={{ width }}>
@@ -212,7 +210,7 @@ export default function CardPreview({
             alt={card?.name || "Card preview"}
             fill
             className={`${
-              isSite ? "object-contain origin-center" : "object-cover"
+              isSite ? "object-contain origin-center rotate-90" : "object-cover"
             } object-center`}
             sizes={`${Math.round(width)}px`}
             priority

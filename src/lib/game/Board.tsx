@@ -66,6 +66,13 @@ const STACK_MARGIN_Z = TILE_SIZE * 0.1;
 const STACK_LAYER_LIFT = CARD_THICK * 0.12;
 const BASE_CARD_ELEVATION = CARD_THICK * 0.55;
 const BURROWED_ELEVATION = CARD_THICK * 0.08;
+const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
+const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.28;
+const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
+
+function clampOffset(value: number, limit: number): number {
+  return Math.max(-limit, Math.min(limit, value));
+}
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
 type BodyApi = {
@@ -573,6 +580,7 @@ export default function Board({
   const touchContextTimerRef = useRef<number | null>(null);
   const hoverClearTimerRef = useRef<number | null>(null);
   const hoverRequestIdRef = useRef(0);
+  const hoverSourceRef = useRef<string | null>(null);
   const [dragAvatar, setDragAvatar] = useState<"p1" | "p2" | null>(null);
   const avatarDragStartRef = useRef<{
     who: "p1" | "p2";
@@ -843,42 +851,50 @@ export default function Board({
     []
   );
 
-  function beginHoverPreview(card?: CardRef | null) {
+  function beginHoverPreview(card?: CardRef | null, sourceKey?: string | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     if (hoverClearTimerRef.current) {
       window.clearTimeout(hoverClearTimerRef.current);
       hoverClearTimerRef.current = null;
     }
-    if (!card) return;
+    hoverSourceRef.current = sourceKey ?? null;
     const requestId = ++hoverRequestIdRef.current;
-    hoverTimer.current = window.setTimeout(() => {
-      ensureCardSlug(card)
-        .then((resolved) => {
-          if (!resolved) return;
-          if (hoverRequestIdRef.current !== requestId) return;
-          setPreviewCard(resolved);
-        })
-        .catch(() => {
-          // Ignore lookup failures; preview simply won't render.
-        });
-    }, 120);
+    if (card) {
+      setPreviewCard(card);
+      hoverTimer.current = window.setTimeout(() => {
+        ensureCardSlug(card)
+          .then((resolved) => {
+            if (!resolved) return;
+            if (hoverRequestIdRef.current !== requestId) return;
+            if (hoverSourceRef.current !== (sourceKey ?? null)) return;
+            setPreviewCard(resolved);
+          })
+          .catch(() => {
+            // Ignore lookup failures; preview simply won't render.
+          });
+      }, 120);
+    }
   }
-  function clearHoverPreview() {
+  function clearHoverPreview(sourceKey?: string | null) {
+    if (sourceKey != null && hoverSourceRef.current !== sourceKey) return;
+    hoverSourceRef.current = null;
     hoverRequestIdRef.current++;
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
     setPreviewCard(null);
   }
-  function clearHoverPreviewDebounced(delay = 220) {
-    const requestId = hoverRequestIdRef.current;
+  function clearHoverPreviewDebounced(sourceKey?: string | null, delay = 400) {
+    if (sourceKey != null && hoverSourceRef.current !== sourceKey) return;
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+    const requestId = ++hoverRequestIdRef.current;
+    const expectedSource = hoverSourceRef.current;
     hoverClearTimerRef.current = window.setTimeout(() => {
       hoverClearTimerRef.current = null;
-      if (hoverRequestIdRef.current === requestId) {
-        hoverRequestIdRef.current++;
-        setPreviewCard(null);
-      }
+      if (hoverRequestIdRef.current !== requestId) return;
+      if (expectedSource != null && hoverSourceRef.current !== expectedSource) return;
+      hoverSourceRef.current = null;
+      setPreviewCard(null);
     }, delay) as unknown as number;
   }
   const clearTouchTimers = useCallback(() => {
@@ -1312,8 +1328,8 @@ export default function Board({
                     const wz = e.point.z;
                     const baseX = pos[0];
                     const baseZ = pos[2];
-                    const offX = wx - baseX;
-                    const offZ = wz - baseZ;
+                    const offX = clampOffset(wx - baseX, TILE_OFFSET_LIMIT_X);
+                    const offZ = clampOffset(wz - baseZ, TILE_OFFSET_LIMIT_Z);
                     if (process.env.NODE_ENV !== "production") {
                       console.debug(
                         `[drop] avatar ${dragAvatar} wx=${wx.toFixed(2)} wz=${wz.toFixed(2)} -> ${x},${y}`
@@ -1371,8 +1387,8 @@ export default function Board({
                       const xPos = startX + idxBase * spacing;
                       const baseX = pos[0] + xPos;
                       const baseZ = pos[2] + zBase;
-                      const offX = world.x - baseX;
-                      const offZ = world.z - baseZ;
+                      const offX = clampOffset(world.x - baseX, TILE_OFFSET_LIMIT_X);
+                      const offZ = clampOffset(world.z - baseZ, TILE_OFFSET_LIMIT_Z);
                       if (process.env.NODE_ENV !== "production") {
                         console.debug(
                           `[drop] perm tile same ${dragging.from}[${dragging.index}] -> ${dropKey} wx=${world.x.toFixed(
@@ -1413,8 +1429,8 @@ export default function Board({
                       const xPos = startX + newIndex * spacing;
                       const baseX = pos[0] + xPos;
                       const baseZ = pos[2] + zBase;
-                      const offX = world.x - baseX;
-                      const offZ = world.z - baseZ;
+                      const offX = clampOffset(world.x - baseX, TILE_OFFSET_LIMIT_X);
+                      const offZ = clampOffset(world.z - baseZ, TILE_OFFSET_LIMIT_Z);
                       if (process.env.NODE_ENV !== "production") {
                         console.debug(
                           `[drop] perm tile cross ${dragging.from}[${dragging.index}] -> ${dropKey} newIndex=${newIndex} wx=${world.x.toFixed(
@@ -1630,7 +1646,7 @@ export default function Board({
                   // Treat tile left-click as background click: deselect and close menus
                   useGameStore.getState().clearSelection();
                   useGameStore.getState().closeContextMenu();
-                  clearHoverPreview();
+                  clearHoverPreview(key);
                 }}
                 onPointerOut={() => {
                   handlePointerOut();
@@ -1688,9 +1704,9 @@ export default function Board({
                               width={CARD_SHORT + 0.3}
                               height={CARD_LONG + 0.4}
                               rotationZ={rotZ}
-                              elevation={0}
+                              elevation={0.0001}
                               color={siteGlowColor}
-                              renderOrder={-100}
+                              renderOrder={1000}
                             />
                           </group>
                         )}
@@ -1706,7 +1722,7 @@ export default function Board({
                                 const cy = e.clientY;
                                 if (site.card) {
                                   touchPreviewTimerRef.current = window.setTimeout(() => {
-                                    beginHoverPreview(site.card);
+                                    beginHoverPreview(site.card, key);
                                   }, 180) as unknown as number;
                                 }
                                 touchContextTimerRef.current = window.setTimeout(() => {
@@ -1720,12 +1736,12 @@ export default function Board({
                             onPointerOver={(e) => {
                               if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
-                              if (site.card) beginHoverPreview(site.card);
+                              if (site.card) beginHoverPreview(site.card, key);
                             }}
                             onPointerOut={(e) => {
                               if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                               e.stopPropagation();
-                              clearHoverPreviewDebounced();
+                              clearHoverPreviewDebounced(key);
                               clearTouchTimers();
                             }}
                             onPointerMove={(e) => {
@@ -1823,8 +1839,15 @@ export default function Board({
                   if (p.attachedTo) {
                     return null;
                   }
+                  const hoverKey = `${key}:${idx}`;
 
                   const owner = p.owner; // 1 or 2
+                  const ownerKeyForTile = owner === 1 ? "p1" : "p2";
+                  const ownerAvatar = avatars?.[ownerKeyForTile];
+                  const avatarOnThisTile =
+                    ownerAvatar?.pos &&
+                    ownerAvatar.pos[0] === x &&
+                    ownerAvatar.pos[1] === y;
                   const isSel =
                     selectedPermanent &&
                     selectedPermanent.at === key &&
@@ -1836,12 +1859,19 @@ export default function Board({
                     ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
                     : undefined;
                   const tokenSiteReplace = !!tokenDef?.siteReplacement;
+                  const marginZ =
+                    STACK_MARGIN_Z + (avatarOnThisTile ? TILE_SIZE * 0.08 : 0);
+                  const avatarShiftZ = avatarOnThisTile
+                    ? owner === 1
+                      ? -AVATAR_AVOID_Z
+                      : AVATAR_AVOID_Z
+                    : 0;
                   // Sites sit at tile center; rubble tokens (site replacements) should also snap to center
                   const zBase = tokenSiteReplace
                     ? 0
                     : owner === 1
-                    ? -TILE_SIZE * 0.5 + marginZ
-                    : TILE_SIZE * 0.5 - marginZ;
+                    ? -TILE_SIZE * 0.5 + marginZ + avatarShiftZ
+                    : TILE_SIZE * 0.5 - marginZ + avatarShiftZ;
                   // Orientation: bottom toward owner; Rubble (site-like token) adds -90° like sites
                   const rotZ =
                     (owner === 1 ? 0 : Math.PI) +
@@ -1860,7 +1890,8 @@ export default function Board({
 
     // Adjust Y position: normal cards stack upward slightly to avoid clipping
     const baseY = isBurrowed ? BURROWED_ELEVATION : BASE_CARD_ELEVATION;
-    const stackLift = !isBurrowed ? idx * STACK_LAYER_LIFT : 0;
+    const stackIndex = idx;
+    const stackLift = !isBurrowed ? stackIndex * STACK_LAYER_LIFT : 0;
     const yPos = baseY + stackLift;
 
     const permanentInstanceKey = p.instanceId ?? `perm:${key}:${idx}`;
@@ -1940,7 +1971,7 @@ export default function Board({
               // Rubble behaves like a site for movement: no drag start
               e.stopPropagation();
               useGameStore.getState().selectPermanent(key, idx);
-              clearHoverPreview();
+              clearHoverPreview(hoverKey);
               return;
             }
             const pe = e.nativeEvent as PointerEvent | undefined;
@@ -1949,7 +1980,7 @@ export default function Board({
               const cx = e.clientX;
               const cy = e.clientY;
               touchPreviewTimerRef.current = window.setTimeout(() => {
-                beginHoverPreview(p.card);
+                beginHoverPreview(p.card, hoverKey);
               }, 180) as unknown as number;
               touchContextTimerRef.current = window.setTimeout(() => {
                 useGameStore.getState().selectPermanent(key, idx);
@@ -1972,7 +2003,7 @@ export default function Board({
                       `[drag] perm:denied ${key}[${idx}] owner=${owner} actor=${actorKey}`
                     );
                   }
-                  clearHoverPreview();
+                  clearHoverPreview(hoverKey);
                   return;
                 }
               }
@@ -1986,18 +2017,18 @@ export default function Board({
               if (process.env.NODE_ENV !== "production") {
                 console.debug(`[drag] perm:down ${key}[${idx}]`);
               }
-              clearHoverPreview();
+              clearHoverPreview(hoverKey);
             }
           }}
           onPointerOver={(e) => {
             if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
             e.stopPropagation();
-            beginHoverPreview(p.card);
+                beginHoverPreview(p.card, hoverKey);
           }}
           onPointerOut={(e) => {
             if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
             e.stopPropagation();
-            clearHoverPreviewDebounced();
+            clearHoverPreviewDebounced(hoverKey);
             // cancel pending drag if pointer leaves before threshold
             if (
               dragStartRef.current &&
@@ -2108,6 +2139,7 @@ export default function Board({
           }}
           onPointerUp={(e) => {
             if (e.button !== 0) return; // ignore non-left button releases
+            if (dragAvatar) return; // allow avatar drops to bubble to tile
             if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
             if (tokenSiteReplace) {
               e.stopPropagation();
@@ -2204,9 +2236,9 @@ export default function Board({
         : CARD_LONG
     }
     rotationZ={rotZ}
-    elevation={isDraggingPermanent ? DRAG_LIFT : 0.001}
+    elevation={isDraggingPermanent ? DRAG_LIFT + 0.0001 : 0.0001}
     color={permanentGlowColor}
-    renderOrder={-100}
+    renderOrder={1000}
   />
 )}
           <group
@@ -2264,9 +2296,9 @@ export default function Board({
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
-                    elevation={isDraggingPermanent ? DRAG_LIFT : 0.001}
+                    elevation={isDraggingPermanent ? DRAG_LIFT + 0.0001 : 0.0001}
                     color={permanentGlowColor}
-                    renderOrder={-100}
+                    renderOrder={1000}
                   />
                 )}
                 <CardPlane
@@ -2460,9 +2492,9 @@ export default function Board({
                 width={CARD_SHORT + 0.18}
                 height={CARD_LONG + 0.24}
                 rotationZ={d.rotZ}
-                elevation={0}
+                elevation={0.0001}
                 color={d.color}
-                renderOrder={-100}
+                renderOrder={1000}
               />
               <CardPlane
                 slug=""
@@ -2489,9 +2521,9 @@ export default function Board({
                 width={d.width}
                 height={d.height}
                 rotationZ={d.rotZ}
-                elevation={0}
+                elevation={0.0001}
                 color={d.color}
-                renderOrder={-100}
+                renderOrder={1000}
               />
               <CardPlane
                 slug={d.slug}
@@ -2519,9 +2551,9 @@ export default function Board({
                 width={CARD_SHORT + 0.3}
                 height={CARD_LONG + 0.4}
                 rotationZ={d.rotZ}
-                elevation={0}
+                elevation={0.0001}
                 color={d.color}
-                renderOrder={-100}
+                renderOrder={1000}
               />
               <CardPlane
                 slug={d.slug}
@@ -2614,9 +2646,9 @@ export default function Board({
                       width={CARD_SHORT + 0.3}
                       height={CARD_LONG + 0.4}
                       rotationZ={rotZ}
-                      elevation={0}
+                      elevation={0.0001}
                       color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
-                      renderOrder={-100}
+                      renderOrder={1000}
                     />
                   )}
                   <group
@@ -2635,7 +2667,7 @@ export default function Board({
                         const cy = e.clientY;
                         if (a.card) {
                           touchPreviewTimerRef.current = window.setTimeout(() => {
-                            beginHoverPreview(a.card);
+                            beginHoverPreview(a.card, who);
                           }, 180) as unknown as number;
                         }
                         touchContextTimerRef.current = window.setTimeout(() => {
@@ -2647,35 +2679,26 @@ export default function Board({
                         }, 500) as unknown as number;
                       }
                       if (e.button === 0) {
-                        e.stopPropagation();
-                        selectAvatar(who);
-                        if (!isSpectator && actorKey && actorKey !== who) {
-                          if (process.env.NODE_ENV !== "production") {
-                            console.debug(
-                              `[drag] avatar:denied ${who} actor=${actorKey}`
-                            );
-                          }
-                          clearHoverPreview();
-                          return;
-                        }
-                        // wait for small hold + movement before starting drag
-                        avatarDragStartRef.current = {
-                          who,
+                    e.stopPropagation();
+                    selectAvatar(who);
+                    // wait for small hold + movement before starting drag
+                    avatarDragStartRef.current = {
+                      who,
                           start: [e.point.x, e.point.z],
                           time: Date.now(),
                         };
-                        clearHoverPreview();
+                        clearHoverPreview(who);
                       }
                     }}
                     onPointerOver={(e) => {
                       if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                       e.stopPropagation();
-                      beginHoverPreview(a.card);
+                      beginHoverPreview(a.card, who);
                     }}
                     onPointerOut={(e) => {
                       if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                       e.stopPropagation();
-                      clearHoverPreview();
+                      clearHoverPreview(who);
                       // cancel pending drag if pointer leaves before threshold
                       if (
                         avatarDragStartRef.current &&
@@ -2859,11 +2882,11 @@ export default function Board({
                             width={CARD_SHORT}
                             height={CARD_LONG}
                             rotationZ={rotZ}
-                            elevation={dragAvatar === who ? DRAG_LIFT : 0}
+                            elevation={dragAvatar === who ? DRAG_LIFT + 0.0001 : 0.0001}
                             color={
                               who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2
                             }
-                            renderOrder={-100}
+                            renderOrder={1000}
                           />
                         )}
                       <CardPlane
@@ -2991,9 +3014,9 @@ export default function Board({
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
-                    elevation={0}
+                    elevation={0.0001}
                     color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
-                    renderOrder={-100}
+                    renderOrder={1000}
                   />
                   <CardPlane
                     slug={slug}
@@ -3036,9 +3059,9 @@ export default function Board({
                     width={glowW}
                     height={glowH}
                     rotationZ={rotZ}
-                    elevation={0}
+                    elevation={0.0001}
                     color={glowColor}
-                    renderOrder={-100}
+                    renderOrder={1000}
                   />
                   <CardPlane
                     slug={slug}
