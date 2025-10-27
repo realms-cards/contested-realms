@@ -1218,10 +1218,14 @@ const canPanCamera =
         // Keep altitude high enough to see the whole mat, but offset slightly in Z
         const dist = Math.max(matW, matH) * 1.1;
         cam.position.set(0, dist, 0);
+        cam.up.set(0, 0, -1);
       } else {
         // Reasonable default orbit position based on seat (slightly offset)
-        cam.position.set(0, 10, myPlayerNumber === 2 ? -5 : 5);
+        const orbitZ = myPlayerNumber === 2 ? -5 : 5;
+        cam.position.set(0, 10, orbitZ);
+        cam.up.set(0, 1, 0);
       }
+      cam.lookAt(0, 0, 0);
       c.update();
     },
     [myPlayerNumber, matW, matH]

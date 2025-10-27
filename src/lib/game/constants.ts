@@ -32,8 +32,8 @@ export const WALL_THICK = 0.06;
 export const WALL_HALF_HEIGHT = 0.6; // 1.2 units tall walls
 
 // Drag interaction constants
-export const DRAG_THRESHOLD = TILE_SIZE * 0.08; // Require some pointer travel before starting a drag (avoid click-move)
-export const DRAG_HOLD_MS = 50; // Require a tiny hold before allowing drag start (prevents right-click wiggle drags) - reduced for responsiveness
+export const DRAG_THRESHOLD = TILE_SIZE * 0.06; // Require some pointer travel before starting a drag (avoid click-move)
+export const DRAG_HOLD_MS = 100; // Tighten hold so quick clicks don't trigger drags but interactions stay snappy
 
 // Hand visual scales
 export const HAND_CARD_SCALE = 1.35; // balanced scale factor for hand cards - big but not overwhelming

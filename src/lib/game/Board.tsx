@@ -26,7 +26,7 @@ import { NumberBadge, type Digit } from "@/components/game/manacost";
 import { useSound } from "@/lib/contexts/SoundContext";
 import BoardCursorLayer from "@/lib/game/components/BoardCursorLayer";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
-import CardGlow from "@/lib/game/components/CardGlow";
+import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import TokenAttachmentDialog from "@/lib/game/components/TokenAttachmentDialog";
 import {
@@ -61,6 +61,11 @@ import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 const ENABLE_SNAP = true;
 // Prefer ghost-only visual during board drags (do not move the real body until drop)
 const USE_GHOST_ONLY_BOARD_DRAG = true;
+const STACK_SPACING = TILE_SIZE * 0.32;
+const STACK_MARGIN_Z = TILE_SIZE * 0.1;
+const STACK_LAYER_LIFT = CARD_THICK * 0.12;
+const BASE_CARD_ELEVATION = CARD_THICK * 0.55;
+const BURROWED_ELEVATION = CARD_THICK * 0.08;
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
 type BodyApi = {
@@ -567,6 +572,7 @@ export default function Board({
   const touchPreviewTimerRef = useRef<number | null>(null);
   const touchContextTimerRef = useRef<number | null>(null);
   const hoverClearTimerRef = useRef<number | null>(null);
+  const hoverRequestIdRef = useRef(0);
   const [dragAvatar, setDragAvatar] = useState<"p1" | "p2" | null>(null);
   const avatarDragStartRef = useRef<{
     who: "p1" | "p2";
@@ -598,6 +604,10 @@ export default function Board({
   // Pending snap operations queued to run safely after the physics step
   const pendingSnaps = useRef<
     Map<string, { x: number; z: number; attempts: number; delay: number }>
+  >(new Map());
+  const slugCacheRef = useRef<Map<number, string | null>>(new Map());
+  const pendingSlugFetchesRef = useRef<
+    Map<number, Promise<string | null>>
   >(new Map());
 
   // Ghost that follows the cursor while dragging from hand/pile, even over the hand area
@@ -650,7 +660,7 @@ export default function Board({
       try {
         api.setNextKinematicTranslation({
           x: target.x,
-          y: target.lift ? DRAG_LIFT : 0.25,
+          y: target.lift ? DRAG_LIFT : BASE_CARD_ELEVATION,
           z: target.z,
         });
       } catch (error) {
@@ -698,7 +708,7 @@ export default function Board({
           try {
             // Temporarily set kinematic to snap precisely, then restore dynamic next tick
             snapApi.setBodyType("kinematicPosition", false);
-            snapApi.setNextKinematicTranslation({ x: job.x, y: 0.25, z: job.z });
+            snapApi.setNextKinematicTranslation({ x: job.x, y: BASE_CARD_ELEVATION, z: job.z });
             setTimeout(() => {
               try {
                 snapApi.setBodyType("dynamic", true);
@@ -788,28 +798,87 @@ export default function Board({
     };
   }, [setDragging, setDragAvatar, setGhost, setDragFromHand, setDragFromPile]);
 
+  const ensureCardSlug = useCallback(
+    async (card: CardRef | null | undefined): Promise<CardRef | null> => {
+      if (!card) return null;
+      const rawSlug = typeof card.slug === "string" ? card.slug.trim() : "";
+      if (rawSlug) return card;
+      const cardId = Number(card.cardId);
+      if (!Number.isFinite(cardId) || cardId <= 0) return null;
+      const cache = slugCacheRef.current;
+      if (cache.has(cardId)) {
+        const cachedSlug = cache.get(cardId);
+        return cachedSlug ? { ...card, slug: cachedSlug } : null;
+      }
+      const pendingMap = pendingSlugFetchesRef.current;
+      let pending = pendingMap.get(cardId);
+      if (!pending) {
+        pending = fetch(`/api/cards/by-id?ids=${cardId}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            const slug =
+              Array.isArray(data) &&
+              data.length > 0 &&
+              data[0] &&
+              typeof data[0].slug === "string" &&
+              data[0].slug.trim().length > 0
+                ? String(data[0].slug).trim()
+                : null;
+            cache.set(cardId, slug ?? null);
+            return slug ?? null;
+          })
+          .catch(() => {
+            cache.set(cardId, null);
+            return null;
+          })
+          .finally(() => {
+            pendingMap.delete(cardId);
+          });
+        pendingMap.set(cardId, pending);
+      }
+      const slug = await pending;
+      if (!slug) return null;
+      return { ...card, slug };
+    },
+    []
+  );
+
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     if (hoverClearTimerRef.current) {
       window.clearTimeout(hoverClearTimerRef.current);
       hoverClearTimerRef.current = null;
     }
-    if (!card?.slug) return;
+    if (!card) return;
+    const requestId = ++hoverRequestIdRef.current;
     hoverTimer.current = window.setTimeout(() => {
-      setPreviewCard(card || null);
+      ensureCardSlug(card)
+        .then((resolved) => {
+          if (!resolved) return;
+          if (hoverRequestIdRef.current !== requestId) return;
+          setPreviewCard(resolved);
+        })
+        .catch(() => {
+          // Ignore lookup failures; preview simply won't render.
+        });
     }, 120);
   }
   function clearHoverPreview() {
+    hoverRequestIdRef.current++;
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
     setPreviewCard(null);
   }
-  function clearHoverPreviewDebounced(delay = 80) {
+  function clearHoverPreviewDebounced(delay = 220) {
+    const requestId = hoverRequestIdRef.current;
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
     hoverClearTimerRef.current = window.setTimeout(() => {
       hoverClearTimerRef.current = null;
-      setPreviewCard(null);
+      if (hoverRequestIdRef.current === requestId) {
+        hoverRequestIdRef.current++;
+        setPreviewCard(null);
+      }
     }, delay) as unknown as number;
   }
   const clearTouchTimers = useCallback(() => {
@@ -1256,16 +1325,18 @@ export default function Board({
                     requestAnimationFrame(() => {
                       moveAvatarToWithOffset(dragAvatar, x, y, [offX, offZ]);
                     });
-                    // Snap avatar body to the final drop point on next frame
-                    snapBodyTo(`avatar:${dragAvatar}`, wx, wz);
-                    if (apiAtDrop) {
-                      try {
-                        setTimeout(() => {
-                          try {
-                            (apiAtDrop as BodyApi).setBodyType("dynamic", true);
-                          } catch {}
-                        }, 0);
-                      } catch {}
+                    if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                      // Snap avatar body to the final drop point on next frame
+                      snapBodyTo(`avatar:${dragAvatar}`, wx, wz);
+                      if (apiAtDrop) {
+                        try {
+                          setTimeout(() => {
+                            try {
+                              (apiAtDrop as BodyApi).setBodyType("dynamic", true);
+                            } catch {}
+                          }, 0);
+                        } catch {}
+                      }
                     }
                     // Restore selection on the moved avatar
                     selectAvatar(dragAvatar);
@@ -1282,8 +1353,8 @@ export default function Board({
                     const dropKey = `${x},${y}`;
                     const world = e.point;
                     // Compute offsets relative to the rendered slot baseline (row position + zBase)
-                    const spacing = TILE_SIZE * 0.28;
-                    const marginZ = TILE_SIZE * 0.1;
+                    const spacing = STACK_SPACING;
+                    const marginZ = STACK_MARGIN_Z;
                     if (dragging.from === dropKey) {
                       const items = permanents[dropKey] || [];
                       const count = items.length;
@@ -1417,8 +1488,8 @@ export default function Board({
 
                         if (nonTokenPermanents.length > 0) {
                           // Find the closest permanent based on world position
-                          const spacing = TILE_SIZE * 0.28;
-                          const marginZ = TILE_SIZE * 0.1;
+                          const spacing = STACK_SPACING;
+                          const marginZ = STACK_MARGIN_Z;
                           let closestPermanent = null;
                           let closestDistance = Infinity;
 
@@ -1491,9 +1562,9 @@ export default function Board({
                     // Normal drop logic (no attachment)
                     const newIndex = toItems.length; // will be appended
                     const newCount = toItems.length + 1;
-                    const spacing = TILE_SIZE * 0.28;
+                    const spacing = STACK_SPACING;
                     const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
-                    const marginZ = TILE_SIZE * 0.1;
+                    const marginZ = STACK_MARGIN_Z;
                     const owner = currentPlayer as 1 | 2;
                     const zBase =
                       owner === 1
@@ -1613,7 +1684,7 @@ export default function Board({
                       <>
                         {renderSiteGlow && (
                           <group position={[edgeOffset.x, 0, edgeOffset.z]}>
-                            <CardGlow
+                            <CardOutline
                               width={CARD_SHORT + 0.3}
                               height={CARD_LONG + 0.4}
                               rotationZ={rotZ}
@@ -1742,7 +1813,7 @@ export default function Board({
               {/* Permanents on this tile */}
               {(() => {
                 const items = permanents[key] || [];
-                const marginZ = TILE_SIZE * 0.1; // distance from bottom/top edge
+                const marginZ = STACK_MARGIN_Z; // distance from bottom/top edge
                 return items.map((p, idx) => {
                   const remoteDragSet = remotePermanentDragLookup.get(key);
                   if (remoteDragSet?.has(idx)) {
@@ -1787,9 +1858,10 @@ export default function Board({
                     permanentPosition?.state === "burrowed" ||
                     permanentPosition?.state === "submerged";
 
-    // Adjust Y position: normal cards at 0.25, burrowed cards at 0.0005 (below sites at 0.001)
-    // This puts burrowed cards under sites but still visible
-    const yPos = isBurrowed ? 0.0005 : 0.25;
+    // Adjust Y position: normal cards stack upward slightly to avoid clipping
+    const baseY = isBurrowed ? BURROWED_ELEVATION : BASE_CARD_ELEVATION;
+    const stackLift = !isBurrowed ? idx * STACK_LAYER_LIFT : 0;
+    const yPos = baseY + stackLift;
 
     const permanentInstanceKey = p.instanceId ?? `perm:${key}:${idx}`;
     const remotePermanentColor = getRemoteHighlightColor(
@@ -1809,6 +1881,11 @@ export default function Board({
       dragging.from === key &&
       dragging.index === idx;
     const showPermanentGlow = renderPermanentGlow && !isLocalDragGhost;
+    const isDraggingPermanent = dragging && dragging.from === key && dragging.index === idx;
+
+    const bodyType =
+      USE_GHOST_ONLY_BOARD_DRAG || tokenSiteReplace ? "fixed" : "dynamic";
+    const gravityScale = USE_GHOST_ONLY_BOARD_DRAG ? 0 : 1;
 
     return (
       <RigidBody
@@ -1834,7 +1911,7 @@ export default function Board({
             );
           }
         }}
-        type={tokenSiteReplace ? "fixed" : "dynamic"}
+        type={bodyType}
         ccd
         colliders={false}
         position={[0 + offX, yPos, zBase + offZ]}
@@ -1842,11 +1919,13 @@ export default function Board({
         angularDamping={2}
         canSleep={false}
         enabledRotations={[false, true, false]}
+        gravityScale={gravityScale}
       >
         <CuboidCollider
           args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
           friction={0.9}
           restitution={0}
+          sensor
         />
         <group
           visible={!isLocalDragGhost}
@@ -1941,7 +2020,7 @@ export default function Board({
             if (tokenSiteReplace) return; // no drag for Rubble
             e.stopPropagation();
             const pe = e.nativeEvent as PointerEvent | undefined;
-            if (pe && (pe as PointerEvent).pointerType === "touch") {
+            if (pe && pe.pointerType === "touch") {
               clearTouchTimers();
             }
             // Always feed cursor telemetry with current world coordinates
@@ -1954,6 +2033,9 @@ export default function Board({
               dragStartRef.current.at === key &&
               dragStartRef.current.index === idx
             ) {
+              if (!pe || (pe.buttons & 1) !== 1) {
+                return;
+              }
               const [sx, sz] = dragStartRef.current.start;
               const dx = e.point.x - sx;
               const dz = e.point.z - sz;
@@ -2017,6 +2099,9 @@ export default function Board({
               draggedBody.current &&
               !USE_GHOST_ONLY_BOARD_DRAG
             ) {
+              if (pe && (pe.buttons & 1) !== 1) {
+                return;
+              }
               // While dragging and pointer is over the card, continue driving it (no ghost)
               moveDraggedBody(e.point.x, e.point.z, true);
             }
@@ -2045,8 +2130,8 @@ export default function Board({
               const dropKey = `${tx},${ty}`;
               const tileX = offsetX + tx * TILE_SIZE;
               const tileZ = offsetY + ty * TILE_SIZE;
-              const marginZ = TILE_SIZE * 0.1;
-              const spacing = TILE_SIZE * 0.28;
+              const marginZ = STACK_MARGIN_Z;
+              const spacing = STACK_SPACING;
               const draggedOwner =
                 permanents[dragging.from]?.[dragging.index]?.owner ?? 1;
               const draggedInstId =
@@ -2105,25 +2190,25 @@ export default function Board({
             }
           }}
         >
-          {/* Selection / remote highlight glow */}
-          {showPermanentGlow && (
-            <CardGlow
-              width={
-                (tokenDef && tokenDef.size === "small"
-                  ? CARD_SHORT * 0.5
-                  : CARD_SHORT) + 0.3
-              }
-              height={
-                (tokenDef && tokenDef.size === "small"
-                  ? CARD_LONG * 0.5
-                  : CARD_LONG) + 0.4
-              }
-              rotationZ={rotZ}
-              elevation={0}
-              color={permanentGlowColor}
-              renderOrder={-100}
-            />
-          )}
+          {/* Selection / remote highlight outline */}
+{showPermanentGlow && (
+  <CardOutline
+    width={
+      tokenDef && tokenDef.size === "small"
+        ? CARD_SHORT * 0.5
+        : CARD_SHORT
+    }
+    height={
+      tokenDef && tokenDef.size === "small"
+        ? CARD_LONG * 0.5
+        : CARD_LONG
+    }
+    rotationZ={rotZ}
+    elevation={isDraggingPermanent ? DRAG_LIFT : 0.001}
+    color={permanentGlowColor}
+    renderOrder={-100}
+  />
+)}
           <group
             visible={true}
             onClick={(e) => {
@@ -2170,16 +2255,16 @@ export default function Board({
                     : CARD_LONG
                 }
                 rotationZ={rotZ}
-                elevation={0.02}
+                elevation={0.005}
               />
             ) : p.card.slug ? (
               <>
                 {showPermanentGlow && (
-                  <CardGlow
+                  <CardOutline
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
-                    elevation={0}
+                    elevation={isDraggingPermanent ? DRAG_LIFT : 0.001}
                     color={permanentGlowColor}
                     renderOrder={-100}
                   />
@@ -2315,7 +2400,7 @@ export default function Board({
                   return (
                     <group
                       key={`attached-${attachIdx}`}
-                      position={[offsetX, 0.05, offsetZ]}
+                      position={[offsetX, BASE_CARD_ELEVATION + CARD_THICK * 0.3, offsetZ]}
                     >
                       <CardPlane
                         slug=""
@@ -2324,7 +2409,7 @@ export default function Board({
                         width={tokenW}
                         height={tokenH}
                         rotationZ={0}
-                        elevation={0.02}
+                        elevation={0.005}
                         renderOrder={700 + attachIdx}
                       />
                     </group>
@@ -2371,13 +2456,13 @@ export default function Board({
         <group>
           {remoteHandDrags.map((d) => (
             <group key={d.key} position={[d.pos.x, 0.33, d.pos.z]}>
-              <CardGlow
+              <CardOutline
                 width={CARD_SHORT + 0.18}
                 height={CARD_LONG + 0.24}
                 rotationZ={d.rotZ}
                 elevation={0}
                 color={d.color}
-                renderOrder={-90}
+                renderOrder={-100}
               />
               <CardPlane
                 slug=""
@@ -2400,7 +2485,7 @@ export default function Board({
         <group>
           {remotePermanentDrags.map((d) => (
             <group key={d.key} position={[d.pos.x, 0.26, d.pos.z]}>
-              <CardGlow
+              <CardOutline
                 width={d.width}
                 height={d.height}
                 rotationZ={d.rotZ}
@@ -2430,7 +2515,7 @@ export default function Board({
         <group>
           {remoteAvatarDrags.map((d) => (
             <group key={d.key} position={[d.pos.x, 0.26, d.pos.z]}>
-              <CardGlow
+              <CardOutline
                 width={CARD_SHORT + 0.3}
                 height={CARD_LONG + 0.4}
                 rotationZ={d.rotZ}
@@ -2471,6 +2556,8 @@ export default function Board({
         const worldZ = baseZ + offZ;
         const hideAvatar =
           USE_GHOST_ONLY_BOARD_DRAG && dragAvatar === who;
+        const avatarBodyType = USE_GHOST_ONLY_BOARD_DRAG ? "fixed" : "dynamic";
+        const avatarGravityScale = USE_GHOST_ONLY_BOARD_DRAG ? 0 : 1;
         // Avatars should behave like board permanents: render exactly at world drop position
         return (
           <group key={`avatar-${who}`}>
@@ -2506,22 +2593,24 @@ export default function Board({
                       );
                     }
                   }}
-                  type="dynamic"
                   ccd
                   colliders={false}
-                  position={[worldX, 0.25, worldZ]}
+                  position={[worldX, BASE_CARD_ELEVATION, worldZ]}
                   linearDamping={2}
                   angularDamping={2}
                   canSleep={false}
                   enabledRotations={[false, true, false]}
+                  gravityScale={avatarGravityScale}
+                  type={avatarBodyType}
                 >
                   <CuboidCollider
                     args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
                     friction={0.9}
                     restitution={0}
+                    sensor
                   />
                   {isSel && !isHandVisible && !hideAvatar && (
-                    <CardGlow
+                    <CardOutline
                       width={CARD_SHORT + 0.3}
                       height={CARD_LONG + 0.4}
                       rotationZ={rotZ}
@@ -2607,7 +2696,7 @@ export default function Board({
                       if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                       e.stopPropagation();
                       const pe = e.nativeEvent as PointerEvent | undefined;
-                      if (pe && (pe as PointerEvent).pointerType === "touch") {
+                      if (pe && pe.pointerType === "touch") {
                         clearTouchTimers();
                       }
                       handlePointerMove(e.point.x, e.point.z);
@@ -2620,6 +2709,9 @@ export default function Board({
                         avatarDragStartRef.current &&
                         avatarDragStartRef.current.who === who
                       ) {
+                        if (!pe || (pe.buttons & 1) !== 1) {
+                          return;
+                        }
                         const [sx, sz] = avatarDragStartRef.current.start;
                         const dx = e.point.x - sx;
                         const dz = e.point.z - sz;
@@ -2628,7 +2720,6 @@ export default function Board({
                           Date.now() - avatarDragStartRef.current.time;
                         if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
                           setDragAvatar(who);
-                          setDragFromHand(true);
                           setGhost(null);
                           if (process.env.NODE_ENV !== "production") {
                             console.debug(`[drag] avatar:start ${who}`);
@@ -2670,6 +2761,9 @@ export default function Board({
                         draggedBody.current &&
                         !USE_GHOST_ONLY_BOARD_DRAG
                       ) {
+                        if (pe && (pe.buttons & 1) !== 1) {
+                          return;
+                        }
                         // While dragging and pointer is over the avatar, continue driving it (no ghost)
                         moveDraggedBody(e.point.x, e.point.z, true);
                       }
@@ -2713,16 +2807,18 @@ export default function Board({
                         requestAnimationFrame(() => {
                           moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
                         });
-                        // Snap avatar body to the final drop point on next frame
-                        snapBodyTo(`avatar:${who}`, wx, wz);
-                        if (apiAtDrop) {
-                          try {
-                            setTimeout(() => {
-                              try {
-                                (apiAtDrop as BodyApi).setBodyType("dynamic", true);
-                              } catch {}
-                            }, 0);
-                          } catch {}
+                        if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                          // Snap avatar body to the final drop point on next frame
+                          snapBodyTo(`avatar:${who}`, wx, wz);
+                          if (apiAtDrop) {
+                            try {
+                              setTimeout(() => {
+                                try {
+                                  (apiAtDrop as BodyApi).setBodyType("dynamic", true);
+                                } catch {}
+                              }, 0);
+                            } catch {}
+                          }
                         }
                         setDragAvatar(null);
                         setDragFromHand(false);
@@ -2759,7 +2855,7 @@ export default function Board({
                       {(selectedAvatar === who || dragAvatar === who) &&
                         !isHandVisible &&
                         !hideAvatar && (
-                          <CardGlow
+                          <CardOutline
                             width={CARD_SHORT}
                             height={CARD_LONG}
                             rotationZ={rotZ}
@@ -2891,7 +2987,7 @@ export default function Board({
               if (!slug) return null;
               return (
                 <>
-                  <CardGlow
+                  <CardOutline
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
@@ -2936,7 +3032,7 @@ export default function Board({
               const glowColor = p.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
               return (
                 <>
-                  <CardGlow
+                  <CardOutline
                     width={glowW}
                     height={glowH}
                     rotationZ={rotZ}
