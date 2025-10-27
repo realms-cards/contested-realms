@@ -2,7 +2,7 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Physics } from "@react-three/rapier";
+import { Physics } from "@/lib/game/physics";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

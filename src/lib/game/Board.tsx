@@ -2686,13 +2686,16 @@ export default function Board({
                     }}
                     onPointerUp={(e) => {
                       if (e.button !== 0) return; // ignore non-left button releases
-                      if (dragFromHand || dragFromPile) return; // let tile handle drop from hand/pile
+                      if (dragging || dragFromHand || dragFromPile) {
+                        // allow underlying board/tile handlers to process permanent/token drops
+                        return;
+                      }
                       if (isSpectator) {
                         e.stopPropagation();
                         return;
                       }
-                      e.stopPropagation();
                       if (dragAvatar === who) {
+                        e.stopPropagation();
                         // Compute nearest tile from world position and preserve exact world drop
                         const wx = e.point.x;
                         const wz = e.point.z;
