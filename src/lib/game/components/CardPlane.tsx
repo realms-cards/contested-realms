@@ -21,6 +21,9 @@ interface CardPlaneProps {
   rotationZ?: number;
   depthWrite?: boolean;
   depthTest?: boolean;
+  polygonOffset?: boolean;
+  polygonOffsetFactor?: number;
+  polygonOffsetUnits?: number;
   interactive?: boolean;
   elevation?: number;
   upright?: boolean; // if true, face camera (no -PI/2 tilt)
@@ -49,6 +52,9 @@ function CardFallback({
   interactive = true,
   depthWrite = true,
   depthTest = true,
+  polygonOffset = true,
+  polygonOffsetFactor = -0.5,
+  polygonOffsetUnits = -0.5,
   opacity = 1.0,
   onContextMenu,
   onPointerDown,
@@ -76,6 +82,9 @@ function CardFallback({
         toneMapped={false}
         depthWrite={depthWrite}
         depthTest={depthTest}
+        polygonOffset={polygonOffset}
+        polygonOffsetFactor={polygonOffsetFactor}
+        polygonOffsetUnits={polygonOffsetUnits}
         transparent={opacity < 1.0}
         opacity={opacity}
       />
@@ -93,6 +102,9 @@ function CardBackFallback({
   interactive = true,
   depthWrite = true,
   depthTest = true,
+  polygonOffset = true,
+  polygonOffsetFactor = -0.5,
+  polygonOffsetUnits = -0.5,
   opacity = 1.0,
   onContextMenu,
   onPointerDown,
@@ -160,6 +172,9 @@ function CardBackFallback({
         toneMapped={false}
         depthWrite={depthWrite}
         depthTest={depthTest}
+        polygonOffset={polygonOffset}
+        polygonOffsetFactor={polygonOffsetFactor}
+        polygonOffsetUnits={polygonOffsetUnits}
         transparent={true}
         opacity={opacity}
       />
@@ -175,6 +190,9 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     rotationZ = 0,
     depthWrite = true,
     depthTest = true,
+    polygonOffset = true,
+    polygonOffsetFactor = -0.5,
+    polygonOffsetUnits = -0.5,
     interactive = true,
     elevation = 0.001,
     upright = false,
@@ -258,6 +276,9 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
         toneMapped={false}
         depthWrite={depthWrite}
         depthTest={depthTest}
+        polygonOffset={polygonOffset}
+        polygonOffsetFactor={polygonOffsetFactor}
+        polygonOffsetUnits={polygonOffsetUnits}
         transparent={true}
         opacity={opacity}
       />
