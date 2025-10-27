@@ -3994,6 +3994,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       const toKey: CellKey = `${x},${y}`;
       const exists = (s.permanents[fromKey] || [])[sel.index];
       if (!exists) return s;
+
+      console.log("[store] moveSelectedPermanentToWithOffset BEFORE ->", {
+        fromKey,
+        toKey,
+        movedName: exists.card.name,
+        fromPermanents: (s.permanents[fromKey] || []).map((p) => p.card.name),
+        toPermanents: (s.permanents[toKey] || []).map((p) => p.card.name),
+      });
+
       const { per, movedName } = movePermanentCore(
         s.permanents,
         fromKey,
@@ -4001,6 +4010,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         toKey,
         offset
       );
+
+      console.log("[store] moveSelectedPermanentToWithOffset AFTER ->", {
+        movedName,
+        fromPermanents: (per[fromKey] || []).map((p) => p.card.name),
+        toPermanents: (per[toKey] || []).map((p) => p.card.name),
+      });
+
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Moved '${movedName}' to #${cellNo}`);
       {
@@ -4009,6 +4025,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           const patch: ServerPatchT = {
             permanents: per as GameState["permanents"],
           };
+          console.log("[store] Sending patch to server ->", {
+            patchKeys: Object.keys(patch),
+            permanentsKeys: Object.keys(patch.permanents || {}),
+          });
           get().trySendPatch(patch);
         }
       }

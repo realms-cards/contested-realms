@@ -790,12 +790,27 @@ export default function OnlineProvider({
       // Apply incremental game state patches into the Zustand store
       transport.on("statePatch", (p) => {
         const patch = p.patch as Record<string, unknown>;
+        const permanentsData = patch.permanents as Record<string, unknown[]> | undefined;
+        const permanentsSummary = permanentsData
+          ? Object.entries(permanentsData)
+              .map(([key, arr]) => {
+                const names = arr.map((p: unknown) => {
+                  const card = (p as { card?: { name?: string } })?.card;
+                  return card?.name || "?";
+                });
+                return `${key}:[${names.join(", ")}]`;
+              })
+              .join(", ")
+          : undefined;
+
         console.log("[statePatch] Received patch:", {
           hasD20Rolls: !!patch.d20Rolls,
           d20Rolls: patch.d20Rolls,
           setupWinner: patch.setupWinner,
           phase: patch.phase,
-          keys: Object.keys(patch)
+          keys: Object.keys(patch),
+          permanentsSummary,
+          timestamp: p.t,
         });
         try {
           const endedFlag =

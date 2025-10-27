@@ -1,11 +1,11 @@
-"use client";
+  "use client";
 
 import { Text, useTexture, Html } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   RigidBody,
   CuboidCollider,
-  useAfterPhysicsStep,
+  useBeforePhysicsStep,
 } from "@react-three/rapier";
 import {
   useCallback,
@@ -57,6 +57,11 @@ import type {
 } from "@/lib/game/store/remoteCursor";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
+// Feature flag to isolate snap effects while debugging rapier aliasing
+const ENABLE_SNAP = true;
+// Prefer ghost-only visual during board drags (do not move the real body until drop)
+const USE_GHOST_ONLY_BOARD_DRAG = true;
+
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
 type BodyApi = {
   wakeUp: () => void;
@@ -64,6 +69,15 @@ type BodyApi = {
   setAngvel: (v: { x: number; y: number; z: number }, wake: boolean) => void;
   setTranslation: (
     v: { x: number; y: number; z: number },
+    wake: boolean
+  ) => void;
+  setNextKinematicTranslation: (v: {
+    x: number;
+    y: number;
+    z: number;
+  }) => void;
+  setBodyType: (
+    t: "dynamic" | "fixed" | "kinematicPosition" | "kinematicVelocity",
     wake: boolean
   ) => void;
 };
@@ -233,6 +247,21 @@ export default function Board({
         if (process.env.NODE_ENV !== "production") {
           console.warn("[ghost] Failed to update drag ghost:", err);
         }
+      }
+    }
+
+    // Smoothly drive board-drag ghost (permanent/avatar) to the last pointer position
+    if ((dragging || dragAvatar) && boardGhostRef.current) {
+      const p = lastPointerRef.current;
+      if (p) {
+        const k2 = 0.4;
+        lastBoardGhostPosRef.current.x += (p.x - lastBoardGhostPosRef.current.x) * k2;
+        lastBoardGhostPosRef.current.z += (p.z - lastBoardGhostPosRef.current.z) * k2;
+        boardGhostRef.current.position.set(
+          lastBoardGhostPosRef.current.x,
+          0.26,
+          lastBoardGhostPosRef.current.z
+        );
       }
     }
   });
@@ -562,7 +591,7 @@ export default function Board({
   );
   // Pending snap operations queued to run safely after the physics step
   const pendingSnaps = useRef<
-    Map<string, { x: number; z: number; attempts: number }>
+    Map<string, { x: number; z: number; attempts: number; delay: number }>
   >(new Map());
 
   // Ghost that follows the cursor while dragging from hand/pile, even over the hand area
@@ -572,6 +601,10 @@ export default function Board({
   const { camera, pointer } = useThree();
   const handlePointerMoveRef = useRef<(x: number, z: number) => void>(() => {});
 
+  // Local ghost for board/avatars drags (separate from hand/pile ghost)
+  const boardGhostRef = useRef<Group | null>(null);
+  const lastBoardGhostPosRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
+
   function moveDraggedBody(x: number, z: number, lift = true) {
     // Defer actual physics API calls to useAfterPhysicsStep
     dragTarget.current = { x, z, lift };
@@ -579,28 +612,42 @@ export default function Board({
 
   // Queue a snap of a body (by id) to an exact world position, applied after the physics step.
   function snapBodyTo(id: string, x: number, z: number) {
-    // Allow a few frames of retries to handle remount timing
-    pendingSnaps.current.set(id, { x, z, attempts: 8 });
+    if (!ENABLE_SNAP) {
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(
+          `[snap] disabled ${id} -> x=${Number(x).toFixed(2)} z=${Number(z).toFixed(2)}`
+        );
+      }
+      return;
+    }
+    requestAnimationFrame(() => {
+      const prev = pendingSnaps.current.get(id);
+      const attempts = prev ? Math.max(prev.attempts, 8) : 8;
+      pendingSnaps.current.set(id, { x, z, attempts, delay: 1 });
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(
+          `[snap] queue ${id} -> x=${Number(x).toFixed(2)} z=${Number(z).toFixed(2)}`
+        );
+      }
+    });
   }
 
-  // Apply queued drag moves and snap operations after each physics step to avoid recursive aliasing
-  useAfterPhysicsStep(() => {
+  // Apply queued drag moves and snap operations before each physics step to avoid aliasing
+  useBeforePhysicsStep(() => {
     // Apply drag target for the currently dragged body
     const target = dragTarget.current;
     const api = draggedBody.current;
     if (api && target) {
       try {
-        api.wakeUp();
-        api.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        api.setAngvel({ x: 0, y: 0, z: 0 }, true);
-        api.setTranslation(
-          { x: target.x, y: target.lift ? DRAG_LIFT : 0.25, z: target.z },
-          true
-        );
+        api.setNextKinematicTranslation({
+          x: target.x,
+          y: target.lift ? DRAG_LIFT : 0.25,
+          z: target.z,
+        });
       } catch (error) {
         if (process.env.NODE_ENV !== "production") {
           console.warn(
-            `[physics] Failed to move dragged body (afterStep):`,
+            `[physics] Failed to move dragged body (beforeStep):`,
             error
           );
         }
@@ -614,17 +661,35 @@ export default function Board({
     if (pendingSnaps.current.size > 0) {
       const entries = Array.from(pendingSnaps.current.entries());
       for (const [id, job] of entries) {
+        // Simple cooldown so we don't touch bodies in the same frame as React commit
+        if (job.delay && job.delay > 0) {
+          pendingSnaps.current.set(id, { ...job, delay: job.delay - 1 });
+          continue;
+        }
         const snapApi = bodyMap.current.get(id);
         if (snapApi) {
+          // Don't snap the body we're actively dragging in this frame
+          if (snapApi === draggedBody.current) {
+            if (process.env.NODE_ENV !== "production") {
+              console.debug(`[snap] skip-dragged ${id}`);
+            }
+            pendingSnaps.current.delete(id);
+            continue;
+          }
           try {
-            snapApi.wakeUp();
-            snapApi.setLinvel({ x: 0, y: 0, z: 0 }, true);
-            snapApi.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            // Apply snap as a direct translation in beforeStep without changing body type
             snapApi.setTranslation({ x: job.x, y: 0.25, z: job.z }, false);
+            if (process.env.NODE_ENV !== "production") {
+              console.debug(
+                `[snap] apply ${id} -> x=${Number(job.x).toFixed(2)} z=${Number(
+                  job.z
+                ).toFixed(2)}`
+              );
+            }
           } catch (error) {
             if (process.env.NODE_ENV !== "production") {
               console.warn(
-                `[physics] Failed to snap body ${id} (afterStep):`,
+                `[physics] Failed to snap body ${id} (beforeStep):`,
                 error
               );
             }
@@ -638,9 +703,20 @@ export default function Board({
               x: job.x,
               z: job.z,
               attempts: job.attempts - 1,
+              delay: 1,
             });
+            if (process.env.NODE_ENV !== "production") {
+              console.debug(
+                `[snap] retry ${id} attempts=${job.attempts - 1} -> x=${Number(
+                  job.x
+                ).toFixed(2)} z=${Number(job.z).toFixed(2)}`
+              );
+            }
           } else {
             pendingSnaps.current.delete(id);
+            if (process.env.NODE_ENV !== "production") {
+              console.debug(`[snap] drop ${id}`);
+            }
           }
         }
       }
@@ -1130,10 +1206,28 @@ export default function Board({
                     const baseZ = pos[2];
                     const offX = wx - baseX;
                     const offZ = wz - baseZ;
-                    if (draggedBody.current) moveDraggedBody(wx, wz, false);
-                    moveAvatarToWithOffset(dragAvatar, x, y, [offX, offZ]);
+                    if (process.env.NODE_ENV !== "production") {
+                      console.debug(
+                        `[drop] avatar ${dragAvatar} wx=${wx.toFixed(2)} wz=${wz.toFixed(2)} -> ${x},${y}`
+                      );
+                    }
+                    const apiAtDrop: BodyApi | null = draggedBody.current;
+                    dragTarget.current = null;
+                    draggedBody.current = null;
+                    requestAnimationFrame(() => {
+                      moveAvatarToWithOffset(dragAvatar, x, y, [offX, offZ]);
+                    });
                     // Snap avatar body to the final drop point on next frame
                     snapBodyTo(`avatar:${dragAvatar}`, wx, wz);
+                    if (apiAtDrop) {
+                      try {
+                        setTimeout(() => {
+                          try {
+                            (apiAtDrop as BodyApi).setBodyType("dynamic", true);
+                          } catch {}
+                        }, 0);
+                      } catch {}
+                    }
                     // Restore selection on the moved avatar
                     selectAvatar(dragAvatar);
                     // Clear drag refs/state
@@ -1148,8 +1242,6 @@ export default function Board({
                   if (dragging) {
                     const dropKey = `${x},${y}`;
                     const world = e.point;
-                    const dragged = permanents[dragging.from]?.[dragging.index];
-                    const draggedId = dragged?.card.cardId;
                     // Compute offsets relative to the rendered slot baseline (row position + zBase)
                     const spacing = TILE_SIZE * 0.28;
                     const marginZ = TILE_SIZE * 0.1;
@@ -1171,12 +1263,30 @@ export default function Board({
                       const baseZ = pos[2] + zBase;
                       const offX = world.x - baseX;
                       const offZ = world.z - baseZ;
-                      if (draggedBody.current)
-                        moveDraggedBody(world.x, world.z, false);
-                      setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
-                      // Ensure body is exactly at the world drop point after render
-                      if (draggedId != null) {
-                        snapBodyTo(`perm:${draggedId}`, world.x, world.z);
+                      if (process.env.NODE_ENV !== "production") {
+                        console.debug(
+                          `[drop] perm tile same ${dragging.from}[${dragging.index}] -> ${dropKey} wx=${world.x.toFixed(
+                            2
+                          )} wz=${world.z.toFixed(2)}`
+                        );
+                      }
+                      const apiAtDrop: BodyApi | null = draggedBody.current;
+                      if (!USE_GHOST_ONLY_BOARD_DRAG && apiAtDrop) {
+                        try {
+                          setTimeout(() => {
+                            try {
+                              (apiAtDrop as BodyApi).setBodyType("dynamic", true);
+                            } catch {}
+                          }, 0);
+                        } catch {}
+                      }
+                      dragTarget.current = null;
+                      draggedBody.current = null;
+                      requestAnimationFrame(() => {
+                        setPermanentOffset(dropKey, dragging.index, [offX, offZ]);
+                      });
+                      if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                        snapBodyTo(`perm:${dropKey}:${dragging.index}`, world.x, world.z);
                       }
                     } else {
                       const toItems = permanents[dropKey] || [];
@@ -1195,12 +1305,21 @@ export default function Board({
                       const baseZ = pos[2] + zBase;
                       const offX = world.x - baseX;
                       const offZ = world.z - baseZ;
-                      if (draggedBody.current)
-                        moveDraggedBody(world.x, world.z, false);
-                      moveSelectedPermanentToWithOffset(x, y, [offX, offZ]);
-                      // Snap to the moved body's stable id
-                      if (draggedId != null) {
-                        snapBodyTo(`perm:${draggedId}`, world.x, world.z);
+                      if (process.env.NODE_ENV !== "production") {
+                        console.debug(
+                          `[drop] perm tile cross ${dragging.from}[${dragging.index}] -> ${dropKey} newIndex=${newIndex} wx=${world.x.toFixed(
+                            2
+                          )} wz=${world.z.toFixed(2)}`
+                        );
+                      }
+                      // No direct body API here; snap queue will position after render
+                      dragTarget.current = null;
+                      draggedBody.current = null;
+                      requestAnimationFrame(() => {
+                        moveSelectedPermanentToWithOffset(x, y, [offX, offZ]);
+                      });
+                      if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                        snapBodyTo(`perm:${dropKey}:${newIndex}`, world.x, world.z);
                       }
                     }
                     setDragging(null);
@@ -1713,6 +1832,20 @@ export default function Board({
                           if (e.button === 0) {
                             e.stopPropagation();
                             useGameStore.getState().selectPermanent(key, idx);
+                            if (!isSpectator && actorKey) {
+                              const mine =
+                                (actorKey === "p1" && owner === 1) ||
+                                (actorKey === "p2" && owner === 2);
+                              if (!mine) {
+                                if (process.env.NODE_ENV !== "production") {
+                                  console.debug(
+                                    `[drag] perm:denied ${key}[${idx}] owner=${owner} actor=${actorKey}`
+                                  );
+                                }
+                                clearHoverPreview();
+                                return;
+                              }
+                            }
                             // wait for small hold + movement before starting drag
                             dragStartRef.current = {
                               at: key,
@@ -1720,6 +1853,9 @@ export default function Board({
                               start: [e.point.x, e.point.z],
                               time: Date.now(),
                             };
+                            if (process.env.NODE_ENV !== "production") {
+                              console.debug(`[drag] perm:down ${key}[${idx}]`);
+                            }
                             clearHoverPreview();
                           }
                         }}
@@ -1779,19 +1915,31 @@ export default function Board({
                             ) {
                               setDragging({ from: key, index: idx });
                               dragStartRef.current = null;
-                              // No ghost for board permanent drags; just move the body
-                              draggedBody.current =
-                                bodyMap.current.get(`perm:${key}:${idx}`) ||
-                                null;
-                              if (draggedBody.current) {
-                                moveDraggedBody(e.point.x, e.point.z, true);
+                              if (process.env.NODE_ENV !== "production") {
+                                console.debug(
+                                  `[drag] perm:start ${key}[${idx}] held=${heldFor} dist=${dist.toFixed(
+                                    2
+                                  )}`
+                                );
+                              }
+                              // Start visual drag. If ghost-only mode, do not move body.
+                              if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                                draggedBody.current =
+                                  bodyMap.current.get(`perm:${key}:${idx}`) ||
+                                  null;
+                                if (draggedBody.current) {
+                                  moveDraggedBody(e.point.x, e.point.z, true);
+                                }
+                              } else {
+                                draggedBody.current = null;
                               }
                             }
                           } else if (
                             dragging &&
                             dragging.from === key &&
                             dragging.index === idx &&
-                            draggedBody.current
+                            draggedBody.current &&
+                            !USE_GHOST_ONLY_BOARD_DRAG
                           ) {
                             // While dragging and pointer is over the card, continue driving it (no ghost)
                             moveDraggedBody(e.point.x, e.point.z, true);
@@ -1833,6 +1981,13 @@ export default function Board({
                             tx = Math.max(0, Math.min(board.size.w - 1, tx));
                             ty = Math.max(0, Math.min(board.size.h - 1, ty));
                             const dropKey = `${tx},${ty}`;
+                            if (process.env.NODE_ENV !== "production") {
+                              console.debug(
+                                `[drop] perm ${dragging.from}->${dropKey} at=${key}[${idx}] wx=${wx.toFixed(
+                                  2
+                                )} wz=${wz.toFixed(2)}`
+                              );
+                            }
                             const tileX = offsetX + tx * TILE_SIZE;
                             const tileZ = offsetY + ty * TILE_SIZE;
                             const marginZ = TILE_SIZE * 0.1;
@@ -1847,8 +2002,8 @@ export default function Board({
                               const baseZ = tileZ + zBase;
                               const offX = wx - baseX;
                               const offZ = wz - baseZ;
-                              if (draggedBody.current)
-                                moveDraggedBody(wx, wz, false);
+                              dragTarget.current = null;
+                              draggedBody.current = null;
                               setPermanentOffset(dropKey, idx, [offX, offZ]);
                               snapBodyTo(`perm:${dropKey}:${idx}`, wx, wz);
                             } else {
@@ -1859,8 +2014,8 @@ export default function Board({
                               const baseZ = tileZ + zBase;
                               const offX = wx - baseX;
                               const offZ = wz - baseZ;
-                              if (draggedBody.current)
-                                moveDraggedBody(wx, wz, false);
+                              dragTarget.current = null;
+                              draggedBody.current = null;
                               moveSelectedPermanentToWithOffset(tx, ty, [
                                 offX,
                                 offZ,
@@ -1877,7 +2032,13 @@ export default function Board({
                         }}
                       >
                         {/* Selection / remote highlight glow */}
-                        {renderPermanentGlow && (
+                        {renderPermanentGlow &&
+                          !(
+                            USE_GHOST_ONLY_BOARD_DRAG &&
+                            dragging &&
+                            dragging.from === key &&
+                            dragging.index === idx
+                          ) && (
                           <CardGlow
                             width={
                               (tokenDef && tokenDef.size === "small"
@@ -1896,6 +2057,14 @@ export default function Board({
                           />
                         )}
                         <group
+                          visible={
+                            !(
+                              USE_GHOST_ONLY_BOARD_DRAG &&
+                              dragging &&
+                              dragging.from === key &&
+                              dragging.index === idx
+                            )
+                          }
                           onClick={(e) => {
                             if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                             e.stopPropagation();
@@ -2329,6 +2498,15 @@ export default function Board({
                       if (e.button === 0) {
                         e.stopPropagation();
                         selectAvatar(who);
+                        if (!isSpectator && actorKey && actorKey !== who) {
+                          if (process.env.NODE_ENV !== "production") {
+                            console.debug(
+                              `[drag] avatar:denied ${who} actor=${actorKey}`
+                            );
+                          }
+                          clearHoverPreview();
+                          return;
+                        }
                         // wait for small hold + movement before starting drag
                         avatarDragStartRef.current = {
                           who,
@@ -2390,14 +2568,26 @@ export default function Board({
                           setDragAvatar(who);
                           setDragFromHand(true);
                           setGhost(null);
-                          // No ghost for avatar drags; just move the body
-                          draggedBody.current =
-                            bodyMap.current.get(`avatar:${who}`) || null;
-                          if (draggedBody.current) {
-                            moveDraggedBody(e.point.x, e.point.z, true);
+                          if (process.env.NODE_ENV !== "production") {
+                            console.debug(`[drag] avatar:start ${who}`);
+                          }
+                          if (!USE_GHOST_ONLY_BOARD_DRAG) {
+                            // Move the real body during drag
+                            draggedBody.current =
+                              bodyMap.current.get(`avatar:${who}`) || null;
+                            if (draggedBody.current) {
+                              moveDraggedBody(e.point.x, e.point.z, true);
+                            }
+                          } else {
+                            // Ghost-only: don't move a body
+                            draggedBody.current = null;
                           }
                         }
-                      } else if (dragAvatar === who && draggedBody.current) {
+                      } else if (
+                        dragAvatar === who &&
+                        draggedBody.current &&
+                        !USE_GHOST_ONLY_BOARD_DRAG
+                      ) {
                         // While dragging and pointer is over the avatar, continue driving it (no ghost)
                         moveDraggedBody(e.point.x, e.point.z, true);
                       }
@@ -2432,10 +2622,23 @@ export default function Board({
                         const tileZ = offsetY + ty * TILE_SIZE;
                         const offX = wx - tileX;
                         const offZ = wz - tileZ;
-                        if (draggedBody.current) moveDraggedBody(wx, wz, false);
-                        moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
+                        const apiAtDrop: BodyApi | null = draggedBody.current;
+                        dragTarget.current = null;
+                        draggedBody.current = null;
+                        requestAnimationFrame(() => {
+                          moveAvatarToWithOffset(who, tx, ty, [offX, offZ]);
+                        });
                         // Snap avatar body to the final drop point on next frame
                         snapBodyTo(`avatar:${who}`, wx, wz);
+                        if (apiAtDrop) {
+                          try {
+                            setTimeout(() => {
+                              try {
+                                (apiAtDrop as BodyApi).setBodyType("dynamic", true);
+                              } catch {}
+                            }, 0);
+                          } catch {}
+                        }
                         setDragAvatar(null);
                         setDragFromHand(false);
                         setGhost(null);
@@ -2446,6 +2649,7 @@ export default function Board({
                     }}
                   >
                     <group
+                      visible={!(USE_GHOST_ONLY_BOARD_DRAG && dragAvatar === who)}
                       onClick={(e) => {
                         if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
                         e.stopPropagation();
@@ -2468,7 +2672,8 @@ export default function Board({
                       }}
                     >
                       {(selectedAvatar === who || dragAvatar === who) &&
-                        !isHandVisible && (
+                        !isHandVisible &&
+                        !(USE_GHOST_ONLY_BOARD_DRAG && dragAvatar === who) && (
                           <CardGlow
                             width={CARD_SHORT}
                             height={CARD_LONG}
@@ -2583,6 +2788,92 @@ export default function Board({
             })()}
           </group>
         )}
+
+      {/* Local ghost while dragging permanents or avatars on the board */}
+      {(dragging || dragAvatar) && (
+        <group
+          ref={boardGhostRef}
+          position={[lastBoardGhostPosRef.current.x, 0.26, lastBoardGhostPosRef.current.z]}
+        >
+          {(() => {
+            if (dragAvatar) {
+              const who = dragAvatar;
+              const a = avatars?.[who];
+              const active = a?.card;
+              const ownerRot = who === "p1" ? 0 : Math.PI;
+              const rotZ = ownerRot + (a?.tapped ? Math.PI / 2 : 0);
+              const slug = active?.slug || "";
+              if (!slug) return null;
+              return (
+                <>
+                  <CardGlow
+                    width={CARD_SHORT}
+                    height={CARD_LONG}
+                    rotationZ={rotZ}
+                    elevation={0}
+                    color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
+                    renderOrder={-100}
+                  />
+                  <CardPlane
+                    slug={slug}
+                    width={CARD_SHORT}
+                    height={CARD_LONG}
+                    rotationZ={rotZ}
+                    interactive={false}
+                  />
+                </>
+              );
+            }
+            if (dragging) {
+              const list = permanents[dragging.from] || [];
+              const p = list[dragging.index];
+              if (!p || !p.card) return null;
+              const isToken = (p.card.type || "").toLowerCase().includes("token");
+              const tokenDef = isToken
+                ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
+                : undefined;
+              let w = CARD_SHORT;
+              let h = CARD_LONG;
+              if (isToken && tokenDef?.size === "small") {
+                w = CARD_SHORT * 0.5;
+                h = CARD_LONG * 0.5;
+              }
+              const ownerRot = p.owner === 1 ? 0 : Math.PI;
+              const rotZ =
+                ownerRot +
+                (tokenDef?.siteReplacement ? -Math.PI / 2 : 0) +
+                (p.tapped ? Math.PI / 2 : 0) +
+                (p.tilt || 0);
+              const slug = isToken ? "" : p.card.slug || "";
+              const textureUrl = isToken && tokenDef ? tokenTextureUrl(tokenDef) : undefined;
+              const glowW = w + 0.3;
+              const glowH = h + 0.4;
+              const glowColor = p.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
+              return (
+                <>
+                  <CardGlow
+                    width={glowW}
+                    height={glowH}
+                    rotationZ={rotZ}
+                    elevation={0}
+                    color={glowColor}
+                    renderOrder={-100}
+                  />
+                  <CardPlane
+                    slug={slug}
+                    width={w}
+                    height={h}
+                    rotationZ={rotZ}
+                    interactive={false}
+                    textureUrl={textureUrl}
+                  />
+                </>
+              );
+            }
+            return null;
+          })()}
+        </group>
+      )}
 
       {/* Token attachment dialog */}
       {attachmentDialog && (
