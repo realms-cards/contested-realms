@@ -361,6 +361,7 @@ export type AvatarState = EntityBase<CardRef | null> & {
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
+  instanceId?: string | null;
   // Optional attachment to a permanent at the same tile
   attachedTo?: { at: CellKey; index: number } | null;
   // Generic numeric counter displayed on the card (e.g., +1 counters)
@@ -863,6 +864,8 @@ export type ServerPatchT = Partial<{
 
 // Small random visual tilt for permanents to reduce overlap uniformity (radians ~ -0.05..+0.05)
 const randomTilt = () => Math.random() * 0.1 - 0.05;
+const newPermanentInstanceId = () =>
+  `perm_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
 
 // ---- Shared helpers (pure) -------------------------------------------------
 
@@ -983,8 +986,8 @@ function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   return out as unknown as T;
 }
 
-// Normalize permanents arrays without dropping duplicates across cells.
-// Trust server/state sync; allow multiple copies of the same cardId.
+// Normalize permanents arrays while dropping accidental duplicates that share an
+// instanceId. Preserves original ordering and keeps attachment indices aligned.
 function dedupePermanents(
   per: Permanents | undefined | null
 ): Permanents | undefined {
@@ -993,12 +996,50 @@ function dedupePermanents(
   const out: Permanents = {} as Permanents;
   for (const [cell, arrAny] of Object.entries(per as Record<string, unknown>)) {
     const arr = Array.isArray(arrAny) ? (arrAny as PermanentItem[]) : [];
-    const nextArr: PermanentItem[] = [];
-    for (const item of arr) {
-      if (!item || typeof item !== "object") continue;
-      nextArr.push(item as PermanentItem);
+    if (arr.length === 0) {
+      out[cell as keyof Permanents] = [] as PermanentItem[];
+      continue;
     }
-    out[cell as keyof Permanents] = nextArr as Permanents[keyof Permanents];
+    const seen = new Map<string, number>();
+    const indexMap = new Map<number, number>();
+    const cleaned: PermanentItem[] = [];
+    arr.forEach((item, idx) => {
+      if (!item || typeof item !== "object") return;
+      const inst =
+        typeof item.instanceId === "string" && item.instanceId.length > 0
+          ? item.instanceId
+          : null;
+      if (inst && seen.has(inst)) {
+        indexMap.set(idx, seen.get(inst)!);
+        return;
+      }
+      const newIndex = cleaned.length;
+      if (inst) {
+        seen.set(inst, newIndex);
+      }
+      indexMap.set(idx, newIndex);
+      cleaned.push(item as PermanentItem);
+    });
+    if (cleaned.length === 0) {
+      out[cell as keyof Permanents] = [] as PermanentItem[];
+      continue;
+    }
+    const normalized = cleaned.map((item, newIdx) => {
+      if (!item || typeof item !== "object") return item;
+      const attached = item.attachedTo;
+      if (attached && attached.at === (cell as CellKey)) {
+        const mapped = indexMap.get(attached.index);
+        if (mapped != null && mapped !== attached.index) {
+          return {
+            ...item,
+            attachedTo: { ...attached, index: mapped },
+          };
+        }
+      }
+      return item;
+    });
+    out[cell as keyof Permanents] =
+      normalized as Permanents[keyof Permanents];
   }
   return out;
 }
@@ -3534,6 +3575,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             get().trySendPatch(patch);
           }
         }
+        if (!s.avatars[who]?.tapped) {
+          try {
+            get().toggleTapAvatar(who);
+          } catch {}
+        }
         // Consume single-use instant permission if present
         let nextInteractionLog: GameState["interactionLog"] | undefined;
         if (consumeInstantId) {
@@ -3568,6 +3614,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         card,
         offset: null,
         tilt: randomTilt(),
+        instanceId: newPermanentInstanceId(),
       });
       per[key] = arr;
       get().log(`${who.toUpperCase()} plays '${card.name}' at #${cellNo}`);
@@ -3749,6 +3796,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             get().trySendPatch(patch);
           }
         }
+        if (!s.avatars[who]?.tapped) {
+          try {
+            get().toggleTapAvatar(who);
+          } catch {}
+        }
         // Consume single-use instant permission if present
         let nextInteractionLog: GameState["interactionLog"] | undefined;
         if (consumeInstantId) {
@@ -3788,6 +3840,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         card,
         offset: null,
         tilt: randomTilt(),
+        instanceId: newPermanentInstanceId(),
       });
       per[key] = arr;
       get().log(
@@ -3888,6 +3941,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         `${who.toUpperCase()} draws '${card.name}' from ${from} to hand`
       );
 
+      // Send patch to server
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            zones: {
+              ...s.zones,
+              [who]: { ...z, [pileName]: pile, hand },
+            } as GameState["zones"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
+
       return {
         zones: { ...s.zones, [who]: { ...z, [pileName]: pile, hand } },
         dragFromPile: null,
@@ -3934,6 +4001,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         }' from hand to ${position} of ${pile}`
       );
 
+      // Send patch to server
+      {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = {
+            zones: {
+              ...s.zones,
+              [who]: { ...zones, hand, [pile]: targetPile },
+            } as GameState["zones"],
+          };
+          get().trySendPatch(patch);
+        }
+      }
+
       return {
         zones: { ...s.zones, [who]: { ...zones, hand, [pile]: targetPile } },
         selectedCard: null,
@@ -3968,19 +4049,21 @@ export const useGameStore = create<GameState>((set, get) => ({
         toKey,
         null
       );
+      const perSanitized =
+        (dedupePermanents(per) ?? per) as Permanents;
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Moved '${movedName}' to #${cellNo}`);
       {
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            permanents: per as GameState["permanents"],
+            permanents: perSanitized as GameState["permanents"],
           };
           get().trySendPatch(patch);
         }
       }
       return {
-        permanents: per,
+        permanents: perSanitized,
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
@@ -3999,8 +4082,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         fromKey,
         toKey,
         movedName: exists.card.name,
-        fromPermanents: (s.permanents[fromKey] || []).map((p) => p.card.name),
-        toPermanents: (s.permanents[toKey] || []).map((p) => p.card.name),
+        instanceId: exists.instanceId,
+        fromPermanents: (s.permanents[fromKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
+        toPermanents: (s.permanents[toKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
       });
 
       const { per, movedName } = movePermanentCore(
@@ -4010,11 +4094,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         toKey,
         offset
       );
+      const perSanitized =
+        (dedupePermanents(per) ?? per) as Permanents;
 
       console.log("[store] moveSelectedPermanentToWithOffset AFTER ->", {
         movedName,
-        fromPermanents: (per[fromKey] || []).map((p) => p.card.name),
-        toPermanents: (per[toKey] || []).map((p) => p.card.name),
+        fromPermanents: (perSanitized[fromKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
+        toPermanents: (perSanitized[toKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
       });
 
       const cellNo = y * s.board.size.w + x + 1;
@@ -4023,17 +4109,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
-            permanents: per as GameState["permanents"],
+            permanents: perSanitized as GameState["permanents"],
           };
           console.log("[store] Sending patch to server ->", {
             patchKeys: Object.keys(patch),
             permanentsKeys: Object.keys(patch.permanents || {}),
           });
-          get().trySendPatch(patch);
+          // Add a small delay to prevent rapid patch sends during transfers
+          setTimeout(() => {
+            get().trySendPatch(patch);
+          }, 50);
         }
       }
       return {
-        permanents: per,
+        permanents: perSanitized,
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
@@ -4074,7 +4163,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const next = { ...cur, tapped: !cur.tapped };
       arr[index] = next;
-      per[at] = arr;
+per[at] = arr;
       const cell = at.split(",");
       const x = Number(cell[0] || 0);
       const y = Number(cell[1] || 0);

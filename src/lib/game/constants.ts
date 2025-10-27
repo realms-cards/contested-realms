@@ -16,7 +16,7 @@ export const CARD_SHORT = CARD_LONG * 0.75; // 3:4 ratio
 
 // Physics constants
 export const CARD_THICK = Math.max(0.012, CARD_LONG * 0.02); // Thin physical thickness for card collisions
-export const DRAG_LIFT = CARD_THICK * 2 + 0.15; // Height to lift a card while dragging so it clears neighbors and the ground
+export const DRAG_LIFT = CARD_THICK * 2; // Height to lift a card while dragging so it clears neighbors and the ground
 export const GROUND_HALF_THICK = 0.05; // Ground collider half-thickness; keep robust to avoid tunneling through a too-thin floor
 export const EDGE_MARGIN = TILE_SIZE * 0.5; // expand ground beyond mat a little
 
