@@ -2,7 +2,8 @@
 
 import { OrbitControls, Text } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Physics, RigidBody } from "@react-three/rapier";
+import { Physics } from "@/lib/game/physics";
+import { RigidBody } from "@react-three/rapier";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

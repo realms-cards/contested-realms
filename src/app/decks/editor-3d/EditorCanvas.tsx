@@ -2,7 +2,7 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Physics } from "@react-three/rapier";
+import { Physics } from "@/lib/game/physics";
 import React, { useEffect } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
