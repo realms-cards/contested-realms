@@ -4829,9 +4829,30 @@ per[at] = arr;
       const fromOwner = item.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
       const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
+
+      // CRITICAL FIX: Preserve world position when changing ownership
+      // The Z-axis base position (zBase) flips when owner changes.
+      // We must adjust the offset to compensate and keep the card in place.
+      // This prevents the card from "jumping" across the tile when control changes.
+      const TILE_SIZE = 2.0; // From @/lib/game/constants
+      const STACK_MARGIN_Z = TILE_SIZE * 0.1;
+      const oldZBase = fromOwner === 1
+        ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+        : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+      const newZBase = newOwner === 1
+        ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+        : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+
+      const currentOffset = item.offset || [0, 0];
+      const adjustedOffset: [number, number] = [
+        currentOffset[0], // X offset unchanged
+        currentOffset[1] + (oldZBase - newZBase) // Adjust Z to compensate for zBase change
+      ];
+
       arr[index] = {
         ...item,
         owner: newOwner,
+        offset: adjustedOffset,
         card: prepareCardForSeat(item.card, newOwnerSeat),
       };
       per[at] = arr;
