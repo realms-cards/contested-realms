@@ -10,6 +10,8 @@ interface OnlineStatusBarProps {
   myPlayerNumber: number | null;
   playerNames: { p1: string; p2: string };
   onOpenMatchInfo: () => void;
+  /** Whether we're in draft mode (disables music) */
+  inDraftMode?: boolean;
 }
 
 export default function OnlineStatusBar({
@@ -17,6 +19,7 @@ export default function OnlineStatusBar({
   myPlayerNumber,
   playerNames,
   onOpenMatchInfo,
+  inDraftMode = false,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const endTurn = useGameStore((s) => s.endTurn);
@@ -81,9 +84,9 @@ export default function OnlineStatusBar({
           </>
         )}
 
-        {/* Audio Controls (Music + Sound) */}
+        {/* Audio Controls (Music + Sound) - Only enable music during actual matches */}
         <div className="w-px h-4 bg-white/20" />
-        <AudioControls />
+        <AudioControls enableMusic={!inDraftMode} />
       </div>
     </div>
   );
