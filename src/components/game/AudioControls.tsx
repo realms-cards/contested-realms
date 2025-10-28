@@ -28,9 +28,8 @@ interface AudioControlsProps {
 }
 
 export default function AudioControls({ enableMusic = true }: AudioControlsProps) {
-  const [musicState, musicControls] = enableMusic
-    ? useMusicPlayer()
-    : [null, null] as const;
+  // Always call hooks unconditionally (React Hooks rules)
+  const [musicState, musicControls] = useMusicPlayer();
   const { volume: soundVolume, setVolume: setSoundVolume } = useSound();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showTrackList, setShowTrackList] = useState(false);
