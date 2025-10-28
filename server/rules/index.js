@@ -287,6 +287,25 @@ function applyTurnStart(game) {
     const cp = Number(game && game.currentPlayer);
     if (!(cp === 1 || cp === 2)) return null;
 
+    // Track turn numbers per player to detect actual turn changes
+    // CRITICAL FIX: Only untap when the turn actually increments for this player
+    const turnTracking = game.turnTracking || { p1: 0, p2: 0 };
+    const playerKey = cp === 1 ? 'p1' : 'p2';
+    const currentTurn = game.turn || 1;
+    const lastTurnForPlayer = turnTracking[playerKey] || 0;
+
+    // If this player's turn number hasn't increased, don't untap
+    // This prevents untapping on every single patch (which was breaking tap state)
+    if (currentTurn <= lastTurnForPlayer) {
+      return null;
+    }
+
+    // Turn has incremented for this player - proceed with untap
+    const updatedTurnTracking = {
+      ...turnTracking,
+      [playerKey]: currentTurn
+    };
+
     // Untap permanents owned by current player AND clear summoning sickness
     const permsPrev = (game && game.permanents) || {};
     const permanents = {};
@@ -322,7 +341,12 @@ function applyTurnStart(game) {
     const resources = { ...resPrev, [meKey]: meRes };
 
     // Do not modify board.sites at turn start (sites do not tap)
-    return { permanents, avatars, resources };
+    return {
+      permanents,
+      avatars,
+      resources,
+      turnTracking: updatedTurnTracking
+    };
   } catch {
     return null;
   }
