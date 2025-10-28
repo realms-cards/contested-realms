@@ -421,11 +421,21 @@ export default function OnlineMatchPage() {
       return;
     }
 
-    // If the server reports the match is in progress, do not auto-load a deck; the resync snapshot
-    // will restore the correct zones/hands.
-    if (match?.status === "in_progress") {
-      console.log("[match] Match in progress; skipping deck load (will use server snapshot)", {
+    // If the server reports the match is in progress AND we already have game state (cards in hand/zones),
+    // do not auto-load a deck; we're reconnecting to an existing game.
+    // NOTE: A match can be "in_progress" immediately when both players join a fresh game,
+    // so we need to check for actual game state to distinguish fresh vs reconnect.
+    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
+    const hasCardsInPlay = hasGameState && (
+      (match as unknown as { game?: { zones?: Record<string, unknown> } })?.game?.zones !== undefined ||
+      (match as unknown as { game?: { permanents?: unknown } })?.game?.permanents !== undefined
+    );
+
+    if (match?.status === "in_progress" && hasCardsInPlay) {
+      console.log("[match] Match in progress with existing game state; skipping deck load (reconnecting)", {
         status: match?.status,
+        hasGameState,
+        hasCardsInPlay,
       });
       setPrepared(true);
       return;
@@ -434,7 +444,6 @@ export default function OnlineMatchPage() {
     // For reconnect edge cases: if we already have a server game snapshot in Setup phase and the match
     // is not in waiting/deck_construction, prefer waiting for the server to advance.
     const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
-    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
     if (hasGameState && gamePhase === "Setup" &&
         match?.status !== "waiting" && match?.status !== "deck_construction") {
       console.log("[match] Server provided Setup-phase game; waiting for snapshot advance");

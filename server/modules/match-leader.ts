@@ -510,26 +510,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
         let patchToApply: MatchPatch = { ...patch };
 
-        // Debug: Log permanent patches to diagnose tap state
-        if (patchToApply.permanents) {
-          try {
-            for (const [cell, perms] of Object.entries(patchToApply.permanents)) {
-              if (Array.isArray(perms)) {
-                for (const p of perms) {
-                  if (p && typeof p === 'object' && 'tapped' in p) {
-                    console.log('[TAP_RECV]', {
-                      cell,
-                      tapped: p.tapped,
-                      tapVersion: (p as Record<string, unknown>).tapVersion,
-                      instanceId: (p as Record<string, unknown>).instanceId
-                    });
-                  }
-                }
-              }
-            }
-          } catch {}
-        }
-
         const enforce =
           rulesEnforceMode === "all" ||
           (rulesEnforceMode === "bot_only" && isCpuPlayerId(playerId));
@@ -882,30 +862,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         );
         match.game = mergedGame as MatchGameState;
 
-        // Debug: Check if tap state survived the merge
-        if (patchToApply.permanents) {
-          try {
-            for (const [cell, perms] of Object.entries(patchToApply.permanents)) {
-              if (Array.isArray(perms)) {
-                for (let i = 0; i < perms.length; i++) {
-                  const p = perms[i];
-                  if (p && typeof p === 'object' && 'tapped' in p) {
-                    const merged = match.game?.permanents?.[cell]?.[i];
-                    console.log('[TAP_MERGED]', {
-                      cell,
-                      index: i,
-                      originalTapped: p.tapped,
-                      originalTapVersion: (p as Record<string, unknown>).tapVersion,
-                      mergedTapped: merged?.tapped,
-                      mergedTapVersion: (merged as Record<string, unknown>)?.tapVersion
-                    });
-                  }
-                }
-              }
-            }
-          } catch {}
-        }
-
         const movementPatch = await Promise.resolve(
           applyMovementAndCombat(match.game, patchToApply, playerId, { match })
         );
@@ -1056,27 +1012,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         const enrichedPatchToApply =
           (await enrichPatchWithCosts(patchToApply, prisma)) ?? patchToApply;
-
-        // Debug: Check if tap state is in the broadcast patch
-        if (enrichedPatchToApply.permanents) {
-          try {
-            for (const [cell, perms] of Object.entries(enrichedPatchToApply.permanents)) {
-              if (Array.isArray(perms)) {
-                for (const p of perms) {
-                  if (p && typeof p === 'object' && 'tapped' in p) {
-                    console.log('[TAP_BROADCAST]', {
-                      cell,
-                      tapped: p.tapped,
-                      tapVersion: (p as Record<string, unknown>).tapVersion,
-                      instanceId: (p as Record<string, unknown>).instanceId
-                    });
-                  }
-                }
-              }
-            }
-          } catch {}
-        }
-
         // Exclude sender from statePatch broadcast to prevent echo overwrites
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;

@@ -148,7 +148,7 @@ export type ContextMenuTarget =
   | { kind: "pile"; who: PlayerKey; from: "spellbook" | "atlas" | "graveyard" }
   | { kind: "tokenpile"; who: PlayerKey };
 
-export type GameEvent = { id: number; ts: number; text: string };
+export type GameEvent = { id: number; ts: number; text: string; turn?: number };
 export const MAX_EVENTS = 200;
 export const BOARD_PING_LIFETIME_MS = 2500;
 export const BOARD_PING_MAX_HISTORY = 8;
@@ -158,6 +158,7 @@ export type SerializedGame = {
   actorKey: PlayerKey | null;
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
+  turn?: number;
   phase: Phase;
   d20Rolls: Record<PlayerKey, number | null>;
   setupWinner: PlayerKey | null;
@@ -183,6 +184,7 @@ export type SerializedGame = {
 export type GameState = {
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
+  turn?: number;
   phase: Phase;
   setPhase: (phase: Phase) => void;
   // D20 Setup phase
