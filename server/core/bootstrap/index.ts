@@ -51,6 +51,9 @@ function createSocketServer(httpServer: http.Server, config: ServerConfig): Serv
     },
     pingInterval: config.pingIntervalMs,
     pingTimeout: config.pingTimeoutMs,
+    perMessageDeflate: {
+      threshold: 1024, // Compress messages larger than 1KB
+    },
   });
 }
 

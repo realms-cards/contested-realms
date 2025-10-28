@@ -296,18 +296,19 @@ export default function OnlineConsole({
                                  low.startsWith("permanents can only") ||
                                  low.startsWith("avatar must");
                   const isSearch = low.startsWith("search:");
+                  const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
                   return (
                     <div
                       key={`${ev.id}-${index}`}
                       className={`opacity-85 ${
-                        isWarn 
-                          ? "text-yellow-400" 
-                          : isSearch 
-                          ? "text-blue-400" 
+                        isWarn
+                          ? "text-yellow-400"
+                          : isSearch
+                          ? "text-blue-400"
                           : ""
                       }`}
                     >
-                      • {formatEventText(ev.text)}
+                      {turnPrefix && <span className="opacity-50">{turnPrefix}</span>}• {formatEventText(ev.text)}
                     </div>
                   );
                 })}

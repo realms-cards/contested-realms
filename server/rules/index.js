@@ -714,7 +714,8 @@ function applyMovementAndCombat(prevGame, action, playerId, context) {
         result.permanents[k] = survivors;
         changed = true;
         try {
-          result.events.push({ id: 0, ts: Date.now(), text: `[Combat] ${k}: ${mine.length} vs ${theirs.length} -> survivors ${survivors.length}` });
+          const currentTurn = game.turn || 1;
+          result.events.push({ id: 0, ts: Date.now(), text: `[Combat] ${k}: ${mine.length} vs ${theirs.length} -> survivors ${survivors.length}`, turn: currentTurn });
         } catch {}
       }
     }

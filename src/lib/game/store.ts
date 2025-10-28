@@ -383,6 +383,7 @@ export type ContextMenuTarget =
 export type GameState = {
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
+  turn?: number;
   phase: Phase;
   setPhase: (phase: Phase) => void;
   // D20 Setup phase
@@ -809,7 +810,7 @@ function computeAvailableMana(
   return mana;
 }
 
-export type GameEvent = { id: number; ts: number; text: string };
+export type GameEvent = { id: number; ts: number; text: string; turn?: number };
 const MAX_EVENTS = 200;
 export const BOARD_PING_LIFETIME_MS = 2500;
 export const BOARD_PING_MAX_HISTORY = 8;
@@ -845,6 +846,7 @@ export type SerializedGame = {
 export type ServerPatchT = Partial<{
   players: GameState["players"];
   currentPlayer: GameState["currentPlayer"];
+  turn: GameState["turn"];
   phase: GameState["phase"];
   d20Rolls: GameState["d20Rolls"];
   setupWinner: GameState["setupWinner"];
@@ -1487,6 +1489,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
   },
   currentPlayer: 1,
+  turn: 1,
   phase: "Setup",
   setPhase: (phase) => set({ phase }),
   // D20 Setup phase
@@ -2278,7 +2281,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   log: (text: string) =>
     set((s) => {
       const nextId = s.eventSeq + 1;
-      const e = { id: nextId, ts: Date.now(), text };
+      const currentTurn = s.turn || 1;
+      const e = { id: nextId, ts: Date.now(), text, turn: currentTurn };
       const eventsAll = [...s.events, e];
       const events =
         eventsAll.length > MAX_EVENTS
@@ -2541,6 +2545,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
       }
+      if (p.turn !== undefined) {
+        next.turn = p.turn;
+      }
       if (p.phase !== undefined) {
         next.phase = p.phase;
       }
@@ -2759,6 +2766,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
+      }
+      if (p.turn !== undefined) {
+        next.turn = p.turn;
       }
       if (p.phase !== undefined) {
         next.phase = p.phase;
@@ -4667,17 +4677,8 @@ per[at] = arr;
           cur.card.name
         }' at #${cellNo}`
       );
-      {
-        const patch = createPermanentsPatch(per, at);
-        console.log('[TAP_PATCH]', {
-          cell: at,
-          tapped: next.tapped,
-          tapVersion: next.tapVersion,
-          patchPermanents: patch.permanents ? Object.keys(patch.permanents) : [],
-          patchContent: patch.permanents?.[at]?.[index]
-        });
-        get().trySendPatch(patch);
-      }
+      const patch = createPermanentsPatch(per, at);
+      get().trySendPatch(patch);
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -5501,6 +5502,7 @@ per[at] = arr;
           },
         },
         currentPlayer: 1,
+        turn: 1,
         phase: "Setup",
         lastServerTs: 0,
         lastLocalActionTs: 0,
