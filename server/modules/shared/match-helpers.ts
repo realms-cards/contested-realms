@@ -74,10 +74,36 @@ export function dedupePermanents(
   }
 }
 
-export function deepMergeReplaceArrays<T>(
-  base: T,
-  patch: unknown
-): T {
+function extractInstanceId(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const id = (value as Record<string, unknown>).instanceId;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function mergeArrayByInstanceId(
+  baseArr: unknown[],
+  patchArr: unknown[]
+): unknown[] {
+  const baseMap = new Map<string, unknown>();
+  for (const item of baseArr) {
+    const id = extractInstanceId(item);
+    if (id) baseMap.set(id, item);
+  }
+  const result: unknown[] = [];
+  for (const item of patchArr) {
+    const id = extractInstanceId(item);
+    if (id && baseMap.has(id)) {
+      const merged = deepMergeReplaceArrays(baseMap.get(id), item);
+      result.push(merged);
+      baseMap.delete(id);
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+export function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   if (patch === undefined) {
     return base;
   }
@@ -87,6 +113,9 @@ export function deepMergeReplaceArrays<T>(
   }
 
   if (Array.isArray(patch)) {
+    if (Array.isArray(base) && patch.some((item) => extractInstanceId(item))) {
+      return mergeArrayByInstanceId(base, patch) as unknown as T;
+    }
     return patch as unknown as T;
   }
 

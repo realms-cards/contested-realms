@@ -8,8 +8,8 @@ import CardPreview from "@/components/game/CardPreview";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import Board from "@/lib/game/Board";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { useGameStore } from "@/lib/game/store";
 import { Physics } from "@/lib/game/physics";
+import { useGameStore } from "@/lib/game/store";
 
 interface MatchRecording {
   matchId: string;

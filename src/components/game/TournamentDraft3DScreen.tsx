@@ -31,8 +31,8 @@ import {
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
 import MouseTracker from "@/lib/game/components/MouseTracker";
 import { CARD_LONG } from "@/lib/game/constants";
-import { useGameStore } from "@/lib/game/store";
 import { Physics } from "@/lib/game/physics";
+import { useGameStore } from "@/lib/game/store";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";

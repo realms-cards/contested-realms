@@ -27,8 +27,8 @@ import {
   BASE_TILE_SIZE,
   MAT_RATIO,
 } from "@/lib/game/constants";
-import { useGameStore } from "@/lib/game/store";
 import { Physics } from "@/lib/game/physics";
+import { useGameStore } from "@/lib/game/store";
 import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {

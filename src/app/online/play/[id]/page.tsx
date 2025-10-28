@@ -43,8 +43,8 @@ import {
   MAT_RATIO,
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
-import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { Physics } from "@/lib/game/physics";
+import { useGameStore, type PlayerKey } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
@@ -1211,6 +1211,10 @@ const canPanCamera =
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
 
+  // Compute natural tilt angle for 2D mode and reuse across handlers
+  // Keep a small fixed tilt so the board looks flat but avoids strict top-down edge cases
+  const naturalTiltAngle = useMemo(() => 0.14, []);
+
   const gotoBaseline = useCallback(
     (mode: "topdown" | "orbit") => {
       const c = controlsRef.current;
@@ -1222,8 +1226,10 @@ const canPanCamera =
         // Natural 2D view: almost top-down from the player's side, slightly tilted
         // Keep altitude high enough to see the whole mat, but offset slightly in Z
         const dist = Math.max(matW, matH) * 1.1;
-        cam.position.set(0, dist, 0);
-        cam.up.set(0, 0, -1);
+        const tilt = naturalTiltAngle;
+        const sign = myPlayerNumber === 2 ? -1 : 1;
+        cam.position.set(0, Math.cos(tilt) * dist, sign * Math.sin(tilt) * dist);
+        cam.up.set(0, 1, 0);
       } else {
         // Reasonable default orbit position based on seat (slightly offset)
         const orbitZ = myPlayerNumber === 2 ? -5 : 5;
@@ -1233,7 +1239,7 @@ const canPanCamera =
       cam.lookAt(0, 0, 0);
       c.update();
     },
-    [myPlayerNumber, matW, matH]
+    [myPlayerNumber, matW, matH, naturalTiltAngle]
   );
 
   function resetCamera() {
@@ -1422,9 +1428,6 @@ const canPanCamera =
     currentPlayerState,
   ]);
 
-  // Compute natural tilt angle for 2D mode based on extents
-  // Constrain polar angle in 2D to a fixed small tilt that matches gotoBaseline('topdown')
-  const naturalTiltAngle = useMemo(() => 0, []);
   const boardInteractionMode =
     endedByMatchStatus || matchEnded ? "spectator" : "normal";
   const clampControls = useCallback(() => {

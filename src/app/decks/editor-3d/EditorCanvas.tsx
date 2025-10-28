@@ -8,8 +8,8 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import Board from "@/lib/game/Board";
-import { useGameStore } from "@/lib/game/store";
 import { Physics } from "@/lib/game/physics";
+import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 interface EditorCanvasProps {
