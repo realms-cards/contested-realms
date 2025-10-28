@@ -56,7 +56,7 @@ import type {
   RemoteCursorDragMeta,
   RemoteCursorHighlight,
 } from "@/lib/game/store/remoteCursor";
-import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
+import { TOKEN_BY_NAME, TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
 const ENABLE_SNAP = true;
@@ -2994,8 +2994,6 @@ export default function Board({
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
                 if ((selected.card.slug || "").startsWith("token:") || isTokenSel) {
                   try {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { TOKEN_BY_KEY } = require("@/lib/game/tokens");
                     const key = (selected.card.slug || "").split(":")[1]?.toLowerCase();
                     const def = key ? TOKEN_BY_KEY[key] : undefined;
                     let w = CARD_SHORT;
@@ -3008,12 +3006,13 @@ export default function Board({
                     if (!selected.card.slug) return null;
                     return (
                       <CardPlane
-                        slug={selected.card.slug}
+                        slug=""
                         width={w}
                         height={h}
                         rotationZ={rotZToken}
                         interactive={false}
-                        textureRotation={def?.textureRotation ?? 0}
+                        textureUrl={def ? tokenTextureUrl(def) : undefined}
+                        forceTextureUrl
                       />
                     );
                   } catch {}
@@ -3041,8 +3040,6 @@ export default function Board({
                 let h = CARD_LONG;
                 if ((c.slug || "").startsWith("token:")) {
                   try {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { TOKEN_BY_KEY } = require("@/lib/game/tokens");
                     const key = c.slug.split(":")[1]?.toLowerCase();
                     const def = key ? TOKEN_BY_KEY[key] : undefined;
                     if (def && def.size === "small") {
@@ -3056,12 +3053,13 @@ export default function Board({
                       (def && def.siteReplacement ? -Math.PI / 2 : 0);
                     return (
                       <CardPlane
-                        slug={c.slug}
+                        slug=""
                         width={w}
                         height={h}
                         rotationZ={rotZToken}
                         interactive={false}
-                        textureRotation={def?.textureRotation ?? 0}
+                        textureUrl={def ? tokenTextureUrl(def) : undefined}
+                        forceTextureUrl
                       />
                     );
                   } catch {}
