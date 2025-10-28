@@ -259,18 +259,83 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function cloneZones(zones: PlayerZones): PlayerZones {
+const newZoneCardInstanceId = () =>
+  `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+
+function normalizeZoneCard(entry: unknown, seat?: Seat): Record<string, unknown> | null {
+  if (!entry || typeof entry !== "object") return null;
+  const src = entry as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...src };
+  const rawCardId = src.cardId;
+  if (typeof rawCardId === "number") {
+    normalized.cardId = rawCardId;
+  } else if (typeof rawCardId === "string") {
+    const cardIdNum = Number(rawCardId);
+    if (Number.isFinite(cardIdNum)) normalized.cardId = cardIdNum;
+    else return null;
+  } else {
+    return null;
+  }
+  if (src.variantId !== undefined && src.variantId !== null) {
+    const rawVariant = src.variantId;
+    const variant =
+      typeof rawVariant === "number" ? rawVariant : Number(rawVariant);
+    if (Number.isFinite(variant)) normalized.variantId = variant;
+    else delete normalized.variantId;
+  }
+  if (
+    normalized.thresholds &&
+    typeof normalized.thresholds === "object" &&
+    normalized.thresholds !== null
+  ) {
+    normalized.thresholds = {
+      ...(normalized.thresholds as Record<string, unknown>),
+    };
+  }
+  if (
+    typeof normalized.instanceId !== "string" ||
+    normalized.instanceId.length === 0
+  ) {
+    normalized.instanceId = newZoneCardInstanceId();
+  }
+  if (seat) {
+    const incomingOwner = normalized.owner;
+    if (incomingOwner === "p1" || incomingOwner === "p2") {
+      if (incomingOwner !== seat) {
+        return null;
+      }
+    }
+    normalized.owner = seat;
+  } else if (normalized.owner === "p1" || normalized.owner === "p2") {
+    // keep provided owner
+  } else if ("owner" in normalized) {
+    delete normalized.owner;
+  }
+  return normalized;
+}
+
+function normalizeZoneList(values: unknown[], seat?: Seat): unknown[] {
+  if (!Array.isArray(values)) return [];
+  const result: unknown[] = [];
+  for (const entry of values) {
+    const normalized = normalizeZoneCard(entry, seat);
+    if (normalized) result.push(normalized);
+  }
+  return result;
+}
+
+function cloneZones(zones: PlayerZones, seat: Seat): PlayerZones {
   return {
-    spellbook: [...zones.spellbook],
-    atlas: [...zones.atlas],
-    hand: [...zones.hand],
-    graveyard: [...zones.graveyard],
-    battlefield: [...zones.battlefield],
-    banished: [...zones.banished],
+    spellbook: normalizeZoneList(zones.spellbook, seat),
+    atlas: normalizeZoneList(zones.atlas, seat),
+    hand: normalizeZoneList(zones.hand, seat),
+    graveyard: normalizeZoneList(zones.graveyard, seat),
+    battlefield: normalizeZoneList(zones.battlefield, seat),
+    banished: normalizeZoneList(zones.banished, seat),
   };
 }
 
-function ensurePlayerZones(value: unknown): PlayerZones {
+function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
   if (!isRecord(value)) {
     return {
       spellbook: [],
@@ -282,7 +347,9 @@ function ensurePlayerZones(value: unknown): PlayerZones {
     };
   }
   const arr = (prop: string): unknown[] =>
-    Array.isArray(value[prop]) ? [...(value[prop] as unknown[])] : [];
+    Array.isArray(value[prop])
+      ? normalizeZoneList(value[prop] as unknown[], seat)
+      : [];
   return {
     spellbook: arr("spellbook"),
     atlas: arr("atlas"),
@@ -661,30 +728,36 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           };
 
           const normalizedPrevZones: ZonesState = {
-            p1: prevZones?.p1 ? cloneZones(ensurePlayerZones(prevZones.p1)) : { ...defaultZones },
-            p2: prevZones?.p2 ? cloneZones(ensurePlayerZones(prevZones.p2)) : { ...defaultZones },
+            p1: prevZones?.p1
+              ? cloneZones(ensurePlayerZones(prevZones.p1, "p1"), "p1")
+              : { ...defaultZones },
+            p2: prevZones?.p2
+              ? cloneZones(ensurePlayerZones(prevZones.p2, "p2"), "p2")
+              : { ...defaultZones },
           };
           const incomingZones = patchToApply.zones ?? {};
+          const hasP1 = isRecord(incomingZones) && "p1" in incomingZones;
+          const hasP2 = isRecord(incomingZones) && "p2" in incomingZones;
+          const incomingP1 = hasP1
+            ? ensurePlayerZones(incomingZones.p1, "p1")
+            : null;
+          const incomingP2 = hasP2
+            ? ensurePlayerZones(incomingZones.p2, "p2")
+            : null;
           const nextZones: ZonesState = {
-            p1: ensurePlayerZones(
-              isRecord(incomingZones) && "p1" in incomingZones ? incomingZones.p1 : undefined
-            ),
-            p2: ensurePlayerZones(
-              isRecord(incomingZones) && "p2" in incomingZones ? incomingZones.p2 : undefined
-            ),
+            p1: incomingP1
+              ? {
+                  ...normalizedPrevZones.p1,
+                  ...incomingP1,
+                }
+              : normalizedPrevZones.p1,
+            p2: incomingP2
+              ? {
+                  ...normalizedPrevZones.p2,
+                  ...incomingP2,
+                }
+              : normalizedPrevZones.p2,
           };
-          nextZones.p1 = nextZones.p1
-            ? {
-                ...normalizedPrevZones.p1,
-                ...nextZones.p1,
-              }
-            : normalizedPrevZones.p1;
-          nextZones.p2 = nextZones.p2
-            ? {
-                ...normalizedPrevZones.p2,
-                ...nextZones.p2,
-              }
-            : normalizedPrevZones.p2;
 
           const prevAvatars = match.game?.avatars ?? { p1: undefined, p2: undefined };
           const defaultAvatar: AvatarState = { card: null, pos: null, tapped: false };
@@ -734,6 +807,52 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             avatars: normalizedAvatars,
             playerPositions: normalizedPositions,
           };
+        }
+
+        if (patchToApply.zones && isRecord(patchToApply.zones)) {
+          const incomingZones = patchToApply.zones as ZonesState;
+          const sanitizedZones: Partial<ZonesState> = {};
+          if (isRecord(incomingZones) && "p1" in incomingZones && actorSeat === "p1") {
+            sanitizedZones.p1 = ensurePlayerZones(incomingZones.p1, "p1");
+          } else if (isRecord(incomingZones) && "p1" in incomingZones && actorSeat !== "p1") {
+            try {
+              console.warn("[match] dropped opponent zone update", {
+                matchId,
+                playerId,
+                seat: "p1",
+                actorSeat,
+              });
+            } catch {
+              // ignore
+            }
+          }
+          if (isRecord(incomingZones) && "p2" in incomingZones && actorSeat === "p2") {
+            sanitizedZones.p2 = ensurePlayerZones(incomingZones.p2, "p2");
+          } else if (isRecord(incomingZones) && "p2" in incomingZones && actorSeat !== "p2") {
+            try {
+              console.warn("[match] dropped opponent zone update", {
+                matchId,
+                playerId,
+                seat: "p2",
+                actorSeat,
+              });
+            } catch {
+              // ignore logging failures
+            }
+          }
+          const zoneKeys = Object.keys(sanitizedZones).filter((key) =>
+            sanitizedZones[key as keyof ZonesState]
+          );
+          if (zoneKeys.length > 0) {
+            patchToApply = {
+              ...patchToApply,
+              zones: sanitizedZones as ZonesState,
+            };
+          } else {
+            const clone = { ...patchToApply } as Record<string, unknown>;
+            delete clone.zones;
+            patchToApply = clone as MatchPatch;
+          }
         }
 
         const mergedGame = deepMergeReplaceArrays(
@@ -1440,3 +1559,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     handleInteractionResponse,
   };
 }
+
+export const __testZoneHelpers = {
+  normalizeZoneCardForSeat: normalizeZoneCard,
+  ensurePlayerZonesForSeat: ensurePlayerZones,
+};

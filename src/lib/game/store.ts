@@ -182,6 +182,8 @@ export type CardRef = {
   type: string | null;
   slug?: string | null; // variant slug for images
   thresholds?: Partial<Thresholds> | null; // cost/requirements
+  owner?: PlayerKey | null;
+  instanceId?: string | null;
 };
 
 export type Zones = {
@@ -223,12 +225,12 @@ function ensurePlayerZones(
   const battlefield = candidate?.battlefield;
   const banished = candidate?.banished;
   return {
-    spellbook: Array.isArray(spellbook) ? spellbook : base.spellbook,
-    atlas: Array.isArray(atlas) ? atlas : base.atlas,
-    hand: Array.isArray(hand) ? hand : base.hand,
-    graveyard: Array.isArray(graveyard) ? graveyard : base.graveyard,
-    battlefield: Array.isArray(battlefield) ? battlefield : base.battlefield,
-    banished: Array.isArray(banished) ? banished : base.banished,
+    spellbook: normalizeCardRefList(spellbook, base.spellbook),
+    atlas: normalizeCardRefList(atlas, base.atlas),
+    hand: normalizeCardRefList(hand, base.hand),
+    graveyard: normalizeCardRefList(graveyard, base.graveyard),
+    battlefield: normalizeCardRefList(battlefield, base.battlefield),
+    banished: normalizeCardRefList(banished, base.banished),
   };
 }
 
@@ -866,6 +868,106 @@ export type ServerPatchT = Partial<{
 const randomTilt = () => Math.random() * 0.1 - 0.05;
 const newPermanentInstanceId = () =>
   `perm_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+const newZoneCardInstanceId = () =>
+  `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+
+function ensureCardInstanceId(card: CardRef): CardRef {
+  if (card.instanceId && card.instanceId.length > 0) {
+    return card;
+  }
+  return {
+    ...card,
+    instanceId: newZoneCardInstanceId(),
+  };
+}
+
+function prepareCardForSeat(card: CardRef, owner: PlayerKey): CardRef {
+  const ensured = ensureCardInstanceId(card);
+  if (ensured.owner === owner) return ensured;
+  return { ...ensured, owner };
+}
+
+function normalizeCardRefEntry(candidate: unknown): CardRef | null {
+  if (!candidate || typeof candidate !== "object") return null;
+  const src = candidate as Partial<CardRef> & Record<string, unknown>;
+  const rawCardId = src.cardId;
+  const cardId =
+    typeof rawCardId === "number"
+      ? rawCardId
+      : typeof rawCardId === "string"
+      ? Number(rawCardId)
+      : NaN;
+  if (!Number.isFinite(cardId)) return null;
+
+  let variantId: number | null = null;
+  if (src.variantId !== undefined && src.variantId !== null) {
+    const candidateVariant =
+      typeof src.variantId === "number"
+        ? src.variantId
+        : Number(src.variantId);
+    variantId = Number.isFinite(candidateVariant) ? candidateVariant : null;
+  }
+
+  let thresholds: Partial<Thresholds> | null = null;
+  if (src.thresholds && typeof src.thresholds === "object") {
+    thresholds = { ...(src.thresholds as Partial<Thresholds>) };
+  }
+
+  const instanceId =
+    typeof src.instanceId === "string" && src.instanceId.length > 0
+      ? src.instanceId
+      : newZoneCardInstanceId();
+
+  const name =
+    typeof src.name === "string"
+      ? src.name
+      : src.name != null
+      ? String(src.name)
+      : "";
+
+  const type =
+    typeof src.type === "string"
+      ? src.type
+      : src.type === null
+      ? null
+      : null;
+
+  const slug =
+    typeof src.slug === "string"
+      ? src.slug
+      : src.slug === null
+      ? null
+      : null;
+
+  const owner =
+    src.owner === "p1" || src.owner === "p2"
+      ? (src.owner as PlayerKey)
+      : null;
+
+  return {
+    cardId,
+    variantId,
+    name,
+    type,
+    slug,
+    thresholds,
+    owner,
+    instanceId,
+  };
+}
+
+function normalizeCardRefList(
+  candidate: unknown,
+  fallback: CardRef[]
+): CardRef[] {
+  const source = Array.isArray(candidate) ? candidate : fallback;
+  const normalized: CardRef[] = [];
+  for (const entry of source) {
+    const ensured = normalizeCardRefEntry(entry);
+    if (ensured) normalized.push(ensured);
+  }
+  return normalized;
+}
 
 // ---- Shared helpers (pure) -------------------------------------------------
 
@@ -968,10 +1070,44 @@ function buildAvatarUpdate(
 
 // Deep merge utility that replaces arrays and merges plain objects.
 // Primitives and nulls overwrite. Undefined in patch leaves value as-is.
+function extractInstanceId(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const id = (value as Record<string, unknown>).instanceId;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function mergeArrayByInstanceId(
+  baseArr: unknown[],
+  patchArr: unknown[]
+): unknown[] {
+  const baseMap = new Map<string, unknown>();
+  for (const item of baseArr) {
+    const id = extractInstanceId(item);
+    if (id) baseMap.set(id, item);
+  }
+  const result: unknown[] = [];
+  for (const item of patchArr) {
+    const id = extractInstanceId(item);
+    if (id && baseMap.has(id)) {
+      const merged = deepMergeReplaceArrays(baseMap.get(id), item);
+      result.push(merged);
+      baseMap.delete(id);
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   if (patch === undefined) return base as T;
   if (patch === null) return null as unknown as T;
-  if (Array.isArray(patch)) return patch as unknown as T; // replace arrays
+  if (Array.isArray(patch)) {
+    if (Array.isArray(base) && patch.some((item) => extractInstanceId(item))) {
+      return mergeArrayByInstanceId(base, patch) as unknown as T;
+    }
+    return patch as unknown as T;
+  }
   if (typeof patch !== "object") return patch as T; // primitives overwrite
 
   const baseObj =
@@ -986,67 +1122,39 @@ function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   return out as unknown as T;
 }
 
-// Normalize permanents arrays while dropping accidental duplicates that share an
-// instanceId. Preserves original ordering and keeps attachment indices aligned.
-function dedupePermanents(
-  per: Permanents | undefined | null
-): Permanents | undefined {
-  if (!per || typeof per !== "object")
-    return per as unknown as Permanents | undefined;
-  const out: Permanents = {} as Permanents;
-  for (const [cell, arrAny] of Object.entries(per as Record<string, unknown>)) {
-    const arr = Array.isArray(arrAny) ? (arrAny as PermanentItem[]) : [];
-    if (arr.length === 0) {
-      out[cell as keyof Permanents] = [] as PermanentItem[];
-      continue;
-    }
-    const seen = new Map<string, number>();
-    const indexMap = new Map<number, number>();
-    const cleaned: PermanentItem[] = [];
-    arr.forEach((item, idx) => {
-      if (!item || typeof item !== "object") return;
-      const inst =
-        typeof item.instanceId === "string" && item.instanceId.length > 0
-          ? item.instanceId
-          : null;
-      if (inst && seen.has(inst)) {
-        indexMap.set(idx, seen.get(inst)!);
-        return;
-      }
-      const newIndex = cleaned.length;
-      if (inst) {
-        seen.set(inst, newIndex);
-      }
-      indexMap.set(idx, newIndex);
-      cleaned.push(item as PermanentItem);
-    });
-    if (cleaned.length === 0) {
-      out[cell as keyof Permanents] = [] as PermanentItem[];
-      continue;
-    }
-    const normalized = cleaned.map((item, newIdx) => {
-      if (!item || typeof item !== "object") return item;
-      const attached = item.attachedTo;
-      if (attached && attached.at === (cell as CellKey)) {
-        const mapped = indexMap.get(attached.index);
-        if (mapped != null && mapped !== attached.index) {
-          return {
-            ...item,
-            attachedTo: { ...attached, index: mapped },
-          };
-        }
-      }
-      return item;
-    });
-    out[cell as keyof Permanents] =
-      normalized as Permanents[keyof Permanents];
+function uniqueCellList(cells: CellKey | CellKey[]): CellKey[] {
+  const arr = Array.isArray(cells) ? cells : [cells];
+  const seen = new Set<CellKey>();
+  const result: CellKey[] = [];
+  for (const cell of arr) {
+    if (typeof cell !== "string") continue;
+    if (seen.has(cell)) continue;
+    seen.add(cell);
+    result.push(cell);
   }
-  return out;
+  return result;
 }
 
-function createPermanentsPatch(per: Permanents): ServerPatchT {
+function createPermanentsPatch(
+  per: Permanents,
+  cells?: CellKey | CellKey[] | null
+): ServerPatchT {
+  if (!cells || (Array.isArray(cells) && cells.length === 0)) {
+    return {
+      permanents: per as GameState["permanents"],
+    } as ServerPatchT;
+  }
+  const payload: Partial<Permanents> = {};
+  for (const cell of uniqueCellList(cells)) {
+    const items = per[cell];
+    payload[cell] = Array.isArray(items)
+      ? (items.map((item) =>
+          item && typeof item === "object" ? ({ ...item } as PermanentItem) : item
+        ) as PermanentItem[])
+      : ([] as PermanentItem[]);
+  }
   return {
-    permanents: per as GameState["permanents"],
+    permanents: payload as GameState["permanents"],
   } as ServerPatchT;
 }
 
@@ -1068,9 +1176,11 @@ type TrackedPatchField = (typeof PATCH_SIGNATURE_FIELDS)[number];
 type PatchSignatureEntry = {
   expiresAt: number;
   fields: TrackedPatchField[];
+  payload: Record<string, string>;
 };
 
 const pendingPatchSignatures = new Map<string, PatchSignatureEntry[]>();
+let getStoreState: (() => GameState) | null = null;
 
 function prunePatchSignatures(now: number) {
   for (const [key, entries] of pendingPatchSignatures.entries()) {
@@ -1083,15 +1193,26 @@ function prunePatchSignatures(now: number) {
   }
 }
 
-function registerPatchSignature(id: string, fields: string[]) {
+function registerPatchSignature(
+  signature: { id: string; fields: TrackedPatchField[] } | null,
+  patch: ServerPatchT
+) {
+  if (!signature) return;
   const now = Date.now();
   prunePatchSignatures(now);
-  const list = pendingPatchSignatures.get(id) ?? [];
+  const list = pendingPatchSignatures.get(signature.id) ?? [];
+  const payload: Record<string, string> = {};
+  for (const field of signature.fields) {
+    const raw = (patch as Record<string, unknown>)[field];
+    if (raw === undefined) continue;
+    payload[field] = stableSerialize(normalizeForSignature(raw));
+  }
   list.push({
     expiresAt: now + PATCH_SIGNATURE_TTL_MS,
-    fields: [...(fields as TrackedPatchField[])],
+    fields: [...signature.fields],
+    payload,
   });
-  pendingPatchSignatures.set(id, list);
+  pendingPatchSignatures.set(signature.id, list);
 }
 
 function normalizeForSignature(value: unknown): unknown {
@@ -1164,10 +1285,58 @@ function filterEchoPatchIfAny(
   prunePatchSignatures(Date.now());
   const list = pendingPatchSignatures.get(signature.id);
   if (!list || list.length === 0) return { patch, matched: false };
-  const entry = list.shift() ?? null;
+  let matchIndex = -1;
+  for (let i = 0; i < list.length; i++) {
+    const candidate = list[i];
+    const fields = candidate.fields ?? [];
+    let matches = true;
+    for (const field of fields) {
+      if (!Object.prototype.hasOwnProperty.call(patch, field)) {
+        matches = false;
+        break;
+      }
+      const serialized = stableSerialize(
+        normalizeForSignature((patch as Record<string, unknown>)[field])
+      );
+      if (candidate.payload?.[field] !== serialized) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      matchIndex = i;
+      break;
+    }
+  }
+  if (matchIndex < 0) return { patch, matched: false };
+  const [entry] = list.splice(matchIndex, 1);
   if (list.length === 0) pendingPatchSignatures.delete(signature.id);
   else pendingPatchSignatures.set(signature.id, list);
-  if (!entry) return { patch, matched: false };
+
+  if (getStoreState) {
+    try {
+      const state = getStoreState();
+      const payload = entry.payload ?? {};
+      let mustKeep = false;
+      for (const field of entry.fields ?? []) {
+        if (!(field in payload)) continue;
+        const currentValue = (state as Record<string, unknown>)[field];
+        const serializedCurrent = stableSerialize(
+          normalizeForSignature(currentValue)
+        );
+        if (serializedCurrent !== payload[field]) {
+          mustKeep = true;
+          break;
+        }
+      }
+      if (mustKeep) {
+        return { patch, matched: false };
+      }
+    } catch {
+      // ignore state comparison failures
+    }
+  }
+
   const fields = entry.fields ?? [];
   let mutated = false;
   const filtered: ServerPatchT = { ...patch };
@@ -1202,16 +1371,69 @@ function filterEchoPatchIfAny(
   return { patch: filtered, matched: true };
 }
 
-function cloneSeatZones(z: Zones | undefined): Zones | null {
+function cloneSeatZones(
+  z: Zones | undefined,
+  seat: keyof GameState["zones"]
+): Zones | null {
   if (!z) return null;
+  const cloneList = (list: CardRef[]): CardRef[] =>
+    list.map((card) => prepareCardForSeat(card, seat));
   return {
-    spellbook: [...z.spellbook],
-    atlas: [...z.atlas],
-    hand: [...z.hand],
-    graveyard: [...z.graveyard],
-    battlefield: [...z.battlefield],
-    banished: [...z.banished],
+    spellbook: cloneList(z.spellbook),
+    atlas: cloneList(z.atlas),
+    hand: cloneList(z.hand),
+    graveyard: cloneList(z.graveyard),
+    battlefield: cloneList(z.battlefield),
+    banished: cloneList(z.banished),
   };
+}
+
+const ZONE_PILES: Array<keyof Zones> = [
+  "spellbook",
+  "atlas",
+  "hand",
+  "graveyard",
+  "battlefield",
+  "banished",
+];
+
+function removeCardInstanceFromSeat(
+  zones: Zones,
+  instanceId: string
+): { zones: Zones; changed: boolean } {
+  let changed = false;
+  const next: Zones = { ...zones };
+  for (const key of ZONE_PILES) {
+    const pile = zones[key] ?? [];
+    const filtered = pile.filter((card) => card?.instanceId !== instanceId);
+    if (filtered.length !== pile.length) {
+      next[key] = filtered;
+      changed = true;
+    }
+  }
+  return { zones: changed ? next : zones, changed };
+}
+
+function removeCardInstanceFromAllZones(
+  zones: GameState["zones"],
+  instanceId: string
+): { zones: GameState["zones"]; seats: PlayerKey[] } | null {
+  if (!zones) return null;
+  const result: GameState["zones"] = { ...zones };
+  const changedSeats: PlayerKey[] = [];
+  for (const seat of ["p1", "p2"] as PlayerKey[]) {
+    const seatZones = zones[seat];
+    if (!seatZones) continue;
+    const { zones: updated, changed } = removeCardInstanceFromSeat(
+      seatZones,
+      instanceId
+    );
+    if (changed) {
+      result[seat] = updated;
+      changedSeats.push(seat);
+    }
+  }
+  return changedSeats.length > 0 ? { zones: result, seats: changedSeats } : null;
 }
 
 function createZonesPatchFor(
@@ -1222,7 +1444,7 @@ function createZonesPatchFor(
   const seatList = Array.isArray(seats) ? seats : [seats];
   const payload: Partial<GameState["zones"]> = {};
   for (const seat of seatList) {
-    const seatZones = cloneSeatZones(zones[seat]);
+    const seatZones = cloneSeatZones(zones[seat], seat);
     if (!seatZones) continue;
     payload[seat] = seatZones;
   }
@@ -1798,38 +2020,34 @@ export const useGameStore = create<GameState>((set, get) => ({
       try {
         const p = patch as ServerPatchT;
         const sanitized: ServerPatchT = { ...p };
-        // Filter avatars: if actorKey known, allow only that seat; if unknown, allow present seats but remove 'tapped'
+        // Filter avatars: if actorKey known, allow only that seat; otherwise drop until actor identified
         if (p.avatars && typeof p.avatars === "object") {
-          const out: Partial<GameState["avatars"]> = {};
           const keys = Object.keys(p.avatars).filter(
             (k) => k === "p1" || k === "p2"
           ) as PlayerKey[];
           if (actorKey === "p1" || actorKey === "p2") {
-            // Keep only actor seat
+            const out: Partial<GameState["avatars"]> = {};
             const k = actorKey as PlayerKey;
             if (keys.includes(k)) {
-              const v = (p.avatars as GameState["avatars"])[k] as
-                | AvatarState
-                | undefined;
+              const v = (p.avatars as GameState["avatars"])[k];
               if (v && typeof v === "object") {
-                const rest = { ...(v as unknown as Record<string, unknown>) };
-                delete (rest as Record<string, unknown>)["tapped"];
-                (out as Record<string, unknown>)[k] = rest as unknown;
+                (out as Record<string, unknown>)[k] = {
+                  ...(v as Record<string, unknown>),
+                } as unknown;
               }
             }
-          } else {
-            // Actor unknown: allow optimistic avatar updates but strip tap intent
-            for (const k of keys) {
-              const v = (p.avatars as GameState["avatars"])[k];
-              if (!v || typeof v !== "object") continue;
-              const rest = { ...(v as Record<string, unknown>) };
-              delete rest.tapped;
-              (out as Record<string, unknown>)[k] = rest as unknown;
+            if (Object.keys(out).length > 0) {
+              sanitized.avatars = out as GameState["avatars"];
+            } else {
+              delete (sanitized as unknown as { avatars?: unknown }).avatars;
             }
-          }
-          if (Object.keys(out).length > 0) {
-            sanitized.avatars = out as GameState["avatars"];
           } else {
+            try {
+              console.warn(
+                "[net] trySendPatch: dropping avatars until actorKey is set",
+                { keys }
+              );
+            } catch {}
             delete (sanitized as unknown as { avatars?: unknown }).avatars;
           }
         }
@@ -1880,7 +2098,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     try {
       tr.sendAction(toSend);
       if (signatureInfo && signatureInfo.fields.length > 0) {
-        registerPatchSignature(signatureInfo.id, signatureInfo.fields);
+        registerPatchSignature(signatureInfo, toSend);
       }
       // Mark last local action timestamp so undo can wait for server ack ordering
       set({ lastLocalActionTs: Date.now() });
@@ -1917,40 +2135,36 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (!isAuthoritativeSnapshot) {
           try {
             const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
-            if (sanitized.avatars && typeof sanitized.avatars === "object") {
-              const out: Partial<GameState["avatars"]> = {};
-              const keys = Object.keys(sanitized.avatars).filter(
-                (k) => k === "p1" || k === "p2"
-              ) as PlayerKey[];
-              if (actorKey === "p1" || actorKey === "p2") {
-                const k = actorKey as PlayerKey;
-                if (keys.includes(k)) {
-                  const v = (sanitized.avatars as GameState["avatars"])[k] as
-                    | AvatarState
-                    | undefined;
-                  if (v && typeof v === "object") {
-                    const rest = {
-                      ...(v as unknown as Record<string, unknown>),
-                    };
-                    delete (rest as Record<string, unknown>)["tapped"];
-                    (out as Record<string, unknown>)[k] = rest as unknown;
-                  }
-                }
-              } else {
-                for (const k of keys) {
-                  const v = (sanitized.avatars as GameState["avatars"])[k];
-                  if (!v || typeof v !== "object") continue;
-                  const rest = { ...(v as Record<string, unknown>) };
-                  delete rest.tapped;
-                  (out as Record<string, unknown>)[k] = rest as unknown;
-                }
-              }
-              if (Object.keys(out).length > 0) {
-                sanitized.avatars = out as GameState["avatars"];
-              } else {
-                delete (sanitized as unknown as { avatars?: unknown }).avatars;
+        if (sanitized.avatars && typeof sanitized.avatars === "object") {
+          const keys = Object.keys(sanitized.avatars).filter(
+            (k) => k === "p1" || k === "p2"
+          ) as PlayerKey[];
+          if (actorKey === "p1" || actorKey === "p2") {
+            const out: Partial<GameState["avatars"]> = {};
+            const k = actorKey as PlayerKey;
+            if (keys.includes(k)) {
+              const v = (sanitized.avatars as GameState["avatars"])[k];
+              if (v && typeof v === "object") {
+                (out as Record<string, unknown>)[k] = {
+                  ...(v as Record<string, unknown>),
+                } as unknown;
               }
             }
+            if (Object.keys(out).length > 0) {
+              sanitized.avatars = out as GameState["avatars"];
+            } else {
+              delete (sanitized as unknown as { avatars?: unknown }).avatars;
+            }
+          } else {
+            try {
+              console.warn(
+                "[net] flushPendingPatches: dropping avatars until actorKey is set",
+                { keys }
+              );
+            } catch {}
+            delete (sanitized as unknown as { avatars?: unknown }).avatars;
+          }
+        }
             if (sanitized.zones && typeof sanitized.zones === "object") {
               if (actorKey === "p1" || actorKey === "p2") {
                 const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
@@ -1991,7 +2205,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Send each patch
         tr.sendAction(toSend);
         if (signatureInfo && signatureInfo.fields.length > 0) {
-          registerPatchSignature(signatureInfo.id, signatureInfo.fields);
+          registerPatchSignature(signatureInfo, toSend);
         }
       } catch (err) {
         sentAll = false;
@@ -2462,14 +2676,34 @@ export const useGameStore = create<GameState>((set, get) => ({
         typeof t === "number" ? Math.max(s.lastServerTs ?? 0, t) : Date.now();
       const extra: Partial<GameState> = {};
       if (replaceKeys.size > 0) {
-        // Authoritative snapshot: drop any queued patches to avoid reapplying stale actions
-        try {
-          console.debug(
-            "[net] applyServerPatch: clearing pendingPatches due to snapshot"
-          );
-        } catch {}
-        extra.pendingPatches = [] as unknown as GameState["pendingPatches"];
-        // Also clear transient selections to avoid UI referencing stale indices
+        const pending = s.pendingPatches ?? [];
+        const remainingPending: ServerPatchT[] = [];
+        if (pending.length > 0) {
+          try {
+            console.debug("[net] applyServerPatch: reconciling pending patches");
+          } catch {}
+          for (const queued of pending) {
+            if (!queued || typeof queued !== "object") continue;
+            const queuedPatch = queued as ServerPatchT;
+            const touchesCritical =
+              "permanents" in queuedPatch ||
+              "zones" in queuedPatch ||
+              "board" in queuedPatch;
+            if (!touchesCritical) {
+              remainingPending.push(queuedPatch);
+              continue;
+            }
+            const merged = deepMergeReplaceArrays(
+              next,
+              queuedPatch
+            ) as Partial<GameState>;
+            Object.assign(next, merged);
+            try {
+              console.debug("[net] applyServerPatch: applied pending after snapshot");
+            } catch {}
+          }
+        }
+        extra.pendingPatches = remainingPending;
         extra.selectedCard = null;
         extra.selectedPermanent = null;
         extra.previewCard = null;
@@ -2875,14 +3109,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       const def = TOKEN_BY_NAME[(name || "").toLowerCase()];
       if (!def) return s as GameState;
       const hand = [...s.zones[who].hand];
-      const card = {
+      const baseToken: CardRef = {
         cardId: newTokenInstanceId(def),
         variantId: null,
         name: def.name,
         type: "Token",
         slug: tokenSlug(def),
         thresholds: null,
-      } as CardRef;
+        instanceId: newZoneCardInstanceId(),
+      };
+      const card = prepareCardForSeat(baseToken, who);
       hand.push(card);
       get().log(`${who.toUpperCase()} adds token '${def.name}' to hand`);
       const zonesNext = {
@@ -2892,8 +3128,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: zonesNext };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
       return { zones: zonesNext } as Partial<GameState> as GameState;
@@ -2919,7 +3157,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
       {
         const patch: ServerPatchT = {
-          ...createPermanentsPatch(per),
+          ...createPermanentsPatch(per, at),
         };
         get().trySendPatch(patch);
       }
@@ -2948,7 +3186,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
       {
         const patch: ServerPatchT = {
-          ...createPermanentsPatch(per),
+          ...createPermanentsPatch(per, at),
         };
         get().trySendPatch(patch);
       }
@@ -2976,7 +3214,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           cur.card.name
         }' at #${cellNo} (now ${nextCount})`
       );
-      get().trySendPatch(createPermanentsPatch(per));
+      get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -3000,7 +3238,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         );
       }
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        get().trySendPatch(createPermanentsPatch(per, at));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -3037,7 +3275,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         );
       }
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        get().trySendPatch(createPermanentsPatch(per, at));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -3058,7 +3296,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Removed counter from '${cur.card.name}' at #${cellNo}`);
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        get().trySendPatch(createPermanentsPatch(per, at));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -3073,7 +3311,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       per[at] = list;
       get().log(`Detached token '${token.card.name}'`);
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        get().trySendPatch(createPermanentsPatch(per, at));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -3457,10 +3695,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   initLibraries: (who, spellbook, atlas) =>
     set((s) => {
-      const sub = {
+      const mapForSeat = (cards: CardRef[]) =>
+        cards.map((card) => prepareCardForSeat(card, who));
+      const sub: Zones = {
         ...s.zones[who],
-        spellbook: [...spellbook],
-        atlas: [...atlas],
+        spellbook: mapForSeat(spellbook as CardRef[]),
+        atlas: mapForSeat(atlas as CardRef[]),
         hand: [],
         graveyard: [],
         battlefield: [],
@@ -3470,9 +3710,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          // Send only my seat to avoid wiping opponent zones on the server
-          const patch: ServerPatchT = { zones: { [who]: sub } as unknown as GameState["zones"] };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
       return { zones: zonesNext } as Partial<GameState> as GameState;
@@ -3480,7 +3721,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   shuffleSpellbook: (who) =>
     set((s) => {
-      const pile = [...s.zones[who].spellbook];
+      const pile = [...s.zones[who].spellbook].map((card) =>
+        prepareCardForSeat(card, who)
+      );
       for (let i = pile.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pile[i], pile[j]] = [pile[j], pile[i]];
@@ -3493,8 +3736,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
       return { zones: zonesNext } as Partial<GameState> as GameState;
@@ -3502,7 +3747,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   shuffleAtlas: (who) =>
     set((s) => {
-      const pile = [...s.zones[who].atlas];
+      const pile = [...s.zones[who].atlas].map((card) =>
+        prepareCardForSeat(card, who)
+      );
       for (let i = pile.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pile[i], pile[j]] = [pile[j], pile[i]];
@@ -3515,8 +3762,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
       return { zones: zonesNext } as Partial<GameState> as GameState;
@@ -3532,13 +3781,17 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const pile =
         from === "spellbook"
-          ? [...s.zones[who].spellbook]
-          : [...s.zones[who].atlas];
+          ? [...s.zones[who].spellbook].map((card) =>
+              prepareCardForSeat(card, who)
+            )
+          : [...s.zones[who].atlas].map((card) =>
+              prepareCardForSeat(card, who)
+            );
       const hand = [...s.zones[who].hand];
       for (let i = 0; i < count; i++) {
         const c = pile.shift();
         if (!c) break;
-        hand.push(c);
+        hand.push(prepareCardForSeat(c, who));
       }
       const updated =
         from === "spellbook" ? { spellbook: pile } : { atlas: pile };
@@ -3552,8 +3805,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
 
@@ -3573,32 +3828,42 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const pile =
         from === "spellbook"
-          ? [...s.zones[who].spellbook]
-          : [...s.zones[who].atlas];
+          ? [...s.zones[who].spellbook].map((card) =>
+              prepareCardForSeat(card, who)
+            )
+          : [...s.zones[who].atlas].map((card) =>
+              prepareCardForSeat(card, who)
+            );
       const hand = [...s.zones[who].hand];
 
       for (let i = 0; i < count; i++) {
         const c = pile.pop();
         if (!c) break;
-        hand.push(c);
+        hand.push(prepareCardForSeat(c, who));
       }
 
       const updated =
         from === "spellbook" ? { spellbook: pile } : { atlas: pile };
       get().log(`${who.toUpperCase()} draws ${count} from bottom of ${from}`);
 
-      // Broadcast as a zones patch if online
+      const seatZones = { ...s.zones[who], ...updated, hand } as Zones;
+      const zonesNext = {
+        ...s.zones,
+        [who]: seatZones,
+      } as GameState["zones"];
+
       {
         const tr = get().transport;
         if (tr) {
-          const seatZones = { ...s.zones[who], ...updated, hand } as Zones;
-          const patch: ServerPatchT = { zones: { [who]: seatZones } as unknown as GameState["zones"] };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
 
       return {
-        zones: { ...s.zones, [who]: { ...s.zones[who], ...updated, hand } },
+        zones: zonesNext,
       } as Partial<GameState> as GameState;
     }),
 
@@ -3617,12 +3882,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       for (let i = 0; i < sbCount; i++) {
         const c = sb.shift();
         if (!c) break;
-        hand.push(c);
+        hand.push(prepareCardForSeat(c, who));
       }
       for (let i = 0; i < atCount; i++) {
         const c = at.shift();
         if (!c) break;
-        hand.push(c);
+        hand.push(prepareCardForSeat(c, who));
       }
       get().log(
         `${who.toUpperCase()} draws opening hand (${sbCount} SB + ${atCount} AT)`
@@ -3634,8 +3899,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { zones: { [who]: zonesNext[who] } as unknown as GameState["zones"] };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
       return { zones: zonesNext } as Partial<GameState> as GameState;
@@ -3811,9 +4078,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Non-site permanent: place on tile
       const per: Permanents = { ...s.permanents };
       const arr = [...(per[key] || [])];
+      const cardWithId = ensureCardInstanceId(card);
       arr.push({
         owner: (who === "p1" ? 1 : 2) as 1 | 2,
-        card,
+        card: cardWithId,
         offset: null,
         tilt: randomTilt(),
         instanceId: newPermanentInstanceId(),
@@ -3826,10 +4094,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       } as GameState["zones"];
 
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        const permanentsPatch = createPermanentsPatch(per, key);
         const zonePatch = createZonesPatchFor(zonesNext, who);
-        if (zonePatch) {
-          get().trySendPatch(zonePatch);
+        const combined: ServerPatchT = {
+          ...(permanentsPatch.permanents
+            ? { permanents: permanentsPatch.permanents }
+            : {}),
+          ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
+        };
+        if (Object.keys(combined).length > 0) {
+          get().trySendPatch(combined);
         }
       }
 
@@ -3971,9 +4245,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             dragFromHand: false,
           } as Partial<GameState> as GameState;
         }
+        const ensuredSiteCard = ensureCardInstanceId(card);
         const sites = {
           ...s.board.sites,
-          [key]: { owner: s.currentPlayer as 1 | 2, tapped: false, card },
+          [key]: {
+            owner: s.currentPlayer as 1 | 2,
+            tapped: false,
+            card: prepareCardForSeat(ensuredSiteCard, who),
+          },
         };
         get().log(
           `${who.toUpperCase()} plays site '${
@@ -3983,17 +4262,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         {
           const tr = get().transport;
           if (tr) {
-            const zonesNext = pileName
+            const boardNext = { ...s.board, sites } as GameState["board"];
+            const zonesAfter = pileName
               ? ({
                   ...s.zones,
                   [who]: { ...z, [pileName]: pile },
                 } as GameState["zones"])
               : s.zones;
-            const patch: ServerPatchT = {
-              zones: zonesNext,
-              board: { ...s.board, sites } as GameState["board"],
-            };
-            get().trySendPatch(patch);
+            const zonePatch = pileName
+              ? createZonesPatchFor(zonesAfter, who)
+              : null;
+            const combined: ServerPatchT = zonePatch?.zones
+              ? { board: boardNext, zones: zonePatch.zones }
+              : { board: boardNext };
+            get().trySendPatch(combined);
           }
         }
         if (!s.avatars[who]?.tapped) {
@@ -4010,7 +4292,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         return {
           zones: pileName
-            ? { ...s.zones, [who]: { ...z, [pileName]: pile } }
+            ? ({
+                ...s.zones,
+                [who]: { ...z, [pileName]: pile },
+              } as GameState["zones"])
             : s.zones,
           board: { ...s.board, sites },
           dragFromPile: null,
@@ -4035,9 +4320,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Non-site
       const per: Permanents = { ...s.permanents };
       const arr = [...(per[key] || [])];
+      const cardWithId = prepareCardForSeat(card, who);
       arr.push({
         owner: (who === "p1" ? 1 : 2) as 1 | 2,
-        card,
+        card: cardWithId,
         offset: null,
         tilt: randomTilt(),
         instanceId: newPermanentInstanceId(),
@@ -4055,12 +4341,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           : null;
 
       {
-        get().trySendPatch(createPermanentsPatch(per));
-        if (zonesNext) {
-          const zonePatch = createZonesPatchFor(zonesNext, who);
-          if (zonePatch) {
-            get().trySendPatch(zonePatch);
-          }
+        const permanentsPatch = createPermanentsPatch(per, key);
+        const zonePatch = zonesNext
+          ? createZonesPatchFor(zonesNext, who)
+          : null;
+        const combined: ServerPatchT = {
+          ...(permanentsPatch.permanents
+            ? { permanents: permanentsPatch.permanents }
+            : {}),
+          ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
+        };
+        if (Object.keys(combined).length > 0) {
+          get().trySendPatch(combined);
         }
       }
 
@@ -4108,7 +4400,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Remove the card from the corresponding pile
       const z = { ...s.zones[who] };
       const pileName = from as keyof Zones;
-      const pile = [...(z[pileName] as CardRef[])];
+      const pile = [...(z[pileName] as CardRef[])].map((card) =>
+        prepareCardForSeat(card, who)
+      );
       let removedIndex = pile.findIndex((c) => c === card);
       if (removedIndex < 0) {
         removedIndex = pile.findIndex(
@@ -4129,27 +4423,29 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       // Add the card to hand
-      const hand = [...z.hand, removed];
+      const ensured = prepareCardForSeat(removed, who);
+      const hand = [...z.hand, ensured];
       get().log(
         `${who.toUpperCase()} draws '${card.name}' from ${from} to hand`
       );
 
-      // Send patch to server
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...z, [pileName]: pile, hand },
+      } as GameState["zones"];
+
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = {
-            zones: {
-              ...s.zones,
-              [who]: { ...z, [pileName]: pile, hand },
-            } as GameState["zones"],
-          };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
 
       return {
-        zones: { ...s.zones, [who]: { ...z, [pileName]: pile, hand } },
+        zones: zonesNext,
         dragFromPile: null,
       } as Partial<GameState> as GameState;
     }),
@@ -4172,7 +4468,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const zones = { ...s.zones[who] };
       const hand = [...zones.hand];
-      const targetPile = [...(zones[pile] as CardRef[])];
+      const targetPile = [...(zones[pile] as CardRef[])].map((card) =>
+        prepareCardForSeat(card, who)
+      );
 
       // Remove card from hand
       const cardToMove = hand.splice(selectedCard.index, 1)[0];
@@ -4180,36 +4478,38 @@ export const useGameStore = create<GameState>((set, get) => ({
         get().log(`Card at index ${selectedCard.index} not found in hand`);
         return s;
       }
+      const ensuredCard = prepareCardForSeat(cardToMove, who);
 
       // Add to pile at specified position
       if (position === "top") {
-        targetPile.unshift(cardToMove);
+        targetPile.unshift(ensuredCard);
       } else {
-        targetPile.push(cardToMove);
+        targetPile.push(ensuredCard);
       }
 
       get().log(
         `${who.toUpperCase()} moves '${
-          cardToMove.name
+          ensuredCard.name
         }' from hand to ${position} of ${pile}`
       );
 
-      // Send patch to server
+      const zonesNext = {
+        ...s.zones,
+        [who]: { ...zones, hand, [pile]: targetPile },
+      } as GameState["zones"];
+
       {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = {
-            zones: {
-              ...s.zones,
-              [who]: { ...zones, hand, [pile]: targetPile },
-            } as GameState["zones"],
-          };
-          get().trySendPatch(patch);
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) {
+            get().trySendPatch(zonePatch);
+          }
         }
       }
 
       return {
-        zones: { ...s.zones, [who]: { ...zones, hand, [pile]: targetPile } },
+        zones: zonesNext,
         selectedCard: null,
       } as Partial<GameState> as GameState;
     }),
@@ -4247,7 +4547,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch = createPermanentsPatch(per ?? s.permanents);
+          const patch = createPermanentsPatch(per ?? s.permanents, [
+            fromKey,
+            toKey,
+          ]);
           get().trySendPatch(patch);
         }
       }
@@ -4295,7 +4598,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch = createPermanentsPatch(per ?? s.permanents);
+          const patch = createPermanentsPatch(per ?? s.permanents, [
+            fromKey,
+            toKey,
+          ]);
           console.log("[store] Sending patch to server ->", {
             patchKeys: Object.keys(patch),
             permanentsKeys: Object.keys(patch.permanents || {}),
@@ -4322,7 +4628,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch = createPermanentsPatch(per);
+          const patch = createPermanentsPatch(per, at);
           get().trySendPatch(patch);
         }
       }
@@ -4357,7 +4663,7 @@ per[at] = arr;
         }' at #${cellNo}`
       );
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        get().trySendPatch(createPermanentsPatch(per, at));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -4380,18 +4686,21 @@ per[at] = arr;
       }
       per[at] = arr;
       const owner: PlayerKey = item.owner === 1 ? "p1" : "p2";
-      const zones = { ...s.zones } as Record<PlayerKey, Zones>;
-      const z = { ...zones[owner] };
-      if (target === "hand") z.hand = [...z.hand, item.card];
+      const zonesNext = { ...s.zones } as Record<PlayerKey, Zones>;
+      const seatZones = { ...zonesNext[owner] };
+      const movedCard = prepareCardForSeat(item.card, owner);
+      if (target === "hand") seatZones.hand = [...seatZones.hand, movedCard];
       else if (target === "graveyard")
-        z.graveyard = [...z.graveyard, item.card];
+        seatZones.graveyard = [...seatZones.graveyard, movedCard];
       else if (target === "spellbook") {
-        const pile = [...z.spellbook];
-        if (position === "top") pile.unshift(item.card);
-        else pile.push(item.card);
-        z.spellbook = pile;
-      } else z.banished = [...z.banished, item.card];
-      zones[owner] = z;
+        const pile = [...seatZones.spellbook];
+        if (position === "top") pile.unshift(movedCard);
+        else pile.push(movedCard);
+        seatZones.spellbook = pile;
+      } else {
+        seatZones.banished = [...seatZones.banished, movedCard];
+      }
+      zonesNext[owner] = seatZones as Zones;
       const cell = at.split(",");
       const x = Number(cell[0] || 0);
       const y = Number(cell[1] || 0);
@@ -4409,15 +4718,26 @@ per[at] = arr;
           item.card.name
         }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
-      const zonesNext = zones as GameState["zones"];
       {
-        get().trySendPatch(createPermanentsPatch(per));
-        const zonePatch = createZonesPatchFor(zonesNext, owner);
-        if (zonePatch) {
-          get().trySendPatch(zonePatch);
+        const permanentsPatch = createPermanentsPatch(per, at);
+        const zonePatch = createZonesPatchFor(
+          zonesNext as GameState["zones"],
+          owner
+        );
+        const combined: ServerPatchT = {
+          ...(permanentsPatch.permanents
+            ? { permanents: permanentsPatch.permanents }
+            : {}),
+          ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
+        };
+        if (Object.keys(combined).length > 0) {
+          get().trySendPatch(combined);
         }
       }
-      return { permanents: per, zones } as Partial<GameState> as GameState;
+      return {
+        permanents: per,
+        zones: zonesNext as GameState["zones"],
+      } as Partial<GameState> as GameState;
     }),
 
   // Move a site from the board to a target zone
@@ -4441,15 +4761,21 @@ per[at] = arr;
       delete sites[key];
       const zones = { ...s.zones } as Record<PlayerKey, Zones>;
       const z = { ...zones[owner] };
-      if (target === "hand") z.hand = [...z.hand, site.card];
-      else if (target === "graveyard")
-        z.graveyard = [...z.graveyard, site.card];
-      else if (target === "atlas") {
+      const movedSiteCard = site.card
+        ? prepareCardForSeat(site.card, owner)
+        : site.card;
+      if (target === "hand" && movedSiteCard) {
+        z.hand = [...z.hand, movedSiteCard];
+      } else if (target === "graveyard" && movedSiteCard) {
+        z.graveyard = [...z.graveyard, movedSiteCard];
+      } else if (target === "atlas" && movedSiteCard) {
         const pile = [...z.atlas];
-        if (position === "top") pile.unshift(site.card);
-        else pile.push(site.card);
+        if (position === "top") pile.unshift(movedSiteCard);
+        else pile.push(movedSiteCard);
         z.atlas = pile;
-      } else z.banished = [...z.banished, site.card];
+      } else if (movedSiteCard) {
+        z.banished = [...z.banished, movedSiteCard];
+      }
       zones[owner] = z;
       const cellNo = y * s.board.size.w + x + 1;
       const label =
@@ -4489,8 +4815,23 @@ per[at] = arr;
       if (!item) return s;
       const fromOwner = item.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
-      arr[index] = { ...item, owner: newOwner };
+      const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
+      arr[index] = {
+        ...item,
+        owner: newOwner,
+        card: prepareCardForSeat(item.card, newOwnerSeat),
+      };
       per[at] = arr;
+      const instanceId = item.card.instanceId;
+      let zonesNext = s.zones;
+      let changedSeats: PlayerKey[] = [];
+      if (instanceId) {
+        const removal = removeCardInstanceFromAllZones(s.zones, instanceId);
+        if (removal) {
+          zonesNext = removal.zones;
+          changedSeats = removal.seats;
+        }
+      }
       const cell = at.split(",");
       const x = Number(cell[0] || 0);
       const y = Number(cell[1] || 0);
@@ -4499,9 +4840,29 @@ per[at] = arr;
         `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
       );
       {
-        get().trySendPatch(createPermanentsPatch(per));
+        const permanentsPatch = createPermanentsPatch(per, at);
+        const patch: ServerPatchT = {
+          ...(permanentsPatch.permanents
+            ? { permanents: permanentsPatch.permanents }
+            : {}),
+        };
+        if (changedSeats.length > 0 && zonesNext) {
+          const zonePatch = createZonesPatchFor(
+            zonesNext,
+            changedSeats as Array<keyof GameState["zones"]>
+          );
+          if (zonePatch?.zones) {
+            patch.zones = zonePatch.zones;
+          }
+        }
+        if (Object.keys(patch).length > 0) {
+          get().trySendPatch(patch);
+        }
       }
-      return { permanents: per } as Partial<GameState> as GameState;
+      return {
+        permanents: per,
+        ...(zonesNext !== s.zones ? { zones: zonesNext } : {}),
+      } as Partial<GameState> as GameState;
     }),
 
   // Transfer control of a site at a given x,y (toggle if 'to' not provided)
@@ -4513,7 +4874,26 @@ per[at] = arr;
       if (!site) return s;
       const fromOwner = site.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
-      const sites = { ...s.board.sites, [key]: { ...site, owner: newOwner } };
+      const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
+      const updatedSiteCard = site.card
+        ? prepareCardForSeat(site.card, newOwnerSeat)
+        : site.card;
+      const sites = {
+        ...s.board.sites,
+        [key]: { ...site, owner: newOwner, card: updatedSiteCard },
+      };
+      let zonesNext = s.zones;
+      let changedSeats: PlayerKey[] = [];
+      if (updatedSiteCard?.instanceId) {
+        const removal = removeCardInstanceFromAllZones(
+          s.zones,
+          updatedSiteCard.instanceId
+        );
+        if (removal) {
+          zonesNext = removal.zones;
+          changedSeats = removal.seats;
+        }
+      }
       const cellNo = y * s.board.size.w + x + 1;
       const name = site.card?.name || `Site #${cellNo}`;
       get().log(
@@ -4522,10 +4902,20 @@ per[at] = arr;
       {
         const boardNext = { ...s.board, sites } as GameState["board"];
         const patch: ServerPatchT = { board: boardNext };
+        if (changedSeats.length > 0 && zonesNext) {
+          const zonePatch = createZonesPatchFor(
+            zonesNext,
+            changedSeats as Array<keyof GameState["zones"]>
+          );
+          if (zonePatch?.zones) {
+            patch.zones = zonePatch.zones;
+          }
+        }
         get().trySendPatch(patch);
       }
       return {
         board: { ...s.board, sites },
+        ...(zonesNext !== s.zones ? { zones: zonesNext } : {}),
       } as Partial<GameState> as GameState;
     }),
 
@@ -5121,3 +5511,5 @@ per[at] = arr;
       return reset as GameState;
     }),
 }));
+
+getStoreState = useGameStore.getState;

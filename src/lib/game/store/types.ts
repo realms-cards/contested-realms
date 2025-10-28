@@ -104,6 +104,8 @@ export type CardRef = {
   type: string | null;
   slug?: string | null; // variant slug for images
   thresholds?: Partial<Thresholds> | null; // cost/requirements
+  owner?: PlayerKey | null;
+  instanceId?: string | null;
 };
 
 export type Zones = {

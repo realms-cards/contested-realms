@@ -39,8 +39,8 @@ import {
   CARD_LONG,
   CARD_SHORT,
 } from "@/lib/game/constants";
-import { useGameStore } from "@/lib/game/store";
 import { Physics } from "@/lib/game/physics";
+import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 
