@@ -360,6 +360,75 @@ function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
   };
 }
 
+function buildBattlefieldFromPermanents(
+  permanents: MatchPermanents | null | undefined
+): Record<Seat, unknown[]> {
+  const result: Record<Seat, unknown[]> = { p1: [], p2: [] };
+  if (!permanents) return result;
+  for (const entries of Object.values(permanents)) {
+    if (!Array.isArray(entries)) continue;
+    for (const item of entries) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      const ownerValue = record.owner;
+      const seat: Seat = ownerValue === 2 ? "p2" : "p1";
+      const card = record.card;
+      const normalized = normalizeZoneCard(card, seat);
+      if (normalized) {
+        normalized.owner = seat;
+        result[seat].push(normalized);
+      }
+    }
+  }
+  return result;
+}
+
+function zoneCardsEqual(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
+  }
+  return true;
+}
+
+function syncBattlefieldZones(match: MatchState, patch: MatchPatch): MatchPatch {
+  if (!match.game) return patch;
+  const battlefield = buildBattlefieldFromPermanents(match.game.permanents);
+  const baseZones = match.game.zones ?? {};
+  const nextZones: ZonesState = {
+    p1: ensurePlayerZones(baseZones?.p1, "p1"),
+    p2: ensurePlayerZones(baseZones?.p2, "p2"),
+  };
+  const dirtySeats: Seat[] = [];
+  for (const seat of ["p1", "p2"] as Seat[]) {
+    const updated = ensurePlayerZones(nextZones[seat], seat);
+    if (!zoneCardsEqual(updated.battlefield, battlefield[seat])) {
+      updated.battlefield = battlefield[seat];
+      nextZones[seat] = updated;
+      dirtySeats.push(seat);
+    }
+  }
+  if (dirtySeats.length === 0 && !patch.permanents) {
+    return patch;
+  }
+  if (dirtySeats.length === 0) {
+    dirtySeats.push("p1", "p2");
+  }
+  match.game = {
+    ...(match.game as Record<string, unknown>),
+    zones: nextZones,
+  } as MatchGameState;
+
+  const existingPatchZones = isRecord(patch.zones) ? { ...patch.zones } : {};
+  for (const seat of dirtySeats) {
+    existingPatchZones[seat] = nextZones[seat];
+  }
+  return {
+    ...patch,
+    zones: existingPatchZones as ZonesState,
+  };
+}
+
 function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
   if (!isRecord(value)) {
     return { ...fallback };
@@ -942,6 +1011,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             match.game.permanents = normalized;
           }
         }
+
+        patchToApply = syncBattlefieldZones(match, patchToApply);
 
         const nextMatchEnded = Boolean(match.game && match.game.matchEnded);
         if (!prevMatchEnded && nextMatchEnded) {
@@ -1563,4 +1634,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 export const __testZoneHelpers = {
   normalizeZoneCardForSeat: normalizeZoneCard,
   ensurePlayerZonesForSeat: ensurePlayerZones,
+  buildBattlefieldFromPermanentsForTest: buildBattlefieldFromPermanents,
+  syncBattlefieldZonesForTest: syncBattlefieldZones,
 };
