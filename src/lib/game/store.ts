@@ -364,10 +364,12 @@ export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
   instanceId?: string | null;
+  tapVersion?: number;
+  version?: number;
   // Optional attachment to a permanent at the same tile
   attachedTo?: { at: CellKey; index: number } | null;
   // Generic numeric counter displayed on the card (e.g., +1 counters)
-  counters?: number; // absent/0 => no counter badge
+  counters?: number | null; // absent/0 => no counter badge
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -866,10 +868,13 @@ export type ServerPatchT = Partial<{
 
 // Small random visual tilt for permanents to reduce overlap uniformity (radians ~ -0.05..+0.05)
 const randomTilt = () => Math.random() * 0.1 - 0.05;
+const INSTANCE_PREFIX = Math.random().toString(36).slice(2, 6);
+let permanentInstanceSeq = 0;
+let cardInstanceSeq = 0;
 const newPermanentInstanceId = () =>
-  `perm_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+  `perm_${INSTANCE_PREFIX}_${Date.now().toString(36)}_${permanentInstanceSeq++}`;
 const newZoneCardInstanceId = () =>
-  `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+  `card_${INSTANCE_PREFIX}_${Date.now().toString(36)}_${cardInstanceSeq++}`;
 
 function ensureCardInstanceId(card: CardRef): CardRef {
   if (card.instanceId && card.instanceId.length > 0) {
@@ -974,21 +979,36 @@ function normalizeCardRefList(
 // Move a permanent between cells with optional new offset while preserving
 // existing behavior around tilt and offset. Returns a new permanents map and
 // the moved card's name for logging.
+type MovePermanentResult = {
+  per: Permanents;
+  movedName: string;
+  removed: PermanentItem[];
+  added: PermanentItem[];
+  updated: PermanentItem[];
+};
+
 function movePermanentCore(
   perIn: Permanents,
   fromKey: CellKey,
   index: number,
   toKey: CellKey,
   newOffset: [number, number] | null
-): { per: Permanents; movedName: string } {
+): MovePermanentResult {
   const per: Permanents = { ...perIn };
   const fromArr = [...(per[fromKey] || [])];
   const spliced = fromArr.splice(index, 1);
   const item = spliced[0];
   if (!item) {
     // Nothing to move; return original state
-    return { per: perIn, movedName: "" };
+    return { per: perIn, movedName: "", removed: [], added: [], updated: [] };
   }
+
+  const removedItems: PermanentItem[] = [];
+  const addedItems: PermanentItem[] = [];
+  const updatedItems: PermanentItem[] = [];
+
+  removedItems.push(item);
+  const baseVersion = ensurePermanentVersion(item);
 
   // Find any tokens attached to this permanent
   const attachedTokenIndices: number[] = [];
@@ -1009,15 +1029,17 @@ function movePermanentCore(
     .forEach((tokenIdx) => {
       const removed = fromArr.splice(tokenIdx, 1)[0];
       if (removed) {
+        removedItems.push(removed);
         attachedTokens.unshift(removed); // Add to front to maintain order
       }
     });
 
   // Update indices for any remaining attachments in fromArr
   // (since we removed items, indices may have shifted)
-  fromArr.forEach((perm) => {
+  fromArr.forEach((perm, idx) => {
     if (perm.attachedTo && perm.attachedTo.at === fromKey) {
-      let newIndex = perm.attachedTo.index;
+      const currentAttached = perm.attachedTo;
+      let newIndex = currentAttached.index;
       // Count how many items were removed before this attachment's target
       for (const removedIdx of attachedTokenIndices) {
         if (removedIdx < perm.attachedTo.index) {
@@ -1027,11 +1049,20 @@ function movePermanentCore(
       if (index < perm.attachedTo.index) {
         newIndex--; // Also account for the main permanent being moved
       }
-      perm.attachedTo.index = newIndex;
+      if (newIndex !== currentAttached.index) {
+        const nextAttachment = { ...currentAttached, index: newIndex };
+        const updatedItem = bumpPermanentVersion({
+          ...perm,
+          attachedTo: nextAttachment,
+        });
+        fromArr[idx] = updatedItem;
+        updatedItems.push(updatedItem);
+      }
     }
   });
 
   const toArr = [...(per[toKey] || [])];
+  const toArrStartLen = toArr.length;
   const newIndex = toArr.length; // The index where the permanent will be placed
 
   // When newOffset is null, keep existing offset; when provided, set it.
@@ -1040,21 +1071,33 @@ function movePermanentCore(
     newOffset == null
       ? item.tilt == null
         ? { ...item, tilt: randomTilt() }
-        : item
+        : { ...item }
       : { ...item, offset: newOffset, tilt: item.tilt ?? randomTilt() };
+  toPush.version = baseVersion + 1;
   toArr.push(toPush);
 
   // Add attached tokens with updated attachment references
   attachedTokens.forEach((token) => {
+    const tokenVersion = ensurePermanentVersion(token) + 1;
     toArr.push({
       ...token,
       attachedTo: { at: toKey, index: newIndex },
+      version: tokenVersion,
     });
   });
 
   per[fromKey] = fromArr;
   per[toKey] = toArr;
-  return { per, movedName: item.card.name };
+  const addedSlice = toArr.slice(toArrStartLen);
+  addedItems.push(...addedSlice);
+
+  return {
+    per,
+    movedName: item.card.name,
+    removed: removedItems,
+    added: addedItems,
+    updated: updatedItems,
+  };
 }
 
 // Build an updated avatars record with a new position/offset for a player.
@@ -1080,20 +1123,90 @@ function mergeArrayByInstanceId(
   baseArr: unknown[],
   patchArr: unknown[]
 ): unknown[] {
-  const baseMap = new Map<string, unknown>();
-  for (const item of baseArr) {
-    const id = extractInstanceId(item);
-    if (id) baseMap.set(id, item);
-  }
-  const result: unknown[] = [];
+  const patchMap = new Map<string, Record<string, unknown>>();
   for (const item of patchArr) {
     const id = extractInstanceId(item);
-    if (id && baseMap.has(id)) {
-      const merged = deepMergeReplaceArrays(baseMap.get(id), item);
-      result.push(merged);
-      baseMap.delete(id);
+    if (id && item && typeof item === "object") {
+      patchMap.set(id, item as Record<string, unknown>);
+    }
+  }
+  const result: unknown[] = [];
+  const seen = new Set<string>();
+  for (const baseItem of baseArr) {
+    const id = extractInstanceId(baseItem);
+    if (id && patchMap.has(id) && baseItem && typeof baseItem === "object") {
+      const baseRecord = baseItem as Record<string, unknown>;
+      const patchRecord = patchMap.get(id) as Record<string, unknown>;
+      const shouldRemove = patchRecord.__remove === true;
+      const merged: Record<string, unknown> = { ...baseRecord };
+      const baseTapVersion = Number(baseRecord.tapVersion ?? 0);
+      const patchTapVersionRaw = patchRecord.tapVersion;
+      const patchTapVersion =
+        typeof patchTapVersionRaw === "number" ? patchTapVersionRaw : null;
+      const allowTapUpdate =
+        patchTapVersion !== null && patchTapVersion >= baseTapVersion;
+      const baseVersion = Number(baseRecord.version ?? 0);
+      const patchVersionRaw = patchRecord.version;
+      const patchVersion =
+        typeof patchVersionRaw === "number" ? patchVersionRaw : null;
+      const allowGenericUpdate =
+        patchVersion === null ? true : patchVersion >= baseVersion;
+      if (!shouldRemove) {
+        for (const [key, value] of Object.entries(patchRecord)) {
+          if (key === "instanceId" || key === "__remove" || value === undefined)
+            continue;
+          if (key === "tapped") {
+            if (allowTapUpdate) {
+              merged.tapped = value;
+              merged.tapVersion = patchTapVersion;
+            }
+            continue;
+          }
+          if (key === "tapVersion") {
+            if (allowTapUpdate) merged.tapVersion = patchTapVersion;
+            continue;
+          }
+          if (key === "version") {
+            if (allowGenericUpdate) merged.version = patchVersion;
+            continue;
+          }
+          if (!allowGenericUpdate) {
+            continue;
+          }
+          merged[key] = value;
+        }
+        if (!allowTapUpdate && baseTapVersion !== undefined) {
+          merged.tapVersion = baseTapVersion;
+        }
+        if (!allowGenericUpdate && baseVersion !== undefined) {
+          merged.version = baseVersion;
+        } else if (allowGenericUpdate && patchVersion !== null) {
+          merged.version = patchVersion;
+        }
+        result.push(merged);
+      }
+      seen.add(id);
+      patchMap.delete(id);
+      if (shouldRemove) {
+        continue;
+      }
     } else {
-      result.push(item);
+      result.push(baseItem);
+      if (id) seen.add(id);
+    }
+  }
+  for (const item of patchArr) {
+    const id = extractInstanceId(item);
+    if (!id || !seen.has(id)) {
+      if (item && typeof item === "object") {
+        const record = { ...(item as Record<string, unknown>) };
+        if (record.__remove === true) continue;
+        delete record.__remove;
+        result.push(record);
+      } else {
+        result.push(item);
+      }
+      if (id) seen.add(id);
     }
   }
   return result;
@@ -1156,6 +1269,215 @@ function createPermanentsPatch(
   return {
     permanents: payload as GameState["permanents"],
   } as ServerPatchT;
+}
+
+type PermanentDeltaUpdate = {
+  at: CellKey;
+  entry: Partial<PermanentItem>;
+  remove?: boolean;
+};
+
+function createPermanentDeltaPatch(
+  updates: PermanentDeltaUpdate[]
+): ServerPatchT | null {
+  if (!updates || updates.length === 0) return null;
+  const payload: Record<string, PermanentItem[]> = {};
+  for (const { at, entry, remove } of updates) {
+    const id = entry.instanceId;
+    if (!id || typeof id !== "string" || id.length === 0) {
+      return null;
+    }
+    const target = (payload[at] ??= []);
+    const record: Record<string, unknown> = { instanceId: id };
+    if (remove) {
+      record.__remove = true;
+    }
+    for (const [key, value] of Object.entries(entry)) {
+      if (key === "instanceId" || value === undefined) continue;
+      record[key] = value;
+    }
+    target.push(record as PermanentItem);
+  }
+  return {
+    permanents: payload as GameState["permanents"],
+  } as ServerPatchT;
+}
+
+function ensurePermanentInstanceId(item: PermanentItem): string | null {
+  if (item.instanceId && item.instanceId.length > 0) {
+    return item.instanceId;
+  }
+  const cardInst =
+    item.card && typeof item.card.instanceId === "string"
+      ? item.card.instanceId
+      : null;
+  return cardInst && cardInst.length > 0 ? cardInst : null;
+}
+
+function ensurePermanentVersion(item: PermanentItem): number {
+  const raw = item.version;
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
+    ? raw
+    : 0;
+}
+
+function normalizePermanentItem(item: PermanentItem | null | undefined): PermanentItem | null {
+  if (!item) return null;
+  const card = ensureCardInstanceId(item.card);
+  let instanceId = item.instanceId;
+  if (!instanceId || instanceId.length === 0) {
+    instanceId = card.instanceId ?? newPermanentInstanceId();
+  }
+  const tapVersion =
+    typeof item.tapVersion === "number" && Number.isFinite(item.tapVersion)
+      ? item.tapVersion
+      : 0;
+  const version = ensurePermanentVersion(item);
+  const normalized: PermanentItem = {
+    ...item,
+    card,
+    instanceId,
+    tapVersion,
+    version,
+  };
+  return normalized;
+}
+
+function normalizePermanentsRecord(
+  per: Permanents | undefined
+): Permanents | undefined {
+  if (!per) return per;
+  const result: Permanents = {};
+  for (const [cell, list] of Object.entries(per)) {
+    if (!Array.isArray(list)) {
+      result[cell] = [];
+      continue;
+    }
+    const normalizedList: PermanentItem[] = [];
+    for (const entry of list) {
+      const normalized = normalizePermanentItem(entry);
+      if (normalized) normalizedList.push(normalized);
+    }
+    result[cell] = normalizedList;
+  }
+  return result;
+}
+
+function bumpPermanentVersion<T extends PermanentItem>(
+  item: T,
+  inc = 1
+): T {
+  const nextVersion = ensurePermanentVersion(item) + inc;
+  return { ...item, version: nextVersion } as T;
+}
+
+function cloneCardForPatch(card: CardRef): CardRef {
+  return {
+    ...card,
+    thresholds: card.thresholds
+      ? { ...(card.thresholds as Partial<Thresholds>) }
+      : card.thresholds ?? null,
+  };
+}
+
+function buildMoveDeltaPatch(
+  fromKey: CellKey,
+  toKey: CellKey,
+  removed: PermanentItem[],
+  updated: PermanentItem[],
+  added: PermanentItem[],
+  per: Permanents,
+  prevPer: Permanents
+): ServerPatchT {
+  const deltaUpdates: PermanentDeltaUpdate[] = [];
+  let deltaValid = true;
+  for (const entry of removed) {
+    const id = ensurePermanentInstanceId(entry);
+    if (!id) {
+      deltaValid = false;
+      break;
+    }
+    deltaUpdates.push({
+      at: fromKey,
+      entry: { instanceId: id },
+      remove: true,
+    });
+  }
+  if (deltaValid) {
+    for (const entry of updated) {
+      const id = ensurePermanentInstanceId(entry);
+      if (!id) {
+        deltaValid = false;
+        break;
+      }
+      const patchEntry: Partial<PermanentItem> = {
+        instanceId: id,
+      };
+      if (entry.attachedTo !== undefined) {
+        patchEntry.attachedTo = entry.attachedTo
+          ? { ...entry.attachedTo }
+          : entry.attachedTo ?? null;
+      }
+      if (entry.offset !== undefined) patchEntry.offset = entry.offset;
+      if (entry.tilt !== undefined) patchEntry.tilt = entry.tilt;
+      if (entry.tapped !== undefined) patchEntry.tapped = entry.tapped;
+      if (entry.tapVersion !== undefined)
+        patchEntry.tapVersion = entry.tapVersion;
+      if (entry.counters !== undefined) {
+        patchEntry.counters = entry.counters;
+      }
+      if (entry.version !== undefined) {
+        patchEntry.version = entry.version;
+      }
+      deltaUpdates.push({
+        at: fromKey,
+        entry: patchEntry,
+      });
+    }
+  }
+  if (deltaValid) {
+    for (const entry of added) {
+      const id = ensurePermanentInstanceId(entry);
+      if (!id) {
+        deltaValid = false;
+        break;
+      }
+      const patchEntry: Partial<PermanentItem> = {
+        instanceId: id,
+        owner: entry.owner,
+        card: cloneCardForPatch(entry.card),
+      };
+      if (entry.offset !== undefined) patchEntry.offset = entry.offset;
+      if (entry.tilt !== undefined) patchEntry.tilt = entry.tilt;
+      if (entry.tapped !== undefined) patchEntry.tapped = entry.tapped;
+      if (entry.tapVersion !== undefined)
+        patchEntry.tapVersion = entry.tapVersion;
+      if (entry.attachedTo !== undefined) {
+        patchEntry.attachedTo = entry.attachedTo
+          ? { ...entry.attachedTo }
+          : entry.attachedTo ?? null;
+      }
+      if (entry.counters !== undefined) {
+        patchEntry.counters = entry.counters;
+      }
+      if (entry.version !== undefined) {
+        patchEntry.version = entry.version;
+      }
+      deltaUpdates.push({
+        at: toKey,
+        entry: patchEntry,
+      });
+    }
+  }
+  const deltaPatch =
+    deltaValid && deltaUpdates.length > 0
+      ? createPermanentDeltaPatch(deltaUpdates)
+      : null;
+  const fallbackPatch = createPermanentsPatch(per ?? prevPer, [
+    fromKey,
+    toKey,
+  ]);
+  return deltaPatch ?? fallbackPatch;
 }
 
 const PATCH_SIGNATURE_TTL_MS = 7_000;
@@ -1453,6 +1775,10 @@ function createZonesPatchFor(
     : null;
 }
 
+function clonePatchForQueue(patch: ServerPatchT): ServerPatchT {
+  return JSON.parse(JSON.stringify(patch)) as ServerPatchT;
+}
+
 // Merge console events by stable key and chronological order, trimming to MAX_EVENTS.
 function mergeEvents(prev: GameEvent[], add: GameEvent[]): GameEvent[] {
   const m = new Map<string, GameEvent>();
@@ -1500,7 +1826,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   transportSubscriptions: [],
   // Actor seat for online play; null in offline/hotseat
   actorKey: null,
-  setActorKey: (key) =>
+  setActorKey: (key) => {
     set((state) => {
       if (state.actorKey === key) return state as GameState;
       if (!key) {
@@ -1523,7 +1849,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         history: promotedHistory.slice(-10),
         historyByPlayer: nextHistoryByPlayer,
       } as Partial<GameState> as GameState;
-    }),
+    });
+    if (key) {
+      try {
+        get().flushPendingPatches();
+      } catch {}
+    }
+  },
   // Match end state
   matchEnded: false,
   winner: null,
@@ -2015,11 +2347,44 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isAuthoritativeSnapshot = !!(
       replaceKeysCandidate && replaceKeysCandidate.length > 0
     );
+    if (!isAuthoritativeSnapshot) {
+      const patchObj = patch as ServerPatchT;
+      const touchesSeatFields =
+        (patchObj.avatars && typeof patchObj.avatars === "object") ||
+        (patchObj.zones && typeof patchObj.zones === "object");
+      if (!actorKey && touchesSeatFields) {
+        set((s) => {
+          const queue = Array.isArray(s.pendingPatches)
+            ? s.pendingPatches
+            : [];
+          return {
+            pendingPatches: [...queue, clonePatchForQueue(patchObj)],
+          } as Partial<GameState> as GameState;
+        });
+        try {
+          console.warn(
+            "[net] trySendPatch: queued seat-specific patch until actorKey is set"
+          );
+        } catch {}
+        return false;
+      }
+    }
     let signatureInfo: ReturnType<typeof makePatchSignature> | null = null;
     if (!isAuthoritativeSnapshot) {
       try {
-        const p = patch as ServerPatchT;
+        const p = patch as ServerPatchT & {
+          __allowZoneSeats?: PlayerKey[];
+        };
         const sanitized: ServerPatchT = { ...p };
+        const allowZoneSeats = Array.isArray(p.__allowZoneSeats)
+          ? (p.__allowZoneSeats as PlayerKey[])
+          : null;
+        if (allowZoneSeats) {
+          delete (p as Record<string, unknown>).__allowZoneSeats;
+        }
+        if (allowZoneSeats) {
+          delete (sanitized as Record<string, unknown>).__allowZoneSeats;
+        }
         // Filter avatars: if actorKey known, allow only that seat; otherwise drop until actor identified
         if (p.avatars && typeof p.avatars === "object") {
           const keys = Object.keys(p.avatars).filter(
@@ -2053,10 +2418,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         // Filter zones: keep only actor seat updates when actor known
         if (p.zones && typeof p.zones === "object") {
+          const allowedSeats = new Set<PlayerKey>();
           if (actorKey === "p1" || actorKey === "p2") {
+            allowedSeats.add(actorKey);
+          }
+          if (allowZoneSeats) {
+            for (const seat of allowZoneSeats) {
+              if (seat === "p1" || seat === "p2") {
+                allowedSeats.add(seat);
+              }
+            }
+          }
+          if (allowedSeats.size > 0) {
             const z = p.zones as Partial<Record<PlayerKey, Zones>>;
             const outZ: Partial<Record<PlayerKey, Zones>> = {};
-            if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
+            for (const seat of allowedSeats) {
+              if (z[seat]) outZ[seat] = z[seat] as Zones;
+            }
             if (Object.keys(outZ).length > 0) {
               sanitized.zones = outZ as GameState["zones"];
             } else {
@@ -2113,15 +2491,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   // Attempt to flush any queued patches when transport is available
   flushPendingPatches: () => {
-    const tr = get().transport;
-    if (!tr) return;
     const queue = get().pendingPatches;
     if (!Array.isArray(queue) || queue.length === 0) return;
-    let sentAll = true;
+    const tr = get().transport;
+    const actorKey = get().actorKey;
+    if (!tr || !actorKey) return;
+
+    const remaining: ServerPatchT[] = [];
     for (const p of queue) {
       try {
-        // Sanitize queued patch as we do in trySendPatch
-        const actorKey = get().actorKey;
         let toSend: ServerPatchT = p as ServerPatchT;
         const replaceKeysCandidate = Array.isArray(
           (p as ServerPatchT).__replaceKeys
@@ -2135,54 +2513,36 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (!isAuthoritativeSnapshot) {
           try {
             const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
-        if (sanitized.avatars && typeof sanitized.avatars === "object") {
-          const keys = Object.keys(sanitized.avatars).filter(
-            (k) => k === "p1" || k === "p2"
-          ) as PlayerKey[];
-          if (actorKey === "p1" || actorKey === "p2") {
-            const out: Partial<GameState["avatars"]> = {};
-            const k = actorKey as PlayerKey;
-            if (keys.includes(k)) {
-              const v = (sanitized.avatars as GameState["avatars"])[k];
-              if (v && typeof v === "object") {
-                (out as Record<string, unknown>)[k] = {
-                  ...(v as Record<string, unknown>),
-                } as unknown;
+            if (sanitized.avatars && typeof sanitized.avatars === "object") {
+              const keys = Object.keys(sanitized.avatars).filter(
+                (k) => k === "p1" || k === "p2"
+              ) as PlayerKey[];
+              const out: Partial<GameState["avatars"]> = {};
+              if (keys.includes(actorKey as PlayerKey)) {
+                const v = (sanitized.avatars as GameState["avatars"])[
+                  actorKey as PlayerKey
+                ];
+                if (v && typeof v === "object") {
+                  (out as Record<string, unknown>)[
+                    actorKey as PlayerKey
+                  ] = { ...(v as Record<string, unknown>) } as unknown;
+                }
+              }
+              if (Object.keys(out).length > 0) {
+                sanitized.avatars = out as GameState["avatars"];
+              } else {
+                delete (sanitized as unknown as { avatars?: unknown }).avatars;
               }
             }
-            if (Object.keys(out).length > 0) {
-              sanitized.avatars = out as GameState["avatars"];
-            } else {
-              delete (sanitized as unknown as { avatars?: unknown }).avatars;
-            }
-          } else {
-            try {
-              console.warn(
-                "[net] flushPendingPatches: dropping avatars until actorKey is set",
-                { keys }
-              );
-            } catch {}
-            delete (sanitized as unknown as { avatars?: unknown }).avatars;
-          }
-        }
             if (sanitized.zones && typeof sanitized.zones === "object") {
-              if (actorKey === "p1" || actorKey === "p2") {
-                const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
-                const outZ: Partial<Record<PlayerKey, Zones>> = {};
-                if (z[actorKey]) outZ[actorKey] = z[actorKey] as Zones;
-                if (Object.keys(outZ).length > 0) {
-                  sanitized.zones = outZ as GameState["zones"];
-                } else {
-                  delete (sanitized as unknown as { zones?: unknown }).zones;
-                }
+              const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
+              const outZ: Partial<Record<PlayerKey, Zones>> = {};
+              if (z[actorKey as PlayerKey]) {
+                outZ[actorKey as PlayerKey] = z[actorKey as PlayerKey] as Zones;
+              }
+              if (Object.keys(outZ).length > 0) {
+                sanitized.zones = outZ as GameState["zones"];
               } else {
-                // Drop zones on unknown actor for queued patches as well
-                try {
-                  console.warn(
-                    "[net] flushPendingPatches: dropping zones until actorKey is set",
-                    { keys: Object.keys(sanitized.zones) }
-                  );
-                } catch {}
                 delete (sanitized as unknown as { zones?: unknown }).zones;
               }
             }
@@ -2192,30 +2552,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (!isAuthoritativeSnapshot) {
           signatureInfo = makePatchSignature(toSend);
         }
-        if (process.env.NODE_ENV !== "production") {
-          try {
-            if (toSend.avatars && typeof toSend.avatars === "object") {
-              console.debug("[net] flushPendingPatches avatars ->", {
-                actorKey,
-                avatars: toSend.avatars,
-              });
-            }
-          } catch {}
-        }
-        // Send each patch
         tr.sendAction(toSend);
         if (signatureInfo && signatureInfo.fields.length > 0) {
           registerPatchSignature(signatureInfo, toSend);
         }
       } catch (err) {
-        sentAll = false;
+        remaining.push(p as ServerPatchT);
         try {
           console.warn(`[net] Flush failed: ${String(err)}`);
         } catch {}
-        break;
       }
     }
-    if (sentAll) set({ pendingPatches: [] });
+    if (remaining.length === 0) set({ pendingPatches: [] });
+    else set({ pendingPatches: remaining });
   },
 
   checkMatchEnd: () => {
@@ -2609,7 +2958,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         const source = replaceKeys.has("permanents")
           ? (p.permanents as Permanents)
           : deepMergeReplaceArrays(s.permanents, p.permanents);
-        next.permanents = source as GameState["permanents"];
+        next.permanents = normalizePermanentsRecord(
+          source as Permanents
+        ) as GameState["permanents"];
       }
       if (p.mulligans !== undefined) {
         next.mulligans = replaceKeys.has("mulligans")
@@ -2784,7 +3135,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.avatars = deepMergeReplaceArrays(s.avatars, p.avatars);
       }
       if (p.permanents !== undefined) {
-        next.permanents = deepMergeReplaceArrays(s.permanents, p.permanents);
+        const merged = deepMergeReplaceArrays(s.permanents, p.permanents);
+        next.permanents = normalizePermanentsRecord(
+          merged as Permanents
+        ) as GameState["permanents"];
       }
       if (p.mulligans !== undefined) {
         next.mulligans = deepMergeReplaceArrays(s.mulligans, p.mulligans);
@@ -3152,15 +3506,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       const targetIdx = last ? last.i : 0;
       const per: Permanents = { ...s.permanents };
       const list = [...(per[at] || [])];
-      list[index] = { ...token, attachedTo: { at, index: targetIdx } };
+      const updatedToken = bumpPermanentVersion({
+        ...token,
+        attachedTo: { at, index: targetIdx },
+      });
+      list[index] = updatedToken;
       per[at] = list;
       get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
-      {
-        const patch: ServerPatchT = {
-          ...createPermanentsPatch(per, at),
-        };
-        get().trySendPatch(patch);
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: list[index].instanceId ?? undefined,
+            attachedTo: { at, index: targetIdx },
+            version: list[index].version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -3179,17 +3543,27 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const per: Permanents = { ...s.permanents };
       const list = [...(per[at] || [])];
-      list[tokenIndex] = { ...token, attachedTo: { at, index: targetIndex } };
+      const updatedToken = bumpPermanentVersion({
+        ...token,
+        attachedTo: { at, index: targetIndex },
+      });
+      list[tokenIndex] = updatedToken;
       per[at] = list;
       get().log(
         `Attached token '${token.card.name}' to permanent '${target.card.name}' at ${at}`
       );
-      {
-        const patch: ServerPatchT = {
-          ...createPermanentsPatch(per, at),
-        };
-        get().trySendPatch(patch);
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: list[tokenIndex].instanceId ?? undefined,
+            attachedTo: { at, index: targetIndex },
+            version: list[tokenIndex].version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -3201,7 +3575,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const cur = arr[index];
       if (!cur) return s;
       const nextCount = Math.max(1, Number(cur.counters || 0) + 1);
-      const next = { ...cur, counters: nextCount } as PermanentItem;
+      const next = bumpPermanentVersion({ ...cur, counters: nextCount });
       arr[index] = next;
       per[at] = arr;
       // Log first-time add vs increment
@@ -3214,7 +3588,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           cur.card.name
         }' at #${cellNo} (now ${nextCount})`
       );
-      get().trySendPatch(createPermanentsPatch(per, at));
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            counters: next.counters,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -3225,7 +3610,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       const cur = arr[index];
       if (!cur) return s;
       const nextCount = Math.max(1, Number(cur.counters || 0) + 1);
-      arr[index] = { ...cur, counters: nextCount } as PermanentItem;
+      const updated = bumpPermanentVersion({
+        ...cur,
+        counters: nextCount,
+      });
+      arr[index] = updated;
       per[at] = arr;
       // Log increment
       {
@@ -3237,9 +3626,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           `Incremented counter on '${cur.card.name}' at #${cellNo} (now ${nextCount})`
         );
       }
-      {
-        get().trySendPatch(createPermanentsPatch(per, at));
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: updated.instanceId ?? undefined,
+            counters: updated.counters,
+            version: updated.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -3252,8 +3650,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const curCount = Number(cur.counters || 0);
       if (curCount <= 1) {
         // Destroy the counter
-        const next = { ...cur } as PermanentItem;
-        delete (next as { counters?: number }).counters;
+        const cleared = { ...cur } as PermanentItem;
+        delete (cleared as { counters?: number }).counters;
+        const next = bumpPermanentVersion(cleared);
         arr[index] = next;
         per[at] = arr;
         const cell = at.split(",");
@@ -3261,9 +3660,22 @@ export const useGameStore = create<GameState>((set, get) => ({
         const y = Number(cell[1] || 0);
         const cellNo = y * s.board.size.w + x + 1;
         get().log(`Removed counter from '${cur.card.name}' at #${cellNo}`);
+        const deltaPatch = createPermanentDeltaPatch([
+          {
+            at,
+            entry: {
+              instanceId: next.instanceId ?? undefined,
+              counters: null,
+              version: next.version,
+            },
+          },
+        ]);
+        if (deltaPatch) get().trySendPatch(deltaPatch);
+        else get().trySendPatch(createPermanentsPatch(per, at));
       } else {
         const nextCount = curCount - 1;
-        arr[index] = { ...cur, counters: nextCount } as PermanentItem;
+        const next = bumpPermanentVersion({ ...cur, counters: nextCount });
+        arr[index] = next;
         per[at] = arr;
         // Log decrement
         const cell = at.split(",");
@@ -3273,9 +3685,18 @@ export const useGameStore = create<GameState>((set, get) => ({
         get().log(
           `Decremented counter on '${cur.card.name}' at #${cellNo} (now ${nextCount})`
         );
-      }
-      {
-        get().trySendPatch(createPermanentsPatch(per, at));
+        const deltaPatch = createPermanentDeltaPatch([
+          {
+            at,
+            entry: {
+              instanceId: next.instanceId ?? undefined,
+              counters: nextCount,
+              version: next.version,
+            },
+          },
+        ]);
+        if (deltaPatch) get().trySendPatch(deltaPatch);
+        else get().trySendPatch(createPermanentsPatch(per, at));
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
@@ -3286,8 +3707,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const arr = [...(per[at] || [])];
       const cur = arr[index];
       if (!cur || cur.counters == null) return s;
-      const next = { ...cur } as PermanentItem;
-      delete (next as { counters?: number }).counters;
+      const cleared = { ...cur } as PermanentItem;
+      delete (cleared as { counters?: number }).counters;
+      const next = bumpPermanentVersion(cleared);
       arr[index] = next;
       per[at] = arr;
       const cell = at.split(",");
@@ -3295,9 +3717,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       const y = Number(cell[1] || 0);
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Removed counter from '${cur.card.name}' at #${cellNo}`);
-      {
-        get().trySendPatch(createPermanentsPatch(per, at));
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            counters: null,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -3307,12 +3738,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (!token) return s;
       const per: Permanents = { ...s.permanents };
       const list = [...(per[at] || [])];
-      list[index] = { ...token, attachedTo: null };
+      const updated = bumpPermanentVersion({ ...token, attachedTo: null });
+      list[index] = updated;
       per[at] = list;
       get().log(`Detached token '${token.card.name}'`);
-      {
-        get().trySendPatch(createPermanentsPatch(per, at));
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: list[index].instanceId ?? undefined,
+            attachedTo: null,
+            version: list[index].version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -4084,7 +4525,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         card: cardWithId,
         offset: null,
         tilt: randomTilt(),
-        instanceId: newPermanentInstanceId(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId:
+          cardWithId.instanceId ?? newPermanentInstanceId(),
       });
       per[key] = arr;
       get().log(`${who.toUpperCase()} plays '${card.name}' at #${cellNo}`);
@@ -4094,14 +4539,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       } as GameState["zones"];
 
       {
-        const permanentsPatch = createPermanentsPatch(per, key);
+        const newest = arr[arr.length - 1];
+        const deltaPatch = newest
+          ? createPermanentDeltaPatch([
+              {
+                at: key,
+                entry: { ...(newest as PermanentItem) },
+              },
+            ])
+          : null;
+        const fallbackPatch = deltaPatch
+          ? null
+          : createPermanentsPatch(per, key);
         const zonePatch = createZonesPatchFor(zonesNext, who);
-        const combined: ServerPatchT = {
-          ...(permanentsPatch.permanents
-            ? { permanents: permanentsPatch.permanents }
-            : {}),
-          ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
-        };
+        const combined: ServerPatchT = {};
+        if (deltaPatch) {
+          Object.assign(combined, deltaPatch);
+        } else if (fallbackPatch?.permanents) {
+          combined.permanents = fallbackPatch.permanents;
+        }
+        if (zonePatch?.zones) {
+          combined.zones = zonePatch.zones;
+        }
         if (Object.keys(combined).length > 0) {
           get().trySendPatch(combined);
         }
@@ -4326,7 +4785,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         card: cardWithId,
         offset: null,
         tilt: randomTilt(),
-        instanceId: newPermanentInstanceId(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId:
+          cardWithId.instanceId ?? newPermanentInstanceId(),
       });
       per[key] = arr;
       get().log(
@@ -4341,16 +4804,30 @@ export const useGameStore = create<GameState>((set, get) => ({
           : null;
 
       {
-        const permanentsPatch = createPermanentsPatch(per, key);
+        const newest = arr[arr.length - 1];
+        const deltaPatch = newest
+          ? createPermanentDeltaPatch([
+              {
+                at: key,
+                entry: { ...(newest as PermanentItem) },
+              },
+            ])
+          : null;
+        const fallbackPatch = deltaPatch
+          ? null
+          : createPermanentsPatch(per, key);
         const zonePatch = zonesNext
           ? createZonesPatchFor(zonesNext, who)
           : null;
-        const combined: ServerPatchT = {
-          ...(permanentsPatch.permanents
-            ? { permanents: permanentsPatch.permanents }
-            : {}),
-          ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
-        };
+        const combined: ServerPatchT = {};
+        if (deltaPatch) {
+          Object.assign(combined, deltaPatch);
+        } else if (fallbackPatch?.permanents) {
+          combined.permanents = fallbackPatch.permanents;
+        }
+        if (zonePatch?.zones) {
+          combined.zones = zonePatch.zones;
+        }
         if (Object.keys(combined).length > 0) {
           get().trySendPatch(combined);
         }
@@ -4535,7 +5012,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const toKey: CellKey = `${x},${y}`;
       const exists = (s.permanents[fromKey] || [])[sel.index];
       if (!exists) return s;
-      const { per, movedName } = movePermanentCore(
+      const { per, movedName, removed, added, updated } = movePermanentCore(
         s.permanents,
         fromKey,
         sel.index,
@@ -4547,10 +5024,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       {
         const tr = get().transport;
         if (tr) {
-          const patch = createPermanentsPatch(per ?? s.permanents, [
+          const patch = buildMoveDeltaPatch(
             fromKey,
             toKey,
-          ]);
+            removed,
+            updated,
+            added,
+            per,
+            s.permanents
+          );
           get().trySendPatch(patch);
         }
       }
@@ -4570,16 +5052,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const exists = (s.permanents[fromKey] || [])[sel.index];
       if (!exists) return s;
 
-      console.log("[store] moveSelectedPermanentToWithOffset BEFORE ->", {
-        fromKey,
-        toKey,
-        movedName: exists.card.name,
-        instanceId: exists.instanceId,
-        fromPermanents: (s.permanents[fromKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
-        toPermanents: (s.permanents[toKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
-      });
-
-      const { per, movedName } = movePermanentCore(
+      const { per, movedName, removed, added, updated } = movePermanentCore(
         s.permanents,
         fromKey,
         sel.index,
@@ -4587,25 +5060,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         offset
       );
 
-      console.log("[store] moveSelectedPermanentToWithOffset AFTER ->", {
-        movedName,
-        fromPermanents: (per[fromKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
-        toPermanents: (per[toKey] || []).map((p) => ({ name: p.card.name, instanceId: p.instanceId })),
-      });
-
       const cellNo = y * s.board.size.w + x + 1;
       get().log(`Moved '${movedName}' to #${cellNo}`);
       {
         const tr = get().transport;
         if (tr) {
-          const patch = createPermanentsPatch(per ?? s.permanents, [
+          const patch = buildMoveDeltaPatch(
             fromKey,
             toKey,
-          ]);
-          console.log("[store] Sending patch to server ->", {
-            patchKeys: Object.keys(patch),
-            permanentsKeys: Object.keys(patch.permanents || {}),
-          });
+            removed,
+            updated,
+            added,
+            per,
+            s.permanents
+          );
           // Add a small delay to prevent rapid patch sends during transfers
           setTimeout(() => {
             get().trySendPatch(patch);
@@ -4623,15 +5091,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       const per: Permanents = { ...s.permanents };
       const arr = [...(per[at] || [])];
       if (!arr[index]) return s;
-      arr[index] = { ...arr[index], offset };
+      const next = bumpPermanentVersion({ ...arr[index], offset });
+      arr[index] = next;
       per[at] = arr;
-      {
-        const tr = get().transport;
-        if (tr) {
-          const patch = createPermanentsPatch(per, at);
-          get().trySendPatch(patch);
-        }
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            offset: next.offset ?? offset ?? null,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -4650,9 +5124,14 @@ export const useGameStore = create<GameState>((set, get) => ({
           return s as GameState;
         }
       }
-      const next = { ...cur, tapped: !cur.tapped };
+      const nextTapVersion = Number(cur.tapVersion ?? 0) + 1;
+      const next = bumpPermanentVersion({
+        ...cur,
+        tapped: !cur.tapped,
+        tapVersion: nextTapVersion,
+      });
       arr[index] = next;
-per[at] = arr;
+      per[at] = arr;
       const cell = at.split(",");
       const x = Number(cell[0] || 0);
       const y = Number(cell[1] || 0);
@@ -4662,9 +5141,19 @@ per[at] = arr;
           cur.card.name
         }' at #${cellNo}`
       );
-      {
-        get().trySendPatch(createPermanentsPatch(per, at));
-      }
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            tapped: next.tapped,
+            tapVersion: next.tapVersion,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
@@ -4677,8 +5166,14 @@ per[at] = arr;
       const item = arr.splice(index, 1)[0];
       if (!item) return s;
       // Ownership guard in online play
-      if (s.transport && s.actorKey) {
-        const ownerKey = (item.owner === 1 ? "p1" : "p2") as PlayerKey;
+      const ownerKey = (item.owner === 1 ? "p1" : "p2") as PlayerKey;
+      if (s.transport) {
+        if (!s.actorKey) {
+          get().log(
+            "Cannot move permanents until seat ownership is established"
+          );
+          return s as GameState;
+        }
         if (s.actorKey !== ownerKey) {
           get().log("Cannot move opponent's permanent to a zone");
           return s as GameState;
@@ -4719,17 +5214,31 @@ per[at] = arr;
         }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
       );
       {
-        const permanentsPatch = createPermanentsPatch(per, at);
+        const deltaPatch = item.instanceId
+          ? createPermanentDeltaPatch([
+              {
+                at,
+                entry: { instanceId: item.instanceId },
+                remove: true,
+              },
+            ])
+          : null;
+        const fallbackPatch = deltaPatch
+          ? null
+          : createPermanentsPatch(per, at);
         const zonePatch = createZonesPatchFor(
           zonesNext as GameState["zones"],
           owner
         );
-        const combined: ServerPatchT = {
-          ...(permanentsPatch.permanents
-            ? { permanents: permanentsPatch.permanents }
-            : {}),
-          ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
-        };
+        const combined: ServerPatchT = {};
+        if (deltaPatch) {
+          Object.assign(combined, deltaPatch);
+        } else if (fallbackPatch?.permanents) {
+          combined.permanents = fallbackPatch.permanents;
+        }
+        if (zonePatch?.zones) {
+          combined.zones = zonePatch.zones;
+        }
         if (Object.keys(combined).length > 0) {
           get().trySendPatch(combined);
         }
@@ -4748,7 +5257,13 @@ per[at] = arr;
       const site = s.board.sites[key];
       if (!site || !site.card) return s;
       // Ownership guard in online play
-      if (s.transport && s.actorKey) {
+      if (s.transport) {
+        if (!s.actorKey) {
+          get().log(
+            "Cannot move sites until seat ownership is established"
+          );
+          return s as GameState;
+        }
         const ownerKey = (site.owner === 1 ? "p1" : "p2") as PlayerKey;
         if (s.actorKey !== ownerKey) {
           get().log("Cannot move opponent's site to a zone");
@@ -4809,18 +5324,32 @@ per[at] = arr;
   transferPermanentControl: (at, index, to) =>
     set((s) => {
       get().pushHistory();
+      if (s.transport) {
+        if (!s.actorKey) {
+          get().log("Cannot transfer control until seat is established");
+          return s as GameState;
+        }
+      }
       const per: Permanents = { ...s.permanents };
       const arr = [...(per[at] || [])];
       const item = arr[index];
       if (!item) return s;
+      if (s.transport && s.actorKey) {
+        const ownerSeat = item.owner === 1 ? "p1" : "p2";
+        if (s.actorKey !== ownerSeat) {
+          get().log("Cannot transfer opponent permanent");
+          return s as GameState;
+        }
+      }
       const fromOwner = item.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
       const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
-      arr[index] = {
+      const updated = bumpPermanentVersion({
         ...item,
         owner: newOwner,
         card: prepareCardForSeat(item.card, newOwnerSeat),
-      };
+      });
+      arr[index] = updated;
       per[at] = arr;
       const instanceId = item.card.instanceId;
       let zonesNext = s.zones;
@@ -4832,6 +5361,27 @@ per[at] = arr;
           changedSeats = removal.seats;
         }
       }
+      // Add to new owner's battlefield locally for immediate feedback
+      if (zonesNext) {
+        const currentSeatZones = {
+          ...(zonesNext[newOwnerSeat] ?? createEmptyPlayerZones()),
+        } as Zones;
+        const battlefield = [...currentSeatZones.battlefield];
+        const alreadyPresent = instanceId
+          ? battlefield.some((card) => card.instanceId === instanceId)
+          : battlefield.some((card) => card.cardId === item.card.cardId);
+        if (!alreadyPresent) {
+          battlefield.push(prepareCardForSeat(item.card, newOwnerSeat));
+          currentSeatZones.battlefield = battlefield;
+          zonesNext = {
+            ...zonesNext,
+            [newOwnerSeat]: currentSeatZones,
+          } as GameState["zones"];
+          if (!changedSeats.includes(newOwnerSeat)) {
+            changedSeats.push(newOwnerSeat);
+          }
+        }
+      }
       const cell = at.split(",");
       const x = Number(cell[0] || 0);
       const y = Number(cell[1] || 0);
@@ -4840,18 +5390,39 @@ per[at] = arr;
         `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
       );
       {
-        const permanentsPatch = createPermanentsPatch(per, at);
-        const patch: ServerPatchT = {
-          ...(permanentsPatch.permanents
-            ? { permanents: permanentsPatch.permanents }
-            : {}),
-        };
-        if (changedSeats.length > 0 && zonesNext) {
-          const zonePatch = createZonesPatchFor(
-            zonesNext,
-            changedSeats as Array<keyof GameState["zones"]>
-          );
+        const actorSeat = s.actorKey;
+        const current = arr[index];
+        const deltaPatch =
+          current && current.instanceId
+            ? createPermanentDeltaPatch([
+                {
+                  at,
+                  entry: {
+                    instanceId: current.instanceId,
+                    owner: current.owner,
+                    card: { ...(current.card as CardRef) },
+                    version: current.version,
+                  },
+                },
+              ])
+            : null;
+        const fallbackPatch = deltaPatch
+          ? null
+          : createPermanentsPatch(per, at);
+        const patch: ServerPatchT = {};
+        if (deltaPatch) {
+          Object.assign(patch, deltaPatch);
+        } else if (fallbackPatch?.permanents) {
+          patch.permanents = fallbackPatch.permanents;
+        }
+        if (zonesNext) {
+          const seatsForZone: PlayerKey[] = [
+            fromOwner === 1 ? "p1" : "p2",
+            newOwnerSeat,
+          ];
+          const zonePatch = createZonesPatchFor(zonesNext, seatsForZone);
           if (zonePatch?.zones) {
+            (patch as Record<string, unknown>).__allowZoneSeats = seatsForZone;
             patch.zones = zonePatch.zones;
           }
         }
@@ -4869,9 +5440,22 @@ per[at] = arr;
   transferSiteControl: (x, y, to) =>
     set((s) => {
       get().pushHistory();
+      if (s.transport) {
+        if (!s.actorKey) {
+          get().log("Cannot transfer control until seat is established");
+          return s as GameState;
+        }
+      }
       const key: CellKey = `${x},${y}`;
       const site = s.board.sites[key];
       if (!site) return s;
+      if (s.transport && s.actorKey) {
+        const ownerSeat = site.owner === 1 ? "p1" : "p2";
+        if (s.actorKey !== ownerSeat) {
+          get().log("Cannot transfer opponent site");
+          return s as GameState;
+        }
+      }
       const fromOwner = site.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
       const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
@@ -5026,24 +5610,32 @@ per[at] = arr;
         ...s.avatars,
         [who]: { ...cur, offset },
       } as GameState["avatars"];
-      {
-        const tr = get().transport;
-        if (tr) {
-          // Only send the acting seat's offset change
-          const patch: ServerPatchT = {
-            avatars: { [who]: { offset } } as GameState["avatars"],
-          };
-          get().trySendPatch(patch);
-        }
+      const updates: Partial<GameState> = {
+        avatars: avatarsNext,
+      };
+      const actorSeat = s.actorKey;
+      const patch: ServerPatchT = {
+        avatars: { [who]: { offset } } as GameState["avatars"],
+      };
+      if (!actorSeat) {
+        const pending = Array.isArray(s.pendingPatches)
+          ? s.pendingPatches
+          : [];
+        updates.pendingPatches = [...pending, patch];
+      } else if (actorSeat !== who) {
+        get().log("Cannot adjust opponent avatar offset");
+        return s as GameState;
+      } else {
+        get().trySendPatch(patch);
       }
-      return { avatars: avatarsNext } as Partial<GameState> as GameState;
+      return updates as Partial<GameState> as GameState;
     }),
 
   toggleTapAvatar: (who) =>
     set((s) => {
       get().pushHistory();
-      // Owner-only
-      if (s.actorKey && s.actorKey !== who) {
+      const actorSeat = s.actorKey;
+      if (actorSeat && actorSeat !== who) {
         get().log(`Cannot change tap on opponent avatar`);
         return s as GameState;
       }
@@ -5053,12 +5645,21 @@ per[at] = arr;
         `${who.toUpperCase()} ${next.tapped ? "taps" : "untaps"} Avatar`
       );
       const avatarsNext = { ...s.avatars, [who]: next } as GameState["avatars"];
-      // Only send tapped field for the acting seat
       const patch: ServerPatchT = {
         avatars: { [who]: { tapped: next.tapped } } as GameState["avatars"],
       };
-      get().trySendPatch(patch);
-      return { avatars: avatarsNext } as Partial<GameState> as GameState;
+      const updates: Partial<GameState> = {
+        avatars: avatarsNext,
+      };
+      if (!actorSeat) {
+        const pending = Array.isArray(s.pendingPatches)
+          ? s.pendingPatches
+          : [];
+        updates.pendingPatches = [...pending, patch];
+      } else {
+        get().trySendPatch(patch);
+      }
+      return updates as Partial<GameState> as GameState;
     }),
 
   // Mulligan: shuffle current hand back into libraries (sites -> atlas, others -> spellbook), then draw a new opening hand.

@@ -161,7 +161,7 @@ export default function Board({
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
   const permanentPositions = useGameStore((s) => s.permanentPositions);
-  const { playCardPlay, playTurnGong } = useSound();
+  const { playCardPlay, playTurnGong, playCardFlip } = useSound();
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const previewCard = useGameStore((s) => s.previewCard);
   // Hand visibility state to disable glows when hand is shown
@@ -1198,6 +1198,61 @@ export default function Board({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [emitBoardPing, isSpectator]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.code !== "KeyT") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (isSpectator || overlayBlocking) return;
+
+      const {
+        selectedPermanent,
+        selectedAvatar,
+        permanents,
+        toggleTapPermanent,
+        toggleTapAvatar,
+        closeContextMenu,
+      } = useGameStore.getState();
+
+      let tapped = false;
+
+      if (selectedPermanent) {
+        const { at, index } = selectedPermanent;
+        const items = permanents[at];
+        if (items && items[index]) {
+          event.preventDefault();
+          toggleTapPermanent(at, index);
+          tapped = true;
+        }
+      } else if (selectedAvatar) {
+        event.preventDefault();
+        toggleTapAvatar(selectedAvatar);
+        tapped = true;
+      }
+
+      if (tapped) {
+        try {
+          playCardFlip();
+        } catch {}
+        closeContextMenu();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isSpectator, overlayBlocking, playCardFlip]);
 
   // removed global pointerup fallback; drops are handled by tiles/cards precisely
 
