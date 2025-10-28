@@ -364,6 +364,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
   instanceId?: string | null;
+  tapVersion?: number; // Version counter for tap/untap state changes
   // Optional attachment to a permanent at the same tile
   attachedTo?: { at: CellKey; index: number } | null;
   // Generic numeric counter displayed on the card (e.g., +1 counters)
@@ -4650,7 +4651,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           return s as GameState;
         }
       }
-      const next = { ...cur, tapped: !cur.tapped };
+      const next = {
+        ...cur,
+        tapped: !cur.tapped,
+        tapVersion: (cur.tapVersion ?? 0) + 1
+      };
       arr[index] = next;
 per[at] = arr;
       const cell = at.split(",");
@@ -4663,7 +4668,15 @@ per[at] = arr;
         }' at #${cellNo}`
       );
       {
-        get().trySendPatch(createPermanentsPatch(per, at));
+        const patch = createPermanentsPatch(per, at);
+        console.log('[TAP_PATCH]', {
+          cell: at,
+          tapped: next.tapped,
+          tapVersion: next.tapVersion,
+          patchPermanents: patch.permanents ? Object.keys(patch.permanents) : [],
+          patchContent: patch.permanents?.[at]?.[index]
+        });
+        get().trySendPatch(patch);
       }
       return { permanents: per } as Partial<GameState> as GameState;
     }),
