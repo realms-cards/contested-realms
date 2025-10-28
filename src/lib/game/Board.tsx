@@ -2988,10 +2988,37 @@ export default function Board({
           >
             {(() => {
               if (selected) {
-                const isSite = (selected.card.type || "")
+                const isTokenSel = ((selected.card.type || "") as string)
                   .toLowerCase()
-                  .includes("site");
+                  .includes("token");
                 const ownerRot = currentPlayer === 1 ? 0 : Math.PI;
+                if ((selected.card.slug || "").startsWith("token:") || isTokenSel) {
+                  try {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { TOKEN_BY_KEY } = require("@/lib/game/tokens");
+                    const key = (selected.card.slug || "").split(":")[1]?.toLowerCase();
+                    const def = key ? TOKEN_BY_KEY[key] : undefined;
+                    let w = CARD_SHORT;
+                    let h = CARD_LONG;
+                    if (def && def.size === "small") {
+                      w = CARD_SHORT * 0.5;
+                      h = CARD_LONG * 0.5;
+                    }
+                    const rotZToken = ownerRot + (def && def.siteReplacement ? -Math.PI / 2 : 0);
+                    if (!selected.card.slug) return null;
+                    return (
+                      <CardPlane
+                        slug={selected.card.slug}
+                        width={w}
+                        height={h}
+                        rotationZ={rotZToken}
+                        interactive={false}
+                        textureRotation={def?.textureRotation ?? 0}
+                      />
+                    );
+                  } catch {}
+                }
+                const isSite = (selected.card.type || "").toLowerCase().includes("site");
                 const rotZ = isSite ? -Math.PI / 2 + ownerRot : ownerRot;
                 if (!selected.card.slug) return null;
                 return (
@@ -3022,10 +3049,6 @@ export default function Board({
                       w = CARD_SHORT * 0.5;
                       h = CARD_LONG * 0.5;
                     }
-                    // Swap dimensions for site replacement tokens so they appear landscape when rotated
-                    if (def && def.siteReplacement) {
-                      [w, h] = [h, w];
-                    }
                     const ownerRotToken =
                       dragFromPile?.who === "p1" ? 0 : Math.PI;
                     const rotZToken =
@@ -3038,6 +3061,7 @@ export default function Board({
                         height={h}
                         rotationZ={rotZToken}
                         interactive={false}
+                        textureRotation={def?.textureRotation ?? 0}
                       />
                     );
                   } catch {}
@@ -3134,6 +3158,7 @@ export default function Board({
                     rotationZ={rotZ}
                     interactive={false}
                     textureUrl={textureUrl}
+                    textureRotation={tokenDef?.textureRotation ?? 0}
                   />
                 </>
               );
