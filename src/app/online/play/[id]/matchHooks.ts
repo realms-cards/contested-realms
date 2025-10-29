@@ -6,6 +6,7 @@ import {
 } from "@/lib/game/store";
 import type { RemoteCursorDragMeta } from "@/lib/game/store/remoteCursor";
 import type { GameTransport } from "@/lib/net/transport";
+import { batchSocketUpdate } from "@/lib/utils/batchSocketUpdate";
 
 type MatchPlayer = {
   id: string;
@@ -202,17 +203,21 @@ export function useRemoteCursorTelemetry(transport: MessageTransport | null) {
       const highlight = parseHighlight(payload.highlight);
       const ts = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
 
-      setRemoteCursor({
-        playerId: pid,
-        playerKey:
-          payload.playerKey === "p1" || payload.playerKey === "p2"
-            ? payload.playerKey
-            : null,
-        position,
-        dragging,
-        highlight,
-        ts,
-        displayName: null,
+      // Wrap in startTransition for React 19 concurrent rendering compatibility
+      // Marks cursor updates as non-urgent to prevent blocking interactive input
+      batchSocketUpdate(() => {
+        setRemoteCursor({
+          playerId: pid,
+          playerKey:
+            payload.playerKey === "p1" || payload.playerKey === "p2"
+              ? payload.playerKey
+              : null,
+          position,
+          dragging,
+          highlight,
+          ts,
+          displayName: null,
+        });
       });
     };
 
@@ -247,7 +252,10 @@ export function useBoardPingListener(transport: MessageTransport | null) {
       const x = Number(msg.position?.x);
       const z = Number(msg.position?.z);
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-      try {
+
+      // Wrap in startTransition for React 19 concurrent rendering compatibility
+      // Board pings are visual effects and can be treated as non-urgent
+      batchSocketUpdate(() => {
         useGameStore.getState().pushBoardPing({
           id,
           position: { x, z },
@@ -258,7 +266,7 @@ export function useBoardPingListener(transport: MessageTransport | null) {
               : null,
           ts: typeof msg.ts === "number" ? msg.ts : Date.now(),
         });
-      } catch {}
+      });
     });
     return () => {
       try {

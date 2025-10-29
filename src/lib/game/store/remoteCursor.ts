@@ -25,6 +25,9 @@ export type RemoteCursorState = {
   highlight: RemoteCursorHighlight;
   ts: number;
   displayName?: string | null;
+  // Interpolation state for smooth cursor movement at 60fps even with 15 Hz network updates
+  prevPosition?: { x: number; z: number } | null;
+  prevTs?: number;
 };
 
 export const REMOTE_CURSOR_TTL_MS = 3000;

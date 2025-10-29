@@ -68,6 +68,8 @@ export default function OnlineProvider({
   const lobbyRef = useRef<LobbyInfo | null>(null);
   // Track latest match across event handlers
   const matchRef = useRef<MatchInfo | null>(null);
+  // Track which matches we've already logged a start message for (to avoid duplicates)
+  const matchStartLoggedRef = useRef<Set<string>>(new Set());
 
 
   const transportRef = useRef<SocketTransport | null>(null);
@@ -778,13 +780,19 @@ export default function OnlineProvider({
         setMatch(p.match);
         // Log match start
         if (p.match.status === "waiting") {
-          useGameStore
-            .getState()
-            .log(
-              `Match started with ${p.match.players
-                .map((pl) => pl.displayName)
-                .join(" and ")}`
-            );
+          try {
+            const id = String((p.match as { id?: unknown }).id || "");
+            if (id && !matchStartLoggedRef.current.has(id)) {
+              matchStartLoggedRef.current.add(id);
+              useGameStore
+                .getState()
+                .log(
+                  `Match started with ${p.match.players
+                    .map((pl) => pl.displayName)
+                    .join(" and ")}`
+                );
+            }
+          } catch {}
         }
       }),
       // Apply incremental game state patches into the Zustand store

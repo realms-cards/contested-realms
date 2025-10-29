@@ -2727,6 +2727,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           highlight: nextHighlight,
           ts,
           displayName: null,
+          // Store previous position and timestamp for interpolation
+          prevPosition: prev?.position ?? null,
+          prevTs: prev?.ts ?? ts,
         };
         return {
           remoteCursors: {
