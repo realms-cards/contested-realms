@@ -101,6 +101,16 @@ import type {
   VoiceParticipant,
   LobbyState,
 } from "./types";
+import {
+  getRateLimitsForSocket,
+  tryConsume,
+  cleanupRateLimits,
+} from "./rateLimiter";
+import {
+  incrementMetric,
+  incrementRateLimitHit,
+  debugLog,
+} from "./metrics";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 type SocketServer = import("socket.io").Server;
@@ -2297,6 +2307,24 @@ io.on("connection", async (socket: SocketClient) => {
     const payload = incoming ?? {};
     const player = getPlayerBySocket(socket);
     if (!player) return;
+
+    // Increment receive metric
+    incrementMetric("chatRecvTotal");
+
+    // Rate limit check - return error if exceeded
+    const rateLimits = getRateLimitsForSocket(socket.id);
+    if (!tryConsume(rateLimits.chat)) {
+      incrementRateLimitHit("chat");
+      debugLog(`[chat] rate limit exceeded for socket ${socket.id}`);
+      socket.emit("chat", {
+        from: null,
+        content: "Rate limit exceeded. Please slow down.",
+        scope: "global" as ChatScope,
+        error: "rate_limited",
+      });
+      return;
+    }
+
     const rawContent = payload.content;
     const normalizedContent =
       typeof rawContent === "string"
@@ -2313,6 +2341,8 @@ io.on("connection", async (socket: SocketClient) => {
     // Global chat: broadcast to all connected clients
     if (requestedScope === "global") {
       io.emit("chat", { from, content, scope: "global" as ChatScope });
+      incrementMetric("chatSentTotal");
+      debugLog(`[chat] global message sent from ${player.id}`);
       return;
     }
 
@@ -2334,8 +2364,14 @@ io.on("connection", async (socket: SocketClient) => {
       room = `lobby:${player.lobbyId}`;
     }
 
-    if (room) io.to(room).emit("chat", { from, content, scope });
-    else socket.emit("chat", { from: null, content, scope });
+    if (room) {
+      io.to(room).emit("chat", { from, content, scope });
+      incrementMetric("chatSentTotal");
+      debugLog(`[chat] room message sent from ${player.id} to ${room}`);
+    } else {
+      socket.emit("chat", { from: null, content, scope });
+      incrementMetric("chatSentTotal");
+    }
   });
 
   // Generic lightweight message channel
@@ -2386,6 +2422,17 @@ io.on("connection", async (socket: SocketClient) => {
       } catch {}
     } else if (type === "boardCursor") {
       try {
+        // Increment receive metric
+        incrementMetric("cursorRecvTotal");
+
+        // Rate limit check - silently drop if exceeded
+        const rateLimits = getRateLimitsForSocket(socket.id);
+        if (!tryConsume(rateLimits.cursor)) {
+          incrementRateLimitHit("cursor");
+          debugLog(`[cursor] rate limit exceeded for socket ${socket.id}`);
+          return; // Silently drop cursor update
+        }
+
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
         const playerKey = getSeatForPlayer(match, player.id) || "p1";
@@ -2511,8 +2558,10 @@ io.on("connection", async (socket: SocketClient) => {
           highlight,
           ts: Date.now(),
         };
-        io.to(room).emit("message", out);
+        // Only emit on boardCursor channel (no duplicate message broadcast)
         io.to(room).emit("boardCursor", out);
+        incrementMetric("cursorSentTotal");
+        debugLog(`[cursor] sent for player ${player.id} in room ${room}`);
       } catch {}
     }
   });
@@ -3009,6 +3058,9 @@ io.on("connection", async (socket: SocketClient) => {
     if (!pid) return;
     const player = players.get(pid);
     playerIdBySocket.delete(socket.id);
+
+    // Cleanup rate limiters for disconnected socket
+    cleanupRateLimits(socket.id);
 
     rtcHandlers.handleDisconnect(player ?? null);
 
