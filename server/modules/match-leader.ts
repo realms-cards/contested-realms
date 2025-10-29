@@ -931,6 +931,20 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         );
         match.game = mergedGame as MatchGameState;
 
+        // DEBUG: Log zones state after merge
+        if (patchToApply.zones) {
+          const p1Hand = match.game.zones?.p1?.hand || [];
+          const p2Hand = match.game.zones?.p2?.hand || [];
+          console.log("[match-leader] Zones after merge:", {
+            patchHadZones: !!patchToApply.zones,
+            p1HandCount: p1Hand.length,
+            p2HandCount: p2Hand.length,
+            p1HandCards: p1Hand.map((c: any) => c.name || c.cardId),
+            p2HandCards: p2Hand.map((c: any) => c.name || c.cardId),
+            patchKeys: Object.keys(patchToApply.zones),
+          });
+        }
+
         const movementPatch = await Promise.resolve(
           applyMovementAndCombat(match.game, patchToApply, playerId, { match })
         );
