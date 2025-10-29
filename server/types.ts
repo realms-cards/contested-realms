@@ -78,3 +78,34 @@ export interface DraftPresenceEntry {
   isConnected: boolean;
   lastActivity: number;
 }
+
+// Rate limiting types for socket events
+export interface TokenBucket {
+  tokens: number;
+  lastRefill: number;
+  capacity: number;
+  refillRate: number; // tokens per second
+  refillInterval: number; // milliseconds
+}
+
+export interface RateLimiterConfig {
+  capacity: number;
+  refillRate: number;
+  refillInterval: number;
+}
+
+export interface SocketRateLimits {
+  chat: TokenBucket;
+  cursor: TokenBucket;
+  message: TokenBucket;
+}
+
+// Metrics types for Prometheus instrumentation
+export interface HotPathMetrics {
+  cursorRecvTotal: number;
+  cursorSentTotal: number;
+  chatRecvTotal: number;
+  chatSentTotal: number;
+  lobbiesUpdatedSentTotal: number;
+  rateLimitHitsTotal: Map<string, number>; // key: event type
+}
