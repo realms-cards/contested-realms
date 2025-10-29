@@ -252,7 +252,7 @@ function mergeArrayByInstanceId(
   return result;
 }
 
-export function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
+export function deepMergeReplaceArrays<T>(base: T, patch: unknown, path: string[] = []): T {
   if (patch === undefined) {
     return base;
   }
@@ -262,13 +262,25 @@ export function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   }
 
   if (Array.isArray(patch)) {
-    // CRITICAL FIX: Use mergeArrayByInstanceId if EITHER base OR patch has instanceIds
+    // CRITICAL FIX: Only use instanceId merging for permanents cell arrays
+    // For zone arrays (hand, graveyard, etc.), we want REPLACEMENT not merging
+    //
+    // Path examples:
+    // - permanents cell: ["permanents", "aura_1_2"] -> use instanceId merge
+    // - zone array: ["zones", "p1", "hand"] -> use replacement
+    const isWithinZones = path.includes("zones");
+    const isWithinPermanents = path.length >= 1 && path[0] === "permanents";
+
     const baseHasIds = Array.isArray(base) && base.some((item) => extractInstanceId(item));
     const patchHasIds = patch.some((item) => extractInstanceId(item));
-    if (baseHasIds || patchHasIds) {
+
+    // Only merge by instanceId for permanents, NOT for zones
+    if (isWithinPermanents && !isWithinZones && (baseHasIds || patchHasIds)) {
       const baseArray = Array.isArray(base) ? base : [];
       return mergeArrayByInstanceId(baseArray, patch) as unknown as T;
     }
+
+    // For zones and other arrays, replace entirely
     return patch as unknown as T;
   }
 
@@ -282,7 +294,7 @@ export function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
 
   for (const [key, value] of Object.entries(source)) {
     const current = output[key];
-    output[key] = deepMergeReplaceArrays(current, value);
+    output[key] = deepMergeReplaceArrays(current, value, [...path, key]);
   }
 
   return output as T;
