@@ -14,6 +14,7 @@ import {
 const CURSOR_HEIGHT = 0.04; // hover slightly above the board so it can be occluded by cards
 const PULSE_SPEED = 6;
 const BASE_SCALE = 1;
+const LERP_FACTOR = 0.2; // Smoothing factor (0-1): higher = faster, lower = smoother
 
 const FALLBACK_REMOTE_COLOR = PLAYER_COLORS.spectator;
 
@@ -28,33 +29,35 @@ function CursorMarker({ entry }: { entry: RemoteCursorState }) {
   const color = cursorColor(entry);
   const tex = useLoader(TextureLoader, "/gamecursor-skeleton.svg");
 
+  // Track current interpolated position (only when actively interpolating)
+  const currentPosRef = useRef<{ x: number; z: number } | null>(null);
+
   if (tex && tex.colorSpace !== SRGBColorSpace) {
     tex.colorSpace = SRGBColorSpace;
     tex.needsUpdate = true;
   }
 
   useFrame(({ clock }) => {
-    if (!entry.position || !pointerRef.current) return;
+    if (!pointerRef.current || !entry.position) return;
 
-    const t = clock.getElapsedTime();
-    const scale = BASE_SCALE + 0.08 * Math.sin(t * PULSE_SPEED);
+    // Pulse animation
+    const elapsed = clock.getElapsedTime();
+    const scale = BASE_SCALE + 0.08 * Math.sin(elapsed * PULSE_SPEED);
     pointerRef.current.scale.setScalar(scale);
 
-    // Interpolate cursor position for smooth 60fps movement even at 15 Hz network updates
-    if (entry.prevPosition && entry.prevTs && entry.ts > entry.prevTs) {
-      const now = Date.now();
-      const duration = entry.ts - entry.prevTs;
-      const elapsed = now - entry.prevTs;
-      const t = Math.min(1, Math.max(0, elapsed / duration));
-
-      // Linear interpolation between previous and current position
-      const x = entry.prevPosition.x + (entry.position.x - entry.prevPosition.x) * t;
-      const z = entry.prevPosition.z + (entry.position.z - entry.prevPosition.z) * t;
-
-      pointerRef.current.position.set(x, CURSOR_HEIGHT, z);
-    } else {
-      // No interpolation data, use current position directly
+    // Efficient exponential smoothing (lerp) - only runs when cursor exists
+    if (!currentPosRef.current) {
+      // Initialize on first frame
+      currentPosRef.current = { x: entry.position.x, z: entry.position.z };
       pointerRef.current.position.set(entry.position.x, CURSOR_HEIGHT, entry.position.z);
+    } else {
+      // Smooth interpolation using lerp
+      const targetX = entry.position.x;
+      const targetZ = entry.position.z;
+      currentPosRef.current.x += (targetX - currentPosRef.current.x) * LERP_FACTOR;
+      currentPosRef.current.z += (targetZ - currentPosRef.current.z) * LERP_FACTOR;
+
+      pointerRef.current.position.set(currentPosRef.current.x, CURSOR_HEIGHT, currentPosRef.current.z);
     }
   });
 
