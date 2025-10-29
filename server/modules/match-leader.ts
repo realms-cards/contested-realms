@@ -925,6 +925,23 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           }
         }
 
+        // DEBUG: Log patch before deep merge
+        if (patchToApply.zones) {
+          const patchP1Hand = (patchToApply.zones as any)?.p1?.hand || [];
+          const patchP2Hand = (patchToApply.zones as any)?.p2?.hand || [];
+          const baseP1Hand = (baseForMerge as any)?.zones?.p1?.hand || [];
+          const baseP2Hand = (baseForMerge as any)?.zones?.p2?.hand || [];
+          console.log("[match-leader] Before deep merge:", {
+            patchP1HandCount: patchP1Hand.length,
+            patchP2HandCount: patchP2Hand.length,
+            baseP1HandCount: baseP1Hand.length,
+            baseP2HandCount: baseP2Hand.length,
+            patchP1HandCards: patchP1Hand.map((c: any) => c.name || c.cardId),
+            patchP2HandCards: patchP2Hand.map((c: any) => c.name || c.cardId),
+            patchHasPermanents: !!patchToApply.permanents,
+          });
+        }
+
         const mergedGame = deepMergeReplaceArrays(
           baseForMerge as Record<string, unknown>,
           patchToApply as Record<string, unknown>

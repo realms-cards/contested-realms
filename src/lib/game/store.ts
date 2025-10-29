@@ -1214,17 +1214,29 @@ function mergeArrayByInstanceId(
   return result;
 }
 
-function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
+function deepMergeReplaceArrays<T>(base: T, patch: unknown, path: string[] = []): T {
   if (patch === undefined) return base as T;
   if (patch === null) return null as unknown as T;
   if (Array.isArray(patch)) {
-    // CRITICAL FIX: Use mergeArrayByInstanceId if EITHER base OR patch has instanceIds
+    // CRITICAL FIX: Only use instanceId merging for permanents cell arrays
+    // For zone arrays (hand, graveyard, etc.), we want REPLACEMENT not merging
+    //
+    // Path examples:
+    // - permanents cell: ["permanents", "aura_1_2"] -> use instanceId merge
+    // - zone array: ["zones", "p1", "hand"] -> use replacement
+    const isWithinZones = path.includes("zones");
+    const isWithinPermanents = path.length >= 1 && path[0] === "permanents";
+
     const baseHasIds = Array.isArray(base) && base.some((item) => extractInstanceId(item));
     const patchHasIds = patch.some((item) => extractInstanceId(item));
-    if (baseHasIds || patchHasIds) {
+
+    // Only merge by instanceId for permanents, NOT for zones
+    if (isWithinPermanents && !isWithinZones && (baseHasIds || patchHasIds)) {
       const baseArray = Array.isArray(base) ? base : [];
       return mergeArrayByInstanceId(baseArray, patch) as unknown as T;
     }
+
+    // For zones and other arrays, replace entirely
     return patch as unknown as T;
   }
   if (typeof patch !== "object") return patch as T; // primitives overwrite
@@ -1236,7 +1248,7 @@ function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   const out: Record<string, unknown> = { ...baseObj };
   for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
     const cur = out[k];
-    out[k] = deepMergeReplaceArrays(cur as unknown, v as unknown) as unknown;
+    out[k] = deepMergeReplaceArrays(cur as unknown, v as unknown, [...path, k]) as unknown;
   }
   return out as unknown as T;
 }
