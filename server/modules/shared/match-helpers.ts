@@ -265,8 +265,12 @@ export function deepMergeReplaceArrays<T>(base: T, patch: unknown): T {
   }
 
   if (Array.isArray(patch)) {
-    if (Array.isArray(base) && patch.some((item) => extractInstanceId(item))) {
-      return mergeArrayByInstanceId(base, patch) as unknown as T;
+    // CRITICAL FIX: Use mergeArrayByInstanceId if EITHER base OR patch has instanceIds
+    const baseHasIds = Array.isArray(base) && base.some((item) => extractInstanceId(item));
+    const patchHasIds = patch.some((item) => extractInstanceId(item));
+    if (baseHasIds || patchHasIds) {
+      const baseArray = Array.isArray(base) ? base : [];
+      return mergeArrayByInstanceId(baseArray, patch) as unknown as T;
     }
     return patch as unknown as T;
   }
