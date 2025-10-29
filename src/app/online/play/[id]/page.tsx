@@ -149,6 +149,8 @@ export default function OnlineMatchPage() {
   // Guard to ensure we only reset local game state once per match in this page session,
   // even if the socket briefly disconnects/reconnects or status changes.
   const resetDoneForRef = useRef<string | null>(null);
+  // Track whether we've loaded a deck for this specific match (prevents skipping deck load on fresh joins)
+  const deckLoadedForMatchRef = useRef<string | null>(null);
   // Local submission flags to reflect immediate client-side submission before server ack
   const [localSealedSubmitted, setLocalSealedSubmitted] = useState(false);
   const [localDraftSubmitted, setLocalDraftSubmitted] = useState(false);
@@ -421,10 +423,11 @@ export default function OnlineMatchPage() {
       return;
     }
 
-    // If the server reports the match is in progress, do not auto-load a deck; the resync snapshot
-    // will restore the correct zones/hands.
-    if (match?.status === "in_progress") {
-      console.log("[match] Match in progress; skipping deck load (will use server snapshot)", {
+    // Simple flag-based approach: Skip deck loading only if we've already loaded a deck for this match.
+    // This prevents skipping deck load when joining a fresh match after finishing a previous one.
+    if (deckLoadedForMatchRef.current === matchId) {
+      console.log("[match] Deck already loaded for this match; skipping deck load", {
+        matchId,
         status: match?.status,
       });
       setPrepared(true);
@@ -433,8 +436,8 @@ export default function OnlineMatchPage() {
 
     // For reconnect edge cases: if we already have a server game snapshot in Setup phase and the match
     // is not in waiting/deck_construction, prefer waiting for the server to advance.
-    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
     const hasGameState = !!(match as unknown as { game?: unknown })?.game;
+    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
     if (hasGameState && gamePhase === "Setup" &&
         match?.status !== "waiting" && match?.status !== "deck_construction") {
       console.log("[match] Server provided Setup-phase game; waiting for snapshot advance");
@@ -604,6 +607,10 @@ export default function OnlineMatchPage() {
           (error) => console.error("[match] Deck load error:", error)
         );
         if (!ok || cancelled) return;
+
+        // Mark that we've successfully loaded a deck for this match
+        deckLoadedForMatchRef.current = matchId;
+
         useGameStore.getState().setPhase("Setup");
         setPrepared(true);
       } catch (error) {
@@ -1034,7 +1041,11 @@ export default function OnlineMatchPage() {
       desired = false;
     } else if (gameActuallyStarted) {
       desired = false;
-      if (!prepared) setPrepared(true);
+      // Only mark as prepared if we've actually loaded a deck for this match
+      // Otherwise we'll skip the deck loading step on constructed matches
+      if (!prepared && deckLoadedForMatchRef.current === matchId) {
+        setPrepared(true);
+      }
       if (!d20RollingComplete) setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
@@ -1066,6 +1077,9 @@ export default function OnlineMatchPage() {
 
     setPrepared(false);
     setD20RollingComplete(false);
+
+    // Clear deck loaded flag when entering a new match
+    deckLoadedForMatchRef.current = null;
 
     // Clear submission flag when entering a truly different match
     try {
@@ -1705,6 +1719,7 @@ const canPanCamera =
               myPlayerNumber={myPlayerNumber}
               playerNames={playerNames}
               onOpenMatchInfo={() => setMatchInfoOpen(true)}
+              inDraftMode={shouldShowDraft}
             />
           )}
           <OnlineLifeCounters

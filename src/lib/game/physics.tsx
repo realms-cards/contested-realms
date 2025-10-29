@@ -15,15 +15,15 @@ function ensureRapierInit(): Promise<void> {
   }
   initPromise = import("@dimforge/rapier3d-compat")
     .then(async (module) => {
-      const initFn =
-        typeof module?.init === "function"
-          ? module.init
-          : typeof (module as unknown as { default?: unknown }).default ===
-              "function"
-            ? ((module as unknown as { default: () => Promise<void> }).default)
-            : null;
-      if (initFn) {
-        await initFn();
+      // Call init() with no parameters as per the new API
+      // The function signature is: init(): Promise<void>
+      if (typeof module?.init === "function") {
+        await module.init();
+      } else if (
+        typeof (module as unknown as { default?: unknown }).default === "function"
+      ) {
+        // If default export is the init function, call it without parameters
+        await (module as unknown as { default: () => Promise<void> }).default();
       }
     })
     .catch((err) => {
