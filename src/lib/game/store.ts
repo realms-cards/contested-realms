@@ -4483,11 +4483,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         {
           const tr = get().transport;
           if (tr) {
+            const zonesNext = {
+              ...s.zones,
+              [who]: { ...s.zones[who], hand },
+            } as GameState["zones"];
+            const zonePatch = createZonesPatchFor(zonesNext, who);
             const patch: ServerPatchT = {
-              zones: {
-                ...s.zones,
-                [who]: { ...s.zones[who], hand },
-              } as GameState["zones"],
+              ...(zonePatch && zonePatch.zones ? { zones: zonePatch.zones } : {}),
               board: { ...s.board, sites } as GameState["board"],
             };
             get().trySendPatch(patch);
