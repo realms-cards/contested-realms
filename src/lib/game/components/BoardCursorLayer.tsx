@@ -34,18 +34,34 @@ function CursorMarker({ entry }: { entry: RemoteCursorState }) {
   }
 
   useFrame(({ clock }) => {
-    if (!entry.position) return;
+    if (!entry.position || !pointerRef.current) return;
+
     const t = clock.getElapsedTime();
     const scale = BASE_SCALE + 0.08 * Math.sin(t * PULSE_SPEED);
-    if (pointerRef.current) {
-      pointerRef.current.scale.setScalar(scale);
+    pointerRef.current.scale.setScalar(scale);
+
+    // Interpolate cursor position for smooth 60fps movement even at 15 Hz network updates
+    if (entry.prevPosition && entry.prevTs && entry.ts > entry.prevTs) {
+      const now = Date.now();
+      const duration = entry.ts - entry.prevTs;
+      const elapsed = now - entry.prevTs;
+      const t = Math.min(1, Math.max(0, elapsed / duration));
+
+      // Linear interpolation between previous and current position
+      const x = entry.prevPosition.x + (entry.position.x - entry.prevPosition.x) * t;
+      const z = entry.prevPosition.z + (entry.position.z - entry.prevPosition.z) * t;
+
+      pointerRef.current.position.set(x, CURSOR_HEIGHT, z);
+    } else {
+      // No interpolation data, use current position directly
+      pointerRef.current.position.set(entry.position.x, CURSOR_HEIGHT, entry.position.z);
     }
   });
 
   if (!entry.position) return null;
 
   return (
-    <group position={[entry.position.x, CURSOR_HEIGHT, entry.position.z]} ref={pointerRef}>
+    <group ref={pointerRef}>
       <group rotation-x={-Math.PI / 2}>
         <mesh renderOrder={6}>
           <planeGeometry args={[0.36, 0.36]} />

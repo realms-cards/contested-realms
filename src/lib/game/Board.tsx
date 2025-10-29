@@ -1087,7 +1087,13 @@ export default function Board({
         lastCursorRef.current = { ...payload };
         return;
       }
-      if (now - lastCursorSentAtRef.current < 45) {
+      // Use env variable for cursor send throttle (default 66ms = 15 Hz)
+      // Supports React 19 concurrent rendering with reduced network traffic
+      const minInterval = typeof process.env.NEXT_PUBLIC_CURSOR_MS === 'string'
+        ? parseInt(process.env.NEXT_PUBLIC_CURSOR_MS, 10)
+        : 66;
+
+      if (now - lastCursorSentAtRef.current < minInterval) {
         lastCursorRef.current = { ...payload };
         return;
       }
