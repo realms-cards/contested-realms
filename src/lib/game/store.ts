@@ -810,7 +810,7 @@ function computeAvailableMana(
   return mana;
 }
 
-export type GameEvent = { id: number; ts: number; text: string };
+export type GameEvent = { id: number; ts: number; text: string; turn?: number };
 const MAX_EVENTS = 200;
 export const BOARD_PING_LIFETIME_MS = 2500;
 export const BOARD_PING_MAX_HISTORY = 8;
