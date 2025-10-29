@@ -1209,11 +1209,8 @@ function mergeArrayByInstanceId(
       if (id) seen.add(id);
     }
   }
-  // CRITICAL FIX: Add remaining items from base that weren't in patch
-  // This prevents cards from being lost when a patch updates some cards but not others
-  for (const item of baseMap.values()) {
-    result.push(item);
-  }
+  // Note: Base items preservation is handled at lines 1193-1195 above
+  // This version already correctly preserves items from base not in patch
   return result;
 }
 
