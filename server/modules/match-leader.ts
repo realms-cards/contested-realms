@@ -325,12 +325,14 @@ function normalizeZoneList(values: unknown[], seat?: Seat): unknown[] {
 }
 
 function cloneZones(zones: PlayerZones, seat: Seat): PlayerZones {
+  // CRITICAL: Battlefield cards can have different owners (stolen/controlled cards)
+  // Don't force owner assignment for battlefield zone
   return {
     spellbook: normalizeZoneList(zones.spellbook, seat),
     atlas: normalizeZoneList(zones.atlas, seat),
     hand: normalizeZoneList(zones.hand, seat),
     graveyard: normalizeZoneList(zones.graveyard, seat),
-    battlefield: normalizeZoneList(zones.battlefield, seat),
+    battlefield: normalizeZoneList(zones.battlefield, undefined),
     banished: normalizeZoneList(zones.banished, seat),
   };
 }
@@ -346,9 +348,11 @@ function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
       banished: [],
     };
   }
+  // CRITICAL: Battlefield cards can have different owners (stolen/controlled cards)
+  // Don't force owner assignment for battlefield zone
   const arr = (prop: string): unknown[] =>
     Array.isArray(value[prop])
-      ? normalizeZoneList(value[prop] as unknown[], seat)
+      ? normalizeZoneList(value[prop] as unknown[], prop === "battlefield" ? undefined : seat)
       : [];
   return {
     spellbook: arr("spellbook"),
