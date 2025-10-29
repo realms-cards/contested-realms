@@ -578,6 +578,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       if (match && patch) {
         const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
         let patchToApply: MatchPatch = { ...patch };
+
         const enforce =
           rulesEnforceMode === "all" ||
           (rulesEnforceMode === "bot_only" && isCpuPlayerId(playerId));
@@ -944,6 +945,26 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           ) as MatchPatch;
         }
 
+        // Auto-increment turn counter when currentPlayer changes
+        // This ensures applyTurnStart can detect actual turn changes
+        const prevCurrentPlayer = baseForMerge.currentPlayer;
+        const nextCurrentPlayer = match.game?.currentPlayer;
+        if (
+          prevCurrentPlayer &&
+          nextCurrentPlayer &&
+          prevCurrentPlayer !== nextCurrentPlayer
+        ) {
+          const currentTurn = Number(match.game?.turn || 1);
+          match.game = {
+            ...match.game,
+            turn: currentTurn + 1
+          } as MatchGameState;
+          patchToApply = {
+            ...patchToApply,
+            turn: currentTurn + 1
+          };
+        }
+
         const turnStartPatch = applyTurnStart(match.game);
         if (turnStartPatch && isRecord(turnStartPatch)) {
           match.game = deepMergeReplaceArrays(
@@ -1062,7 +1083,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         const enrichedPatchToApply =
           (await enrichPatchWithCosts(patchToApply, prisma)) ?? patchToApply;
-
         // Exclude sender from statePatch broadcast to prevent echo overwrites
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;

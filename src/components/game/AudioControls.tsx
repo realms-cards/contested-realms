@@ -22,7 +22,13 @@ import { useMusicPlayer } from "@/hooks/useMusicPlayer";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { MUSIC_TRACKS } from "@/lib/music/music-config";
 
-export default function AudioControls() {
+interface AudioControlsProps {
+  /** Whether to enable music player (disabled during drafts) */
+  enableMusic?: boolean;
+}
+
+export default function AudioControls({ enableMusic = true }: AudioControlsProps) {
+  // Always call hooks unconditionally (React Hooks rules)
   const [musicState, musicControls] = useMusicPlayer();
   const { volume: soundVolume, setVolume: setSoundVolume } = useSound();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -76,135 +82,139 @@ export default function AudioControls() {
             ×
           </button>
 
-          {/* Music Section */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Music className="w-4 h-4 text-slate-300" />
-              <span className="text-sm font-medium text-slate-200">Music</span>
-            </div>
-
-            {/* Current Track */}
-            <div className="text-xs text-slate-400 mb-2">
-              {musicState.currentTrack.title}
-              <span className="ml-2">
-                ({musicState.currentTrackIndex + 1} / {MUSIC_TRACKS.length})
-              </span>
-            </div>
-
-            {/* Playback Controls */}
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                onClick={musicControls.previousTrack}
-                className="p-1.5 rounded hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 transition-colors"
-                title="Previous track"
-                aria-label="Previous track"
-              >
-                <SkipBack className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => {
-                  if (!musicState.isEnabled) {
-                    musicControls.toggleEnabled();
-                  }
-                  musicControls.togglePlay();
-                }}
-                className="p-2 rounded-full bg-slate-700/50 hover:bg-slate-600/50 text-slate-100 transition-colors"
-                title={musicState.isPlaying ? "Pause" : "Play"}
-                aria-label={musicState.isPlaying ? "Pause music" : "Play music"}
-              >
-                {musicState.isPlaying ? (
-                  <Pause className="w-4 h-4" fill="currentColor" />
-                ) : (
-                  <Play className="w-4 h-4" fill="currentColor" />
-                )}
-              </button>
-
-              <button
-                onClick={musicControls.nextTrack}
-                className="p-1.5 rounded hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 transition-colors"
-                title="Next track"
-                aria-label="Next track"
-              >
-                <SkipForward className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Music Volume */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() =>
-                  musicControls.setVolume(musicState.volume > 0 ? 0 : 0.7)
-                }
-                className="text-slate-300 hover:text-slate-100 transition-colors"
-                aria-label={musicState.volume === 0 ? "Unmute music" : "Mute music"}
-              >
-                {musicState.volume === 0 ? (
-                  <VolumeX className="w-4 h-4" />
-                ) : (
-                  <Volume2 className="w-4 h-4" />
-                )}
-              </button>
-
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={musicState.volume * 100}
-                onChange={(e) =>
-                  musicControls.setVolume(parseInt(e.target.value) / 100)
-                }
-                className="flex-1 h-1 rounded-full appearance-none cursor-pointer bg-slate-700
-                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-slate-300
-                  [&::-webkit-slider-thumb]:hover:bg-slate-100 [&::-webkit-slider-thumb]:transition-colors
-                  [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full
-                  [&::-moz-range-thumb]:bg-slate-300 [&::-moz-range-thumb]:hover:bg-slate-100
-                  [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:transition-colors"
-                title={`Music volume: ${Math.round(musicState.volume * 100)}%`}
-                aria-label="Music volume slider"
-              />
-
-              <div className="text-xs text-slate-400 w-8 text-right">
-                {Math.round(musicState.volume * 100)}%
-              </div>
-            </div>
-
-            {/* Track List */}
-            <div className="mt-2 relative">
-              <button
-                onClick={() => setShowTrackList(!showTrackList)}
-                className="w-full px-2 py-1.5 rounded bg-slate-800/40 hover:bg-slate-800/60 border border-slate-700/50 text-xs text-slate-300 text-left transition-colors"
-                aria-label="Select track"
-              >
-                Track List
-              </button>
-
-              {showTrackList && (
-                <div className="absolute bottom-full mb-2 left-0 right-0 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-lg shadow-xl">
-                  {MUSIC_TRACKS.map((track, index) => (
-                    <button
-                      key={track.filename}
-                      onClick={() => {
-                        musicControls.selectTrack(index);
-                        setShowTrackList(false);
-                      }}
-                      className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-800/60 transition-colors ${
-                        index === musicState.currentTrackIndex
-                          ? "bg-slate-700/50 text-slate-100 font-medium"
-                          : "text-slate-300"
-                      }`}
-                    >
-                      <div className="truncate">{track.title}</div>
-                    </button>
-                  ))}
+          {/* Music Section - Only show if music is enabled */}
+          {enableMusic && musicState && musicControls && (
+            <>
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Music className="w-4 h-4 text-slate-300" />
+                  <span className="text-sm font-medium text-slate-200">Music</span>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* Divider */}
-          <div className="border-t border-slate-700/50 my-3" />
+                {/* Current Track */}
+                <div className="text-xs text-slate-400 mb-2">
+                  {musicState.currentTrack.title}
+                  <span className="ml-2">
+                    ({musicState.currentTrackIndex + 1} / {MUSIC_TRACKS.length})
+                  </span>
+                </div>
+
+                {/* Playback Controls */}
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={musicControls.previousTrack}
+                    className="p-1.5 rounded hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 transition-colors"
+                    title="Previous track"
+                    aria-label="Previous track"
+                  >
+                    <SkipBack className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (!musicState.isEnabled) {
+                        musicControls.toggleEnabled();
+                      }
+                      musicControls.togglePlay();
+                    }}
+                    className="p-2 rounded-full bg-slate-700/50 hover:bg-slate-600/50 text-slate-100 transition-colors"
+                    title={musicState.isPlaying ? "Pause" : "Play"}
+                    aria-label={musicState.isPlaying ? "Pause music" : "Play music"}
+                  >
+                    {musicState.isPlaying ? (
+                      <Pause className="w-4 h-4" fill="currentColor" />
+                    ) : (
+                      <Play className="w-4 h-4" fill="currentColor" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={musicControls.nextTrack}
+                    className="p-1.5 rounded hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 transition-colors"
+                    title="Next track"
+                    aria-label="Next track"
+                  >
+                    <SkipForward className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Music Volume */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      musicControls.setVolume(musicState.volume > 0 ? 0 : 0.7)
+                    }
+                    className="text-slate-300 hover:text-slate-100 transition-colors"
+                    aria-label={musicState.volume === 0 ? "Unmute music" : "Mute music"}
+                  >
+                    {musicState.volume === 0 ? (
+                      <VolumeX className="w-4 h-4" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" />
+                    )}
+                  </button>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={musicState.volume * 100}
+                    onChange={(e) =>
+                      musicControls.setVolume(parseInt(e.target.value) / 100)
+                    }
+                    className="flex-1 h-1 rounded-full appearance-none cursor-pointer bg-slate-700
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-slate-300
+                      [&::-webkit-slider-thumb]:hover:bg-slate-100 [&::-webkit-slider-thumb]:transition-colors
+                      [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full
+                      [&::-moz-range-thumb]:bg-slate-300 [&::-moz-range-thumb]:hover:bg-slate-100
+                      [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:transition-colors"
+                    title={`Music volume: ${Math.round(musicState.volume * 100)}%`}
+                    aria-label="Music volume slider"
+                  />
+
+                  <div className="text-xs text-slate-400 w-8 text-right">
+                    {Math.round(musicState.volume * 100)}%
+                  </div>
+                </div>
+
+                {/* Track List */}
+                <div className="mt-2 relative">
+                  <button
+                    onClick={() => setShowTrackList(!showTrackList)}
+                    className="w-full px-2 py-1.5 rounded bg-slate-800/40 hover:bg-slate-800/60 border border-slate-700/50 text-xs text-slate-300 text-left transition-colors"
+                    aria-label="Select track"
+                  >
+                    Track List
+                  </button>
+
+                  {showTrackList && (
+                    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-lg shadow-xl">
+                      {MUSIC_TRACKS.map((track, index) => (
+                        <button
+                          key={track.filename}
+                          onClick={() => {
+                            musicControls.selectTrack(index);
+                            setShowTrackList(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-800/60 transition-colors ${
+                            index === musicState.currentTrackIndex
+                              ? "bg-slate-700/50 text-slate-100 font-medium"
+                              : "text-slate-300"
+                          }`}
+                        >
+                          <div className="truncate">{track.title}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-slate-700/50 my-3" />
+            </>
+          )}
 
           {/* Sound Section */}
           <div>
