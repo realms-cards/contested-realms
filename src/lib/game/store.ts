@@ -1266,6 +1266,24 @@ function uniqueCellList(cells: CellKey | CellKey[]): CellKey[] {
   return result;
 }
 
+function mergePermanentsMap(
+  base: Permanents,
+  patch: unknown
+): Permanents {
+  const result: Permanents = { ...(base || ({} as Permanents)) } as Permanents;
+  if (!patch || typeof patch !== "object") return result;
+  const perPatch = patch as Record<string, unknown>;
+  for (const [cell, value] of Object.entries(perPatch)) {
+    const nextArr = Array.isArray(value) ? (value as unknown[]) : [];
+    const baseArr = Array.isArray(result[cell as keyof Permanents])
+      ? ((result[cell as keyof Permanents] as unknown[]) || [])
+      : [];
+    const merged = mergeArrayByInstanceId(baseArr, nextArr) as unknown as PermanentItem[];
+    (result as Record<string, PermanentItem[]>)[cell] = merged;
+  }
+  return result;
+}
+
 function createPermanentsPatch(
   per: Permanents,
   cells?: CellKey | CellKey[] | null
@@ -2978,7 +2996,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.permanents !== undefined) {
         const source = replaceKeys.has("permanents")
           ? (p.permanents as Permanents)
-          : deepMergeReplaceArrays(s.permanents, p.permanents);
+          : mergePermanentsMap(s.permanents, p.permanents);
         next.permanents = normalizePermanentsRecord(
           source as Permanents
         ) as GameState["permanents"];
@@ -3156,7 +3174,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.avatars = deepMergeReplaceArrays(s.avatars, p.avatars);
       }
       if (p.permanents !== undefined) {
-        const merged = deepMergeReplaceArrays(s.permanents, p.permanents);
+        const merged = mergePermanentsMap(s.permanents, p.permanents);
         next.permanents = normalizePermanentsRecord(
           merged as Permanents
         ) as GameState["permanents"];
