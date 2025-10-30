@@ -5389,13 +5389,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       // CRITICAL FIX: Preserve exact world position when changing ownership
       // The card should ONLY rotate 180° without any positional movement.
       //
-      // The problem: offset is relative to (startX + index * spacing, zBase)
-      // When ownership changes, zBase flips but the card's world position shouldn't.
+      // Card's world position: worldZ = tileZ + zBase + offset[1]
+      // When ownership changes, zBase flips from one side to the other.
+      // To maintain the same worldZ: oldWorldZ = newWorldZ
+      // Therefore: tileZ + oldZBase + oldOffset[1] = tileZ + newZBase + newOffset[1]
+      // Solving: newOffset[1] = oldOffset[1] + (oldZBase - newZBase)
       //
-      // Solution: Since we can't easily calculate absolute world position here
-      // (would need tile position, stack count, index), we should set offset to [0, 0]
-      // and let the renderer position the card at its natural stack position.
-      // This ensures the card stays in its stack cell without artificial movement.
+      // BUT: The zBase flip also means the offset direction reverses!
+      // If a card is offset +0.2 from player 1's side, it should be -0.2 from player 2's side
+      // to stay in the same world position.
       const TILE_SIZE = 2.0; // From @/lib/game/constants
       const STACK_MARGIN_Z = TILE_SIZE * 0.1;
 
@@ -5409,9 +5411,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const currentOffset = item.offset || [0, 0];
       const zBaseDiff = oldZBase - newZBase;
 
-      // Reset offset to [0, 0] to position at natural stack location
-      // This prevents artificial movement when ownership changes
-      const adjustedOffset: [number, number] = [0, 0];
+      // Adjust offset to maintain world position: add zBaseDiff and invert Z direction
+      // X offset stays the same (no owner-based shift in X)
+      const adjustedOffset: [number, number] = [
+        currentOffset[0],
+        -currentOffset[1] + zBaseDiff
+      ];
 
       console.log('[ownership-change]', {
         from: fromOwner,
@@ -5422,7 +5427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentOffset,
         adjustedOffset,
         at,
-        strategy: 'reset-to-natural-position'
+        strategy: 'invert-offset-and-adjust'
       });
 
       const updated = bumpPermanentVersion({
