@@ -1280,6 +1280,31 @@ function mergePermanentsMap(
       : [];
     const merged = mergeArrayByInstanceId(baseArr, nextArr) as unknown as PermanentItem[];
     (result as Record<string, PermanentItem[]>)[cell] = merged;
+
+    // Debug logging for ownership changes
+    if (nextArr.length > 0) {
+      nextArr.forEach((item) => {
+        if (item && typeof item === 'object') {
+          const patchItem = item as Partial<PermanentItem>;
+          const baseItem = baseArr.find((b) => {
+            const bi = b as Partial<PermanentItem>;
+            return bi.card?.instanceId === patchItem.card?.instanceId;
+          }) as Partial<PermanentItem> | undefined;
+
+          if (baseItem && baseItem.owner !== patchItem.owner) {
+            console.log('[mergePermanentsMap] Ownership change detected:', {
+              cell,
+              instanceId: patchItem.card?.instanceId,
+              cardName: patchItem.card?.name,
+              oldOwner: baseItem.owner,
+              newOwner: patchItem.owner,
+              oldOffset: baseItem.offset,
+              newOffset: patchItem.offset
+            });
+          }
+        }
+      });
+    }
   }
   return result;
 }
@@ -5411,11 +5436,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       const currentOffset = item.offset || [0, 0];
       const zBaseDiff = oldZBase - newZBase;
 
-      // Adjust offset to maintain world position: add zBaseDiff and invert Z direction
-      // X offset stays the same (no owner-based shift in X)
+      // Adjust offset to maintain world position
+      // Formula: newOffset = oldOffset + (oldZBase - newZBase)
+      // This ensures: tileZ + oldZBase + oldOffset = tileZ + newZBase + newOffset
+      // DO NOT invert offset - just add the zBase difference
       const adjustedOffset: [number, number] = [
-        currentOffset[0],
-        -currentOffset[1] + zBaseDiff
+        currentOffset[0], // X offset unchanged
+        currentOffset[1] + zBaseDiff // Z offset adjusted by zBase difference
       ];
 
       console.log('[ownership-change]', {
@@ -5427,7 +5454,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentOffset,
         adjustedOffset,
         at,
+        instanceId: item.card.instanceId,
+        cardName: item.card.name,
         strategy: 'invert-offset-and-adjust'
+      });
+
+      // Log what we're sending in the patch
+      console.log('[ownership-change] Permanent update:', {
+        at,
+        instanceId: item.card.instanceId,
+        owner: newOwner,
+        offset: adjustedOffset
       });
 
       const updated = bumpPermanentVersion({
@@ -5487,6 +5524,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                   entry: {
                     instanceId: current.instanceId,
                     owner: current.owner,
+                    offset: current.offset, // CRITICAL: Include offset in patch
                     card: { ...(current.card as CardRef) },
                     version: current.version,
                   },
