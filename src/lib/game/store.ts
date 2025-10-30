@@ -5386,12 +5386,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
       const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
 
-      // CRITICAL FIX: Preserve world position when changing ownership
-      // The Z-axis base position (zBase) flips when owner changes.
-      // We must adjust the offset to compensate and keep the card in place.
-      // This prevents the card from "jumping" across the tile when control changes.
+      // CRITICAL FIX: Preserve exact world position when changing ownership
+      // The card should ONLY rotate 180° without any positional movement.
+      //
+      // The problem: offset is relative to (startX + index * spacing, zBase)
+      // When ownership changes, zBase flips but the card's world position shouldn't.
+      //
+      // Solution: Since we can't easily calculate absolute world position here
+      // (would need tile position, stack count, index), we should set offset to [0, 0]
+      // and let the renderer position the card at its natural stack position.
+      // This ensures the card stays in its stack cell without artificial movement.
       const TILE_SIZE = 2.0; // From @/lib/game/constants
       const STACK_MARGIN_Z = TILE_SIZE * 0.1;
+
       const oldZBase = fromOwner === 1
         ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
         : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
@@ -5400,10 +5407,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
 
       const currentOffset = item.offset || [0, 0];
-      const adjustedOffset: [number, number] = [
-        currentOffset[0], // X offset unchanged
-        currentOffset[1] + (oldZBase - newZBase) // Adjust Z to compensate for zBase change
-      ];
+      const zBaseDiff = oldZBase - newZBase;
+
+      // Reset offset to [0, 0] to position at natural stack location
+      // This prevents artificial movement when ownership changes
+      const adjustedOffset: [number, number] = [0, 0];
+
+      console.log('[ownership-change]', {
+        from: fromOwner,
+        to: newOwner,
+        oldZBase,
+        newZBase,
+        zBaseDiff,
+        currentOffset,
+        adjustedOffset,
+        at,
+        strategy: 'reset-to-natural-position'
+      });
 
       const updated = bumpPermanentVersion({
         ...item,
