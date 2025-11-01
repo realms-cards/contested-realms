@@ -2756,7 +2756,7 @@ function AuthenticatedDeckEditor() {
         );
       })()}
       {/* Draft picks loading indicator */}
-      {isDraftMode && !draftInitDone && (
+      {isDraftMode && !draftInitDone && pick3D.length === 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="rounded-xl bg-slate-900/90 px-6 py-4 text-center text-white shadow-2xl border border-white/10">
             <div className="text-xs uppercase tracking-widest text-white/60">

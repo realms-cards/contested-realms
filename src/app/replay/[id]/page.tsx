@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import Board from "@/lib/game/Board";
+import Hand3D from "@/lib/game/components/Hand3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -243,6 +244,25 @@ export default function ReplayViewerPage() {
 
           <Physics gravity={[0, -9.81, 0]}>
             <Board interactionMode="spectator" enableBoardPings={false} />
+            {/* Commentator-style hands for replay: both players, face-up, flat, at edges */}
+            <Hand3D
+              owner="p1"
+              matW={1}
+              matH={1}
+              viewerPlayerNumber={1}
+              placement="edgeBottom"
+              showCardBacks={false}
+              flatCards
+            />
+            <Hand3D
+              owner="p2"
+              matW={1}
+              matH={1}
+              viewerPlayerNumber={1}
+              placement="edgeTop"
+              showCardBacks={false}
+              flatCards
+            />
             <TextureCache />
           </Physics>
 

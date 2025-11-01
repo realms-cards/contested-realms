@@ -447,6 +447,20 @@ model LeaderboardEntry {
   @@index([rank])
 }
 
+model HumanCardStats {
+  id        String     @id @default(cuid())
+  cardId    Int
+  format    GameFormat
+  plays     Int        @default(0)
+  wins      Int        @default(0)
+  losses    Int        @default(0)
+  draws     Int        @default(0)
+  updatedAt DateTime   @updatedAt
+
+  @@unique([cardId, format])
+  @@index([cardId])
+}
+
 // Online match persistence for real-time games (non-tournament quick play)
 enum OnlineMatchStatus {
   waiting

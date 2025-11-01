@@ -180,6 +180,8 @@ export default function OnlineMatchPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         setSpectatorSeat((s) => (s === 'p1' ? 'p2' : 'p1'));
+        // Reset any accumulated spectator yaw so the baseline seat view is neutral
+        try { spectatorYawTargetRef.current = 0; } catch {}
       } else if (e.key === 'ArrowLeft') {
         spectatorYawTargetRef.current -= 0.15;
       } else if (e.key === 'ArrowRight') {
@@ -2086,16 +2088,27 @@ const canPanCamera =
                   ref={controlsRef}
                   makeDefault
                   target={[0, 0, 0]}
-                  mouseButtons={{
-                    MIDDLE: THREE.MOUSE.DOLLY,
-                    RIGHT: THREE.MOUSE.PAN,
-                  }}
+                  mouseButtons={
+                    isSpectatorView
+                      ? {
+                          LEFT: THREE.MOUSE.ROTATE,
+                          MIDDLE: THREE.MOUSE.DOLLY,
+                          RIGHT: THREE.MOUSE.PAN,
+                        }
+                      : {
+                          MIDDLE: THREE.MOUSE.DOLLY,
+                          RIGHT: THREE.MOUSE.PAN,
+                        }
+                  }
                   touches={{ TWO: THREE.TOUCH.PAN }}
                   enabled={canPanCamera}
                   enablePan={canPanCamera}
-                  enableRotate={false}
+                  enableRotate={isSpectatorView ? true : false}
                   enableZoom={!resyncing && !dragFromHand && !dragFromPile}
-                  enableDamping={false}
+                  enableDamping={isSpectatorView}
+                  dampingFactor={isSpectatorView ? 0.08 : 0}
+                  screenSpacePanning={isSpectatorView}
+                  panSpeed={isSpectatorView ? 1.2 : 1}
                   onChange={clampControls}
                   minDistance={minDist}
                   maxDistance={maxDist}
@@ -2107,8 +2120,12 @@ const canPanCamera =
                   }
                   // Adjust rotation constraints based on player position
                   // Default to P1 constraints if player number not determined yet
-                  minAzimuthAngle={viewPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
-                  maxAzimuthAngle={viewPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
+                  minAzimuthAngle={
+                    isSpectatorView ? -Infinity : viewPlayerNumber === 2 ? Math.PI - 0.5 : -0.5
+                  }
+                  maxAzimuthAngle={
+                    isSpectatorView ? Infinity : viewPlayerNumber === 2 ? Math.PI + 0.5 : 0.5
+                  }
                 />
                 {/* Smooth spectator rotation around board center */}
                 {isSpectatorView && (
@@ -2116,6 +2133,7 @@ const canPanCamera =
                     enabled={true}
                     controlsRef={controlsRef}
                     yawTargetRef={spectatorYawTargetRef}
+                    resetKey={viewPlayerNumber}
                   />
                 )}
                 <KeyboardPanControls enabled={canPanCamera} />
@@ -2198,17 +2216,19 @@ function SpectatorRotateControls({
   enabled,
   controlsRef,
   yawTargetRef,
+  resetKey,
 }: {
   enabled: boolean;
   controlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   yawTargetRef: React.MutableRefObject<number>;
+  resetKey?: number | string | null;
 }) {
   const { camera } = useThree();
   const yawAppliedRef = useRef(0);
   useEffect(() => {
     yawAppliedRef.current = 0;
     yawTargetRef.current = 0;
-  }, [yawTargetRef]);
+  }, [yawTargetRef, resetKey]);
   useFrame(() => {
     if (!enabled) return;
     const c = controlsRef.current;

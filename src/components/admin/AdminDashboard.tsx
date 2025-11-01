@@ -83,6 +83,57 @@ export default function AdminDashboard({
   const [usersError, setUsersError] = useState<string | null>(null);
   const [usersNextCursor, setUsersNextCursor] = useState<string | null>(null);
   const [usersFetchedAt, setUsersFetchedAt] = useState<string | null>(null);
+  const [cardStats, setCardStats] = useState<
+    Array<{
+      cardId: number;
+      name: string;
+      plays: number;
+      wins: number;
+      losses: number;
+      draws: number;
+      winRate: number;
+    }>
+  >([]);
+  const [cardStatsError, setCardStatsError] = useState<string | null>(null);
+  const [cardStatsLoading, setCardStatsLoading] = useState(false);
+  const [cardStatsFormat, setCardStatsFormat] = useState<"constructed" | "sealed" | "draft">("constructed");
+  const [cardStatsOrder, setCardStatsOrder] = useState<"plays" | "wins" | "winRate">("plays");
+  const [cardStatsLimit, setCardStatsLimit] = useState<number>(50);
+
+  const refreshCardStats = useCallback(async () => {
+    setCardStatsLoading(true);
+    setCardStatsError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("format", cardStatsFormat);
+      params.set("order", cardStatsOrder);
+      params.set("limit", String(cardStatsLimit));
+      const response = await fetch(`/api/admin/human-card-stats?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
+      const payload = (await response.json()) as {
+        stats: Array<{
+          cardId: number;
+          name: string;
+          plays: number;
+          wins: number;
+          losses: number;
+          draws: number;
+          winRate: number;
+        }>;
+      };
+      setCardStats(payload.stats || []);
+    } catch (error) {
+      setCardStatsError(error instanceof Error ? error.message : "Failed to load stats");
+    } finally {
+      setCardStatsLoading(false);
+    }
+  }, [cardStatsFormat, cardStatsOrder, cardStatsLimit]);
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -282,6 +333,7 @@ export default function AdminDashboard({
         refreshJobs(),
         refreshSessions(),
         refreshUsage(),
+        refreshCardStats(),
       ]);
     } catch (error) {
       setStatusError(
@@ -296,6 +348,7 @@ export default function AdminDashboard({
     refreshJobs,
     refreshSessions,
     refreshUsage,
+    refreshCardStats,
   ]);
 
   useEffect(() => {
@@ -304,12 +357,14 @@ export default function AdminDashboard({
     void refreshJobs();
     void refreshSessions();
     void refreshUsage();
+    void refreshCardStats();
   }, [
     refreshErrors,
     refreshHealthHistory,
     refreshJobs,
     refreshSessions,
     refreshUsage,
+    refreshCardStats,
   ]);
 
   const runAdminAction = useCallback(
@@ -442,6 +497,98 @@ export default function AdminDashboard({
               label="Updated at"
               valueLabel={formatTimestamp(stats.updatedAt)}
             />
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <h2 className="text-lg font-semibold text-white">Human card stats (per-card win rate)</h2>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <label className="flex items-center gap-1">
+                <span className="text-slate-300">Format</span>
+                <select
+                  value={cardStatsFormat}
+                  onChange={(e) => setCardStatsFormat(e.target.value as typeof cardStatsFormat)}
+                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
+                >
+                  <option value="constructed">constructed</option>
+                  <option value="sealed">sealed</option>
+                  <option value="draft">draft</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-slate-300">Order</span>
+                <select
+                  value={cardStatsOrder}
+                  onChange={(e) => setCardStatsOrder(e.target.value as typeof cardStatsOrder)}
+                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
+                >
+                  <option value="plays">plays</option>
+                  <option value="wins">wins</option>
+                  <option value="winRate">win rate</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-slate-300">Limit</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={cardStatsLimit}
+                  onChange={(e) => setCardStatsLimit(Math.max(1, Math.min(200, Number(e.target.value) || 50)))}
+                  className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
+                />
+              </label>
+              <button
+                onClick={() => void refreshCardStats()}
+                className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                disabled={cardStatsLoading}
+              >
+                {cardStatsLoading ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+          </div>
+          {cardStatsError && (
+            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+              {cardStatsError}
+            </div>
+          )}
+          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+            <table className="min-w-full text-left text-xs text-slate-200">
+              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-3 py-2">Card</th>
+                  <th className="px-3 py-2">Plays</th>
+                  <th className="px-3 py-2">Wins</th>
+                  <th className="px-3 py-2">Losses</th>
+                  <th className="px-3 py-2">Draws</th>
+                  <th className="px-3 py-2">Win rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cardStats.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-2 text-slate-300" colSpan={6}>
+                      No stats yet. Play some matches or adjust filters.
+                    </td>
+                  </tr>
+                ) : (
+                  cardStats.map((row) => (
+                    <tr key={`${row.cardId}`} className="border-t border-slate-800/60">
+                      <td className="px-3 py-2">
+                        <span className="font-medium text-white">{row.name}</span>
+                        <div className="text-[10px] text-slate-400">#{row.cardId}</div>
+                      </td>
+                      <td className="px-3 py-2">{row.plays}</td>
+                      <td className="px-3 py-2">{row.wins}</td>
+                      <td className="px-3 py-2">{row.losses}</td>
+                      <td className="px-3 py-2">{row.draws}</td>
+                      <td className="px-3 py-2">{(row.winRate * 100).toFixed(1)}%</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 

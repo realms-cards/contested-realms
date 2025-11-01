@@ -308,6 +308,15 @@ useEffect(() => {
   }, [tournaments, refreshTournamentDetail]);
 
   const handleDraftReady = useCallback((data: { tournamentId: string; draftSessionId: string; totalPlayers?: number }) => {
+    // If we've already submitted our draft deck for this tournament, never auto-redirect back into the draft/editor
+    try {
+      const submitted =
+        localStorage.getItem(`draft_submitted_tournament_${data.tournamentId}`) === "true" ||
+        localStorage.getItem(`sealed_submitted_tournament_${data.tournamentId}`) === "true";
+      if (submitted) {
+        return;
+      }
+    } catch {}
     setCurrentTournamentState((prev) => {
       if (!prev || prev.id !== data.tournamentId) return prev;
       return { ...(prev as unknown as Record<string, unknown>), draftSessionId: data.draftSessionId } as unknown as TournamentInfo;
