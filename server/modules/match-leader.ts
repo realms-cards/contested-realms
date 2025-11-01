@@ -325,14 +325,12 @@ function normalizeZoneList(values: unknown[], seat?: Seat): unknown[] {
 }
 
 function cloneZones(zones: PlayerZones, seat: Seat): PlayerZones {
-  // CRITICAL: Battlefield cards can have different owners (stolen/controlled cards)
-  // Don't force owner assignment for battlefield zone
   return {
     spellbook: normalizeZoneList(zones.spellbook, seat),
     atlas: normalizeZoneList(zones.atlas, seat),
     hand: normalizeZoneList(zones.hand, seat),
     graveyard: normalizeZoneList(zones.graveyard, seat),
-    battlefield: normalizeZoneList(zones.battlefield, undefined),
+    battlefield: normalizeZoneList(zones.battlefield, seat),
     banished: normalizeZoneList(zones.banished, seat),
   };
 }
@@ -348,11 +346,9 @@ function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
       banished: [],
     };
   }
-  // CRITICAL: Battlefield cards can have different owners (stolen/controlled cards)
-  // Don't force owner assignment for battlefield zone
   const arr = (prop: string): unknown[] =>
     Array.isArray(value[prop])
-      ? normalizeZoneList(value[prop] as unknown[], prop === "battlefield" ? undefined : seat)
+      ? normalizeZoneList(value[prop] as unknown[], seat)
       : [];
   return {
     spellbook: arr("spellbook"),
@@ -521,6 +517,26 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     interactionDecisions,
     isCpuPlayerId,
   } = deps;
+
+  // --- Spectator patch broadcasting ---
+  function sanitizePatchForSpectator(patch: MatchPatch | null | undefined): MatchPatch | null {
+    if (!patch || typeof patch !== "object") return patch ?? null;
+    const out = { ...(patch as Record<string, unknown>) };
+    if (out.zones && typeof out.zones === "object") {
+      delete out.zones;
+    }
+    return out as MatchPatch;
+  }
+
+  function broadcastSpectatePatch(matchId: string, enrichedPatch: MatchPatch, now: number): void {
+    try {
+      const sanitized = sanitizePatchForSpectator(enrichedPatch);
+      if (sanitized) {
+        try { io.to(`spectate:${matchId}`).emit("statePatch", { patch: sanitized, t: now }); } catch {}
+      }
+      try { io.to(`spectate:${matchId}:hands`).emit("statePatch", { patch: enrichedPatch, t: now }); } catch {}
+    } catch {}
+  }
 
   async function applyAction(
     matchId: string,
@@ -1126,6 +1142,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         } else {
           io.to(matchRoom).emit("statePatch", { patch: enrichedPatchToApply, t: now });
         }
+        // Also broadcast to spectators (sanitized unless commentator)
+        try {
+          const patchForSpectators = (enrichedPatchToApply ?? patchToApply) as MatchPatch;
+          broadcastSpectatePatch(matchId, patchForSpectators, now);
+        } catch {}
 
         await persistMatchUpdate(match, patchToApply, playerId, now);
 
@@ -1151,6 +1172,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         } else {
           io.to(matchRoom).emit("statePatch", { patch: enrichedPatch, t: now });
         }
+        // Also broadcast to spectators (sanitized unless commentator)
+        try {
+          const patchForSpectators = (enrichedPatch ?? (patch ?? undefined)) as MatchPatch | undefined;
+          if (patchForSpectators) broadcastSpectatePatch(matchId, patchForSpectators, now);
+        } catch {}
 
         await persistMatchUpdate(match, patch ?? null, playerId, now);
       }
@@ -1163,11 +1189,17 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       // Exclude sender from statePatch broadcast to prevent echo overwrites
       const sender = players.get(playerId);
       const senderSocketId = sender?.socketId;
+      const tNow = Date.now();
       if (senderSocketId) {
-        io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedIncoming, t: Date.now() });
+        io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedIncoming, t: tNow });
       } else {
-        io.to(matchRoom).emit("statePatch", { patch: enrichedIncoming, t: Date.now() });
+        io.to(matchRoom).emit("statePatch", { patch: enrichedIncoming, t: tNow });
       }
+      // Also broadcast to spectators (sanitized unless commentator)
+      try {
+        const patchForSpectators = (enrichedIncoming ?? (patchInput as MatchPatch | null) ?? undefined) as MatchPatch | undefined;
+        if (patchForSpectators) broadcastSpectatePatch(matchId, patchForSpectators, tNow);
+      } catch {}
 
       if (error instanceof Error) {
         console.warn("[match] leaderApplyAction error", error.message);

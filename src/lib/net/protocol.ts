@@ -235,6 +235,7 @@ export const LeaveMatchPayload = z.object({});
 export const ReadyPayload = z.object({ ready: z.boolean() });
 export const StartMatchPayload = z.object({});
 export const JoinMatchPayload = z.object({ matchId: z.string() });
+export const WatchMatchPayload = z.object({ matchId: z.string(), token: z.string().optional() });
 export const ActionPayload = z.object({ action: z.any() });
 export const ChatPayload = z.object({ content: z.string().min(1), scope: ChatScopeSchema.optional() });
 export const ResyncRequestPayload = z.object({});
@@ -280,6 +281,7 @@ export type LeaveMatchPayloadT = z.infer<typeof LeaveMatchPayload>;
 export type ReadyPayloadT = z.infer<typeof ReadyPayload>;
 export type StartMatchPayloadT = z.infer<typeof StartMatchPayload>;
 export type JoinMatchPayloadT = z.infer<typeof JoinMatchPayload>;
+export type WatchMatchPayloadT = z.infer<typeof WatchMatchPayload>;
 export type ActionPayloadT = z.infer<typeof ActionPayload>;
 export type ChatPayloadT = z.infer<typeof ChatPayload>;
 export type ResyncRequestPayloadT = z.infer<typeof ResyncRequestPayload>;
@@ -300,6 +302,7 @@ export type ClientEventMap = {
   ready: ReadyPayloadT;
   startMatch: StartMatchPayloadT;
   joinMatch: JoinMatchPayloadT;
+  watchMatch: WatchMatchPayloadT;
   action: ActionPayloadT;
   chat: ChatPayloadT;
   resyncRequest: ResyncRequestPayloadT;
@@ -389,6 +392,7 @@ export const Protocol = {
   ReadyPayload,
   StartMatchPayload,
   JoinMatchPayload,
+  WatchMatchPayload,
   ActionPayload,
   ChatPayload,
   ResyncRequestPayload,

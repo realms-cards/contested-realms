@@ -29,6 +29,11 @@ export interface Hand3DProps {
   owner?: PlayerKey; // default: p1 (bottom)
   showCardBacks?: boolean; // if true, render card backs instead of card faces
   viewerPlayerNumber?: number | null; // 1 or 2, for positioning opponent hands
+  // Optional placement override. When set to 'edgeTop'/'edgeBottom', the hand is placed along the board edge
+  // regardless of showCardBacks; when omitted, placement falls back to overlayBottom for faces and edge for backs.
+  placement?: 'overlayBottom' | 'edgeTop' | 'edgeBottom';
+  // When true, render cards flat on the board (used for commentator mode)
+  flatCards?: boolean;
   // Enhanced preview functions (optional for compatibility)
   showCardPreview?: (card: CardPreviewData) => void;
   hideCardPreview?: () => void;
@@ -40,6 +45,8 @@ export default function Hand3D({
   owner = "p1", 
   showCardBacks = false, 
   viewerPlayerNumber = null,
+  placement,
+  flatCards = false,
   showCardPreview,
   hideCardPreview 
 }: Hand3DProps) {
@@ -220,14 +227,21 @@ export default function Hand3D({
     const worldH = 2 * Math.tan(fov / 2) * dist;
     const margin = HAND_BOTTOM_MARGIN;
     
-    // Position hands based on owner and card back mode
-    const bottomY = showCardBacks 
-      ? worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE  // Top of screen for opponent
-      : -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE; // Bottom of screen for player
+    // Placement model:
+    // - If placement prop is provided: use edgeTop/edgeBottom (spectator mode)
+    // - If not provided: original overlay behavior
+    const hasExplicitPlacement = typeof placement === 'string' && placement.length > 0;
+    // Edge placement for:
+    // - Spectators: explicit placement edgeTop/edgeBottom
+    // - Players: opponent hand (showCardBacks) implicitly at board edge (upright)
+    const isEdgePlacement = (hasExplicitPlacement && (placement === 'edgeTop' || placement === 'edgeBottom')) || (!hasExplicitPlacement && showCardBacks);
+    const overlayTop = false; // with implicit edge for opponent, overlay top is no longer used
 
-    // Use mouseInZone as trigger to initially show cards, then rely on overCardsArea to keep them visible
-    // Allow hand to show during drags for card returns
-    let targetShown = showCardBacks ? 1 : (overCardsArea || mouseInZone) ? 1 : 0;
+    const bottomY = -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE; // Bottom overlay baseline
+    const topY = worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE; // Top overlay baseline
+
+    // Reveal logic: edge hands always visible; overlay hands show on interaction
+    let targetShown = isEdgePlacement ? 1 : (overCardsArea || mouseInZone) ? 1 : 0;
     if (!showCardBacks && isCoarsePointer) {
       if (dragFromHand && selected && selected.who === owner) {
         const hScr = window.innerHeight || 1;
@@ -243,9 +257,9 @@ export default function Hand3D({
       revealLerp.current = targetShown;
 
     // Smooth hand spread animation
-    const handShouldBeSpread = showCardBacks 
-      ? true // Opponent hands always spread for visibility
-      : (overCardsArea || mouseInZone); // Spread when over cards, with zone as initial trigger
+    const handShouldBeSpread = isEdgePlacement
+      ? true // Edge hands always spread for visibility
+      : (overCardsArea || mouseInZone); // Overlay hand spreads when interacted with
     const spreadTarget = handShouldBeSpread ? 1 : 0;
     const spreadK = 0.25; // Smooth easing for hand spread
     handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
@@ -255,23 +269,30 @@ export default function Hand3D({
     const hiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
-    if (showCardBacks) {
-      // Opponent hand: position just beyond the board edge using world units so it stays visible
+    if (isEdgePlacement) {
+      // Board-edge placement (top or bottom relative to viewer)
       const gridHalfH = (boardSize?.h || 4) * TILE_SIZE * 0.5;
       const marginZ = CARD_LONG * HAND_CARD_SCALE * 0.65; // keep comfortably outside grid
       const edge = gridHalfH + marginZ;
-      const z = (viewerPlayerNumber === 1 ? -edge : edge);
+      const topZ = (viewerPlayerNumber === 1 ? -edge : edge);
+      const bottomZ = (viewerPlayerNumber === 1 ? edge : -edge);
+      // Decide top vs bottom: explicit placement for spectators; players (implicit edge) place top when showing backs
+      const placeTop = hasExplicitPlacement ? (placement === 'edgeTop') : showCardBacks;
+      const z = placeTop ? topZ : bottomZ;
       const elevateY = 0.2; // slight lift above board
       rootRef.current.position.set(0, elevateY, z);
-      // Face the viewing player properly (top faces down toward P1, bottom faces up toward P2)
-      const rotation = viewerPlayerNumber === 1 ? 0 : Math.PI;
+      // Face the viewing player properly
+      const rotation = placeTop
+        ? (viewerPlayerNumber === 1 ? 0 : Math.PI)
+        : (viewerPlayerNumber === 1 ? Math.PI : 0);
       rootRef.current.rotation.set(0, rotation, 0);
     } else {
-      // Player hand: position relative to camera (screen-relative)
+      // Overlay placement relative to camera (bottom for own, top for opponent when backs)
       rootRef.current.position.copy(cam.position);
       rootRef.current.quaternion.copy(cam.quaternion);
       rootRef.current.translateZ(-dist);
-      rootRef.current.translateY(bottomY + yOffset);
+      const overlayY = overlayTop ? topY : bottomY;
+      rootRef.current.translateY(overlayY + yOffset);
     }
 
     // Smooth focus index animation (for cycling)
@@ -841,7 +862,7 @@ export default function Hand3D({
                 width={CARD_SHORT}
                 height={CARD_LONG}
                 rotationZ={cardRotationZ}
-                upright
+                upright={!flatCards}
                 depthWrite={showCardBacks ? true : false}
                 depthTest={showCardBacks ? true : false}
                 renderOrder={renderOrder}

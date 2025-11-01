@@ -1,6 +1,6 @@
 "use client";
 
-import { Star, Settings } from "lucide-react";
+import { Star, Settings, Users } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useGameStore } from "@/lib/game/store";
@@ -12,6 +12,10 @@ interface OnlineStatusBarProps {
   onOpenMatchInfo: () => void;
   /** Whether we're in draft mode (disables music) */
   inDraftMode?: boolean;
+  /** If true, disables turn controls (spectator mode) */
+  readOnly?: boolean;
+  /** Number of spectators to display (optional) */
+  spectatorCount?: number | null;
 }
 
 export default function OnlineStatusBar({
@@ -20,6 +24,8 @@ export default function OnlineStatusBar({
   playerNames,
   onOpenMatchInfo,
   inDraftMode = false,
+  readOnly = false,
+  spectatorCount = null,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const endTurn = useGameStore((s) => s.endTurn);
@@ -28,7 +34,7 @@ export default function OnlineStatusBar({
   const matchEnded = useGameStore((s) => s.matchEnded);
 
   // Check if this player can control the current turn
-  const canControlTurn = myPlayerNumber === currentPlayer && !matchEnded;
+  const canControlTurn = !readOnly && myPlayerNumber === currentPlayer && !matchEnded;
   const currentPlayerName = currentPlayer === 1 ? playerNames.p1 : playerNames.p2;
   const isMyTurn = myPlayerNumber === currentPlayer;
 
@@ -56,7 +62,7 @@ export default function OnlineStatusBar({
         <Star className={`w-4 h-4 ${isMyTurn ? 'fill-green-400 text-green-400' : 'fill-yellow-400 text-yellow-400'}`} />
         <span className="opacity-80">{currentPlayerName}&apos;s Turn</span>
 
-        {/* Turn Controls - Only for current player */}
+        {/* Turn Controls - Only for current player and not read-only */}
         {canControlTurn && (
           <button
             className="rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-1 transition-colors"
@@ -81,6 +87,17 @@ export default function OnlineStatusBar({
             >
               Undo
             </button>
+          </>
+        )}
+
+        {/* Spectator presence chip (player-facing) */}
+        {typeof spectatorCount === "number" && (
+          <>
+            <div className="w-px h-4 bg-white/20" />
+            <div className="rounded-full bg-white/10 text-white px-3 py-1 flex items-center gap-1.5" title="Spectator Count" aria-label="Spectator Count">
+              <Users className="w-3.5 h-3.5" />
+              <span>{spectatorCount}</span>
+            </div>
           </>
         )}
 

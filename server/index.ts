@@ -252,6 +252,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
 }
 
+// --- Spectator sanitization helpers ---
+function sanitizeMatchInfoForSpectator(info: AnyRecord): AnyRecord {
+  try {
+    const out: AnyRecord = { ...info };
+    delete (out as AnyRecord).playerDecks;
+    delete (out as AnyRecord).sealedPacks;
+    delete (out as AnyRecord).deckSubmissions;
+    delete (out as AnyRecord).draftState;
+    return out;
+  } catch {
+    return info;
+  }
+}
+
+function sanitizeGameForSpectator(game: AnyRecord | null | undefined): AnyRecord | null {
+  if (!isRecord(game)) return null;
+  try {
+    const out: AnyRecord = { ...game };
+    if (isRecord(out.zones)) delete out.zones;
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+// --- Spectator presence helpers ---
+async function broadcastSpectatorsUpdated(matchId: string) {
+  try {
+    const room = `spectate:${matchId}`;
+    let count = 0;
+    try {
+      const sockets = await io.in(room).allSockets();
+      count = sockets ? sockets.size : 0;
+    } catch {}
+    const out = { type: "spectatorsUpdated", matchId, count };
+    try { io.to(room).emit("message", out); } catch {}
+    try { io.to(`match:${matchId}`).emit("message", out); } catch {}
+  } catch {}
+}
+
 type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
 
 interface MatchDraftService {
@@ -273,6 +313,7 @@ interface MatchDraftService {
   getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
   clearDraftWatchdog(matchId: string): void;
 }
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const getOpponentSeat = (seat: Seat | null | undefined): Seat | null =>
   seat ? (getOpponentSeatRaw(seat) as Seat | null) : null;
@@ -1001,9 +1042,6 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
   }
 
   let loserId = typeof options?.loserId === "string" ? options.loserId : null;
-  if (!loserId && loserSeat) {
-    loserId = getPlayerIdForSeat(match, loserSeat);
-  }
   if (!loserId && winnerId) {
     loserId = inferLoserId(match, winnerId);
   }
@@ -1051,6 +1089,7 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
       winner: (winnerSeat === "p1" || winnerSeat === "p2") ? (winnerSeat as "p1" | "p2") : null,
     };
     io.to(room).emit("statePatch", { patch: endPatch, t: now });
+    try { io.to(`spectate:${match.id}`).emit("statePatch", { patch: endPatch, t: now }); } catch {}
     // Also emit an explicit event for compatibility with clients that rely on a
     // status transition rather than the game patch (older builds or dropped patch).
     io.to(room).emit("matchEnded", {
@@ -1081,8 +1120,8 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
   recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
 
   // If this is a tournament match, persist result into Tournament Match and update round completion
-  try {
-    if (match.tournamentId) {
+  if (match.tournamentId) {
+    try {
       const nowIso = new Date().toISOString();
       const tMatch = await prisma.match.findUnique({
         where: { id: match.id },
@@ -1201,14 +1240,14 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
           }
         }
       }
-    }
-  } catch (err) {
-    try {
+    } catch (err) {
       console.warn(
         "[tournament] failed to record result into rounds:",
-        safeErrorMessage(err)
+        err && typeof err === "object" && "message" in err
+          ? (err as Error).message
+          : err
       );
-    } catch {}
+    }
   }
 }
 
@@ -1537,7 +1576,6 @@ async function cleanupMatchNow(
   } catch {}
 }
 
-
 // Handle per-player mulligan completion as the cluster leader
 function getMatchInfo(match: ServerMatchState): AnyRecord {
   const serializeSealedPacks = (packs: unknown): Record<string, unknown> | undefined => {
@@ -1786,7 +1824,7 @@ function finishMatchRecording(matchId: string): void {
 
 const REQUIRE_JWT = Boolean(
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "1" ||
-    (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
+  (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
 );
 
 // Enforce NextAuth-signed JWT at connect time
@@ -2154,6 +2192,120 @@ io.on("connection", async (socket: SocketClient) => {
     } catch {}
   });
 
+  socket.on("watchMatch", async (payload) => {
+    const matchId = payload && typeof payload.matchId === "string" ? payload.matchId : null;
+    if (!matchId) return;
+    const player = getPlayerBySocket(socket);
+    try {
+      const match = await getOrLoadMatch(matchId);
+      if (!match) {
+        try {
+          socket.emit("watch:error", { matchId, message: "match_not_found" });
+        } catch {}
+        return;
+      }
+      // Disallow spectating your own active match
+      if (player && Array.isArray(match.playerIds) && match.playerIds.includes(player.id)) {
+        try {
+          socket.emit("watch:error", { matchId, message: "cannot_spectate_own_match" });
+        } catch {}
+        return;
+      }
+
+      // Join spectate room and tag socket as spectator for sanitization
+      try {
+        await socket.join(`spectate:${matchId}`);
+      } catch {}
+      try {
+        socket.data = socket.data || {};
+        (socket.data as { isSpectator?: boolean; watchMatchId?: string }).isSpectator = true;
+        (socket.data as { isSpectator?: boolean; watchMatchId?: string }).watchMatchId = matchId;
+        // Commentator mode: tournament host or IDs listed in env COMMENTATOR_IDS can view hands
+        let canViewHands = false;
+        try {
+          const pid = player?.id || playerIdBySocket.get(socket.id) || null;
+          const rawList = String(process.env.COMMENTATOR_IDS || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (pid && rawList.includes(pid)) canViewHands = true;
+          const tid = (match as AnyRecord)?.tournamentId as string | null | undefined;
+          if (!canViewHands && tid) {
+            try {
+              const t = await prisma.tournament.findUnique({ where: { id: tid }, select: { creatorId: true } });
+              if (t && t.creatorId && pid && t.creatorId === pid) canViewHands = true;
+            } catch {}
+          }
+        } catch {}
+        (socket.data as { canViewHands?: boolean }).canViewHands = canViewHands;
+        try {
+          io.to(socket.id).emit("message", {
+            type: "spectatorPermits",
+            matchId,
+            viewHands: canViewHands,
+          });
+        } catch {}
+        if (canViewHands) {
+          try { await socket.join(`spectate:${matchId}:hands`); } catch {}
+        }
+      } catch {}
+      try { await broadcastSpectatorsUpdated(matchId); } catch {}
+
+      // Announce spectator join to players via console event
+      try {
+        const name = player?.displayName || "Spectator";
+        const canViewHands = Boolean((socket as unknown as { data?: { canViewHands?: boolean } | undefined }).data?.canViewHands);
+        const handsText = canViewHands ? " (can see hands)" : "";
+        io.to(`match:${matchId}`).emit("statePatch", {
+          patch: {
+            events: [
+              { ts: Date.now(), text: `${name} joined as spectator${handsText}` }
+            ]
+          },
+          t: Date.now(),
+        });
+      } catch {}
+
+      // Send sanitized match info ack so client resolves watch promise
+      try {
+        const base = getMatchInfo(match);
+        const info = sanitizeMatchInfoForSpectator(base);
+        io.to(socket.id).emit("matchStarted", { match: info });
+      } catch {}
+
+      // Initial sanitized snapshot
+      try {
+        const base = getMatchInfo(match);
+        const info = sanitizeMatchInfoForSpectator(base);
+        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = { match: info };
+        const game = match?.game;
+        let meaningful = false;
+        if (isRecord(game)) {
+          if (match.status === "in_progress") meaningful = true;
+          else meaningful = Object.keys(game).length > 0;
+        }
+        if (meaningful) {
+          const enriched = await enrichPatchWithCostsSafe((match.game ?? null) as MatchPatch | null, prisma);
+          snap.game = sanitizeGameForSpectator(enriched as unknown as AnyRecord) as unknown as MatchPatch | null;
+          snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
+        }
+        io.to(socket.id).emit("resyncResponse", { snapshot: snap });
+      } catch {}
+
+      // If a draft is in progress, proactively sync draft state to this socket
+      try {
+        if (
+          match.matchType === "draft" &&
+          match.draftState &&
+          match.draftState.phase &&
+          match.draftState.phase !== "waiting"
+        ) {
+          io.to(socket.id).emit("draftUpdate", match.draftState);
+        }
+      } catch {}
+    } catch {}
+  });
+
   socket.on("leaveMatch", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
@@ -2419,6 +2571,7 @@ io.on("connection", async (socket: SocketClient) => {
           ts: Date.now(),
         };
         io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
     } else if (type === "boardCursor") {
       try {
@@ -2560,6 +2713,7 @@ io.on("connection", async (socket: SocketClient) => {
         };
         // Only emit on boardCursor channel (no duplicate message broadcast)
         io.to(room).emit("boardCursor", out);
+        try { io.to(`spectate:${matchId}`).emit("boardCursor", out); } catch {}
         incrementMetric("cursorSentTotal");
         debugLog(`[cursor] sent for player ${player.id} in room ${room}`);
       } catch {}
@@ -2572,9 +2726,10 @@ io.on("connection", async (socket: SocketClient) => {
     if (player && player.matchId) {
       const match = await getOrLoadMatch(player.matchId);
       if (match) {
-        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = {
-          match: getMatchInfo(match),
-        };
+        const isSpectator = Boolean((socket as unknown as { data?: { isSpectator?: boolean } | undefined }).data?.isSpectator);
+        const baseMatchInfo = getMatchInfo(match);
+        const matchInfo = isSpectator ? sanitizeMatchInfoForSpectator(baseMatchInfo) : baseMatchInfo;
+        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = { match: matchInfo };
         // Only include a game snapshot when it's meaningful.
         // During sealed/draft setup the server-side game can be an empty object ({}),
         // while the client has already loaded decks locally. Sending an empty game here
@@ -2631,11 +2786,11 @@ io.on("connection", async (socket: SocketClient) => {
         })();
         if (hasMeaningfulGame) {
           // Enrich game state with card costs before sending to client
-          const enrichedGame = await enrichPatchWithCostsSafe(
+          const enrichedGameRaw = await enrichPatchWithCostsSafe(
             (match.game ?? null) as MatchPatch | null,
             prisma
           );
-          snap.game = enrichedGame;
+          snap.game = isSpectator ? (sanitizeGameForSpectator(enrichedGameRaw as unknown as AnyRecord) as unknown as MatchPatch | null) : enrichedGameRaw;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
             console.log("[resync] sending game state with d20Rolls:", {
@@ -2656,7 +2811,7 @@ io.on("connection", async (socket: SocketClient) => {
           } catch {}
         }
         socket.emit("resyncResponse", { snapshot: snap });
-        // If a draft is in progress, proactively sync draft state to this socket
+      // If a draft is in progress, proactively sync draft state to this socket
         try {
           if (
             match.matchType === "draft" &&
@@ -2669,6 +2824,43 @@ io.on("connection", async (socket: SocketClient) => {
         } catch {}
         return;
       }
+    }
+    // Spectator resync: if this socket is watching a match, send a sanitized snapshot
+    const watchMatchId = (socket as unknown as { data?: { isSpectator?: boolean; watchMatchId?: string } | undefined }).data?.watchMatchId;
+    const isSpectatorSock = Boolean((socket as unknown as { data?: { isSpectator?: boolean } | undefined }).data?.isSpectator);
+    if (isSpectatorSock && typeof watchMatchId === "string" && watchMatchId.length > 0) {
+      try {
+        const match = await getOrLoadMatch(watchMatchId);
+        if (match) {
+          const baseMatchInfo = getMatchInfo(match);
+          const matchInfo = sanitizeMatchInfoForSpectator(baseMatchInfo);
+          const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = { match: matchInfo };
+          const hasMeaningfulGame = (() => {
+            const game = match?.game;
+            if (!isRecord(game)) return false;
+            if (match.status === "in_progress") return true;
+            const keys = Object.keys(game);
+            if (keys.length === 0) return false;
+            return true;
+          })();
+          if (hasMeaningfulGame) {
+            const enrichedGameRaw = await enrichPatchWithCostsSafe(
+              (match.game ?? null) as MatchPatch | null,
+              prisma
+            );
+            const canViewHands = Boolean((socket as unknown as { data?: { canViewHands?: boolean } | undefined }).data?.canViewHands);
+            snap.game = canViewHands
+              ? ((enrichedGameRaw as unknown) as MatchPatch | null)
+              : (sanitizeGameForSpectator(enrichedGameRaw as unknown as AnyRecord) as unknown as MatchPatch | null);
+            snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
+          }
+          socket.emit("resyncResponse", { snapshot: snap });
+          return;
+        }
+      } catch {}
+      // Fallback for spectator if match not found
+      socket.emit("resyncResponse", { snapshot: {} });
+      return;
     }
     if (player && player.lobbyId && lobbies.has(player.lobbyId)) {
       const lobby = lobbies.get(player.lobbyId);
@@ -3054,6 +3246,12 @@ io.on("connection", async (socket: SocketClient) => {
   });
 
   socket.on("disconnect", () => {
+    try {
+      const watchId = (socket as unknown as { data?: { watchMatchId?: string } | undefined }).data?.watchMatchId;
+      if (typeof watchId === "string" && watchId.length > 0) {
+        void broadcastSpectatorsUpdated(watchId);
+      }
+    } catch {}
     const pid = playerIdBySocket.get(socket.id);
     if (!pid) return;
     const player = players.get(pid);
