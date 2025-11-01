@@ -384,6 +384,7 @@ export type ContextMenuTarget =
 export type GameState = {
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
+  turn: number;
   phase: Phase;
   setPhase: (phase: Phase) => void;
   // D20 Setup phase
@@ -820,6 +821,7 @@ export type SerializedGame = {
   actorKey: PlayerKey | null;
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
+  turn: number;
   phase: Phase;
   d20Rolls: Record<PlayerKey, number | null>;
   setupWinner: PlayerKey | null;
@@ -846,6 +848,7 @@ export type SerializedGame = {
 export type ServerPatchT = Partial<{
   players: GameState["players"];
   currentPlayer: GameState["currentPlayer"];
+  turn: GameState["turn"];
   phase: GameState["phase"];
   d20Rolls: GameState["d20Rolls"];
   setupWinner: GameState["setupWinner"];
@@ -1873,6 +1876,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
   },
   currentPlayer: 1,
+  turn: 1,
   phase: "Setup",
   setPhase: (phase) => set({ phase }),
   // D20 Setup phase
@@ -2687,7 +2691,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   log: (text: string) =>
     set((s) => {
       const nextId = s.eventSeq + 1;
-      const e = { id: nextId, ts: Date.now(), text };
+      const currentTurn = s.turn || 1;
+      const e = { id: nextId, ts: Date.now(), text, turn: currentTurn };
       const eventsAll = [...s.events, e];
       const events =
         eventsAll.length > MAX_EVENTS
@@ -2953,6 +2958,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
       }
+      if (p.turn !== undefined) {
+        next.turn = p.turn;
+      }
       if (p.phase !== undefined) {
         next.phase = p.phase;
       }
@@ -3174,6 +3182,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
       }
+      if (p.turn !== undefined) {
+        next.turn = p.turn;
+      }
       if (p.phase !== undefined) {
         next.phase = p.phase;
       }
@@ -3263,6 +3274,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         actorKey: s.actorKey ?? null,
         players: JSON.parse(JSON.stringify(s.players)),
         currentPlayer: s.currentPlayer,
+        turn: s.turn,
         phase: s.phase,
         d20Rolls: JSON.parse(JSON.stringify(s.d20Rolls)),
         setupWinner: s.setupWinner,
@@ -3416,6 +3428,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           const patch: ServerPatchT = {
             players: prev.players,
             currentPlayer: prev.currentPlayer,
+            turn: prev.turn,
             phase: prev.phase,
             d20Rolls: prev.d20Rolls,
             setupWinner: prev.setupWinner,
@@ -3435,6 +3448,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             __replaceKeys: [
               "players",
               "currentPlayer",
+              "turn",
               "phase",
               "d20Rolls",
               "setupWinner",
@@ -3476,6 +3490,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         historyByPlayer: hb as GameState["historyByPlayer"],
         players: prev.players,
         currentPlayer: prev.currentPlayer,
+        turn: prev.turn,
         phase: prev.phase,
         d20Rolls: prev.d20Rolls,
         setupWinner: prev.setupWinner,
@@ -4015,6 +4030,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // On new turn start: untap all sites of the active player and clear selection
     if (passTurn) {
       const nextPlayer = s.currentPlayer === 1 ? 2 : 1;
+      const nextTurn = s.turn + 1;
       // Sites do not tap in Sorcery; do not modify board.sites.tapped
       // Untap all permanents owned by the next player
       const permanents: Permanents = { ...s.permanents };
@@ -4036,16 +4052,18 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       {
         // Server is authoritative for start-of-turn untaps (permanents and avatar).
-        // Only send phase/currentPlayer; server will broadcast the full authoritative patch.
+        // Only send phase/currentPlayer/turn; server will broadcast the full authoritative patch.
         const patch: ServerPatchT = {
           phase: nextPhase,
           currentPlayer: nextPlayer,
+          turn: nextTurn,
         };
         get().trySendPatch(patch);
       }
       set({
         phase: nextPhase,
         currentPlayer: nextPlayer,
+        turn: nextTurn,
         permanents,
         avatars: avatarsNext,
         selectedCard: null,
@@ -4072,6 +4090,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const cur = s.currentPlayer;
     get().log(`P${cur} ends the turn`);
     const nextPlayer = cur === 1 ? 2 : 1;
+    const nextTurn = s.turn + 1;
 
     // Untap all permanents owned by the next player
     const permanents: Permanents = { ...s.permanents };
@@ -4092,16 +4111,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     } as GameState["avatars"];
 
     {
-      // Server will compute start-of-turn untaps. Send only phase/currentPlayer.
+      // Server will compute start-of-turn untaps. Send only phase/currentPlayer/turn.
       const patch: ServerPatchT = {
         phase: "Main",
         currentPlayer: nextPlayer,
+        turn: nextTurn,
       };
       get().trySendPatch(patch);
     }
     set({
       phase: "Main",
       currentPlayer: nextPlayer,
+      turn: nextTurn,
       permanents,
       avatars: avatarsNext,
       selectedCard: null,
@@ -4531,7 +4552,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
         const sites = {
           ...s.board.sites,
-          [key]: { owner: s.currentPlayer as 1 | 2, tapped: false, card },
+          [key]: { owner: (who === "p1" ? 1 : 2) as 1 | 2, tapped: false, card },
         };
         get().log(
           `${who.toUpperCase()} plays site '${card.name}' at #${cellNo}`
@@ -4774,7 +4795,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const sites = {
           ...s.board.sites,
           [key]: {
-            owner: s.currentPlayer as 1 | 2,
+            owner: (who === "p1" ? 1 : 2) as 1 | 2,
             tapped: false,
             card: prepareCardForSeat(ensuredSiteCard, who),
           },
@@ -6193,6 +6214,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           },
         },
         currentPlayer: 1,
+        turn: 1,
         phase: "Setup",
         lastServerTs: 0,
         lastLocalActionTs: 0,

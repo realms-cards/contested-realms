@@ -45,9 +45,6 @@ function normalizeSealedConfigClient(sc: unknown): unknown {
   // Clamp to protocol bounds (3..8)
   const packCount = Math.max(3, Math.min(8, candidatePackCount));
   let setMix: string[] = Array.isArray(obj.setMix) ? (obj.setMix as unknown[]).filter((s) => typeof s === 'string') as string[] : [];
-  if (setMix.length === 0) {
-    setMix = entries.filter(([, v]) => (Number(n(v)) || 0) > 0).map(([k]) => String(k));
-  }
   if (setMix.length === 0) setMix = ['Beta'];
   const rawTimeLimit = n(obj.timeLimit);
   const candidateTime = Number.isFinite(rawTimeLimit) && rawTimeLimit > 0 ? Math.floor(rawTimeLimit) : 40;
@@ -236,6 +233,7 @@ export class SocketTransport implements GameTransport {
   private connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
   private isIntentionalDisconnect = false;
   private genericHandlers: Map<string, Set<(payload: unknown) => void>> = new Map();
+  private inflightWatch: Map<string, Promise<void>> = new Map();
 
   private static getMessageType(m: unknown): string {
     if (m && typeof m === "object" && "type" in (m as Record<string, unknown>)) {
@@ -507,6 +505,48 @@ export class SocketTransport implements GameTransport {
         }
       } catch {}
     });
+  }
+
+  async watchMatch(matchId: string, token?: string): Promise<void> {
+    console.log("[Transport] watchMatch called for:", matchId);
+    const s = this.requireSocket();
+    if (!s.connected) {
+      console.error("[Transport] Socket not connected!");
+      throw new Error("Socket not connected");
+    }
+    const existing = this.inflightWatch.get(matchId);
+    if (existing) return existing;
+    const promise = new Promise<void>((resolve, reject) => {
+      const onMatch = (payload: unknown) => {
+        const fixed = normalizeMatchStartedPayload(payload);
+        console.log("[Transport] Received matchStarted (normalized)", fixed);
+        const parsed = Protocol.MatchStartedPayload.parse(fixed);
+        this.dispatch("matchStarted", parsed);
+        s.off("matchStarted", onMatch);
+        s.off("match:error", onError);
+        s.off("watch:error", onError);
+        resolve();
+      };
+      const onError = (payload: unknown) => {
+        const err = payload as { matchId?: string; message?: string };
+        if (!err || err.matchId !== matchId) return;
+        s.off("matchStarted", onMatch);
+        s.off("match:error", onError);
+        s.off("watch:error", onError);
+        reject(new Error(err.message || "Unable to watch match"));
+      };
+      s.on("matchStarted", onMatch);
+      s.on("match:error", onError);
+      s.on("watch:error", onError);
+      const payload = Protocol.WatchMatchPayload.parse({ matchId, token });
+      console.log("[Transport] Emitting watchMatch with payload:", payload);
+      s.emit("watchMatch", payload);
+    })
+      .finally(() => {
+        this.inflightWatch.delete(matchId);
+      });
+    this.inflightWatch.set(matchId, promise);
+    return promise;
   }
 
   leaveLobby(): void {

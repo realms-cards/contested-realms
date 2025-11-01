@@ -20,16 +20,23 @@ function ensurePermanentRecord(
   record: Record<string, unknown> | null | undefined
 ): Record<string, unknown> | null {
   if (!record) return null;
-  const ownerValue = record.owner;
-  if (ownerValue !== 1 && ownerValue !== 2) {
-    record.owner = 1;
+  const ownerValue = record.owner as unknown;
+  if (ownerValue === 1 || ownerValue === 2) {
+    // valid numeric owner, keep as-is
+  } else if (typeof ownerValue === "string") {
+    const n = Number(ownerValue);
+    if (n === 1 || n === 2) record.owner = n;
+    else delete (record as Record<string, unknown>).owner;
+  } else if (ownerValue !== undefined) {
+    // invalid owner present, drop it to avoid overriding base
+    delete (record as Record<string, unknown>).owner;
   }
   const cardValue = record.card;
   const card = cardValue && typeof cardValue === "object"
     ? (cardValue as Record<string, unknown>)
     : null;
   let instanceId = typeof record.instanceId === "string" ? record.instanceId : null;
-  let cardInstanceId = card && typeof card.instanceId === "string" ? card.instanceId : null;
+  const cardInstanceId = card && typeof card.instanceId === "string" ? card.instanceId : null;
   if (!instanceId || instanceId.length === 0) {
     instanceId = cardInstanceId;
   }

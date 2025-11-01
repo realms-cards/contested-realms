@@ -1654,27 +1654,7 @@ export default function Board({
                     const offX = wx - baseX;
                     const offZ = wz - baseZ;
 
-                    if (selected) {
-                      playSelectedTo(x, y);
-                      try {
-                        playCardPlay();
-                      } catch {}
-                      setDragFromHand(false); // Explicitly clear drag state after hand drop
-                      setGhost(null); // Clear ghost
-                      const type = (
-                        (selected.card?.type || "") as string
-                      ).toLowerCase();
-                      const isToken = type.includes("token");
-                      const tokenDef = isToken
-                        ? TOKEN_BY_NAME[
-                            (selected.card?.name || "").toLowerCase()
-                          ]
-                        : undefined;
-                      const tokenSiteReplace = !!tokenDef?.siteReplacement;
-                      if (!type.includes("site") && !tokenSiteReplace) {
-                        setPermanentOffset(dropKey, newIndex, [offX, offZ]);
-                      }
-                    } else if (dragFromPile?.card) {
+                    if (dragFromPile?.card) {
                       const type = (
                         (dragFromPile.card.type || "") as string
                       ).toLowerCase();
@@ -1689,6 +1669,26 @@ export default function Board({
                       const tokenDef = isToken
                         ? TOKEN_BY_NAME[
                             (dragFromPile.card.name || "").toLowerCase()
+                          ]
+                        : undefined;
+                      const tokenSiteReplace = !!tokenDef?.siteReplacement;
+                      if (!type.includes("site") && !tokenSiteReplace) {
+                        setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+                      }
+                    } else if (selected) {
+                      playSelectedTo(x, y);
+                      try {
+                        playCardPlay();
+                      } catch {}
+                      setDragFromHand(false); // Explicitly clear drag state after hand drop
+                      setGhost(null); // Clear ghost
+                      const type = (
+                        (selected.card?.type || "") as string
+                      ).toLowerCase();
+                      const isToken = type.includes("token");
+                      const tokenDef = isToken
+                        ? TOKEN_BY_NAME[
+                            (selected.card?.name || "").toLowerCase()
                           ]
                         : undefined;
                       const tokenSiteReplace = !!tokenDef?.siteReplacement;

@@ -12,6 +12,9 @@ interface OnlineLifeCountersProps {
   myPlayerId?: string | null;
   opponentPlayerId?: string | null;
   matchId?: string | null;
+  showYouLabels?: boolean;
+  readOnly?: boolean;
+  spectatorMode?: boolean;
 }
 
 function formatLifeDisplay(life: number, lifeState: LifeState): string {
@@ -57,7 +60,9 @@ function LifeCounter({
   dragFromHand,
   isMe,
   showNameAbove,
-}: LifeCounterProps & { showNameAbove: boolean }) {
+  showYou,
+  spectatorMode,
+}: LifeCounterProps & { showNameAbove: boolean; showYou: boolean; spectatorMode?: boolean }) {
   const playerState = useGameStore((s) => s.players[player]);
   const addLife = useGameStore((s) => s.addLife);
 
@@ -85,7 +90,7 @@ function LifeCounter({
           onContextMenu={(e) => e.preventDefault()}
         >
           {playerName}
-          {isMe && " (You)"}
+          {spectatorMode && isMe ? " (Watching)" : showYou && isMe ? " (You)" : ""}
         </div>
       )}
 
@@ -168,7 +173,7 @@ function LifeCounter({
           onContextMenu={(e) => e.preventDefault()}
         >
           {playerName}
-          {isMe && " (You)"}
+          {spectatorMode && isMe ? " (Watching)" : isMe ? " (You)" : ""}
         </div>
       )}
     </div>
@@ -182,10 +187,12 @@ export default function OnlineLifeCounters({
   myPlayerId = null,
   opponentPlayerId = null,
   matchId = null,
+  showYouLabels = false,
+  readOnly = false,
 }: OnlineLifeCountersProps) {
   // In online multiplayer, both players can modify life totals
   const matchEnded = useGameStore((s) => s.matchEnded);
-  const canModifyLife = !!myPlayerKey && !matchEnded;
+  const canModifyLife = !readOnly && !!myPlayerKey && !matchEnded;
   const p1LifeState = useGameStore((s) => s.players.p1.lifeState);
   const p2LifeState = useGameStore((s) => s.players.p2.lifeState);
   const tieGame = useGameStore((s) => s.tieGame);
@@ -230,6 +237,8 @@ export default function OnlineLifeCounters({
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === "p1"}
         showNameAbove={true}
+        showYou={showYouLabels}
+        spectatorMode={readOnly}
       />
 
       {/* P2 Life - name below */}
@@ -240,6 +249,8 @@ export default function OnlineLifeCounters({
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === "p2"}
         showNameAbove={false}
+        showYou={showYouLabels}
+        spectatorMode={readOnly}
       />
 
       {/* Tie button shown between/under life counters */}

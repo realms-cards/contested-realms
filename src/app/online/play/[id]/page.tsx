@@ -1,8 +1,8 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
-import { useParams, useRouter } from "next/navigation";
+import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -58,6 +58,16 @@ import {
 export default function OnlineMatchPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSpectatorView = useMemo(() => {
+    try {
+      if (!searchParams) return false;
+      const v = searchParams.get("watch");
+      return v === "1" || v === "true";
+    } catch {
+      return false;
+    }
+  }, [searchParams]);
   const { updateScreenType } = useVideoOverlay();
 
   // Enhanced card preview state using the draft-3d/editor-3d pattern
@@ -104,6 +114,26 @@ export default function OnlineMatchPage() {
     opponentPlayerId,
   } = usePlayerIdentity(match, me);
 
+  const [spectatorSeat, setSpectatorSeat] = useState<PlayerKey>("p1");
+  useEffect(() => {
+    if (!isSpectatorView) return;
+    if (!matchId) return;
+    try {
+      const v = sessionStorage.getItem(`spectator_seat_${matchId}`);
+      if (v === "p1" || v === "p2") setSpectatorSeat(v as PlayerKey);
+    } catch {}
+  }, [isSpectatorView, matchId]);
+  useEffect(() => {
+    if (!isSpectatorView) return;
+    if (!matchId) return;
+    try {
+      sessionStorage.setItem(`spectator_seat_${matchId}`, spectatorSeat);
+    } catch {}
+  }, [isSpectatorView, matchId, spectatorSeat]);
+
+  const viewPlayerKey = useMemo(() => (isSpectatorView ? spectatorSeat : myPlayerKey), [isSpectatorView, spectatorSeat, myPlayerKey]);
+  const viewPlayerNumber = useMemo(() => (isSpectatorView ? (spectatorSeat === "p2" ? 2 : 1) : myPlayerNumber), [isSpectatorView, spectatorSeat, myPlayerNumber]);
+
   // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {
     setActorKey(myPlayerKey);
@@ -116,6 +146,49 @@ export default function OnlineMatchPage() {
 
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
+
+  // Spectator presence
+  const [spectatorCount, setSpectatorCount] = useState<number | null>(null);
+  const [spectatorCanViewHands, setSpectatorCanViewHands] = useState<boolean>(false);
+  useEffect(() => {
+    if (!transport?.on) return;
+    const off = transport.on("message", (m) => {
+      const type = m && typeof m === "object" && (m as Record<string, unknown>).type;
+      if (type === "spectatorsUpdated") {
+        const mid = (m as unknown as { matchId?: string }).matchId;
+        const count = (m as unknown as { count?: unknown }).count as number | undefined;
+        if (mid === matchId && typeof count === "number" && Number.isFinite(count)) {
+          setSpectatorCount(count);
+        }
+        return;
+      }
+      if (type === "spectatorPermits") {
+        const mid = (m as unknown as { matchId?: string }).matchId;
+        const viewHands = !!(m as unknown as { viewHands?: boolean }).viewHands;
+        if (mid === matchId) setSpectatorCanViewHands(viewHands);
+        return;
+      }
+    });
+    return () => {
+      try { off?.(); } catch {}
+    };
+  }, [transport, matchId]);
+
+  // Spectator keyboard rotation: Left/Right toggles seat
+  useEffect(() => {
+    if (!isSpectatorView) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        setSpectatorSeat((s) => (s === 'p1' ? 'p2' : 'p1'));
+      } else if (e.key === 'ArrowLeft') {
+        spectatorYawTargetRef.current -= 0.15;
+      } else if (e.key === 'ArrowRight') {
+        spectatorYawTargetRef.current += 0.15;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSpectatorView]);
 
   const rtc = voice?.rtc ?? null;
   const matchOverlayTargetId = useMemo(() => {
@@ -235,7 +308,9 @@ export default function OnlineMatchPage() {
       if (joinAttemptedForRef.current !== matchId) {
         console.log("[joinMatch effect] Ensuring server-side room join");
         joinAttemptedForRef.current = matchId;
-        void joinMatch(matchId);
+        void (isSpectatorView && transport?.watchMatch
+          ? transport.watchMatch(matchId)
+          : joinMatch(matchId));
       }
       return;
     }
@@ -249,8 +324,10 @@ export default function OnlineMatchPage() {
       because: hasBootstrapRef.current ? "bootstrap" : "direct",
     });
     joinAttemptedForRef.current = matchId;
-    void joinMatch(matchId);
-  }, [connected, match?.id, matchId, joinMatch, leaveMatch, transport]);
+    void (isSpectatorView && transport?.watchMatch
+      ? transport.watchMatch(matchId)
+      : joinMatch(matchId));
+  }, [connected, match?.id, matchId, joinMatch, leaveMatch, transport, isSpectatorView]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -305,6 +382,7 @@ export default function OnlineMatchPage() {
     const transitioningFromWaiting =
       prevStatus === "waiting" && match?.status === "in_progress";
     if (
+      !isSpectatorView &&
       match?.status === "in_progress" &&
       rejoinChatSentForRef.current !== matchId &&
       !transitioningFromWaiting
@@ -328,6 +406,7 @@ export default function OnlineMatchPage() {
     me?.displayName,
     resync,
     sendChat,
+    isSpectatorView,
   ]);
 
   // Setup state (like offline play)
@@ -341,6 +420,7 @@ export default function OnlineMatchPage() {
   const storeActorKey = useGameStore((s) => s.actorKey);
   const storeMatchEnded = useGameStore((s) => s.matchEnded);
   const showToolbox =
+    !isSpectatorView &&
     match?.status === "in_progress" &&
     serverPhase !== "Setup" &&
     !setupOpen &&
@@ -1011,6 +1091,11 @@ export default function OnlineMatchPage() {
 
   // Canonical control for setup overlay (prevents ping-pong updates)
   useEffect(() => {
+    // Spectators never see the setup overlay
+    if (isSpectatorView) {
+      if (setupOpen) setSetupOpen(false);
+      return;
+    }
     if (!matchId || match?.id !== matchId) return;
     if (!match) return;
 
@@ -1021,7 +1106,12 @@ export default function OnlineMatchPage() {
     // "Start" phase means D20 rolling complete, in mulligan phase
     // "Setup" phase means D20 rolling OR waiting for players
     const gameActuallyStarted = serverPhase === "Main";
-    const d20Complete = serverPhase === "Start" || serverPhase === "Main" || storeSetupWinner != null;
+    const d20Complete = (() => {
+      const r = storeD20Rolls;
+      const bothRolled = !!(r && r.p1 != null && r.p2 != null);
+      const notTie = bothRolled && Number(r!.p1) !== Number(r!.p2);
+      return Boolean(storeSetupWinner) || notTie;
+    })();
 
     console.log("[setupOpen logic]", {
       serverPhase,
@@ -1052,14 +1142,22 @@ export default function OnlineMatchPage() {
       if (!gameActuallyStarted && serverPhase !== "Setup") {
         try { useGameStore.getState().setPhase("Setup"); } catch {}
       }
-    } else if (d20Complete && !d20RollingComplete && serverPhase === "Start") {
+    } else if (serverPhase === "Setup" && !d20RollingComplete) {
+      desired = true;
+    } else if (d20Complete && !d20RollingComplete) {
       setD20RollingComplete(true);
     } else if (!prepared) {
       desired = true;
     }
 
     if (desired !== setupOpen) setSetupOpen(desired);
-  }, [matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen, setPrepared, d20RollingComplete, setD20RollingComplete, storeSetupWinner, storeD20Rolls]);
+  }, [isSpectatorView, matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen, setPrepared, d20RollingComplete, setD20RollingComplete, storeSetupWinner, storeD20Rolls]);
+
+  useEffect(() => {
+    if (isSpectatorView) {
+      setSetupOpen(false);
+    }
+  }, [isSpectatorView]);
 
   
 
@@ -1241,19 +1339,19 @@ const canPanCamera =
         // Keep altitude high enough to see the whole mat, but offset slightly in Z
         const dist = Math.max(matW, matH) * 1.1;
         const tilt = naturalTiltAngle;
-        const sign = myPlayerNumber === 2 ? -1 : 1;
+        const sign = viewPlayerNumber === 2 ? -1 : 1;
         cam.position.set(0, Math.cos(tilt) * dist, sign * Math.sin(tilt) * dist);
         cam.up.set(0, 1, 0);
       } else {
         // Reasonable default orbit position based on seat (slightly offset)
-        const orbitZ = myPlayerNumber === 2 ? -5 : 5;
+        const orbitZ = viewPlayerNumber === 2 ? -5 : 5;
         cam.position.set(0, 10, orbitZ);
         cam.up.set(0, 1, 0);
       }
       cam.lookAt(0, 0, 0);
       c.update();
     },
-    [myPlayerNumber, matW, matH, naturalTiltAngle]
+    [viewPlayerNumber, matW, matH, naturalTiltAngle]
   );
 
   function resetCamera() {
@@ -1270,7 +1368,7 @@ const canPanCamera =
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [cameraMode, gotoBaseline, matW, matH]);
+  }, [cameraMode, gotoBaseline, matW, matH, viewPlayerNumber]);
   // Robust: reset drag flags only on hard-cancel contexts (not every pointerup)
   useEffect(() => {
     const reset = () => {
@@ -1374,7 +1472,7 @@ const canPanCamera =
   }, [matchId]);
 
   // Check if we're in the correct match
-  const inThisMatch = !!matchId && match?.id === matchId;
+  const inThisMatch = !!matchId && (match?.id === matchId || isSpectatorView);
 
   // Dynamic page title with comprehensive match info
   useEffect(() => {
@@ -1443,7 +1541,7 @@ const canPanCamera =
   ]);
 
   const boardInteractionMode =
-    endedByMatchStatus || matchEnded ? "spectator" : "normal";
+    isSpectatorView || endedByMatchStatus || matchEnded ? "spectator" : "normal";
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
     if (!c) return;
@@ -1526,16 +1624,18 @@ const canPanCamera =
     }),
     []
   );
+  // Smooth spectator rotation helpers
+  const spectatorYawTargetRef = useRef<number>(0);
   const cameraOptions = useMemo(
     () => ({
-      position: (myPlayerNumber === 2 ? [0, 10, -5] : [0, 10, 5]) as [
+      position: (viewPlayerNumber === 2 ? [0, 10, -5] : [0, 10, 5]) as [
         number,
         number,
         number
       ],
       fov: 50,
     }),
-    [myPlayerNumber]
+    [viewPlayerNumber]
   );
 
   // Show draft screen for active draft matches (but only if we haven't submitted a deck)
@@ -1607,6 +1707,30 @@ const canPanCamera =
           <div className="text-center">
             <div className="text-xl font-semibold mb-2">Joining Match</div>
             <div className="text-sm opacity-60">Match ID: {matchId}</div>
+          </div>
+        </div>
+      )}
+
+      {inThisMatch && isSpectatorView && (
+        <div className="absolute top-2 right-2 z-30">
+          <div className="flex items-center gap-2">
+            <div className="px-2 py-1 rounded bg-purple-600/80 text-white text-xs font-semibold shadow">
+              Spectating{typeof spectatorCount === 'number' ? ` (${spectatorCount})` : ''}
+            </div>
+            <div className="bg-black/40 rounded-md p-0.5">
+              <button
+                className={`px-2 py-1 text-xs rounded ${spectatorSeat === "p1" ? "bg-white/20" : "hover:bg-white/10"}`}
+                onClick={() => setSpectatorSeat("p1")}
+              >
+                P1
+              </button>
+              <button
+                className={`ml-1 px-2 py-1 text-xs rounded ${spectatorSeat === "p2" ? "bg-white/20" : "hover:bg-white/10"}`}
+                onClick={() => setSpectatorSeat("p2")}
+              >
+                P2
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1713,19 +1837,24 @@ const canPanCamera =
             />
           )}
           {/* Online Status Bar with turn restrictions */}
-          {myPlayerNumber && (
+          {viewPlayerNumber && (
             <OnlineStatusBar
               dragFromHand={dragFromHand}
-              myPlayerNumber={myPlayerNumber}
+              myPlayerNumber={viewPlayerNumber}
               playerNames={playerNames}
               onOpenMatchInfo={() => setMatchInfoOpen(true)}
               inDraftMode={shouldShowDraft}
+              readOnly={isSpectatorView}
+              spectatorCount={spectatorCount}
             />
           )}
           <OnlineLifeCounters
             dragFromHand={dragFromHand}
-            myPlayerKey={myPlayerKey}
+            myPlayerKey={viewPlayerKey}
             playerNames={playerNames}
+            showYouLabels={!isSpectatorView}
+            readOnly={isSpectatorView}
+            spectatorMode={isSpectatorView}
           />
 
           {/* Online Console with Events and Chat tabs */}
@@ -1739,6 +1868,7 @@ const canPanCamera =
             onLeaveLobby={leaveLobby}
             connected={connected}
             myPlayerId={myPlayerId}
+            hideChat={isSpectatorView}
           />
 
           {/* Enhanced Hover Preview Overlay - uses new CardPreview component */}
@@ -1913,26 +2043,36 @@ const canPanCamera =
                 <Hud3D owner="p2" />
 
                 {/* 3D Hands - show both player and opponent hands */}
-                {myPlayerKey && (
+                {viewPlayerKey && (
                   <Hand3D
-                    owner={myPlayerKey}
+                    owner={viewPlayerKey}
                     matW={MAT_PIXEL_W}
                     matH={MAT_PIXEL_H}
+                    viewerPlayerNumber={viewPlayerNumber}
+                    // Own-hand visibility: players always see; spectators see only with commentator permit
+                    showCardBacks={isSpectatorView ? !spectatorCanViewHands : false}
+                    // Commentator: bottom edge for oriented seat; Spectator (non-commentator): also use bottom edge for oriented seat
+                    placement={isSpectatorView ? 'edgeBottom' : undefined}
+                    flatCards={isSpectatorView ? Boolean(spectatorCanViewHands) : false}
                     showCardPreview={showCardPreview}
                     hideCardPreview={hideCardPreview}
                   />
                 )}
                 {/* Opponent hand with card backs */}
-                {myPlayerKey &&
+                {viewPlayerKey &&
                   (() => {
-                    const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
+                    const opponentKey = viewPlayerKey === "p1" ? "p2" : "p1";
                     return (
                       <Hand3D
                         owner={opponentKey}
                         matW={MAT_PIXEL_W}
                         matH={MAT_PIXEL_H}
-                        showCardBacks={true}
-                        viewerPlayerNumber={myPlayerNumber}
+                        // Opponent-hand visibility: players see backs; spectators see faces only with commentator permit
+                        showCardBacks={isSpectatorView ? !spectatorCanViewHands : true}
+                        viewerPlayerNumber={viewPlayerNumber}
+                        // Commentator and non-commentator spectators: top edge for the opponent seat
+                        placement={isSpectatorView ? 'edgeTop' : undefined}
+                        flatCards={isSpectatorView ? Boolean(spectatorCanViewHands) : false}
                         showCardPreview={showCardPreview}
                         hideCardPreview={hideCardPreview}
                       />
@@ -1967,9 +2107,17 @@ const canPanCamera =
                   }
                   // Adjust rotation constraints based on player position
                   // Default to P1 constraints if player number not determined yet
-                  minAzimuthAngle={myPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
-                  maxAzimuthAngle={myPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
+                  minAzimuthAngle={viewPlayerNumber === 2 ? Math.PI - 0.5 : -0.5}
+                  maxAzimuthAngle={viewPlayerNumber === 2 ? Math.PI + 0.5 : 0.5}
                 />
+                {/* Smooth spectator rotation around board center */}
+                {isSpectatorView && (
+                  <SpectatorRotateControls
+                    enabled={true}
+                    controlsRef={controlsRef}
+                    yawTargetRef={spectatorYawTargetRef}
+                  />
+                )}
                 <KeyboardPanControls enabled={canPanCamera} />
                 <TrackpadOrbitAdapter />
               </Canvas>
@@ -2043,5 +2191,44 @@ function KeyboardPanControls({ enabled = true, step = 0.4 }: { enabled?: boolean
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
   useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
+}
+
+function SpectatorRotateControls({
+  enabled,
+  controlsRef,
+  yawTargetRef,
+}: {
+  enabled: boolean;
+  controlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
+  yawTargetRef: React.MutableRefObject<number>;
+}) {
+  const { camera } = useThree();
+  const yawAppliedRef = useRef(0);
+  useEffect(() => {
+    yawAppliedRef.current = 0;
+    yawTargetRef.current = 0;
+  }, [yawTargetRef]);
+  useFrame(() => {
+    if (!enabled) return;
+    const c = controlsRef.current;
+    if (!c) return;
+    const targetYaw = yawTargetRef.current;
+    const currentYaw = yawAppliedRef.current;
+    const delta = targetYaw - currentYaw;
+    if (Math.abs(delta) < 1e-3) return;
+    // Smooth step toward target yaw
+    const step = Math.max(-0.08, Math.min(0.08, delta * 0.15));
+    yawAppliedRef.current = currentYaw + step;
+    // Rotate camera position around Y axis about the origin (board center)
+    const x = camera.position.x;
+    const z = camera.position.z;
+    const r = Math.sqrt(x * x + z * z) || 10;
+    const theta = Math.atan2(z, x) + step;
+    const y = camera.position.y;
+    camera.position.set(Math.cos(theta) * r, y, Math.sin(theta) * r);
+    camera.lookAt(0, 0, 0);
+    c.update();
+  });
   return null;
 }

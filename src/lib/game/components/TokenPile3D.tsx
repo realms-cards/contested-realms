@@ -176,6 +176,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                         slug: tokenSlug(def),
                         thresholds: null,
                       };
+                      // Clear any selected hand card and preview to prevent accidental plays
+                      try {
+                        const store = useGameStore.getState();
+                        store.clearSelection?.();
+                        store.setPreviewCard?.(null);
+                      } catch {}
                       setDragFromPile({ who: owner, from: "tokens", card });
                       setDragFromHand(true);
                       bumpInteractClock();
@@ -246,6 +252,12 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
                         slug: tokenSlug(def),
                         thresholds: null,
                       };
+                      // Clear any selected hand card and preview to prevent accidental plays
+                      try {
+                        const store = useGameStore.getState();
+                        store.clearSelection?.();
+                        store.setPreviewCard?.(null);
+                      } catch {}
                       setDragFromPile({ who: owner, from: "tokens", card });
                       setDragFromHand(true);
                       bumpInteractClock();
