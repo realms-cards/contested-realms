@@ -282,9 +282,11 @@ export default function Hand3D({
       const elevateY = 0.2; // slight lift above board
       rootRef.current.position.set(0, elevateY, z);
       // Face the viewing player properly
-      const rotation = placeTop
+      const rotation = flatCards
+        // Commentator mode: both hands should be readable (no flip for lower hand)
         ? (viewerPlayerNumber === 1 ? 0 : Math.PI)
-        : (viewerPlayerNumber === 1 ? Math.PI : 0);
+        // Player mode / non-commentator spectators: top vs bottom differ
+        : (placeTop ? (viewerPlayerNumber === 1 ? 0 : Math.PI) : (viewerPlayerNumber === 1 ? Math.PI : 0));
       rootRef.current.rotation.set(0, rotation, 0);
     } else {
       // Overlay placement relative to camera (bottom for own, top for opponent when backs)
