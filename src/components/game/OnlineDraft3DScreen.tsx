@@ -325,6 +325,7 @@ export default function OnlineDraft3DScreen({
   const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<
     number | null
   >(null); // Track if we've shown overlay for current round
+  const [pickTimeRemaining, setPickTimeRemaining] = useState<number>(0);
 
   // Render order counter for stacking
   const roCounterRef = useRef(1500);
@@ -919,6 +920,24 @@ export default function OnlineDraft3DScreen({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [staged, amPicker, ready, handlePickAndPass]);
+
+  // Local visual countdown for current pick (no autopick). Starts when it's my turn.
+  useEffect(() => {
+    if (draftState.phase !== "picking" || !amPicker) {
+      setPickTimeRemaining(0);
+      return;
+    }
+    const durationSec = 60; // default visual timer for 2P draft
+    const startedAt = Date.now();
+    const update = () => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const remaining = Math.max(0, durationSec - elapsed);
+      setPickTimeRemaining(remaining);
+    };
+    update();
+    const id = window.setInterval(update, 1000);
+    return () => window.clearInterval(id);
+  }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker]);
 
   // Create sorted stack positions for picked cards
   const stackedPositions = useMemo(() => {
@@ -1529,9 +1548,9 @@ export default function OnlineDraft3DScreen({
               Waiting for {draftSync.waitingPlayers.length} player(s)
             </div>
           )}
-          {pickTimer.hasTimeRemaining && (
+          {(pickTimer.hasTimeRemaining || pickTimeRemaining > 0) && (
             <div className="text-xs mt-1">
-              Pick timer: {pickTimer.timeRemaining}s
+              Pick timer: {pickTimer.hasTimeRemaining ? pickTimer.timeRemaining : pickTimeRemaining}s
             </div>
           )}
         </div>

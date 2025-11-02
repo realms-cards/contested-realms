@@ -52,6 +52,7 @@ export default function OnlineConsole({
   
   // Game events
   const events = useGameStore((s) => s.events);
+  const actorKey = useGameStore((s) => s.actorKey);
   const eventsRef = useRef<HTMLDivElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
   
@@ -120,14 +121,33 @@ export default function OnlineConsole({
 
   // Format event text (same logic as offline console)
   function formatEventText(text: string): string {
-    let t = text || "";
-    // Case 1: P2 draws 'Card Name' ...
-    t = t.replace(/^(P2 draws )'[^']+'/i, "$1a card");
-    // Case 2: Cannot draw 'Card Name' ...: P2 is not the current player
+    const t0 = text || "";
+    const seat = actorKey;
+    if (seat !== 'p1' && seat !== 'p2') return t0;
+
+    const opp = seat === 'p1' ? 'P2' : 'P1';
+    let t = t0;
+
     t = t.replace(
-      /^Cannot draw '.*?'( from .+: P2 is not the current player)$/i,
-      "Cannot draw a card$1"
+      new RegExp(`^(${opp} draws )'[^']+' from (spellbook|atlas) to hand$`, 'i'),
+      (_m, _prefix, pile) => `${opp} just drew from ${pile}`
     );
+
+    t = t.replace(
+      new RegExp(`^${opp} draws (\\d+) from bottom of (spellbook|atlas)$`, 'i'),
+      (_m, _n, pile) => `${opp} just drew from ${pile}`
+    );
+
+    t = t.replace(
+      new RegExp(`^${opp} draws (\\d+) from (spellbook|atlas)$`, 'i'),
+      (_m, _n, pile) => `${opp} just drew from ${pile}`
+    );
+
+    t = t.replace(
+      new RegExp(`^Cannot draw '.*?'( from .+: ${opp} is not the current player)$`, 'i'),
+      'Cannot draw a card$1'
+    );
+
     return t;
   }
 

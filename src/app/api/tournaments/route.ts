@@ -311,11 +311,19 @@ export async function POST(req: NextRequest) {
             playerId: session.user.id
           }
         }),
-        prisma.playerStanding.create({
-          data: {
+        prisma.playerStanding.upsert({
+          where: {
+            tournamentId_playerId: { tournamentId: tournament.id, playerId: session.user.id }
+          },
+          create: {
             tournamentId: tournament.id,
             playerId: session.user.id,
             displayName
+          },
+          update: {
+            displayName,
+            isEliminated: false,
+            currentMatchId: null,
           }
         })
       ]);

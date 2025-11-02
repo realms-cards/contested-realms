@@ -2776,6 +2776,28 @@ io.on("connection", async (socket: SocketClient) => {
         io.to(room).emit("message", out);
         try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
+    } else if (type === "d20Roll") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        // Sanitize and clamp roll value or generate one server-side
+        let value = Number((payload as { value?: unknown })?.value);
+        if (!Number.isFinite(value) || value < 1 || value > 20) {
+          value = Math.floor(Math.random() * 20) + 1;
+        } else {
+          value = Math.max(1, Math.min(20, Math.floor(value)));
+        }
+        const out = {
+          type: "d20Roll",
+          value,
+          playerKey,
+          from: player.id,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
     } else if (type === "boardCursor") {
       try {
         // Increment receive metric

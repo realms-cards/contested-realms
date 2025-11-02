@@ -126,6 +126,7 @@ export default function TournamentDraft3DScreen({
     Record<number, CardMeta>
   >({});
   const [slugToCardId, setSlugToCardId] = useState<Record<string, number>>({});
+  const [pickTimeRemaining, setPickTimeRemaining] = useState<number>(0);
   // Keep track of an in-flight pick to avoid server poll briefly re-adding the picked card
   const pickInFlightRef = useRef<{
     packIndex: number;
@@ -344,6 +345,35 @@ export default function TournamentDraft3DScreen({
       setPackChoiceOverlay(false);
     }
   }, [draftState.phase, packChoiceOverlay]);
+
+  // Server-driven pick timer countdown (authoritative). Uses pickStartAt/timePerPick from state when present.
+  useEffect(() => {
+    if (draftState.phase !== "picking") {
+      setPickTimeRemaining(0);
+      return;
+    }
+    const anyState = draftState as unknown as {
+      timePerPick?: number;
+      pickStartAt?: number;
+    };
+    const tpp = Number(anyState?.timePerPick) || 60;
+    const startAt = Number(anyState?.pickStartAt) || 0;
+    if (!startAt || !Number.isFinite(startAt)) {
+      setPickTimeRemaining(0);
+      return;
+    }
+    const update = () => {
+      const deadline = startAt + tpp * 1000;
+      const remaining = Math.max(
+        0,
+        Math.floor((deadline - Date.now()) / 1000)
+      );
+      setPickTimeRemaining(remaining);
+    };
+    update();
+    const id = window.setInterval(update, 1000);
+    return () => window.clearInterval(id);
+  }, [draftState]);
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -1855,6 +1885,20 @@ export default function TournamentDraft3DScreen({
               <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
                 Pack {draftState.packIndex + 1} • Pick {draftState.pickNumber}
               </div>
+              {draftState.phase === "picking" && pickTimeRemaining > 0 && (
+                <div
+                  className={`mt-0.5 text-sm font-mono pointer-events-none ${
+                    pickTimeRemaining <= 10
+                      ? "text-red-400"
+                      : pickTimeRemaining <= 20
+                      ? "text-yellow-300"
+                      : "text-green-400"
+                  }`}
+                >
+                  {Math.floor(pickTimeRemaining / 60)}:
+                  {String(pickTimeRemaining % 60).padStart(2, "0")}
+                </div>
+              )}
               {draftState.phase === "picking" &&
                 draftState.waitingFor.length > 0 && (
                   <div className="mt-0.5 text-[11px] text-white/50 pointer-events-none">

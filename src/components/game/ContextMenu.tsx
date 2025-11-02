@@ -403,7 +403,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
-    if (isMine && count > 0) {
+    const canSearch = (t.from === "graveyard" ? count > 0 : isMine && count > 0);
+    if (canSearch) {
       doSearchPile = () => {
         const displayName =
           t.from === "spellbook"
@@ -411,11 +412,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             : t.from === "atlas"
             ? "Atlas"
             : "Cemetery";
-        openSearchDialog(displayName, pile, (selectedCard) => {
-          // Draw the selected card to hand
-          setDragFromPile({ who: t.who, from: t.from, card: selectedCard });
-          drawFromPileToHand();
-        });
+        if (t.from === "graveyard") {
+          // Graveyard search is read-only for both players
+          openSearchDialog(displayName, pile, () => {});
+        } else {
+          openSearchDialog(displayName, pile, (selectedCard) => {
+            // Draw the selected card to hand (only own piles)
+            if (!isMine) return;
+            setDragFromPile({ who: t.who, from: t.from, card: selectedCard });
+            drawFromPileToHand();
+          });
+        }
         // Log opening of search dialog for Spellbook/Atlas in yellow via PlayPage style
         if (t.from === "spellbook" || t.from === "atlas") {
           const whoDisplay = t.who.toUpperCase();

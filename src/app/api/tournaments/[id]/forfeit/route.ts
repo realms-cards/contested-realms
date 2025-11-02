@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,90 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'You are not part of this tournament' }), { status: 400 });
     }
 
+    // If in an active match, end it as a loss for the forfeiting player
+    const currentMatchId = (standing as unknown as { currentMatchId?: string | null })?.currentMatchId || null;
+    if (currentMatchId) {
+      const match = await prisma.match.findUnique({ where: { id: currentMatchId } });
+      if (match && match.status !== 'completed') {
+        const playersArr = Array.isArray(match.players) ? (match.players as Array<{ id?: string; playerId?: string; userId?: string }>) : [];
+        const ids = playersArr
+          .map((p) => (p?.id || p?.playerId || p?.userId ? String(p.id || p.playerId || p.userId) : null))
+          .filter((x): x is string => !!x);
+        const opponentId = ids.find((pid) => pid !== userId) || null;
+
+        const now = new Date();
+        await prisma.match.update({
+          where: { id: currentMatchId },
+          data: {
+            status: 'completed',
+            results: {
+              winnerId: opponentId,
+              loserId: userId,
+              isDraw: false,
+              gameResults: [],
+              completedAt: now.toISOString(),
+            },
+            completedAt: now,
+          },
+        });
+
+        if (opponentId) {
+          // Update standings and recalc tiebreakers
+          await updateStandingsAfterMatch(id, currentMatchId, {
+            winnerId: opponentId,
+            loserId: userId,
+            isDraw: false,
+          });
+
+          // Broadcast STATISTICS_UPDATED
+          try {
+            const updatedStandings = await prisma.playerStanding.findMany({
+              where: { tournamentId: id },
+              orderBy: [
+                { matchPoints: 'desc' },
+                { gameWinPercentage: 'desc' },
+                { opponentMatchWinPercentage: 'desc' },
+              ],
+            });
+            await tournamentSocketService.broadcastStatisticsUpdate(id, {
+              tournamentId: id,
+              standings: updatedStandings.map((standing) => ({
+                playerId: standing.playerId,
+                playerName: standing.displayName,
+                wins: standing.wins,
+                losses: standing.losses,
+                draws: standing.draws,
+                matchPoints: standing.matchPoints,
+                tiebreakers: {
+                  gameWinPercentage: standing.gameWinPercentage,
+                  opponentMatchWinPercentage: standing.opponentMatchWinPercentage,
+                },
+                finalRanking: null,
+              })),
+              rounds: [],
+              overallStats: {
+                totalMatches: 0,
+                completedMatches: 0,
+                averageMatchDuration: null,
+                tournamentDuration: null,
+                totalPlayers: updatedStandings.length,
+                roundsCompleted: 0,
+              },
+            });
+          } catch {}
+        }
+
+        // Notify both players' match clients
+        try {
+          await tournamentSocketService.broadcastToMatch(currentMatchId, 'matchEnded', {
+            tournamentId: id,
+            reason: 'forfeit',
+            winnerId: opponentId || undefined,
+          });
+        } catch {}
+      }
+    }
+
     // Mark player as eliminated, clear current match assignment, and remove registration
     await prisma.$transaction([
       prisma.playerStanding.update({
@@ -64,6 +149,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Broadcast update so UIs refresh standings and lists
     try {
       await tournamentSocketService.broadcastTournamentUpdateById(id);
+    } catch {}
+
+    // Notify tournament room that the player left (host and viewers)
+    try {
+      const regCount = await prisma.tournamentRegistration.count({ where: { tournamentId: id } });
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, shortId: true } });
+      const playerName = user?.name || user?.shortId || userId;
+      await tournamentSocketService.broadcastPlayerLeft(id, userId, playerName, regCount);
     } catch {}
 
     return new Response(JSON.stringify({

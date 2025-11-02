@@ -67,6 +67,7 @@ const STACK_MARGIN_Z = TILE_SIZE * 0.1;
 const STACK_LAYER_LIFT = CARD_THICK * 0.12;
 const BASE_CARD_ELEVATION = CARD_THICK * 0.55;
 const BURROWED_ELEVATION = CARD_THICK * 0.08;
+const RUBBLE_ELEVATION = CARD_THICK * 0.04;
 const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
 const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.28;
 const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
@@ -167,6 +168,7 @@ export default function Board({
   // Hand visibility state to disable glows when hand is shown
   const mouseInHandZone = useGameStore((s) => s.mouseInHandZone);
   const handHoverCount = useGameStore((s) => s.handHoverCount);
+  const [lastTouchedId, setLastTouchedId] = useState<string | null>(null);
   const isHandVisible = mouseInHandZone || handHoverCount > 0;
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
@@ -267,18 +269,27 @@ export default function Board({
     }
 
     // Smoothly drive board-drag ghost (permanent/avatar) to the last pointer position
-    if ((dragging || dragAvatar) && boardGhostRef.current) {
-      const p = lastPointerRef.current;
-      if (p) {
-        const k2 = 0.4;
-        lastBoardGhostPosRef.current.x += (p.x - lastBoardGhostPosRef.current.x) * k2;
-        lastBoardGhostPosRef.current.z += (p.z - lastBoardGhostPosRef.current.z) * k2;
-        boardGhostRef.current.position.set(
-          lastBoardGhostPosRef.current.x,
-          0.26,
-          lastBoardGhostPosRef.current.z
-        );
-      }
+    if ((dragging || dragAvatar) && boardGhostRef.current && camera) {
+      try {
+        const rc = raycasterRef.current;
+        rc.setFromCamera(pointer, camera);
+        const { origin, direction } = rc.ray;
+        const dy = direction.y;
+        if (Math.abs(dy) > 1e-6) {
+          const t = -origin.y / dy;
+          const px = origin.x + direction.x * t;
+          const pz = origin.z + direction.z * t;
+          handlePointerMoveRef.current(px, pz);
+          const k2 = 0.4;
+          lastBoardGhostPosRef.current.x += (px - lastBoardGhostPosRef.current.x) * k2;
+          lastBoardGhostPosRef.current.z += (pz - lastBoardGhostPosRef.current.z) * k2;
+          boardGhostRef.current.position.set(
+            lastBoardGhostPosRef.current.x,
+            0.26,
+            lastBoardGhostPosRef.current.z
+          );
+        }
+      } catch {}
     }
   });
 
@@ -601,6 +612,10 @@ export default function Board({
     start: [number, number];
     time: number;
   } | null>(null);
+  const draggingRef = useRef<{ from: string; index: number } | null>(null);
+  useEffect(() => {
+    draggingRef.current = dragging;
+  }, [dragging]);
   // Map of cellKey:index -> RigidBody to drive during drag
   const bodyMap = useRef<Map<string, BodyApi>>(new Map());
   const draggedBody = useRef<BodyApi | null>(null);
@@ -1133,6 +1148,128 @@ export default function Board({
   useEffect(() => {
     handlePointerMoveRef.current = handlePointerMove;
   }, [handlePointerMove]);
+
+  useEffect(() => {
+    const onGlobalPointerUp = () => {
+      if (Date.now() - lastDropAt.current < 32) return;
+      if (dragAvatar) return;
+      if (dragFromHand || dragFromPile) return;
+      if (isSpectator) return;
+      const d = draggingRef.current;
+      if (!d) return;
+      const p = lastPointerRef.current;
+      if (!p) return;
+      const wx = p.x;
+      const wz = p.z;
+      try {
+        const gridHalfW = (board.size.w * TILE_SIZE) / 2;
+        const gridHalfH = (board.size.h * TILE_SIZE) / 2;
+        const rightX = gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
+        const leftX = -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
+        const zSpacing = CARD_LONG * 1.1;
+        const halfW = CARD_SHORT / 2 + 0.2;
+        const halfH = CARD_LONG / 2 + 0.2;
+        const p1X = rightX + 0.1;
+        const p1StartZ = -gridHalfH - TILE_SIZE * 0.8;
+        const p1Z = p1StartZ + zSpacing * 7.2;
+        const p2X = leftX - 0.1;
+        const p2StartZ = gridHalfH + TILE_SIZE * 0.8;
+        const p2Z = p2StartZ - zSpacing * 7.2;
+        const p1AtlasZ = p1StartZ + zSpacing * 4.8;
+        const p1SpellZ = p1StartZ + zSpacing * 5.9;
+        const p2AtlasZ = p2StartZ - zSpacing * 4.8;
+        const p2SpellZ = p2StartZ - zSpacing * 5.9;
+        const atlasHalfW = CARD_LONG / 2 + 0.2;
+        const atlasHalfH = CARD_SHORT / 2 + 0.2;
+
+        const overP1GY = wx >= p1X - halfW && wx <= p1X + halfW && wz >= p1Z - halfH && wz <= p1Z + halfH;
+        const overP2GY = wx >= p2X - halfW && wx <= p2X + halfW && wz >= p2Z - halfH && wz <= p2Z + halfH;
+        const overP1Atlas = wx >= p1X - atlasHalfW && wx <= p1X + atlasHalfW && wz >= p1AtlasZ - atlasHalfH && wz <= p1AtlasZ + atlasHalfH;
+        const overP2Atlas = wx >= p2X - atlasHalfW && wx <= p2X + atlasHalfW && wz >= p2AtlasZ - atlasHalfH && wz <= p2AtlasZ + atlasHalfH;
+        const overP1Spell = wx >= p1X - halfW && wx <= p1X + halfW && wz >= p1SpellZ - halfH && wz <= p1SpellZ + halfH;
+        const overP2Spell = wx >= p2X - halfW && wx <= p2X + halfW && wz >= p2SpellZ - halfH && wz <= p2SpellZ + halfH;
+        if (overP1Atlas || overP2Atlas || overP1Spell || overP2Spell) {
+          setDragging(null);
+          setDragFromHand(false);
+          setGhost(null);
+          dragStartRef.current = null;
+          lastDropAt.current = Date.now();
+          draggedBody.current = null;
+          return;
+        }
+        if (overP1GY || overP2GY) {
+          const store = useGameStore.getState();
+          const draggedCard = permanents[d.from]?.[d.index]?.card;
+          const tokenType = (draggedCard?.type || "").toLowerCase();
+          const goTo = tokenType.includes("token") ? "banished" : "graveyard";
+          try {
+            store.movePermanentToZone(d.from, d.index, goTo);
+            try { playCardFlip(); } catch {}
+          } finally {
+            setDragging(null);
+            setDragFromHand(false);
+            setGhost(null);
+            dragStartRef.current = null;
+            lastDropAt.current = Date.now();
+            draggedBody.current = null;
+          }
+          return;
+        }
+      } catch {}
+      let tx = Math.round((wx - offsetX) / TILE_SIZE);
+      let ty = Math.round((wz - offsetY) / TILE_SIZE);
+      tx = Math.max(0, Math.min(board.size.w - 1, tx));
+      ty = Math.max(0, Math.min(board.size.h - 1, ty));
+      const dropKey = `${tx},${ty}`;
+      const tileX = offsetX + tx * TILE_SIZE;
+      const tileZ = offsetY + ty * TILE_SIZE;
+      const marginZ = STACK_MARGIN_Z;
+      const spacing = STACK_SPACING;
+      const draggedOwner = permanents[d.from]?.[d.index]?.owner ?? 1;
+      const draggedInstId = permanents[d.from]?.[d.index]?.instanceId || null;
+      const zBase = draggedOwner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
+      if (d.from === dropKey) {
+        const baseX = tileX + (-((Math.max((permanents[dropKey] || []).length, 1) - 1) * spacing) / 2 + d.index * spacing);
+        const baseZ = tileZ + zBase;
+        const offX = wx - baseX;
+        const offZ = wz - baseZ;
+        dragTarget.current = null;
+        draggedBody.current = null;
+        requestAnimationFrame(() => {
+          setPermanentOffset(dropKey, d.index, [offX, offZ]);
+        });
+        if (!USE_GHOST_ONLY_BOARD_DRAG) {
+          const targetId = (draggedInstId || `perm:${dropKey}:${d.index}`) as string;
+          snapBodyTo(targetId, wx, wz);
+        }
+      } else {
+        const toItems = permanents[dropKey] || [];
+        const newIndex = toItems.length;
+        const startX = -((Math.max(newIndex + 1, 1) - 1) * spacing) / 2;
+        const baseX = tileX + (startX + newIndex * spacing);
+        const baseZ = tileZ + zBase;
+        const offX = wx - baseX;
+        const offZ = wz - baseZ;
+        dragTarget.current = null;
+        draggedBody.current = null;
+        requestAnimationFrame(() => {
+          moveSelectedPermanentToWithOffset(tx, ty, [offX, offZ]);
+        });
+        if (!USE_GHOST_ONLY_BOARD_DRAG) {
+          const targetId = (draggedInstId || `perm:${dropKey}:${newIndex}`) as string;
+          snapBodyTo(targetId, wx, wz);
+        }
+      }
+      setDragging(null);
+      setDragFromHand(false);
+      setGhost(null);
+      dragStartRef.current = null;
+      lastDropAt.current = Date.now();
+      draggedBody.current = null;
+    };
+    window.addEventListener("pointerup", onGlobalPointerUp);
+    return () => window.removeEventListener("pointerup", onGlobalPointerUp);
+  }, [dragAvatar, dragFromHand, dragFromPile, isSpectator, board.size.w, board.size.h, offsetX, offsetY, permanents, moveSelectedPermanentToWithOffset, setPermanentOffset, setDragging, setDragFromHand, setGhost, playCardFlip]);
 
   // Re-emit cursor when drag or highlight changes (using last known position)
   useEffect(() => {
@@ -1950,12 +2087,21 @@ export default function Board({
                     permanentPosition?.state === "submerged";
 
     // Adjust Y position: normal cards stack upward slightly to avoid clipping
-    const baseY = isBurrowed ? BURROWED_ELEVATION : BASE_CARD_ELEVATION;
-    const stackIndex = idx;
-    const stackLift = !isBurrowed ? stackIndex * STACK_LAYER_LIFT : 0;
+    const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
+    const isLastTouched = lastTouchedId === permId;
+    const baseY = isBurrowed
+      ? BURROWED_ELEVATION
+      : tokenSiteReplace
+      ? RUBBLE_ELEVATION
+      : BASE_CARD_ELEVATION;
+    const isTopCandidate =
+      (dragging && dragging.from === key && dragging.index === idx) || isSel || isLastTouched;
+    const effectiveStackIndex =
+      !isBurrowed && !tokenSiteReplace && isTopCandidate ? items.length + 1 : idx;
+    const stackLift = !isBurrowed && !tokenSiteReplace ? effectiveStackIndex * STACK_LAYER_LIFT : 0;
     const yPos = baseY + stackLift;
 
-    const permanentInstanceKey = p.instanceId ?? `perm:${key}:${idx}`;
+    const permanentInstanceKey = permId;
     const remotePermanentColor = getRemoteHighlightColor(
       p.card ?? null,
       {
@@ -2032,6 +2178,7 @@ export default function Board({
               // Rubble behaves like a site for movement: no drag start
               e.stopPropagation();
               useGameStore.getState().selectPermanent(key, idx);
+              setLastTouchedId(permId);
               clearHoverPreview(hoverKey);
               return;
             }
@@ -2045,6 +2192,7 @@ export default function Board({
               }, 180) as unknown as number;
               touchContextTimerRef.current = window.setTimeout(() => {
                 useGameStore.getState().selectPermanent(key, idx);
+                setLastTouchedId(permId);
                 openContextMenu(
                   { kind: "permanent", at: key, index: idx },
                   { x: cx, y: cy }
@@ -2054,11 +2202,15 @@ export default function Board({
             if (e.button === 0) {
               e.stopPropagation();
               useGameStore.getState().selectPermanent(key, idx);
+              setLastTouchedId(permId);
               if (!isSpectator && actorKey) {
                 const mine =
                   (actorKey === "p1" && owner === 1) ||
                   (actorKey === "p2" && owner === 2);
-                if (!mine) {
+                const actorIsActive =
+                  (actorKey === "p1" && currentPlayer === 1) ||
+                  (actorKey === "p2" && currentPlayer === 2);
+                if (!mine && !actorIsActive) {
                   if (process.env.NODE_ENV !== "production") {
                     console.debug(
                       `[drag] perm:denied ${key}[${idx}] owner=${owner} actor=${actorKey}`
@@ -2105,6 +2257,7 @@ export default function Board({
             if (tokenSiteReplace) return;
             if (isSpectator) return;
             e.stopPropagation();
+            setLastTouchedId(permId);
             emitBoardPing({ x: e.point.x, z: e.point.z });
           }}
           onPointerMove={(e) => {
@@ -2215,9 +2368,61 @@ export default function Board({
             e.stopPropagation();
             clearTouchTimers();
             if (dragging) {
-              // Drop the currently dragged permanent based on pointer world position
               const wx = e.point.x;
               const wz = e.point.z;
+              try {
+                const gridHalfW = (board.size.w * TILE_SIZE) / 2;
+                const gridHalfH = (board.size.h * TILE_SIZE) / 2;
+                const rightX = gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
+                const leftX = -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
+                const zSpacing = CARD_LONG * 1.1;
+                const halfW = CARD_SHORT / 2 + 0.2;
+                const halfH = CARD_LONG / 2 + 0.2;
+                const p1X = rightX + 0.1;
+                const p1StartZ = -gridHalfH - TILE_SIZE * 0.8;
+                const p1Z = p1StartZ + zSpacing * 7.2;
+                const p2X = leftX - 0.1;
+                const p2StartZ = gridHalfH + TILE_SIZE * 0.8;
+                const p2Z = p2StartZ - zSpacing * 7.2;
+                const p1AtlasZ = p1StartZ + zSpacing * 4.8;
+                const p1SpellZ = p1StartZ + zSpacing * 5.9;
+                const p2AtlasZ = p2StartZ - zSpacing * 4.8;
+                const p2SpellZ = p2StartZ - zSpacing * 5.9;
+                const atlasHalfW = CARD_LONG / 2 + 0.2;
+                const atlasHalfH = CARD_SHORT / 2 + 0.2;
+                const overP1GY = wx >= p1X - halfW && wx <= p1X + halfW && wz >= p1Z - halfH && wz <= p1Z + halfH;
+                const overP2GY = wx >= p2X - halfW && wx <= p2X + halfW && wz >= p2Z - halfH && wz <= p2Z + halfH;
+                const overP1Atlas = wx >= p1X - atlasHalfW && wx <= p1X + atlasHalfW && wz >= p1AtlasZ - atlasHalfH && wz <= p1AtlasZ + atlasHalfH;
+                const overP2Atlas = wx >= p2X - atlasHalfW && wx <= p2X + atlasHalfW && wz >= p2AtlasZ - atlasHalfH && wz <= p2AtlasZ + atlasHalfH;
+                const overP1Spell = wx >= p1X - halfW && wx <= p1X + halfW && wz >= p1SpellZ - halfH && wz <= p1SpellZ + halfH;
+                const overP2Spell = wx >= p2X - halfW && wx <= p2X + halfW && wz >= p2SpellZ - halfH && wz <= p2SpellZ + halfH;
+                if (overP1Atlas || overP2Atlas || overP1Spell || overP2Spell) {
+                  setDragging(null);
+                  setDragFromHand(false);
+                  setGhost(null);
+                  dragStartRef.current = null;
+                  lastDropAt.current = Date.now();
+                  draggedBody.current = null;
+                  return;
+                }
+                if (overP1GY || overP2GY) {
+                  const store = useGameStore.getState();
+                  const tokenType = (p.card?.type || "").toLowerCase();
+                  const goTo = tokenType.includes("token") ? "banished" : "graveyard";
+                  try {
+                    store.movePermanentToZone(dragging.from, dragging.index, goTo);
+                    try { playCardFlip(); } catch {}
+                  } finally {
+                    setDragging(null);
+                    setDragFromHand(false);
+                    setGhost(null);
+                    dragStartRef.current = null;
+                    lastDropAt.current = Date.now();
+                    draggedBody.current = null;
+                  }
+                  return;
+                }
+              } catch {}
               let tx = Math.round((wx - offsetX) / TILE_SIZE);
               let ty = Math.round((wz - offsetY) / TILE_SIZE);
               tx = Math.max(0, Math.min(board.size.w - 1, tx));
@@ -2281,6 +2486,7 @@ export default function Board({
               dragStartRef.current = null;
               lastDropAt.current = Date.now();
               draggedBody.current = null;
+              setLastTouchedId(permId);
               return;
             }
           }}
@@ -2319,6 +2525,7 @@ export default function Board({
                 return;
               // Left-click selects only; context menu via right-click
               useGameStore.getState().selectPermanent(key, idx);
+              setLastTouchedId(permId);
             }}
             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
               if (isSpectator) return;
@@ -2326,6 +2533,7 @@ export default function Board({
               e.nativeEvent.preventDefault();
               // Ensure the permanent is selected before opening the menu
               useGameStore.getState().selectPermanent(key, idx);
+              setLastTouchedId(permId);
               openContextMenu(
                 { kind: "permanent", at: key, index: idx },
                 { x: e.clientX, y: e.clientY }
@@ -2351,6 +2559,8 @@ export default function Board({
                 }
                 rotationZ={rotZ}
                 elevation={0.005}
+                depthWrite={!tokenSiteReplace}
+                renderOrder={tokenSiteReplace ? -5 : 100}
               />
             ) : p.card.slug ? (
               <>
@@ -2369,7 +2579,9 @@ export default function Board({
                   width={CARD_SHORT}
                   height={CARD_LONG}
                   rotationZ={rotZ}
-                  renderOrder={isBurrowed ? -10 : 100}
+                  renderOrder={
+                    isBurrowed ? -10 : (isDraggingPermanent || isSel || isLastTouched) ? 1000 : 100
+                  }
                   depthWrite={!isBurrowed}
                   depthTest={true}
                   textureUrl={
@@ -2383,7 +2595,9 @@ export default function Board({
                 width={CARD_SHORT}
                 height={CARD_LONG}
                 rotationZ={rotZ}
-                renderOrder={isBurrowed ? -10 : 100}
+                renderOrder={
+                  isBurrowed ? -10 : (isDraggingPermanent || isSel || isLastTouched) ? 1000 : 100
+                }
                 depthWrite={!isBurrowed}
                 depthTest={true}
                 textureUrl={
@@ -2672,6 +2886,16 @@ export default function Board({
                   contextMenu.target.kind === "avatar" &&
                   contextMenu.target.who === who) ||
                 dragAvatar === who;
+              const avatarId = `avatar:${who}`;
+              const isLastTouchedAvatar = lastTouchedId === avatarId;
+              const tileKeyForAvatar = `${ax},${ay}`;
+              const tileItemsForAvatar = permanents[tileKeyForAvatar] || [];
+              const isTopAvatar = dragAvatar === who || isSel || isLastTouchedAvatar;
+              const avatarY =
+                BASE_CARD_ELEVATION +
+                (isTopAvatar
+                  ? (tileItemsForAvatar.length + 1) * STACK_LAYER_LIFT + CARD_THICK * 0.01
+                  : 0);
               return (
                 <RigidBody
                   key={`avatar-${who}`}
@@ -2692,7 +2916,7 @@ export default function Board({
                   }}
                   ccd
                   colliders={false}
-                  position={[worldX, BASE_CARD_ELEVATION, worldZ]}
+                  position={[worldX, avatarY, worldZ]}
                   linearDamping={2}
                   angularDamping={2}
                   canSleep={false}
@@ -2713,7 +2937,7 @@ export default function Board({
                       rotationZ={rotZ}
                       elevation={0.0001}
                       color={who === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2}
-                      renderOrder={1000}
+                      renderOrder={1201}
                     />
                   )}
                   <group
@@ -2737,6 +2961,7 @@ export default function Board({
                         }
                         touchContextTimerRef.current = window.setTimeout(() => {
                           selectAvatar(who);
+                          setLastTouchedId(avatarId);
                           openContextMenu(
                             { kind: "avatar", who },
                             { x: cx, y: cy }
@@ -2746,6 +2971,7 @@ export default function Board({
                       if (e.button === 0) {
                     e.stopPropagation();
                     selectAvatar(who);
+                    setLastTouchedId(avatarId);
                     // wait for small hold + movement before starting drag
                     avatarDragStartRef.current = {
                       who,
@@ -2778,6 +3004,7 @@ export default function Board({
                       if (dragAvatar) return;
                       if (isSpectator) return;
                       e.stopPropagation();
+                      setLastTouchedId(avatarId);
                       emitBoardPing({ x: e.point.x, z: e.point.z });
                     }}
                     onPointerMove={(e) => {
@@ -2863,6 +3090,7 @@ export default function Board({
                       e.stopPropagation();
                       e.nativeEvent.preventDefault();
                       selectAvatar(who);
+                      setLastTouchedId(avatarId);
                       openContextMenu(
                         { kind: "avatar", who },
                         { x: e.clientX, y: e.clientY }
@@ -2916,6 +3144,7 @@ export default function Board({
                         avatarDragStartRef.current = null;
                         lastDropAt.current = Date.now();
                         draggedBody.current = null;
+                        setLastTouchedId(avatarId);
                       }
                     }}
                   >
@@ -2929,6 +3158,7 @@ export default function Board({
                         if (dragAvatar === who) return;
                         // Left-click selects only; context menu via right-click
                         selectAvatar(who);
+                        setLastTouchedId(avatarId);
                       }}
                       onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                         if (isSpectator) return;
@@ -2936,6 +3166,7 @@ export default function Board({
                         e.nativeEvent.preventDefault();
                         // Ensure the avatar is selected before opening the menu
                         selectAvatar(who);
+                        setLastTouchedId(avatarId);
                         openContextMenu(
                           { kind: "avatar", who },
                           { x: e.clientX, y: e.clientY }
@@ -2964,6 +3195,9 @@ export default function Board({
                         elevation={dragAvatar === who ? DRAG_LIFT + 0.002 : 0.002}
                         polygonOffsetUnits={-1.25}
                         polygonOffsetFactor={-0.75}
+                        renderOrder={(isLastTouchedAvatar || isSel || dragAvatar === who) ? 1200 : 100}
+                        depthWrite={!(isLastTouchedAvatar || isSel || dragAvatar === who)}
+                        depthTest={!(isLastTouchedAvatar || isSel || dragAvatar === who) ? true : false}
                         textureUrl={
                           activeCard || cachedCard
                             ? undefined

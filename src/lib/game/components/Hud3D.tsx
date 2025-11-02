@@ -14,8 +14,11 @@ export interface Hud3DProps {
 
 export default function Hud3D({ owner }: Hud3DProps) {
   const boardSize = useGameStore((s) => s.board.size);
-  // Derived available mana from sites + permanent providers
-  const mana = useGameStore((s) => s.getAvailableMana(owner));
+  // Show adjustable mana counter stored on the player state
+  const mana = useGameStore((s) => s.players[owner].mana);
+  const actorKey = useGameStore((s) => s.actorKey);
+  const addMana = useGameStore((s) => s.addMana);
+  const dragFromHand = useGameStore((s) => s.dragFromHand);
 
   // Seat mapping for HUD: p1 bottom, p2 top
   const isBottom = owner === "p1";
@@ -35,6 +38,7 @@ export default function Hud3D({ owner }: Hud3DProps) {
   // Place mana label just outside the threshold column horizontally
   const outsideSign = owner === "p1" ? 1 : -1;
   const manaX = sideX + outsideSign * CARD_SHORT * 0.9;
+  const canAdjust = (actorKey ? actorKey === owner : true) && !dragFromHand;
 
   return (
     <group>
@@ -61,8 +65,10 @@ export default function Hud3D({ owner }: Hud3DProps) {
           <div className="pointer-events-auto select-none">
             <ManaCounterHUD
               value={mana}
-              disableInc={true}
-              disableDec={true}
+              onIncrement={canAdjust ? () => addMana(owner, 1) : undefined}
+              onDecrement={canAdjust ? () => addMana(owner, -1) : undefined}
+              disableInc={!canAdjust}
+              disableDec={!canAdjust}
               size={18}
             />
           </div>

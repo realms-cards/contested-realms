@@ -541,7 +541,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentsDebounced]);
+  }, [queueStatisticsRefresh, refreshTournamentsDebounced, currentTournament?.creatorId, currentTournament?.id, currentUserId]);
 
   const handlePlayerLeft = useCallback((data: { 
     tournamentId: string;
@@ -563,13 +563,23 @@ useEffect(() => {
       const updated = reg.filter(p => p.id !== data.playerId);
       return { ...(prev as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
     });
+    try {
+      const hostId = currentTournament?.creatorId || null;
+      if (hostId && hostId === currentUserId && currentTournament?.id === data.tournamentId) {
+        const msg = `${data.playerName} forfeited and left the tournament.`;
+        localStorage.setItem('app:toast', msg);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
+        }
+      }
+    } catch {}
     setRealtimeEvents(prev => ({
       ...prev,
       playerLeftCount: prev.playerLeftCount + 1,
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentsDebounced]);
+  }, [queueStatisticsRefresh, refreshTournamentsDebounced, currentTournament?.creatorId, currentTournament?.id, currentUserId]);
 
   const handlePreparationUpdate = useCallback((data: { 
     tournamentId: string; 
