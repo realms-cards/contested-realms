@@ -53,6 +53,21 @@ const EditorCanvas = dynamic(
 // Stable constant for standard site names (tournament legal)
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
 
+function pickStandardSiteResult(
+  results: SearchResult[],
+  name: (typeof STANDARD_SITE_NAMES)[number]
+): SearchResult | null {
+  const normalized = name.toLowerCase();
+  const betaExact = results.find(
+    (card) => card.cardName.toLowerCase() === normalized && card.set === "Beta"
+  );
+  if (betaExact) return betaExact;
+  const anyExact = results.find(
+    (card) => card.cardName.toLowerCase() === normalized
+  );
+  return anyExact ?? null;
+}
+
 // --- Deck Editor data types (same as 2D editor) ---
 
 type Zone = "Deck" | "Sideboard";
@@ -568,7 +583,8 @@ function AuthenticatedDeckEditor() {
               )}${setParam}&type=site`
             );
             const data = (await res.json()) as SearchResult[];
-            return [name, res.ok && data[0] ? data[0] : null] as const;
+            const match = res.ok ? pickStandardSiteResult(data, name) : null;
+            return [name, match] as const;
           })
         );
 
@@ -2123,7 +2139,7 @@ function AuthenticatedDeckEditor() {
           `/api/cards/search?q=${encodeURIComponent(name)}&type=site`
         );
         const data = (await res.json()) as SearchResult[];
-        const r = res.ok && data[0] ? data[0] : null;
+        const r = res.ok ? pickStandardSiteResult(data, name) : null;
         if (r) addCardAuto(r);
         else setError(`Site ${name} not found`);
       } catch (e) {

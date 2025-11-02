@@ -2047,6 +2047,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         console.warn("[interaction] failed to send request", err);
       } catch {}
     }
+    try {
+      const k = String(input.kind || "request");
+      const msg = `Consent requested: '${k}'`;
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("app:toast", { detail: { message: msg } })
+        );
+      }
+    } catch {}
   },
   receiveInteractionEnvelope: (incoming) => {
     const message: InteractionMessage | null = (() => {
@@ -2104,6 +2113,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       const grantOverride =
         normalizeGrantRequest(payload.grant) ??
         normalizeGrantRequest(payload.proposedGrant);
+      // Prepare requester-visible logging of the decision
+      const localId = get().localPlayerId;
+      let shouldLogDecision = false;
+      let decisionLogText: string | null = null;
       set((state) => {
         const existing = state.interactionLog[message.requestId];
         const baseRequest =
@@ -2135,6 +2148,30 @@ export const useGameStore = create<GameState>((set, get) => ({
           receivedAt: existing?.receivedAt ?? baseRequest.createdAt ?? now,
           updatedAt: now,
         };
+        // Only log the opponent's decision to the requester, and only once
+        const wasAlreadyAnswered = !!existing?.response;
+        const isRequester = !!localId && baseRequest.from === localId;
+        if (!wasAlreadyAnswered && isRequester) {
+          const k = String(message.kind || "request");
+          if (message.decision === "approved") {
+            decisionLogText = `Consent result: '${k}' approved.`;
+            shouldLogDecision = true;
+          } else if (message.decision === "declined") {
+            const reason =
+              typeof message.reason === "string" && message.reason.trim().length
+                ? `: ${message.reason}`
+                : ".";
+            decisionLogText = `Consent result: '${k}' declined${reason}`;
+            shouldLogDecision = true;
+          } else if (message.decision === "cancelled") {
+            const reason =
+              typeof message.reason === "string" && message.reason.trim().length
+                ? `: ${message.reason}`
+                : ".";
+            decisionLogText = `Consent result: '${k}' cancelled${reason}`;
+            shouldLogDecision = true;
+          }
+        }
         const nextLog: InteractionStateMap = {
           ...state.interactionLog,
           [message.requestId]: nextEntry,
@@ -2151,6 +2188,19 @@ export const useGameStore = create<GameState>((set, get) => ({
           acknowledgedInteractionIds: acknowledged,
         };
       });
+      // Perform logging outside of set to avoid state churn in the same reducer pass
+      if (shouldLogDecision && decisionLogText) {
+        try {
+          get().log(decisionLogText);
+        } catch {}
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", { detail: { message: decisionLogText } })
+            );
+          }
+        } catch {}
+      }
     }
   },
   receiveInteractionResult: (message: InteractionResultMessage) => {
@@ -2237,8 +2287,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         } as Partial<GameState> as GameState;
       }
       // Default: just update the log/acknowledged flags and optionally log message
+      // Only log successful results to avoid noisy server debug like
+      // 'Unsupported pending action kind' for unimplemented actions.
       try {
-        if (message.message) get().log(message.message);
+        if (message.success && message.message) get().log(message.message);
       } catch {}
       return {
         interactionLog: nextLog,
@@ -5271,9 +5323,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       const zonesNext = { ...s.zones } as Record<PlayerKey, Zones>;
       const seatZones = { ...zonesNext[owner] };
       const movedCard = prepareCardForSeat(item.card, owner);
-      if (target === "hand") seatZones.hand = [...seatZones.hand, movedCard];
-      else if (target === "graveyard")
-        seatZones.graveyard = [...seatZones.graveyard, movedCard];
+      const isToken = String(item.card?.type || "").toLowerCase().includes("token");
+      const finalTarget = target === "graveyard" && isToken ? "banished" : target;
+      if (finalTarget === "hand") seatZones.hand = [...seatZones.hand, movedCard];
+      else if (finalTarget === "graveyard")
+        seatZones.graveyard = [movedCard, ...seatZones.graveyard];
       else if (target === "spellbook") {
         const pile = [...seatZones.spellbook];
         if (position === "top") pile.unshift(movedCard);
@@ -5288,11 +5342,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       const y = Number(cell[1] || 0);
       const cellNo = y * s.board.size.w + x + 1;
       const label =
-        target === "hand"
+        finalTarget === "hand"
           ? "hand"
-          : target === "graveyard"
+          : finalTarget === "graveyard"
           ? "graveyard"
-          : target === "spellbook"
+          : finalTarget === "spellbook"
           ? "spellbook"
           : "banished";
       get().log(
@@ -5369,7 +5423,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (target === "hand" && movedSiteCard) {
         z.hand = [...z.hand, movedSiteCard];
       } else if (target === "graveyard" && movedSiteCard) {
-        z.graveyard = [...z.graveyard, movedSiteCard];
+        z.graveyard = [movedSiteCard, ...z.graveyard];
       } else if (target === "atlas" && movedSiteCard) {
         const pile = [...z.atlas];
         if (position === "top") pile.unshift(movedSiteCard);

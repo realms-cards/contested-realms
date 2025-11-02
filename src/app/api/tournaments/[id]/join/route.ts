@@ -113,13 +113,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     });
 
-    // Create initial standing
-    console.log("Creating player standing:", { tournamentId: id, playerId: userId, displayName });
-    await prisma.playerStanding.create({
-      data: {
+    // Create or revive standing (handle re-join after prior forfeit)
+    console.log("Upserting player standing:", { tournamentId: id, playerId: userId, displayName });
+    await prisma.playerStanding.upsert({
+      where: {
+        tournamentId_playerId: { tournamentId: id, playerId: userId }
+      },
+      create: {
         tournamentId: id,
         playerId: userId,
         displayName
+      },
+      update: {
+        displayName,
+        isEliminated: false,
+        currentMatchId: null,
       }
     });
 

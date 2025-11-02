@@ -60,6 +60,7 @@ export default function TournamentDetailsPage() {
     loading: rtLoading,
     error: rtError,
     lastUpdated,
+    refreshTournaments,
   } = useRealtimeTournaments();
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -409,7 +410,9 @@ export default function TournamentDetailsPage() {
         .registeredPlayers || [];
     if (Array.isArray(rp) && rp.some((p) => p.id === userId)) return true;
     // Fallback for active phase when registrations may not be present
-    return Boolean(statistics?.standings?.some((s) => s.playerId === userId));
+    return Boolean(
+      statistics?.standings?.some((s) => s.playerId === userId && !s.isEliminated)
+    );
   }, [tournament, statistics?.standings, session?.user?.id]);
 
   // Check if current user is the creator
@@ -2317,6 +2320,15 @@ export default function TournamentDetailsPage() {
                               },
                             })
                           );
+                          try {
+                            await refreshTournaments?.();
+                          } catch {}
+                          try {
+                            statistics?.actions?.refreshAll?.();
+                          } catch {}
+                          try {
+                            setCurrentTournamentById(tournament.id);
+                          } catch {}
                         } catch {}
                       } catch (err) {
                         setError(

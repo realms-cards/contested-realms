@@ -128,11 +128,19 @@ export async function PATCH(
             playerId: userId
           }
         }),
-        prisma.playerStanding.create({
-          data: {
+        prisma.playerStanding.upsert({
+          where: {
+            tournamentId_playerId: { tournamentId: invitation.tournamentId, playerId: userId }
+          },
+          create: {
             tournamentId: invitation.tournamentId,
             playerId: userId,
             displayName
+          },
+          update: {
+            displayName,
+            isEliminated: false,
+            currentMatchId: null,
           }
         })
       ]);

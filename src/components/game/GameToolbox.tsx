@@ -31,6 +31,7 @@ export default function GameToolbox({
   const interactionLog = useGameStore((s) => s.interactionLog);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const localPlayerId = useGameStore((s) => s.localPlayerId);
+  const transport = useGameStore((s) => s.transport);
 
   const isOnline = !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
 
@@ -71,6 +72,28 @@ export default function GameToolbox({
     }, 500);
     return () => clearInterval(id as unknown as number);
   }, []);
+
+  // Subscribe to shared d20Roll messages from the server.
+  // When received, open the D20 overlay locally for both players.
+  useEffect(() => {
+    if (!transport?.on) return undefined;
+    const off = transport.on("message", (m) => {
+      const t = m && typeof m === "object" && (m as { type?: unknown }).type;
+      if (t !== "d20Roll") return;
+      const valRaw = (m as { value?: unknown }).value as number | undefined;
+      const value = Number(valRaw);
+      if (!Number.isFinite(value)) return;
+      setD20Value(Math.max(1, Math.min(20, Math.floor(value))));
+      setD20Open(true);
+      setD20Rolling(true);
+      try {
+        console.log(`[Toolbox] D20 roll <= ${value}`);
+      } catch {}
+    });
+    return () => {
+      try { off?.(); } catch {}
+    };
+  }, [transport]);
 
   // Track pending permission requests we initiated so we can react on approval
   const pendingRequestRef = useRef<
@@ -262,6 +285,19 @@ export default function GameToolbox({
 
   const startToolboxRoll = () => {
     const value = Math.floor(Math.random() * 20) + 1;
+    if (isOnline && transport?.sendMessage) {
+      try {
+        transport.sendMessage({ type: "d20Roll", value });
+      } catch {}
+      // Log once; event log is synchronized via server patch in log()
+      log(`Toolbox D20 roll: ${value}`);
+      try {
+        console.log(`[Toolbox] D20 roll: ${value}`);
+      } catch {}
+      // Do not open local-only popup here; the shared listener will open it for both players
+      return;
+    }
+    // Offline/hotseat fallback: local popup
     setD20Value(value);
     setD20Open(true);
     setD20Rolling(true);

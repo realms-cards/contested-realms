@@ -1,6 +1,8 @@
 "use client";
 
 import { Skull, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useGameStore } from "@/lib/game/store";
 import type { LifeState, PlayerKey } from "@/lib/game/store";
 
@@ -39,6 +41,7 @@ interface LifeCounterProps {
 function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCounterProps & { showNameAbove: boolean }) {
   const playerState = useGameStore((s) => s.players[player]);
   const addLife = useGameStore((s) => s.addLife);
+  const [showDeathConfirm, setShowDeathConfirm] = useState(false);
   
   const { life, lifeState } = playerState;
   const lifeDisplay = formatLifeDisplay(life, lifeState);
@@ -99,7 +102,13 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
           </button>
           <button
             className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            onClick={() => addLife(player, -1)}
+            onClick={() => {
+              if (lifeState === 'dd') {
+                setShowDeathConfirm(true);
+              } else {
+                addLife(player, -1);
+              }
+            }}
             disabled={dragFromHand || !canDecrease}
             title={!canDecrease ? 'Player is dead' : 'Decrease life'}
             onContextMenu={(e) => e.preventDefault()}
@@ -119,6 +128,47 @@ function LifeCounter({ player, playerName, dragFromHand, showNameAbove }: LifeCo
           {playerName}
         </div>
       )}
+
+      {showDeathConfirm &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4"
+            onMouseDown={() => setShowDeathConfirm(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="death-confirm-title"
+              className="bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl w-full max-w-sm p-5"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <h2 id="death-confirm-title" className="text-lg font-semibold mb-2">
+                Declare your DEATH?
+              </h2>
+              <p className="text-sm text-slate-300 mb-4">This action is irreversible.</p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeathConfirm(false)}
+                  className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addLife(player, -1);
+                    setShowDeathConfirm(false);
+                  }}
+                  className="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-700 text-white"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

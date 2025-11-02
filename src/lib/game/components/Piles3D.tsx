@@ -54,7 +54,7 @@ export default function Piles3D({
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
-  const { playCardFlip } = useSound();
+  const { playCardFlip, playCardSelect } = useSound();
   // Intentionally unused in this component after layout refactor
   void _matW;
   void _matH;
@@ -190,7 +190,7 @@ export default function Piles3D({
         const isCemetery = key === "graveyard";
         // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
         const ownerRot = owner === "p1" ? Math.PI : 0;
-        const rotZ = ownerRot + Math.PI + (isCemetery ? Math.PI : 0);
+        const rotZ = isCemetery ? (owner === "p1" ? 0 : Math.PI) : ownerRot + Math.PI;
         const cardbackUrl = isCemetery 
           ? undefined 
           : key === "atlas" 
@@ -274,8 +274,22 @@ export default function Piles3D({
                       );
                       clearHoverPreview();
                     }}
+                    onClick={() => {
+                      const isDragging = !!dragFromHand || !!dragFromPile;
+                      if (isDragging) return;
+                      if (isCemetery) return;
+                      const store = useGameStore.getState();
+                      const actorKey = store.actorKey;
+                      const isMine = !actorKey || actorKey === owner;
+                      if (store.transport && !isMine) return;
+                      const from = (key === "atlas" ? "atlas" : "spellbook") as
+                        | "atlas"
+                        | "spellbook";
+                      store.drawFrom(owner, from, 1);
+                      try { playCardSelect(); } catch {}
+                    }}
                     // Dragging from piles is disabled
-                    onPointerMove={(_e: ThreeEvent<PointerEvent>) => {
+                    onPointerMove={( _e: ThreeEvent<PointerEvent>) => {
                       // touch the arg to avoid unused-var lint
                       void _e;
                       // Keep allowing propagation for orbit/ghost updates, but do nothing here

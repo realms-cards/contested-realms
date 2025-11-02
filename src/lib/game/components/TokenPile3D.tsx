@@ -99,8 +99,7 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
       >
         {/* Small stacked visuals with Disabled on top */}
         {(() => {
-          const disabled = TOKEN_DEFS.find((t) => t.key === "Disabled");
-          const texTop = disabled ? tokenTextureUrl(disabled) : undefined;
+          const texTop = "/api/assets/cardback_spellbook.png";
           const w = CARD_SHORT * 0.5;
           const h = CARD_LONG * 0.5;
           const layers = 3;

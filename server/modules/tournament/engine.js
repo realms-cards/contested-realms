@@ -10,7 +10,7 @@ let instanceId = null;
 const DRAFT_STATE_CHANNEL = 'draft:session:update';
 
 // In-memory session cache
-// Map<sessionId, { session: { id, participants, status, packConfiguration, settings }, state, persistTimer, lastPersistAt, meta }>
+// Map<sessionId, { session: { id, participants, status, packConfiguration, settings }, state, persistTimer, lastPersistAt, meta, autoTimer }>
 const sessions = new Map();
 
 export function setDeps({ prismaClient, ioServer, storeRedisClient, instanceId: id }) {
@@ -63,7 +63,11 @@ async function getOrLoad(sessionId) {
 
 function publishState(sessionId, state) {
   // Local fast-path emit
-  try { io && io.to(room(sessionId)).emit('draftUpdate', state); } catch {}
+  try {
+    if (io) {
+      io.to(room(sessionId)).emit('draftUpdate', state);
+    }
+  } catch {}
   // Cross-instance broadcast (include instanceId to prevent echo)
   try {
     if (storeRedis) {
@@ -100,6 +104,64 @@ function schedulePersist(sessionId, state) {
     entry.lastPersistAt = Date.now();
     await persistState(sessionId, entry.state);
   }, 150);
+}
+
+// Per-pick countdown helpers (authoritative, server-side)
+function getTimePerPickSeconds(entry) {
+  try {
+    const v = Number(entry?.session?.settings?.timePerPick);
+    return Number.isFinite(v) && v > 0 ? v : 60;
+  } catch {
+    return 60;
+  }
+}
+
+function clearPickAutoTimer(sessionId) {
+  const entry = sessions.get(sessionId);
+  if (!entry) return;
+  if (entry.autoTimer) {
+    try { clearTimeout(entry.autoTimer); } catch {}
+    entry.autoTimer = null;
+  }
+}
+
+function schedulePickAutoTimer(sessionId) {
+  const entry = sessions.get(sessionId);
+  if (!entry) return;
+  const state = entry.state || {};
+  // Only schedule during picking
+  if (state.phase !== 'picking') {
+    clearPickAutoTimer(sessionId);
+    return;
+  }
+  clearPickAutoTimer(sessionId);
+  const timePerPick = getTimePerPickSeconds(entry);
+  entry.autoTimer = setTimeout(async () => {
+    try {
+      const current = sessions.get(sessionId) || (await getOrLoad(sessionId));
+      const s = current?.state || {};
+      if (s.phase !== 'picking') return;
+      const waiting = Array.isArray(s.waitingFor) ? s.waitingFor.slice() : [];
+      if (waiting.length === 0) return;
+      // Auto-pick first available for all waiting players
+      for (const pid of waiting) {
+        const participants = current.session.participants || [];
+        const seatIdx = indexByPlayer(participants, pid);
+        if (seatIdx < 0) continue;
+        const pack = Array.isArray(s.currentPacks?.[seatIdx]) ? s.currentPacks[seatIdx] : null;
+        if (!pack || pack.length === 0) continue;
+        const cardId = pack[0]?.id;
+        if (!cardId) continue;
+        try {
+          await makePick(sessionId, pid, cardId);
+        } catch (e) {
+          try { console.warn('[tourney] auto-pick failed for', pid, e?.message || e); } catch {}
+        }
+      }
+    } finally {
+      // Next pick/round will schedule a new timer when state updates
+    }
+  }, Math.max(1, Math.floor(timePerPick * 1000)));
 }
 
 // Simple Redis-based lock to serialize updates across instances
@@ -185,11 +247,15 @@ export async function choosePack(sessionId, playerId, { packIndex, setChoice } =
     state.phase = 'picking';
     state.pickNumber = 1;
     state.allGeneratedPacks = allPacks;
+    // Start per-pick timer metadata
+    state.timePerPick = getTimePerPickSeconds(entry);
+    state.pickStartAt = Date.now();
 
     // Broadcast immediately, then persist (batched) and publish for other instances
     publishState(sessionId, state);
     schedulePersist(sessionId, state);
     entry.state = state;
+    // Visual warning only: no autopick scheduling in current version
     return state;
   });
 }
@@ -244,6 +310,8 @@ export async function makePick(sessionId, playerId, cardId) {
         state.pickNumber = 1;
         if (state.packIndex >= meta.packCount) {
           state.phase = 'complete';
+          // Clear timer on completion
+          clearPickAutoTimer(sessionId);
         } else {
           state.phase = 'pack_selection';
           state.waitingFor = participants.map((p) => p.playerId);
@@ -251,6 +319,8 @@ export async function makePick(sessionId, playerId, cardId) {
           // Reset choices for this round
           state.packChoice = Array.from({ length: playerCount }, () => null);
           state.packDirection = state.packDirection === 'left' ? 'right' : 'left';
+          // Clear timer while awaiting pack selection
+          clearPickAutoTimer(sessionId);
         }
       } else {
         // Passing
@@ -265,6 +335,10 @@ export async function makePick(sessionId, playerId, cardId) {
         state.phase = 'picking';
         state.waitingFor = participants.map((p) => p.playerId);
         console.log('[Engine] After pack rotation: pickNumber=%d waitingFor=%j', state.pickNumber, state.waitingFor);
+        // Restart per-pick timer metadata on new pick
+        state.timePerPick = getTimePerPickSeconds(entry);
+        state.pickStartAt = Date.now();
+        // Visual warning only: no autopick scheduling in current version
       }
     }
 

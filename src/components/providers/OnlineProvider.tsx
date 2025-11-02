@@ -55,10 +55,29 @@ export default function OnlineProvider({
   const [socialError, setSocialError] = useState<string | null>(null);
   const socialErrorTimer = useRef<number | null>(null);
   const [connToast, setConnToast] = useState<string | null>(null);
+  const [appToast, setAppToast] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { message?: string } | undefined;
+      if (detail?.message) {
+        setAppToast(detail.message);
+        window.setTimeout(() => setAppToast(null), 3500);
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("app:toast", handler as EventListener);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("app:toast", handler as EventListener);
+      }
+    };
   }, []);
   const [incomingVoiceRequest, setIncomingVoiceRequest] = useState<VoiceIncomingRequest | null>(null);
   const [outgoingVoiceRequest, setOutgoingVoiceRequest] = useState<VoiceOutgoingRequest | null>(null);
@@ -982,6 +1001,24 @@ export default function OnlineProvider({
             return next as MatchInfo;
           });
           useGameStore.getState().log(`Match ended: ${p.reason || "unknown reason"}`);
+          try {
+            const myId = meRef.current?.id || null;
+            let msg: string | null = null;
+            if ((p as unknown as { reason?: string })?.reason === "forfeit") {
+              const winnerId = (p as unknown as { winnerId?: string | null })?.winnerId || null;
+              if (myId && winnerId && winnerId === myId) {
+                msg = "Your opponent forfeited. You win.";
+              } else if (myId && winnerId && winnerId !== myId) {
+                msg = "You forfeited the match.";
+              } else {
+                msg = "Match ended due to forfeit.";
+              }
+            }
+            if (msg) {
+              localStorage.setItem("app:toast", msg);
+              window.dispatchEvent(new CustomEvent("app:toast", { detail: { message: msg } }));
+            }
+          } catch {}
         }
       }),
       transport.on("error", (p) => {
@@ -1247,6 +1284,11 @@ export default function OnlineProvider({
       {connToast && (
         <div className="fixed top-3 right-3 z-[3000] bg-red-600/90 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20">
           {connToast}
+        </div>
+      )}
+      {appToast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[3000] bg-black/70 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20">
+          {appToast}
         </div>
       )}
     </OnlineContext.Provider>
