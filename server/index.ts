@@ -1712,7 +1712,10 @@ async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState
       } catch {}
       if (dbMatch.playerDecks && typeof dbMatch.playerDecks === "object") {
         try {
-          match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
+          const hasExisting = match.playerDecks instanceof Map && match.playerDecks.size > 0;
+          if (!hasExisting) {
+            match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
+          }
         } catch {}
       }
     }
@@ -2156,33 +2159,35 @@ io.on("connection", async (socket: SocketClient) => {
       }
     } catch {}
 
-    console.log(
-      `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} tokenId=${
-        tokenId ? "yes" : "no"
-      } socket=${socket.id}`
-    );
+    try {
+      console.log(
+        `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} tokenId=${
+          tokenId ? "yes" : "no"
+        } socket=${socket.id}`
+      );
+    } catch {}
 
     socket.emit("welcome", {
       you: { id: player.id, displayName: player.displayName },
     });
     broadcastPlayers();
 
-    // Rejoin previous rooms if any
     if (player.matchId && matches.has(player.matchId)) {
       socket.join(`match:${player.matchId}`);
       const m = matches.get(player.matchId);
       if (m) {
         socket.emit("matchStarted", { match: getMatchInfo(m) });
 
-        // If rejoining during an active draft, send current draft state
         if (
           m.matchType === "draft" &&
           m.draftState &&
           m.draftState.phase !== "waiting"
         ) {
-          console.log(
-            `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`
-          );
+          try {
+            console.log(
+              `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`
+            );
+          } catch {}
           socket.emit("draftUpdate", m.draftState);
         }
       }
@@ -2210,82 +2215,82 @@ io.on("connection", async (socket: SocketClient) => {
         }
       } catch {}
     }
-  });
+});
 
-  // --- Tournament Draft session rooms + presence ---
-  socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
-    if (!authed) return;
-    const sessionId = payload?.sessionId;
-    if (!sessionId) return;
+// --- Tournament Draft session rooms + presence ---
+socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
+  if (!authed) return;
+  const sessionId = payload?.sessionId;
+  if (!sessionId) return;
+  try {
+    await socket.join(`draft:${sessionId}`);
+    currentDraftSessionId = sessionId;
+    // Ack
     try {
-      await socket.join(`draft:${sessionId}`);
-      currentDraftSessionId = sessionId;
-      // Ack
-      try {
-        socket.emit("draft:session:joined", { sessionId });
-      } catch {}
-      // Presence update
-      try {
-        const pid = playerIdBySocket.get(socket.id);
-        const p = pid ? players.get(pid) : null;
-        const list = await updateDraftPresence(
-          sessionId,
-          pid || "unknown",
-          p?.displayName || null,
-          true
-        );
-        if (pid) {
+      socket.emit("draft:session:joined", { sessionId });
+    } catch {}
+    // Presence update
+    try {
+      const pid = playerIdBySocket.get(socket.id);
+      const p = pid ? players.get(pid) : null;
+      const list = await updateDraftPresence(
+        sessionId,
+        pid || "unknown",
+        p?.displayName || null,
+        true
+      );
+      if (pid) {
+        try {
+          await prisma.draftParticipant.updateMany({
+            where: { draftSessionId: sessionId, playerId: pid },
+            data: { status: "active" },
+          });
+        } catch (err) {
           try {
-            await prisma.draftParticipant.updateMany({
-              where: { draftSessionId: sessionId, playerId: pid },
-              data: { status: "active" },
+            console.warn(
+              "[draft] failed to mark participant active",
+              safeErrorMessage(err)
+            );
+          } catch {}
+        }
+      }
+      io.to(`draft:${sessionId}`).emit("draft:session:presence", {
+        sessionId,
+        players: list,
+      });
+      // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
+      try {
+        setTimeout(() => {
+          try {
+            io.to(socket.id).emit("draft:session:presence", {
+              sessionId,
+              players: list,
             });
-          } catch (err) {
+          } catch {}
+        }, 25);
+      } catch {}
+      // Send current draft state snapshot to the joining socket (tournament draft engine)
+      try {
+        const mod = await tournamentModules.loadEngine();
+        if (mod && typeof mod.getState === "function") {
+          const s = await mod.getState(sessionId);
+          if (s) {
             try {
-              console.warn(
-                "[draft] failed to mark participant active",
-                safeErrorMessage(err)
-              );
+              io.to(socket.id).emit("draftUpdate", s);
             } catch {}
           }
         }
-        io.to(`draft:${sessionId}`).emit("draft:session:presence", {
-          sessionId,
-          players: list,
-        });
-        // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
-        try {
-          setTimeout(() => {
-            try {
-              io.to(socket.id).emit("draft:session:presence", {
-                sessionId,
-                players: list,
-              });
-            } catch {}
-          }, 25);
-        } catch {}
-        // Send current draft state snapshot to the joining socket (tournament draft engine)
-        try {
-          const mod = await tournamentModules.loadEngine();
-          if (mod && typeof mod.getState === "function") {
-            const s = await mod.getState(sessionId);
-            if (s) {
-              try {
-                io.to(socket.id).emit("draftUpdate", s);
-              } catch {}
-            }
-          }
-        } catch {}
       } catch {}
-    } catch (e) {
-      try {
-        socket.emit("draft:error", {
-          errorCode: "join_failed",
-          errorMessage: String(safeErrorMessage(e)),
-        });
-      } catch {}
-    }
-  });
+    } catch {}
+  } catch (e) {
+    try {
+      socket.emit("draft:error", {
+        errorCode: "join_failed",
+        errorMessage: String(safeErrorMessage(e)),
+      });
+    } catch {}
+  }
+});
 
   socket.on("draft:session:leave", async (payload?: DraftSessionLeavePayload) => {
     const sessionId = payload?.sessionId || currentDraftSessionId;
@@ -2795,6 +2800,128 @@ io.on("connection", async (socket: SocketClient) => {
           from: player.id,
           ts: Date.now(),
         } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "attackDeclare") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          tile?: { x?: unknown; y?: unknown };
+          attacker?: { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown };
+          target?: { kind?: unknown; at?: unknown; index?: unknown };
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const at = typeof msg.attacker?.at === "string" ? (msg.attacker?.at as string) : null;
+        const indexVal = Number(msg.attacker?.index);
+        const ownerVal = Number(msg.attacker?.owner);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+        // Normalize optional target
+        let target: { kind: "permanent" | "avatar" | "site"; at: string; index: number | null } | null = null;
+        try {
+          const raw = msg.target as unknown;
+          if (raw && typeof raw === "object") {
+            const rec = raw as Record<string, unknown>;
+            const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+            const a = typeof rec.at === "string" ? (rec.at as string) : "";
+            const idx = (rec.index == null ? null : Number(rec.index)) as number | null;
+            const okKind = k === "permanent" || k === "avatar" || k === "site";
+            if (okKind && a && (idx === null || Number.isFinite(idx))) {
+              target = { kind: k as "permanent" | "avatar" | "site", at: a, index: idx };
+            }
+          }
+        } catch {}
+        const out = {
+          type: "attackDeclare",
+          id,
+          tile: { x, y },
+          attacker: { at, index: Number(indexVal), instanceId: typeof msg.attacker?.instanceId === "string" ? (msg.attacker?.instanceId as string) : null, owner: Number(ownerVal) as 1 | 2 },
+          ...(target ? { target } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatSetDefenders") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; defenders?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const raw = Array.isArray(msg.defenders) ? (msg.defenders as unknown[]) : [];
+        const defenders = raw
+          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((d) => {
+            const at = typeof d!.at === "string" ? (d!.at as string) : null;
+            const indexVal = Number(d!.index);
+            const ownerVal = Number(d!.owner);
+            const instanceId = typeof d!.instanceId === "string" ? (d!.instanceId as string) : null;
+            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return null;
+            return { at, index: Number(indexVal), owner: Number(ownerVal) as 1 | 2, instanceId };
+          })
+          .filter(Boolean);
+        const out = { type: "combatSetDefenders", id, defenders, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatResolve") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          tile?: { x?: unknown; y?: unknown };
+          attacker?: { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown };
+          defenders?: unknown[];
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const tile = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+        const at = typeof msg.attacker?.at === "string" ? (msg.attacker?.at as string) : null;
+        const indexVal = Number(msg.attacker?.index);
+        const attacker = at && Number.isFinite(indexVal) ? { at, index: Number(indexVal) } : undefined;
+        const raw = Array.isArray(msg.defenders) ? (msg.defenders as unknown[]) : [];
+        const defenders = raw
+          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((d) => {
+            const dat = typeof d!.at === "string" ? (d!.at as string) : null;
+            const didx = Number(d!.index);
+            if (!dat || !Number.isFinite(didx)) return null;
+            return { at: dat, index: Number(didx) };
+          })
+          .filter(Boolean);
+        const out = { type: "combatResolve", id, tile, attacker, defenders, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatCancel") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const out = { type: "combatCancel", id: (payload as { id?: unknown })?.id ?? rid("cmb"), ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "toast") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const raw = (payload as { text?: unknown })?.text;
+        const text = typeof raw === "string" ? raw.slice(0, 200) : null;
+        if (!text) return;
+        const out = { type: "toast", text, playerKey, ts: Date.now() } as const;
         io.to(room).emit("message", out);
         try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
@@ -3398,6 +3525,11 @@ io.on("connection", async (socket: SocketClient) => {
     }
     playerDecks.set(player.id, cards);
 
+    // Persist updated playerDecks for recovery and cross-instance consistency
+    try {
+      persistMatchUpdate(match, null, player.id, Date.now());
+    } catch {}
+
     // Lightweight ack so client UI can flip instantly
     try {
       socket.emit("deckAccepted", {
@@ -3446,6 +3578,8 @@ io.on("connection", async (socket: SocketClient) => {
     io.to(`match:${match.id}`).emit("matchStarted", {
       match: getMatchInfo(match),
     });
+
+    // Ensure persistence after broadcast as well
     try {
       persistMatchUpdate(match, null, player.id, Date.now());
     } catch {}

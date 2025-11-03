@@ -8,6 +8,14 @@ interface TokenAttachmentDialogProps {
   targetPermanent: { at: string; index: number; card: CardRef };
   onConfirm: () => void;
   onCancel: () => void;
+  // Optional fields tolerated by callers; not used here
+  dropCoords?: { x: number; y: number };
+  fromPile?: boolean;
+  pileInfo?: {
+    who: "p1" | "p2";
+    from: "tokens" | "spellbook" | "atlas" | "graveyard";
+    card: CardRef;
+  } | null;
 }
 
 export default function TokenAttachmentDialog({

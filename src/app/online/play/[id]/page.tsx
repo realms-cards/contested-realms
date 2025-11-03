@@ -516,16 +516,22 @@ export default function OnlineMatchPage() {
       return;
     }
 
-    // For reconnect edge cases: if we already have a server game snapshot in Setup phase and the match
-    // is not in waiting/deck_construction, prefer waiting for the server to advance.
+    // If the server has provided any game snapshot, treat it as authoritative and
+    // do NOT regenerate local decks/hands. This avoids hand re-rolls and deck switches on reload.
     const hasGameState = !!(match as unknown as { game?: unknown })?.game;
-    const gamePhase = (match as unknown as { game?: { phase?: string } })?.game?.phase;
-    if (hasGameState && gamePhase === "Setup" &&
-        match?.status !== "waiting" && match?.status !== "deck_construction") {
-      console.log("[match] Server provided Setup-phase game; waiting for snapshot advance");
+    if (hasGameState) {
+      console.log("[match] Server game snapshot present; skipping local deck autoload");
+      setPrepared(true);
       return;
     }
-    
+
+    // Only auto-load local deck during waiting/deck_construction phases.
+    // If the match is beyond setup, wait for server state instead.
+    if (match?.status !== "waiting" && match?.status !== "deck_construction") {
+      setPrepared(true);
+      return;
+    }
+
     if (!match?.playerDecks || !me?.id) return;
     if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
 
@@ -1110,8 +1116,10 @@ export default function OnlineMatchPage() {
     const gameActuallyStarted = serverPhase === "Main";
     const d20Complete = (() => {
       const r = storeD20Rolls;
-      const bothRolled = !!(r && r.p1 != null && r.p2 != null);
-      const notTie = bothRolled && Number(r!.p1) !== Number(r!.p2);
+      const p1 = r?.p1;
+      const p2 = r?.p2;
+      const bothRolled = p1 != null && p2 != null;
+      const notTie = bothRolled && Number(p1) !== Number(p2);
       return Boolean(storeSetupWinner) || notTie;
     })();
 
