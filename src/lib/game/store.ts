@@ -430,6 +430,38 @@ export type GameState = {
   expireInteraction: (requestId: string) => void;
   clearInteraction: (requestId: string) => void;
   transportSubscriptions: Array<() => void>;
+  // Feature flag: opt-in guided overlays for combat interactions
+  interactionGuides: boolean;
+  setInteractionGuides: (on: boolean) => void;
+  // Card meta cache (subset) used to detect base power quickly
+  metaByCardId: Record<
+    number,
+    { attack: number | null; defence: number | null; cost: number | null }
+  >;
+  fetchCardMeta: (ids: number[]) => Promise<void>;
+  // Pending combat (MVP)
+  pendingCombat: {
+    id: string;
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null;
+    defenderSeat: PlayerKey | null;
+    defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>;
+    status: "declared" | "defending" | "resolved" | "cancelled";
+    createdAt: number;
+  } | null;
+  declareAttack: (
+    tile: { x: number; y: number },
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 },
+    target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null
+  ) => void;
+  setDefenderSelection: (
+    defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>
+  ) => void;
+  resolveCombat: () => void;
+  cancelCombat: () => void;
+  // Generic lightweight message handler
+  receiveCustomMessage: (msg: CustomMessage) => void;
   // Safe patch sending
   pendingPatches: ServerPatchT[];
   trySendPatch: (patch: ServerPatchT) => boolean;
@@ -1924,6 +1956,285 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Match end state
   matchEnded: false,
   winner: null,
+  // Feature flag: Interaction Guides (default OFF, persisted locally)
+  interactionGuides: (() => {
+    try {
+      if (typeof window !== "undefined") {
+        return localStorage.getItem("sorcery:interactionGuides") === "1";
+      }
+    } catch {}
+    return false;
+  })(),
+  setInteractionGuides: (on) => {
+    set({ interactionGuides: !!on } as Partial<GameState> as GameState);
+    try {
+      if (typeof window !== "undefined")
+        localStorage.setItem("sorcery:interactionGuides", on ? "1" : "0");
+    } catch {}
+  },
+  // Card meta cache for base power detection
+  metaByCardId: {},
+  fetchCardMeta: async (ids) => {
+    try {
+      const uniq = Array.from(
+        new Set(
+          (Array.isArray(ids) ? ids : [])
+            .map((n) => Number(n))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        )
+      );
+      const need = uniq.filter((id) => !get().metaByCardId[id]);
+      if (!need.length) return;
+      const res = await fetch(
+        `/api/cards/meta?ids=${encodeURIComponent(need.join(","))}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) return;
+      const rows = (await res.json()) as Array<{
+        cardId: number;
+        cost: number | null;
+        thresholds?: unknown;
+        attack: number | null;
+        defence: number | null;
+      }>;
+      const next = { ...(get().metaByCardId as Record<number, { attack: number | null; defence: number | null; cost: number | null }>) };
+      for (const r of rows) {
+        next[r.cardId] = {
+          attack: r.attack ?? null,
+          defence: r.defence ?? null,
+          cost: r.cost ?? null,
+        };
+      }
+      set({ metaByCardId: next } as Partial<GameState> as GameState);
+    } catch {}
+  },
+  // Minimal combat state (MVP)
+  pendingCombat: null,
+  declareAttack: (tile, attacker, target) =>
+    set((s) => {
+      const id = `cmb_${Date.now().toString(36)}_${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      const defenderSeat = (attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+      const pc = {
+        id,
+        tile,
+        attacker,
+        target: target ?? null,
+        defenderSeat,
+        defenders: [],
+        status: "declared" as const,
+        createdAt: Date.now(),
+      };
+      const tr = get().transport;
+      // Build nice labels
+      const attackerLabel = (() => {
+        try {
+          const a = (get().permanents as Permanents)[attacker.at]?.[attacker.index] || null;
+          return a?.card?.name || "Attacker";
+        } catch { return "Attacker"; }
+      })();
+      const targetLabel = (() => {
+        try {
+          if (!target) return null;
+          if (target.kind === "site") return "Site";
+          if (target.kind === "avatar") return "Avatar";
+          const list = (get().permanents as Permanents)[target.at] || [];
+          const p = (target.index != null && list[target.index]) ? list[target.index] : null;
+          return p?.card?.name || "Unit";
+        } catch { return null; }
+      })();
+      if (tr?.sendMessage) {
+        try {
+          tr.sendMessage({
+            type: "attackDeclare",
+            id,
+            tile,
+            attacker,
+            target: target ?? null,
+            playerKey: s.actorKey ?? null,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+          if (targetLabel) {
+            tr.sendMessage({ type: "toast", text: `${attackerLabel} attacks ${targetLabel}` } as unknown as CustomMessage);
+          }
+        } catch {}
+      }
+      try {
+        const cellNo = tile.y * s.board.size.w + tile.x + 1;
+        if (targetLabel) get().log(`${attackerLabel} attacks ${targetLabel} at #${cellNo}`);
+        else get().log(`Attack declared at #${cellNo}`);
+      } catch {}
+      return { pendingCombat: pc } as Partial<GameState> as GameState;
+    }),
+  setDefenderSelection: (defenders) => {
+    set((s) => {
+      if (!s.pendingCombat) return s as GameState;
+      return {
+        pendingCombat: { ...s.pendingCombat, defenders, status: "defending" },
+      } as Partial<GameState> as GameState;
+    });
+    const pc = get().pendingCombat;
+    const tr = get().transport;
+    if (pc && tr?.sendMessage) {
+      try {
+        tr.sendMessage({
+          type: "combatSetDefenders",
+          id: pc.id,
+          defenders,
+          playerKey: get().actorKey ?? null,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+        tr.sendMessage({ type: "toast", text: `Defender chose ${defenders.length} defender${defenders.length === 1 ? "" : "s"}` } as unknown as CustomMessage);
+      } catch {}
+    }
+  },
+  resolveCombat: () => {
+    const pc = get().pendingCombat;
+    if (!pc) return;
+    const tr = get().transport;
+    if (tr?.sendMessage) {
+      try {
+        tr.sendMessage({
+          type: "combatResolve",
+          id: pc.id,
+          attacker: pc.attacker,
+          defenders: pc.defenders,
+          tile: pc.tile,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+  },
+  cancelCombat: () => {
+    const pc = get().pendingCombat;
+    if (!pc) return;
+    set({ pendingCombat: null });
+    const tr = get().transport;
+    if (tr?.sendMessage) {
+      try {
+        tr.sendMessage({ type: "combatCancel", id: pc.id, ts: Date.now() } as unknown as CustomMessage);
+      } catch {}
+    }
+  },
+  receiveCustomMessage: (msg) => {
+    if (!msg || typeof msg !== "object") return;
+    const t = (msg as { type?: unknown }).type;
+    if (typeof t !== "string" || !t) return;
+    if (t === "toast") {
+      const text = (msg as { text?: unknown }).text;
+      if (typeof text === "string" && text.trim().length > 0) {
+        try { get().log(text); } catch {}
+      }
+      return;
+    }
+    if (t === "attackDeclare") {
+      const id = (msg as { id?: unknown }).id;
+      const tile = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+      const attacker = (msg as { attacker?: unknown }).attacker as
+        | { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown }
+        | undefined;
+      const targetAny = (msg as { target?: unknown }).target as unknown;
+      const x = Number(tile?.x);
+      const y = Number(tile?.y);
+      const at = typeof attacker?.at === "string" ? (attacker?.at as string) : null;
+      const indexVal = Number(attacker?.index);
+      const ownerVal = Number(attacker?.owner);
+      if (!id || !Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+      const defenderSeat = (ownerVal === 1 ? "p2" : "p1") as PlayerKey;
+      let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
+      try {
+        if (targetAny && typeof targetAny === "object") {
+          const rec = targetAny as Record<string, unknown>;
+          const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+          const a = typeof rec.at === "string" ? (rec.at as string) : "";
+          const idx = rec.index == null ? null : Number(rec.index);
+          const okKind = k === "permanent" || k === "avatar" || k === "site";
+          if (okKind && a && (idx === null || Number.isFinite(idx))) {
+            target = { kind: k as "permanent" | "avatar" | "site", at: a as CellKey, index: idx as number | null };
+          }
+        }
+      } catch {}
+      set({
+        pendingCombat: {
+          id: String(id),
+          tile: { x, y },
+          attacker: { at, index: Number(indexVal), instanceId: (attacker?.instanceId as string | null) ?? null, owner: (ownerVal as 1 | 2) },
+          target,
+          defenderSeat,
+          defenders: [],
+          status: "declared",
+          createdAt: Date.now(),
+        },
+      } as Partial<GameState> as GameState);
+      try { get().log(`Attack declared at #${y * get().board.size.w + x + 1}`); } catch {}
+      return;
+    }
+    if (t === "combatSetDefenders") {
+      const id = (msg as { id?: unknown }).id;
+      const defendersAny = (msg as { defenders?: unknown }).defenders as unknown;
+      if (!id || !Array.isArray(defendersAny)) return;
+      const records = defendersAny
+        .filter((d) => d && typeof d === "object")
+        .map((d) => d as Record<string, unknown>);
+      const defenders = records
+        .map((rec) => {
+          const at = typeof rec.at === "string" ? (rec.at as string) : null;
+          const indexVal = Number(rec.index);
+          const ownerVal = Number(rec.owner);
+          const instanceId =
+            typeof rec.instanceId === "string"
+              ? (rec.instanceId as string)
+              : null;
+          if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return null;
+          return {
+            at,
+            index: Number(indexVal),
+            owner: ownerVal as 1 | 2,
+            instanceId: instanceId ?? null,
+          };
+        })
+        .filter((x): x is { at: CellKey; index: number; owner: 1 | 2; instanceId: string | null } => Boolean(x));
+      set((s) => {
+        if (!s.pendingCombat || s.pendingCombat.id !== (id as string)) return s as GameState;
+        return { pendingCombat: { ...s.pendingCombat, defenders, status: "defending" } } as Partial<GameState> as GameState;
+      });
+      try { get().log(`Defenders selected: ${defenders.length}`); } catch {}
+      return;
+    }
+    if (t === "combatResolve") {
+      const id = (msg as { id?: unknown }).id as string | undefined;
+      const attacker = (msg as { attacker?: unknown }).attacker as { at?: unknown; index?: unknown } | undefined;
+      const defendersAny = (msg as { defenders?: unknown }).defenders as unknown[] | undefined;
+      set((s) => {
+        if (!s.pendingCombat || (id && s.pendingCombat.id !== id)) return s as GameState;
+        return s as GameState;
+      });
+      const aAt = typeof attacker?.at === "string" ? (attacker.at as string) : null;
+      const aIdx = Number(attacker?.index);
+      if (aAt && Number.isFinite(aIdx)) {
+        try { get().toggleTapPermanent(aAt, Number(aIdx)); } catch {}
+      }
+      const defenders = Array.isArray(defendersAny) ? defendersAny : [];
+      for (const d of defenders) {
+        if (!d || typeof d !== "object") continue;
+        const rec = d as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const idx = Number(rec.index);
+        if (at && Number.isFinite(idx)) {
+          try { get().toggleTapPermanent(at, Number(idx)); } catch {}
+        }
+      }
+      try { get().log("Combat resolved"); } catch {}
+      set({ pendingCombat: null });
+      return;
+    }
+    if (t === "combatCancel") {
+      set({ pendingCombat: null });
+      try { get().log("Combat cancelled"); } catch {}
+      return;
+    }
+  },
   interactionLog: {},
   pendingInteractionId: null,
   acknowledgedInteractionIds: {},
@@ -1959,6 +2270,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           t.on("interaction:result", (msg) => {
             try {
               get().receiveInteractionResult(msg);
+            } catch {}
+          }),
+          t.on("message", (m) => {
+            try {
+              get().receiveCustomMessage(m as unknown as CustomMessage);
             } catch {}
           })
         );

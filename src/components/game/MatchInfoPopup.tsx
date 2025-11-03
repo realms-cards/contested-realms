@@ -29,6 +29,8 @@ export default function MatchInfoPopup({
   const lastServerTs = useGameStore((s) => s.lastServerTs);
   const pendingCount = useGameStore((s) => s.pendingPatches.length);
   const flushPending = useGameStore((s) => s.flushPendingPatches);
+  const interactionGuides = useGameStore((s) => s.interactionGuides);
+  const setInteractionGuides = useGameStore((s) => s.setInteractionGuides);
 
   if (!isOpen) return null;
 
@@ -103,6 +105,16 @@ export default function MatchInfoPopup({
               <div className="flex justify-between">
                 <span>Server Sync:</span>
                 <span className="font-medium">{lastServerTs || 0}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span>Interaction Guides</span>
+                <button
+                  className={`rounded-full px-3 py-1 text-xs transition-colors ${interactionGuides ? "bg-emerald-600/90 hover:bg-emerald-500" : "bg-white/15 hover:bg-white/25"}`}
+                  onClick={() => setInteractionGuides(!interactionGuides)}
+                  aria-pressed={interactionGuides}
+                >
+                  {interactionGuides ? "On" : "Off"}
+                </button>
               </div>
             </div>
           </div>
