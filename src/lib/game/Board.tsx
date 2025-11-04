@@ -70,7 +70,7 @@ const ENABLE_SNAP = true;
 const USE_GHOST_ONLY_BOARD_DRAG = true;
 const STACK_SPACING = TILE_SIZE * 0.32;
 const STACK_MARGIN_Z = TILE_SIZE * 0.1;
-const STACK_LAYER_LIFT = CARD_THICK * 0.12;
+const STACK_LAYER_LIFT = CARD_THICK * 0.04;
 const BASE_CARD_ELEVATION = CARD_THICK * 0.55;
 const BURROWED_ELEVATION = CARD_THICK * 0.08;
 const HIGHLIGHT_ATTACKER = "#22c55e";
@@ -83,6 +83,60 @@ const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
 
 function clampOffset(value: number, limit: number): number {
   return Math.max(-limit, Math.min(limit, value));
+}
+
+function findCardInstanceNode(object: Object3D | null): Object3D | null {
+  let current = object;
+  while (current) {
+    if (
+      current.userData &&
+      Object.prototype.hasOwnProperty.call(current.userData, "cardInstance")
+    ) {
+      return current;
+    }
+    current = current.parent ?? null;
+  }
+  return null;
+}
+
+function isPrimaryCardHit(
+  e: ThreeEvent<PointerEvent | MouseEvent>
+): boolean {
+  const intersections = e.intersections;
+  if (!intersections || intersections.length === 0) {
+    return true;
+  }
+  const primaryObject = intersections[0]?.object ?? null;
+  const eventObject = (e.object as Object3D | undefined) ?? null;
+  if (!primaryObject || !eventObject) {
+    return true;
+  }
+  if (primaryObject.uuid === eventObject.uuid) {
+    return true;
+  }
+
+  let cursor: Object3D | null = eventObject.parent ?? null;
+  while (cursor) {
+    if (cursor.uuid === primaryObject.uuid) {
+      return true;
+    }
+    cursor = cursor.parent ?? null;
+  }
+  cursor = primaryObject.parent ?? null;
+  while (cursor) {
+    if (cursor.uuid === eventObject.uuid) {
+      return true;
+    }
+    cursor = cursor.parent ?? null;
+  }
+
+  const primaryCard = findCardInstanceNode(primaryObject);
+  const eventCard = findCardInstanceNode(eventObject);
+  if (primaryCard && eventCard && primaryCard.uuid === eventCard.uuid) {
+    return true;
+  }
+
+  return false;
 }
 
 // Minimal shape of the rapier rigid body API we need (keep local to avoid import typing issues)
@@ -2614,7 +2668,11 @@ export default function Board({
                       />
                       <group
                         visible={!isLocalDragGhost}
+                        userData={{ cardInstance: permId }}
                         onPointerDown={(e) => {
+                          if (!isPrimaryCardHit(e)) {
+                            return;
+                          }
                           if (isSpectator) {
                             e.stopPropagation();
                             return;
@@ -2783,6 +2841,10 @@ export default function Board({
                         }}
                         onPointerOver={(e) => {
                           if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                          if (!isPrimaryCardHit(e)) {
+                            clearHoverPreviewDebounced(hoverKey);
+                            return;
+                          }
                           e.stopPropagation();
                           beginHoverPreview(p.card, hoverKey);
                         }}
@@ -2804,6 +2866,9 @@ export default function Board({
                           if (dragFromHand || dragFromPile) return;
                           if (tokenSiteReplace) return;
                           if (isSpectator) return;
+                          if (!isPrimaryCardHit(e)) {
+                            return;
+                          }
                           e.stopPropagation();
                           setLastTouchedId(permId);
                           emitBoardPing({ x: e.point.x, z: e.point.z });
@@ -2811,6 +2876,10 @@ export default function Board({
                         onPointerMove={(e) => {
                           if (dragFromHand || dragFromPile) return; // let tiles drive ghost/body during hand/pile drags
                           if (tokenSiteReplace) return; // no drag for Rubble
+                          if (!isPrimaryCardHit(e)) {
+                            clearHoverPreviewDebounced(hoverKey);
+                            return;
+                          }
                           e.stopPropagation();
                           const pe = e.nativeEvent as PointerEvent | undefined;
                           if (pe && pe.pointerType === "touch") {
@@ -3140,8 +3209,12 @@ export default function Board({
                         {/* role-based glow merged into base glow above */}
                         <group
                           visible={true}
+                          userData={{ cardInstance: permId }}
                           onClick={(e) => {
                             if (dragFromHand || dragFromPile) return; // allow bubbling to tiles during hand/pile drags
+                            if (!isPrimaryCardHit(e)) {
+                              return;
+                            }
                             e.stopPropagation();
                             if (isSpectator) return;
                             // If dragging this item, ignore clicks
@@ -3157,6 +3230,9 @@ export default function Board({
                           }}
                           onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                             if (isSpectator) return;
+                            if (!isPrimaryCardHit(e)) {
+                              return;
+                            }
                             e.stopPropagation();
                             e.nativeEvent.preventDefault();
                             // Ensure the permanent is selected before opening the menu

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import YourDeckList from "@/app/decks/editor-3d/YourDeckList";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
 
@@ -55,11 +56,18 @@ export default function RightPanel(props: RightPanelProps) {
     setFeedback,
   } = props;
 
+  const [columns, setColumns] = useState<2 | 3 | 4>(2);
+
+  // Calculate panel width based on columns
+  // Base card width ~200px + gaps, padding, borders
+  const panelWidth =
+    columns === 2 ? "w-[28rem]" : // ~448px for 2 columns
+    columns === 3 ? "w-[40rem]" : // ~640px for 3 columns
+    "w-[52rem]"; // ~832px for 4 columns
+
   return (
-    <div className="absolute right-6 top-14 sm:top-16 max-w-7xl mx-auto px-4 pb-6 pt-2 pointer-events-none select-none">
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-8" />
-        <div className="col-span-12 lg:col-span-4">
+    <div className="absolute right-6 top-14 sm:top-16 pointer-events-none select-none">
+      <div className={`${panelWidth} transition-all duration-300 ease-in-out ml-auto`}>
           <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
             <div className="font-medium mb-2 text-white flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -128,11 +136,11 @@ export default function RightPanel(props: RightPanelProps) {
                 moveOneFromSideboardToDeck={moveOneFromSideboardToDeck}
                 openContextMenu={openContextMenu}
                 setFeedback={setFeedback}
+                onColumnsChange={setColumns}
               />
             )}
           </div>
         </div>
       </div>
-    </div>
   );
 }

@@ -129,39 +129,13 @@ export default function DraggableCard3D({
     (isSite ? -Math.PI / 2 : 0) +
     (isDragging || lockUpright || uprightLocked ? 0 : extraRotZ);
 
-  // Calculate visible area for fanned cards
-  // Each card in the stack covers some of the card below it
-  const isInStack = totalInStack > 1;
-  const isTopCard = stackIndex === totalInStack - 1;
-  
-  // For fanned cards, calculate the actual visible strip
-  // Fan offsets: X = stackIndex * 0.03, Y = stackIndex * 0.05
-  // Each higher card covers part of lower cards
-  let visibleWidth = CARD_SHORT;
-  let visibleHeight = CARD_LONG;
-  let hitboxOffsetX = 0;
-  let hitboxOffsetZ = 0;
-  
-  if (isInStack && !isTopCard) {
-    // Each card in the fan reveals exactly the fan offset strip
-    const fanOffsetX = 0.03;  // X offset per stack level  
-    const fanOffsetZ = 0.05;  // Z offset per stack level
-    
-    // The visible area is exactly the fan offset - no more, no less
-    visibleWidth = fanOffsetX;
-    visibleHeight = fanOffsetZ;
-    
-    // Position hitbox at the trailing edge (opposite to fan direction)
-    // Cards fan toward +X and +Z, so visible strip is at the -X and -Z edge
-    hitboxOffsetX = -(CARD_SHORT / 2) + (visibleWidth / 2);
-    hitboxOffsetZ = -(CARD_LONG / 2) + (visibleHeight / 2);
-  }
-  
-  // For editor-3d, always use full hitbox since there's no complex stacking
-  visibleWidth = CARD_SHORT;
-  visibleHeight = CARD_LONG;
-  hitboxOffsetX = 0;
-  hitboxOffsetZ = 0;
+  // Use full card hitbox for all cards
+  // MouseTracker component handles picking the topmost card based on Y position
+  // This is simpler and more reliable than trying to calculate visible strips
+  const visibleWidth = CARD_SHORT;
+  const visibleHeight = CARD_LONG;
+  const hitboxOffsetX = 0;
+  const hitboxOffsetZ = 0;
 
   return (
     <group ref={ref} position={[x, y, z]}>
