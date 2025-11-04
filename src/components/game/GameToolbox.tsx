@@ -101,6 +101,41 @@ export default function GameToolbox({
     };
   }, [transport]);
 
+  const handleInspectBanished = () => {
+    const seat = banishedSeat;
+    if (isOnline && mySeat && seat !== mySeat) {
+      const rid = requestConsent("inspectBanished", `Request to look at ${seat.toUpperCase()} banished`, { seat });
+      if (rid) {
+      }
+      return;
+    }
+    const cards = zones[seat]?.banished || [];
+    openSearchDialog(`${seat.toUpperCase()} Banished`, cards, () => {});
+  };
+
+  const handleUnbanish = () => {
+    const seat = unbanishSeat;
+    const target = unbanishTarget;
+    const cards = zones[seat]?.banished || [];
+    if (cards.length === 0) return;
+    openSearchDialog(`${seat.toUpperCase()} Banished`, cards, (selected: CardRef) => {
+      const instanceId = selected?.instanceId ?? null;
+      if (!instanceId) return;
+      if (isOnline && mySeat && seat !== mySeat) {
+        const ttlMs = 20000;
+        const rid = requestConsent(
+          "unbanishCard",
+          `Request to return from banished to ${target}`,
+          { seat, instanceId, target, grant: { allowOpponentZoneWrite: true, targetSeat: seat, singleUse: true, expiresAt: Date.now() + ttlMs } as Record<string, unknown> }
+        );
+        if (rid) {
+        }
+        return;
+      }
+      moveFromBanishedToZone(seat, instanceId, target);
+    });
+  };
+
   // Track pending permission requests we initiated so we can react on approval
   const pendingRequestRef = useRef<
     Record<
@@ -466,12 +501,18 @@ export default function GameToolbox({
             {/* Inspect Banished */}
             <div>
               <div className="font-medium mb-1">Look at banished</div>
-              <button
-                className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
-                onClick={handleInspectBanished}
-              >
-                Inspect Banished
-              </button>
+              <div className="flex gap-2 mb-1">
+                <select value={banishedSeat} onChange={(e) => setBanishedSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
+                  <option value="p1">P1</option>
+                  <option value="p2">P2</option>
+                </select>
+                <button
+                  className="flex-1 rounded bg-white/15 hover:bg-white/25 py-1"
+                  onClick={handleInspectBanished}
+                >
+                  Inspect
+                </button>
+              </div>
             </div>
 
             {/* Return from Banished */}
