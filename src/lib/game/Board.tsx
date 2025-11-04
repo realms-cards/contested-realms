@@ -23,6 +23,7 @@ import {
   type Intersection,
   type Group,
 } from "three";
+import { type StoreApi, type UseBoundStore } from "zustand";
 // (overlay components are no longer used)
 import { NumberBadge, type Digit } from "@/components/game/manacost";
 import { useSound } from "@/lib/contexts/SoundContext";
@@ -53,6 +54,7 @@ import {
   type CardRef,
   type BoardState,
   type RemoteCursorState,
+  type GameState,
 } from "@/lib/game/store";
 import type {
   RemoteCursorDragMeta,
@@ -165,6 +167,7 @@ interface BoardProps {
   noRaycast?: boolean;
   enableBoardPings?: boolean;
   interactionMode?: "normal" | "spectator";
+  storeApi?: UseBoundStore<StoreApi<GameState>>;
 }
 
 const DEFAULT_BOARD_STATE: BoardState = { size: { w: 5, h: 4 }, sites: {} };
@@ -203,54 +206,60 @@ export default function Board({
   noRaycast = false,
   enableBoardPings = false,
   interactionMode = "normal",
+  storeApi,
 }: BoardProps = {}) {
+  const resolvedStoreApi = (storeApi ?? useGameStore) as UseBoundStore<
+    StoreApi<GameState>
+  >;
+  const useScopedStore = <T,>(selector: (state: GameState) => T): T =>
+    resolvedStoreApi(selector);
   const isSpectator = interactionMode === "spectator";
-  const boardState = useGameStore((s) => s.board);
+  const boardState = useScopedStore((s) => s.board);
   const board = boardState ?? DEFAULT_BOARD_STATE;
-  const showGrid = useGameStore((s) => s.showGridOverlay);
-  const showPlaymat = useGameStore((s) => s.showPlaymat);
-  const playSelectedTo = useGameStore((s) => s.playSelectedTo);
-  const moveSelectedPermanentToWithOffset = useGameStore(
+  const showGrid = useScopedStore((s) => s.showGridOverlay);
+  const showPlaymat = useScopedStore((s) => s.showPlaymat);
+  const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
+  const moveSelectedPermanentToWithOffset = useScopedStore(
     (s) => s.moveSelectedPermanentToWithOffset
   );
-  const setPermanentOffset = useGameStore((s) => s.setPermanentOffset);
-  const moveAvatarToWithOffset = useGameStore((s) => s.moveAvatarToWithOffset);
-  const contextMenu = useGameStore((s) => s.contextMenu);
-  const openContextMenu = useGameStore((s) => s.openContextMenu);
-  const selected = useGameStore((s) => s.selectedCard);
-  const selectedPermanent = useGameStore((s) => s.selectedPermanent);
-  const permanents = useGameStore((s) => s.permanents);
-  const permanentPositions = useGameStore((s) => s.permanentPositions);
+  const setPermanentOffset = useScopedStore((s) => s.setPermanentOffset);
+  const moveAvatarToWithOffset = useScopedStore((s) => s.moveAvatarToWithOffset);
+  const contextMenu = useScopedStore((s) => s.contextMenu);
+  const openContextMenu = useScopedStore((s) => s.openContextMenu);
+  const selected = useScopedStore((s) => s.selectedCard);
+  const selectedPermanent = useScopedStore((s) => s.selectedPermanent);
+  const permanents = useScopedStore((s) => s.permanents);
+  const permanentPositions = useScopedStore((s) => s.permanentPositions);
   const { playCardPlay, playTurnGong, playCardFlip } = useSound();
-  const dragFromHand = useGameStore((s) => s.dragFromHand);
-  const previewCard = useGameStore((s) => s.previewCard);
+  const dragFromHand = useScopedStore((s) => s.dragFromHand);
+  const previewCard = useScopedStore((s) => s.previewCard);
   // Hand visibility state to disable glows when hand is shown
-  const mouseInHandZone = useGameStore((s) => s.mouseInHandZone);
-  const handHoverCount = useGameStore((s) => s.handHoverCount);
+  const mouseInHandZone = useScopedStore((s) => s.mouseInHandZone);
+  const handHoverCount = useScopedStore((s) => s.handHoverCount);
   const [lastTouchedId, setLastTouchedId] = useState<string | null>(null);
   const isHandVisible = mouseInHandZone || handHoverCount > 0;
-  const setDragFromHand = useGameStore((s) => s.setDragFromHand);
-  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
-  const dragFromPile = useGameStore((s) => s.dragFromPile);
-  const setLastPointerWorldPos = useGameStore((s) => s.setLastPointerWorldPos);
-  const setDragFromPile = useGameStore((s) => s.setDragFromPile);
-  const playFromPileTo = useGameStore((s) => s.playFromPileTo);
-  const getRemoteHighlightColor = useGameStore(
+  const setDragFromHand = useScopedStore((s) => s.setDragFromHand);
+  const setPreviewCard = useScopedStore((s) => s.setPreviewCard);
+  const dragFromPile = useScopedStore((s) => s.dragFromPile);
+  const setLastPointerWorldPos = useScopedStore((s) => s.setLastPointerWorldPos);
+  const setDragFromPile = useScopedStore((s) => s.setDragFromPile);
+  const playFromPileTo = useScopedStore((s) => s.playFromPileTo);
+  const getRemoteHighlightColor = useScopedStore(
     (s) => s.getRemoteHighlightColor
   );
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const actorKey = useGameStore((s) => s.actorKey);
-  const remoteCursors = useGameStore((s) => s.remoteCursors);
-  const localPlayerId = useGameStore((s) => s.localPlayerId);
-  const avatars = useGameStore((s) => s.avatars);
-  const overlayBlocking = useGameStore((s) =>
+  const currentPlayer = useScopedStore((s) => s.currentPlayer);
+  const actorKey = useScopedStore((s) => s.actorKey);
+  const remoteCursors = useScopedStore((s) => s.remoteCursors);
+  const localPlayerId = useScopedStore((s) => s.localPlayerId);
+  const avatars = useScopedStore((s) => s.avatars);
+  const overlayBlocking = useScopedStore((s) =>
     Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
   );
   // Counter actions
-  const incrementPermanentCounter = useGameStore(
+  const incrementPermanentCounter = useScopedStore(
     (s) => s.incrementPermanentCounter
   );
-  const decrementPermanentCounter = useGameStore(
+  const decrementPermanentCounter = useScopedStore(
     (s) => s.decrementPermanentCounter
   );
 
@@ -268,12 +277,12 @@ export default function Board({
   } | null>(null);
 
   // Attack chooser state moved to store so HUD can render at layout level
-  const attackChoice = useGameStore((s) => s.attackChoice);
-  const setAttackChoice = useGameStore((s) => s.setAttackChoice);
-  const attackTargetChoice = useGameStore((s) => s.attackTargetChoice);
-  const setAttackTargetChoice = useGameStore((s) => s.setAttackTargetChoice);
-  const attackConfirm = useGameStore((s) => s.attackConfirm);
-  const setAttackConfirm = useGameStore((s) => s.setAttackConfirm);
+  const attackChoice = useScopedStore((s) => s.attackChoice);
+  const setAttackChoice = useScopedStore((s) => s.setAttackChoice);
+  const attackTargetChoice = useScopedStore((s) => s.attackTargetChoice);
+  const setAttackTargetChoice = useScopedStore((s) => s.setAttackTargetChoice);
+  const attackConfirm = useScopedStore((s) => s.attackConfirm);
+  const setAttackConfirm = useScopedStore((s) => s.setAttackConfirm);
   const [lastCrossMove, setLastCrossMove] = useState<{
     fromKey: string;
     toKey: string;
@@ -281,16 +290,16 @@ export default function Board({
     prevOffset: [number, number] | null;
     instanceId?: string | null;
   } | null>(null);
-  const interactionGuides = useGameStore((s) => s.interactionGuides);
-  const metaByCardId = useGameStore((s) => s.metaByCardId);
-  const fetchCardMeta = useGameStore((s) => s.fetchCardMeta);
-  const declareAttack = useGameStore((s) => s.declareAttack);
-  const pendingCombat = useGameStore((s) => s.pendingCombat);
-  const resolveCombat = useGameStore((s) => s.resolveCombat);
-  const cancelCombat = useGameStore((s) => s.cancelCombat);
-  const selectPermanent = useGameStore((s) => s.selectPermanent);
-  const setDefenderSelection = useGameStore((s) => s.setDefenderSelection);
-  const revertCrossMoveTick = useGameStore((s) => s.revertCrossMoveTick);
+  const interactionGuides = useScopedStore((s) => s.interactionGuides);
+  const metaByCardId = useScopedStore((s) => s.metaByCardId);
+  const fetchCardMeta = useScopedStore((s) => s.fetchCardMeta);
+  const declareAttack = useScopedStore((s) => s.declareAttack);
+  const pendingCombat = useScopedStore((s) => s.pendingCombat);
+  const resolveCombat = useScopedStore((s) => s.resolveCombat);
+  const cancelCombat = useScopedStore((s) => s.cancelCombat);
+  const selectPermanent = useScopedStore((s) => s.selectPermanent);
+  const setDefenderSelection = useScopedStore((s) => s.setDefenderSelection);
+  const revertCrossMoveTick = useScopedStore((s) => s.revertCrossMoveTick);
 
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
@@ -299,9 +308,9 @@ export default function Board({
   };
 
   // Site edge placement functions
-  const calculateEdgePosition = useGameStore((s) => s.calculateEdgePosition);
-  const playerPositions = useGameStore((s) => s.playerPositions);
-  const setPlayerPosition = useGameStore((s) => s.setPlayerPosition);
+  const calculateEdgePosition = useScopedStore((s) => s.calculateEdgePosition);
+  const playerPositions = useScopedStore((s) => s.playerPositions);
+  const setPlayerPosition = useScopedStore((s) => s.setPlayerPosition);
 
   // Playmat texture is loaded inside the Playmat subcomponent via Suspense.
 
@@ -691,8 +700,8 @@ export default function Board({
     start: [number, number];
     time: number;
   } | null>(null);
-  const selectedAvatar = useGameStore((s) => s.selectedAvatar);
-  const selectAvatar = useGameStore((s) => s.selectAvatar);
+  const selectedAvatar = useScopedStore((s) => s.selectedAvatar);
+  const selectAvatar = useScopedStore((s) => s.selectAvatar);
   const lastAvatarCardsRef = useRef<Record<"p1" | "p2", CardRef | null>>({
     p1: null,
     p2: null,
@@ -1032,7 +1041,7 @@ export default function Board({
   const lastPointerRef = useRef<{ x: number; z: number } | null>(null);
 
   const resolveHighlight = useCallback((): RemoteCursorHighlight => {
-    const state = useGameStore.getState();
+    const state = resolvedStoreApi.getState();
 
     const deriveCardMeta = (
       card: CardRef | null | undefined,
@@ -1104,7 +1113,7 @@ export default function Board({
   }, []);
 
   const resolveDraggingMeta = useCallback((): RemoteCursorDragMeta | null => {
-    const s = useGameStore.getState();
+    const s = resolvedStoreApi.getState();
     if (isSpectator) {
       return null;
     }
@@ -1168,7 +1177,7 @@ export default function Board({
       if (isSpectator) {
         return;
       }
-      const s = useGameStore.getState();
+      const s = resolvedStoreApi.getState();
       const playerId = s.localPlayerId;
       if (!playerId) return;
       const tr = s.transport;
@@ -1325,7 +1334,7 @@ export default function Board({
           return;
         }
         if (overP1GY || overP2GY) {
-          const store = useGameStore.getState();
+          const store = resolvedStoreApi.getState();
           const draggedCard = permanents[d.from]?.[d.index]?.card;
           const tokenType = (draggedCard?.type || "").toLowerCase();
           const goTo = tokenType.includes("token") ? "banished" : "graveyard";
@@ -1506,7 +1515,7 @@ export default function Board({
       const x = Number(position.x);
       const z = Number(position.z);
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-      const { actorKey, pushBoardPing, transport } = useGameStore.getState();
+      const { actorKey, pushBoardPing, transport } = resolvedStoreApi.getState();
       const seat = actorKey === "p1" || actorKey === "p2" ? actorKey : "p1";
       const id = `ping_${Math.random()
         .toString(36)
@@ -1550,7 +1559,7 @@ export default function Board({
         }
         if (isSpectator) return;
         e.preventDefault();
-        const { lastPointerWorldPos } = useGameStore.getState();
+        const { lastPointerWorldPos } = resolvedStoreApi.getState();
         emitBoardPing(lastPointerWorldPos);
       }
     };
@@ -1583,7 +1592,7 @@ export default function Board({
         toggleTapPermanent,
         toggleTapAvatar,
         closeContextMenu,
-      } = useGameStore.getState();
+      } = resolvedStoreApi.getState();
 
       let tapped = false;
 
@@ -2222,8 +2231,8 @@ export default function Board({
                   // Prevent duplicate actions when a drop just occurred on this tile
                   if (Date.now() - lastDropAt.current < 200) return;
                   // Treat tile left-click as background click: deselect and close menus
-                  useGameStore.getState().clearSelection();
-                  useGameStore.getState().closeContextMenu();
+                  resolvedStoreApi.getState().clearSelection();
+                  resolvedStoreApi.getState().closeContextMenu();
                 }}
               >
                 <planeGeometry args={[TILE_SIZE, TILE_SIZE]} />
@@ -2682,7 +2691,7 @@ export default function Board({
                           if (tokenSiteReplace) {
                             // Rubble behaves like a site for movement: no drag start
                             e.stopPropagation();
-                            useGameStore.getState().selectPermanent(key, idx);
+                            resolvedStoreApi.getState().selectPermanent(key, idx);
                             setLastTouchedId(permId);
                             clearHoverPreview(hoverKey);
                             return;
@@ -2795,7 +2804,7 @@ export default function Board({
                           }
                           if (e.button === 0) {
                             e.stopPropagation();
-                            useGameStore.getState().selectPermanent(key, idx);
+                            resolvedStoreApi.getState().selectPermanent(key, idx);
                             setLastTouchedId(permId);
                             if (!isSpectator && actorKey) {
                               const mine =
@@ -3060,7 +3069,7 @@ export default function Board({
                                 return;
                               }
                               if (overP1GY || overP2GY) {
-                                const store = useGameStore.getState();
+                                const store = resolvedStoreApi.getState();
                                 const tokenType = (
                                   p.card?.type || ""
                                 ).toLowerCase();
@@ -3225,7 +3234,7 @@ export default function Board({
                             )
                               return;
                             // Left-click selects only; context menu via right-click
-                            useGameStore.getState().selectPermanent(key, idx);
+                            resolvedStoreApi.getState().selectPermanent(key, idx);
                             setLastTouchedId(permId);
                           }}
                           onContextMenu={(e: ThreeEvent<PointerEvent>) => {
@@ -3236,7 +3245,7 @@ export default function Board({
                             e.stopPropagation();
                             e.nativeEvent.preventDefault();
                             // Ensure the permanent is selected before opening the menu
-                            useGameStore.getState().selectPermanent(key, idx);
+                            resolvedStoreApi.getState().selectPermanent(key, idx);
                             setLastTouchedId(permId);
                             openContextMenu(
                               { kind: "permanent", at: key, index: idx },

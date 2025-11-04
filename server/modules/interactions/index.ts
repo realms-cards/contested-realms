@@ -36,6 +36,7 @@ export const INTERACTION_REQUEST_KINDS = new Set([
   "tieGame",
   "inspectBanished",
   "unbanishCard",
+  "restoreSnapshot",
 ]);
 
 export const INTERACTION_DECISIONS = new Set(["approved", "declined", "cancelled"]);
@@ -418,6 +419,74 @@ export function createInteractionModule({
         };
       } catch (_e) {
         return { ...resultBase, success: false, message: "Failed to unbanish" };
+      }
+    }
+    if (kind === "restoreSnapshot") {
+      const raw = pendingAction.snapshot;
+      if (!raw || typeof raw !== "object") {
+        return { ...resultBase, success: false, message: "Missing snapshot payload" };
+      }
+      const src = raw as Record<string, unknown>;
+      const patch: Record<string, unknown> = {};
+      if (src.players && typeof src.players === "object") patch.players = src.players;
+      if (src.currentPlayer === 1 || src.currentPlayer === 2) patch.currentPlayer = src.currentPlayer as number;
+      if (Number.isFinite(Number(src.turn))) patch.turn = Number(src.turn);
+      if (typeof src.phase === "string") patch.phase = src.phase as string;
+      if (src.board && typeof src.board === "object") patch.board = src.board;
+      if (src.permanents && typeof src.permanents === "object") patch.permanents = src.permanents;
+      if (src.avatars && typeof src.avatars === "object") patch.avatars = src.avatars;
+      if (src.permanentPositions && typeof src.permanentPositions === "object") patch.permanentPositions = src.permanentPositions;
+      if (src.permanentAbilities && typeof src.permanentAbilities === "object") patch.permanentAbilities = src.permanentAbilities;
+      if (src.sitePositions && typeof src.sitePositions === "object") patch.sitePositions = src.sitePositions;
+      if (src.playerPositions && typeof src.playerPositions === "object") patch.playerPositions = src.playerPositions;
+      if (src.zones && typeof src.zones === "object") patch.zones = src.zones;
+
+      const allowedKeys = new Set([
+        "players",
+        "currentPlayer",
+        "turn",
+        "phase",
+        "board",
+        "zones",
+        "avatars",
+        "permanents",
+        "permanentPositions",
+        "permanentAbilities",
+        "sitePositions",
+        "playerPositions",
+      ]);
+      let rk: string[] = [];
+      if (Array.isArray((src as any).__replaceKeys)) {
+        rk = ((src as any).__replaceKeys as unknown[])
+          .map((k) => (typeof k === "string" ? k : null))
+          .filter((k): k is string => !!k && allowedKeys.has(k));
+      }
+      if (!rk || rk.length === 0) {
+        rk = Object.keys(patch).filter((k) => allowedKeys.has(k));
+      }
+      (patch as any).__replaceKeys = rk;
+      try {
+        if (rk.length > 0) {
+          const mergePatch: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(patch)) if (!rk.includes(k)) mergePatch[k] = v;
+          const nextGame = deepMergeReplaceArrays(match.game || {}, mergePatch);
+          for (const key of rk) (nextGame as any)[key] = (patch as any)[key];
+          match.game = nextGame;
+        } else {
+          match.game = deepMergeReplaceArrays(match.game || {}, patch);
+        }
+        match.lastTs = now;
+        const room = `match:${match.id}`;
+        const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+        io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
+        return {
+          ...resultBase,
+          success: true,
+          payload: { requestedBy: pendingAction.requestedBy || null },
+          message: "Snapshot restored",
+        };
+      } catch (_e) {
+        return { ...resultBase, success: false, message: "Failed to restore snapshot" };
       }
     }
     if (kind === "tieGame") {

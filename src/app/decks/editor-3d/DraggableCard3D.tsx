@@ -3,13 +3,21 @@
 import type { ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group } from "three";
-import {
-  createCardMeshUserData,
-  createCardPreviewData,
-  type CardPreviewData,
-} from "@/lib/game/card-preview.types";
+import { createCardMeshUserData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+
+/**
+ * Small Y offset per card in stack - MouseTracker sorts by Y to pick topmost card
+ *
+ * This offset is ONLY applied when cards are actually stacked (totalInStack > 1).
+ * In unstacked mode, all cards remain on the same plane (y = 0.002) for proper visual layout.
+ *
+ * Benefits:
+ * - Autostack mode: Stacked cards get unique Y positions → MouseTracker picks top card
+ * - Unstacked mode: All cards at same Y → visually flat, no floating/staggering
+ */
+const STACK_VERTICAL_STEP = 0.001;
 
 export default function DraggableCard3D({
   slug,
@@ -25,8 +33,8 @@ export default function DraggableCard3D({
   onRelease,
   getTopRenderOrder,
   onHoverChange,
-  onHoverStart,
-  onHoverEnd,
+  onHoverStart, // Not used in editor (MouseTracker handles it), kept for draft screens
+  onHoverEnd, // Not used in editor (MouseTracker handles it), kept for draft screens
   lockUpright,
   onDoubleClick,
   onContextMenu,
@@ -52,8 +60,8 @@ export default function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
-  onHoverStart?: (card: CardPreviewData) => void;
-  onHoverEnd?: () => void;
+  onHoverStart?: (card: { slug: string; name: string; type: string | null }) => void; // Not used in editor, kept for draft compatibility
+  onHoverEnd?: () => void; // Not used in editor, kept for draft compatibility
   lockUpright?: boolean;
   onDoubleClick?: () => void;
   onContextMenu?: (clientX: number, clientY: number) => void;
@@ -79,19 +87,7 @@ export default function DraggableCard3D({
   const roRef = useRef<number>(baseRenderOrder);
   const [isDragging, setIsDragging] = useState(false);
   const [uprightLocked, setUprightLocked] = useState(false);
-  const hoveringRef = useRef(false);
-  const hoverStableRef = useRef<number | null>(null);
   const lastClickTime = useRef<number>(0);
-
-  const previewData = useMemo(
-    () =>
-      createCardPreviewData({
-        slug,
-        name: cardName ?? slug,
-        type: cardType ?? null,
-      }),
-    [slug, cardName, cardType]
-  );
 
   const meshUserData = useMemo(
     () =>
@@ -104,15 +100,6 @@ export default function DraggableCard3D({
     [cardId, slug, cardName, cardType]
   );
 
-  // Cleanup hover timer on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverStableRef.current) {
-        window.clearTimeout(hoverStableRef.current);
-      }
-    };
-  }, []);
-
   // Reset render order to base when not dragging
   useEffect(() => {
     if (!isDragging) {
@@ -120,10 +107,15 @@ export default function DraggableCard3D({
     }
   }, [baseRenderOrder, isDragging]);
 
+  // Calculate unique Y position for this card in the stack
+  // MouseTracker sorts by Y to pick the topmost card
+  // Only offset Y when actually stacked (totalInStack > 1), otherwise keep all cards on same plane
+  const cardY = totalInStack > 1 ? y + stackIndex * STACK_VERTICAL_STEP : y;
+
   const setPos = useCallback((wx: number, wz: number, lift = false) => {
     if (!ref.current) return;
-    ref.current.position.set(wx, lift ? 0.25 : y, wz);
-  }, [y]);
+    ref.current.position.set(wx, lift ? 0.25 : cardY, wz);
+  }, [cardY]);
 
   const rotZ =
     (isSite ? -Math.PI / 2 : 0) +
@@ -138,7 +130,7 @@ export default function DraggableCard3D({
   const hitboxOffsetZ = 0;
 
   return (
-    <group ref={ref} position={[x, y, z]}>
+    <group ref={ref} position={[x, cardY, z]}>
       {/* Invisible hitbox positioned at card surface level, sized for visible area */}
       <mesh
         position={[hitboxOffsetX, 0.005, hitboxOffsetZ]}
@@ -260,34 +252,6 @@ export default function DraggableCard3D({
           }
 
           onRelease?.(wx, wz, wasDragging);
-        }}
-        onPointerOver={() => {
-          if (disabled) return;
-          hoveringRef.current = true;
-          // Clear any pending hover-out debounce
-          if (hoverStableRef.current) {
-            window.clearTimeout(hoverStableRef.current);
-            hoverStableRef.current = null;
-          }
-          onHoverChange?.(true);
-          if (previewData) {
-            onHoverStart?.(previewData);
-          }
-        }}
-        onPointerOut={() => {
-          hoveringRef.current = false;
-          // Add a small delay before calling hover false to prevent spurious events
-          if (hoverStableRef.current) {
-            window.clearTimeout(hoverStableRef.current);
-          }
-          hoverStableRef.current = window.setTimeout(() => {
-            // Only call hover false if we're truly not hovering anymore
-            if (!hoveringRef.current) {
-              onHoverChange?.(false);
-              onHoverEnd?.();
-            }
-            hoverStableRef.current = null;
-          }, 50); // Small delay to handle pointer event quirks
         }}
         onContextMenu={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;

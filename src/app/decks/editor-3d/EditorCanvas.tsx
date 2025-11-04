@@ -2,14 +2,14 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import Board from "@/lib/game/Board";
 import { Physics } from "@/lib/game/physics";
-import { useGameStore } from "@/lib/game/store";
+import { createGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 
 interface EditorCanvasProps {
@@ -28,9 +28,14 @@ export default function EditorCanvas({
   children,
   orbitLocked = false,
 }: EditorCanvasProps) {
+  const storeApi = useMemo<ReturnType<typeof createGameStore>>(
+    () => createGameStore(),
+    []
+  );
+
   useEffect(() => {
-    useGameStore.getState().resetGameState();
-  }, []);
+    storeApi.getState().resetGameState();
+  }, [storeApi]);
 
   return (
     <div className="absolute inset-0 w-full h-full">
@@ -48,7 +53,7 @@ export default function EditorCanvas({
         <ambientLight intensity={0.8} />
         <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
         <Physics gravity={[0, -9.81, 0]}>
-          <Board interactionMode="spectator" />
+          <Board interactionMode="spectator" storeApi={storeApi} />
           {children}
         </Physics>
         <OrbitControls
