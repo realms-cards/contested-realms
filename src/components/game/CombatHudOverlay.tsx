@@ -24,6 +24,7 @@ export default function CombatHudOverlay() {
 
   const declareAttack = useGameStore((s) => s.declareAttack);
   const resolveCombat = useGameStore((s) => s.resolveCombat);
+  const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
   const cancelCombat = useGameStore((s) => s.cancelCombat);
   const requestRevertCrossMove = useGameStore((s) => s.requestRevertCrossMove);
 
@@ -199,10 +200,10 @@ export default function CombatHudOverlay() {
     );
   }
 
-  // Auto-hide summary after short display
+  // Auto-hide summary after longer display (still manually closable)
   useEffect(() => {
     if (!lastCombatSummary) return;
-    const id = window.setTimeout(() => setLastCombatSummary(null), 3500);
+    const id = window.setTimeout(() => setLastCombatSummary(null), 12000);
     return () => window.clearTimeout(id);
   }, [lastCombatSummary, setLastCombatSummary]);
 
@@ -318,8 +319,11 @@ export default function CombatHudOverlay() {
             if (actorKey !== seatOwner) return null;
             return (
               <div className="pointer-events-auto rounded-full bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-2 flex gap-2 text-sm">
-                <button className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1" onClick={() => resolveCombat()}>
-                  Resolve Combat
+                <button className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1" onClick={() => autoResolveCombat()}>
+                  Auto Resolve
+                </button>
+                <button className="rounded bg-indigo-600/90 hover:bg-indigo-500 px-3 py-1" onClick={() => resolveCombat()}>
+                  Manual Resolve
                 </button>
                 <button
                   className="rounded bg-white/15 hover:bg-white/25 px-3 py-1"
@@ -337,13 +341,34 @@ export default function CombatHudOverlay() {
       ) : null}
 
       {/* Final summary banner (both players) */}
-      {lastCombatSummary ? (
-        <div className="fixed inset-x-0 top-28 z-40 pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
-            {lastCombatSummary.text}
+      {lastCombatSummary ? (() => {
+        const actor = lastCombatSummary.actor;
+        const targetSeat = lastCombatSummary.targetSeat;
+        const ac = actor ? PLAYER_COLORS[actor] : "#aaaaaa";
+        const tc = targetSeat ? PLAYER_COLORS[targetSeat] : "#aaaaaa";
+        return (
+          <div className="fixed inset-x-0 top-28 z-40 pointer-events-none flex justify-center">
+            <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+              <div className="min-w-0">
+                {(actor || targetSeat) ? (
+                  <div className="text-xs opacity-90 mb-1">
+                    {actor ? <span style={{ color: ac }} className="font-semibold">{actor.toUpperCase()}</span> : null}
+                    {actor || targetSeat ? <span className="mx-1">→</span> : null}
+                    {targetSeat ? <span style={{ color: tc }} className="font-semibold">{targetSeat.toUpperCase()}</span> : null}
+                  </div>
+                ) : null}
+                <div className="leading-tight drop-shadow-sm break-words">{lastCombatSummary.text}</div>
+              </div>
+              <button
+                className="ml-2 rounded bg-white/15 hover:bg-white/25 px-2 py-1 text-sm"
+                onClick={() => setLastCombatSummary(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
     </>
   );
 }

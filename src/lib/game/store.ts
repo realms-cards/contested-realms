@@ -473,8 +473,8 @@ export type GameState = {
   // Signal Board to revert last cross-tile move (handled locally there)
   revertCrossMoveTick: number;
   requestRevertCrossMove: () => void;
-  lastCombatSummary: { id: string; text: string; ts: number } | null;
-  setLastCombatSummary: (s: { id: string; text: string; ts: number } | null) => void;
+  lastCombatSummary: { id: string; text: string; ts: number; actor?: PlayerKey; targetSeat?: PlayerKey } | null;
+  setLastCombatSummary: (smm: { id: string; text: string; ts: number; actor?: PlayerKey; targetSeat?: PlayerKey } | null) => void;
   declareAttack: (
     tile: { x: number; y: number },
     attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 },
@@ -484,6 +484,7 @@ export type GameState = {
     defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>
   ) => void;
   resolveCombat: () => void;
+  autoResolveCombat: () => void;
   cancelCombat: () => void;
   // Generic lightweight message handler
   receiveCustomMessage: (msg: CustomMessage) => void;
@@ -584,6 +585,11 @@ export type GameState = {
     y: number,
     target: "hand" | "graveyard" | "banished" | "atlas",
     position?: "top" | "bottom"
+  ) => void;
+  moveFromBanishedToZone: (
+    who: PlayerKey,
+    instanceId: string,
+    target: "hand" | "graveyard"
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
@@ -2182,10 +2188,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
     const fsTag = eff.firstStrike ? " (FS)" : "";
     const tileNo = (() => { try { return pc.tile.y * get().board.size.w + pc.tile.x + 1; } catch { return null; } })();
+    const actorSeat = (pc.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
+    let targetSeat: PlayerKey | undefined = undefined;
     if (pc.target && pc.target.kind === "site") {
       const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
       if (owner === 1 || owner === 2) {
         const seat = owner === 1 ? "p1" : "p2";
+        targetSeat = seat as PlayerKey;
         const dd = players[seat].lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
         const siteName = board.sites[pc.target.at]?.card?.name || "Site";
@@ -2194,6 +2203,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } else if (pc.target && pc.target.kind === "avatar") {
       const seat = pc.attacker.owner === 1 ? "p2" : "p1";
+      targetSeat = seat as PlayerKey;
       const state = players[seat];
       const avatarName = getAvatarName(seat as PlayerKey);
       if (state.lifeState === "dd") {
@@ -2219,10 +2229,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         ? getPermName(pc.target.at, pc.target.index)
         : (pc.defenders?.length ? pc.defenders.map(d => getPermName(d.at, d.index)).slice(0,3).join(", ") + (pc.defenders.length > 3 ? ", …" : "") : "target");
       const kills = aAtk >= targetDef;
+      targetSeat = pc.defenderSeat as PlayerKey;
       summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
     }
     // Set local summary first so the acting player always sees it immediately
-    set({ lastCombatSummary: { id: pc.id, text: summary, ts: Date.now() } } as Partial<GameState> as GameState);
+    set({ lastCombatSummary: { id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } } as Partial<GameState> as GameState);
     if (tr?.sendMessage) {
       try {
         tr.sendMessage({
@@ -2234,10 +2245,121 @@ export const useGameStore = create<GameState>((set, get) => ({
           target: pc.target ?? null,
           ts: Date.now(),
         } as unknown as CustomMessage);
-        tr.sendMessage({ type: "combatSummary", id: pc.id, text: summary, ts: Date.now() } as unknown as CustomMessage);
+        tr.sendMessage({ type: "combatSummary", id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } as unknown as CustomMessage);
       } catch {}
     }
     set({ pendingCombat: null, attackChoice: null, attackTargetChoice: null, attackConfirm: null } as Partial<GameState> as GameState);
+  },
+  autoResolveCombat: () => {
+    const pc = get().pendingCombat;
+    if (!pc) return;
+    // Helpers copied from resolveCombat scope
+    const { permanents, metaByCardId, board, players } = get();
+    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+      try {
+        const cardId = (permanents as Permanents)[at]?.[index]?.card?.cardId;
+        const m = cardId ? (metaByCardId as Record<number, { attack: number | null; defence: number | null }>)[Number(cardId)] : undefined;
+        return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+      } catch { return { atk: 0, def: 0 }; }
+    }
+    function getAttachments(at: string, index: number): Permanents[string] {
+      const list = (permanents as Permanents)[at] || [];
+      return list.filter((p) => p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index);
+    }
+    function computeEffectiveAttack(a: { at: CellKey; index: number }): { atk: number; firstStrike: boolean } {
+      const base = getAtkDef(a.at, a.index).atk;
+      const attachments = getAttachments(a.at, a.index);
+      let atk = base; let firstStrike = false; let disabled = false;
+      for (const tkn of attachments) {
+        const nm = (tkn.card?.name || "").toLowerCase();
+        if (nm === "lance") { firstStrike = true; atk += 1; }
+        if (nm === "disabled") { disabled = true; }
+      }
+      if (disabled) atk = 0;
+      if (!Number.isFinite(atk)) atk = 0;
+      return { atk, firstStrike };
+    }
+    const eff = computeEffectiveAttack({ at: pc.attacker.at, index: pc.attacker.index });
+    const aSeat = (pc.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
+    let tSeat: PlayerKey | undefined = undefined;
+    // Apply unit kills
+    const sumDef = pc.defenders && pc.defenders.length > 0
+      ? pc.defenders.reduce((s, d) => s + getAtkDef(d.at, d.index).def, 0)
+      : (pc.target && pc.target.kind === "permanent" && pc.target.index != null ? getAtkDef(pc.target.at, pc.target.index).def : 0);
+    const kills = eff.atk >= sumDef && sumDef > 0;
+    const killList: Array<{ at: CellKey; index: number; owner: PlayerKey }> = [];
+    if (kills) {
+      if (pc.defenders && pc.defenders.length > 0) {
+        for (const d of pc.defenders) {
+          const ownerSeat = (d.owner === 1 ? "p1" : "p2") as PlayerKey;
+          killList.push({ at: d.at, index: d.index, owner: ownerSeat });
+        }
+        tSeat = pc.defenderSeat as PlayerKey;
+      } else if (pc.target && pc.target.kind === "permanent" && pc.target.index != null) {
+        // Target unit owner is the opposite of attacker
+        const ownerSeat = pc.defenderSeat as PlayerKey;
+        killList.push({ at: pc.target.at, index: pc.target.index, owner: ownerSeat });
+        tSeat = ownerSeat;
+      }
+    }
+    // If there are defenders, check whether the attacker dies to their total attack (unless attacker strikes first and kills them)
+    if (pc.defenders && pc.defenders.length > 0) {
+      const sumAtk = pc.defenders.reduce((s, d) => s + computeEffectiveAttack({ at: d.at, index: d.index }).atk, 0);
+      const attackerDef = getAtkDef(pc.attacker.at, pc.attacker.index).def;
+      const attackerWouldDie = sumAtk >= attackerDef && attackerDef > 0;
+      const attackerHasFSAndKills = eff.firstStrike && kills;
+      if (attackerWouldDie && !attackerHasFSAndKills) {
+        killList.push({ at: pc.attacker.at, index: pc.attacker.index, owner: aSeat });
+      }
+    }
+    // Apply avatar/site damage
+    if (pc.target && pc.target.kind === "site") {
+      const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
+      if (owner === 1 || owner === 2) {
+        const seat = owner === 1 ? "p1" : "p2";
+        tSeat = seat as PlayerKey;
+        const dd = players[seat].lifeState === "dd";
+        if (!dd) {
+          const dmg = Math.max(0, Math.floor(eff.atk));
+          if (dmg > 0) try { get().addLife(seat as PlayerKey, -dmg); } catch {}
+        }
+      }
+    } else if (pc.target && pc.target.kind === "avatar") {
+      const seat = (pc.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+      tSeat = seat;
+      const isDD = players[seat].lifeState === "dd";
+      const dmg = Math.max(0, Math.floor(eff.atk));
+      if (isDD) {
+        // Any avatar damage at DD reduces to 0 and ends match
+        try { get().addLife(seat, -1); } catch {}
+      } else if (dmg > 0) {
+        try { get().addLife(seat, -dmg); } catch {}
+      }
+    }
+    // Apply local kills only for our own seat; send message so opponent applies theirs
+    const mySeat = get().actorKey as PlayerKey | null;
+    if (mySeat) {
+      for (const k of killList) {
+        if (k.owner === mySeat) {
+          try { get().movePermanentToZone(k.at, k.index, "graveyard"); } catch {}
+        }
+      }
+    }
+    // Compose and broadcast summary via the existing path
+    const tr = get().transport;
+    if (tr?.sendMessage && killList.length > 0) {
+      try {
+        tr.sendMessage({ type: "combatAutoApply", id: pc.id, kills: killList, ts: Date.now() } as unknown as CustomMessage);
+      } catch {}
+    }
+    get().resolveCombat();
+    // Enhance local banner with actor/target seat
+    const now = Date.now();
+    set((s) => {
+      const cur = s.lastCombatSummary;
+      if (!cur || cur.ts < now - 100) return s as GameState;
+      return { lastCombatSummary: { ...cur, actor: aSeat, targetSeat: tSeat } } as Partial<GameState> as GameState;
+    });
   },
   cancelCombat: () => {
     const pc = get().pendingCombat;
@@ -2261,12 +2383,31 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       return;
     }
+    if (t === "combatAutoApply") {
+      const killsAny = (msg as { kills?: unknown }).kills as unknown;
+      if (Array.isArray(killsAny)) {
+        const mySeat = get().actorKey as PlayerKey | null;
+        for (const k of killsAny) {
+          if (!k || typeof k !== "object") continue;
+          const rec = k as Record<string, unknown>;
+          const at = typeof rec.at === "string" ? (rec.at as string) : "";
+          const idx = Number(rec.index);
+          const owner = (rec.owner as PlayerKey | undefined) ?? undefined;
+          if (!at || !Number.isFinite(idx)) continue;
+          if (!mySeat || owner !== mySeat) continue;
+          try { get().movePermanentToZone(at as CellKey, Number(idx), "graveyard"); } catch {}
+        }
+      }
+      return;
+    }
     
     if (t === "combatSummary") {
       const id = (msg as { id?: unknown }).id as string | undefined;
       const text = (msg as { text?: unknown }).text as string | undefined;
+      const actor = (msg as { actor?: unknown }).actor as PlayerKey | undefined;
+      const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as PlayerKey | undefined;
       if (id && typeof text === "string") {
-        set({ lastCombatSummary: { id, text, ts: Date.now() }, pendingCombat: null } as Partial<GameState> as GameState);
+        set({ lastCombatSummary: { id, text, ts: Date.now(), actor, targetSeat }, pendingCombat: null } as Partial<GameState> as GameState);
       }
       return;
     }
@@ -2419,6 +2560,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const atkFx = aCell ? listAttachmentEffects(aCell.at, aCell.index) : [];
         const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
         const fsTag = eff.firstStrike ? " (FS)" : "";
+        const actorSeat = (Number(attacker?.owner) === 1 ? "p1" : "p2") as PlayerKey;
+        let targetSeat: PlayerKey | undefined = undefined;
         // Parse optional target
         let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
         if (targetAny && typeof targetAny === "object") {
@@ -2444,6 +2587,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           const owner = board.sites[target.at]?.owner as 1 | 2 | undefined;
           if (owner === 1 || owner === 2) {
             const seat = owner === 1 ? "p1" : "p2";
+            targetSeat = seat as PlayerKey;
             const dd = players[seat].lifeState === "dd";
             const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
             const siteName = board.sites[target.at]?.card?.name || "Site";
@@ -2453,6 +2597,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else if (target && target.kind === "avatar") {
           const aOwner = Number(attacker?.owner);
           const seat = (aOwner === 1 ? "p2" : "p1") as PlayerKey;
+          targetSeat = seat;
           const state = players[seat];
           const avatarName = getAvatarName(seat);
           if (state.lifeState === "dd") {
@@ -2493,9 +2638,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             targetName = names.join(", ") + (defenders.length > 3 ? ", …" : "");
           }
           const kills = aAtk >= targetDef;
+          targetSeat = (get().pendingCombat?.defenderSeat ?? null) as PlayerKey | null || undefined;
           summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
         }
-        set({ lastCombatSummary: { id: String(id || Date.now()), text: summary, ts: Date.now() }, pendingCombat: null } as Partial<GameState> as GameState);
+        set({ lastCombatSummary: { id: String(id || Date.now()), text: summary, ts: Date.now(), actor: actorSeat, targetSeat }, pendingCombat: null } as Partial<GameState> as GameState);
       } catch {
         set({ pendingCombat: null } as Partial<GameState> as GameState);
       }
