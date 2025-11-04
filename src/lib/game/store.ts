@@ -450,6 +450,31 @@ export type GameState = {
     status: "declared" | "defending" | "resolved" | "cancelled";
     createdAt: number;
   } | null;
+  // HUD-driven combat UI (lifted from Board for layout-level overlays)
+  attackChoice: {
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    attackerName?: string | null;
+  } | null;
+  attackTargetChoice: {
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    candidates: Array<{ kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null; label: string }>;
+  } | null;
+  attackConfirm: {
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null };
+    targetLabel: string;
+  } | null;
+  setAttackChoice: (v: GameState["attackChoice"]) => void;
+  setAttackTargetChoice: (v: GameState["attackTargetChoice"]) => void;
+  setAttackConfirm: (v: GameState["attackConfirm"]) => void;
+  // Signal Board to revert last cross-tile move (handled locally there)
+  revertCrossMoveTick: number;
+  requestRevertCrossMove: () => void;
+  lastCombatSummary: { id: string; text: string; ts: number } | null;
+  setLastCombatSummary: (s: { id: string; text: string; ts: number } | null) => void;
   declareAttack: (
     tile: { x: number; y: number },
     attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 },
@@ -2010,6 +2035,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   // Minimal combat state (MVP)
   pendingCombat: null,
+  attackChoice: null,
+  attackTargetChoice: null,
+  attackConfirm: null,
+  setAttackChoice: (v) => set({ attackChoice: v }),
+  setAttackTargetChoice: (v) => set({ attackTargetChoice: v }),
+  setAttackConfirm: (v) => set({ attackConfirm: v }),
+  revertCrossMoveTick: 0,
+  requestRevertCrossMove: () => set((s) => ({ revertCrossMoveTick: (s.revertCrossMoveTick || 0) + 1 })),
+  lastCombatSummary: null,
+  setLastCombatSummary: (smm) => set({ lastCombatSummary: smm } as Partial<GameState> as GameState),
   declareAttack: (tile, attacker, target) =>
     set((s) => {
       const id = `cmb_${Date.now().toString(36)}_${Math.random()
@@ -2085,7 +2120,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           playerKey: get().actorKey ?? null,
           ts: Date.now(),
         } as unknown as CustomMessage);
-        tr.sendMessage({ type: "toast", text: `Defender chose ${defenders.length} defender${defenders.length === 1 ? "" : "s"}` } as unknown as CustomMessage);
+        tr.sendMessage({ type: "toast", text: `Acting player chose ${defenders.length} defender${defenders.length === 1 ? "" : "s"}` } as unknown as CustomMessage);
       } catch {}
     }
   },
@@ -2093,6 +2128,101 @@ export const useGameStore = create<GameState>((set, get) => ({
     const pc = get().pendingCombat;
     if (!pc) return;
     const tr = get().transport;
+    const permanents = get().permanents as Permanents;
+    const meta = get().metaByCardId as Record<number, { attack: number | null; defence: number | null; cost: number | null }>;
+    const players = get().players;
+    const board = get().board;
+    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+      try {
+        const cardId = permanents[at]?.[index]?.card?.cardId;
+        const m = cardId ? meta[Number(cardId)] : undefined;
+        return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+      } catch { return { atk: 0, def: 0 }; }
+    }
+    function getAttachments(at: string, index: number): Permanents[string] {
+      const list = permanents[at] || [];
+      return list.filter((p) => p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index);
+    }
+    function listAttachmentEffects(at: string, index: number): string[] {
+      const effects: string[] = [];
+      for (const t of getAttachments(at, index)) {
+        const nm = (t.card?.name || "").trim();
+        const low = nm.toLowerCase();
+        if (low === "lance") effects.push("Lance(+1, FS)");
+        else if (low === "disabled") effects.push("Disabled(Atk=0)");
+        else if (nm) effects.push(nm);
+      }
+      return effects;
+    }
+    function getPermName(at: string, index: number): string {
+      try { return permanents[at]?.[index]?.card?.name || "Unit"; } catch { return "Unit"; }
+    }
+    function getAvatarName(seat: PlayerKey): string {
+      try { return (get().avatars?.[seat]?.card?.name as string) || "Avatar"; } catch { return "Avatar"; }
+    }
+    function computeEffectiveAttack(a: { at: CellKey; index: number }): { atk: number; firstStrike: boolean } {
+      const base = getAtkDef(a.at, a.index).atk;
+      const attachments = getAttachments(a.at, a.index);
+      let atk = base;
+      let firstStrike = false;
+      let disabled = false;
+      for (const t of attachments) {
+        const nm = (t.card?.name || "").toLowerCase();
+        if (nm === "lance") { firstStrike = true; atk += 1; }
+        if (nm === "disabled") { disabled = true; }
+      }
+      if (disabled) atk = 0;
+      if (!Number.isFinite(atk)) atk = 0;
+      return { atk, firstStrike };
+    }
+    const eff = computeEffectiveAttack({ at: pc.attacker.at, index: pc.attacker.index });
+    let summary = "Combat resolved";
+    const attackerName = getPermName(pc.attacker.at, pc.attacker.index);
+    const atkFx = listAttachmentEffects(pc.attacker.at, pc.attacker.index);
+    const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
+    const fsTag = eff.firstStrike ? " (FS)" : "";
+    const tileNo = (() => { try { return pc.tile.y * get().board.size.w + pc.tile.x + 1; } catch { return null; } })();
+    if (pc.target && pc.target.kind === "site") {
+      const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
+      if (owner === 1 || owner === 2) {
+        const seat = owner === 1 ? "p1" : "p2";
+        const dd = players[seat].lifeState === "dd";
+        const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+        const siteName = board.sites[pc.target.at]?.card?.name || "Site";
+        const ddNote = dd ? " (DD rule)" : "";
+        summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
+      }
+    } else if (pc.target && pc.target.kind === "avatar") {
+      const seat = pc.attacker.owner === 1 ? "p2" : "p1";
+      const state = players[seat];
+      const avatarName = getAvatarName(seat as PlayerKey);
+      if (state.lifeState === "dd") {
+        summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: ${seat.toUpperCase()} to 0 (lethal from DD, match ends)`;
+      } else {
+        const life = Number(state.life) || 0;
+        const dmg = Math.max(0, Math.floor(eff.atk));
+        const next = Math.max(0, life - dmg);
+        if (life > 0 && next <= 0) {
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: reaches Death's Door; further avatar/site damage this turn won't reduce life`;
+        } else {
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: ${dmg} dmg (life ${life} → ${next})`;
+        }
+      }
+    } else {
+      const aAtk = eff.atk;
+      const targetDef = (() => {
+        if (pc.target && pc.target.kind === "permanent" && pc.target.index != null) return getAtkDef(pc.target.at, pc.target.index).def;
+        if (pc.defenders && pc.defenders.length > 0) return pc.defenders.reduce((s, d) => s + getAtkDef(d.at, d.index).def, 0);
+        return 0;
+      })();
+      const targetName = pc.target && pc.target.kind === "permanent" && pc.target.index != null
+        ? getPermName(pc.target.at, pc.target.index)
+        : (pc.defenders?.length ? pc.defenders.map(d => getPermName(d.at, d.index)).slice(0,3).join(", ") + (pc.defenders.length > 3 ? ", …" : "") : "target");
+      const kills = aAtk >= targetDef;
+      summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
+    }
+    // Set local summary first so the acting player always sees it immediately
+    set({ lastCombatSummary: { id: pc.id, text: summary, ts: Date.now() } } as Partial<GameState> as GameState);
     if (tr?.sendMessage) {
       try {
         tr.sendMessage({
@@ -2101,10 +2231,13 @@ export const useGameStore = create<GameState>((set, get) => ({
           attacker: pc.attacker,
           defenders: pc.defenders,
           tile: pc.tile,
+          target: pc.target ?? null,
           ts: Date.now(),
         } as unknown as CustomMessage);
+        tr.sendMessage({ type: "combatSummary", id: pc.id, text: summary, ts: Date.now() } as unknown as CustomMessage);
       } catch {}
     }
+    set({ pendingCombat: null, attackChoice: null, attackTargetChoice: null, attackConfirm: null } as Partial<GameState> as GameState);
   },
   cancelCombat: () => {
     const pc = get().pendingCombat;
@@ -2125,6 +2258,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       const text = (msg as { text?: unknown }).text;
       if (typeof text === "string" && text.trim().length > 0) {
         try { get().log(text); } catch {}
+      }
+      return;
+    }
+    
+    if (t === "combatSummary") {
+      const id = (msg as { id?: unknown }).id as string | undefined;
+      const text = (msg as { text?: unknown }).text as string | undefined;
+      if (id && typeof text === "string") {
+        set({ lastCombatSummary: { id, text, ts: Date.now() }, pendingCombat: null } as Partial<GameState> as GameState);
       }
       return;
     }
@@ -2199,17 +2341,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (!s.pendingCombat || s.pendingCombat.id !== (id as string)) return s as GameState;
         return { pendingCombat: { ...s.pendingCombat, defenders, status: "defending" } } as Partial<GameState> as GameState;
       });
-      try { get().log(`Defenders selected: ${defenders.length}`); } catch {}
+      try { get().log(`Acting player selected ${defenders.length} defender${defenders.length === 1 ? "" : "s"}`); } catch {}
       return;
     }
     if (t === "combatResolve") {
       const id = (msg as { id?: unknown }).id as string | undefined;
-      const attacker = (msg as { attacker?: unknown }).attacker as { at?: unknown; index?: unknown } | undefined;
+      const attacker = (msg as { attacker?: unknown }).attacker as { at?: unknown; index?: unknown; owner?: unknown } | undefined;
       const defendersAny = (msg as { defenders?: unknown }).defenders as unknown[] | undefined;
-      set((s) => {
-        if (!s.pendingCombat || (id && s.pendingCombat.id !== id)) return s as GameState;
-        return s as GameState;
-      });
+      const targetAny = (msg as { target?: unknown }).target as unknown;
+      const tileMsg = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+      // Toggle taps for visuals
       const aAt = typeof attacker?.at === "string" ? (attacker.at as string) : null;
       const aIdx = Number(attacker?.index);
       if (aAt && Number.isFinite(aIdx)) {
@@ -2225,8 +2366,140 @@ export const useGameStore = create<GameState>((set, get) => ({
           try { get().toggleTapPermanent(at, Number(idx)); } catch {}
         }
       }
+      // Compute a fallback summary so both players see outcome even if a separate summary message is delayed
+      try {
+        const permanents = get().permanents as Permanents;
+        const meta = get().metaByCardId as Record<number, { attack: number | null; defence: number | null; cost: number | null }>;
+        const board = get().board;
+        const players = get().players;
+        function getAtkDef(at: string, index: number): { atk: number; def: number } {
+          try {
+            const cardId = permanents[at]?.[index]?.card?.cardId;
+            const m = cardId ? meta[Number(cardId)] : undefined;
+            return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+          } catch { return { atk: 0, def: 0 }; }
+        }
+        function getAttachments(at: string, index: number): Permanents[string] {
+          const list = permanents[at] || [];
+          return list.filter((p) => p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index);
+        }
+        function listAttachmentEffects(at: string, index: number): string[] {
+          const effects: string[] = [];
+          for (const t of getAttachments(at, index)) {
+            const nm = (t.card?.name || "").trim();
+            const low = nm.toLowerCase();
+            if (low === "lance") effects.push("Lance(+1, FS)");
+            else if (low === "disabled") effects.push("Disabled(Atk=0)");
+            else if (nm) effects.push(nm);
+          }
+          return effects;
+        }
+        function getPermName(at: string, index: number): string {
+          try { return permanents[at]?.[index]?.card?.name || "Unit"; } catch { return "Unit"; }
+        }
+        function getAvatarName(seat: PlayerKey): string {
+          try { return (get().avatars?.[seat]?.card?.name as string) || "Avatar"; } catch { return "Avatar"; }
+        }
+        function computeEffectiveAttack(a: { at: CellKey; index: number }): { atk: number; firstStrike: boolean } {
+          const base = getAtkDef(a.at, a.index).atk;
+          const attachments = getAttachments(a.at, a.index);
+          let atk = base; let firstStrike = false; let disabled = false;
+          for (const tkn of attachments) {
+            const nm = (tkn.card?.name || "").toLowerCase();
+            if (nm === "lance") { firstStrike = true; atk += 1; }
+            if (nm === "disabled") { disabled = true; }
+          }
+          if (disabled) atk = 0;
+          if (!Number.isFinite(atk)) atk = 0;
+          return { atk, firstStrike };
+        }
+        const aCell = aAt && Number.isFinite(aIdx) ? { at: aAt as CellKey, index: Number(aIdx) } : null;
+        const eff = aCell ? computeEffectiveAttack(aCell) : { atk: 0, firstStrike: false };
+        const attackerName = aCell ? getPermName(aCell.at, aCell.index) : "Attacker";
+        const atkFx = aCell ? listAttachmentEffects(aCell.at, aCell.index) : [];
+        const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
+        const fsTag = eff.firstStrike ? " (FS)" : "";
+        // Parse optional target
+        let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
+        if (targetAny && typeof targetAny === "object") {
+          const rec = targetAny as Record<string, unknown>;
+          const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+          const a = typeof rec.at === "string" ? (rec.at as string) : "";
+          const idx = rec.index == null ? null : Number(rec.index);
+          const okKind = k === "permanent" || k === "avatar" || k === "site";
+          if (okKind && a && (idx === null || Number.isFinite(idx))) {
+            target = { kind: k as "permanent" | "avatar" | "site", at: a as CellKey, index: idx as number | null };
+          }
+        }
+        let summary = "Combat resolved";
+        const tileNo = (() => {
+          try {
+            const x = Number(tileMsg?.x);
+            const y = Number(tileMsg?.y);
+            if (Number.isFinite(x) && Number.isFinite(y)) return y * get().board.size.w + x + 1;
+          } catch {}
+          return null as number | null;
+        })();
+        if (target && target.kind === "site") {
+          const owner = board.sites[target.at]?.owner as 1 | 2 | undefined;
+          if (owner === 1 || owner === 2) {
+            const seat = owner === 1 ? "p1" : "p2";
+            const dd = players[seat].lifeState === "dd";
+            const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+            const siteName = board.sites[target.at]?.card?.name || "Site";
+            const ddNote = dd ? " (DD rule)" : "";
+            summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
+          }
+        } else if (target && target.kind === "avatar") {
+          const aOwner = Number(attacker?.owner);
+          const seat = (aOwner === 1 ? "p2" : "p1") as PlayerKey;
+          const state = players[seat];
+          const avatarName = getAvatarName(seat);
+          if (state.lifeState === "dd") {
+            summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: ${seat.toUpperCase()} to 0 (lethal from DD, match ends)`;
+          } else {
+            const life = Number(state.life) || 0;
+            const dmg = Math.max(0, Math.floor(eff.atk));
+            const next = Math.max(0, life - dmg);
+            if (life > 0 && next <= 0) {
+              summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: reaches Death's Door; further avatar/site damage this turn won't reduce life`;
+            } else {
+              summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: ${dmg} dmg (life ${life} → ${next})`;
+            }
+          }
+        } else {
+          const aAtk = eff.atk;
+          let targetDef = 0;
+          let targetName = "target";
+          if (target && target.kind === "permanent" && target.index != null) {
+            targetDef = getAtkDef(target.at, target.index).def;
+            targetName = getPermName(target.at, target.index);
+          } else if (defenders.length > 0) {
+            const defRecs: Record<string, unknown>[] = defenders
+              .filter((d) => d && typeof d === "object")
+              .map((d) => d as Record<string, unknown>);
+            targetDef = 0;
+            for (const rec of defRecs) {
+              const at = typeof rec.at === "string" ? (rec.at as string) : "";
+              const idx = Number(rec.index);
+              if (at && Number.isFinite(idx)) targetDef += getAtkDef(at, Number(idx)).def;
+            }
+            const names: string[] = [];
+            for (const rec of defRecs.slice(0, 3)) {
+              const at = typeof rec.at === "string" ? (rec.at as string) : "";
+              const idx = Number(rec.index);
+              if (at && Number.isFinite(idx)) names.push(getPermName(at, Number(idx)));
+            }
+            targetName = names.join(", ") + (defenders.length > 3 ? ", …" : "");
+          }
+          const kills = aAtk >= targetDef;
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
+        }
+        set({ lastCombatSummary: { id: String(id || Date.now()), text: summary, ts: Date.now() }, pendingCombat: null } as Partial<GameState> as GameState);
+      } catch {
+        set({ pendingCombat: null } as Partial<GameState> as GameState);
+      }
       try { get().log("Combat resolved"); } catch {}
-      set({ pendingCombat: null });
       return;
     }
     if (t === "combatCancel") {
@@ -2584,6 +2857,8 @@ export const useGameStore = create<GameState>((set, get) => ({
                 ? "Atlas"
                 : pile === "hand"
                 ? "Hand"
+                : pile === "banished"
+                ? "Banished"
                 : "Spellbook"
             }${from ? ` (${from})` : ""}`
           : message.kind || "Peek Results";
@@ -4223,7 +4498,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   getAvailableMana: (who) => {
     const s = get();
-    return computeAvailableMana(s.board, s.permanents, who);
+    const base = computeAvailableMana(s.board, s.permanents, who);
+    const offset = Number(s.players[who]?.mana || 0);
+    return Math.max(0, base + offset);
   },
   getThresholdTotals: (who) => {
     const s = get();
@@ -4324,21 +4601,20 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   addMana: (who, delta) =>
     set((s) => {
-      const currentMana = s.players[who].mana;
-      const newMana = Math.max(0, currentMana + delta);
-      if (newMana === currentMana) return s as GameState;
+      const current = Number(s.players[who]?.mana || 0);
+      const next = current + delta;
+      if (next === current) return s as GameState;
 
       const newState = {
         players: {
           ...s.players,
           [who]: {
             ...s.players[who],
-            mana: newMana,
+            mana: next,
           },
         },
       } as Partial<GameState> as GameState;
 
-      // Send patch to other players in multiplayer
       const patch: ServerPatchT = { players: newState.players };
       get().trySendPatch(patch);
 
@@ -5775,6 +6051,40 @@ export const useGameStore = create<GameState>((set, get) => ({
         board: { ...s.board, sites },
         zones,
       } as Partial<GameState> as GameState;
+    }),
+
+  moveFromBanishedToZone: (who, instanceId, target) =>
+    set((s) => {
+      get().pushHistory();
+      if (!instanceId) return s as GameState;
+      if (s.transport && s.actorKey && s.actorKey !== who) {
+        get().log("Cannot modify opponent banished without consent");
+        return s as GameState;
+      }
+      const zonesNext = { ...s.zones } as Record<PlayerKey, Zones>;
+      const seatZones = { ...zonesNext[who] } as Zones;
+      const banished = [...seatZones.banished];
+      const idx = banished.findIndex((c) => c && c.instanceId === instanceId);
+      if (idx < 0) return s as GameState;
+      const card = banished.splice(idx, 1)[0];
+      if (!card) return s as GameState;
+      if (target === "hand") {
+        seatZones.hand = [...seatZones.hand, card];
+      } else {
+        seatZones.graveyard = [card, ...seatZones.graveyard];
+      }
+      seatZones.banished = banished;
+      zonesNext[who] = seatZones;
+      get().log(
+        `Returned '${card.name}' from banished to ${
+          target === "hand" ? "hand" : "graveyard"
+        } (${who.toUpperCase()})`
+      );
+      {
+        const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
+        if (patch) get().trySendPatch(patch);
+      }
+      return { zones: zonesNext as GameState["zones"] } as Partial<GameState> as GameState;
     }),
 
   // Transfer control of a permanent at a given cell/index (toggle if 'to' not provided)

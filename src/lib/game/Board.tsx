@@ -213,47 +213,13 @@ export default function Board({
     } | null;
   } | null>(null);
 
-  // Attack chooser state (shown after cross-tile move when guides are ON and valid targets exist)
-  const [attackChoice, setAttackChoice] = useState<{
-    tile: { x: number; y: number };
-    attacker: {
-      at: string;
-      index: number;
-      instanceId?: string | null;
-      owner: 1 | 2;
-    };
-    attackerName?: string | null;
-  } | null>(null);
-  const [attackTargetChoice, setAttackTargetChoice] = useState<{
-    tile: { x: number; y: number };
-    attacker: {
-      at: string;
-      index: number;
-      instanceId?: string | null;
-      owner: 1 | 2;
-    };
-    candidates: Array<{
-      kind: "permanent" | "avatar" | "site";
-      at: string;
-      index: number | null;
-      label: string;
-    }>;
-  } | null>(null);
-  const [attackConfirm, setAttackConfirm] = useState<{
-    tile: { x: number; y: number };
-    attacker: {
-      at: string;
-      index: number;
-      instanceId?: string | null;
-      owner: 1 | 2;
-    };
-    target: {
-      kind: "permanent" | "avatar" | "site";
-      at: CellKey;
-      index: number | null;
-    };
-    targetLabel: string;
-  } | null>(null);
+  // Attack chooser state moved to store so HUD can render at layout level
+  const attackChoice = useGameStore((s) => s.attackChoice);
+  const setAttackChoice = useGameStore((s) => s.setAttackChoice);
+  const attackTargetChoice = useGameStore((s) => s.attackTargetChoice);
+  const setAttackTargetChoice = useGameStore((s) => s.setAttackTargetChoice);
+  const attackConfirm = useGameStore((s) => s.attackConfirm);
+  const setAttackConfirm = useGameStore((s) => s.setAttackConfirm);
   const [lastCrossMove, setLastCrossMove] = useState<{
     fromKey: string;
     toKey: string;
@@ -270,6 +236,7 @@ export default function Board({
   const cancelCombat = useGameStore((s) => s.cancelCombat);
   const selectPermanent = useGameStore((s) => s.selectPermanent);
   const setDefenderSelection = useGameStore((s) => s.setDefenderSelection);
+  const revertCrossMoveTick = useGameStore((s) => s.revertCrossMoveTick);
 
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
@@ -357,6 +324,12 @@ export default function Board({
       } catch {}
     }
   });
+
+  // Respond to layout-level cancel requests
+  useEffect(() => {
+    // Any tick change requests revert of the last cross-tile move
+    revertLastCrossTileMove();
+  }, [revertCrossMoveTick]);
 
   // Compute mat world size using BASE tile size (keeps mat size unchanged even if TILE_SIZE changes)
   const baseGridW = board.size.w * BASE_TILE_SIZE;
@@ -1718,10 +1691,6 @@ export default function Board({
             offsetY + y * TILE_SIZE,
           ];
           const site = board.sites[key];
-          const isHover = false; // hover highlighting disabled
-          const base = 0.16;
-          const color = `hsl(210 10% ${base * 100}%)`;
-          const opacity = 0; // fully transparent tile overlay to avoid distraction
           return (
             <group key={key} position={pos}>
               <mesh
@@ -2201,20 +2170,10 @@ export default function Board({
                   // Treat tile left-click as background click: deselect and close menus
                   useGameStore.getState().clearSelection();
                   useGameStore.getState().closeContextMenu();
-                  clearHoverPreview(key);
-                }}
-                onPointerOut={() => {
-                  handlePointerOut();
                 }}
               >
-                <planeGeometry args={[TILE_SIZE * 0.96, TILE_SIZE * 0.96]} />
-                <meshStandardMaterial
-                  color={color}
-                  transparent
-                  opacity={opacity}
-                  metalness={0}
-                  roughness={1}
-                />
+                <planeGeometry args={[TILE_SIZE, TILE_SIZE]} />
+                <meshStandardMaterial color={"#000"} opacity={0} transparent depthWrite={false} />
               </mesh>
 
               {site && (
@@ -2224,11 +2183,12 @@ export default function Board({
                       -Math.PI / 2 +
                       (site.owner === 1 ? 0 : Math.PI) +
                       (site.tapped ? Math.PI / 2 : 0);
-                    const isSel =
-                      !!contextMenu &&
-                      contextMenu.target.kind === "site" &&
-                      contextMenu.target.x === x &&
-                      contextMenu.target.y === y;
+                    let isSel = false;
+                    if (contextMenu && contextMenu.target.kind === "site") {
+                      isSel =
+                        contextMenu.target.x === x &&
+                        contextMenu.target.y === y;
+                    }
 
                     // Calculate edge-based positioning toward owning player
                     const ownerKey = site.owner === 1 ? "p1" : "p2";
@@ -2263,38 +2223,38 @@ export default function Board({
                               color={siteGlowColor}
                               renderOrder={1000}
                             />
-                            {(() => {
-                              // HUD target/confirm highlight for site
-                              let hl: string | null = null;
-                              const siteKey = `${x},${y}` as CellKey;
-                              if (
-                                attackConfirm &&
-                                attackConfirm.target.kind === "site" &&
-                                attackConfirm.target.at === siteKey
-                              )
-                                hl = HIGHLIGHT_TARGET;
-                              if (
-                                pendingCombat &&
-                                pendingCombat.target &&
-                                pendingCombat.target.kind === "site" &&
-                                pendingCombat.target.at === siteKey
-                              )
-                                hl = HIGHLIGHT_TARGET;
-                              if (!hl) return null;
-                              return (
-                                <CardOutline
-                                  width={CARD_SHORT}
-                                  height={CARD_LONG}
-                                  rotationZ={rotZ}
-                                  elevation={0.0002}
-                                  color={hl}
-                                  renderOrder={1202}
-                                  pulse
-                                />
-                              );
-                            })()}
                           </group>
                         )}
+                        {(() => {
+                          let hl: string | null = null;
+                          const siteKey = `${x},${y}` as CellKey;
+                          if (
+                            attackConfirm &&
+                            attackConfirm.target.kind === "site" &&
+                            attackConfirm.target.at === siteKey
+                          )
+                            hl = HIGHLIGHT_TARGET;
+                          if (
+                            pendingCombat?.target &&
+                            pendingCombat.target.kind === "site" &&
+                            pendingCombat.target.at === siteKey
+                          )
+                            hl = HIGHLIGHT_TARGET;
+                          if (!hl) return null;
+                          return (
+                            <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+                              <CardOutline
+                                width={CARD_SHORT}
+                                height={CARD_LONG}
+                                rotationZ={rotZ}
+                                elevation={0.0002}
+                                color={hl}
+                                renderOrder={1202}
+                                pulse
+                              />
+                            </group>
+                          );
+                        })()}
                         {site.card?.slug ? (
                           <group
                             position={[edgeOffset.x, 0, edgeOffset.z]}
@@ -2559,8 +2519,45 @@ export default function Board({
                     dragging &&
                     dragging.from === key &&
                     dragging.index === idx;
+                  // Role-based combat glow
+                  let roleGlow: string | null = null;
+                  if (
+                    attackTargetChoice &&
+                    attackTargetChoice.attacker.at === key &&
+                    attackTargetChoice.attacker.index === idx
+                  ) {
+                    roleGlow = HIGHLIGHT_ATTACKER;
+                  }
+                  if (
+                    attackConfirm &&
+                    attackConfirm.target.kind === "permanent" &&
+                    attackConfirm.target.at === (key as CellKey) &&
+                    attackConfirm.target.index === idx
+                  ) {
+                    roleGlow = HIGHLIGHT_TARGET;
+                  }
+                  if (pendingCombat) {
+                    if (
+                      pendingCombat.attacker.at === key &&
+                      pendingCombat.attacker.index === idx
+                    )
+                      roleGlow = HIGHLIGHT_ATTACKER;
+                    if (
+                      pendingCombat.target &&
+                      pendingCombat.target.kind === "permanent" &&
+                      pendingCombat.target.at === (key as CellKey) &&
+                      pendingCombat.target.index === idx
+                    )
+                      roleGlow = HIGHLIGHT_TARGET;
+                    if (
+                      (pendingCombat.defenders || []).some(
+                        (d) => d.at === key && d.index === idx
+                      )
+                    )
+                      roleGlow = HIGHLIGHT_DEFENDER;
+                  }
                   const showPermanentGlow =
-                    renderPermanentGlow && !isLocalDragGhost;
+                    (renderPermanentGlow && !isLocalDragGhost) || !!roleGlow;
                   const isDraggingPermanent =
                     dragging && dragging.from === key && dragging.index === idx;
 
@@ -3132,61 +3129,15 @@ export default function Board({
                             }
                             rotationZ={rotZ}
                             elevation={isDraggingPermanent ? DRAG_LIFT + 0.0001 : 0.0001}
-                            color={permanentGlowColor}
+                            color={roleGlow ?? permanentGlowColor}
                             renderOrder={1000}
+                            pulse={!!roleGlow}
+                            pulseSpeed={1.6}
+                            pulseMin={0.35}
+                            pulseMax={0.95}
                           />
                         )}
-                        {/* Combat role highlight (attacker/target/defender) */}
-                        {(() => {
-                          let hl: string | null = null;
-                          if (
-                            attackTargetChoice &&
-                            attackTargetChoice.attacker.at === key &&
-                            attackTargetChoice.attacker.index === idx
-                          )
-                            hl = HIGHLIGHT_ATTACKER;
-                          if (
-                            attackConfirm &&
-                            attackConfirm.target.kind === "permanent" &&
-                            attackConfirm.target.at === key &&
-                            attackConfirm.target.index === idx
-                          )
-                            hl = HIGHLIGHT_TARGET;
-                          if (pendingCombat) {
-                            if (pendingCombat.attacker.at === key && pendingCombat.attacker.index === idx)
-                              hl = HIGHLIGHT_ATTACKER;
-                            if (
-                              pendingCombat.target &&
-                              pendingCombat.target.kind === "permanent" &&
-                              pendingCombat.target.at === key &&
-                              pendingCombat.target.index === idx
-                            )
-                              hl = HIGHLIGHT_TARGET;
-                            if (
-                              actorKey &&
-                              pendingCombat.defenderSeat === actorKey &&
-                              (pendingCombat.defenders || []).some((d) => d.at === key && d.index === idx)
-                            )
-                              hl = HIGHLIGHT_DEFENDER;
-                          }
-                          if (!hl) return null;
-                          const w = tokenDef && tokenDef.size === "small" ? CARD_SHORT * 0.5 : CARD_SHORT;
-                          const h = tokenDef && tokenDef.size === "small" ? CARD_LONG * 0.5 : CARD_LONG;
-                          return (
-                            <CardOutline
-                              width={w}
-                              height={h}
-                              rotationZ={rotZ}
-                              elevation={0.0002}
-                              color={hl}
-                              renderOrder={1203}
-                              pulse
-                              pulseSpeed={1.6}
-                              pulseMin={0.35}
-                              pulseMax={0.95}
-                            />
-                          );
-                        })()}
+                        {/* role-based glow merged into base glow above */}
                         <group
                           visible={true}
                           onClick={(e) => {
@@ -3433,13 +3384,13 @@ export default function Board({
                 });
               })()}
 
-              {showGrid && isHover && (
+              {showGrid && (
                 <Text
                   font="/fantaisie_artistiqu.ttf"
                   position={[0, 0.02, 0]}
                   rotation-x={-Math.PI / 2}
                   fontSize={0.18}
-                  color={isHover ? "#fff" : "#cbd5e1"}
+                  color="#cbd5e1"
                   anchorX="center"
                   anchorY="middle"
                   outlineWidth={0.005}
@@ -3686,7 +3637,7 @@ export default function Board({
                       if (attackTargetChoice) {
                         e.stopPropagation();
                         const enemySeat: "p1" | "p2" =
-                          attackTargetChoice.attacker.owner === 1 ? "p1" : "p2";
+                          attackTargetChoice.attacker.owner === 1 ? "p2" : "p1";
                         const isEnemyAvatar = who === enemySeat;
                         const pos = Array.isArray(a.pos) ? a.pos : null;
                         const onTile = !!(
@@ -4218,250 +4169,24 @@ export default function Board({
         </group>
       )}
 
-      {/* HUD-only prompts (top center). Wrapper does not block board, only the inner bar catches clicks. */}
-      <Html fullscreen zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-        {(() => {
-          // Helper labels
-          const tileNum = attackChoice
-            ? attackChoice.tile.y * board.size.w + attackChoice.tile.x + 1
-            : attackTargetChoice
-            ? attackTargetChoice.tile.y * board.size.w +
-              attackTargetChoice.tile.x +
-              1
-            : null;
-          const attackerLabel = (() => {
-            if (attackChoice?.attackerName) return attackChoice.attackerName;
-            const pc = pendingCombat?.attacker;
-            if (pc) {
-              try {
-                return (
-                  permanents[pc.at]?.[pc.index]?.card?.name || "Attacker"
-                );
-              } catch {}
-            }
-            return null;
-          })();
-          const targetLabel = (() => {
-            const t = pendingCombat?.target;
-            if (!t) return null;
-            if (t.kind === "site")
-              return board.sites[`${t.at}`]?.card?.name || "Site";
-            if (t.kind === "avatar") return "Avatar";
-            try {
-              return permanents[t.at]?.[t.index ?? -1]?.card?.name || "Unit";
-            } catch {
-              return "Unit";
-            }
-          })();
-          // Attack choice bar
-          const actorIsActive = (actorKey === "p1" && currentPlayer === 1) || (actorKey === "p2" && currentPlayer === 2);
-          if (attackChoice && actorIsActive) {
-            return (
-              <div className="absolute left-1/2 -translate-x-1/2 top-4 pointer-events-auto">
-                <div className="px-4 py-2 rounded-full bg-black/80 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
-                  <span className="opacity-80">
-                    <span className="font-fantaisie">{attackerLabel || "Unit"}</span>{" "}
-                    {tileNum ? `(Tile #${tileNum})` : ""} should:{" "}
-                  </span>
-                  <button
-                    className="underline underline-offset-2 hover:text-emerald-300 mx-1"
-                    onClick={() => {
-                      setAttackTargetChoice({
-                        tile: attackChoice.tile,
-                        attacker: attackChoice.attacker,
-                        candidates: [],
-                      });
-                      setAttackChoice(null);
-                    }}
-                  >
-                    Move & Attack
-                  </button>
-                  <span className="opacity-50">·</span>
-                  <button
-                    className="underline underline-offset-2 hover:text-white mx-1"
-                    onClick={() => {
-                      setAttackChoice(null);
-                    }}
-                  >
-                    Move Only
-                  </button>
-                  <span className="opacity-50">·</span>
-                  <button
-                    className="underline underline-offset-2 hover:text-white mx-1"
-                    onClick={() => {
-                      revertLastCrossTileMove();
-                      setAttackChoice(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            );
-          }
-          // Target selection bar
-          if (attackTargetChoice && !attackConfirm) {
-            const tn =
-              attackTargetChoice.tile.y * board.size.w +
-              attackTargetChoice.tile.x +
-              1;
-            return (
-              <div className="absolute left-1/2 -translate-x-1/2 top-4 pointer-events-auto">
-                <div className="px-4 py-2 rounded-full bg-black/80 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
-                  <span className="opacity-80">
-                    Select a target at{" "}
-                    <span className="font-fantaisie">Tile #{tn}</span>
-                  </span>
-                  <span className="opacity-50 mx-2">·</span>
-                  <button
-                    className="underline underline-offset-2 hover:text-white"
-                    onClick={() => {
-                      revertLastCrossTileMove();
-                      setAttackTargetChoice(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            );
-          }
-          // Confirm attack bar
-          if (attackConfirm) {
-            const tn =
-              attackConfirm.tile.y * board.size.w + attackConfirm.tile.x + 1;
-            const atkName = (() => {
-              try {
-                return (
-                  permanents[attackConfirm.attacker.at]?.[
-                    attackConfirm.attacker.index
-                  ]?.card?.name || "Attacker"
-                );
-              } catch {
-                return "Attacker";
-              }
-            })();
-            return (
-              <div className="absolute left-1/2 -translate-x-1/2 top-4 pointer-events-auto">
-                <div className="px-4 py-2 rounded-full bg-black/80 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
-                  <span className="opacity-80">
-                    Attack{" "}
-                    <span className="font-fantaisie">{atkName}</span> →{" "}
-                    <span className="font-fantaisie">{attackConfirm.targetLabel}</span>{" "}
-                    at{" "}
-                    <span className="font-fantaisie">Tile #{tn}</span>?
-                  </span>
-                  <span className="opacity-50 mx-2">·</span>
-                  <button
-                    className="underline underline-offset-2 hover:text-emerald-300 mr-2"
-                    onClick={() => {
-                      try {
-                        declareAttack(
-                          attackConfirm.tile,
-                          attackConfirm.attacker,
-                          attackConfirm.target
-                        );
-                      } finally {
-                        setAttackConfirm(null);
-                        setAttackTargetChoice(null);
-                      }
-                    }}
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    className="underline underline-offset-2 hover:text-white"
-                    onClick={() => {
-                      setAttackConfirm(null);
-                    }}
-                  >
-                    Back
-                  </button>
-                </div>
-              </div>
-            );
-          }
-          // Defender bar
-          if (
-            pendingCombat &&
-            actorKey &&
-            pendingCombat.defenderSeat === actorKey
-          ) {
-            const n = pendingCombat.defenders?.length || 0;
-            return (
-              <div className="absolute left-1/2 -translate-x-1/2 top-4 pointer-events-auto">
-                <div className="px-4 py-2 rounded-full bg-black/80 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
-                  <span className="opacity-80">
-                    <span className="font-fantaisie">{attackerLabel || "Attacker"}</span>
-                    {targetLabel ? ` attacks ` : " attacks"}
-                    {targetLabel ? (
-                      <span className="font-fantaisie">{targetLabel}</span>
-                    ) : null}
-                    . Choose defenders: {n} selected
-                  </span>
-                  <span className="opacity-50 mx-2">·</span>
-                  <button
-                    className="underline underline-offset-2 hover:text-white mr-2"
-                    onClick={() => {
-                      setDefenderSelection(
-                        [] as Array<{
-                          at: CellKey;
-                          index: number;
-                          owner: 1 | 2;
-                          instanceId?: string | null;
-                        }>
-                      );
-                    }}
-                  >
-                    Don’t defend
-                  </button>
-                  <button
-                    className="underline underline-offset-2 hover:text-emerald-300"
-                    onClick={() => {
-                      /* selection already synced */
-                    }}
-                  >
-                    {n > 0 ? "Submit" : "Confirm"}
-                  </button>
-                </div>
-              </div>
-            );
-          }
-          return null;
-        })()}
-      </Html>
-
-      {/* Attacker controls to resolve/cancel minimal combat */}
-      {pendingCombat && (
+      {/* Token attachment dialog */}
+      {attachmentDialog ? (
         <Html fullscreen zIndexRange={[10, 0]}>
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-20 z-40">
-            {(() => {
-              const seatOwner: "p1" | "p2" =
-                pendingCombat.attacker.owner === 1 ? "p1" : "p2";
-              if (actorKey !== seatOwner) return null;
-              return (
-                <div className="rounded-full bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-2 flex gap-2 text-sm">
-                  <button
-                    className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
-                    onClick={() => resolveCombat()}
-                  >
-                    Resolve Combat
-                  </button>
-                  <button
-                    className="rounded bg-white/15 hover:bg-white/25 px-3 py-1"
-                    onClick={() => {
-                      cancelCombat();
-                      revertLastCrossTileMove();
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
+          <TokenAttachmentDialog
+            token={attachmentDialog.token}
+            targetPermanent={attachmentDialog.targetPermanent}
+            dropCoords={attachmentDialog.dropCoords}
+            fromPile={attachmentDialog.fromPile}
+            pileInfo={attachmentDialog.pileInfo}
+            onConfirm={() => setAttachmentDialog(null)}
+            onCancel={() => setAttachmentDialog(null)}
+          />
         </Html>
-      )}
+      ) : null}
+
+      {/* Combat HUD is rendered at layout level (outside Canvas) */}
+
+      {/* bottom Html controls removed in favor of portal */}
     </group>
   );
 }

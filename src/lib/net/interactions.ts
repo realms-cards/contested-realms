@@ -8,6 +8,9 @@ export const InteractionRequestKinds = [
   "takeFromPile",
   "manipulatePermanent",
   "tieGame",
+  // Banished-zone utilities
+  "inspectBanished",
+  "unbanishCard",
 ] as const;
 
 export type InteractionRequestKind =
