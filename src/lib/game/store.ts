@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import {
   MANA_PROVIDER_BY_NAME,
@@ -749,6 +749,17 @@ export type GameState = {
   ) => string | null;
   localPlayerId: string | null;
   setLocalPlayerId: (id: string | null) => void;
+  snapshots: Array<{
+    id: string;
+    title: string;
+    ts: number;
+    includePrivate: boolean;
+    kind: "auto" | "manual";
+    turn: number;
+    actor: PlayerKey | null;
+    payload: ServerPatchT;
+  }>;
+  createSnapshot: (title: string, kind?: "auto" | "manual") => void;
 };
 
 const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "End"];
@@ -1923,7 +1934,7 @@ function mergeEvents(prev: GameEvent[], add: GameEvent[]): GameEvent[] {
   return merged.length > MAX_EVENTS ? merged.slice(-MAX_EVENTS) : merged;
 }
 
-export const useGameStore = create<GameState>((set, get) => ({
+const createGameStoreState: StateCreator<GameState> = (set, get) => ({
   players: {
     p1: {
       life: 20,
@@ -1941,7 +1952,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentPlayer: 1,
   turn: 1,
   phase: "Setup",
-  setPhase: (phase) => set({ phase }),
+  setPhase: (phase) =>
+    set((s) => {
+      if (phase === "Start") {
+        try {
+          setTimeout(() => {
+            try {
+              get().createSnapshot(`Turn ${s.turn} start (P${s.currentPlayer})`, "auto");
+            } catch {}
+          }, 0);
+        } catch {}
+      }
+      return { phase } as Partial<GameState> as GameState;
+    }),
   // D20 Setup phase
   d20Rolls: { p1: null, p2: null },
   setupWinner: null,
@@ -2192,8 +2215,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     let targetSeat: PlayerKey | undefined = undefined;
     if (pc.target && pc.target.kind === "site") {
       const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
-      if (owner === 1 || owner === 2) {
-        const seat = owner === 1 ? "p1" : "p2";
+      const seat = owner === 1 ? "p1" : owner === 2 ? "p2" : (pc.defenderSeat as PlayerKey);
+      if (seat) {
         targetSeat = seat as PlayerKey;
         const dd = players[seat].lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
@@ -2219,18 +2242,34 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
     } else {
-      const aAtk = eff.atk;
-      const targetDef = (() => {
-        if (pc.target && pc.target.kind === "permanent" && pc.target.index != null) return getAtkDef(pc.target.at, pc.target.index).def;
-        if (pc.defenders && pc.defenders.length > 0) return pc.defenders.reduce((s, d) => s + getAtkDef(d.at, d.index).def, 0);
-        return 0;
-      })();
-      const targetName = pc.target && pc.target.kind === "permanent" && pc.target.index != null
-        ? getPermName(pc.target.at, pc.target.index)
-        : (pc.defenders?.length ? pc.defenders.map(d => getPermName(d.at, d.index)).slice(0,3).join(", ") + (pc.defenders.length > 3 ? ", …" : "") : "target");
-      const kills = aAtk >= targetDef;
-      targetSeat = pc.defenderSeat as PlayerKey;
-      summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
+      const tileKey = (() => { try { return `${pc.tile.x},${pc.tile.y}` as CellKey; } catch { return null as CellKey | null; } })();
+      const siteAtTile = tileKey ? (board.sites[tileKey] as SiteTile | undefined) : undefined;
+      if (!pc.target && siteAtTile && siteAtTile.card) {
+        const owner = siteAtTile.owner as 1 | 2 | undefined;
+        let seat: PlayerKey | null = owner === 1 ? "p1" : owner === 2 ? "p2" : (pc.defenderSeat as PlayerKey | null);
+        if (!seat) seat = (pc.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+        if (seat) {
+          targetSeat = seat as PlayerKey;
+          const dd = players[seat].lifeState === "dd";
+          const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+          const siteName = siteAtTile.card?.name || "Site";
+          const ddNote = dd ? " (DD rule)" : "";
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
+        }
+      } else {
+        const aAtk = eff.atk;
+        const targetDef = (() => {
+          if (pc.target && pc.target.kind === "permanent" && pc.target.index != null) return getAtkDef(pc.target.at, pc.target.index).def;
+          if (pc.defenders && pc.defenders.length > 0) return pc.defenders.reduce((s, d) => s + getAtkDef(d.at, d.index).def, 0);
+          return 0;
+        })();
+        const targetName = pc.target && pc.target.kind === "permanent" && pc.target.index != null
+          ? getPermName(pc.target.at, pc.target.index)
+          : (pc.defenders?.length ? pc.defenders.map(d => getPermName(d.at, d.index)).slice(0,3).join(", ") + (pc.defenders.length > 3 ? ", …" : "") : "target");
+        const kills = aAtk >= targetDef;
+        targetSeat = pc.defenderSeat as PlayerKey;
+        summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
+      }
     }
     // Set local summary first so the acting player always sees it immediately
     set({ lastCombatSummary: { id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } } as Partial<GameState> as GameState);
@@ -2585,8 +2624,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         })();
         if (target && target.kind === "site") {
           const owner = board.sites[target.at]?.owner as 1 | 2 | undefined;
+          let seat: PlayerKey | null = null;
           if (owner === 1 || owner === 2) {
-            const seat = owner === 1 ? "p1" : "p2";
+            seat = (owner === 1 ? "p1" : "p2") as PlayerKey;
+          } else {
+            seat =
+              (get().pendingCombat?.defenderSeat as PlayerKey | null) ??
+              ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
+          }
+          if (seat) {
             targetSeat = seat as PlayerKey;
             const dd = players[seat].lifeState === "dd";
             const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
@@ -2613,35 +2659,64 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
           }
         } else {
-          const aAtk = eff.atk;
-          let targetDef = 0;
-          let targetName = "target";
-          if (target && target.kind === "permanent" && target.index != null) {
-            targetDef = getAtkDef(target.at, target.index).def;
-            targetName = getPermName(target.at, target.index);
-          } else if (defenders.length > 0) {
-            const defRecs: Record<string, unknown>[] = defenders
-              .filter((d) => d && typeof d === "object")
-              .map((d) => d as Record<string, unknown>);
-            targetDef = 0;
-            for (const rec of defRecs) {
-              const at = typeof rec.at === "string" ? (rec.at as string) : "";
-              const idx = Number(rec.index);
-              if (at && Number.isFinite(idx)) targetDef += getAtkDef(at, Number(idx)).def;
+          const tileKey = (() => {
+            try {
+              const x = Number(tileMsg?.x);
+              const y = Number(tileMsg?.y);
+              if (Number.isFinite(x) && Number.isFinite(y)) return `${x},${y}` as CellKey;
+            } catch {}
+            return null as CellKey | null;
+          })();
+          const siteAtTile = tileKey ? (board.sites[tileKey] as SiteTile | undefined) : undefined;
+          if (!target && siteAtTile && siteAtTile.card) {
+            const owner = siteAtTile.owner as 1 | 2 | undefined;
+            let seat: PlayerKey | null = owner === 1 ? "p1" : owner === 2 ? "p2" : (get().pendingCombat?.defenderSeat as PlayerKey | null);
+            if (!seat) seat = ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
+            if (seat) {
+              targetSeat = seat as PlayerKey;
+              const dd = players[seat].lifeState === "dd";
+              const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+              const siteName = siteAtTile.card?.name || "Site";
+              const ddNote = dd ? " (DD rule)" : "";
+              summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
             }
-            const names: string[] = [];
-            for (const rec of defRecs.slice(0, 3)) {
-              const at = typeof rec.at === "string" ? (rec.at as string) : "";
-              const idx = Number(rec.index);
-              if (at && Number.isFinite(idx)) names.push(getPermName(at, Number(idx)));
+          } else {
+            const aAtk = eff.atk;
+            let targetDef = 0;
+            let targetName = "target";
+            if (target && target.kind === "permanent" && target.index != null) {
+              targetDef = getAtkDef(target.at, target.index).def;
+              targetName = getPermName(target.at, target.index);
+            } else if (defenders.length > 0) {
+              const defRecs: Record<string, unknown>[] = defenders
+                .filter((d) => d && typeof d === "object")
+                .map((d) => d as Record<string, unknown>);
+              targetDef = 0;
+              for (const rec of defRecs) {
+                const at = typeof rec.at === "string" ? (rec.at as string) : "";
+                const idx = Number(rec.index);
+                if (at && Number.isFinite(idx)) targetDef += getAtkDef(at, Number(idx)).def;
+              }
+              const names: string[] = [];
+              for (const rec of defRecs.slice(0, 3)) {
+                const at = typeof rec.at === "string" ? (rec.at as string) : "";
+                const idx = Number(rec.index);
+                if (at && Number.isFinite(idx)) names.push(getPermName(at, Number(idx)));
+              }
+              targetName = names.join(", ") + (defenders.length > 3 ? ", …" : "");
             }
-            targetName = names.join(", ") + (defenders.length > 3 ? ", …" : "");
+            const kills = aAtk >= targetDef;
+            targetSeat = (get().pendingCombat?.defenderSeat ?? null) as PlayerKey | null || undefined;
+            summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
           }
-          const kills = aAtk >= targetDef;
-          targetSeat = (get().pendingCombat?.defenderSeat ?? null) as PlayerKey | null || undefined;
-          summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
         }
-        set({ lastCombatSummary: { id: String(id || Date.now()), text: summary, ts: Date.now(), actor: actorSeat, targetSeat }, pendingCombat: null } as Partial<GameState> as GameState);
+        const exists = get().lastCombatSummary;
+        if (exists && String(exists.id) === String(id || "")) {
+          // Keep the already received detailed summary; just clear pending state
+          set({ pendingCombat: null } as Partial<GameState> as GameState);
+        } else {
+          set({ lastCombatSummary: { id: String(id || Date.now()), text: summary, ts: Date.now(), actor: actorSeat, targetSeat }, pendingCombat: null } as Partial<GameState> as GameState);
+        }
       } catch {
         set({ pendingCombat: null } as Partial<GameState> as GameState);
       }
@@ -3654,6 +3729,60 @@ export const useGameStore = create<GameState>((set, get) => ({
   localPlayerId: null,
   setLocalPlayerId: (id) => set({ localPlayerId: id ?? null }),
 
+  // Snapshots: used for emergency restore (auto) and realm archive (manual)
+  snapshots: [],
+  createSnapshot: (title: string, kind: "auto" | "manual" = "manual") =>
+    set((s) => {
+      const id = `ss_${Date.now().toString(36)}_${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      const payload: ServerPatchT = JSON.parse(
+        JSON.stringify({
+          players: s.players,
+          currentPlayer: s.currentPlayer,
+          turn: s.turn,
+          phase: s.phase,
+          board: s.board,
+          zones: s.zones,
+          avatars: s.avatars,
+          permanents: s.permanents,
+          permanentPositions: s.permanentPositions,
+          permanentAbilities: s.permanentAbilities,
+          sitePositions: s.sitePositions,
+          playerPositions: s.playerPositions,
+          events: s.events,
+          eventSeq: s.eventSeq,
+        })
+      ) as ServerPatchT;
+      const item = {
+        id,
+        title: title && title.length > 0 ? title : kind === "auto" ? `Turn ${s.turn} start (P${s.currentPlayer})` : "Realm Archive",
+        ts: Date.now(),
+        includePrivate: true,
+        kind,
+        turn: s.turn,
+        actor: s.actorKey ?? null,
+        payload,
+      };
+      const prev = Array.isArray(s.snapshots) ? s.snapshots : [];
+      let list: typeof prev;
+      if (kind === "manual") {
+        // Keep only one manual archive at a time
+        const withoutManual = prev.filter((x) => x.kind !== "manual");
+        list = [...withoutManual, item];
+      } else {
+        // Keep last 5 auto snapshots total (prune to 4, add new => 5)
+        const autos = prev.filter((x) => x.kind === "auto");
+        const nonAutos = prev.filter((x) => x.kind !== "auto");
+        const keep = autos.slice(Math.max(autos.length - 4, 0));
+        list = [...nonAutos, ...keep, item];
+      }
+      try {
+        get().log(`Saved snapshot '${item.title}'`);
+      } catch {}
+      return { snapshots: list } as Partial<GameState> as GameState;
+    }),
+
   // Apply an incremental server patch into the store.
   // - Only whitelisted game-state fields are updated
   // - Arrays are replaced; objects are deep-merged
@@ -3884,6 +4013,24 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.eventSeq = Math.max(s.eventSeq, Number(p.eventSeq) || 0);
       }
 
+      // Guarded auto-snapshot on Start phase coming from server patches
+      try {
+        const candidatePhase = (p.phase as GameState["phase"]) ?? s.phase;
+        const candidateTurn = (p.turn as GameState["turn"]) ?? s.turn;
+        const candidateCP = (p.currentPlayer as GameState["currentPlayer"]) ?? s.currentPlayer;
+        if (candidatePhase === "Start") {
+          const prevSnaps = Array.isArray(s.snapshots) ? s.snapshots : [];
+          const hasForTurn = prevSnaps.some((ss) => ss.kind === "auto" && ss.turn === candidateTurn);
+          if (!hasForTurn) {
+            setTimeout(() => {
+              try {
+                get().createSnapshot(`Turn ${candidateTurn} start (P${candidateCP})`, "auto");
+              } catch {}
+            }, 0);
+          }
+        }
+      } catch {}
+
       const lastTs =
         typeof t === "number" ? Math.max(s.lastServerTs ?? 0, t) : Date.now();
       const extra: Partial<GameState> = {};
@@ -3964,9 +4111,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const p = patch as ServerPatchT;
       const next: Partial<GameState> = {};
+      const replaceKeys = new Set<string>(
+        Array.isArray(p.__replaceKeys) ? p.__replaceKeys : []
+      );
 
       if (p.players !== undefined) {
-        next.players = deepMergeReplaceArrays(s.players, p.players);
+        next.players = replaceKeys.has("players")
+          ? (p.players as GameState["players"])
+          : deepMergeReplaceArrays(s.players, p.players);
       }
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
@@ -3990,67 +4142,93 @@ export const useGameStore = create<GameState>((set, get) => ({
         next.winner = p.winner;
       }
       if (p.board !== undefined) {
-        next.board = deepMergeReplaceArrays(s.board, p.board);
+        next.board = replaceKeys.has("board")
+          ? (p.board as GameState["board"])
+          : deepMergeReplaceArrays(s.board, p.board);
       }
       if (p.zones !== undefined) {
-        next.zones = deepMergeReplaceArrays(s.zones, p.zones);
+        next.zones = replaceKeys.has("zones")
+          ? (p.zones as GameState["zones"])
+          : deepMergeReplaceArrays(s.zones, p.zones);
       }
       if (p.avatars !== undefined) {
-        next.avatars = deepMergeReplaceArrays(s.avatars, p.avatars);
+        next.avatars = replaceKeys.has("avatars")
+          ? (p.avatars as GameState["avatars"])
+          : deepMergeReplaceArrays(s.avatars, p.avatars);
       }
       if (p.permanents !== undefined) {
-        const merged = mergePermanentsMap(s.permanents, p.permanents);
-        next.permanents = normalizePermanentsRecord(
-          merged as Permanents
-        ) as GameState["permanents"];
+        if (replaceKeys.has("permanents")) {
+          next.permanents = normalizePermanentsRecord(
+            (p.permanents as Permanents) || ({} as Permanents)
+          ) as GameState["permanents"];
+        } else {
+          const merged = mergePermanentsMap(s.permanents, p.permanents);
+          next.permanents = normalizePermanentsRecord(
+            merged as Permanents
+          ) as GameState["permanents"];
+        }
       }
       if (p.mulligans !== undefined) {
-        next.mulligans = deepMergeReplaceArrays(s.mulligans, p.mulligans);
+        next.mulligans = replaceKeys.has("mulligans")
+          ? (p.mulligans as GameState["mulligans"])
+          : deepMergeReplaceArrays(s.mulligans, p.mulligans);
       }
       if (p.mulliganDrawn !== undefined) {
-        next.mulliganDrawn = deepMergeReplaceArrays(
-          s.mulliganDrawn,
-          p.mulliganDrawn
-        );
+        next.mulliganDrawn = replaceKeys.has("mulliganDrawn")
+          ? (p.mulliganDrawn as GameState["mulliganDrawn"])
+          : deepMergeReplaceArrays(s.mulliganDrawn, p.mulliganDrawn);
       }
       if (p.permanentPositions !== undefined) {
-        next.permanentPositions = deepMergeReplaceArrays(
-          s.permanentPositions,
-          p.permanentPositions
-        );
+        next.permanentPositions = replaceKeys.has("permanentPositions")
+          ? (p.permanentPositions as GameState["permanentPositions"])
+          : deepMergeReplaceArrays(
+              s.permanentPositions,
+              p.permanentPositions
+            );
       }
       if (p.permanentAbilities !== undefined) {
-        next.permanentAbilities = deepMergeReplaceArrays(
-          s.permanentAbilities,
-          p.permanentAbilities
-        );
+        next.permanentAbilities = replaceKeys.has("permanentAbilities")
+          ? (p.permanentAbilities as GameState["permanentAbilities"])
+          : deepMergeReplaceArrays(
+              s.permanentAbilities,
+              p.permanentAbilities
+            );
       }
       if (p.sitePositions !== undefined) {
-        next.sitePositions = deepMergeReplaceArrays(
-          s.sitePositions,
-          p.sitePositions
-        );
+        next.sitePositions = replaceKeys.has("sitePositions")
+          ? (p.sitePositions as GameState["sitePositions"])
+          : deepMergeReplaceArrays(s.sitePositions, p.sitePositions);
       }
       if (p.playerPositions !== undefined) {
-        next.playerPositions = deepMergeReplaceArrays(
-          s.playerPositions,
-          p.playerPositions
-        );
+        next.playerPositions = replaceKeys.has("playerPositions")
+          ? (p.playerPositions as GameState["playerPositions"])
+          : deepMergeReplaceArrays(s.playerPositions, p.playerPositions);
       }
       if (p.events !== undefined) {
-        const merged = mergeEvents(s.events, (p.events as GameEvent[]) || []);
-        next.events = merged;
-        const mergedMaxId = merged.reduce(
-          (mx, e) => Math.max(mx, Number(e.id) || 0),
-          0
-        );
-        const candidateSeq = Math.max(s.eventSeq, mergedMaxId);
-        next.eventSeq =
-          p.eventSeq !== undefined
-            ? Math.max(candidateSeq, Number(p.eventSeq) || 0)
-            : candidateSeq;
+        if (replaceKeys.has("events")) {
+          const ev = (p.events as GameEvent[]) || [];
+          next.events = ev;
+          next.eventSeq =
+            p.eventSeq !== undefined
+              ? Math.max(Number(p.eventSeq) || 0, 0)
+              : Math.max(ev.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0), 0);
+        } else {
+          const merged = mergeEvents(s.events, (p.events as GameEvent[]) || []);
+          next.events = merged;
+          const mergedMaxId = merged.reduce(
+            (mx, e) => Math.max(mx, Number(e.id) || 0),
+            0
+          );
+          const candidateSeq = Math.max(s.eventSeq, mergedMaxId);
+          next.eventSeq =
+            p.eventSeq !== undefined
+              ? Math.max(candidateSeq, Number(p.eventSeq) || 0)
+              : candidateSeq;
+        }
       } else if (p.eventSeq !== undefined) {
-        next.eventSeq = Math.max(s.eventSeq, Number(p.eventSeq) || 0);
+        next.eventSeq = replaceKeys.has("eventSeq")
+          ? Math.max(Number(p.eventSeq) || 0, 0)
+          : Math.max(s.eventSeq, Number(p.eventSeq) || 0);
       }
 
       return next as Partial<GameState> as GameState;
@@ -7081,9 +7259,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         acknowledgedInteractionIds: {},
         activeInteraction: null,
         transportSubscriptions: [],
+        snapshots: [],
       };
       return reset as GameState;
-    }),
-}));
+    })
+});
+
+export const createGameStore = () => create<GameState>(createGameStoreState);
+
+export const useGameStore = createGameStore();
 
 getStoreState = useGameStore.getState;

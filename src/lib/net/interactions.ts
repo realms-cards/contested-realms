@@ -11,6 +11,7 @@ export const InteractionRequestKinds = [
   // Banished-zone utilities
   "inspectBanished",
   "unbanishCard",
+  "restoreSnapshot",
 ] as const;
 
 export type InteractionRequestKind =

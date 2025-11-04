@@ -99,8 +99,16 @@ export default function CombatHudOverlay() {
   const targetLabel = (() => {
     const t = pendingCombat?.target;
     if (!t) return null;
-    if (t.kind === "site") return board.sites[`${t.at}`]?.card?.name || "Site";
-    if (t.kind === "avatar") return "Avatar";
+    if (t.kind === "site") {
+      const siteName = board.sites[`${t.at}`]?.card?.name || "Site";
+      const owner = (board.sites[`${t.at}`]?.owner as 1 | 2 | undefined) ?? undefined;
+      const seat = owner === 1 ? "P1" : owner === 2 ? "P2" : null;
+      return seat ? `${siteName} (${seat})` : siteName;
+    }
+    if (t.kind === "avatar") {
+      const seat = (pendingCombat?.defenderSeat ?? (pendingCombat?.attacker.owner === 1 ? "p2" : "p1")) as "p1" | "p2";
+      return `Avatar (${seat?.toUpperCase?.() ?? "?"})`;
+    }
     try {
       return permanents[t.at]?.[t.index ?? -1]?.card?.name || "Unit";
     } catch {
@@ -117,7 +125,7 @@ export default function CombatHudOverlay() {
         try { return (board.sites[attackConfirm.target.at]?.owner as 1 | 2 | undefined) ?? null; } catch { return null; }
       })();
       if (owner === 1 || owner === 2) {
-        const seat = owner === 1 ? "p1" : "p2" as const;
+        const seat: "p1" | "p2" = owner === 1 ? "p1" : "p2";
         const dd = players[seat].lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
         return <span className="opacity-80 ml-2">· Expected: deal <span className="font-semibold">{dmg}</span> to <span className="font-semibold" style={{ color: PLAYER_COLORS[seat] }}>{seat.toUpperCase()}</span>{eff.firstStrike ? " (FS)" : ""}</span>;
@@ -125,7 +133,7 @@ export default function CombatHudOverlay() {
     }
     // Avatar damage suggestion with DD rules
     if (attackConfirm.target.kind === "avatar") {
-      const seat = attackConfirm.attacker.owner === 1 ? "p2" : "p1" as const;
+      const seat: "p1" | "p2" = attackConfirm.attacker.owner === 1 ? "p2" : "p1";
       const life = Number(players[seat]?.life ?? 0);
       const isDD = players[seat]?.lifeState === "dd";
       if (isDD) {
@@ -176,8 +184,87 @@ export default function CombatHudOverlay() {
       sumAtk += Number(m.atk);
     }
     // If no defenders selected yet but target is a unit, include it as provisional target
-    if (!haveAny && pendingCombat.target && pendingCombat.target.kind === "permanent" && pendingCombat.target.index != null) {
-      sumDef = getAtkDef(pendingCombat.target.at, pendingCombat.target.index).def;
+    let targetName: string | null = null;
+    if (
+      !haveAny &&
+      pendingCombat.target &&
+      pendingCombat.target.kind === "permanent" &&
+      pendingCombat.target.index != null
+    ) {
+      const t = getAtkDef(pendingCombat.target.at, pendingCombat.target.index);
+      sumDef = Number(t.def);
+      sumAtk = Number(t.atk);
+      try {
+        targetName =
+          permanents[pendingCombat.target.at]?.[pendingCombat.target.index]?.card?.name || null;
+      } catch {
+        targetName = null;
+      }
+      haveAny = true;
+    }
+    // If no defenders and target is site/avatar, show expected damage (including DD rules)
+    if (!haveAny && pendingCombat.target) {
+      if (pendingCombat.target.kind === "site") {
+        const owner = (() => {
+          try {
+            return (
+              (board.sites[pendingCombat.target.at]?.owner as 1 | 2 | undefined) ?? null
+            );
+          } catch {
+            return null;
+          }
+        })();
+        const fallbackSeat = (pendingCombat.defenderSeat ?? (pendingCombat.attacker.owner === 1 ? "p2" : "p1")) as "p1" | "p2";
+        const seat: "p1" | "p2" = owner === 1 ? "p1" : owner === 2 ? "p2" : fallbackSeat;
+        if (seat === "p1" || seat === "p2") {
+          const dd = players[seat].lifeState === "dd";
+          const dmg = dd ? 0 : Math.max(0, Math.floor(a.atk));
+          return (
+            <span className="opacity-70 ml-2">
+              · Expected: deal <span className="font-semibold">{dmg}</span> to
+              <span className="font-semibold" style={{ color: PLAYER_COLORS[seat] }}>
+                {" "}
+                {seat.toUpperCase()}
+              </span>
+              {a.firstStrike ? " (FS)" : ""}
+            </span>
+          );
+        }
+      } else if (pendingCombat.target.kind === "avatar") {
+        const seat: "p1" | "p2" = pendingCombat.attacker.owner === 1 ? "p2" : "p1";
+        const life = Number(players[seat]?.life ?? 0);
+        const isDD = players[seat]?.lifeState === "dd";
+        if (isDD) {
+          return (
+            <span className="opacity-70 ml-2">
+              · Expected: <span className="font-semibold" style={{ color: PLAYER_COLORS[seat] }}>
+                {seat.toUpperCase()}
+              </span>{" "}
+              reduced to <span className="font-semibold">0</span> (lethal from DD)
+            </span>
+          );
+        }
+        const dmg = Math.max(0, Math.floor(a.atk));
+        const next = Math.max(0, life - dmg);
+        if (life > 0 && next <= 0) {
+          return (
+            <span className="opacity-70 ml-2">
+              · Expected: {seat.toUpperCase()} reaches Death&apos;s Door; further avatar/site damage this turn won&apos;t reduce life
+            </span>
+          );
+        }
+        return (
+          <span className="opacity-70 ml-2">
+            · Expected: deal <span className="font-semibold">{dmg}</span> to
+            <span className="font-semibold" style={{ color: PLAYER_COLORS[seat] }}>
+              {" "}
+              {seat.toUpperCase()}
+            </span>
+            , life {life} → {next}
+            {a.firstStrike ? " (FS)" : ""}
+          </span>
+        );
+      }
     }
     const attackerDef = (() => {
       try {
@@ -190,7 +277,7 @@ export default function CombatHudOverlay() {
     })();
     const parts: string[] = [];
     parts.push(`Atk ${a.atk}${a.firstStrike ? " (FS)" : ""}`);
-    if (haveAny) parts.push(`vs DefSum ${sumDef}`);
+    if (haveAny) parts.push(`vs ${targetName ? `${targetName} ` : ""}Def ${sumDef}`);
     const killVerdict = a.atk != null && haveAny ? (a.atk >= sumDef ? "may wipe" : "might not") : "—";
     const tradeVerdict = attackerDef != null && haveAny ? (sumAtk >= attackerDef ? "attacker may die" : "attacker survives") : "—";
     return (
@@ -307,6 +394,7 @@ export default function CombatHudOverlay() {
         ) : pendingCombat && actorKey && pendingCombat.defenderSeat !== actorKey ? (
           <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
             Defenders: {pendingCombat.defenders?.length ? defenderNames() : "—"}
+            <SuggestionDefense />
           </div>
         ) : null}
       </div>

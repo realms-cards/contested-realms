@@ -2,10 +2,10 @@
 
 import { Canvas } from "@react-three/fiber";
 import { Wrench } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
-import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
+import { useGameStore, type PlayerKey, type CardRef, type ServerPatchT } from "@/lib/game/store";
 import { generateInteractionRequestId, type InteractionRequestKind } from "@/lib/net/interactions";
 
 export type GameToolboxProps = {
@@ -70,6 +70,12 @@ export default function GameToolbox({
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const moveFromBanishedToZone = useGameStore((s) => s.moveFromBanishedToZone);
+  const applyPatch = useGameStore((s) => s.applyPatch);
+  const trySendPatch = useGameStore((s) => s.trySendPatch);
+  const snapshots = useGameStore((s) => s.snapshots);
+  const createSnapshot = useGameStore((s) => s.createSnapshot);
+  const phase = useGameStore((s) => s.phase);
+  const turn = useGameStore((s) => s.turn);
 
   // Drive the indicator countdown via a simple interval
   useEffect(() => {
@@ -100,6 +106,91 @@ export default function GameToolbox({
       try { off?.(); } catch {}
     };
   }, [transport]);
+
+  // Auto-snapshot backstop: once per (turn,currentPlayer) on Start phase
+  const lastAutoSnapRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase !== "Start") return;
+    const key = `${turn}|${currentPlayer}|Start`;
+    if (lastAutoSnapRef.current === key) return;
+    const hasForTurn = Array.isArray(snapshots) && snapshots.some((s) => s.kind === "auto" && s.turn === turn);
+    if (hasForTurn) {
+      lastAutoSnapRef.current = key;
+      return;
+    }
+    lastAutoSnapRef.current = key;
+    try { createSnapshot(`Turn ${turn} start (P${currentPlayer})`, "auto"); } catch {}
+  }, [phase, turn, currentPlayer, snapshots, createSnapshot]);
+
+  // Derive snapshot lists
+  const autoSnapshots = useMemo(
+    () => (Array.isArray(snapshots) ? snapshots.filter((s) => s.kind === "auto") : []),
+    [snapshots]
+  );
+  const archiveSnapshots = useMemo(
+    () => (Array.isArray(snapshots) ? snapshots.filter((s) => (s.kind ?? "manual") === "manual") : []),
+    [snapshots]
+  );
+
+  // Archive if none; otherwise restore the latest archive (board + cemetery only)
+  const handleArchiveOrRestoreRealm = () => {
+    const item = archiveSnapshots.length > 0 ? archiveSnapshots[archiveSnapshots.length - 1] : null;
+    if (!item) {
+      createSnapshot("", "manual");
+      return;
+    }
+    const raw: Record<string, unknown> = JSON.parse(JSON.stringify(item.payload || {}));
+    const allowed = [
+      "board",
+      "avatars",
+      "permanents",
+      "permanentPositions",
+      "permanentAbilities",
+      "sitePositions",
+      "playerPositions",
+    ];
+    const patch: Record<string, unknown> = {};
+    const rawR = raw as Record<string, unknown>;
+    for (const k of allowed) if (k in rawR) patch[k] = rawR[k];
+    const zp = raw.zones as | { p1?: { graveyard?: unknown[] }; p2?: { graveyard?: unknown[] } } | undefined;
+    const zonesPartial: Record<string, unknown> = {};
+    if (zp && (zp.p1?.graveyard || zp.p2?.graveyard)) {
+      zonesPartial.p1 = zp.p1 && zp.p1.graveyard ? { graveyard: zp.p1.graveyard } : {};
+      zonesPartial.p2 = zp.p2 && zp.p2.graveyard ? { graveyard: zp.p2.graveyard } : {};
+      (patch as Record<string, unknown>)["zones"] = zonesPartial as unknown;
+    }
+    const replaceKeys = Object.keys(patch).filter((k) => k !== "zones");
+    (patch as { __replaceKeys?: string[] }).__replaceKeys = replaceKeys;
+    if (isOnline && mySeat && opponentSeat) {
+      requestConsent(
+        "restoreSnapshot",
+        `Restore the realm: ${item.title}`,
+        { snapshot: patch }
+      );
+      return;
+    }
+    applyPatch(patch);
+    trySendPatch(patch as ServerPatchT);
+  };
+
+  // Restore latest auto snapshot (full authoritative state)
+  const handleRestoreSnapshot = () => {
+    if (autoSnapshots.length === 0) return;
+    const item = autoSnapshots[autoSnapshots.length - 1];
+    const raw: Record<string, unknown> = JSON.parse(JSON.stringify(item.payload || {}));
+    const keys = Object.keys(raw).filter((k) => k !== "__replaceKeys");
+    (raw as { __replaceKeys?: string[] }).__replaceKeys = keys;
+    if (isOnline && mySeat && opponentSeat) {
+      requestConsent(
+        "restoreSnapshot",
+        `Restore snapshot: ${item.title}`,
+        { snapshot: raw }
+      );
+      return;
+    }
+    applyPatch(raw);
+    trySendPatch(raw as ServerPatchT);
+  };
 
   const handleInspectBanished = () => {
     const seat = banishedSeat;
@@ -353,6 +444,13 @@ export default function GameToolbox({
   const headerPaddingClass = collapsed ? "px-2 py-1" : "px-2 py-1.5 sm:px-3 sm:py-2";
   const toggleBtnPaddingClass = collapsed ? "px-1.5 py-0.5" : "px-2 py-0.5";
 
+  // Realm button presentation
+  const isRealmArmed = archiveSnapshots.length > 0;
+  const realmBtnText = isRealmArmed ? "Restore the Realm" : "Archive the Realm";
+  const realmBtnClass = isRealmArmed
+    ? "w-full rounded bg-amber-600/90 hover:bg-amber-500 py-1"
+    : "w-full rounded bg-white/15 hover:bg-white/25 py-1";
+
   return (
     <div className="absolute bottom-3 right-3 z-20 text-white">
       {/* Instant permission indicator */}
@@ -533,6 +631,36 @@ export default function GameToolbox({
                 onClick={handleUnbanish}
               >
                 Return a card
+              </button>
+            </div>
+
+            {/* Snapshots (emergency full-state restore) */}
+            <div>
+              <div className="font-medium mb-1">Snapshots</div>
+              <button
+                className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40"
+                onClick={handleRestoreSnapshot}
+                disabled={autoSnapshots.length === 0}
+                title="Emergency recovery: restores entire game state"
+              >
+                Restore snapshot
+              </button>
+              {autoSnapshots.length > 0 && (
+                <div className="mt-1 text-xs opacity-70">
+                  Latest: {new Date(autoSnapshots[autoSnapshots.length - 1].ts).toLocaleTimeString()} · {autoSnapshots[autoSnapshots.length - 1].title}
+                </div>
+              )}
+            </div>
+
+            {/* Realm (single version: archive if none, otherwise restore board + cemetery) */}
+            <div>
+              <div className="font-medium mb-1">Realm</div>
+              <button
+                className={realmBtnClass}
+                onClick={handleArchiveOrRestoreRealm}
+                title={realmBtnText}
+              >
+                {realmBtnText}
               </button>
             </div>
 

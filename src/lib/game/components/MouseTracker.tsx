@@ -9,7 +9,13 @@ interface MouseTrackerProps {
   onHover: (card: { slug: string; name: string; type: string | null } | null) => void;
 }
 
-// Component to track mouse position and perform raycasting for card detection
+/**
+ * MouseTracker - Centralized card hover detection
+ *
+ * Performs raycasting on mousemove and picks the topmost card based on actual
+ * world Y position. This handles stacked cards properly by reading the 3D position
+ * from the scene, not from the cards array.
+ */
 export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
   const { camera, scene, raycaster, pointer, gl } = useThree();
   const lastHoveredSlug = useRef<string | null>(null);
@@ -27,7 +33,7 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
       }
     });
     return objects;
-  }, [scene]);
+  }, [scene, cards]); // Re-build when cards array changes
   
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -52,7 +58,11 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
             if (cardId) {
               const card = cards.find(c => c.id === cardId);
               if (card) {
-                return { intersect, card, y: card.y || 0 };
+                // Get the actual world Y position of the intersected object
+                // This accounts for stack offsets and transforms
+                const worldPos = new THREE.Vector3();
+                intersect.object.getWorldPosition(worldPos);
+                return { intersect, card, y: worldPos.y };
               }
             }
             return null;
