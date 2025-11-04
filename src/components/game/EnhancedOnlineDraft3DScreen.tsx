@@ -222,7 +222,7 @@ export default function EnhancedOnlineDraft3DScreen({
   }, []);
 
   // Enhanced Draft-3D Online Integration (declare before effects that reference it)
-  const { sendCardPreview, sendStackInteraction, isConnected } =
+  const { sendCardPreview, clearCardPreview, sendStackInteraction, isConnected } =
     useDraft3DTransport({
       transport,
       sessionId: matchId || "unknown",
@@ -259,6 +259,18 @@ export default function EnhancedOnlineDraft3DScreen({
       }
     };
   }, [hoverPreview, isConnected, sendCardPreview]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    if (hoverPreview) return;
+    const lastSlug = lastSentHoverSlugRef.current;
+    if (lastSlug) {
+      try {
+        clearCardPreview(lastSlug, "hover");
+      } catch {}
+      lastSentHoverSlugRef.current = null;
+    }
+  }, [hoverPreview, isConnected, clearCardPreview]);
 
   // Keep a stable snapshot of metadata for layout to avoid jitter when meta arrives later
   useEffect(() => {
@@ -335,7 +347,7 @@ export default function EnhancedOnlineDraft3DScreen({
       currentHoverCardRef.current = null;
       setHoverPreview(null);
       clearHoverTimerRef.current = null;
-    }, 1200); // Increased from 400ms to 1.2s for better card preview visibility
+    }, 120);
   }, []);
 
   // Convert DraftCard to BoosterCard format for Pick3D
@@ -1605,29 +1617,7 @@ export default function EnhancedOnlineDraft3DScreen({
                 onHoverInfo={(info) => {
                   if (info) {
                     showCardPreview(info);
-                  } else if (amPicker) {
-                    // Only do complex hover handling when it's the picker's turn
-                    const currentSlug = currentHoverCardRef.current;
-                    if (currentSlug) {
-                      const isHandCard = packAsBoosterCards.some(
-                        (c) => c.slug === currentSlug
-                      );
-                      if (isHandCard) {
-                        const sel = selectedRowIndex;
-                        if (sel != null) {
-                          const c = packAsBoosterCards[sel];
-                          if (c)
-                            showCardPreview({
-                              slug: c.slug,
-                              name: c.cardName,
-                              type: c.type ?? null,
-                            });
-                          else hideCardPreview();
-                        } else hideCardPreview();
-                      }
-                    }
                   } else {
-                    // When not the active picker, just hide preview
                     hideCardPreview();
                   }
                 }}
@@ -1644,13 +1634,6 @@ export default function EnhancedOnlineDraft3DScreen({
                   if (d > PICK_RADIUS) {
                     setStaged({ idx, x: wx, z: wz });
                     setSelectedRowIndex(null);
-                    const c = packAsBoosterCards[idx];
-                    if (c)
-                      showCardPreview({
-                        slug: c.slug,
-                        name: c.cardName,
-                        type: c.type ?? null,
-                      });
                   } else if (staged && staged.idx === idx) {
                     setStaged(null);
                   }
@@ -1668,15 +1651,7 @@ export default function EnhancedOnlineDraft3DScreen({
                       });
                       setSelectedRowIndex(null);
                     }
-                    const c = packAsBoosterCards[idx];
-                    if (c)
-                      showCardPreview({
-                        slug: c.slug,
-                        name: c.cardName,
-                        type: c.type ?? null,
-                      });
                   } else {
-                    hideCardPreview();
                   }
                 }}
                 orbitLocked={orbitLocked}

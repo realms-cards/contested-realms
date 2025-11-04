@@ -325,6 +325,12 @@ export type GameState = {
     target: "hand" | "graveyard" | "banished" | "atlas",
     position?: "top" | "bottom"
   ) => void;
+  // Return a card from banished to a legal zone
+  moveFromBanishedToZone: (
+    who: PlayerKey,
+    instanceId: string,
+    target: "hand" | "graveyard"
+  ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
   transferSiteControl: (x: number, y: number, to?: 1 | 2) => void;

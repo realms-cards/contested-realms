@@ -5,7 +5,7 @@ import { Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
-import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
 import { generateInteractionRequestId, type InteractionRequestKind } from "@/lib/net/interactions";
 
 export type GameToolboxProps = {
@@ -49,6 +49,10 @@ export default function GameToolbox({
   const [peekCount, setPeekCount] = useState<number>(3);
   const [peekFromWhere, setPeekFromWhere] = useState<"top" | "bottom">("top");
 
+  const [banishedSeat, setBanishedSeat] = useState<PlayerKey>(mySeat ?? "p1");
+  const [unbanishSeat, setUnbanishSeat] = useState<PlayerKey>(mySeat ?? "p1");
+  const [unbanishTarget, setUnbanishTarget] = useState<"hand" | "graveyard">("hand");
+
   // Toolbox D20 overlay state
   const [d20Open, setD20Open] = useState(false);
   const [d20Rolling, setD20Rolling] = useState(false);
@@ -64,6 +68,8 @@ export default function GameToolbox({
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
+  const openSearchDialog = useGameStore((s) => s.openSearchDialog);
+  const moveFromBanishedToZone = useGameStore((s) => s.moveFromBanishedToZone);
 
   // Drive the indicator countdown via a simple interval
   useEffect(() => {
@@ -454,6 +460,38 @@ export default function GameToolbox({
                 title={isOnline ? "Requests opponent consent" : "Hotseat: opens the other hand"}
               >
                 Inspect Hand
+              </button>
+            </div>
+
+            {/* Inspect Banished */}
+            <div>
+              <div className="font-medium mb-1">Look at banished</div>
+              <button
+                className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
+                onClick={handleInspectBanished}
+              >
+                Inspect Banished
+              </button>
+            </div>
+
+            {/* Return from Banished */}
+            <div>
+              <div className="font-medium mb-1">Return from banished</div>
+              <div className="flex gap-2 mb-1">
+                <select value={unbanishSeat} onChange={(e) => setUnbanishSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
+                  <option value="p1">P1</option>
+                  <option value="p2">P2</option>
+                </select>
+                <select value={unbanishTarget} onChange={(e) => setUnbanishTarget(e.target.value as "hand" | "graveyard")} className="bg-white/10 rounded px-2 py-1">
+                  <option value="hand">Hand</option>
+                  <option value="graveyard">Cemetery</option>
+                </select>
+              </div>
+              <button
+                className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
+                onClick={handleUnbanish}
+              >
+                Return a card
               </button>
             </div>
 

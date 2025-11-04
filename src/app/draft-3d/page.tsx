@@ -525,7 +525,7 @@ export default function Draft3DPage() {
       currentHoverCardRef.current = null;
       setHoverPreview(null);
       clearHoverTimerRef.current = null;
-    }, 400); // Longer delay to handle 3D card hover sensitivity
+    }, 120);
   }, []); // setHoverPreview is stable, no need to include it
   const [metaByCardId, setMetaByCardId] = useState<
     Record<
@@ -813,29 +813,7 @@ export default function Draft3DPage() {
                 if (info) {
                   showCardPreview(info);
                 } else {
-                  // Only clear preview if it was from a hand card
-                  // Check if current preview matches a hand card before clearing
-                  const currentSlug = currentHoverCardRef.current;
-                  if (currentSlug) {
-                    const isHandCard = currentPacks[0]?.some(
-                      (c) => c.slug === currentSlug
-                    );
-                    if (isHandCard) {
-                      // Keep preview if a card is selected
-                      const sel = selectedRowIndex;
-                      if (sel != null) {
-                        const c = currentPacks[0]?.[sel];
-                        if (c)
-                          showCardPreview({
-                            slug: c.slug,
-                            name: c.cardName,
-                            type: c.type ?? null,
-                          });
-                        else hideCardPreview();
-                      } else hideCardPreview();
-                    }
-                    // If it's a board card preview, don't interfere with it
-                  }
+                  hideCardPreview();
                 }
               }}
               onDragMove={(idx, wx, wz) => {

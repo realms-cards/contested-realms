@@ -36,6 +36,7 @@ import Hud3D from "@/lib/game/components/Hud3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import TokenPile3D from "@/lib/game/components/TokenPile3D";
+import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import {
   MAT_PIXEL_H,
   MAT_PIXEL_W,
@@ -1983,6 +1984,9 @@ const canPanCamera =
             leaveLabel={tournamentId ? "Return to Tournament" : undefined}
             allowContinue={false}
           />
+
+          {/* Combat HUD Overlay (layout-level, not inside Canvas) */}
+          <CombatHudOverlay />
 
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (

@@ -34,6 +34,8 @@ export const INTERACTION_REQUEST_KINDS = new Set([
   "takeFromPile",
   "manipulatePermanent",
   "tieGame",
+  "inspectBanished",
+  "unbanishCard",
 ]);
 
 export const INTERACTION_DECISIONS = new Set(["approved", "declined", "cancelled"]);
@@ -60,7 +62,7 @@ export function createInteractionModule({
   persistMatchUpdate,
   prisma,
 }: InteractionModuleDeps) {
-function ensureInteractionState(match: any): void {
+  function ensureInteractionState(match: any): void {
     if (!match) return;
     if (!(match.interactionRequests instanceof Map)) {
       match.interactionRequests = new Map();
@@ -340,6 +342,83 @@ function ensureInteractionState(match: any): void {
           requestedBy: pendingAction.requestedBy || null,
         },
       };
+    }
+    if (kind === "inspectBanished") {
+      const seat = pendingAction.seat === "p1" || pendingAction.seat === "p2" ? pendingAction.seat : null;
+      if (!seat) {
+        return { ...resultBase, success: false, message: "Invalid seat for banished inspect" };
+      }
+      const cards = getTopCards(match, seat, "banished", 99, "top").map((card) => {
+        if (!card || typeof card !== "object") return {};
+        const out: Record<string, unknown> = {};
+        if ((card as any).name) out.name = (card as any).name;
+        if ((card as any).type) out.type = (card as any).type;
+        if ((card as any).slug) out.slug = (card as any).slug;
+        if (typeof (card as any).instanceId === "string") out.instanceId = (card as any).instanceId;
+        if (Number.isFinite((card as any).cardId)) out.cardId = Number((card as any).cardId);
+        if (Number.isFinite((card as any).variantId)) out.variantId = Number((card as any).variantId);
+        return out;
+      });
+      return {
+        ...resultBase,
+        success: true,
+        payload: {
+          seat,
+          pile: "banished",
+          from: "top",
+          count: cards.length,
+          cards,
+          requestedBy: pendingAction.requestedBy || null,
+        },
+      };
+    }
+    if (kind === "unbanishCard") {
+      const seat = pendingAction.seat === "p1" || pendingAction.seat === "p2" ? pendingAction.seat : null;
+      const target = pendingAction.target === "hand" ? "hand" : "graveyard";
+      const instanceId = typeof pendingAction.instanceId === "string" ? pendingAction.instanceId : null;
+      if (!seat || !instanceId) {
+        return { ...resultBase, success: false, message: "Invalid unbanish parameters" };
+      }
+      try {
+        const zones = (match.game && match.game.zones) || {};
+        const seatZonesRaw = zones && typeof zones === "object" ? (zones as any)[seat] : null;
+        const banished = Array.isArray(seatZonesRaw?.banished) ? [...seatZonesRaw.banished] : [];
+        const idx = banished.findIndex((c: any) => c && typeof c === "object" && c.instanceId === instanceId);
+        if (idx < 0) {
+          return { ...resultBase, success: false, message: "Card not found in banished" };
+        }
+        const card = banished.splice(idx, 1)[0];
+        const moved = { ...(card || {}) } as Record<string, unknown>;
+        moved.owner = seat;
+        const hand = Array.isArray(seatZonesRaw?.hand) ? [...seatZonesRaw.hand] : [];
+        const graveyard = Array.isArray(seatZonesRaw?.graveyard) ? [...seatZonesRaw.graveyard] : [];
+        if (target === "hand") hand.push(moved);
+        else graveyard.unshift(moved);
+
+        const patch = {
+          zones: {
+            [seat]: {
+              banished,
+              hand: target === "hand" ? hand : undefined,
+              graveyard: target === "graveyard" ? graveyard : undefined,
+            },
+          },
+        } as MatchPatch;
+        match.game = deepMergeReplaceArrays(match.game || {}, patch);
+        match.lastTs = now;
+        const room = `match:${match.id}`;
+        const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+        io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
+        const name = typeof (card as any)?.name === "string" ? (card as any).name : "Card";
+        return {
+          ...resultBase,
+          success: true,
+          payload: { seat, target, requestedBy: pendingAction.requestedBy || null },
+          message: `Returned '${name}' from banished to ${target}.`,
+        };
+      } catch (_e) {
+        return { ...resultBase, success: false, message: "Failed to unbanish" };
+      }
     }
     if (kind === "tieGame") {
       try {

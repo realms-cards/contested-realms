@@ -14,8 +14,8 @@ export interface Hud3DProps {
 
 export default function Hud3D({ owner }: Hud3DProps) {
   const boardSize = useGameStore((s) => s.board.size);
-  // Show adjustable mana counter stored on the player state
-  const mana = useGameStore((s) => s.players[owner].mana);
+  // Show adaptive available mana (computed base + manual offset)
+  const mana = useGameStore((s) => s.getAvailableMana(owner));
   const actorKey = useGameStore((s) => s.actorKey);
   const addMana = useGameStore((s) => s.addMana);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
