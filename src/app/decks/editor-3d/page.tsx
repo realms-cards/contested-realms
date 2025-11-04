@@ -1396,21 +1396,25 @@ function AuthenticatedDeckEditor() {
   }, [pick3D]);
 
   const yourCounts = useMemo(() => {
-    const m = new Map<
-      number,
-      { cardId: number; name: string; count: number }
-    >();
-    Object.values(picks).forEach((it) => {
-      const cur = m.get(it.cardId) || {
-        cardId: it.cardId,
-        name: it.name,
-        count: 0,
-      };
-      cur.count += it.count;
-      m.set(it.cardId, cur);
-    });
-    return Array.from(m.values());
-  }, [picks]);
+    // Build counts from pick3D to preserve visual order on board
+    // This ensures cards appear in YourDeckList in the same order they appear on the board
+    const seenCards = new Set<number>();
+    const counts: Array<{ cardId: number; name: string; count: number }> = [];
+
+    for (const p of pick3D) {
+      if (!seenCards.has(p.card.cardId)) {
+        seenCards.add(p.card.cardId);
+        const count = pick3D.filter(item => item.card.cardId === p.card.cardId).length;
+        counts.push({
+          cardId: p.card.cardId,
+          name: p.card.cardName,
+          count,
+        });
+      }
+    }
+
+    return counts;
+  }, [pick3D]);
 
   const manaCurve = useMemo(() => {
     const curve: Record<number, number> = {};
@@ -2272,11 +2276,45 @@ function AuthenticatedDeckEditor() {
     return computeStackPositions(pick3D, metaByCardId, isSortingEnabled);
   }, [pick3D, isSortingEnabled, metaByCardId]);
 
+  // Calculate stack sizes for proper hitbox handling
+  const stackSizes = useMemo(() => {
+    if (!stackPositions) return new Map<string, number>();
+
+    const sizeMap = new Map<string, number>();
+    const stackGroups = new Map<string, number>();
+
+    // Group by position to find stack sizes
+    for (const [, pos] of stackPositions) {
+      const key = `${pos.x.toFixed(3)},${pos.z.toFixed(3)}`;
+      stackGroups.set(key, (stackGroups.get(key) || 0) + 1);
+    }
+
+    // Map each position to its stack size
+    for (const [, pos] of stackPositions) {
+      const key = `${pos.x.toFixed(3)},${pos.z.toFixed(3)}`;
+      sizeMap.set(key, stackGroups.get(key) || 1);
+    }
+
+    return sizeMap;
+  }, [stackPositions]);
+
   // Convert deck picks to Pick3D format - preserve existing positions when possible
   const positionsRef = useRef<Map<string, { z: number; x: number }>>(new Map());
   const zoneCountsRef = useRef<Map<string, number>>(new Map());
+  const lastPicksCount = useRef(0);
 
   useEffect(() => {
+    // Calculate total card count from picks
+    const totalCards = Object.values(picks).reduce((sum, item) => sum + item.count, 0);
+
+    // Skip rebuilding pick3D if card count hasn't changed
+    // This preserves positions when cards are just moved between zones
+    if (lastPicksCount.current === totalCards && pick3D.length > 0) {
+      return;
+    }
+
+    lastPicksCount.current = totalCards;
+
     const newPick3D: Pick3D[] = [];
     let id = 1;
 
@@ -2350,7 +2388,7 @@ function AuthenticatedDeckEditor() {
 
     setPick3D(newPick3D);
     setNextPickId(id);
-  }, [picks, isSealed, isDraftMode]);
+  }, [picks, isSealed, isDraftMode, pick3D.length]);
 
   // Update position cache whenever pick3D changes
   useEffect(() => {
@@ -2507,8 +2545,10 @@ function AuthenticatedDeckEditor() {
         }
 
         // Normal behavior: move to sideboard
-        const newZ = 1.5 + Math.random() * 0.5;
-        const newX = 0.5 + Math.random() * 3;
+        // When sorting is disabled, preserve the card's current position (just update zone)
+        // When sorting is enabled, assign a new random position in the sideboard area
+        const newZ = isSortingEnabled ? 1.5 + Math.random() * 0.5 : card.z;
+        const newX = isSortingEnabled ? 0.5 + Math.random() * 3 : card.x;
         updated[idx] = {
           ...updated[idx],
           x: newX,
@@ -2555,7 +2595,7 @@ function AuthenticatedDeckEditor() {
         return updated;
       });
     },
-    [isStandardSite]
+    [isStandardSite, isSortingEnabled]
   );
 
   const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
@@ -2566,8 +2606,10 @@ function AuthenticatedDeckEditor() {
       );
       if (idx === -1) return prev;
       const card = updated[idx];
-      const newZ = -1.5 - Math.random() * 0.5;
-      const newX = -2 + Math.random() * 4;
+      // When sorting is disabled, preserve the card's current position (just update zone)
+      // When sorting is enabled, assign a new random position in the deck area
+      const newZ = isSortingEnabled ? -1.5 - Math.random() * 0.5 : card.z;
+      const newX = isSortingEnabled ? -2 + Math.random() * 4 : card.x;
       updated[idx] = {
         ...updated[idx],
         x: newX,
@@ -2616,7 +2658,7 @@ function AuthenticatedDeckEditor() {
 
       return updated;
     });
-  }, []);
+  }, [isSortingEnabled]);
 
   // Helper function to move specific card by its unique ID
   const moveSpecificCardToSideboard = useCallback(
@@ -2822,7 +2864,10 @@ function AuthenticatedDeckEditor() {
 
                 // Use sorted position if sorting is enabled, otherwise use card's position
                 const stackPos = stackPositions?.get(p.id);
-                const x = stackPos ? stackPos.x : p.x;
+                // Add X offset for each card in stack for better targeting (fan effect)
+                const x = stackPos
+                  ? stackPos.x + stackPos.stackIndex * 0.03
+                  : p.x;
                 const z = stackPos ? stackPos.z : p.z;
 
                 // Calculate base render order like draft-3d
@@ -2835,7 +2880,15 @@ function AuthenticatedDeckEditor() {
                 // Use stackPos.stackIndex * 0.05 for proper visual stacking height
                 const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
 
-                // Determine if this card should be interactive (topmost card in its area)
+                // Calculate stack information for proper hitbox sizing
+                const stackKey = stackPos
+                  ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}`
+                  : null;
+                const totalInStack = stackKey
+                  ? stackSizes.get(stackKey) || 1
+                  : 1;
+                const stackIndex = stackPos ? stackPos.stackIndex : 0;
+
                 return (
                   <DraggableCard3D
                     key={p.id}
@@ -2848,8 +2901,8 @@ function AuthenticatedDeckEditor() {
                     y={y}
                     baseRenderOrder={baseRenderOrder}
                     cardId={p.id}
-                    stackIndex={stackPos ? stackPos.stackIndex : 0}
-                    totalInStack={1}
+                    stackIndex={stackIndex}
+                    totalInStack={totalInStack}
                     interactive={true}
                     onContextMenu={(cx, cy) =>
                       openContextMenuForCard(

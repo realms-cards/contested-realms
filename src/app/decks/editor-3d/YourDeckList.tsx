@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
@@ -25,7 +26,10 @@ export type YourDeckListProps = {
     clientY: number
   ) => void;
   setFeedback: (msg: string) => void;
+  onColumnsChange?: (columns: 2 | 3 | 4) => void;
 };
+
+type SortMode = "name" | "cost" | "type" | "none";
 
 export default function YourDeckList(props: YourDeckListProps) {
   const {
@@ -40,7 +44,16 @@ export default function YourDeckList(props: YourDeckListProps) {
     moveOneFromSideboardToDeck,
     openContextMenu,
     setFeedback,
+    onColumnsChange,
   } = props;
+
+  const [columns, setColumns] = useState<2 | 3 | 4>(2);
+  const [sortMode, setSortMode] = useState<SortMode>("none");
+
+  const handleColumnsChange = (newColumns: 2 | 3 | 4) => {
+    setColumns(newColumns);
+    onColumnsChange?.(newColumns);
+  };
 
   const order = ["air", "water", "earth", "fire"] as const;
 
@@ -50,18 +63,44 @@ export default function YourDeckList(props: YourDeckListProps) {
     return pick3D.some((p) => p.card.cardId === it.cardId);
   });
 
-  const groups: Array<{ key: "avatar" | "spellbook" | "atlas"; items: typeof yourCounts }> = [
-    { key: "avatar", items: [] },
-    { key: "spellbook", items: [] },
-    { key: "atlas", items: [] },
-  ];
+  // Apply sorting
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    if (sortMode === "name") {
+      return a.name.localeCompare(b.name);
+    } else if (sortMode === "cost") {
+      const costA = metaByCardId[a.cardId]?.cost ?? 0;
+      const costB = metaByCardId[b.cardId]?.cost ?? 0;
+      if (costA !== costB) return costA - costB;
+      return a.name.localeCompare(b.name);
+    } else if (sortMode === "type") {
+      const typeA = (pickInfoById[a.cardId]?.type || "").toLowerCase();
+      const typeB = (pickInfoById[b.cardId]?.type || "").toLowerCase();
+      if (typeA !== typeB) return typeA.localeCompare(typeB);
+      return a.name.localeCompare(b.name);
+    }
+    // "none" mode: no sorting, preserve original order
+    return 0;
+  });
 
-  for (const it of filtered) {
-    const pickInfo = pickInfoById[it.cardId];
-    const t = (pickInfo?.type || "").toLowerCase();
-    if (t.includes("avatar")) groups[0].items.push(it);
-    else if (t.includes("site")) groups[2].items.push(it);
-    else groups[1].items.push(it);
+  // When sort mode is "none", skip grouping to preserve exact visual order
+  const groups: Array<{ key: "avatar" | "spellbook" | "atlas" | "all"; items: typeof yourCounts }> =
+    sortMode === "none"
+      ? [{ key: "all", items: sortedFiltered }]
+      : [
+          { key: "avatar", items: [] },
+          { key: "spellbook", items: [] },
+          { key: "atlas", items: [] },
+        ];
+
+  // Only group by type if not in "none" mode
+  if (sortMode !== "none") {
+    for (const it of sortedFiltered) {
+      const pickInfo = pickInfoById[it.cardId];
+      const t = (pickInfo?.type || "").toLowerCase();
+      if (t.includes("avatar")) groups[0].items.push(it);
+      else if (t.includes("site")) groups[2].items.push(it);
+      else groups[1].items.push(it);
+    }
   }
 
   const renderItem = (it: { cardId: number; count: number; name: string }) => {
@@ -80,28 +119,42 @@ export default function YourDeckList(props: YourDeckListProps) {
     const cardInDeck = pick3D.filter((p) => p.card.cardId === it.cardId && p.zone === "Deck").length;
     const cardInSideboard = pick3D.filter((p) => p.card.cardId === it.cardId && p.zone === "Sideboard").length;
 
-    const handleContextMenu = (e: React.MouseEvent) => {
+    const handleClick = (e: React.MouseEvent) => {
       e.preventDefault();
       const total = cardInDeck + cardInSideboard;
       if (total === 1 || cardInDeck === 0 || cardInSideboard === 0) {
+        // Single zone - toggle between deck and sideboard
         if (cardInDeck > 0) {
           moveOneToSideboard(it.cardId);
           const remaining = cardInDeck - 1;
           const msg = remaining > 0
             ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-            : `Moved "${it.name}" to Sideboard (deck now empty)`;
+            : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
           setFeedback(msg);
         } else if (cardInSideboard > 0) {
           moveOneFromSideboardToDeck(it.cardId);
           const remaining = cardInSideboard - 1;
           const msg = remaining > 0
             ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
-            : `Moved "${it.name}" to Deck (sideboard now empty)`;
+            : `Moved "${it.name}" to Deck (no copies remain in sideboard)`;
           setFeedback(msg);
         }
       } else {
-        openContextMenu(it.cardId, it.name, e.clientX, e.clientY);
+        // Multiple cards in both zones - prefer moving from deck to sideboard
+        if (cardInDeck > 0) {
+          moveOneToSideboard(it.cardId);
+          const remaining = cardInDeck - 1;
+          const msg = remaining > 0
+            ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+            : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
+          setFeedback(msg);
+        }
       }
+    };
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+      e.preventDefault();
+      openContextMenu(it.cardId, it.name, e.clientX, e.clientY);
     };
 
     return (
@@ -112,8 +165,9 @@ export default function YourDeckList(props: YourDeckListProps) {
           if (slug) onHoverPreview(slug, it.name, pickInfo?.type || null);
         }}
         onMouseLeave={() => onHoverClear()}
+        onClick={handleClick}
         onContextMenu={handleContextMenu}
-        title={`Right-click to move between Deck/Sideboard`}
+        title={`Left-click to move between Deck/Sideboard. Right-click for more options.`}
       >
         <div className="flex items-start gap-2">
           {slug ? (
@@ -181,15 +235,72 @@ export default function YourDeckList(props: YourDeckListProps) {
     );
   };
 
+  const gridColsClass =
+    columns === 2 ? "grid-cols-2" :
+    columns === 3 ? "grid-cols-3" :
+    "grid-cols-4";
+
   return (
     <div className="max-h-[calc(100vh-9rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
+      {/* Controls */}
+      <div className="sticky top-0 z-10 bg-black/90 backdrop-blur-sm p-2 rounded space-y-2 border border-white/10">
+        {/* Column selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-white/60 text-[10px] uppercase tracking-wide">Columns:</span>
+          <div className="flex gap-1">
+            {([2, 3, 4] as const).map((col) => (
+              <button
+                key={col}
+                onClick={() => handleColumnsChange(col)}
+                className={`px-2 py-0.5 rounded text-[10px] ${
+                  columns === col
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20"
+                }`}
+              >
+                {col}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Sort selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-white/60 text-[10px] uppercase tracking-wide">Sort:</span>
+          <div className="flex gap-1 flex-wrap">
+            {[
+              { value: "none", label: "None" },
+              { value: "name", label: "Name" },
+              { value: "cost", label: "Cost" },
+              { value: "type", label: "Type" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setSortMode(option.value as SortMode)}
+                className={`px-2 py-0.5 rounded text-[10px] ${
+                  sortMode === option.value
+                    ? "bg-green-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Card groups */}
       {groups.map((g) =>
         g.items.length > 0 ? (
           <div key={g.key}>
-            <div className="mb-1 text-white/70 text-[11px] uppercase tracking-wide">
-              {g.key === "avatar" ? "Avatar" : g.key === "spellbook" ? "Spellbook" : "Atlas"}
-            </div>
-            <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2">
+            {/* Only show group label when not in "none" mode */}
+            {g.key !== "all" && (
+              <div className="mb-1 text-white/70 text-[11px] uppercase tracking-wide">
+                {g.key === "avatar" ? "Avatar" : g.key === "spellbook" ? "Spellbook" : "Atlas"}
+              </div>
+            )}
+            <div className={`grid ${gridColsClass} gap-2`}>
               {g.items.map((it) => renderItem(it))}
             </div>
           </div>
