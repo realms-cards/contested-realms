@@ -2816,19 +2816,24 @@ export default function Board({
                               const canDefendNow =
                                 !!(pendingCombat &&
                                   pendingCombat.defenderSeat === actorKey);
-                              if (!mine) {
+
+                              // Active player can move any cards (theirs or opponent's)
+                              // Non-active players can only move their own cards
+                              if (!actorIsActive && !mine) {
                                 if (process.env.NODE_ENV !== "production") {
                                   console.debug(
-                                    `[drag] perm:denied not-owner ${key}[${idx}] owner=${owner} actor=${actorKey}`
+                                    `[drag] perm:denied not-active-player ${key}[${idx}] owner=${owner} actor=${actorKey}`
                                   );
                                 }
                                 clearHoverPreview(hoverKey);
                                 return;
                               }
-                              if (!(actorIsActive || canDefendNow)) {
+
+                              // During combat defense, can only move own cards
+                              if (canDefendNow && !actorIsActive && !mine) {
                                 if (process.env.NODE_ENV !== "production") {
                                   console.debug(
-                                    `[drag] perm:denied inactive ${key}[${idx}] actor=${actorKey} current=${currentPlayer}`
+                                    `[drag] perm:denied defense-not-owner ${key}[${idx}] owner=${owner} actor=${actorKey}`
                                   );
                                 }
                                 clearHoverPreview(hoverKey);
@@ -3749,7 +3754,13 @@ export default function Board({
                       if (!isSpectator && actorKey) {
                         const mySeat: "p1" | "p2" = who;
                         const mine = actorKey === mySeat;
-                        if (!mine) {
+                        const actorIsActive =
+                          (actorKey === "p1" && currentPlayer === 1) ||
+                          (actorKey === "p2" && currentPlayer === 2);
+
+                        // Active player can drag any avatar
+                        // Non-active players can only drag their own avatar
+                        if (!mine && !actorIsActive) {
                           e.stopPropagation();
                           return;
                         }

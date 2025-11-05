@@ -11,11 +11,12 @@ import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
  * Small Y offset per card in stack - MouseTracker sorts by Y to pick topmost card
  *
  * This offset is ONLY applied when cards are actually stacked (totalInStack > 1).
- * In unstacked mode, all cards remain on the same plane (y = 0.002) for proper visual layout.
+ * In unstacked mode, cards get a minimal offset (passed via y prop) to allow MouseTracker
+ * to distinguish overlapping cards while remaining visually flat.
  *
  * Benefits:
- * - Autostack mode: Stacked cards get unique Y positions → MouseTracker picks top card
- * - Unstacked mode: All cards at same Y → visually flat, no floating/staggering
+ * - Autostack mode: Stacked cards get unique Y positions (0.001 per layer) → clear visual stacking
+ * - Unstacked mode: Minimal Y offset (0.001 per card index) → visually flat but pickable
  */
 const STACK_VERTICAL_STEP = 0.001;
 
