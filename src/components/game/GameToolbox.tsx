@@ -131,6 +131,17 @@ export default function GameToolbox({
     () => (Array.isArray(snapshots) ? snapshots.filter((s) => (s.kind ?? "manual") === "manual") : []),
     [snapshots]
   );
+  const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!Array.isArray(autoSnapshots) || autoSnapshots.length === 0) {
+      setSelectedAutoId(null);
+      return;
+    }
+    const latest = autoSnapshots[autoSnapshots.length - 1];
+    if (!selectedAutoId || !autoSnapshots.some((s) => s.id === selectedAutoId)) {
+      setSelectedAutoId(latest.id);
+    }
+  }, [autoSnapshots]);
 
   // Archive if none; otherwise restore the latest archive (board + cemetery only)
   const handleArchiveOrRestoreRealm = () => {
@@ -173,10 +184,11 @@ export default function GameToolbox({
     trySendPatch(patch as ServerPatchT);
   };
 
-  // Restore latest auto snapshot (full authoritative state)
+  // Restore selected auto snapshot (full authoritative state)
   const handleRestoreSnapshot = () => {
     if (autoSnapshots.length === 0) return;
-    const item = autoSnapshots[autoSnapshots.length - 1];
+    const pool = autoSnapshots.slice(Math.max(autoSnapshots.length - 5, 0));
+    const item = (selectedAutoId ? pool.find((s) => s.id === selectedAutoId) : null) || pool[pool.length - 1];
     const raw: Record<string, unknown> = JSON.parse(JSON.stringify(item.payload || {}));
     const keys = Object.keys(raw).filter((k) => k !== "__replaceKeys");
     (raw as { __replaceKeys?: string[] }).__replaceKeys = keys;
@@ -637,6 +649,21 @@ export default function GameToolbox({
             {/* Snapshots (emergency full-state restore) */}
             <div>
               <div className="font-medium mb-1">Snapshots</div>
+              {autoSnapshots.length > 0 && (
+                <select
+                  className="w-full mb-1 rounded bg-white/10 hover:bg-white/15 py-1 text-xs"
+                  value={selectedAutoId ?? ""}
+                  onChange={(e) => setSelectedAutoId(e.target.value || null)}
+                >
+                  {autoSnapshots
+                    .slice(Math.max(autoSnapshots.length - 5, 0))
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {new Date(s.ts).toLocaleTimeString()} · {s.title}
+                      </option>
+                    ))}
+                </select>
+              )}
               <button
                 className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40"
                 onClick={handleRestoreSnapshot}
@@ -645,9 +672,13 @@ export default function GameToolbox({
               >
                 Restore snapshot
               </button>
-              {autoSnapshots.length > 0 && (
+              {autoSnapshots.length > 0 && selectedAutoId && (
                 <div className="mt-1 text-xs opacity-70">
-                  Latest: {new Date(autoSnapshots[autoSnapshots.length - 1].ts).toLocaleTimeString()} · {autoSnapshots[autoSnapshots.length - 1].title}
+                  {(() => {
+                    const pool = autoSnapshots.slice(Math.max(autoSnapshots.length - 5, 0));
+                    const sel = pool.find((s) => s.id === selectedAutoId) || pool[pool.length - 1];
+                    return `${new Date(sel.ts).toLocaleTimeString()} · ${sel.title}`;
+                  })()}
                 </div>
               )}
             </div>

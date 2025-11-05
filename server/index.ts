@@ -2913,6 +2913,132 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         io.to(room).emit("message", out);
         try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
+    } else if (type === "combatCommit") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          defenders?: unknown;
+          target?: { kind?: unknown; at?: unknown; index?: unknown } | null;
+          tile?: { x?: unknown; y?: unknown };
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const rawDefs = Array.isArray(msg.defenders) ? (msg.defenders as unknown[]) : [];
+        const defenders = rawDefs
+          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((d) => {
+            const at = typeof d!.at === "string" ? (d!.at as string) : null;
+            const indexVal = Number(d!.index);
+            const ownerVal = Number(d!.owner);
+            const instanceId = typeof d!.instanceId === "string" ? (d!.instanceId as string) : null;
+            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return null;
+            return { at, index: Number(indexVal), owner: Number(ownerVal) as 1 | 2, instanceId };
+          })
+          .filter(Boolean);
+        const tx = Number(msg.tile?.x);
+        const ty = Number(msg.tile?.y);
+        const tile = Number.isFinite(tx) && Number.isFinite(ty) ? { x: tx, y: ty } : undefined;
+        let target: { kind: "permanent" | "avatar" | "site"; at: string; index: number | null } | undefined;
+        try {
+          const rec = msg.target as Record<string, unknown> | null | undefined;
+          const k = typeof rec?.kind === "string" ? (rec!.kind as string) : "";
+          const a = typeof rec?.at === "string" ? (rec!.at as string) : "";
+          const idx = (rec?.index == null ? null : Number(rec!.index)) as number | null;
+          if ((k === "permanent" || k === "avatar" || k === "site") && a && (idx === null || Number.isFinite(idx))) {
+            target = { kind: k as "permanent" | "avatar" | "site", at: a, index: idx };
+          }
+        } catch {}
+        const out = { type: "combatCommit", id, defenders, ...(tile ? { tile } : {}), ...(target ? { target } : {}), playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatAssign") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; assignment?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const raw = Array.isArray(msg.assignment) ? (msg.assignment as unknown[]) : [];
+        const assignment = raw
+          .map((a) => (a && typeof a === "object" ? (a as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((a) => {
+            const at = typeof a!.at === "string" ? (a!.at as string) : null;
+            const indexVal = Number(a!.index);
+            const amount = Number(a!.amount);
+            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(amount)) return null;
+            return { at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
+          })
+          .filter(Boolean);
+        const out = { type: "combatAssign", id, assignment, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatAutoApply") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; kills?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const raw = Array.isArray(msg.kills) ? (msg.kills as unknown[]) : [];
+        const kills = raw
+          .map((k) => (k && typeof k === "object" ? (k as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((k) => {
+            const at = typeof k!.at === "string" ? (k!.at as string) : null;
+            const indexVal = Number(k!.index);
+            const owner = ((): "p1" | "p2" | null => {
+              const o = Number((k as Record<string, unknown>).owner as unknown);
+              return o === 1 ? "p1" : o === 2 ? "p2" : null;
+            })();
+            if (!at || !Number.isFinite(indexVal) || !owner) return null;
+            return { at, index: Number(indexVal), owner };
+          })
+          .filter(Boolean);
+        const out = { type: "combatAutoApply", id, kills, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatDamage") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; damage?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
+        const damage = raw
+          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((d) => {
+            const at = typeof d!.at === "string" ? (d!.at as string) : null;
+            const indexVal = Number(d!.index);
+            const amount = Number(d!.amount);
+            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(amount)) return null;
+            return { at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
+          })
+          .filter(Boolean);
+        const out = { type: "combatDamage", id, damage, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "combatSummary") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; text?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const text = typeof msg.text === "string" ? msg.text : "";
+        const out = { type: "combatSummary", id, text, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
     } else if (type === "toast") {
       try {
         const match = await getOrLoadMatch(matchId);

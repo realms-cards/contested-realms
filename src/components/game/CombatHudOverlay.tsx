@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore, type CellKey } from "@/lib/game/store";
 
@@ -23,10 +23,9 @@ export default function CombatHudOverlay() {
   const setLastCombatSummary = useGameStore((s) => s.setLastCombatSummary);
 
   const declareAttack = useGameStore((s) => s.declareAttack);
-  const resolveCombat = useGameStore((s) => s.resolveCombat);
-  const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
-  const cancelCombat = useGameStore((s) => s.cancelCombat);
   const requestRevertCrossMove = useGameStore((s) => s.requestRevertCrossMove);
+  const commitDefenders = useGameStore((s) => s.commitDefenders);
+  const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
 
   const actorIsActive =
     (actorKey === "p1" && currentPlayer === 1) ||
@@ -41,7 +40,6 @@ export default function CombatHudOverlay() {
     : null;
 
   const attackerLabel = (() => {
-    if (attackChoice?.attackerName) return attackChoice.attackerName;
     const pc = pendingCombat?.attacker;
     if (pc) {
       try {
@@ -50,6 +48,118 @@ export default function CombatHudOverlay() {
     }
     return null;
   })();
+
+function AttackerAssignmentBar() {
+  const actorKey = useGameStore((s) => s.actorKey);
+  const pendingCombat = useGameStore((s) => s.pendingCombat);
+  const setDamageAssignment = useGameStore((s) => s.setDamageAssignment);
+  const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
+  const permanents = useGameStore((s) => s.permanents);
+  const metaByCardId = useGameStore((s) => s.metaByCardId);
+  const [assign, setAssign] = useState<Record<string, number>>({});
+
+  const pc = pendingCombat;
+  const defs = useMemo(() => (pc?.defenders ? pc.defenders : []), [pc?.id, pc?.defenders]);
+  const aSeat: "p1" | "p2" = useMemo(() => (pc?.attacker?.owner === 1 ? "p1" : "p2"), [pc?.attacker?.owner]) as "p1" | "p2";
+  const amAttacker = actorKey ? actorKey === aSeat : true;
+
+  function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    try {
+      const cardId = permanents[at]?.[index]?.card?.cardId;
+      const m = cardId ? metaByCardId[Number(cardId)] : undefined;
+      return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+    } catch {
+      return { atk: 0, def: 0 };
+    }
+  }
+  function getAttachments(at: string, index: number) {
+    const list = permanents[at] || [];
+    return list.filter((p) => p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index);
+  }
+  function computeEffectiveAttack(a: { at: CellKey; index: number }): { atk: number; firstStrike: boolean } {
+    const base = getAtkDef(a.at, a.index).atk;
+    const attachments = getAttachments(a.at, a.index);
+    let atk = base;
+    let firstStrike = false;
+    let disabled = false;
+    for (const t of attachments) {
+      const nm = (t.card?.name || "").toLowerCase();
+      if (nm === "lance") { firstStrike = true; atk += 1; }
+      if (nm === "disabled") { disabled = true; }
+    }
+    if (disabled) atk = 0;
+    if (!Number.isFinite(atk)) atk = 0;
+    return { atk, firstStrike };
+  }
+
+  const totalAtk = useMemo(() => {
+    if (!pc) return 0;
+    const eff = computeEffectiveAttack({ at: pc.attacker.at, index: pc.attacker.index });
+    return Math.max(0, Math.floor(eff.atk));
+  }, [pc?.attacker?.at, pc?.attacker?.index, permanents, metaByCardId, computeEffectiveAttack]);
+  const asList = useMemo(() => defs.map((d) => ({ key: `${d.at}:${d.index}`, at: d.at as CellKey, index: d.index })), [defs]);
+  useEffect(() => { setAssign({}); }, [pc?.id]);
+  const sum = useMemo(() => Object.values(assign).reduce((a, v) => a + (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0), 0), [assign]);
+  const valid = defs.length <= 1 || sum === totalAtk;
+  const quickFill = () => {
+    let left = totalAtk;
+    const next: Record<string, number> = {};
+    for (const d of asList) {
+      const take = Math.max(0, Math.min(left, totalAtk));
+      next[d.key] = take;
+      left -= take;
+      if (left <= 0) break;
+    }
+    setAssign(next);
+  };
+  const reset = () => setAssign({});
+  const pushAssignment = () => {
+    const payload = asList.map((d) => ({ at: d.at, index: d.index, amount: Math.max(0, Math.floor(assign[d.key] || 0)) }));
+    setDamageAssignment(payload);
+  };
+
+  if (!pc) return null;
+  if (!amAttacker) return null;
+  const committed = pc.status === "committed";
+
+  return (
+    <div className="fixed inset-x-0 bottom-24 z-40 pointer-events-none flex justify-center">
+      <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+        {!committed ? (
+          <span className="text-xs opacity-75 mr-1">Waiting for defense commit…</span>
+        ) : null}
+        {defs.length > 1 ? (
+          <>
+            <div className="text-sm opacity-80">Assign {totalAtk} damage:</div>
+            {asList.map((d, i) => (
+              <div key={d.key} className="flex items-center gap-1">
+                <span className="text-xs opacity-80">D{i + 1}</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="w-16 bg-white/10 rounded px-2 py-1 text-sm"
+                  value={Number.isFinite(assign[d.key]) ? (assign[d.key] as number) : ""}
+                  onChange={(e) => {
+                    const v = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                    setAssign((prev) => ({ ...prev, [d.key]: v }));
+                  }}
+                  disabled={!committed}
+                />
+              </div>
+            ))}
+            <div className="text-xs opacity-80">Sum {sum}/{totalAtk}</div>
+            <button className="rounded bg-white/15 hover:bg-white/25 px-2 py-1 text-xs disabled:opacity-50" onClick={quickFill} disabled={!committed}>Quick Fill</button>
+            <button className="rounded bg-white/15 hover:bg-white/25 px-2 py-1 text-xs disabled:opacity-50" onClick={reset} disabled={!committed}>Reset</button>
+            <button className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 text-sm disabled:opacity-50" onClick={pushAssignment} disabled={!committed || !valid}>Set</button>
+            <button className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm disabled:opacity-50" onClick={() => autoResolveCombat()} disabled={!committed || !valid}>Auto Resolve</button>
+          </>
+        ) : (
+          <button className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm disabled:opacity-50" onClick={() => autoResolveCombat()} disabled={!committed}>Auto Resolve</button>
+        )}
+      </div>
+    </div>
+  );
+}
 
   function defenderNames(limit = 3): string {
     const list = pendingCombat?.defenders || [];
@@ -373,60 +483,59 @@ export default function CombatHudOverlay() {
             </button>
           </div>
         ) : pendingCombat && actorKey && pendingCombat.defenderSeat === actorKey ? (
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
-            <span className="opacity-80">
-              <span className="font-fantaisie" style={{ color: (pendingCombat.attacker.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2) }}>{attackerLabel || "Attacker"}</span>{targetLabel ? ` attacks ` : " attacks"}
-              {targetLabel ? <span className="font-fantaisie">{targetLabel}</span> : null}. Choose defenders: {pendingCombat.defenders?.length || 0} selected{(pendingCombat.defenders?.length || 0) > 0 ? ` – ${defenderNames()}` : ""}
-            </span>
+          pendingCombat.status !== "committed" ? (
+            <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
+              <span className="opacity-80">
+                <span className="font-fantaisie" style={{ color: (pendingCombat.attacker.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2) }}>{attackerLabel || "Attacker"}</span>{targetLabel ? ` attacks ` : " attacks"}
+                {targetLabel ? <span className="font-fantaisie">{targetLabel}</span> : null}. Choose defenders: {pendingCombat.defenders?.length || 0} selected{(pendingCombat.defenders?.length || 0) > 0 ? ` – ${defenderNames()}` : ""}
+              </span>
+              <SuggestionDefense />
+              <button
+                className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+                onClick={() => {
+                  commitDefenders();
+                }}
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
+              Defenders committed. Waiting for attacker…
+            </div>
+          )
+        ) : pendingCombat && (actorKey ? pendingCombat.defenderSeat !== actorKey : true) ? (
+          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+            <div>Defenders: {pendingCombat.defenders?.length ? defenderNames() : "—"}</div>
             <SuggestionDefense />
-            <span className="mx-2 rounded bg-white/10 px-3 py-1 opacity-70 select-none pointer-events-none">
-              Take damage
-            </span>
-            <button
-              className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
-              onClick={() => {
-                resolveCombat();
-              }}
-            >
-              {pendingCombat.defenders?.length ? "Submit" : "Confirm"}
-            </button>
-          </div>
-        ) : pendingCombat && actorKey && pendingCombat.defenderSeat !== actorKey ? (
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
-            Defenders: {pendingCombat.defenders?.length ? defenderNames() : "—"}
-            <SuggestionDefense />
+            {pendingCombat.status === "committed" ? (() => {
+              const aSeat = (pendingCombat.attacker.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+              const amAttacker = actorKey ? actorKey === aSeat : true;
+              if (!amAttacker) return null;
+              const defs = pendingCombat.defenders || [];
+              if (defs.length <= 1) {
+                return (
+                  <button className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm" onClick={() => autoResolveCombat()}>
+                    Auto Resolve
+                  </button>
+                );
+              }
+              const eff = computeEffectiveAttack({ at: pendingCombat.attacker.at, index: pendingCombat.attacker.index });
+              const totalAtk = Math.max(0, Math.floor(eff.atk));
+              const sum = (pendingCombat.assignment || []).reduce((s, a) => s + Math.max(0, Math.floor(Number(a.amount) || 0)), 0);
+              const valid = sum === totalAtk;
+              return (
+                <button className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm disabled:opacity-50" onClick={() => autoResolveCombat()} disabled={!valid}>
+                  Auto Resolve
+                </button>
+              );
+            })() : null}
           </div>
         ) : null}
       </div>
 
       {/* Bottom attacker controls */}
-      {pendingCombat ? (
-        <div className="fixed inset-x-0 bottom-24 z-40 pointer-events-none flex justify-center">
-          {(() => {
-            const seatOwner: "p1" | "p2" = pendingCombat.attacker.owner === 1 ? "p1" : "p2";
-            if (actorKey !== seatOwner) return null;
-            return (
-              <div className="pointer-events-auto rounded-full bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-2 flex gap-2 text-sm">
-                <button className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1" onClick={() => autoResolveCombat()}>
-                  Auto Resolve
-                </button>
-                <button className="rounded bg-indigo-600/90 hover:bg-indigo-500 px-3 py-1" onClick={() => resolveCombat()}>
-                  Manual Resolve
-                </button>
-                <button
-                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1"
-                  onClick={() => {
-                    cancelCombat();
-                    requestRevertCrossMove();
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            );
-          })()}
-        </div>
-      ) : null}
+      <AttackerAssignmentBar />
 
       {/* Final summary banner (both players) */}
       {lastCombatSummary ? (() => {

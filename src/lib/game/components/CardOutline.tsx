@@ -78,7 +78,7 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={false}
+          depthTest={true}
           toneMapped={false}
           transparent={opacity < 1}
         />
@@ -91,7 +91,7 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={false}
+          depthTest={true}
           toneMapped={false}
           transparent={opacity < 1}
         />
@@ -104,7 +104,7 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={false}
+          depthTest={true}
           toneMapped={false}
           transparent={opacity < 1}
         />
@@ -117,7 +117,7 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={false}
+          depthTest={true}
           toneMapped={false}
           transparent={opacity < 1}
         />

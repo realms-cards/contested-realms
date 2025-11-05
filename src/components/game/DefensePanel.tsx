@@ -14,8 +14,8 @@ export default function DefensePanel() {
   const boardW = useGameStore((s) => s.board.size.w);
 
   const isOpen = useMemo(
-    () => Boolean(pending && pending.status !== "resolved" && pending.status !== "cancelled"),
-    [pending]
+    () => Boolean(pending && pending.status === "defending"),
+    [pending?.status]
   );
   const defenderSeat: PlayerKey | null = (pending?.defenderSeat as PlayerKey | null) ?? null;
   const mySeat = actorKey;

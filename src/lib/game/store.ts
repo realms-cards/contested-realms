@@ -370,6 +370,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   attachedTo?: { at: CellKey; index: number } | null;
   // Generic numeric counter displayed on the card (e.g., +1 counters)
   counters?: number | null; // absent/0 => no counter badge
+  damage?: number | null;
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -401,6 +402,9 @@ export type GameState = {
   // Multiplayer transport (null => offline)
   transport: GameTransport | null;
   setTransport: (t: GameTransport | null) => void;
+  // Current online match id (null offline). Used for per-match persistence.
+  matchId: string | null;
+  setMatchId: (id: string | null) => void;
   // Local seat/actor (only set in online play UI; null in offline)
   actorKey: PlayerKey | null;
   setActorKey: (key: PlayerKey | null) => void;
@@ -447,7 +451,8 @@ export type GameState = {
     target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null;
     defenderSeat: PlayerKey | null;
     defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>;
-    status: "declared" | "defending" | "resolved" | "cancelled";
+    status: "declared" | "defending" | "committed" | "resolved" | "cancelled";
+    assignment?: Array<{ at: CellKey; index: number; amount: number }> | null;
     createdAt: number;
   } | null;
   // HUD-driven combat UI (lifted from Board for layout-level overlays)
@@ -483,9 +488,13 @@ export type GameState = {
   setDefenderSelection: (
     defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>
   ) => void;
+  commitDefenders: () => void;
+  setDamageAssignment: (asgn: Array<{ at: CellKey; index: number; amount: number }>) => boolean;
   resolveCombat: () => void;
   autoResolveCombat: () => void;
   cancelCombat: () => void;
+  applyDamageToPermanent: (at: CellKey, index: number, amount: number) => void;
+  clearAllDamageForSeat: (seat: PlayerKey) => void;
   // Generic lightweight message handler
   receiveCustomMessage: (msg: CustomMessage) => void;
   // Safe patch sending
@@ -760,6 +769,7 @@ export type GameState = {
     payload: ServerPatchT;
   }>;
   createSnapshot: (title: string, kind?: "auto" | "manual") => void;
+  hydrateSnapshotsFromStorage: () => void;
 };
 
 const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "End"];
@@ -768,6 +778,39 @@ const THRESHOLD_KEYS: (keyof Thresholds)[] = ["air", "water", "earth", "fire"];
 
 function emptyThresholds(): Thresholds {
   return { air: 0, water: 0, earth: 0, fire: 0 };
+}
+
+// --- Local persistence helpers (per-match scoped) ---
+function snapshotsStorageKey(matchId: string | null): string {
+  return matchId && String(matchId).length > 0
+    ? `cr_snapshots:${String(matchId)}`
+    : "cr_snapshots";
+}
+
+function loadSnapshotsFromStorageFor(matchId: string | null): GameState["snapshots"] {
+  if (typeof window === "undefined") return [] as unknown as GameState["snapshots"];
+  try {
+    const raw = window.localStorage.getItem(snapshotsStorageKey(matchId));
+    if (!raw) return [] as unknown as GameState["snapshots"];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as GameState["snapshots"]) : ([] as unknown as GameState["snapshots"]);
+  } catch {
+    return [] as unknown as GameState["snapshots"];
+  }
+}
+
+function saveSnapshotsToStorageFor(matchId: string | null, snaps: GameState["snapshots"]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(snapshotsStorageKey(matchId), JSON.stringify(snaps ?? []));
+  } catch {}
+}
+
+function clearSnapshotsStorageFor(matchId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(snapshotsStorageKey(matchId));
+  } catch {}
 }
 
 function accumulateThresholds(
@@ -1956,11 +1999,16 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     set((s) => {
       if (phase === "Start") {
         try {
-          setTimeout(() => {
-            try {
-              get().createSnapshot(`Turn ${s.turn} start (P${s.currentPlayer})`, "auto");
-            } catch {}
-          }, 0);
+          const turnNow = s.turn;
+          const cpNow = s.currentPlayer;
+          const hasForTurn = Array.isArray(s.snapshots) && s.snapshots.some((ss) => ss.kind === "auto" && ss.turn === turnNow);
+          if (!hasForTurn) {
+            setTimeout(() => {
+              try {
+                get().createSnapshot(`Turn ${turnNow} start (P${cpNow})`, "auto");
+              } catch {}
+            }, 0);
+          }
         } catch {}
       }
       return { phase } as Partial<GameState> as GameState;
@@ -1975,6 +2023,21 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
   // Multiplayer transport (injected by online play UI)
   transport: null,
   transportSubscriptions: [],
+  // Current match id (online) for per-match snapshot persistence
+  matchId: null,
+  setMatchId: (id) => {
+    set((s) => {
+      const prevId = s.matchId ?? null;
+      const nextId = id ?? null;
+      if (prevId === nextId) return s as GameState;
+      const currentSnaps = Array.isArray(s.snapshots) ? (s.snapshots as GameState["snapshots"]) : ([] as unknown as GameState["snapshots"]);
+      // Persist current in-memory snapshots under the previous key to be safe
+      try { saveSnapshotsToStorageFor(prevId, currentSnaps); } catch {}
+      // Load snapshots for the new scope
+      const loaded = loadSnapshotsFromStorageFor(nextId);
+      return { matchId: nextId, snapshots: loaded } as Partial<GameState> as GameState;
+    });
+  },
   // Actor seat for online play; null in offline/hotseat
   actorKey: null,
   setActorKey: (key) => {
@@ -2006,6 +2069,82 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         get().flushPendingPatches();
       } catch {}
     }
+  },
+  commitDefenders: () => {
+    const pc = get().pendingCombat;
+    if (!pc) return;
+    set((s) => {
+      if (!s.pendingCombat) return s as GameState;
+      return {
+        pendingCombat: { ...s.pendingCombat, status: "committed" as const },
+      } as Partial<GameState> as GameState;
+    });
+    const tr = get().transport;
+    if (tr?.sendMessage) {
+      try {
+        tr.sendMessage({
+          type: "combatCommit",
+          id: pc.id,
+          defenders: pc.defenders,
+          target: pc.target ?? null,
+          tile: pc.tile,
+          playerKey: get().actorKey ?? null,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+  },
+  setDamageAssignment: (asgn) => {
+    const pc = get().pendingCombat;
+    if (!pc || pc.status !== "committed") return false;
+    const { permanents, metaByCardId } = get();
+    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+      try {
+        const cardId = (permanents as Permanents)[at]?.[index]?.card?.cardId;
+        const m = cardId ? (metaByCardId as Record<number, { attack: number | null; defence: number | null }>)[Number(cardId)] : undefined;
+        return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+      } catch { return { atk: 0, def: 0 }; }
+    }
+    function getAttachments(at: string, index: number): Permanents[string] {
+      const list = (permanents as Permanents)[at] || [];
+      return list.filter((p) => p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index);
+    }
+    function computeEffectiveAttack(a: { at: CellKey; index: number }): { atk: number; firstStrike: boolean } {
+      const base = getAtkDef(a.at, a.index).atk;
+      const attachments = getAttachments(a.at, a.index);
+      let atk = base; let firstStrike = false; let disabled = false;
+      for (const tkn of attachments) {
+        const nm = (tkn.card?.name || "").toLowerCase();
+        if (nm === "lance") { firstStrike = true; atk += 1; }
+        if (nm === "disabled") { disabled = true; }
+      }
+      if (disabled) atk = 0;
+      if (!Number.isFinite(atk)) atk = 0;
+      return { atk, firstStrike };
+    }
+    const eff = computeEffectiveAttack({ at: pc.attacker.at, index: pc.attacker.index });
+    if (!Array.isArray(asgn)) return false;
+    const defKeys = new Set((pc.defenders || []).map((d) => `${d.at}:${d.index}`));
+    let sum = 0;
+    for (const a of asgn) {
+      if (!a || typeof a !== "object") return false;
+      if (typeof a.at !== "string" || !Number.isFinite(Number(a.index)) || !Number.isFinite(Number(a.amount))) return false;
+      if (!defKeys.has(`${a.at}:${a.index}`)) return false;
+      if (a.amount < 0) return false;
+      sum += Math.floor(Number(a.amount));
+    }
+    if (sum !== Math.floor(eff.atk)) return false;
+    set((s) => {
+      if (!s.pendingCombat) return s as GameState;
+      return { pendingCombat: { ...s.pendingCombat, assignment: asgn.map((x) => ({ at: x.at, index: Number(x.index), amount: Math.floor(Number(x.amount)) })) } } as Partial<GameState> as GameState;
+    });
+    const tr = get().transport;
+    if (tr?.sendMessage) {
+      try {
+        tr.sendMessage({ type: "combatAssign", id: pc.id, assignment: asgn, ts: Date.now() } as unknown as CustomMessage);
+      } catch {}
+    }
+    return true;
   },
   // Match end state
   matchEnded: false,
@@ -2292,6 +2431,11 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
   autoResolveCombat: () => {
     const pc = get().pendingCombat;
     if (!pc) return;
+    if (pc.status !== "committed") return;
+    // Only the attacker may trigger auto resolve
+    const actor = get().actorKey as PlayerKey | null;
+    const wants = (pc.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
+    if (actor && actor !== wants) return;
     // Helpers copied from resolveCombat scope
     const { permanents, metaByCardId, board, players } = get();
     function getAtkDef(at: string, index: number): { atk: number; def: number } {
@@ -2321,58 +2465,89 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     const eff = computeEffectiveAttack({ at: pc.attacker.at, index: pc.attacker.index });
     const aSeat = (pc.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
     let tSeat: PlayerKey | undefined = undefined;
-    // Apply unit kills
-    const sumDef = pc.defenders && pc.defenders.length > 0
-      ? pc.defenders.reduce((s, d) => s + getAtkDef(d.at, d.index).def, 0)
-      : (pc.target && pc.target.kind === "permanent" && pc.target.index != null ? getAtkDef(pc.target.at, pc.target.index).def : 0);
-    const kills = eff.atk >= sumDef && sumDef > 0;
     const killList: Array<{ at: CellKey; index: number; owner: PlayerKey }> = [];
-    if (kills) {
-      if (pc.defenders && pc.defenders.length > 0) {
-        for (const d of pc.defenders) {
-          const ownerSeat = (d.owner === 1 ? "p1" : "p2") as PlayerKey;
-          killList.push({ at: d.at, index: d.index, owner: ownerSeat });
+    const damageList: Array<{ at: CellKey; index: number; amount: number }> = [];
+    // Resolve vs defenders using assignment
+    const defenders = (pc.defenders || []).map((d) => {
+      const stats = getAtkDef(d.at, d.index);
+      const effD = computeEffectiveAttack({ at: d.at, index: d.index });
+      return { ...d, def: stats.def, atk: effD.atk, fs: effD.firstStrike };
+    });
+    const defAssignMap = new Map<string, number>();
+    if (defenders.length > 1) {
+      const asgn = pc.assignment || [];
+      let sum = 0;
+      for (const a of asgn) { const k = `${a.at}:${a.index}`; defAssignMap.set(k, Math.floor(Number(a.amount) || 0)); sum += Math.floor(Number(a.amount) || 0); }
+      if (sum !== Math.floor(eff.atk)) return; // invalid assignment; do nothing
+    } else if (defenders.length === 1) {
+      const only = defenders[0];
+      defAssignMap.set(`${only.at}:${only.index}`, Math.floor(eff.atk));
+    }
+    const attackerDef = getAtkDef(pc.attacker.at, pc.attacker.index).def;
+    let attackerAlive = true;
+    const aliveDefenders = new Set(defenders.map((d) => `${d.at}:${d.index}`));
+    // First strike window
+    if (eff.firstStrike || defenders.some((d) => d.fs)) {
+      // Attacker FS hits first
+      if (eff.firstStrike && defenders.length > 0) {
+        for (const d of defenders) {
+          const k = `${d.at}:${d.index}`;
+          const amt = defAssignMap.get(k) || 0;
+          if (amt >= d.def) { killList.push({ at: d.at, index: d.index, owner: (d.owner === 1 ? "p1" : "p2") as PlayerKey }); aliveDefenders.delete(k); }
+          else if (amt > 0) { damageList.push({ at: d.at, index: d.index, amount: amt }); }
         }
         tSeat = pc.defenderSeat as PlayerKey;
-      } else if (pc.target && pc.target.kind === "permanent" && pc.target.index != null) {
-        // Target unit owner is the opposite of attacker
-        const ownerSeat = pc.defenderSeat as PlayerKey;
-        killList.push({ at: pc.target.at, index: pc.target.index, owner: ownerSeat });
-        tSeat = ownerSeat;
       }
+      // Defender FS hits back simultaneously
+      const fsAtkFromDefs = defenders.filter((d) => d.fs && aliveDefenders.has(`${d.at}:${d.index}`)).reduce((s, d) => s + d.atk, 0);
+      if (fsAtkFromDefs >= attackerDef && attackerDef > 0) attackerAlive = false;
     }
-    // If there are defenders, check whether the attacker dies to their total attack (unless attacker strikes first and kills them)
-    if (pc.defenders && pc.defenders.length > 0) {
-      const sumAtk = pc.defenders.reduce((s, d) => s + computeEffectiveAttack({ at: d.at, index: d.index }).atk, 0);
-      const attackerDef = getAtkDef(pc.attacker.at, pc.attacker.index).def;
-      const attackerWouldDie = sumAtk >= attackerDef && attackerDef > 0;
-      const attackerHasFSAndKills = eff.firstStrike && kills;
-      if (attackerWouldDie && !attackerHasFSAndKills) {
-        killList.push({ at: pc.attacker.at, index: pc.attacker.index, owner: aSeat });
+    // Simultaneous/remaining strikes
+    if (attackerAlive) {
+      for (const d of defenders) {
+        const k = `${d.at}:${d.index}`;
+        if (!aliveDefenders.has(k)) continue;
+        const amt = defAssignMap.get(k) || 0;
+        if (amt >= d.def) { killList.push({ at: d.at, index: d.index, owner: (d.owner === 1 ? "p1" : "p2") as PlayerKey }); aliveDefenders.delete(k); }
+        else if (amt > 0) { damageList.push({ at: d.at, index: d.index, amount: amt }); }
       }
+      tSeat = pc.defenderSeat as PlayerKey;
     }
-    // Apply avatar/site damage
-    if (pc.target && pc.target.kind === "site") {
-      const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
-      if (owner === 1 || owner === 2) {
-        const seat = owner === 1 ? "p1" : "p2";
-        tSeat = seat as PlayerKey;
-        const dd = players[seat].lifeState === "dd";
-        if (!dd) {
-          const dmg = Math.max(0, Math.floor(eff.atk));
-          if (dmg > 0) try { get().addLife(seat as PlayerKey, -dmg); } catch {}
+    if (attackerAlive) {
+      const nonFsDefs = defenders.filter((d) => !d.fs && aliveDefenders.has(`${d.at}:${d.index}`));
+      const sumAtk = nonFsDefs.reduce((s, d) => s + d.atk, 0);
+      if (sumAtk >= attackerDef && attackerDef > 0) attackerAlive = false;
+    }
+    if (!attackerAlive) {
+      killList.push({ at: pc.attacker.at, index: pc.attacker.index, owner: aSeat });
+    }
+    // Apply temporary damage locally (only our seat's permanents)
+    for (const dmg of damageList) {
+      try { get().applyDamageToPermanent(dmg.at, dmg.index, dmg.amount); } catch {}
+    }
+    // If there are no defenders, apply avatar/site damage (with DD rules)
+    if ((pc.defenders?.length || 0) === 0) {
+      if (pc.target && pc.target.kind === "site") {
+        const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
+        if (owner === 1 || owner === 2) {
+          const seat = owner === 1 ? "p1" : "p2";
+          tSeat = seat as PlayerKey;
+          const dd = players[seat].lifeState === "dd";
+          if (!dd) {
+            const dmg = Math.max(0, Math.floor(eff.atk));
+            if (dmg > 0) try { get().addLife(seat as PlayerKey, -dmg); } catch {}
+          }
         }
-      }
-    } else if (pc.target && pc.target.kind === "avatar") {
-      const seat = (pc.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
-      tSeat = seat;
-      const isDD = players[seat].lifeState === "dd";
-      const dmg = Math.max(0, Math.floor(eff.atk));
-      if (isDD) {
-        // Any avatar damage at DD reduces to 0 and ends match
-        try { get().addLife(seat, -1); } catch {}
-      } else if (dmg > 0) {
-        try { get().addLife(seat, -dmg); } catch {}
+      } else if (pc.target && pc.target.kind === "avatar") {
+        const seat = (pc.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+        tSeat = seat;
+        const isDD = players[seat].lifeState === "dd";
+        const dmg = Math.max(0, Math.floor(eff.atk));
+        if (isDD) {
+          try { get().addLife(seat, -1); } catch {}
+        } else if (dmg > 0) {
+          try { get().addLife(seat, -dmg); } catch {}
+        }
       }
     }
     // Apply local kills only for our own seat; send message so opponent applies theirs
@@ -2389,6 +2564,11 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     if (tr?.sendMessage && killList.length > 0) {
       try {
         tr.sendMessage({ type: "combatAutoApply", id: pc.id, kills: killList, ts: Date.now() } as unknown as CustomMessage);
+      } catch {}
+    }
+    if (tr?.sendMessage && damageList.length > 0) {
+      try {
+        tr.sendMessage({ type: "combatDamage", id: pc.id, damage: damageList, ts: Date.now() } as unknown as CustomMessage);
       } catch {}
     }
     get().resolveCombat();
@@ -2419,6 +2599,97 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const text = (msg as { text?: unknown }).text;
       if (typeof text === "string" && text.trim().length > 0) {
         try { get().log(text); } catch {}
+      }
+      return;
+    }
+    if (t === "combatCommit") {
+      const id = (msg as { id?: unknown }).id as string | undefined;
+      const defendersAny = (msg as { defenders?: unknown }).defenders as unknown;
+      const targetAny = (msg as { target?: unknown }).target as unknown;
+      const tileMsg = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+      if (!id) return;
+      let defenders: Array<{ at: CellKey; index: number; owner: 1 | 2; instanceId: string | null }> = [];
+      if (Array.isArray(defendersAny)) {
+        defenders = defendersAny
+          .filter((d) => d && typeof d === "object")
+          .map((d) => d as Record<string, unknown>)
+          .map((rec) => {
+            const at = typeof rec.at === "string" ? (rec.at as string) : null;
+            const idx = Number(rec.index);
+            const ownerVal = Number(rec.owner);
+            const instanceId = typeof rec.instanceId === "string" ? (rec.instanceId as string) : null;
+            if (!at || !Number.isFinite(idx) || !Number.isFinite(ownerVal)) return null;
+            return { at: at as CellKey, index: Number(idx), owner: ownerVal as 1 | 2, instanceId };
+          })
+          .filter(Boolean) as Array<{ at: CellKey; index: number; owner: 1 | 2; instanceId: string | null }>;
+      }
+      let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
+      try {
+        if (targetAny && typeof targetAny === "object") {
+          const rec = targetAny as Record<string, unknown>;
+          const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+          const a = typeof rec.at === "string" ? (rec.at as string) : "";
+          const idx = rec.index == null ? null : Number(rec.index);
+          const ok = k === "permanent" || k === "avatar" || k === "site";
+          if (ok && a && (idx === null || Number.isFinite(idx))) {
+            const kind = k as "permanent" | "avatar" | "site";
+            target = { kind, at: a as CellKey, index: idx };
+          }
+        }
+      } catch {}
+      const x = Number(tileMsg?.x);
+      const y = Number(tileMsg?.y);
+      set((s) => {
+        if (!s.pendingCombat || s.pendingCombat.id !== id) return s as GameState;
+        return {
+          pendingCombat: {
+            ...s.pendingCombat,
+            defenders,
+            target: target ?? s.pendingCombat.target,
+            tile: Number.isFinite(x) && Number.isFinite(y) ? { x, y } : s.pendingCombat.tile,
+            status: "committed",
+          },
+        } as Partial<GameState> as GameState;
+      });
+      return;
+    }
+    if (t === "combatAssign") {
+      const id = (msg as { id?: unknown }).id as string | undefined;
+      const asgnAny = (msg as { assignment?: unknown }).assignment as unknown;
+      if (!id || !Array.isArray(asgnAny)) return;
+      const records = asgnAny.filter((a) => a && typeof a === "object").map((a) => a as Record<string, unknown>);
+      const asgn = records
+        .map((rec) => {
+          const at = typeof rec.at === "string" ? (rec.at as string) : null;
+          const idx = Number(rec.index);
+          const amt = Number(rec.amount);
+          if (!at || !Number.isFinite(idx) || !Number.isFinite(amt)) return null;
+          return { at: at as CellKey, index: Number(idx), amount: Math.max(0, Math.floor(amt)) };
+        })
+        .filter(Boolean) as Array<{ at: CellKey; index: number; amount: number }>;
+      set((s) => {
+        if (!s.pendingCombat || s.pendingCombat.id !== id) return s as GameState;
+        return { pendingCombat: { ...s.pendingCombat, assignment: asgn } } as Partial<GameState> as GameState;
+      });
+      return;
+    }
+    if (t === "combatDamage") {
+      const dmgAny = (msg as { damage?: unknown }).damage as unknown;
+      if (!Array.isArray(dmgAny)) return;
+      const mySeat = get().actorKey as PlayerKey | null;
+      for (const d of dmgAny) {
+        if (!d || typeof d !== "object") continue;
+        const rec = d as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : "";
+        const idx = Number(rec.index);
+        const amt = Number(rec.amount);
+        if (!at || !Number.isFinite(idx) || !Number.isFinite(amt)) continue;
+        try {
+          const ownerNum = (get().permanents as Permanents)[at]?.[Number(idx)]?.owner;
+          const ownerSeat = ownerNum === 1 ? "p1" : ownerNum === 2 ? "p2" : null;
+          if (!mySeat || ownerSeat !== mySeat) continue;
+          get().applyDamageToPermanent(at as CellKey, Number(idx), Math.max(0, Math.floor(amt)));
+        } catch {}
       }
       return;
     }
@@ -2519,7 +2790,14 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         .filter((x): x is { at: CellKey; index: number; owner: 1 | 2; instanceId: string | null } => Boolean(x));
       set((s) => {
         if (!s.pendingCombat || s.pendingCombat.id !== (id as string)) return s as GameState;
-        return { pendingCombat: { ...s.pendingCombat, defenders, status: "defending" } } as Partial<GameState> as GameState;
+        const prev = s.pendingCombat.status;
+        return {
+          pendingCombat: {
+            ...s.pendingCombat,
+            defenders,
+            status: prev === "committed" ? "committed" : "defending",
+          },
+        } as Partial<GameState> as GameState;
       });
       try { get().log(`Acting player selected ${defenders.length} defender${defenders.length === 1 ? "" : "s"}`); } catch {}
       return;
@@ -3730,7 +4008,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
   setLocalPlayerId: (id) => set({ localPlayerId: id ?? null }),
 
   // Snapshots: used for emergency restore (auto) and realm archive (manual)
-  snapshots: [],
+  snapshots: (typeof window !== "undefined" ? loadSnapshotsFromStorageFor(null) : []) as unknown as GameState["snapshots"],
   createSnapshot: (title: string, kind: "auto" | "manual" = "manual") =>
     set((s) => {
       const id = `ss_${Date.now().toString(36)}_${Math.random()
@@ -3780,7 +4058,15 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       try {
         get().log(`Saved snapshot '${item.title}'`);
       } catch {}
+      try {
+        saveSnapshotsToStorageFor(get().matchId ?? null, list as GameState["snapshots"]);
+      } catch {}
       return { snapshots: list } as Partial<GameState> as GameState;
+    }),
+  hydrateSnapshotsFromStorage: () =>
+    set((s) => {
+      const snaps = loadSnapshotsFromStorageFor(s.matchId ?? null);
+      return { snapshots: snaps } as Partial<GameState> as GameState;
     }),
 
   // Apply an incremental server patch into the store.
@@ -3910,8 +4196,12 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       }
 
       // Apply match end result from server so all clients reflect the outcome
+      let shouldClearSnapshots = false;
       if (p.matchEnded !== undefined) {
         next.matchEnded = !!p.matchEnded;
+        if (p.matchEnded === true) {
+          shouldClearSnapshots = true;
+        }
       }
       if (p.winner !== undefined) {
         next.winner = p.winner as PlayerKey | null;
@@ -4013,12 +4303,15 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         next.eventSeq = Math.max(s.eventSeq, Number(p.eventSeq) || 0);
       }
 
-      // Guarded auto-snapshot on Start phase coming from server patches
+      // Guarded auto-snapshot on Start phase or when new turn/seat is observed via server patches
       try {
         const candidatePhase = (p.phase as GameState["phase"]) ?? s.phase;
         const candidateTurn = (p.turn as GameState["turn"]) ?? s.turn;
         const candidateCP = (p.currentPlayer as GameState["currentPlayer"]) ?? s.currentPlayer;
-        if (candidatePhase === "Start") {
+        const newTurn = candidateTurn !== s.turn;
+        const seatChanged = candidateCP !== s.currentPlayer;
+        const enteringStart = candidatePhase === "Start" && s.phase !== "Start";
+        if ((enteringStart || newTurn || seatChanged) && candidatePhase !== "Setup") {
           const prevSnaps = Array.isArray(s.snapshots) ? s.snapshots : [];
           const hasForTurn = prevSnaps.some((ss) => ss.kind === "auto" && ss.turn === candidateTurn);
           if (!hasForTurn) {
@@ -4096,12 +4389,17 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
           });
         } catch {}
       }
-      return {
+      const result = {
         ...s,
         ...next,
         ...extra,
         lastServerTs: lastTs,
       } as Partial<GameState> as GameState;
+      if (shouldClearSnapshots) {
+        try { clearSnapshotsStorageFor(get().matchId ?? null); } catch {}
+        (result as GameState).snapshots = [] as GameState["snapshots"];
+      }
+      return result;
     }),
 
   // Apply a replay patch (simplified version without server communication or timestamps)
@@ -4574,6 +4872,73 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 
+  // --- Temporary combat damage on permanents -------------------------------
+  applyDamageToPermanent: (at, index, amount) =>
+    set((s) => {
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      const cur = arr[index];
+      if (!cur) return s as GameState;
+      const curDmg = Math.max(0, Number(cur.damage || 0));
+      const add = Math.max(0, Math.floor(Number(amount || 0)));
+      const nextDmg = curDmg + add;
+      const next = bumpPermanentVersion({ ...cur, damage: nextDmg });
+      arr[index] = next;
+      per[at] = arr;
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            damage: next.damage ?? null,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  clearAllDamageForSeat: (seat) =>
+    set((s) => {
+      const owner = seat === "p1" ? 1 : 2;
+      const per: Permanents = { ...s.permanents };
+      const updates: PermanentDeltaUpdate[] = [];
+      for (const [cell, list] of Object.entries(per)) {
+        const arr = [...(list || [])];
+        let changed = false;
+        for (let i = 0; i < arr.length; i++) {
+          const cur = arr[i];
+          if (!cur) continue;
+          if (cur.owner !== owner) continue;
+          const dmg = Math.max(0, Number(cur.damage || 0));
+          if (dmg > 0) {
+            const next = bumpPermanentVersion({ ...cur, damage: null });
+            arr[i] = next;
+            updates.push({
+              at: cell as CellKey,
+              entry: {
+                instanceId: next.instanceId ?? undefined,
+                damage: null,
+                version: next.version,
+              },
+            });
+            changed = true;
+          }
+        }
+        if (changed) {
+          per[cell as CellKey] = arr;
+        }
+      }
+      if (updates.length > 0) {
+        const deltaPatch = createPermanentDeltaPatch(updates);
+        if (deltaPatch) get().trySendPatch(deltaPatch);
+        else get().trySendPatch(createPermanentsPatch(per));
+      }
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
   attachTokenToPermanent: (at, tokenIndex, targetIndex) =>
     set((s) => {
       const arr = s.permanents[at] || [];
@@ -5036,7 +5401,24 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         avatars: avatarsNext,
         selectedCard: null,
       });
+      try {
+        get().clearAllDamageForSeat(nextKey);
+      } catch {}
       get().log(`Turn passes to P${nextPlayer}`);
+      // Schedule auto-snapshot for new turn start (offline fallback and echo-safe)
+      try {
+        const snapshotTurn = nextTurn;
+        const snapshotCP = nextPlayer;
+        setTimeout(() => {
+          try {
+            const st = get();
+            const hasForTurn = Array.isArray(st.snapshots) && st.snapshots.some((ss) => ss.kind === "auto" && ss.turn === snapshotTurn);
+            if (!hasForTurn && st.phase !== "Setup") {
+              st.createSnapshot(`Turn ${snapshotTurn} start (P${snapshotCP})`, "auto");
+            }
+          } catch {}
+        }, 0);
+      } catch {}
     } else {
       {
         const patch: ServerPatchT = { phase: nextPhase };
@@ -5096,7 +5478,25 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       selectedCard: null,
       selectedPermanent: null,
     });
+    try {
+      const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
+      get().clearAllDamageForSeat(nextKey);
+    } catch {}
 
+    // Schedule auto-snapshot for the beginning of the new player's turn
+    try {
+      const snapshotTurn = nextTurn;
+      const snapshotCP = nextPlayer;
+      setTimeout(() => {
+        try {
+          const st = get();
+          const hasForTurn = Array.isArray(st.snapshots) && st.snapshots.some((ss) => ss.kind === "auto" && ss.turn === snapshotTurn);
+          if (!hasForTurn && st.phase !== "Setup") {
+            st.createSnapshot(`Turn ${snapshotTurn} start (P${snapshotCP})`, "auto");
+          }
+        } catch {}
+      }, 0);
+    } catch {}
     get().log(`Turn passes to P${nextPlayer}`);
   },
 
@@ -7202,6 +7602,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
   resetGameState: () =>
     set((state) => {
       console.log("[game] Resetting game state for new match");
+      try { clearSnapshotsStorageFor(get().matchId ?? null); } catch {}
       const reset: Partial<GameState> = {
         players: {
           p1: {

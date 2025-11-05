@@ -797,6 +797,9 @@ export default function OnlineProvider({
         } catch {}
 
         setMatch(p.match);
+        try {
+          useGameStore.getState().setMatchId(p.match?.id ?? null);
+        } catch {}
         // Log match start
         if (p.match.status === "waiting") {
           try {
@@ -903,15 +906,20 @@ export default function OnlineProvider({
                 transport.leaveMatch();
               } catch {}
               setMatch(null);
+              try { useGameStore.getState().setMatchId(null); } catch {}
+              return;
             } else {
               setMatch(snap.match);
+              try { useGameStore.getState().setMatchId(snap.match?.id ?? null); } catch {}
             }
           } catch {
             setMatch(snap.match);
+            try { useGameStore.getState().setMatchId(snap.match?.id ?? null); } catch {}
           }
         } else {
           // No match in snapshot means we're not in a game; do not apply snapshot
           allowApplyGame = false;
+          try { useGameStore.getState().setMatchId(null); } catch {}
         }
 
         if (!snap?.lobby && !snap?.match) {
@@ -919,6 +927,7 @@ export default function OnlineProvider({
           setMatch(null);
           setReady(false);
           allowApplyGame = false;
+          try { useGameStore.getState().setMatchId(null); } catch {}
         }
 
         // Apply full game snapshot if provided and allowed

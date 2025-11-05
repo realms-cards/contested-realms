@@ -2251,6 +2251,11 @@ function AuthenticatedDeckEditor() {
 
   // Keep track of card render orders for proper layering
   const nextRenderOrder = useRef(1500);
+
+  // Track interaction order for unstacked mode - maps cardId to layer index
+  const [cardLayerOrder, setCardLayerOrder] = useState<Map<number, number>>(new Map());
+  const nextLayerIndex = useRef(0);
+
   const getTopRenderOrder = useCallback(() => {
     // When sorting is enabled, use much higher temporary render order for dragging
     // This ensures dragged cards appear above stacks during interaction
@@ -2261,10 +2266,24 @@ function AuthenticatedDeckEditor() {
     return nextRenderOrder.current;
   }, [isSortingEnabled]);
 
+  // Bring a card to the front (highest layer)
+  const bringCardToFront = useCallback((cardId: number) => {
+    if (isSortingEnabled) return; // Only applies to unstacked mode
+    setCardLayerOrder(prev => {
+      const newMap = new Map(prev);
+      newMap.set(cardId, nextLayerIndex.current++);
+      return newMap;
+    });
+  }, [isSortingEnabled]);
+
   // Reset render orders when sorting is toggled to ensure proper stacking
   useEffect(() => {
     if (isSortingEnabled) {
       nextRenderOrder.current = 1500; // Reset base render order
+    } else {
+      // Reset layer order when entering unstacked mode
+      nextLayerIndex.current = 0;
+      setCardLayerOrder(new Map());
     }
   }, [isSortingEnabled]); // Only reset when sorting is toggled, not when cards change
 
@@ -2857,7 +2876,7 @@ function AuthenticatedDeckEditor() {
                 return aY - bY; // Lower Y values render first (behind higher Y values)
               });
 
-              return sortedCards.map((p) => {
+              return sortedCards.map((p, cardIndex) => {
                 const isSite = (p.card.type || "")
                   .toLowerCase()
                   .includes("site");
@@ -2872,13 +2891,20 @@ function AuthenticatedDeckEditor() {
 
                 // Calculate base render order like draft-3d
                 // Higher stack index = higher render order = rendered on top
+                // In unstacked mode, use interaction-based layering (most recently interacted cards on top)
+                const layerIndex = !stackPos ? (cardLayerOrder.get(p.id) ?? cardIndex) : 0;
                 const baseRenderOrder = stackPos
                   ? 1600 + stackPos.stackIndex * 10
-                  : 1500;
+                  : 1500 + layerIndex;
 
                 // Calculate Y position with proper stack height like draft-3d
                 // Use stackPos.stackIndex * 0.05 for proper visual stacking height
-                const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
+                // In unstacked mode, use interaction-based layering for Y offset (0.001 per layer = 1mm)
+                // This allows MouseTracker to distinguish overlapping cards by Y position
+                // Most recently interacted cards get higher Y values and appear "on top"
+                const y = stackPos
+                  ? 0.002 + stackPos.stackIndex * 0.05
+                  : 0.002 + layerIndex * 0.001;
 
                 // Calculate stack information for proper hitbox sizing
                 const stackKey = stackPos
@@ -2992,6 +3018,9 @@ function AuthenticatedDeckEditor() {
                       setOrbitLocked(dragging);
                     }}
                     onRelease={(wx, wz, wasDragging) => {
+                      // Bring card to front on any interaction (click or drag)
+                      bringCardToFront(p.id);
+
                       // Click to move between deck/sideboard using the same functions as sidebar
                       if (!wasDragging) {
                         const currentZone = p.zone; // Use explicit zone field
