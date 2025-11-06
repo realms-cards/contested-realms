@@ -102,6 +102,7 @@ export type CardRef = {
   variantId?: number | null;
   name: string;
   type: string | null;
+  subTypes?: string | null; // card subtypes (e.g., "Monument", "Automaton", "Weapon", etc.)
   slug?: string | null; // variant slug for images
   thresholds?: Partial<Thresholds> | null; // cost/requirements
   owner?: PlayerKey | null;
@@ -270,6 +271,17 @@ export type GameState = {
     from: "spellbook" | "atlas",
     count?: number
   ) => void;
+  scryTop: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    decision: "top" | "bottom"
+  ) => void;
+  scryMany: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    count: number,
+    bottomIndexes: number[]
+  ) => void;
   drawOpening: (
     who: PlayerKey,
     spellbookCount?: number,
@@ -432,6 +444,11 @@ export type GameState = {
     at: CellKey,
     tokenIndex: number,
     targetIndex: number
+  ) => void;
+  attachPermanentToAvatar: (
+    at: CellKey,
+    permanentIndex: number,
+    avatarKey: PlayerKey
   ) => void;
   detachToken: (at: CellKey, index: number) => void;
   // Derived selectors (pure getters)

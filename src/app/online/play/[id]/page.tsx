@@ -517,10 +517,23 @@ export default function OnlineMatchPage() {
       return;
     }
 
-    // If the server has provided any game snapshot, treat it as authoritative and
+    // If the server has provided any meaningful game snapshot, treat it as authoritative and
     // do NOT regenerate local decks/hands. This avoids hand re-rolls and deck switches on reload.
-    const hasGameState = !!(match as unknown as { game?: unknown })?.game;
-    if (hasGameState) {
+    // Empty game object {} should not be treated as meaningful state.
+    const hasMeaningfulGameState = (() => {
+      const game = (match as unknown as { game?: unknown })?.game;
+      if (!game || typeof game !== 'object') return false;
+      const keys = Object.keys(game);
+      // Empty object {} is not meaningful
+      if (keys.length === 0) return false;
+      // Check for actual game state properties
+      return keys.some(k =>
+        k === 'zones' || k === 'board' || k === 'permanents' ||
+        k === 'libraries' || k === 'currentPlayer' || k === 'avatars' ||
+        k === 'mulligans' || k === 'd20Rolls'
+      );
+    })();
+    if (hasMeaningfulGameState) {
       console.log("[match] Server game snapshot present; skipping local deck autoload");
       setPrepared(true);
       return;
@@ -887,10 +900,25 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (!matchId || match?.id !== matchId) return;
     if (resyncing) return;
-    const hasServerGameState = !!(match as unknown as { game?: unknown })?.game;
-    if ((match?.status === "waiting" || match?.status === "deck_construction") && !hasServerGameState) {
+    // Check for meaningful server game state (not just empty {})
+    const hasMeaningfulServerGameState = (() => {
+      const game = (match as unknown as { game?: unknown })?.game;
+      if (!game || typeof game !== 'object') return false;
+      const keys = Object.keys(game);
+      if (keys.length === 0) return false;
+      return keys.some(k =>
+        k === 'zones' || k === 'board' || k === 'permanents' ||
+        k === 'libraries' || k === 'currentPlayer' || k === 'avatars' ||
+        k === 'mulligans' || k === 'd20Rolls'
+      );
+    })();
+    // Reset game state for waiting matches to ensure D20 flow always shows
+    // For deck_construction, only reset if there's no meaningful server state (to preserve sealed/draft data)
+    const shouldReset = match?.status === "waiting" ||
+      (match?.status === "deck_construction" && !hasMeaningfulServerGameState);
+    if (shouldReset) {
       // Allow repeated resets even if matchId is the same, by keying on status/snapshot presence
-      const resetKey = `${matchId}:waiting:${hasServerGameState ? 1 : 0}`;
+      const resetKey = `${matchId}:${match?.status}:${hasMeaningfulServerGameState ? 1 : 0}`;
       if (waitingResetDoneRef.current !== resetKey) {
         try {
           useGameStore.getState().resetGameState();
@@ -1150,13 +1178,11 @@ export default function OnlineMatchPage() {
       if (!d20RollingComplete) setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
-      if (!gameActuallyStarted && serverPhase !== "Setup") {
+      if (!gameActuallyStarted && serverPhase !== "Setup" && !d20Complete) {
         try { useGameStore.getState().setPhase("Setup"); } catch {}
       }
     } else if (serverPhase === "Setup" && !d20RollingComplete) {
       desired = true;
-    } else if (d20Complete && !d20RollingComplete) {
-      setD20RollingComplete(true);
     } else if (!prepared) {
       desired = true;
     }

@@ -55,6 +55,7 @@ import {
   type BoardState,
   type RemoteCursorState,
   type GameState,
+  type PlayerKey,
 } from "@/lib/game/store";
 import type {
   RemoteCursorDragMeta,
@@ -262,6 +263,12 @@ export default function Board({
   const decrementPermanentCounter = useScopedStore(
     (s) => s.decrementPermanentCounter
   );
+  const attachTokenToPermanent = useScopedStore(
+    (s) => s.attachTokenToPermanent
+  );
+  const attachPermanentToAvatar = useScopedStore(
+    (s) => s.attachPermanentToAvatar
+  );
 
   // Token attachment dialog state
   const [attachmentDialog, setAttachmentDialog] = useState<{
@@ -305,6 +312,16 @@ export default function Board({
   const isAttachableToken = (tokenName: string): boolean => {
     const name = tokenName.toLowerCase();
     return name === "lance" || name === "stealth" || name === "disabled";
+  };
+
+  // Helper to check if a card is a carryable artifact
+  const isCarryableArtifact = (card: CardRef): boolean => {
+    const cardType = (card.type || "").toLowerCase();
+    const cardSubTypes = (card.subTypes || "").toLowerCase();
+    const isArtifact = cardType.includes("artifact");
+    const isMonument = cardSubTypes.includes("monument");
+    const isAutomaton = cardSubTypes.includes("automaton");
+    return isArtifact && !isMonument && !isAutomaton;
   };
 
   // Site edge placement functions
@@ -2080,23 +2097,37 @@ export default function Board({
                         (draggedCard as CardRef).name || ""
                       ).toLowerCase();
 
-                      // Check if this is an attachable token and there are non-token permanents at this location
-                      if (isToken && isAttachableToken(tokenName)) {
-                        const nonTokenPermanents = toItems.filter(
-                          (item) =>
-                            !(item.card.type || "")
-                              .toLowerCase()
-                              .includes("token")
+                      // Check if this is an attachable token or artifact and there are units at this location
+                      const isAttachable = (isToken && isAttachableToken(tokenName)) ||
+                                           isCarryableArtifact(draggedCard as CardRef);
+
+                      if (isAttachable) {
+                        // Find units (non-token, non-artifact, non-site permanents) at this location
+                        const unitPermanents = toItems.filter(
+                          (item) => {
+                            const itemType = (item.card.type || "").toLowerCase();
+                            return !itemType.includes("token") &&
+                                   !itemType.includes("artifact") &&
+                                   !itemType.includes("site");
+                          }
                         );
 
-                        if (nonTokenPermanents.length > 0) {
-                          // Find the closest permanent based on world position
+                        // Also check if an avatar is on this tile
+                        const avatarOnTile = Object.entries(avatars).find(([_, avatar]) => {
+                          const pos = avatar.pos;
+                          return pos && pos[0] === x && pos[1] === y;
+                        });
+
+                        const hasAttachableTarget = unitPermanents.length > 0 || !!avatarOnTile;
+
+                        if (hasAttachableTarget) {
+                          // Find the closest unit permanent based on world position
                           const spacing = STACK_SPACING;
                           const marginZ = STACK_MARGIN_Z;
                           let closestPermanent = null;
                           let closestDistance = Infinity;
 
-                          nonTokenPermanents.forEach((perm) => {
+                          unitPermanents.forEach((perm) => {
                             const realIdx = toItems.indexOf(perm);
                             const startX =
                               -((Math.max(toItems.length, 1) - 1) * spacing) /
@@ -2126,7 +2157,20 @@ export default function Board({
                             }
                           });
 
-                          // If we found a close permanent (within reasonable distance), show dialog
+                          // If no close permanent but avatar is on tile, use avatar as target
+                          if (!closestPermanent || closestDistance >= TILE_SIZE * 0.5) {
+                            if (avatarOnTile) {
+                              const [avatarKey, avatar] = avatarOnTile;
+                              closestPermanent = {
+                                at: dropKey,
+                                index: -1, // Sentinel for avatar
+                                card: avatar.card || { cardId: 0, variantId: null, name: `${avatarKey.toUpperCase()} Avatar`, type: "Avatar", slug: null },
+                              };
+                              closestDistance = 0; // Force it to be "close enough"
+                            }
+                          }
+
+                          // If we found a close target (unit or avatar), show dialog
                           if (
                             closestPermanent &&
                             closestDistance < TILE_SIZE * 0.5
@@ -2359,7 +2403,15 @@ export default function Board({
                                 const onTile =
                                   attackTargetChoice.tile.x === x &&
                                   attackTargetChoice.tile.y === y;
-                                if (isEnemySite && onTile) {
+                                // Ranged restriction: only allow site targeting when same tile as attacker
+                                let sameTileAsAttacker = false;
+                                try {
+                                  const parts = (attackTargetChoice.attacker.at || "").split(",");
+                                  const ax = Number(parts[0]);
+                                  const ay = Number(parts[1]);
+                                  sameTileAsAttacker = Number.isFinite(ax) && Number.isFinite(ay) && ax === x && ay === y;
+                                } catch {}
+                                if (isEnemySite && onTile && sameTileAsAttacker) {
                                   const label = site.card?.name || "Site";
                                   setAttackConfirm({
                                     tile: attackTargetChoice.tile,
@@ -2371,6 +2423,10 @@ export default function Board({
                                     },
                                     targetLabel: label,
                                   });
+                                  return;
+                                }
+                                // If ranged attempt to target a site (adjacent tile), ignore
+                                if (isEnemySite && onTile && !sameTileAsAttacker) {
                                   return;
                                 }
                               }
@@ -3423,13 +3479,13 @@ export default function Board({
                                 token.card.name || ""
                               ).toLowerCase();
                               const attachTokenDef = TOKEN_BY_NAME[tokenName];
+                              const isArtifact = (token.card.type || "").toLowerCase().includes("artifact");
 
-                              // Position attached tokens slightly offset on the card
-                              const offsetX =
-                                CARD_SHORT *
-                                0.3 *
-                                (attachIdx - (attachedTokens.length - 1) / 2);
-                              const offsetZ = -CARD_LONG * 0.3;
+                              // Position attached tokens/artifacts offset from parent
+                              // Both artifacts and tokens use centered top positioning with horizontal staggering
+                              const offsetMultiplier = 0.3;
+                              const offsetX = CARD_SHORT * offsetMultiplier * (attachIdx - (attachedTokens.length - 1) / 2);
+                              const offsetZ = CARD_LONG * 0.4; // Top of parent card
 
                               if (attachTokenDef) {
                                 const texUrl = tokenTextureUrl(attachTokenDef);
@@ -3447,7 +3503,7 @@ export default function Board({
                                     key={`attached-${attachIdx}`}
                                     position={[
                                       offsetX,
-                                      BASE_CARD_ELEVATION + CARD_THICK * 0.3,
+                                      BASE_CARD_ELEVATION + CARD_THICK * 0.1, // Lower Y so parent is on top
                                       offsetZ,
                                     ]}
                                   >
@@ -3457,9 +3513,33 @@ export default function Board({
                                       forceTextureUrl
                                       width={tokenW}
                                       height={tokenH}
-                                      rotationZ={0}
+                                      rotationZ={rotZ}
                                       elevation={0.005}
-                                      renderOrder={700 + attachIdx}
+                                      renderOrder={50 + attachIdx} // Lower renderOrder so parent renders on top
+                                    />
+                                  </group>
+                                );
+                              } else if (isArtifact && token.card.slug) {
+                                // Render carryable artifacts as mini-cards (60% size, like normal tokens)
+                                const artifactW = CARD_SHORT * 0.6;
+                                const artifactH = CARD_LONG * 0.6;
+
+                                return (
+                                  <group
+                                    key={`attached-${attachIdx}`}
+                                    position={[
+                                      offsetX,
+                                      BASE_CARD_ELEVATION + CARD_THICK * 0.1, // Lower Y so parent is on top
+                                      offsetZ,
+                                    ]}
+                                  >
+                                    <CardPlane
+                                      slug={token.card.slug}
+                                      width={artifactW}
+                                      height={artifactH}
+                                      rotationZ={rotZ}
+                                      elevation={0.005}
+                                      renderOrder={50 + attachIdx} // Lower renderOrder so parent renders on top
                                     />
                                   </group>
                                 );
@@ -4043,6 +4123,56 @@ export default function Board({
                             : "/api/assets/cardback_spellbook.png"
                         }
                       />
+                      {/* Render artifacts attached to this avatar */}
+                      {(() => {
+                        if (!a.pos) return null;
+                        const [avatarX, avatarY] = a.pos;
+                        const avatarKey = `${avatarX},${avatarY}` as CellKey;
+                        const perms = permanents[avatarKey] || [];
+
+                        // Find all artifacts attached to this avatar (index === -1)
+                        const attachedArtifacts = perms
+                          .map((p, idx) => ({ p, idx }))
+                          .filter(({ p }) =>
+                            p.attachedTo &&
+                            p.attachedTo.index === -1 &&
+                            p.attachedTo.at === avatarKey
+                          );
+
+                        if (attachedArtifacts.length === 0) return null;
+
+                        return attachedArtifacts.map(({ p, idx }, attachIdx) => {
+                          const isArtifact = (p.card.type || "").toLowerCase().includes("artifact");
+                          if (!isArtifact || !p.card.slug) return null;
+
+                          // Render artifacts as mini-cards (60% size) at top center with horizontal staggering
+                          const artifactW = CARD_SHORT * 0.6;
+                          const artifactH = CARD_LONG * 0.6;
+                          const offsetMultiplier = 0.3;
+                          const offsetX = CARD_SHORT * offsetMultiplier * (attachIdx - (attachedArtifacts.length - 1) / 2);
+                          const offsetZ = CARD_LONG * 0.4; // Top of avatar card
+
+                          return (
+                            <group
+                              key={`avatar-attached-${idx}`}
+                              position={[
+                                offsetX,
+                                BASE_CARD_ELEVATION + CARD_THICK * 0.1,
+                                offsetZ,
+                              ]}
+                            >
+                              <CardPlane
+                                slug={p.card.slug}
+                                width={artifactW}
+                                height={artifactH}
+                                rotationZ={rotZ}
+                                elevation={0.005}
+                                renderOrder={50 + attachIdx}
+                              />
+                            </group>
+                          );
+                        });
+                      })()}
                     </group>
                   </group>
                 </RigidBody>
@@ -4274,8 +4404,89 @@ export default function Board({
             dropCoords={attachmentDialog.dropCoords}
             fromPile={attachmentDialog.fromPile}
             pileInfo={attachmentDialog.pileInfo}
-            onConfirm={() => setAttachmentDialog(null)}
-            onCancel={() => setAttachmentDialog(null)}
+            onConfirm={() => {
+              const { targetPermanent, dropCoords, fromPile, pileInfo } = attachmentDialog;
+              const isAvatarTarget = targetPermanent.index === -1;
+
+              if (fromPile && pileInfo) {
+                // Restore dragFromPile state so playFromPileTo can access it
+                setDragFromPile(pileInfo);
+
+                // Play card from pile to the board first
+                playFromPileTo(dropCoords.x, dropCoords.y);
+
+                // After playing, we need to find the card in the permanents list and attach it
+                const key = targetPermanent.at;
+                setTimeout(() => {
+                  const perms = useGameStore.getState().permanents[key] || [];
+                  // Find the newly added card (token or artifact)
+                  const cardIndex = perms.findIndex((p) =>
+                    p.card.name === pileInfo.card.name &&
+                    !p.attachedTo
+                  );
+
+                  if (cardIndex >= 0) {
+                    if (isAvatarTarget) {
+                      // Attach to avatar - need to determine which avatar
+                      const [x, y] = key.split(",").map(Number);
+                      const avatarKey = Object.entries(avatars).find(([_, avatar]) => {
+                        const pos = avatar.pos;
+                        return pos && pos[0] === x && pos[1] === y;
+                      })?.[0] as PlayerKey | undefined;
+
+                      if (avatarKey) {
+                        attachPermanentToAvatar(key, cardIndex, avatarKey);
+                      }
+                    } else {
+                      // Attach to permanent
+                      attachTokenToPermanent(key, cardIndex, targetPermanent.index);
+                    }
+                  }
+
+                  // Clear dragFromPile after attachment
+                  setDragFromPile(null);
+                }, 100);
+              } else {
+                // Card is already on board, just attach it
+                const key = targetPermanent.at;
+                const perms = permanents[key] || [];
+                const cardIndex = perms.findIndex(p => p.card.name === attachmentDialog.token.name);
+
+                if (cardIndex >= 0) {
+                  if (isAvatarTarget) {
+                    // Attach to avatar
+                    const [x, y] = key.split(",").map(Number);
+                    const avatarKey = Object.entries(avatars).find(([_, avatar]) => {
+                      const pos = avatar.pos;
+                      return pos && pos[0] === x && pos[1] === y;
+                    })?.[0] as PlayerKey | undefined;
+
+                    if (avatarKey) {
+                      attachPermanentToAvatar(key, cardIndex, avatarKey);
+                    }
+                  } else {
+                    // Attach to permanent
+                    attachTokenToPermanent(key, cardIndex, targetPermanent.index);
+                  }
+                }
+              }
+
+              setAttachmentDialog(null);
+            }}
+            onCancel={() => {
+              const { dropCoords, fromPile, pileInfo } = attachmentDialog;
+
+              if (fromPile && pileInfo) {
+                // Restore dragFromPile state before playing
+                setDragFromPile(pileInfo);
+                // If canceling, play the token normally without attachment
+                playFromPileTo(dropCoords.x, dropCoords.y);
+                // Clear after playing
+                setTimeout(() => setDragFromPile(null), 50);
+              }
+
+              setAttachmentDialog(null);
+            }}
           />
         </Html>
       ) : null}

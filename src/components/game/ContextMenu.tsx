@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
-import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
+import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync, detectRangedAbilitySync } from "@/lib/game/cardAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import type { ContextMenuAction } from "@/lib/game/types";
@@ -21,6 +21,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const actorKey = useGameStore((s) => s.actorKey);
   const toggleTapPermanent = useGameStore((s) => s.toggleTapPermanent);
+  const setAttackTargetChoice = useGameStore((s) => s.setAttackTargetChoice);
   const addCounterOnPermanent = useGameStore((s) => s.addCounterOnPermanent);
   const clearPermanentCounter = useGameStore((s) => s.clearPermanentCounter);
   const toggleTapAvatar = useGameStore((s) => s.toggleTapAvatar);
@@ -38,6 +39,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const addTokenToHand = useGameStore((s) => s.addTokenToHand);
   const attachTokenToTopPermanent = useGameStore((s) => s.attachTokenToTopPermanent);
+  const attachTokenToPermanent = useGameStore((s) => s.attachTokenToPermanent);
+  const attachPermanentToAvatar = useGameStore((s) => s.attachPermanentToAvatar);
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
   
@@ -51,6 +54,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     null
   );
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>([]);
+  // Extra combat actions computed per-open menu (do not store in state to avoid duplication)
+  const extraActions: ContextMenuAction[] = [];
 
   useLayoutEffect(() => {
     if (!contextMenu) {
@@ -205,6 +210,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doToggleCounter: (() => void) | null = null;
   let hasCounter = false;
   let attachedTokens: Array<{ name: string; index: number }> = [];
+  let isCarryableArtifact = false;
 
   if (t.kind === "site") {
     const key = `${t.x},${t.y}`;
@@ -283,6 +289,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     const isToken = (item?.card?.type || "").toLowerCase().includes("token");
+
+    // Check if this is a carryable artifact
+    // Carryable artifacts: type = "Artifact" and subTypes != "Monument" or "Automaton"
+    const cardType = (item?.card?.type || "").toLowerCase();
+    const cardSubTypes = (item?.card?.subTypes || "").toLowerCase();
+    const isArtifact = cardType.includes("artifact");
+    const isMonument = cardSubTypes.includes("monument");
+    const isAutomaton = cardSubTypes.includes("automaton");
+    isCarryableArtifact = isArtifact && !isMonument && !isAutomaton && !item?.attachedTo;
+
     // Counter toggle for non-site tokens and regular permanents
     if (item) {
       hasCounter = (Number(item.counters || 0) > 0);
@@ -333,6 +349,43 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     } else if (isMine) {
+      // Add attachment option for carryable artifacts
+      if (isCarryableArtifact) {
+        // Check for minions (non-artifact permanents) on the same tile
+        const nonArtifactPermanents = arr
+          .map((it, i) => ({ it, i }))
+          .filter(({ it, i }) => {
+            const type = (it.card.type || "").toLowerCase();
+            const isUnit = !type.includes("artifact") && !type.includes("token") && !type.includes("site");
+            return isUnit && i !== t.index; // Exclude the artifact itself
+          });
+
+        // Check if there's an avatar on this tile
+        const ownerKey = item.owner === 1 ? "p1" : "p2";
+        const avatar = avatars[ownerKey];
+        const avatarPos = Array.isArray(avatar?.pos) && avatar.pos.length === 2 ? avatar.pos : null;
+        const [artifactX, artifactY] = t.at.split(",").map(Number);
+        const isOnAvatarTile = avatarPos && avatarPos[0] === artifactX && avatarPos[1] === artifactY;
+
+        // Can attach to minion or avatar
+        const hasAttachableTarget = nonArtifactPermanents.length > 0 || isOnAvatarTile;
+
+        if (hasAttachableTarget) {
+          doAttachToken = () => {
+            if (nonArtifactPermanents.length > 0) {
+              // Attach to the top-most minion on the same tile
+              const targetIdx = nonArtifactPermanents[nonArtifactPermanents.length - 1].i;
+              attachTokenToPermanent(t.at, t.index, targetIdx);
+              log(`Attached artifact '${item.card.name}' to minion`);
+            } else if (isOnAvatarTile) {
+              // Attach to avatar using the new function
+              attachPermanentToAvatar(t.at, t.index, ownerKey);
+            }
+            onClose();
+          };
+        }
+      }
+
       doToHand = () => {
         movePermanentToZone(t.at, t.index, "hand");
         try { playCardFlip(); } catch {}
@@ -359,6 +412,58 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     }
+
+    // Combat actions (same-tile and ranged-adjacent)
+    try {
+      const canAct = isMine && ((actorKey === "p1" && currentPlayer === 1) || (actorKey === "p2" && currentPlayer === 2) || !actorKey);
+      const ownerNum: 1 | 2 | null = item ? (item.owner === 1 ? 1 : item.owner === 2 ? 2 : null) : null;
+      const enemyOwner: 1 | 2 | null = ownerNum === 1 ? 2 : ownerNum === 2 ? 1 : null;
+      const [sx, sy] = t.at.split(",");
+      const x = Number(sx), y = Number(sy);
+      const tileKey = `${x},${y}`;
+      const unitsHere = enemyOwner != null ? (permanents[tileKey] || []).some((p) => p && p.owner === enemyOwner) : false;
+      const siteHereEnemy = enemyOwner != null ? (board.sites[tileKey]?.owner === enemyOwner) : false;
+      const canAttackHere = canAct && !tapped && (unitsHere || siteHereEnemy);
+      const isRanged = !!(item?.card?.name && detectRangedAbilitySync(item.card.name));
+      const boardW = board.size.w, boardH = board.size.h;
+      const neighbors: Array<{ x: number; y: number }> = [
+        { x: x - 1, y },
+        { x: x + 1, y },
+        { x, y: y - 1 },
+        { x, y: y + 1 },
+      ].filter((p) => p.x >= 0 && p.y >= 0 && p.x < boardW && p.y < boardH);
+      const rangedTargets = isRanged && enemyOwner != null && canAct && !tapped
+        ? neighbors.filter((p) => {
+            const k = `${p.x},${p.y}`;
+            const list = permanents[k] || [];
+            return list.some((u) => u && u.owner === enemyOwner);
+          })
+        : [];
+
+      if (canAttackHere && item) {
+        // Insert button to render later
+        extraActions.push({
+          actionId: "__attack_here__",
+          displayText: siteHereEnemy && !unitsHere ? "Attack site here" : "Attack here",
+          isEnabled: true,
+          targetPermanentId: 0,
+          description: "Start an attack on this tile",
+        });
+      }
+
+      if (rangedTargets.length > 0 && item) {
+        for (const p of rangedTargets) {
+          const cellNo = p.y * board.size.w + p.x + 1;
+          extraActions.push({
+            actionId: `__attack_adj_${p.x}_${p.y}__`,
+            displayText: `Ranged attack T${cellNo}`,
+            isEnabled: true,
+            targetPermanentId: 0,
+            description: "Start a ranged attack to an adjacent tile",
+          });
+        }
+      }
+    } catch {}
 
   } else if (t.kind === "avatar") {
     const a = avatars[t.who];
@@ -502,7 +607,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
                     onClick={doAttachToken}
                   >
-                    Attach to permanent
+                    {t.kind === "permanent" && isCarryableArtifact ? "Attach to unit" : "Attach to permanent"}
                   </button>
                 )}
                 {doDetachToken && (
@@ -613,34 +718,89 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             )}
 
             {/* Burrow/Submerge Actions */}
-            {positionActions.length > 0 && (
+            {(positionActions.length > 0 || (Array.isArray(extraActions) && extraActions.length > 0)) && (
               <div className="space-y-2">
-                {positionActions.map((action) => (
-                  <button
-                    key={action.actionId}
-                    className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
-                      action.isEnabled 
-                        ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200" 
-                        : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                    }`}
-                    disabled={!action.isEnabled}
-                    onClick={() => {
-                      if (action.isEnabled && action.newPositionState) {
-                        updatePermanentState(action.targetPermanentId, action.newPositionState);
-                        log(`${header} ${action.displayText.toLowerCase()}${action.newPositionState === 'surface' ? 'ed' : 'ed'}`);
-                        onClose();
-                      }
-                    }}
-                    title={action.description}
-                  >
-                    <span className="text-xs">
-                      {action.icon === 'arrow-down' && '↓'}
-                      {action.icon === 'arrow-up' && '↑'}
-                      {action.icon === 'waves' && '〜'}
-                    </span>
-                    <span>{action.displayText}</span>
-                  </button>
-                ))}
+                {(positionActions.concat(extraActions)).map((action) => {
+                  const isAttackHere = action.actionId === "__attack_here__";
+                  const isAttackAdj = action.actionId.startsWith("__attack_adj_");
+                  if (isAttackHere) {
+                    return (
+                      <button
+                        key={action.actionId}
+                        className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                        onClick={() => {
+                          // Reconstruct context to call attack here
+                          if (t.kind === 'permanent') {
+                            const [sx, sy] = t.at.split(',');
+                            const at = t.at as string;
+                            const idx = t.index as number;
+                            const px = Number(sx), py = Number(sy);
+                            const itm = (permanents[at] || [])[idx];
+                            if (itm) {
+                              setAttackTargetChoice({ tile: { x: px, y: py }, attacker: { at, index: idx, instanceId: itm.instanceId ?? null, owner: itm.owner as 1 | 2 }, candidates: [] });
+                            }
+                          }
+                          onClose();
+                        }}
+                      >
+                        {action.displayText}
+                      </button>
+                    );
+                  }
+                  if (isAttackAdj) {
+                    return (
+                      <button
+                        key={action.actionId}
+                        className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                        onClick={() => {
+                          const prefix = "__attack_adj_";
+                          const rest = action.actionId.startsWith(prefix) ? action.actionId.slice(prefix.length) : "";
+                          const coordsStr = rest.endsWith("__") ? rest.slice(0, -2) : rest;
+                          const parts = coordsStr.split("_");
+                          const ax = Number(parts[0]);
+                          const ay = Number(parts[1]);
+                          if (t.kind === 'permanent') {
+                            const at = t.at as string;
+                            const idx = t.index as number;
+                            const itm = (permanents[at] || [])[idx];
+                            if (itm && Number.isFinite(ax) && Number.isFinite(ay)) {
+                              setAttackTargetChoice({ tile: { x: ax, y: ay }, attacker: { at, index: idx, instanceId: itm.instanceId ?? null, owner: itm.owner as 1 | 2 }, candidates: [] });
+                            }
+                          }
+                          onClose();
+                        }}
+                      >
+                        {action.displayText}
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      key={action.actionId}
+                      className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
+                        action.isEnabled 
+                          ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200" 
+                          : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                      }`}
+                      disabled={!action.isEnabled}
+                      onClick={() => {
+                        if (action.isEnabled && action.newPositionState) {
+                          updatePermanentState(action.targetPermanentId, action.newPositionState);
+                          log(`${header} ${action.displayText.toLowerCase()}${action.newPositionState === 'surface' ? 'ed' : 'ed'}`);
+                          onClose();
+                        }
+                      }}
+                      title={action.description}
+                    >
+                      <span className="text-xs">
+                        {action.icon === 'arrow-down' && '↓'}
+                        {action.icon === 'arrow-up' && '↑'}
+                        {action.icon === 'waves' && '〜'}
+                      </span>
+                      <span>{action.displayText}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 

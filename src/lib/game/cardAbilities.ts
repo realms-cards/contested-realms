@@ -95,3 +95,33 @@ export function detectBurrowSubmergeAbilitiesSync(cardName: string): {
 
   return { canBurrow, canSubmerge };
 }
+
+export async function detectRangedAbility(cardName: string): Promise<boolean> {
+  try {
+    const abilities = await fetchCardAbilities(cardName);
+    const txt = (abilities.rulesText || "").toLowerCase();
+    if (!txt) return false;
+    if (txt.includes("ranged")) return true;
+    if (txt.includes("bow")) return true;
+    if (txt.includes("archer")) return true;
+    if (txt.includes("sling")) return true;
+    if (txt.includes("shoot")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function detectRangedAbilitySync(cardName: string): boolean {
+  const cached = abilityCache.get(cardName.toLowerCase());
+  if (cached && cached.rulesText) {
+    const t = cached.rulesText.toLowerCase();
+    if (t.includes("ranged") || t.includes("bow") || t.includes("archer") || t.includes("sling") || t.includes("shoot")) return true;
+  }
+  const n = cardName.toLowerCase();
+  if (n.includes("archer")) return true;
+  if (n.includes("bow")) return true;
+  if (n.includes("sling")) return true;
+  if (n.includes("ranger")) return true;
+  return false;
+}
