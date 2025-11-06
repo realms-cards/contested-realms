@@ -135,8 +135,8 @@ jobs:
           # Rolling restart servers to avoid downtime (do not restart caddy)
           $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate server1
           wait_healthy sorcery-server-1
-          $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate server2
-          wait_healthy sorcery-server-2
+          # $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate server2
+          # wait_healthy sorcery-server-2
 
           # Basic health check
           sleep 5 || true
