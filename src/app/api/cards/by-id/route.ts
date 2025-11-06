@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
         card: {
           select: {
             name: true,
+            subTypes: true,
             meta: {
               select: {
                 cost: true,
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
         },
       },
     });
-    const byCard = new Map<number, { cardId: number; name: string; slug: string; setName: string; type: string | null; cost: number | null; thresholds: Record<string, number> | null }>();
+    const byCard = new Map<number, { cardId: number; name: string; slug: string; setName: string; type: string | null; subTypes: string | null; cost: number | null; thresholds: Record<string, number> | null }>();
     for (const v of variants) {
       if (!byCard.has(v.cardId)) {
         // Find metadata for this set
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
           setName: v.set.name,
           // Prefer per-set metadata.type (authoritative) then fall back to variant.typeText
           type: (metadata?.type as string | undefined) || v.typeText || null,
+          subTypes: v.card.subTypes || null,
           cost: metadata?.cost ?? null,
           thresholds: metadata?.thresholds as Record<string, number> | null ?? null,
         });
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
           card: {
             select: {
               name: true,
+              subTypes: true,
               meta: {
                 select: {
                   cost: true,
@@ -96,6 +99,7 @@ export async function GET(req: NextRequest) {
             slug: v.slug,
             setName: v.set.name,
             type: (metadata?.type as string | undefined) || v.typeText || null,
+            subTypes: v.card.subTypes || null,
             cost: metadata?.cost ?? null,
             thresholds: metadata?.thresholds as Record<string, number> | null ?? null,
           });

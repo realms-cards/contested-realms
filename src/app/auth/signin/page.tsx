@@ -346,6 +346,8 @@ function SignInContent() {
               <input
                 id="email-signin-input"
                 type="email"
+                name="email"
+                autoComplete="email username"
                 value={emailInput}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   setEmailInput(e.target.value);
@@ -393,6 +395,9 @@ function SignInContent() {
               <form onSubmit={handleTwoFactorSignIn} className="space-y-3">
                 <input
                   type="text"
+                  name="otp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   value={twoFactorCode}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setTwoFactorCode(e.target.value)
@@ -421,6 +426,8 @@ function SignInContent() {
             <form onSubmit={handlePasskeyRegistration} className="space-y-3">
               <input
                 type="text"
+                name="name"
+                autoComplete="name"
                 value={registerDisplayName}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setRegisterDisplayName(e.target.value)
@@ -431,6 +438,8 @@ function SignInContent() {
               />
               <input
                 type="email"
+                name="email"
+                autoComplete="email"
                 value={registerEmail}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setRegisterEmail(e.target.value)

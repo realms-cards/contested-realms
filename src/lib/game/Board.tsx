@@ -3520,7 +3520,7 @@ export default function Board({
                                   </group>
                                 );
                               } else if (isArtifact && token.card.slug) {
-                                // Render carryable artifacts as mini-cards (60% size, like normal tokens)
+                                // Render carryable artifacts as mini-cards (60% size)
                                 const artifactW = CARD_SHORT * 0.6;
                                 const artifactH = CARD_LONG * 0.6;
 
@@ -3529,7 +3529,7 @@ export default function Board({
                                     key={`attached-${attachIdx}`}
                                     position={[
                                       offsetX,
-                                      BASE_CARD_ELEVATION + CARD_THICK * 0.1, // Lower Y so parent is on top
+                                      BASE_CARD_ELEVATION + CARD_THICK * 0.2,
                                       offsetZ,
                                     ]}
                                   >
@@ -3538,8 +3538,8 @@ export default function Board({
                                       width={artifactW}
                                       height={artifactH}
                                       rotationZ={rotZ}
-                                      elevation={0.005}
-                                      renderOrder={50 + attachIdx} // Lower renderOrder so parent renders on top
+                                      elevation={0.006}
+                                      renderOrder={50 + attachIdx}
                                     />
                                   </group>
                                 );

@@ -12,6 +12,7 @@ type ApiCardRef = {
   variantId?: number | null;
   name: string;
   type: string | null;
+  subTypes?: string | null;
   slug?: string | null;
   thresholds?: Record<string, number> | null;
 };
@@ -58,7 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       count: number;
       variantId: number | null;
       variant: { typeText: string | null; slug: string | null } | null;
-      card: { name: string };
+      card: { name: string; subTypes: string | null };
     };
     const cards = deck.cards as DeckCardRow[];
 
@@ -82,13 +83,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     for (const dc of cards) {
       const key = dc.setId ? `${dc.cardId}:${dc.setId}` : null;
       const meta = key ? metaMap.get(key) : undefined;
-      const type = dc.variant?.typeText || meta?.type || null;
+      // Prefer metadata.type (authoritative) over variant.typeText (flavor text)
+      const type = meta?.type || dc.variant?.typeText || null;
       const thresholds = meta?.thresholds ?? null;
       const ref: ApiCardRef = {
         cardId: dc.cardId,
         variantId: dc.variantId ?? null,
         name: dc.card.name,
         type,
+        subTypes: dc.card.subTypes || null,
         slug: dc.variant?.slug ?? null,
         thresholds,
       };

@@ -2565,6 +2565,7 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           await finalizeMatch(match, {
             winnerId: forfeitWinnerId,
             winnerSeat: forfeitWinnerSeat ?? undefined,
+            loserId: player.id,
             reason: "forfeit",
           });
         }

@@ -148,7 +148,17 @@ export default function TournamentInviteModal({
         {/* Search */}
         <div className="mb-4">
           <input
-            type="text"
+            type="search"
+            name="q"
+            autoComplete="off"
+            role="searchbox"
+            inputMode="search"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
+            data-dashlane-ignore="true"
+            data-np-ignore="true"
+            data-keeper-lock="true"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search players by name or email..."

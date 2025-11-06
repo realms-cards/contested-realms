@@ -135,8 +135,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       const qty = Number(dc.count || 0);
       if (dc.zone === 'Spellbook') agg.spellbook += qty;
       if (dc.zone === 'Atlas') agg.atlas += qty;
-      // Avatar detection via variant or CardSetMetadata fallback
-      const type = (dc.variant?.typeText || (dc.setId != null ? metaMap.get(`${dc.cardId}:${dc.setId}`) : undefined) || '').toLowerCase();
+      // Avatar detection - prefer metadata.type over typeText (flavor text)
+      const type = ((dc.setId != null ? metaMap.get(`${dc.cardId}:${dc.setId}`) : undefined) || dc.variant?.typeText || '').toLowerCase();
       if (type.includes('avatar')) {
         agg.avatarCount += qty;
       }
@@ -270,7 +270,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const qty = Number(c.count || 0);
       if (c.zone === 'Spellbook') spellbook += qty;
       if (c.zone === 'Atlas') atlas += qty;
-      const type = (c.variant?.typeText || (c.setId != null ? metaSel.get(`${c.cardId}:${c.setId}`) : undefined) || '').toLowerCase();
+      // Prefer metadata.type over typeText (flavor text)
+      const type = ((c.setId != null ? metaSel.get(`${c.cardId}:${c.setId}`) : undefined) || c.variant?.typeText || '').toLowerCase();
       if (type.includes('avatar')) avatarCount += qty;
     }
     const isConstructedValid = (avatarCount === 1) && (spellbook >= 50) && (atlas >= 30);

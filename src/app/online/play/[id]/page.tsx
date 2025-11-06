@@ -526,12 +526,21 @@ export default function OnlineMatchPage() {
       const keys = Object.keys(game);
       // Empty object {} is not meaningful
       if (keys.length === 0) return false;
-      // Check for actual game state properties
+      // Check for actual game state properties (not just Setup phase data)
+      // d20Rolls with null values is NOT meaningful - it's initial state
+      const hasActualRolls = (() => {
+        try {
+          const rolls = (game as Record<string, unknown>)?.d20Rolls;
+          if (!rolls || typeof rolls !== 'object') return false;
+          const r = rolls as Record<string, unknown>;
+          return (r.p1 != null && r.p1 !== null) || (r.p2 != null && r.p2 !== null);
+        } catch { return false; }
+      })();
       return keys.some(k =>
         k === 'zones' || k === 'board' || k === 'permanents' ||
         k === 'libraries' || k === 'currentPlayer' || k === 'avatars' ||
-        k === 'mulligans' || k === 'd20Rolls'
-      );
+        k === 'mulligans'
+      ) || hasActualRolls;
     })();
     if (hasMeaningfulGameState) {
       console.log("[match] Server game snapshot present; skipping local deck autoload");
@@ -594,6 +603,7 @@ export default function OnlineMatchPage() {
                   slug: string;
                   setName: string;
                   type?: string | null;
+                  subTypes?: string | null;
                   cost?: number | null;
                   thresholds?: Record<string, number> | null;
                 }>;
@@ -606,6 +616,7 @@ export default function OnlineMatchPage() {
                       slug: m.slug,
                       setName: m.setName,
                       type: m.type || null,
+                      subTypes: m.subTypes || null,
                       cost: m.cost ?? null,
                       thresholds: m.thresholds ?? null,
                     }
@@ -630,6 +641,7 @@ export default function OnlineMatchPage() {
                       slug: meta.slug,
                       set: meta.setName,
                       type: meta.type || "",
+                      subTypes: meta.subTypes || null,
                       thresholds: meta.thresholds || null,
                     });
                   }
@@ -781,19 +793,22 @@ export default function OnlineMatchPage() {
           slug: string;
           setName: string;
           type?: string | null;
+          subTypes?: string | null;
         }>;
         console.log("[match] Fetched card metadata for", metas.length, "cards. Sample:", metas.slice(0, 3));
         const byId = new Map<
           number,
-          { name: string; slug: string; setName: string; type: string | null; cost: number | null; thresholds: Record<string, number> | null }
+          { name: string; slug: string; setName: string; type: string | null; subTypes: string | null; cost: number | null; thresholds: Record<string, number> | null }
         >();
         for (const meta of metas) {
           const cardType = meta.type || null;
+          const cardSubTypes = meta.subTypes || null;
           byId.set(Number(meta.cardId), {
             name: meta.name,
             slug: meta.slug,
             setName: meta.setName,
             type: cardType,
+            subTypes: cardSubTypes,
             cost: (meta as { cost?: number | null }).cost ?? null,
             thresholds: (meta as { thresholds?: Record<string, number> | null }).thresholds ?? null,
           });
@@ -825,6 +840,7 @@ export default function OnlineMatchPage() {
               slug: meta.slug,
               set: meta.setName,
               type: meta.type || "",
+              subTypes: meta.subTypes || null,
               thresholds: meta.thresholds || null,
             });
           }
@@ -900,17 +916,26 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (!matchId || match?.id !== matchId) return;
     if (resyncing) return;
-    // Check for meaningful server game state (not just empty {})
+    // Check for meaningful server game state (not just empty {} or Setup phase data)
     const hasMeaningfulServerGameState = (() => {
       const game = (match as unknown as { game?: unknown })?.game;
       if (!game || typeof game !== 'object') return false;
       const keys = Object.keys(game);
       if (keys.length === 0) return false;
+      // d20Rolls with null values is NOT meaningful - it's initial state
+      const hasActualRolls = (() => {
+        try {
+          const rolls = (game as Record<string, unknown>)?.d20Rolls;
+          if (!rolls || typeof rolls !== 'object') return false;
+          const r = rolls as Record<string, unknown>;
+          return (r.p1 != null && r.p1 !== null) || (r.p2 != null && r.p2 !== null);
+        } catch { return false; }
+      })();
       return keys.some(k =>
         k === 'zones' || k === 'board' || k === 'permanents' ||
         k === 'libraries' || k === 'currentPlayer' || k === 'avatars' ||
-        k === 'mulligans' || k === 'd20Rolls'
-      );
+        k === 'mulligans'
+      ) || hasActualRolls;
     })();
     // Reset game state for waiting matches to ensure D20 flow always shows
     // For deck_construction, only reset if there's no meaningful server state (to preserve sealed/draft data)
@@ -1175,14 +1200,22 @@ export default function OnlineMatchPage() {
       if (!prepared && deckLoadedForMatchRef.current === matchId) {
         setPrepared(true);
       }
+      // D20 is complete when phase advances past Setup (to Start or Main)
+      // This ensures both players sync when server advances phase
       if (!d20RollingComplete) setD20RollingComplete(true);
     } else if (match.status === "waiting" || match.status === "deck_construction") {
       desired = true;
       if (!gameActuallyStarted && serverPhase !== "Setup" && !d20Complete) {
         try { useGameStore.getState().setPhase("Setup"); } catch {}
       }
-    } else if (serverPhase === "Setup" && !d20RollingComplete) {
+    } else if (serverPhase === "Setup") {
+      // Always show setup overlay during Setup phase, regardless of local d20RollingComplete
+      // This ensures both players see D20 screen when in Setup phase
       desired = true;
+      // Reset d20RollingComplete if we're back in Setup phase (e.g., after reload)
+      if (d20RollingComplete && !prepared) {
+        setD20RollingComplete(false);
+      }
     } else if (!prepared) {
       desired = true;
     }
@@ -1847,7 +1880,7 @@ const canPanCamera =
                 matchType={match?.matchType as "constructed" | "sealed" | "draft"}
               />
             )
-          ) : !d20RollingComplete ? (
+          ) : serverPhase === "Setup" ? (
             <OnlineD20Screen
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
@@ -1993,6 +2026,9 @@ const canPanCamera =
             winner={finalEndContext ? finalEndContext.winner : winner}
             playerNames={finalEndContext ? finalEndContext.playerNames : playerNames}
             myPlayerKey={finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey}
+            reason={(match as unknown as { endReason?: string | null })?.endReason || undefined}
+            winnerId={(match as unknown as { winnerId?: string | null })?.winnerId || undefined}
+            myPlayerId={myPlayerId || undefined}
             onClose={() => {
               setMatchEndOverlayOpen(false);
             }}

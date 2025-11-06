@@ -5310,11 +5310,27 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const target = arr[targetIndex];
       if (!token || !target) return s;
 
-      // Verify token is actually a token
-      if (!(token.card.type || "").toLowerCase().includes("token")) return s;
+      // Verify token is actually a token OR a carryable artifact
+      const itemType = (token.card.type || "").toLowerCase();
+      const itemSubTypes = (token.card.subTypes || "").toLowerCase();
+      const isToken = itemType.includes("token");
+      const isArtifact = itemType.includes("artifact");
+      const isMonument = itemSubTypes.includes("monument");
+      const isAutomaton = itemSubTypes.includes("automaton");
+      const isCarryableArtifact = isArtifact && !isMonument && !isAutomaton;
 
-      // Verify target is not a token
-      if ((target.card.type || "").toLowerCase().includes("token")) return s;
+      if (!isToken && !isCarryableArtifact) return s;
+
+      // Verify target is not a token or carryable artifact
+      const targetType = (target.card.type || "").toLowerCase();
+      const targetSubTypes = (target.card.subTypes || "").toLowerCase();
+      const targetIsToken = targetType.includes("token");
+      const targetIsArtifact = targetType.includes("artifact");
+      const targetIsMonument = targetSubTypes.includes("monument");
+      const targetIsAutomaton = targetSubTypes.includes("automaton");
+      const targetIsCarryableArtifact = targetIsArtifact && !targetIsMonument && !targetIsAutomaton;
+
+      if (targetIsToken || targetIsCarryableArtifact) return s;
 
       const per: Permanents = { ...s.permanents };
       const list = [...(per[at] || [])];
@@ -5324,8 +5340,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       });
       list[tokenIndex] = updatedToken;
       per[at] = list;
+      const itemLabel = isCarryableArtifact ? "artifact" : "token";
       get().log(
-        `Attached token '${token.card.name}' to permanent '${target.card.name}' at ${at}`
+        `Attached ${itemLabel} '${token.card.name}' to permanent '${target.card.name}' at ${at}`
       );
       const deltaPatch = createPermanentDeltaPatch([
         {

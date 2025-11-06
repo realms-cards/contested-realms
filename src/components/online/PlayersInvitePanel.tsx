@@ -237,6 +237,18 @@ export default function PlayersInvitePanel({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <input
+          type="search"
+          name="q"
+          autoComplete="off"
+          role="searchbox"
+          inputMode="search"
+          aria-autocomplete="list"
+          data-1p-ignore
+          data-lpignore="true"
+          data-bwignore="true"
+          data-dashlane-ignore="true"
+          data-np-ignore="true"
+          data-keeper-lock="true"
           className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
           placeholder="Search players"
           value={query}

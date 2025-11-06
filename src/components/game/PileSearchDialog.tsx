@@ -83,12 +83,42 @@ export default function PileSearchDialog({
           </button>
         </div>
 
-        <div className="mb-4">
+        <div
+          className="mb-4"
+          role="search"
+          data-1p-ignore="true"
+          data-lpignore="true"
+          data-bwignore="true"
+          data-dashlane-ignore="true"
+          data-np-ignore="true"
+          data-keeper-lock="true"
+        >
           <input
-            type="text"
+            id="pile-search-input"
+            type="search"
+            name="pile-search"
+            autoComplete="off section-pile-search"
+            role="searchbox"
+            inputMode="search"
+            aria-autocomplete="list"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="search"
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-bwignore="true"
+            data-dashlane-ignore="true"
+            data-np-ignore="true"
+            data-keeper-lock="true"
+            data-keepassxc-browser-skip="true"
+            data-form-type="other"
             placeholder="Search by name, text, or type..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
+            onMouseDown={(e) => e.currentTarget.removeAttribute('readonly')}
+            readOnly
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             autoFocus
           />
