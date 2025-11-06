@@ -675,7 +675,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     if (!isMine) {
                       return (
                         <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent's)
+                          {token.name} (opponent&apos;s)
                         </div>
                       );
                     }
@@ -696,7 +696,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     if (!isMine) {
                       return (
                         <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent's)
+                          {token.name} (opponent&apos;s)
                         </div>
                       );
                     }
@@ -728,7 +728,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     if (!isMine) {
                       return (
                         <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent's)
+                          {token.name} (opponent&apos;s)
                         </div>
                       );
                     }
@@ -768,7 +768,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     if (!isMine) {
                       return (
                         <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent's)
+                          {token.name} (opponent&apos;s)
                         </div>
                       );
                     }
