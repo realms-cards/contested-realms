@@ -3480,6 +3480,8 @@ export default function Board({
                               ).toLowerCase();
                               const attachTokenDef = TOKEN_BY_NAME[tokenName];
                               const isArtifact = (token.card.type || "").toLowerCase().includes("artifact");
+                              // Find actual index in items array for detachment
+                              const tokenIdx = items.indexOf(token);
 
                               // Position attached tokens/artifacts offset from parent
                               // Both artifacts and tokens use centered top positioning with horizontal staggering
@@ -3520,16 +3522,24 @@ export default function Board({
                                   </group>
                                 );
                               } else if (isArtifact && token.card.slug) {
-                                // Render carryable artifacts as mini-cards (60% size)
+                                // Render carryable artifacts as mini-cards (60% size) underneath parent
                                 const artifactW = CARD_SHORT * 0.6;
                                 const artifactH = CARD_LONG * 0.6;
+                                const artifactHoverKey = `artifact:${key}:${idx}:${attachIdx}`;
+
+                                // Get parent's renderOrder to ensure artifact renders below
+                                const parentRenderOrder = isBurrowed
+                                  ? -10
+                                  : isDraggingPermanent || isSel || isLastTouched
+                                  ? 1000
+                                  : 100;
 
                                 return (
                                   <group
                                     key={`attached-${attachIdx}`}
                                     position={[
                                       offsetX,
-                                      BASE_CARD_ELEVATION + CARD_THICK * 0.2,
+                                      BASE_CARD_ELEVATION - CARD_THICK * 0.05, // Lower Y to appear underneath
                                       offsetZ,
                                     ]}
                                   >
@@ -3538,8 +3548,18 @@ export default function Board({
                                       width={artifactW}
                                       height={artifactH}
                                       rotationZ={rotZ}
-                                      elevation={0.006}
-                                      renderOrder={50 + attachIdx}
+                                      elevation={-0.001} // Negative to render behind parent
+                                      renderOrder={parentRenderOrder - 10 - attachIdx} // Well below parent
+                                      depthWrite={false} // Don't write depth to allow parent to occlude
+                                      interactive={true}
+                                      onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                                        e.stopPropagation();
+                                        beginHoverPreview(token.card, artifactHoverKey);
+                                      }}
+                                      onPointerOut={(e: ThreeEvent<PointerEvent>) => {
+                                        e.stopPropagation();
+                                        clearHoverPreviewDebounced(artifactHoverKey);
+                                      }}
                                     />
                                   </group>
                                 );
@@ -4145,19 +4165,24 @@ export default function Board({
                           const isArtifact = (p.card.type || "").toLowerCase().includes("artifact");
                           if (!isArtifact || !p.card.slug) return null;
 
-                          // Render artifacts as mini-cards (60% size) at top center with horizontal staggering
+                          // Render artifacts as mini-cards (60% size) underneath avatar
                           const artifactW = CARD_SHORT * 0.6;
                           const artifactH = CARD_LONG * 0.6;
                           const offsetMultiplier = 0.3;
                           const offsetX = CARD_SHORT * offsetMultiplier * (attachIdx - (attachedArtifacts.length - 1) / 2);
                           const offsetZ = CARD_LONG * 0.4; // Top of avatar card
+                          const artifactHoverKey = `artifact:avatar:${who}:${idx}`;
+
+                          // Render artifacts underneath avatar
+                          const avatarRenderOrder = isLastTouchedAvatar || isSel || dragAvatar === who ? 1200 : 100;
+                          const artifactRenderOrder = avatarRenderOrder - 10 - attachIdx; // Well below avatar
 
                           return (
                             <group
                               key={`avatar-attached-${idx}`}
                               position={[
                                 offsetX,
-                                BASE_CARD_ELEVATION + CARD_THICK * 0.1,
+                                BASE_CARD_ELEVATION - CARD_THICK * 0.05, // Lower Y to appear underneath
                                 offsetZ,
                               ]}
                             >
@@ -4166,8 +4191,19 @@ export default function Board({
                                 width={artifactW}
                                 height={artifactH}
                                 rotationZ={rotZ}
-                                elevation={0.005}
-                                renderOrder={50 + attachIdx}
+                                elevation={-0.001} // Negative to render behind avatar
+                                renderOrder={artifactRenderOrder}
+                                depthWrite={false}
+                                depthTest={false}
+                                interactive={true}
+                                onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                                  e.stopPropagation();
+                                  beginHoverPreview(p.card, artifactHoverKey);
+                                }}
+                                onPointerOut={(e: ThreeEvent<PointerEvent>) => {
+                                  e.stopPropagation();
+                                  clearHoverPreviewDebounced(artifactHoverKey);
+                                }}
                               />
                             </group>
                           );

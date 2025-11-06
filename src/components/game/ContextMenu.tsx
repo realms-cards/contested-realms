@@ -211,6 +211,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let hasCounter = false;
   let attachedTokens: Array<{ name: string; index: number; type: string | null; subTypes: string | null; tileKey: string }> = [];
   let isCarryableArtifact = false;
+  let isMine = false; // Ownership check for attached items operations
 
   if (t.kind === "site") {
     const key = `${t.x},${t.y}`;
@@ -279,7 +280,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
-    const isMine = !actorKey || (ownerKey && actorKey === ownerKey);
+    isMine = !actorKey || !!(ownerKey && actorKey === ownerKey);
     if (item && isMine) {
       transferTo = item.owner === 1 ? 2 : 1;
       doTransfer = () => {
@@ -479,6 +480,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     tapped = !!a?.tapped;
     const canToggle = !actorKey || actorKey === t.who;
     hasToggle = !!canToggle;
+    isMine = !actorKey || actorKey === t.who;
     if (canToggle) {
       doToggle = () => {
         toggleTapAvatar(t.who);
@@ -669,7 +671,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   const isCarryableArt = isArtifact && !isMonument && !isAutomaton;
 
                   if (isCarryableArt) {
-                    // Carryable artifacts: offer Drop option (like Lance)
+                    // Carryable artifacts: offer Drop option (like Lance) - only if we own the parent
+                    if (!isMine) {
+                      return (
+                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
+                          {token.name} (opponent's)
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={token.index}
@@ -683,7 +692,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       </button>
                     );
                   } else if (isLance) {
-                    // Lance: offer Drop or Destroy options
+                    // Lance: offer Drop or Destroy options - only if we own the parent
+                    if (!isMine) {
+                      return (
+                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
+                          {token.name} (opponent's)
+                        </div>
+                      );
+                    }
                     return (
                       <div key={token.index} className="space-y-1">
                         <button
@@ -708,7 +724,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       </div>
                     );
                   } else if (isStealth || isDisabled) {
-                    // Stealth/Disabled: banish when detached
+                    // Stealth/Disabled: banish when detached - only if we own the parent
+                    if (!isMine) {
+                      return (
+                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
+                          {token.name} (opponent's)
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={token.index}
@@ -741,7 +764,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       </button>
                     );
                   } else {
-                    // Other tokens: simple detach
+                    // Other tokens: simple detach - only if we own the parent
+                    if (!isMine) {
+                      return (
+                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
+                          {token.name} (opponent's)
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={token.index}

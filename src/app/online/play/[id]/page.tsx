@@ -1396,6 +1396,7 @@ const canPanCamera =
   // Compute natural tilt angle for 2D mode and reuse across handlers
   // Keep a small fixed tilt so the board looks flat but avoids strict top-down edge cases
   const naturalTiltAngle = useMemo(() => 0.14, []);
+  const safeMinOrbitTilt = 0.06;
 
   const gotoBaseline = useCallback(
     (mode: "topdown" | "orbit") => {
@@ -1424,9 +1425,14 @@ const canPanCamera =
     [viewPlayerNumber, matW, matH, naturalTiltAngle]
   );
 
-  function resetCamera() {
+  const resetCamera = useCallback(() => {
     gotoBaseline(cameraMode);
-  }
+    if (isSpectatorView) {
+      try {
+        spectatorYawTargetRef.current = 0;
+      } catch {}
+    }
+  }, [gotoBaseline, cameraMode, isSpectatorView]);
 
   // When switching camera mode or when board extents change, rebase the camera
   useEffect(() => {
@@ -1439,6 +1445,20 @@ const canPanCamera =
     });
     return () => cancelAnimationFrame(id);
   }, [cameraMode, gotoBaseline, matW, matH, viewPlayerNumber]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "BUTTON")) {
+        return;
+      }
+      e.preventDefault();
+      resetCamera();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [resetCamera]);
   // Robust: reset drag flags only on hard-cancel contexts (not every pointerup)
   useEffect(() => {
     const reset = () => {
@@ -2187,7 +2207,7 @@ const canPanCamera =
                   minDistance={minDist}
                   maxDistance={maxDist}
                   minPolarAngle={
-                    cameraMode === "topdown" ? naturalTiltAngle : 0
+                    cameraMode === "topdown" ? naturalTiltAngle : safeMinOrbitTilt
                   }
                   maxPolarAngle={
                     cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4
