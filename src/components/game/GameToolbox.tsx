@@ -1,7 +1,8 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Wrench } from "lucide-react";
+import { Wrench, Eye } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
@@ -26,6 +27,7 @@ export default function GameToolbox({
   const zones = useGameStore((s) => s.zones);
   const drawFrom = useGameStore((s) => s.drawFrom);
   const drawFromBottom = useGameStore((s) => s.drawFromBottom);
+  const scryMany = useGameStore((s) => s.scryMany);
   const log = useGameStore((s) => s.log);
   const sendInteraction = useGameStore((s) => s.sendInteractionRequest);
   const interactionLog = useGameStore((s) => s.interactionLog);
@@ -49,7 +51,15 @@ export default function GameToolbox({
   const [peekCount, setPeekCount] = useState<number>(3);
   const [peekFromWhere, setPeekFromWhere] = useState<"top" | "bottom">("top");
 
-  const [banishedSeat, setBanishedSeat] = useState<PlayerKey>(mySeat ?? "p1");
+  const [scrySeat, setScrySeat] = useState<PlayerKey>(mySeat ?? "p1");
+  const [scryPile, setScryPile] = useState<"spellbook" | "atlas">("spellbook");
+  const [scryCount, setScryCount] = useState<number>(1);
+  const [scryOpen, setScryOpen] = useState<boolean>(false);
+  const [scryCards, setScryCards] = useState<CardRef[]>([]);
+  const [scryBottom, setScryBottom] = useState<Record<number, boolean>>({});
+
+  const [actionType, setActionType] = useState<"draw" | "peek" | "scry">("draw");
+  const [fixOpen, setFixOpen] = useState<boolean>(false);
   const [unbanishSeat, setUnbanishSeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [unbanishTarget, setUnbanishTarget] = useState<"hand" | "graveyard">("hand");
 
@@ -107,6 +117,34 @@ export default function GameToolbox({
     };
   }, [transport]);
 
+  const disabledOnlineOpponentScry = isOnline && mySeat != null && scrySeat !== mySeat;
+  const handleOpenScry = () => {
+    if (disabledOnlineOpponentScry) {
+      log("Online: cannot scry opponent piles");
+      return;
+    }
+    const cards = scryPile === "spellbook" ? zones[scrySeat]?.spellbook || [] : zones[scrySeat]?.atlas || [];
+    const cnt = Math.max(1, Math.min(Math.floor(scryCount) || 1, cards.length));
+    if (cnt <= 0) return;
+    setScryCards(cards.slice(0, cnt));
+    setScryBottom({});
+    setScryOpen(true);
+  };
+  const toggleScryIndex = (i: number) => {
+    setScryBottom((prev) => {
+      const next = { ...prev } as Record<number, boolean>;
+      next[i] = !next[i];
+      return next;
+    });
+  };
+  const applyScry = () => {
+    const bottomIndexes = scryCards.map((_, i) => (scryBottom[i] ? i : -1)).filter((i) => i >= 0);
+    if (scryCards.length > 0) {
+      scryMany(scrySeat, scryPile, scryCards.length, bottomIndexes);
+    }
+    setScryOpen(false);
+  };
+
   // Auto-snapshot backstop: once per (turn,currentPlayer) on Start phase
   const lastAutoSnapRef = useRef<string | null>(null);
   useEffect(() => {
@@ -141,7 +179,7 @@ export default function GameToolbox({
     if (!selectedAutoId || !autoSnapshots.some((s) => s.id === selectedAutoId)) {
       setSelectedAutoId(latest.id);
     }
-  }, [autoSnapshots]);
+  }, [autoSnapshots, selectedAutoId]);
 
   // Archive if none; otherwise restore the latest archive (board + cemetery only)
   const handleArchiveOrRestoreRealm = () => {
@@ -202,18 +240,6 @@ export default function GameToolbox({
     }
     applyPatch(raw);
     trySendPatch(raw as ServerPatchT);
-  };
-
-  const handleInspectBanished = () => {
-    const seat = banishedSeat;
-    if (isOnline && mySeat && seat !== mySeat) {
-      const rid = requestConsent("inspectBanished", `Request to look at ${seat.toUpperCase()} banished`, { seat });
-      if (rid) {
-      }
-      return;
-    }
-    const cards = zones[seat]?.banished || [];
-    openSearchDialog(`${seat.toUpperCase()} Banished`, cards, () => {});
   };
 
   const handleUnbanish = () => {
@@ -458,10 +484,10 @@ export default function GameToolbox({
 
   // Realm button presentation
   const isRealmArmed = archiveSnapshots.length > 0;
-  const realmBtnText = isRealmArmed ? "Restore the Realm" : "Archive the Realm";
+  const realmBtnText = isRealmArmed ? "Restore the Realm" : "Archive the Realm (Kairos)";
   const realmBtnClass = isRealmArmed
     ? "w-full rounded bg-amber-600/90 hover:bg-amber-500 py-1"
-    : "w-full rounded bg-white/15 hover:bg-white/25 py-1";
+    : "w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1";
 
   return (
     <div className="absolute bottom-3 right-3 z-20 text-white">
@@ -532,7 +558,6 @@ export default function GameToolbox({
             {/* Instant Spell (request when not your turn) */}
             {showInstantRequest && (
               <div>
-                <div className="font-medium mb-1">Instant: ask to play now</div>
                 <button
                   className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1"
                   onClick={handleRequestInstantSpell}
@@ -542,173 +567,104 @@ export default function GameToolbox({
                 </button>
               </div>
             )}
-            {/* Draw Controls */}
-            <div>
-              <div className="font-medium mb-1">Draw from pile</div>
-              <div className="flex gap-2 mb-1">
-                <select value={drawSeat} onChange={(e) => setDrawSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
+            {/* Combined pile action: Draw / Peek / Scry */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+              <div className="flex flex-wrap gap-2 mb-1">
+                <select value={actionType} onChange={(e) => setActionType(e.target.value as typeof actionType)} className="bg-white/10 rounded px-2 py-1">
+                  <option value="draw">Draw</option>
+                  <option value="peek">Peek</option>
+                  <option value="scry">Scry</option>
+                </select>
+                <select value={drawSeat} onChange={(e) => { const v = e.target.value as PlayerKey; setDrawSeat(v); setPeekSeat(v); setScrySeat(v); }} className="bg-white/10 rounded px-2 py-1">
                   <option value="p1">P1</option>
                   <option value="p2">P2</option>
                 </select>
-                <select value={drawPile} onChange={(e) => setDrawPile(e.target.value as "spellbook" | "atlas")} className="bg-white/10 rounded px-2 py-1">
+                <select value={drawPile} onChange={(e) => { const v = e.target.value as "spellbook" | "atlas"; setDrawPile(v); setPeekPile(v); setScryPile(v); }} className="bg-white/10 rounded px-2 py-1">
                   <option value="spellbook">Spellbook</option>
                   <option value="atlas">Atlas</option>
                 </select>
-                <select value={drawFromWhere} onChange={(e) => setDrawFromWhere(e.target.value as "top" | "bottom")} className="bg-white/10 rounded px-2 py-1">
+                <select value={drawFromWhere} onChange={(e) => { const v = e.target.value as "top" | "bottom"; setDrawFromWhere(v); setPeekFromWhere(v); }} className={`bg-white/10 rounded px-2 py-1 ${actionType === "scry" ? "opacity-50 pointer-events-none" : ""}`}>
                   <option value="top">Top</option>
                   <option value="bottom">Bottom</option>
                 </select>
-                <input type="number" min={1} max={10} value={drawCount} onChange={(e) => setDrawCount(Number(e.target.value))} className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1" />
+                <input type="number" min={1} max={20} value={drawCount} onChange={(e) => { const n = Number(e.target.value); setDrawCount(n); setPeekCount(n); setScryCount(n); }} className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1" />
               </div>
               <button
-                className={`w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40`}
-                onClick={handleDraw}
-                disabled={disabledOnlineOpponentDraw}
-                title={disabledOnlineOpponentDraw ? "Online: cannot draw from opponent piles" : ""}
+                className={`w-full rounded ${actionType === "draw" ? "bg-emerald-600/90 hover:bg-emerald-500" : "bg-white/15 hover:bg-white/25"} py-1 disabled:opacity-40`}
+                onClick={() => {
+                  if (actionType === "draw") return handleDraw();
+                  if (actionType === "peek") return handlePeekPile();
+                  return handleOpenScry();
+                }}
+                disabled={(actionType === "draw" && disabledOnlineOpponentDraw) || (actionType === "scry" && disabledOnlineOpponentScry)}
+                title={(actionType === "draw" && disabledOnlineOpponentDraw) ? "Online: cannot draw from opponent piles" : (actionType === "scry" && disabledOnlineOpponentScry) ? "Online: cannot scry opponent piles" : ""}
               >
-                Draw
+                {actionType === "draw"
+                  ? `Draw • ${drawSeat.toUpperCase()} • ${drawPile} • ${drawFromWhere} • x${drawCount}`
+                  : actionType === "peek"
+                  ? `Peek • ${peekSeat.toUpperCase()} • ${peekPile} • ${peekFromWhere} • x${peekCount}`
+                  : `Scry • ${scrySeat.toUpperCase()} • ${scryPile} • x${scryCount}`}
               </button>
-            </div>
 
-            {/* Peek Pile */}
-            <div>
-              <div className="font-medium mb-1">Look at pile</div>
-              <div className="flex gap-2 mb-1">
-                <select value={peekSeat} onChange={(e) => setPeekSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
-                  <option value="p1">P1</option>
-                  <option value="p2">P2</option>
-                </select>
-                <select value={peekPile} onChange={(e) => setPeekPile(e.target.value as "spellbook" | "atlas")} className="bg-white/10 rounded px-2 py-1">
-                  <option value="spellbook">Spellbook</option>
-                  <option value="atlas">Atlas</option>
-                </select>
-                <select value={peekFromWhere} onChange={(e) => setPeekFromWhere(e.target.value as "top" | "bottom")} className="bg-white/10 rounded px-2 py-1">
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-                </select>
-                <input type="number" min={1} max={20} value={peekCount} onChange={(e) => setPeekCount(Number(e.target.value))} className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1" />
-              </div>
-              <button
-                className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
-                onClick={handlePeekPile}
-              >
-                Look
-              </button>
-            </div>
-
-            {/* Inspect Hand */}
-            <div>
-              <div className="font-medium mb-1">Look at opponent hand</div>
-              <button
-                className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
-                onClick={handleInspectOpponentHand}
-                title={isOnline ? "Requests opponent consent" : "Hotseat: opens the other hand"}
-              >
-                Inspect Hand
-              </button>
-            </div>
-
-            {/* Inspect Banished */}
-            <div>
-              <div className="font-medium mb-1">Look at banished</div>
-              <div className="flex gap-2 mb-1">
-                <select value={banishedSeat} onChange={(e) => setBanishedSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
-                  <option value="p1">P1</option>
-                  <option value="p2">P2</option>
-                </select>
-                <button
-                  className="flex-1 rounded bg-white/15 hover:bg-white/25 py-1"
-                  onClick={handleInspectBanished}
-                >
-                  Inspect
-                </button>
-              </div>
-            </div>
-
-            {/* Return from Banished */}
-            <div>
-              <div className="font-medium mb-1">Return from banished</div>
-              <div className="flex gap-2 mb-1">
-                <select value={unbanishSeat} onChange={(e) => setUnbanishSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
-                  <option value="p1">P1</option>
-                  <option value="p2">P2</option>
-                </select>
-                <select value={unbanishTarget} onChange={(e) => setUnbanishTarget(e.target.value as "hand" | "graveyard")} className="bg-white/10 rounded px-2 py-1">
-                  <option value="hand">Hand</option>
-                  <option value="graveyard">Cemetery</option>
-                </select>
-              </div>
-              <button
-                className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
-                onClick={handleUnbanish}
-              >
-                Return a card
-              </button>
-            </div>
-
-            {/* Snapshots (emergency full-state restore) */}
-            <div>
-              <div className="font-medium mb-1">Snapshots</div>
-              {autoSnapshots.length > 0 && (
-                <select
-                  className="w-full mb-1 rounded bg-white/10 hover:bg-white/15 py-1 text-xs"
-                  value={selectedAutoId ?? ""}
-                  onChange={(e) => setSelectedAutoId(e.target.value || null)}
-                >
-                  {autoSnapshots
-                    .slice(Math.max(autoSnapshots.length - 5, 0))
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {new Date(s.ts).toLocaleTimeString()} · {s.title}
-                      </option>
-                    ))}
-                </select>
-              )}
-              <button
-                className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40"
-                onClick={handleRestoreSnapshot}
-                disabled={autoSnapshots.length === 0}
-                title="Emergency recovery: restores entire game state"
-              >
-                Restore snapshot
-              </button>
-              {autoSnapshots.length > 0 && selectedAutoId && (
-                <div className="mt-1 text-xs opacity-70">
-                  {(() => {
-                    const pool = autoSnapshots.slice(Math.max(autoSnapshots.length - 5, 0));
-                    const sel = pool.find((s) => s.id === selectedAutoId) || pool[pool.length - 1];
-                    return `${new Date(sel.ts).toLocaleTimeString()} · ${sel.title}`;
-                  })()}
+              {scryOpen && (
+                <div className="mt-2 rounded-xl bg-black/30 ring-1 ring-white/10 p-2">
+                  <div className="text-xs opacity-80 mb-2">Click to mark cards to put on bottom</div>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {scryCards.map((c, i) => {
+                      const isSite = (c.type || "").toLowerCase().includes("site");
+                      const onBottom = !!scryBottom[i];
+                      return (
+                        <button key={i} className={`relative flex-shrink-0 ${onBottom ? "ring-2 ring-red-400" : "ring-1 ring-white/20"} rounded overflow-hidden`} onClick={() => toggleScryIndex(i)}>
+                          <div className={`${isSite ? "relative aspect-[4/3] w-20 sm:w-24" : "relative aspect-[3/4] w-16 sm:w-20"}`}>
+                            <Image
+                              src={`/api/images/${c.slug}`}
+                              alt={c.name}
+                              fill
+                              sizes="(max-width: 640px) 80px, 96px"
+                              className={`object-contain ${isSite ? "rotate-90" : ""}`}
+                            />
+                          </div>
+                          {onBottom && (
+                            <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center text-[10px] font-bold">BOTTOM</div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button className="flex-1 rounded bg-emerald-600/90 hover:bg-emerald-500 py-1" onClick={applyScry}>Apply</button>
+                    <button className="flex-1 rounded bg-white/10 hover:bg-white/20 py-1" onClick={() => setScryOpen(false)}>Cancel</button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Realm (single version: archive if none, otherwise restore board + cemetery) */}
-            <div>
-              <div className="font-medium mb-1">Realm</div>
-              <button
-                className={realmBtnClass}
-                onClick={handleArchiveOrRestoreRealm}
-                title={realmBtnText}
-              >
-                {realmBtnText}
-              </button>
+            {/* Inspect Hand + D20 row */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+              <div className="flex gap-2">
+                <button
+                  className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1 inline-flex items-center justify-center gap-2"
+                  onClick={handleInspectOpponentHand}
+                  title={isOnline ? "Requests opponent consent" : "Hotseat: opens the other hand"}
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Inspect Hand</span>
+                </button>
+                <button
+                  className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1"
+                  onClick={startToolboxRoll}
+                  aria-label="Roll D20"
+                  title="Roll D20"
+                >
+                  <div className="flex items-center justify-center">
+                    <Image src="/d20.svg" alt="D20" width={16} height={16} />
+                  </div>
+                </button>
+              </div>
             </div>
 
-            {/* D20 Roll */}
-            <div>
-              <div className="font-medium mb-1">Roll D20</div>
-              <button
-                className="w-full rounded bg-blue-600/90 hover:bg-blue-500 py-1"
-                onClick={startToolboxRoll}
-              >
-                Roll
-              </button>
-            </div>
-
-            {/* Force Burrow/Submerge */}
-            <div>
-              <div className="font-medium mb-1">Burrow/Submerge (force)</div>
+            {/* Force Burrow/Submerge (moved under Inspect/D20) */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
               <div className="grid grid-cols-3 gap-2">
                 <button className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40" onClick={() => handleForcePosition("burrowed")} disabled={!selectedPermanent}>Burrow</button>
                 <button className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40" onClick={() => handleForcePosition("submerged")} disabled={!selectedPermanent}>Submerge</button>
@@ -718,6 +674,88 @@ export default function GameToolbox({
                 <div className="text-xs opacity-70 mt-1">Tip: select a permanent on the board first</div>
               )}
             </div>
+
+            {/* Fix Game State subview */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+              <button
+                className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
+                onClick={() => setFixOpen((v) => !v)}
+                aria-expanded={fixOpen}
+              >
+                {fixOpen ? "Fix Game State ▲" : "Fix Game State ▼"}
+              </button>
+              {fixOpen && (
+                <div className="mt-2 space-y-2">
+                  {/* Return from Banished */}
+                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                    <div className="flex gap-2 mb-1">
+                      <select value={unbanishSeat} onChange={(e) => setUnbanishSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
+                        <option value="p1">P1</option>
+                        <option value="p2">P2</option>
+                      </select>
+                      <select value={unbanishTarget} onChange={(e) => setUnbanishTarget(e.target.value as "hand" | "graveyard")} className="bg-white/10 rounded px-2 py-1">
+                        <option value="hand">Hand</option>
+                        <option value="graveyard">Cemetery</option>
+                      </select>
+                    </div>
+                    <button
+                      className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
+                      onClick={handleUnbanish}
+                    >
+                      Return banished card
+                    </button>
+                  </div>
+
+                  {/* Snapshots */}
+                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                    {autoSnapshots.length > 0 && (
+                      <select
+                        className="w-full mb-1 rounded bg-white/10 hover:bg-white/15 py-1 text-xs"
+                        value={selectedAutoId ?? ""}
+                        onChange={(e) => setSelectedAutoId(e.target.value || null)}
+                      >
+                        {autoSnapshots
+                          .slice(Math.max(autoSnapshots.length - 5, 0))
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {new Date(s.ts).toLocaleTimeString()} · {s.title}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    <button
+                      className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40"
+                      onClick={handleRestoreSnapshot}
+                      disabled={autoSnapshots.length === 0}
+                      title="Emergency recovery: restores entire game state"
+                    >
+                      Restore snapshot
+                    </button>
+                    {autoSnapshots.length > 0 && selectedAutoId && (
+                      <div className="mt-1 text-xs opacity-70">
+                        {(() => {
+                          const pool = autoSnapshots.slice(Math.max(autoSnapshots.length - 5, 0));
+                          const sel = pool.find((s) => s.id === selectedAutoId) || pool[pool.length - 1];
+                          return `${new Date(sel.ts).toLocaleTimeString()} · ${sel.title}`;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Realm (single version: archive if none, otherwise restore board + cemetery) */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+              <button
+                className={realmBtnClass}
+                onClick={handleArchiveOrRestoreRealm}
+                title={realmBtnText}
+              >
+                {realmBtnText}
+              </button>
+            </div>
+            
           </div>
         </div>
       )}
@@ -761,7 +799,7 @@ export default function GameToolbox({
                     setTimeout(() => {
                       setD20Open(false);
                       setD20Value(null);
-                    }, 1200);
+                    }, 3200);
                   }}
                 />
               </Canvas>

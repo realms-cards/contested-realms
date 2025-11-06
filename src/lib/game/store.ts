@@ -180,6 +180,7 @@ export type CardRef = {
   variantId?: number | null;
   name: string;
   type: string | null;
+  subTypes?: string | null; // card subtypes (e.g., "Monument", "Automaton", "Weapon", etc.)
   slug?: string | null; // variant slug for images
   thresholds?: Partial<Thresholds> | null; // cost/requirements
   owner?: PlayerKey | null;
@@ -485,6 +486,11 @@ export type GameState = {
     attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 },
     target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null
   ) => void;
+  // Trigger an intercept offer after a Move Only action by the attacker
+  offerIntercept: (
+    tile: { x: number; y: number },
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }
+  ) => void;
   setDefenderSelection: (
     defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>
   ) => void;
@@ -495,6 +501,7 @@ export type GameState = {
   cancelCombat: () => void;
   applyDamageToPermanent: (at: CellKey, index: number, amount: number) => void;
   clearAllDamageForSeat: (seat: PlayerKey) => void;
+  setTapPermanent: (at: CellKey, index: number, tapped: boolean) => void;
   // Generic lightweight message handler
   receiveCustomMessage: (msg: CustomMessage) => void;
   // Safe patch sending
@@ -539,6 +546,17 @@ export type GameState = {
     who: PlayerKey,
     from: "spellbook" | "atlas",
     count?: number
+  ) => void;
+  scryTop: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    decision: "top" | "bottom"
+  ) => void;
+  scryMany: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    count: number,
+    bottomIndexes: number[]
   ) => void;
   drawOpening: (
     who: PlayerKey,
@@ -699,6 +717,11 @@ export type GameState = {
     at: CellKey,
     tokenIndex: number,
     targetIndex: number
+  ) => void;
+  attachPermanentToAvatar: (
+    at: CellKey,
+    permanentIndex: number,
+    avatarKey: PlayerKey
   ) => void;
   detachToken: (at: CellKey, index: number) => void;
   // Derived selectors (pure getters)
@@ -1218,6 +1241,52 @@ function movePermanentCore(
     added: addedItems,
     updated: updatedItems,
   };
+}
+
+// Move artifacts attached to an avatar when the avatar moves
+function moveAvatarAttachedArtifacts(
+  permanents: Permanents,
+  oldTileKey: CellKey,
+  newTileKey: CellKey
+): { permanents: Permanents; movedArtifacts: PermanentItem[] } {
+  const per: Permanents = { ...permanents };
+  const oldArr = [...(per[oldTileKey] || [])];
+  const movedArtifacts: PermanentItem[] = [];
+
+  // Find artifacts attached to avatar (index === -1)
+  const attachedIndices: number[] = [];
+  oldArr.forEach((perm, idx) => {
+    if (
+      perm.attachedTo &&
+      perm.attachedTo.index === -1 &&
+      perm.attachedTo.at === oldTileKey
+    ) {
+      attachedIndices.push(idx);
+    }
+  });
+
+  // Remove attached artifacts from old tile (from highest index to lowest)
+  attachedIndices.sort((a, b) => b - a).forEach((idx) => {
+    const removed = oldArr.splice(idx, 1)[0];
+    if (removed) {
+      movedArtifacts.push(removed);
+    }
+  });
+
+  // Add attached artifacts to new tile with updated attachment reference
+  const newArr = [...(per[newTileKey] || [])];
+  movedArtifacts.reverse().forEach((artifact) => {
+    const updatedArtifact = bumpPermanentVersion({
+      ...artifact,
+      attachedTo: { at: newTileKey, index: -1 },
+    });
+    newArr.push(updatedArtifact);
+  });
+
+  per[oldTileKey] = oldArr;
+  per[newTileKey] = newArr;
+
+  return { permanents: per, movedArtifacts };
 }
 
 // Build an updated avatars record with a new position/offset for a player.
@@ -2013,6 +2082,43 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       }
       return { phase } as Partial<GameState> as GameState;
     }),
+
+  // Idempotent tap setter for permanents
+  setTapPermanent: (at, index, tapped) =>
+    set((s) => {
+      get().pushHistory();
+      const per: Permanents = { ...s.permanents };
+      const arr = [...(per[at] || [])];
+      if (!arr[index]) return s as GameState;
+      const cur = arr[index];
+      // Owner-only change when online
+      if (s.transport && s.actorKey) {
+        const ownerKey = (cur.owner === 1 ? "p1" : "p2") as PlayerKey;
+        if (s.actorKey !== ownerKey) return s as GameState;
+      }
+      const nextTapVersion = Number(cur.tapVersion ?? 0) + (cur.tapped === tapped ? 0 : 1);
+      const next = bumpPermanentVersion({
+        ...cur,
+        tapped,
+        tapVersion: nextTapVersion,
+      });
+      arr[index] = next;
+      per[at] = arr;
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            tapped: next.tapped,
+            tapVersion: next.tapVersion,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
   // D20 Setup phase
   d20Rolls: { p1: null, p2: null },
   setupWinner: null,
@@ -2079,19 +2185,26 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         pendingCombat: { ...s.pendingCombat, status: "committed" as const },
       } as Partial<GameState> as GameState;
     });
+    // Re-read state after update to get committed status
+    const updated = get().pendingCombat;
+    if (!updated) return;
     const tr = get().transport;
     if (tr?.sendMessage) {
       try {
+        console.log('[commitDefenders] Sending combatCommit with defenders:', updated.defenders?.length || 0);
         tr.sendMessage({
           type: "combatCommit",
-          id: pc.id,
-          defenders: pc.defenders,
-          target: pc.target ?? null,
-          tile: pc.tile,
+          id: updated.id,
+          defenders: updated.defenders,
+          target: updated.target ?? null,
+          tile: updated.tile,
           playerKey: get().actorKey ?? null,
           ts: Date.now(),
         } as unknown as CustomMessage);
-      } catch {}
+        console.log('[commitDefenders] combatCommit sent');
+      } catch (err) {
+        console.error('[commitDefenders] Error sending combatCommit:', err);
+      }
     }
   },
   setDamageAssignment: (asgn) => {
@@ -2102,7 +2215,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       try {
         const cardId = (permanents as Permanents)[at]?.[index]?.card?.cardId;
         const m = cardId ? (metaByCardId as Record<number, { attack: number | null; defence: number | null }>)[Number(cardId)] : undefined;
-        return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+        const atk = Number(m?.attack ?? 0) || 0;
+        const def = Number(m?.defence ?? m?.attack ?? 0) || 0;
+        return { atk, def };
       } catch { return { atk: 0, def: 0 }; }
     }
     function getAttachments(at: string, index: number): Permanents[string] {
@@ -2270,6 +2385,40 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       } catch {}
       return { pendingCombat: pc } as Partial<GameState> as GameState;
     }),
+  offerIntercept: (tile, attacker) => {
+    try {
+      const defenderSeat = (attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+      const key = `${tile.x},${tile.y}` as CellKey;
+      const per = get().permanents as Permanents;
+      const unitsHere = (per[key] || []).filter(
+        (p) => p && p.owner === (attacker.owner === 1 ? 2 : 1) && !p.tapped
+      );
+      let avatarHere = false;
+      try {
+        const av = (get().avatars as GameState["avatars"])[defenderSeat];
+        if (
+          av && Array.isArray(av.pos) && av.pos.length === 2 &&
+          av.pos[0] === tile.x && av.pos[1] === tile.y && !av.tapped
+        ) avatarHere = true;
+      } catch {}
+      if (unitsHere.length === 0 && !avatarHere) return; // no eligible interceptors
+      const id = `cmb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const tr = get().transport;
+      if (tr?.sendMessage) {
+        try {
+          tr.sendMessage({
+            type: "interceptOffer",
+            id,
+            tile,
+            attacker,
+            playerKey: get().actorKey ?? null,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        } catch {}
+      }
+      try { get().log("Intercept offered to defender"); } catch {}
+    } catch {}
+  },
   setDefenderSelection: (defenders) => {
     set((s) => {
       if (!s.pendingCombat) return s as GameState;
@@ -2296,6 +2445,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     const pc = get().pendingCombat;
     if (!pc) return;
     const tr = get().transport;
+    const existing = get().lastCombatSummary;
+    const haveSummary = existing && String(existing.id) === String(pc.id);
     const permanents = get().permanents as Permanents;
     const meta = get().metaByCardId as Record<number, { attack: number | null; defence: number | null; cost: number | null }>;
     const players = get().players;
@@ -2304,7 +2455,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       try {
         const cardId = permanents[at]?.[index]?.card?.cardId;
         const m = cardId ? meta[Number(cardId)] : undefined;
-        return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+        const atk = Number(m?.attack ?? 0) || 0;
+        const def = Number(m?.defence ?? m?.attack ?? 0) || 0; // default health to base power when defence missing
+        return { atk, def };
       } catch { return { atk: 0, def: 0 }; }
     }
     function getAttachments(at: string, index: number): Permanents[string] {
@@ -2383,7 +2536,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     } else {
       const tileKey = (() => { try { return `${pc.tile.x},${pc.tile.y}` as CellKey; } catch { return null as CellKey | null; } })();
       const siteAtTile = tileKey ? (board.sites[tileKey] as SiteTile | undefined) : undefined;
-      if (!pc.target && siteAtTile && siteAtTile.card) {
+      if (!pc.target && siteAtTile && siteAtTile.card && ((pc.defenders?.length || 0) === 0)) {
         const owner = siteAtTile.owner as 1 | 2 | undefined;
         let seat: PlayerKey | null = owner === 1 ? "p1" : owner === 2 ? "p2" : (pc.defenderSeat as PlayerKey | null);
         if (!seat) seat = (pc.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
@@ -2410,8 +2563,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
       }
     }
-    // Set local summary first so the acting player always sees it immediately
-    set({ lastCombatSummary: { id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } } as Partial<GameState> as GameState);
+    // Always send combatResolve for taps/cleanup; only send summary if not already set
     if (tr?.sendMessage) {
       try {
         tr.sendMessage({
@@ -2423,7 +2575,10 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
           target: pc.target ?? null,
           ts: Date.now(),
         } as unknown as CustomMessage);
-        tr.sendMessage({ type: "combatSummary", id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } as unknown as CustomMessage);
+        if (!haveSummary) {
+          set({ lastCombatSummary: { id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } } as Partial<GameState> as GameState);
+          tr.sendMessage({ type: "combatSummary", id: pc.id, text: summary, ts: Date.now(), actor: actorSeat, targetSeat } as unknown as CustomMessage);
+        }
       } catch {}
     }
     set({ pendingCombat: null, attackChoice: null, attackTargetChoice: null, attackConfirm: null } as Partial<GameState> as GameState);
@@ -2434,15 +2589,22 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     if (pc.status !== "committed") return;
     // Only the attacker may trigger auto resolve
     const actor = get().actorKey as PlayerKey | null;
+    const isIntercept = !pc.target;
     const wants = (pc.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
-    if (actor && actor !== wants) return;
+    const defSeat = pc.defenderSeat as PlayerKey | null;
+    if (actor) {
+      const defenderMay = Boolean(isIntercept && defSeat && actor === defSeat);
+      if (!defenderMay && actor !== wants) return;
+    }
     // Helpers copied from resolveCombat scope
     const { permanents, metaByCardId, board, players } = get();
     function getAtkDef(at: string, index: number): { atk: number; def: number } {
       try {
         const cardId = (permanents as Permanents)[at]?.[index]?.card?.cardId;
         const m = cardId ? (metaByCardId as Record<number, { attack: number | null; defence: number | null }>)[Number(cardId)] : undefined;
-        return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+        const atk = Number(m?.attack ?? 0) || 0;
+        const def = Number(m?.defence ?? m?.attack ?? 0) || 0; // default health to base power when defence missing
+        return { atk, def };
       } catch { return { atk: 0, def: 0 }; }
     }
     function getAttachments(at: string, index: number): Permanents[string] {
@@ -2468,17 +2630,44 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     const killList: Array<{ at: CellKey; index: number; owner: PlayerKey }> = [];
     const damageList: Array<{ at: CellKey; index: number; amount: number }> = [];
     // Resolve vs defenders using assignment
-    const defenders = (pc.defenders || []).map((d) => {
+    let defenders = (pc.defenders || []).map((d) => {
       const stats = getAtkDef(d.at, d.index);
       const effD = computeEffectiveAttack({ at: d.at, index: d.index });
       return { ...d, def: stats.def, atk: effD.atk, fs: effD.firstStrike };
     });
+    // If directly attacking a single unit (no intercept defenders), treat that unit as the sole defender
+    if (defenders.length === 0 && pc.target && pc.target.kind === "permanent" && pc.target.index != null) {
+      const ownerNum = (() => { try { return (permanents as Permanents)[pc.target.at]?.[pc.target.index]?.owner as 1 | 2 | undefined; } catch { return undefined; } })();
+      if (ownerNum === 1 || ownerNum === 2) {
+        const statsT = getAtkDef(pc.target.at, pc.target.index);
+        const effT = computeEffectiveAttack({ at: pc.target.at, index: pc.target.index });
+        defenders = [{ at: pc.target.at, index: Number(pc.target.index), owner: ownerNum, def: statsT.def, atk: effT.atk, fs: effT.firstStrike }];
+      }
+    }
     const defAssignMap = new Map<string, number>();
     if (defenders.length > 1) {
       const asgn = pc.assignment || [];
       let sum = 0;
       for (const a of asgn) { const k = `${a.at}:${a.index}`; defAssignMap.set(k, Math.floor(Number(a.amount) || 0)); sum += Math.floor(Number(a.amount) || 0); }
-      if (sum !== Math.floor(eff.atk)) return; // invalid assignment; do nothing
+      if (sum !== Math.floor(eff.atk)) {
+        // If interceptor resolves without assignment, distribute fairly to avoid deadlock
+        const actorSeat = actor as PlayerKey | null;
+        const defenderIsResolving = Boolean(isIntercept && actorSeat && defSeat && actorSeat === defSeat);
+        if (defenderIsResolving) {
+          const total = Math.floor(eff.atk);
+          const count = defenders.length;
+          const base = Math.floor(total / count);
+          let rem = total - base * count;
+          for (const d of defenders) {
+            const k = `${d.at}:${d.index}`;
+            const amt = base + (rem > 0 ? 1 : 0);
+            defAssignMap.set(k, amt);
+            if (rem > 0) rem -= 1;
+          }
+        } else {
+          return; // invalid without fallback; attacker must assign
+        }
+      }
     } else if (defenders.length === 1) {
       const only = defenders[0];
       defAssignMap.set(`${only.at}:${only.index}`, Math.floor(eff.atk));
@@ -2514,8 +2703,15 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       tSeat = pc.defenderSeat as PlayerKey;
     }
     if (attackerAlive) {
-      const nonFsDefs = defenders.filter((d) => !d.fs && aliveDefenders.has(`${d.at}:${d.index}`));
-      const sumAtk = nonFsDefs.reduce((s, d) => s + d.atk, 0);
+      const anyFS = eff.firstStrike || defenders.some((d) => d.fs);
+      let sumAtk = 0;
+      if (anyFS) {
+        const nonFsAlive = defenders.filter((d) => !d.fs && aliveDefenders.has(`${d.at}:${d.index}`));
+        sumAtk = nonFsAlive.reduce((s, d) => s + d.atk, 0);
+      } else {
+        // Pure simultaneous: include defenders even if they died from attacker's damage
+        sumAtk = defenders.reduce((s, d) => s + d.atk, 0);
+      }
       if (sumAtk >= attackerDef && attackerDef > 0) attackerAlive = false;
     }
     if (!attackerAlive) {
@@ -2526,7 +2722,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       try { get().applyDamageToPermanent(dmg.at, dmg.index, dmg.amount); } catch {}
     }
     // If there are no defenders, apply avatar/site damage (with DD rules)
-    if ((pc.defenders?.length || 0) === 0) {
+    if (defenders.length === 0) {
       if (pc.target && pc.target.kind === "site") {
         const owner = board.sites[pc.target.at]?.owner as 1 | 2 | undefined;
         if (owner === 1 || owner === 2) {
@@ -2552,33 +2748,131 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     }
     // Apply local kills only for our own seat; send message so opponent applies theirs
     const mySeat = get().actorKey as PlayerKey | null;
+    console.log('[autoResolveCombat] killList:', killList, 'mySeat:', mySeat);
     if (mySeat) {
       for (const k of killList) {
+        console.log('[autoResolveCombat] checking kill:', k, 'k.owner === mySeat?', k.owner === mySeat);
         if (k.owner === mySeat) {
-          try { get().movePermanentToZone(k.at, k.index, "graveyard"); } catch {}
+          console.log('[autoResolveCombat] Applying kill to graveyard:', k.at, k.index);
+          try { get().movePermanentToZone(k.at, k.index, "graveyard"); } catch (err) {
+            console.error('[autoResolveCombat] Error moving to graveyard:', err);
+          }
+        }
+      }
+    } else {
+      // Hotseat/spectator: apply all kills locally
+      for (const k of killList) {
+        try { get().movePermanentToZone(k.at, k.index, "graveyard"); } catch (err) {
+          console.error('[autoResolveCombat] Error moving to graveyard (hotseat):', err);
         }
       }
     }
-    // Compose and broadcast summary via the existing path
+    // Compose and broadcast actual outcome summary before final resolve
     const tr = get().transport;
     if (tr?.sendMessage && killList.length > 0) {
       try {
+        console.log('[autoResolveCombat] Sending combatAutoApply with kills:', killList);
         tr.sendMessage({ type: "combatAutoApply", id: pc.id, kills: killList, ts: Date.now() } as unknown as CustomMessage);
-      } catch {}
+      } catch (err) {
+        console.error('[autoResolveCombat] Error sending combatAutoApply:', err);
+      }
     }
     if (tr?.sendMessage && damageList.length > 0) {
       try {
         tr.sendMessage({ type: "combatDamage", id: pc.id, damage: damageList, ts: Date.now() } as unknown as CustomMessage);
       } catch {}
     }
+
+    // Build an actual outcome summary
+    const attackerNameForSummary = (() => {
+      try { return (get().permanents as Permanents)[pc.attacker.at]?.[pc.attacker.index]?.card?.name || "Attacker"; } catch { return "Attacker"; }
+    })();
+    // Helper to get permanent name safely
+    const getNameAt = (at: CellKey, index: number): string => {
+      try { return (get().permanents as Permanents)[at]?.[index]?.card?.name || "Unit"; } catch { return "Unit"; }
+    };
+    const deadDefs = killList
+      .filter((k) => k.owner === (pc.defenderSeat as PlayerKey))
+      .map((k) => {
+        try { return (get().permanents as Permanents)[k.at]?.[k.index]?.card?.name || null; } catch { return null; }
+      })
+      .filter(Boolean) as string[];
+    const attackerDied = killList.some((k) => k.at === pc.attacker.at && k.index === pc.attacker.index);
+    // Compute damage dealt to attacker (FS + simultaneous)
+    let damageFromDefsFS = 0;
+    let damageFromDefsSim = 0;
+    try {
+      const anyFS = eff.firstStrike || defenders.some((d) => d.fs);
+      const fsContrib = defenders
+        .filter((d) => d.fs && aliveDefenders.has(`${d.at}:${d.index}`))
+        .reduce((s, d) => s + d.atk, 0);
+      damageFromDefsFS = fsContrib;
+      if (anyFS) {
+        if (attackerAlive) {
+          const nonFsContribAlive = defenders
+            .filter((d) => !d.fs && aliveDefenders.has(`${d.at}:${d.index}`))
+            .reduce((s, d) => s + d.atk, 0);
+          damageFromDefsSim = nonFsContribAlive;
+        }
+      } else {
+        // Pure simultaneous: defenders deal damage even if they die in this exchange
+        damageFromDefsSim = defenders.reduce((s, d) => s + d.atk, 0);
+      }
+    } catch {}
+    const totalDmgToAttacker = Math.max(0, Math.floor(damageFromDefsFS + damageFromDefsSim));
+    let text = '';
+    if ((pc.defenders?.length || 0) > 0) {
+      // Unit-vs-unit outcome with names
+      const defenderNames = (pc.defenders || []).map((d) => getNameAt(d.at, d.index));
+      if (attackerDied) {
+        const source = defenderNames.length === 1 ? `defending "${defenderNames[0]}"` : `defenders ${defenderNames.map((n) => `"${n}"`).join(', ')}`;
+        text = `Attacker "${attackerNameForSummary}" takes ${totalDmgToAttacker} damage from ${source} and is destroyed`;
+        if (deadDefs.length > 0) {
+          text += `; defenders lost: ${deadDefs.join(', ')}`;
+        }
+      } else if (deadDefs.length > 0) {
+        text = `Defenders destroyed: ${deadDefs.join(', ')}`;
+      } else {
+        const dmgDefs = damageList
+          .map((d) => {
+            const nm = getNameAt(d.at as CellKey, d.index);
+            return `${nm}: ${d.amount}`;
+          });
+        text = dmgDefs.length ? `Damage dealt to defenders: ${dmgDefs.join(', ')}` : `No casualties`;
+      }
+    } else if (pc.target && pc.target.kind === 'avatar') {
+      const seat: PlayerKey = pc.attacker.owner === 1 ? 'p2' : 'p1';
+      const before = Number((players as GameState['players'])[seat]?.life ?? 0);
+      const after = Number((get().players as GameState['players'])[seat]?.life ?? before);
+      const dmg = Math.max(0, before - after);
+      const avatarName = (() => { try { return (get().avatars?.[seat]?.card?.name as string) || 'Avatar'; } catch { return 'Avatar'; } })();
+      if (before > 0 && after === 0) {
+        text = `Attacker "${attackerNameForSummary}" strikes Avatar "${avatarName}" for lethal damage (reaches Death's Door)`;
+      } else {
+        text = `Attacker "${attackerNameForSummary}" strikes Avatar "${avatarName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
+      }
+    } else if (pc.target && pc.target.kind === 'site') {
+      const owner = (get().board.sites[pc.target.at]?.owner as 1 | 2 | undefined);
+      const seat: PlayerKey | null = owner === 1 ? 'p1' : owner === 2 ? 'p2' : null;
+      const siteName = (() => { try { return pc.target && pc.target.at ? (get().board.sites[pc.target.at as CellKey]?.card?.name || 'Site') : 'Site'; } catch { return 'Site'; } })();
+      if (seat) {
+        const before = Number((players as GameState['players'])[seat]?.life ?? 0);
+        const after = Number((get().players as GameState['players'])[seat]?.life ?? before);
+        const dmg = Math.max(0, before - after);
+        text = `Attacker "${attackerNameForSummary}" strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
+      } else {
+        text = `Attacker "${attackerNameForSummary}" strikes Site "${siteName}"`;
+      }
+    } else {
+      text = attackerDied ? `Attacker "${attackerNameForSummary}" is destroyed` : `No casualties`;
+    }
+    // Set and broadcast summary once
+    set({ lastCombatSummary: { id: pc.id, text, ts: Date.now(), actor: aSeat, targetSeat: tSeat } } as Partial<GameState> as GameState);
+    if (tr?.sendMessage) {
+      try { tr.sendMessage({ type: 'combatSummary', id: pc.id, text, ts: Date.now(), actor: aSeat, targetSeat: tSeat } as unknown as CustomMessage); } catch {}
+    }
+    // Now finalize (taps, clear pending, etc.)
     get().resolveCombat();
-    // Enhance local banner with actor/target seat
-    const now = Date.now();
-    set((s) => {
-      const cur = s.lastCombatSummary;
-      if (!cur || cur.ts < now - 100) return s as GameState;
-      return { lastCombatSummary: { ...cur, actor: aSeat, targetSeat: tSeat } } as Partial<GameState> as GameState;
-    });
   },
   cancelCombat: () => {
     const pc = get().pendingCombat;
@@ -2595,6 +2889,36 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     if (!msg || typeof msg !== "object") return;
     const t = (msg as { type?: unknown }).type;
     if (typeof t !== "string" || !t) return;
+    if (t === "interceptOffer") {
+      const idRaw = (msg as { id?: unknown }).id as string | undefined;
+      const tile = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+      const attacker = (msg as { attacker?: unknown }).attacker as { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown } | undefined;
+      const x = Number(tile?.x);
+      const y = Number(tile?.y);
+      const at = typeof attacker?.at === "string" ? (attacker?.at as string) : null;
+      const indexVal = Number(attacker?.index);
+      const ownerVal = Number(attacker?.owner);
+      const id = typeof idRaw === "string" && idRaw ? idRaw : `cmb_${Date.now().toString(36)}`;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+      const defenderSeat = (ownerVal === 1 ? "p2" : "p1") as PlayerKey;
+      const mySeat = get().actorKey as PlayerKey | null;
+      // Show intercept chooser only to defender seat, or in hotseat (no actorKey)
+      if (mySeat && mySeat !== defenderSeat) return;
+      set({
+        pendingCombat: {
+          id: String(id),
+          tile: { x, y },
+          attacker: { at, index: Number(indexVal), instanceId: (attacker?.instanceId as string | null) ?? null, owner: (ownerVal as 1 | 2) },
+          target: null,
+          defenderSeat,
+          defenders: [],
+          status: "defending",
+          createdAt: Date.now(),
+        },
+      } as Partial<GameState> as GameState);
+      try { get().log("Intercept opportunity: choose interceptors"); } catch {}
+      return;
+    }
     if (t === "toast") {
       const text = (msg as { text?: unknown }).text;
       if (typeof text === "string" && text.trim().length > 0) {
@@ -2695,17 +3019,23 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     }
     if (t === "combatAutoApply") {
       const killsAny = (msg as { kills?: unknown }).kills as unknown;
+      console.log('[combatAutoApply] Received kills:', killsAny);
       if (Array.isArray(killsAny)) {
         const mySeat = get().actorKey as PlayerKey | null;
+        console.log('[combatAutoApply] mySeat:', mySeat, 'kills count:', killsAny.length);
         for (const k of killsAny) {
           if (!k || typeof k !== "object") continue;
           const rec = k as Record<string, unknown>;
           const at = typeof rec.at === "string" ? (rec.at as string) : "";
           const idx = Number(rec.index);
           const owner = (rec.owner as PlayerKey | undefined) ?? undefined;
+          console.log('[combatAutoApply] Processing kill:', { at, idx, owner }, 'owner === mySeat?', owner === mySeat);
           if (!at || !Number.isFinite(idx)) continue;
           if (!mySeat || owner !== mySeat) continue;
-          try { get().movePermanentToZone(at as CellKey, Number(idx), "graveyard"); } catch {}
+          console.log('[combatAutoApply] Applying kill to graveyard:', at, idx);
+          try { get().movePermanentToZone(at as CellKey, Number(idx), "graveyard"); } catch (err) {
+            console.error('[combatAutoApply] Error moving to graveyard:', err);
+          }
         }
       }
       return;
@@ -2808,22 +3138,14 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const defendersAny = (msg as { defenders?: unknown }).defenders as unknown[] | undefined;
       const targetAny = (msg as { target?: unknown }).target as unknown;
       const tileMsg = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
-      // Toggle taps for visuals
+      // Set taps idempotently: attacker taps on attack; defenders remain unchanged
       const aAt = typeof attacker?.at === "string" ? (attacker.at as string) : null;
       const aIdx = Number(attacker?.index);
       if (aAt && Number.isFinite(aIdx)) {
-        try { get().toggleTapPermanent(aAt, Number(aIdx)); } catch {}
+        try { get().setTapPermanent(aAt as CellKey, Number(aIdx), true); } catch {}
       }
+      // Do not tap defenders here
       const defenders = Array.isArray(defendersAny) ? defendersAny : [];
-      for (const d of defenders) {
-        if (!d || typeof d !== "object") continue;
-        const rec = d as Record<string, unknown>;
-        const at = typeof rec.at === "string" ? (rec.at as string) : null;
-        const idx = Number(rec.index);
-        if (at && Number.isFinite(idx)) {
-          try { get().toggleTapPermanent(at, Number(idx)); } catch {}
-        }
-      }
       // Compute a fallback summary so both players see outcome even if a separate summary message is delayed
       try {
         const permanents = get().permanents as Permanents;
@@ -2834,7 +3156,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
           try {
             const cardId = permanents[at]?.[index]?.card?.cardId;
             const m = cardId ? meta[Number(cardId)] : undefined;
-            return { atk: Number(m?.attack ?? 0) || 0, def: Number(m?.defence ?? 0) || 0 };
+            const atk = Number(m?.attack ?? 0) || 0;
+            const def = Number(m?.defence ?? m?.attack ?? 0) || 0;
+            return { atk, def };
           } catch { return { atk: 0, def: 0 }; }
         }
         function getAttachments(at: string, index: number): Permanents[string] {
@@ -2946,7 +3270,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
             return null as CellKey | null;
           })();
           const siteAtTile = tileKey ? (board.sites[tileKey] as SiteTile | undefined) : undefined;
-          if (!target && siteAtTile && siteAtTile.card) {
+          if (!target && siteAtTile && siteAtTile.card && defenders.length === 0) {
             const owner = siteAtTile.owner as 1 | 2 | undefined;
             let seat: PlayerKey | null = owner === 1 ? "p1" : owner === 2 ? "p2" : (get().pendingCombat?.defenderSeat as PlayerKey | null);
             if (!seat) seat = ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
@@ -2966,9 +3290,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
               targetDef = getAtkDef(target.at, target.index).def;
               targetName = getPermName(target.at, target.index);
             } else if (defenders.length > 0) {
-              const defRecs: Record<string, unknown>[] = defenders
-                .filter((d) => d && typeof d === "object")
-                .map((d) => d as Record<string, unknown>);
+              const defRecs: Record<string, unknown>[] = (defenders as unknown[])
+                .filter((d: unknown) => d && typeof d === "object")
+                .map((d: unknown) => d as Record<string, unknown>);
               targetDef = 0;
               for (const rec of defRecs) {
                 const at = typeof rec.at === "string" ? (rec.at as string) : "";
@@ -3011,6 +3335,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
   pendingInteractionId: null,
   acknowledgedInteractionIds: {},
   activeInteraction: null,
+  appliedCombatResolves: {},
   setTransport: (t) => {
     const prev = get().transportSubscriptions;
     if (Array.isArray(prev) && prev.length > 0) {
@@ -4835,6 +5160,45 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       return { zones: zonesNext } as Partial<GameState> as GameState;
     }),
 
+  scryMany: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    count: number,
+    bottomIndexes: number[]
+  ) =>
+    set((s) => {
+      const pile0 = from === "spellbook" ? s.zones[who].spellbook : s.zones[who].atlas;
+      const pile = [...pile0];
+      const k = Math.max(0, Math.min(pile.length, Math.floor(count || 0)));
+      if (k <= 0 || pile.length === 0) return s as GameState;
+      const top = pile.slice(0, k).map((c) => prepareCardForSeat(c, who));
+      const rest = pile.slice(k).map((c) => prepareCardForSeat(c, who));
+      const setBottom = new Set(
+        Array.isArray(bottomIndexes)
+          ? bottomIndexes.filter((i) => Number.isInteger(i) && i >= 0 && i < k)
+          : []
+      );
+      const keepers = top.filter((_, i) => !setBottom.has(i));
+      const movers = top.filter((_, i) => setBottom.has(i));
+      const nextPile = [...keepers, ...rest, ...movers];
+      const zonesNext = {
+        ...s.zones,
+        [who]: {
+          ...s.zones[who],
+          ...(from === "spellbook" ? { spellbook: nextPile } : { atlas: nextPile }),
+        },
+      } as GameState["zones"];
+      get().log(`${who.toUpperCase()} scries ${k} from ${from} (${movers.length} to bottom)`);
+      {
+        const tr = get().transport;
+        if (tr) {
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) get().trySendPatch(zonePatch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
+    }),
+
   attachTokenToTopPermanent: (at, index) =>
     set((s) => {
       const arr = s.permanents[at] || [];
@@ -4970,6 +5334,49 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
             instanceId: list[tokenIndex].instanceId ?? undefined,
             attachedTo: { at, index: targetIndex },
             version: list[tokenIndex].version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
+
+  attachPermanentToAvatar: (at: CellKey, permanentIndex: number, avatarKey: PlayerKey) =>
+    set((s) => {
+      const arr = s.permanents[at] || [];
+      const permanent = arr[permanentIndex];
+      if (!permanent) return s;
+
+      // Verify avatar exists and is on the same tile
+      const avatar = s.avatars[avatarKey as PlayerKey];
+      if (!avatar || !avatar.pos) return s;
+      const [avatarX, avatarY] = avatar.pos;
+      const [permX, permY] = at.split(",").map(Number);
+      if (avatarX !== permX || avatarY !== permY) {
+        get().log(`Cannot attach to avatar: not on same tile`);
+        return s;
+      }
+
+      // Use index -1 as sentinel for "attached to avatar"
+      const per: Permanents = { ...s.permanents };
+      const list = [...(per[at] || [])];
+      const updatedPermanent = bumpPermanentVersion({
+        ...permanent,
+        attachedTo: { at, index: -1 },
+      });
+      list[permanentIndex] = updatedPermanent;
+      per[at] = list;
+      get().log(
+        `Attached '${permanent.card.name}' to ${avatarKey.toUpperCase()} Avatar`
+      );
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: list[permanentIndex].instanceId ?? undefined,
+            attachedTo: { at, index: -1 },
+            version: list[permanentIndex].version,
           },
         },
       ]);
@@ -5360,37 +5767,52 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     const nextIdx = (idx + 1) % phases.length;
     const nextPhase = phases[nextIdx];
     const passTurn = nextPhase === "Start"; // wrapped around
-    // On new turn start: untap all sites of the active player and clear selection
+    // On new turn start: untap next player's permanents and clear selection
     if (passTurn) {
       const nextPlayer = s.currentPlayer === 1 ? 2 : 1;
       const nextTurn = s.turn + 1;
-      // Sites do not tap in Sorcery; do not modify board.sites.tapped
-      // Untap all permanents owned by the next player
+      // Sites do not tap in Sorcery
+      // Untap all permanents owned by the next player and collect deltas
       const permanents: Permanents = { ...s.permanents };
+      const updates: PermanentDeltaUpdate[] = [];
       for (const cellKey of Object.keys(permanents)) {
         const cellPermanents = permanents[cellKey] || [];
-        permanents[cellKey] = cellPermanents.map((permanent) =>
-          permanent.owner === nextPlayer
-            ? { ...permanent, tapped: false }
-            : permanent
-        );
+        const arr = [...cellPermanents];
+        let changed = false;
+        for (let i = 0; i < arr.length; i++) {
+          const cur = arr[i];
+          if (!cur) continue;
+          if (cur.owner !== nextPlayer) continue;
+          if (cur.tapped) {
+            const next = bumpPermanentVersion({ ...cur, tapped: false });
+            arr[i] = next;
+            updates.push({
+              at: cellKey as CellKey,
+              entry: {
+                instanceId: next.instanceId ?? undefined,
+                tapped: false,
+                tapVersion: next.tapVersion,
+                version: next.version,
+              },
+            });
+            changed = true;
+          }
+        }
+        if (changed) permanents[cellKey] = arr;
       }
 
-      // Untap the next player's avatar
+      // Untap the next player's avatar locally
       const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
       const avatarsNext = {
         ...s.avatars,
         [nextKey]: { ...s.avatars[nextKey], tapped: false },
       } as GameState["avatars"];
 
+      // Send authoritative patch for phase/turn and tapped=false deltas
       {
-        // Server is authoritative for start-of-turn untaps (permanents and avatar).
-        // Only send phase/currentPlayer/turn; server will broadcast the full authoritative patch.
-        const patch: ServerPatchT = {
-          phase: nextPhase,
-          currentPlayer: nextPlayer,
-          turn: nextTurn,
-        };
+        const base: ServerPatchT = { phase: nextPhase, currentPlayer: nextPlayer, turn: nextTurn };
+        const deltaPatch = updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
+        const patch: ServerPatchT = deltaPatch ? { ...deltaPatch, ...base } : base;
         get().trySendPatch(patch);
       }
       set({
@@ -5442,15 +5864,33 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
     const nextPlayer = cur === 1 ? 2 : 1;
     const nextTurn = s.turn + 1;
 
-    // Untap all permanents owned by the next player
+    // Untap all permanents owned by the next player and collect deltas
     const permanents: Permanents = { ...s.permanents };
+    const updates: PermanentDeltaUpdate[] = [];
     for (const cellKey of Object.keys(permanents)) {
       const cellPermanents = permanents[cellKey] || [];
-      permanents[cellKey] = cellPermanents.map((permanent) =>
-        permanent.owner === nextPlayer
-          ? { ...permanent, tapped: false }
-          : permanent
-      );
+      const arr = [...cellPermanents];
+      let changed = false;
+      for (let i = 0; i < arr.length; i++) {
+        const cur = arr[i];
+        if (!cur) continue;
+        if (cur.owner !== nextPlayer) continue;
+        if (cur.tapped) {
+          const next = bumpPermanentVersion({ ...cur, tapped: false });
+          arr[i] = next;
+          updates.push({
+            at: cellKey as CellKey,
+            entry: {
+              instanceId: next.instanceId ?? undefined,
+              tapped: false,
+              tapVersion: next.tapVersion,
+              version: next.version,
+            },
+          });
+          changed = true;
+        }
+      }
+      if (changed) permanents[cellKey] = arr;
     }
 
     // Untap the next player's avatar
@@ -5460,13 +5900,11 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       [nextKey]: { ...s.avatars[nextKey], tapped: false },
     } as GameState["avatars"];
 
+    // Send authoritative patch (phase/turn and tapped=false deltas)
     {
-      // Server will compute start-of-turn untaps. Send only phase/currentPlayer/turn.
-      const patch: ServerPatchT = {
-        phase: "Main",
-        currentPlayer: nextPlayer,
-        turn: nextTurn,
-      };
+      const base: ServerPatchT = { phase: "Main", currentPlayer: nextPlayer, turn: nextTurn };
+      const deltaPatch = updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
+      const patch: ServerPatchT = deltaPatch ? { ...deltaPatch, ...base } : base;
       get().trySendPatch(patch);
     }
     set({
@@ -5759,6 +6197,43 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       return {
         zones: zonesNext,
       } as Partial<GameState> as GameState;
+    }),
+
+  scryTop: (
+    who: PlayerKey,
+    from: "spellbook" | "atlas",
+    decision: "top" | "bottom"
+  ) =>
+    set((s) => {
+      const secondSeat: PlayerKey = s.currentPlayer === 1 ? "p2" : "p1";
+      if (who !== secondSeat) return s as GameState;
+      if (s.phase !== "Start") return s as GameState;
+      const pile = from === "spellbook" ? [...s.zones[who].spellbook] : [...s.zones[who].atlas];
+      if (pile.length === 0) return s as GameState;
+      const top = pile[0];
+      let nextPile = pile;
+      if (decision === "bottom" && top) {
+        nextPile = pile.slice(1);
+        nextPile.push(prepareCardForSeat(top, who));
+      }
+      const zonesNext = {
+        ...s.zones,
+        [who]: {
+          ...s.zones[who],
+          ...(from === "spellbook" ? { spellbook: nextPile } : { atlas: nextPile }),
+        },
+      } as GameState["zones"]; 
+      get().log(
+        `${who.toUpperCase()} scries ${from} (${decision === "bottom" ? "bottom" : "top"}${top?.name ? ": " + top.name : ""})`
+      );
+      {
+        const tr = get().transport;
+        if (tr) {
+          const zonePatch = createZonesPatchFor(zonesNext, who);
+          if (zonePatch) get().trySendPatch(zonePatch);
+        }
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
     }),
 
   drawOpening: (who, spellbookCount?: number, atlasCount?: number) =>
@@ -7104,12 +7579,30 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       get().pushHistory();
       const w = s.board.size.w;
       const cellNo = y * w + x + 1;
+
+      // Get old avatar position
+      const oldPos = s.avatars[who]?.pos;
+      const oldKey = oldPos ? `${oldPos[0]},${oldPos[1]}` as CellKey : null;
+      const newKey = `${x},${y}` as CellKey;
+
+      // Update avatar position
       const avatars = buildAvatarUpdate(
         s,
         who,
         [x, y] as [number, number],
         null
       );
+
+      // Move attached artifacts if avatar moved to a different tile
+      let permanents = s.permanents;
+      if (oldKey && oldKey !== newKey) {
+        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey, newKey);
+        permanents = result.permanents;
+        if (result.movedArtifacts.length > 0) {
+          get().log(`Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`);
+        }
+      }
+
       get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
       {
         const tr = get().transport;
@@ -7119,10 +7612,17 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
               [who]: { pos: [x, y] as [number, number], offset: null },
             } as GameState["avatars"],
           };
+          // Also send permanents patch if artifacts moved
+          if (oldKey && oldKey !== newKey) {
+            patch.permanents = {
+              [oldKey]: permanents[oldKey] || [],
+              [newKey]: permanents[newKey] || [],
+            };
+          }
           get().trySendPatch(patch);
         }
       }
-      return { avatars } as Partial<GameState> as GameState;
+      return { avatars, permanents } as Partial<GameState> as GameState;
     }),
 
   moveAvatarToWithOffset: (who, x, y, offset) =>
@@ -7130,12 +7630,30 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       get().pushHistory();
       const w = s.board.size.w;
       const cellNo = y * w + x + 1;
+
+      // Get old avatar position
+      const oldPos = s.avatars[who]?.pos;
+      const oldKey = oldPos ? `${oldPos[0]},${oldPos[1]}` as CellKey : null;
+      const newKey = `${x},${y}` as CellKey;
+
+      // Update avatar position
       const avatars = buildAvatarUpdate(
         s,
         who,
         [x, y] as [number, number],
         offset
       );
+
+      // Move attached artifacts if avatar moved to a different tile
+      let permanents = s.permanents;
+      if (oldKey && oldKey !== newKey) {
+        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey, newKey);
+        permanents = result.permanents;
+        if (result.movedArtifacts.length > 0) {
+          get().log(`Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`);
+        }
+      }
+
       get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
       {
         const tr = get().transport;
@@ -7146,10 +7664,17 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
               [who]: { pos: [x, y] as [number, number], offset },
             } as GameState["avatars"],
           };
+          // Also send permanents patch if artifacts moved
+          if (oldKey && oldKey !== newKey) {
+            patch.permanents = {
+              [oldKey]: permanents[oldKey] || [],
+              [newKey]: permanents[newKey] || [],
+            };
+          }
           get().trySendPatch(patch);
         }
       }
-      return { avatars } as Partial<GameState> as GameState;
+      return { avatars, permanents } as Partial<GameState> as GameState;
     }),
 
   setAvatarOffset: (who, offset) =>

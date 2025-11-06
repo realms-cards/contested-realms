@@ -306,8 +306,9 @@ export default function Piles3D({
                       const store = useGameStore.getState();
                       if (dragFromHand && store.selectedCard) {
                         const card = store.selectedCard;
-                        const cardType = card.card?.type;
-                        if (key === "spellbook" && cardType === "Spell") {
+                        const typeLc = String(card.card?.type || "").toLowerCase();
+                        // Non-site cards go to Spellbook
+                        if (key === "spellbook" && !typeLc.includes("site")) {
                           const pileName = "Spellbook";
                           openPlacementDialog(
                             card.card?.name || "Card",
@@ -324,7 +325,8 @@ export default function Piles3D({
                               store.closePlacementDialog();
                             }
                           );
-                        } else if (key === "atlas" && cardType === "Site") {
+                        // Site cards go to Atlas
+                        } else if (key === "atlas" && typeLc.includes("site")) {
                           const pileName = "Atlas";
                           openPlacementDialog(
                             card.card?.name || "Card",
@@ -405,9 +407,10 @@ export default function Piles3D({
                   const store = useGameStore.getState();
                   if (dragFromHand && store.selectedCard) {
                     const card = store.selectedCard;
-                    const cardType = card.card?.type;
+                    const typeLc = String(card.card?.type || "").toLowerCase();
 
-                    if (key === "spellbook" && cardType === "Spell") {
+                    // Non-site cards go to Spellbook
+                    if (key === "spellbook" && !typeLc.includes("site")) {
                       const pileName = "Spellbook";
                       openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
                         store.moveCardFromHandToPile(owner, "spellbook", position);
@@ -416,7 +419,8 @@ export default function Piles3D({
                         store.clearSelection();
                         store.closePlacementDialog();
                       });
-                    } else if (key === "atlas" && cardType === "Site") {
+                    // Site cards go to Atlas
+                    } else if (key === "atlas" && typeLc.includes("site")) {
                       const pileName = "Atlas";
                       openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
                         store.moveCardFromHandToPile(owner, "atlas", position);

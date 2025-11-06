@@ -29,6 +29,8 @@ export default function OfflineMulliganScreen({
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
   const { playCardSelect, playTurnGong } = useSound();
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const scryTop = useGameStore((s) => s.scryTop);
 
   // Set screen type for video overlay (no RTC in offline)
   useEffect(() => {
@@ -38,6 +40,14 @@ export default function OfflineMulliganScreen({
 
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
+  const isSecondSeat = (() => {
+    const first = currentPlayer === 1 ? "p1" : "p2";
+    return myPlayerKey === (first === "p1" ? "p2" : "p1");
+  })();
+  const [scryOpen, setScryOpen] = useState<boolean>(false);
+  const [scryPile, setScryPile] = useState<"spellbook" | "atlas">("spellbook");
+  const [scryReveal, setScryReveal] = useState<boolean>(false);
+  const topCard = (zones[myPlayerKey]?.[scryPile] || [])[0];
 
   const handleCardClick = (index: number) => {
     if (done || myMulligans === 0) return;
@@ -62,6 +72,11 @@ export default function OfflineMulliganScreen({
 
   const handleFinalize = () => {
     if (submitted) return;
+    if (isSecondSeat && !scryOpen) {
+      setScryReveal(false);
+      setScryOpen(true);
+      return;
+    }
     setSubmitted(true);
     setDone(true);
     try {
@@ -77,6 +92,95 @@ export default function OfflineMulliganScreen({
         <div className="text-sm opacity-80">
           Playing as: <span className="font-medium text-blue-400">{playerNames[myPlayerKey]}</span>
         </div>
+
+      {scryOpen && isSecondSeat && (
+        <div className="mt-4 bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-semibold">Second Player Scry</div>
+            <div className="text-xs opacity-80">Choose a pile and keep on top or put on bottom</div>
+          </div>
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              className={`rounded px-3 py-1 text-sm ${scryPile === "spellbook" ? "bg-white/20" : "bg-white/10 hover:bg-white/20"} ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
+              onClick={() => { if (!scryReveal) setScryPile("spellbook"); }}
+              disabled={scryReveal}
+            >
+              Spellbook
+            </button>
+            <button
+              className={`rounded px-3 py-1 text-sm ${scryPile === "atlas" ? "bg-white/20" : "bg-white/10 hover:bg-white/20"} ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
+              onClick={() => { if (!scryReveal) setScryPile("atlas"); }}
+              disabled={scryReveal}
+            >
+              Atlas
+            </button>
+          </div>
+          {!scryReveal ? (
+            <div className="flex items-center justify-between mt-1">
+              <div className="text-xs opacity-70">Confirm the pile to reveal its top card</div>
+              <button
+                className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
+                onClick={() => setScryReveal(true)}
+              >
+                Confirm Pile
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                {topCard ? (
+                  <div className="relative w-24 h-36 sm:w-28 sm:h-40 rounded overflow-hidden ring-1 ring-white/20 mx-auto">
+                    <Image
+                      src={`/api/images/${topCard.slug}`}
+                      alt={topCard.name}
+                      fill
+                      sizes="112px"
+                      className={`object-contain ${(topCard.type || "").toLowerCase().includes("site") ? "rotate-90" : ""}`}
+                    />
+                  </div>
+                ) : (
+                  <div className="text-xs opacity-70">Selected pile is empty</div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <button
+                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
+                  disabled={!topCard}
+                  onClick={() => {
+                    try { playCardSelect(); } catch {}
+                    scryTop(myPlayerKey, scryPile, "top");
+                    setScryOpen(false);
+                    handleFinalize();
+                  }}
+                >
+                  Keep on Top
+                </button>
+                <button
+                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
+                  disabled={!topCard}
+                  onClick={() => {
+                    try { playCardSelect(); } catch {}
+                    scryTop(myPlayerKey, scryPile, "bottom");
+                    setScryOpen(false);
+                    handleFinalize();
+                  }}
+                >
+                  Put on Bottom
+                </button>
+                <button
+                  className="rounded bg-white/10 hover:bg-white/20 px-3 py-1 text-sm"
+                  onClick={() => {
+                    setScryOpen(false);
+                    handleFinalize();
+                  }}
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
         <div className="text-xs opacity-60 mt-1">
           Select up to 3 cards to put back. You&apos;ll draw the same number from the appropriate pile.
         </div>

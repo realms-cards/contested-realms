@@ -2520,6 +2520,26 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
     if (!player || !player.matchId) return;
     const matchId = player.matchId;
     const match = matches.get(matchId);
+    // Compute forfeit winner before mutating the roster
+    let forfeitWinnerId: string | null = null;
+    let forfeitWinnerSeat: Seat | null = null;
+    try {
+      if (match) {
+        const leftSeat = getSeatForPlayer(match as unknown as { playerIds?: string[] | null }, player.id) as Seat | null;
+        const oppSeat = leftSeat ? getOpponentSeatStrict(leftSeat) : null;
+        const candidate = oppSeat
+          ? (getPlayerIdForSeat(match as unknown as { playerIds?: string[] | null }, oppSeat) as string | null)
+          : (inferLoserId(match as unknown as { playerIds?: string[] | null }, player.id) as string | null);
+        if (candidate && (oppSeat === "p1" || oppSeat === "p2")) {
+          forfeitWinnerId = candidate;
+          forfeitWinnerSeat = oppSeat;
+        } else if (candidate) {
+          // Fallback when seat couldn't be determined reliably
+          forfeitWinnerId = candidate;
+          forfeitWinnerSeat = null;
+        }
+      }
+    } catch {}
     // Clear player association first
     player.matchId = null;
     // Leave the match room
@@ -2533,6 +2553,21 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
       // Persist roster change
       try {
         await persistMatchUpdate(match, null, player.id, Date.now());
+      } catch {}
+      // If at least one player remains and match hasn't ended, count this as a forfeit
+      try {
+        if (
+          match.status !== "ended" &&
+          forfeitWinnerId &&
+          Array.isArray(match.playerIds) &&
+          match.playerIds.length > 0
+        ) {
+          await finalizeMatch(match, {
+            winnerId: forfeitWinnerId,
+            winnerSeat: forfeitWinnerSeat ?? undefined,
+            reason: "forfeit",
+          });
+        }
       } catch {}
       // If no players left, schedule cleanup
       if (!Array.isArray(match.playerIds) || match.playerIds.length === 0) {
@@ -2842,6 +2877,35 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           tile: { x, y },
           attacker: { at, index: Number(indexVal), instanceId: typeof msg.attacker?.instanceId === "string" ? (msg.attacker?.instanceId as string) : null, owner: Number(ownerVal) as 1 | 2 },
           ...(target ? { target } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "interceptOffer") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          tile?: { x?: unknown; y?: unknown };
+          attacker?: { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown };
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const at = typeof msg.attacker?.at === "string" ? (msg.attacker?.at as string) : null;
+        const indexVal = Number(msg.attacker?.index);
+        const ownerVal = Number(msg.attacker?.owner);
+        const instanceId = typeof msg.attacker?.instanceId === "string" ? (msg.attacker?.instanceId as string) : null;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+        const out = {
+          type: "interceptOffer",
+          id,
+          tile: { x, y },
+          attacker: { at, index: Number(indexVal), instanceId, owner: Number(ownerVal) as 1 | 2 },
           playerKey,
           ts: Date.now(),
         } as const;
