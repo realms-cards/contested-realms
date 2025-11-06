@@ -209,7 +209,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doDetachToken: (() => void) | null = null;
   let doToggleCounter: (() => void) | null = null;
   let hasCounter = false;
-  let attachedTokens: Array<{ name: string; index: number }> = [];
+  let attachedTokens: Array<{ name: string; index: number; type: string | null; subTypes: string | null; tileKey: string }> = [];
   let isCarryableArtifact = false;
 
   if (t.kind === "site") {
@@ -297,7 +297,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const isArtifact = cardType.includes("artifact");
     const isMonument = cardSubTypes.includes("monument");
     const isAutomaton = cardSubTypes.includes("automaton");
-    isCarryableArtifact = isArtifact && !isMonument && !isAutomaton && !item?.attachedTo;
+    const isCarryableArtifactType = isArtifact && !isMonument && !isAutomaton;
+    isCarryableArtifact = isCarryableArtifactType && !item?.attachedTo;
 
     // Counter toggle for non-site tokens and regular permanents
     if (item) {
@@ -321,7 +322,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           perm.attachedTo.at === t.at &&
           perm.attachedTo.index === t.index
         )
-        .map(({ perm, idx }) => ({ name: perm.card.name, index: idx }));
+        .map(({ perm, idx }) => ({
+          name: perm.card.name,
+          index: idx,
+          type: perm.card.type || null,
+          subTypes: perm.card.subTypes || null,
+          tileKey: t.at
+        }));
     }
 
     if (isToken && isMine) {
@@ -349,8 +356,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         onClose();
       };
     } else if (isMine) {
-      // Add attachment option for carryable artifacts
-      if (isCarryableArtifact) {
+      // Handle carryable artifacts (attach only - detach is on the unit's menu)
+      if (isCarryableArtifactType && !item?.attachedTo) {
+        // Artifact is not attached - provide attach option
         // Check for minions (non-artifact permanents) on the same tile
         const nonArtifactPermanents = arr
           .map((it, i) => ({ it, i }))
@@ -477,6 +485,28 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         try { playCardFlip(); } catch {}
         onClose();
       };
+    }
+
+    // Find artifacts attached to this avatar (attachedTo.index === -1)
+    const avatarPos = Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
+    if (avatarPos) {
+      const [ax, ay] = avatarPos;
+      const avatarTileKey = `${ax},${ay}`;
+      const tilePermanents = permanents[avatarTileKey] || [];
+      attachedTokens = tilePermanents
+        .map((perm, idx) => ({ perm, idx }))
+        .filter(({ perm }) =>
+          perm.attachedTo &&
+          perm.attachedTo.at === avatarTileKey &&
+          perm.attachedTo.index === -1
+        )
+        .map(({ perm, idx }) => ({
+          name: perm.card.name,
+          index: idx,
+          type: perm.card.type || null,
+          subTypes: perm.card.subTypes || null,
+          tileKey: avatarTileKey
+        }));
     }
   } else if (t.kind === "pile") {
     const pile: CardRef[] = zones[t.who][t.from];
@@ -620,24 +650,46 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 )}
               </div>
             )}
-            {/* Attached tokens section - show only for non-token permanents */}
-            {attachedTokens && attachedTokens.length > 0 && t.kind === "permanent" && (
+            {/* Attached tokens section - show for permanents and avatars */}
+            {attachedTokens && attachedTokens.length > 0 && (t.kind === "permanent" || t.kind === "avatar") && (
               <div className="space-y-2">
-                <div className="text-xs text-white/70 px-3 py-1">Attached Tokens:</div>
+                <div className="text-xs text-white/70 px-3 py-1">Attached Items:</div>
                 {attachedTokens.map((token) => {
                   const tokenName = token.name.toLowerCase();
                   const isLance = tokenName === "lance";
                   const isStealth = tokenName === "stealth";
                   const isDisabled = tokenName === "disabled";
 
-                  if (isLance) {
+                  // Check if this is a carryable artifact
+                  const tokenType = (token.type || "").toLowerCase();
+                  const tokenSubTypes = (token.subTypes || "").toLowerCase();
+                  const isArtifact = tokenType.includes("artifact");
+                  const isMonument = tokenSubTypes.includes("monument");
+                  const isAutomaton = tokenSubTypes.includes("automaton");
+                  const isCarryableArt = isArtifact && !isMonument && !isAutomaton;
+
+                  if (isCarryableArt) {
+                    // Carryable artifacts: offer Drop option (like Lance)
+                    return (
+                      <button
+                        key={token.index}
+                        className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
+                        onClick={() => {
+                          detachToken(token.tileKey, token.index);
+                          onClose();
+                        }}
+                      >
+                        Drop {token.name}
+                      </button>
+                    );
+                  } else if (isLance) {
                     // Lance: offer Drop or Destroy options
                     return (
                       <div key={token.index} className="space-y-1">
                         <button
                           className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
                           onClick={() => {
-                            detachToken(t.at, token.index);
+                            detachToken(token.tileKey, token.index);
                             onClose();
                           }}
                         >
@@ -646,7 +698,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         <button
                           className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
                           onClick={() => {
-                            movePermanentToZone(t.at, token.index, "banished");
+                            movePermanentToZone(token.tileKey, token.index, "banished");
                             try { playCardFlip(); } catch {}
                             onClose();
                           }}
@@ -663,11 +715,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
                         onClick={() => {
                           // First detach, then immediately banish
-                          detachToken(t.at, token.index);
+                          detachToken(token.tileKey, token.index);
                           // Use setTimeout to ensure detach completes first
                           setTimeout(() => {
                             const permanents = useGameStore.getState().permanents;
-                            const items = permanents[t.at] || [];
+                            const items = permanents[token.tileKey] || [];
                             // Find the token that was just detached
                             const detachedToken = items.find(
                               (item) =>
@@ -677,7 +729,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             if (detachedToken) {
                               const tokenIndex = items.indexOf(detachedToken);
                               if (tokenIndex >= 0) {
-                                movePermanentToZone(t.at, tokenIndex, "banished");
+                                movePermanentToZone(token.tileKey, tokenIndex, "banished");
                                 try { playCardFlip(); } catch {}
                               }
                             }
@@ -695,7 +747,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         key={token.index}
                         className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
                         onClick={() => {
-                          detachToken(t.at, token.index);
+                          detachToken(token.tileKey, token.index);
                           onClose();
                         }}
                       >

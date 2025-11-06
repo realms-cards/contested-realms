@@ -249,6 +249,17 @@ export default function BottomBar(props: BottomBarProps) {
                   {!isDraftMode ? (
                     <>
                       <input
+                        type="search"
+                        name="q"
+                        autoComplete="off"
+                        role="searchbox"
+                        inputMode="search"
+                        data-1p-ignore
+                        data-lpignore="true"
+                        data-bwignore="true"
+                        data-dashlane-ignore="true"
+                        data-np-ignore="true"
+                        data-keeper-lock="true"
                         value={q}
                         onChange={(e) => setQ(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && doSearch()}
@@ -282,6 +293,17 @@ export default function BottomBar(props: BottomBarProps) {
                   ) : (
                     <>
                       <input
+                        type="search"
+                        name="q"
+                        autoComplete="off"
+                        role="searchbox"
+                        inputMode="search"
+                        data-1p-ignore
+                        data-lpignore="true"
+                        data-bwignore="true"
+                        data-dashlane-ignore="true"
+                        data-np-ignore="true"
+                        data-keeper-lock="true"
                         value={q}
                         onChange={(e) => setQ(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && doSearch()}

@@ -13,6 +13,9 @@ interface MatchEndOverlayProps {
   onLeaveLobby?: () => void;
   leaveLabel?: string;
   allowContinue?: boolean;
+  reason?: string;
+  winnerId?: string | null;
+  myPlayerId?: string | null;
 }
 
 export default function MatchEndOverlay({
@@ -25,13 +28,18 @@ export default function MatchEndOverlay({
   onLeaveLobby,
   leaveLabel,
   allowContinue = true,
+  reason,
+  winnerId,
+  myPlayerId,
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
   const isDraw = winner === null;
   const winnerName = winner ? playerNames[winner] : null;
-  const isSpectator = !myPlayerKey; // When seat isn't resolved or viewer is a spectator
-  const didIWin = !isSpectator && winner === myPlayerKey;
+  const isSpectator = !myPlayerKey;
+  const didIWinSeat = !isSpectator && winner === myPlayerKey;
+  const didIWinById = typeof winnerId === "string" && typeof myPlayerId === "string" && winnerId === myPlayerId;
+  const didIWin = reason === "forfeit" ? !!didIWinById : didIWinSeat;
 
   const handleLeaveMatch = () => {
     if (onLeave) {
@@ -43,6 +51,25 @@ export default function MatchEndOverlay({
   };
 
   const canContinue = allowContinue && typeof onClose === "function";
+
+  // Title text
+  const titleText = isDraw
+    ? "Draw!"
+    : reason === "forfeit"
+    ? isSpectator
+      ? winnerName
+        ? `${winnerName} wins by forfeit`
+        : "Match ended by forfeit"
+      : didIWin
+      ? "Opponent left"
+      : "You left the match"
+    : isSpectator
+    ? winnerName
+      ? `${winnerName} wins!`
+      : "Match Over"
+    : didIWin
+    ? "Victory!"
+    : `${winnerName ?? "Opponent"} wins`;
 
   return (
     <div 
@@ -67,22 +94,20 @@ export default function MatchEndOverlay({
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-bold mb-4">
-          {isDraw
-            ? "Draw!"
-            : isSpectator
-            ? winnerName
-              ? `${winnerName} wins!`
-              : "Match Over"
-            : didIWin
-            ? "Victory!"
-            : `${winnerName ?? "Opponent"} wins`}
-        </h1>
+        <h1 className="text-3xl font-bold mb-4">{titleText}</h1>
 
         {/* Result Description */}
         <div className="text-lg opacity-90 mb-6">
           {isDraw ? (
             <p>Both players died simultaneously.</p>
+          ) : reason === "forfeit" ? (
+            isSpectator ? (
+              <p>Match ended by forfeit.</p>
+            ) : didIWin ? (
+              <p><span className="font-semibold text-green-400">Your opponent</span>{" forfeited. You win."}</p>
+            ) : (
+              <p>You forfeited the match.</p>
+            )
           ) : isSpectator ? (
             <p>
               <span className="font-semibold text-green-400">{winnerName ?? "A player"}</span>
@@ -102,29 +127,41 @@ export default function MatchEndOverlay({
         </div>
 
         {/* Match Summary */}
-        <div className="bg-black/30 rounded-xl p-4 mb-6 text-sm">
-          <div className="text-xs opacity-70 mb-2">Final Result</div>
-          <div className="space-y-1">
-            <div className={`flex justify-between ${winner === 'p1' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
-              <span>
-                {playerNames.p1}
-                {myPlayerKey === 'p1' ? ' (You)' : ''}
-              </span>
-              <span>
-                {winner === null ? 'Draw' : winner === 'p1' ? 'Winner' : 'Loser'}
-              </span>
-            </div>
-            <div className={`flex justify-between ${winner === 'p2' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
-              <span>
-                {playerNames.p2}
-                {myPlayerKey === 'p2' ? ' (You)' : ''}
-              </span>
-              <span>
-                {winner === null ? 'Draw' : winner === 'p2' ? 'Winner' : 'Loser'}
-              </span>
+        {reason === "forfeit" ? (
+          <div className="bg-black/30 rounded-xl p-4 mb-6 text-sm">
+            <div className="text-xs opacity-70 mb-2">Final Result</div>
+            <div className="space-y-1">
+              <div className={`flex justify-between ${didIWin ? 'text-green-400' : 'text-red-400'}`}>
+                <span>{didIWin ? 'You' : 'Opponent'}</span>
+                <span>Winner (forfeit)</span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-black/30 rounded-xl p-4 mb-6 text-sm">
+            <div className="text-xs opacity-70 mb-2">Final Result</div>
+            <div className="space-y-1">
+              <div className={`flex justify-between ${winner === 'p1' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
+                <span>
+                  {playerNames.p1}
+                  {myPlayerKey === 'p1' ? ' (You)' : ''}
+                </span>
+                <span>
+                  {winner === null ? 'Draw' : winner === 'p1' ? 'Winner' : 'Loser'}
+                </span>
+              </div>
+              <div className={`flex justify-between ${winner === 'p2' ? 'text-green-400' : winner === null ? 'text-yellow-400' : 'text-red-400'}`}>
+                <span>
+                  {playerNames.p2}
+                  {myPlayerKey === 'p2' ? ' (You)' : ''}
+                </span>
+                <span>
+                  {winner === null ? 'Draw' : winner === 'p2' ? 'Winner' : 'Loser'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="space-y-3">

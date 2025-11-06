@@ -441,6 +441,17 @@ export default function TournamentsPage() {
           {viewFilter !== "active" && (
             <div className="ml-auto flex items-center gap-2">
               <input
+                type="search"
+                name="q"
+                autoComplete="off"
+                role="searchbox"
+                inputMode="search"
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore="true"
+                data-dashlane-ignore="true"
+                data-np-ignore="true"
+                data-keeper-lock="true"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);

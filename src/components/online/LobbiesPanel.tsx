@@ -70,6 +70,17 @@ export default function LobbiesPanel() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
+            type="search"
+            name="q"
+            autoComplete="off"
+            role="searchbox"
+            inputMode="search"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
+            data-dashlane-ignore="true"
+            data-np-ignore="true"
+            data-keeper-lock="true"
             className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
             placeholder="Search by lobby ID, host, or player"
             value={lobbyQuery}
@@ -125,6 +136,16 @@ export default function LobbiesPanel() {
           </button>
           <div className="flex-1 flex gap-2">
             <input
+              type="text"
+              name="lobby-id"
+              autoComplete="off"
+              inputMode="text"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore="true"
+              data-dashlane-ignore="true"
+              data-np-ignore="true"
+              data-keeper-lock="true"
               className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
               placeholder="Lobby ID"
               value={lobbyIdInput}

@@ -995,6 +995,9 @@ export default function OnlineProvider({
             if (p && typeof p === "object" && "winnerId" in p && p.winnerId) {
               next.winnerId = (p as { winnerId: string }).winnerId;
             }
+            if (p && typeof p === "object" && "reason" in p && (p as { reason?: unknown }).reason) {
+              next.endReason = (p as { reason?: string }).reason;
+            }
             if (p && typeof p === "object" && "result" in p) {
               const resultValue = (p as { result?: unknown }).result;
               if (

@@ -258,7 +258,8 @@ export async function loadTournamentConstructedDeck(
         cardId: Number(card.id),
         variantId: variant ? Number(variant.id) : null,
         name: String(card.name),
-        type: String(variant?.typeText || card.type || ''),
+        type: String(card.type || variant?.typeText || ''), // Use card.type (metadata.type) first, not typeText (flavor text)
+        subTypes: (card.subTypes as string | null | undefined) || null,
         slug: String(variant?.slug || card.slug || ''),
         thresholds: (card.thresholds as Record<string, number>) || null,
       };

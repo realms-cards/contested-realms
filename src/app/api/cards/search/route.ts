@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         finish: true,
         product: true,
         typeText: true,
-        card: { select: { name: true } },
+        card: { select: { name: true, subTypes: true } },
         set: { select: { name: true } },
       },
       take: 200,
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       finish: unknown;
       product: string;
       typeText: string | null;
-      card: { name: string };
+      card: { name: string; subTypes: string | null };
       set: { name: string };
     };
     const pairs = variants.map((v: VariantRow) => ({ cardId: v.cardId, setId: v.setId }));
@@ -91,13 +91,16 @@ export async function GET(req: NextRequest) {
       cardName: string;
       set: string;
       type: string | null;
+      subTypes: string | null;
       rarity: string | null;
     };
     const out: SearchOut[] = variants
       .map((v: VariantRow): SearchOut => {
         const meta = metaMap.get(metaKey(v.cardId, v.setId));
-        const type = v.typeText || meta?.type || null;
+        // Prefer metadata.type over typeText (flavor text)
+        const type = meta?.type || v.typeText || null;
         const rarity = meta?.rarity || null;
+        const subTypes = v.card.subTypes || null;
         return {
           variantId: v.id,
           slug: v.slug.startsWith("dra_") ? ("drl_" + v.slug.slice(4)) : v.slug,
@@ -107,6 +110,7 @@ export async function GET(req: NextRequest) {
           cardName: v.card.name,
           set: v.set.name,
           type,
+          subTypes,
           rarity,
         };
       })

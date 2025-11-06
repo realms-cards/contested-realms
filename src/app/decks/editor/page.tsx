@@ -972,6 +972,17 @@ export default function DeckEditorPage() {
               <div className="font-medium mb-2">Search</div>
               <div className="flex flex-wrap items-end gap-2 mb-2">
                 <input
+                  type="search"
+                  name="q"
+                  autoComplete="off"
+                  role="searchbox"
+                  inputMode="search"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-bwignore="true"
+                  data-dashlane-ignore="true"
+                  data-np-ignore="true"
+                  data-keeper-lock="true"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   className="border rounded px-3 py-2 bg-transparent w-48"
