@@ -1205,9 +1205,11 @@ function movePermanentCore(
     }
   });
 
-  const toArr = [...(per[toKey] || [])];
+  const targetSource =
+    toKey === fromKey ? fromArr : ((per[toKey] as PermanentItem[]) || []);
+  const toArr = [...targetSource];
   const toArrStartLen = toArr.length;
-  const newIndex = toArr.length; // The index where the permanent will be placed
+  const newIndex = toArrStartLen; // The index where the permanent will be placed
 
   // When newOffset is null, keep existing offset; when provided, set it.
   // For tilt: if item has none, assign a random one on move; otherwise keep.
@@ -1321,23 +1323,103 @@ function extractInstanceId(value: unknown): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
+type PermanentRecord = Record<string, unknown>;
+
+function ensurePermanentRecord(
+  record: PermanentRecord | null | undefined
+): PermanentRecord | null {
+  if (!record) return null;
+  const ownerValue = record.owner as unknown;
+  if (ownerValue === 1 || ownerValue === 2) {
+    // valid numeric owner, keep as-is
+  } else if (typeof ownerValue === "string") {
+    const n = Number(ownerValue);
+    if (n === 1 || n === 2) record.owner = n;
+    else delete (record as PermanentRecord).owner;
+  } else if (ownerValue !== undefined) {
+    delete (record as PermanentRecord).owner;
+  }
+  const cardValue = record.card;
+  const card = cardValue && typeof cardValue === "object"
+    ? (cardValue as PermanentRecord)
+    : null;
+  let instanceId = typeof record.instanceId === "string" ? record.instanceId : null;
+  const cardInstanceId = card && typeof card.instanceId === "string" ? card.instanceId : null;
+  if (!instanceId || instanceId.length === 0) {
+    instanceId = cardInstanceId;
+  }
+  if (!instanceId || instanceId.length === 0) {
+    instanceId = newPermanentInstanceId();
+  }
+  record.instanceId = instanceId;
+  if (card && (!cardInstanceId || cardInstanceId.length === 0)) {
+    card.instanceId = instanceId;
+  }
+  const tapVersion = Number(record.tapVersion ?? 0);
+  record.tapVersion = Number.isFinite(tapVersion) && tapVersion >= 0 ? tapVersion : 0;
+  const version = Number(record.version ?? 0);
+  record.version = Number.isFinite(version) && version >= 0 ? version : 0;
+  return record;
+}
+
+function makePermanentFallbackKey(record: PermanentRecord): string | null {
+  const owner = record.owner;
+  const card = record.card as PermanentRecord | undefined;
+  if (!card) {
+    return typeof record.instanceId === "string"
+      ? `id:${record.instanceId}`
+      : null;
+  }
+  const cardId = card.cardId ?? card.slug ?? card.name ?? record.instanceId ?? "unknown";
+  const attached = record.attachedTo as { at?: string; index?: number } | undefined;
+  const attachedKey = attached ? `${attached.at ?? ""}|${attached.index ?? ""}` : "none";
+  return `${owner ?? ""}|${cardId}|${attachedKey}`;
+}
+
 function mergeArrayByInstanceId(
   baseArr: unknown[],
   patchArr: unknown[]
 ): unknown[] {
   const patchMap = new Map<string, Record<string, unknown>>();
+  // Construct a fallback lookup keyed by card identity + attachment info so we
+  // can reconcile items whose instanceId changed (e.g., due to persistence
+  // rehydration) without relying on mutation side-effects.
+  const fallbackMap = new Map<string, Record<string, unknown>>();
+  const normalizedPatch: Record<string, unknown>[] = [];
   for (const item of patchArr) {
-    const id = extractInstanceId(item);
-    if (id && item && typeof item === "object") {
-      patchMap.set(id, item as Record<string, unknown>);
-    }
+    if (!item || typeof item !== "object") continue;
+    const normalized = ensurePermanentRecord(item as Record<string, unknown>);
+    if (!normalized) continue;
+    normalizedPatch.push(normalized);
+    const id = extractInstanceId(normalized);
+    if (id) patchMap.set(id, normalized);
+    const key = makePermanentFallbackKey(normalized);
+    if (key) fallbackMap.set(key, normalized);
   }
   const result: unknown[] = [];
   const seen = new Set<string>();
   for (const baseItem of baseArr) {
-    const id = extractInstanceId(baseItem);
-    if (id && patchMap.has(id) && baseItem && typeof baseItem === "object") {
-      const baseRecord = baseItem as Record<string, unknown>;
+    if (!baseItem || typeof baseItem !== "object") continue;
+    const baseRecord = ensurePermanentRecord(baseItem as Record<string, unknown>);
+    if (!baseRecord) continue;
+    let id = extractInstanceId(baseRecord);
+    const ensureFallbackMatch = () => {
+      const fallbackKey = makePermanentFallbackKey(baseRecord);
+      if (fallbackKey && fallbackMap.has(fallbackKey)) {
+        const patchRecord = fallbackMap.get(fallbackKey) as Record<string, unknown>;
+        const patchId = extractInstanceId(patchRecord);
+        if (patchId) {
+          baseRecord.instanceId = patchId;
+          id = patchId;
+        }
+      }
+    };
+    if (!id) {
+      ensureFallbackMatch();
+    } else if (!patchMap.has(id)) {
+      ensureFallbackMatch();
+    }
+    if (id && patchMap.has(id)) {
       const patchRecord = patchMap.get(id) as Record<string, unknown>;
       const shouldRemove = patchRecord.__remove === true;
       const merged: Record<string, unknown> = { ...baseRecord };
@@ -1389,6 +1471,8 @@ function mergeArrayByInstanceId(
       }
       seen.add(id);
       patchMap.delete(id);
+      const fallbackKey = makePermanentFallbackKey(baseRecord);
+      if (fallbackKey) fallbackMap.delete(fallbackKey);
       if (shouldRemove) {
         continue;
       }
@@ -1397,7 +1481,7 @@ function mergeArrayByInstanceId(
       if (id) seen.add(id);
     }
   }
-  for (const item of patchArr) {
+  for (const item of normalizedPatch) {
     const id = extractInstanceId(item);
     if (!id || !seen.has(id)) {
       if (item && typeof item === "object") {
@@ -1482,31 +1566,6 @@ function mergePermanentsMap(
       : [];
     const merged = mergeArrayByInstanceId(baseArr, nextArr) as unknown as PermanentItem[];
     (result as Record<string, PermanentItem[]>)[cell] = merged;
-
-    // Debug logging for ownership changes
-    if (nextArr.length > 0) {
-      nextArr.forEach((item) => {
-        if (item && typeof item === 'object') {
-          const patchItem = item as Partial<PermanentItem>;
-          const baseItem = baseArr.find((b) => {
-            const bi = b as Partial<PermanentItem>;
-            return bi.card?.instanceId === patchItem.card?.instanceId;
-          }) as Partial<PermanentItem> | undefined;
-
-          if (baseItem && baseItem.owner !== patchItem.owner) {
-            console.log('[mergePermanentsMap] Ownership change detected:', {
-              cell,
-              instanceId: patchItem.card?.instanceId,
-              cardName: patchItem.card?.name,
-              oldOwner: baseItem.owner,
-              newOwner: patchItem.owner,
-              oldOffset: baseItem.offset,
-              newOffset: patchItem.offset
-            });
-          }
-        }
-      });
-    }
   }
   return result;
 }
@@ -6983,7 +7042,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
 
       // If the unit moved to a different tile (not just repositioned on the same tile), tap it
       let finalPer = per;
-      let finalUpdated = updated;
+      const finalUpdated = updated;
+      let finalAdded = added;
       if (fromKey !== toKey && newIndex >= 0) {
         const movedUnit = finalPer[toKey]?.[newIndex];
         if (movedUnit && !movedUnit.tapped) {
@@ -6996,7 +7056,12 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
           });
           arr[newIndex] = tappedUnit;
           finalPer = { ...finalPer, [toKey]: arr };
-          finalUpdated = [...finalUpdated, tappedUnit];
+          const movedId = ensurePermanentInstanceId(tappedUnit);
+          if (movedId) {
+            finalAdded = finalAdded.map((item) =>
+              ensurePermanentInstanceId(item) === movedId ? tappedUnit : item
+            );
+          }
           get().log(`Moved '${movedName}' to #${cellNo} (tapped)`);
         } else {
           get().log(`Moved '${movedName}' to #${cellNo}`);
@@ -7013,7 +7078,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
             toKey,
             removed,
             finalUpdated,
-            added,
+            finalAdded,
             finalPer,
             s.permanents
           );
@@ -7048,7 +7113,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
 
       // If the unit moved to a different tile (not just repositioned on the same tile), tap it
       let finalPer = per;
-      let finalUpdated = updated;
+      const finalUpdated = updated;
+      let finalAdded = added;
       if (fromKey !== toKey && newIndex >= 0) {
         const movedUnit = finalPer[toKey]?.[newIndex];
         if (movedUnit && !movedUnit.tapped) {
@@ -7061,7 +7127,12 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
           });
           arr[newIndex] = tappedUnit;
           finalPer = { ...finalPer, [toKey]: arr };
-          finalUpdated = [...finalUpdated, tappedUnit];
+          const movedId = ensurePermanentInstanceId(tappedUnit);
+          if (movedId) {
+            finalAdded = finalAdded.map((item) =>
+              ensurePermanentInstanceId(item) === movedId ? tappedUnit : item
+            );
+          }
           get().log(`Moved '${movedName}' to #${cellNo} (tapped)`);
         } else {
           get().log(`Moved '${movedName}' to #${cellNo}`);
@@ -7078,7 +7149,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
             toKey,
             removed,
             finalUpdated,
-            added,
+            finalAdded,
             finalPer,
             s.permanents
           );
@@ -7492,7 +7563,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
       );
       {
-        const actorSeat = s.actorKey;
         const current = arr[index];
         const deltaPatch =
           current && current.instanceId
