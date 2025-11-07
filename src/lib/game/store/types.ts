@@ -9,7 +9,7 @@ import type {
   InteractionResponseMessage,
   InteractionResultMessage,
 } from "@/lib/net/interactions";
-import type { GameTransport } from "@/lib/net/transport";
+import type { GameTransport, CustomMessage } from "@/lib/net/transport";
 import type {
   BurrowAbility,
   ContextMenuAction,
@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import type { RemoteCursorState } from "./remoteCursor";
 export { REMOTE_CURSOR_TTL_MS } from "./remoteCursor";
+export type { RemoteCursorState } from "./remoteCursor";
 
 export type Phase = "Setup" | "Start" | "Draw" | "Main" | "End";
 export type PlayerKey = "p1" | "p2";
@@ -139,6 +140,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   attachedTo?: { at: CellKey; index: number } | null;
   // Generic numeric counter displayed on the card (e.g., +1 counters)
   counters?: number | null; // absent/0 => no counter badge
+  damage?: number | null;
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -160,7 +162,7 @@ export type SerializedGame = {
   actorKey: PlayerKey | null;
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
-  turn?: number;
+  turn: number;
   phase: Phase;
   d20Rolls: Record<PlayerKey, number | null>;
   setupWinner: PlayerKey | null;
@@ -186,7 +188,7 @@ export type SerializedGame = {
 export type GameState = {
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
-  turn?: number;
+  turn: number;
   phase: Phase;
   setPhase: (phase: Phase) => void;
   // D20 Setup phase
@@ -203,6 +205,9 @@ export type GameState = {
   // Multiplayer transport (null => offline)
   transport: GameTransport | null;
   setTransport: (t: GameTransport | null) => void;
+  // Current online match id (null offline). Used for per-match persistence.
+  matchId: string | null;
+  setMatchId: (id: string | null) => void;
   // Local seat/actor (only set in online play UI; null in offline)
   actorKey: PlayerKey | null;
   setActorKey: (key: PlayerKey | null) => void;
@@ -210,13 +215,17 @@ export type GameState = {
   matchEnded: boolean;
   winner: PlayerKey | null;
   checkMatchEnd: () => void;
+  // Manual tie declaration when both players are at Death's Door
+  tieGame: () => void;
   // Cross-turn interactions
   interactionLog: InteractionStateMap;
   pendingInteractionId: string | null;
   acknowledgedInteractionIds: Record<string, true>;
   activeInteraction: InteractionRequestEntry | null;
   sendInteractionRequest: (input: SendInteractionRequestInput) => void;
-  receiveInteractionEnvelope: (envelope: InteractionEnvelope | InteractionMessage) => void;
+  receiveInteractionEnvelope: (
+    envelope: InteractionEnvelope | InteractionMessage
+  ) => void;
   // New: handle server-executed interaction outcomes
   receiveInteractionResult: (message: InteractionResultMessage) => void;
   respondToInteraction: (
@@ -228,6 +237,75 @@ export type GameState = {
   expireInteraction: (requestId: string) => void;
   clearInteraction: (requestId: string) => void;
   transportSubscriptions: Array<() => void>;
+  // Feature flag: opt-in guided overlays for combat interactions
+  interactionGuides: boolean;
+  setInteractionGuides: (on: boolean) => void;
+  // Card meta cache (subset) used to detect base power quickly
+  metaByCardId: Record<
+    number,
+    { attack: number | null; defence: number | null; cost: number | null }
+  >;
+  fetchCardMeta: (ids: number[]) => Promise<void>;
+  // Pending combat (MVP)
+  pendingCombat: {
+    id: string;
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null;
+    defenderSeat: PlayerKey | null;
+    defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>;
+    status: "declared" | "defending" | "committed" | "resolved" | "cancelled";
+    assignment?: Array<{ at: CellKey; index: number; amount: number }> | null;
+    createdAt: number;
+  } | null;
+  // HUD-driven combat UI (lifted from Board for layout-level overlays)
+  attackChoice: {
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    attackerName?: string | null;
+  } | null;
+  attackTargetChoice: {
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    candidates: Array<{ kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null; label: string }>;
+  } | null;
+  attackConfirm: {
+    tile: { x: number; y: number };
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null };
+    targetLabel: string;
+  } | null;
+  setAttackChoice: (v: GameState["attackChoice"]) => void;
+  setAttackTargetChoice: (v: GameState["attackTargetChoice"]) => void;
+  setAttackConfirm: (v: GameState["attackConfirm"]) => void;
+  // Signal Board to revert last cross-tile move (handled locally there)
+  revertCrossMoveTick: number;
+  requestRevertCrossMove: () => void;
+  lastCombatSummary: { id: string; text: string; ts: number; actor?: PlayerKey; targetSeat?: PlayerKey } | null;
+  setLastCombatSummary: (smm: { id: string; text: string; ts: number; actor?: PlayerKey; targetSeat?: PlayerKey } | null) => void;
+  declareAttack: (
+    tile: { x: number; y: number },
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 },
+    target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null
+  ) => void;
+  // Trigger an intercept offer after a Move Only action by the attacker
+  offerIntercept: (
+    tile: { x: number; y: number },
+    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }
+  ) => void;
+  setDefenderSelection: (
+    defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>
+  ) => void;
+  commitDefenders: () => void;
+  setDamageAssignment: (asgn: Array<{ at: CellKey; index: number; amount: number }>) => boolean;
+  resolveCombat: () => void;
+  autoResolveCombat: () => void;
+  cancelCombat: () => void;
+  applyDamageToPermanent: (at: CellKey, index: number, amount: number) => void;
+  clearAllDamageForSeat: (seat: PlayerKey) => void;
+  setTapPermanent: (at: CellKey, index: number, tapped: boolean) => void;
+  // Generic lightweight message handler
+  receiveCustomMessage: (msg: CustomMessage) => void;
   // Safe patch sending
   pendingPatches: ServerPatchT[];
   trySendPatch: (patch: ServerPatchT) => boolean;
@@ -337,7 +415,6 @@ export type GameState = {
     target: "hand" | "graveyard" | "banished" | "atlas",
     position?: "top" | "bottom"
   ) => void;
-  // Return a card from banished to a legal zone
   moveFromBanishedToZone: (
     who: PlayerKey,
     instanceId: string,
@@ -372,9 +449,7 @@ export type GameState = {
   eventSeq: number;
   log: (text: string) => void;
   boardPings: BoardPingEvent[];
-  pushBoardPing: (
-    ping: Omit<BoardPingEvent, "ts"> & { ts?: number }
-  ) => void;
+  pushBoardPing: (ping: Omit<BoardPingEvent, "ts"> & { ts?: number }) => void;
   removeBoardPing: (id: string) => void;
   lastPointerWorldPos: { x: number; z: number } | null;
   setLastPointerWorldPos: (pos: { x: number; z: number } | null) => void;
@@ -461,6 +536,24 @@ export type GameState = {
   historyByPlayer: Record<PlayerKey, SerializedGame[]>;
   pushHistory: () => void;
   undo: () => void;
+  matchId: string | null;
+  setMatchId: (id: string | null) => void;
+  actorKey: PlayerKey | null;
+  setActorKey: (key: PlayerKey | null) => void;
+  localPlayerId: string | null;
+  setLocalPlayerId: (id: string | null) => void;
+  snapshots: Array<{
+    id: string;
+    title: string;
+    ts: number;
+    includePrivate: boolean;
+    kind: "auto" | "manual";
+    turn: number;
+    actor: PlayerKey | null;
+    payload: ServerPatchT;
+  }>;
+  createSnapshot: (title: string, kind?: "auto" | "manual") => void;
+  hydrateSnapshotsFromStorage: () => void;
 
   // Permanent Position Management (Burrow/Submerge)
   permanentPositions: Record<number, PermanentPosition>; // permanentId -> position
@@ -508,12 +601,25 @@ export type GameState = {
   ) => string | null;
   localPlayerId: string | null;
   setLocalPlayerId: (id: string | null) => void;
+  snapshots: Array<{
+    id: string;
+    title: string;
+    ts: number;
+    includePrivate: boolean;
+    kind: "auto" | "manual";
+    turn: number;
+    actor: PlayerKey | null;
+    payload: ServerPatchT;
+  }>;
+  createSnapshot: (title: string, kind?: "auto" | "manual") => void;
+  hydrateSnapshotsFromStorage: () => void;
 };
 
 // Typed view of server patchable fields (subset of GameState, pure data only)
 export type ServerPatchT = Partial<{
   players: GameState["players"];
   currentPlayer: GameState["currentPlayer"];
+  turn: GameState["turn"];
   phase: GameState["phase"];
   d20Rolls: GameState["d20Rolls"];
   setupWinner: GameState["setupWinner"];
