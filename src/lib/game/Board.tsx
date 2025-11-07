@@ -81,7 +81,7 @@ const HIGHLIGHT_TARGET = "#ef4444";
 const HIGHLIGHT_DEFENDER = "#3b82f6";
 const RUBBLE_ELEVATION = CARD_THICK * 0.04;
 const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
-const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.28;
+const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.65; // Increased to allow reaching tile center and beyond
 const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
 
 function clampOffset(value: number, limit: number): number {
@@ -1371,10 +1371,43 @@ export default function Board({
           return;
         }
       } catch {}
-      let tx = Math.round((wx - offsetX) / TILE_SIZE);
-      let ty = Math.round((wz - offsetY) / TILE_SIZE);
-      tx = Math.max(0, Math.min(board.size.w - 1, tx));
-      ty = Math.max(0, Math.min(board.size.h - 1, ty));
+      // Global handler for board drops that don't hit tile mesh (e.g., dropped on cards)
+      // Strategy: Check distance from source tile first to avoid false cross-tile detection
+      // when dropping on cards that extend from your own tile into adjacent tiles
+      const [fromX, fromY] = d.from.split(",").map(Number);
+      const fromTileX = offsetX + fromX * TILE_SIZE;
+      const fromTileZ = offsetY + fromY * TILE_SIZE;
+      const distFromSource = Math.sqrt(
+        Math.pow(wx - fromTileX, 2) + Math.pow(wz - fromTileZ, 2)
+      );
+
+      let tx: number, ty: number;
+      // If drop is within ~60% of tile size from source, treat as same-tile move
+      // This prevents false cross-tile when dropping on your own extended cards
+      if (distFromSource < TILE_SIZE * 0.6) {
+        tx = fromX;
+        ty = fromY;
+        if (process.env.NODE_ENV !== "production") {
+          console.debug(
+            `[drop] GLOBAL: Close to source (dist=${distFromSource.toFixed(
+              2
+            )} < ${(TILE_SIZE * 0.6).toFixed(2)}), keeping on source tile ${fromX},${fromY}`
+          );
+        }
+      } else {
+        // Far enough away - round to nearest tile
+        tx = Math.round((wx - offsetX) / TILE_SIZE);
+        ty = Math.round((wz - offsetY) / TILE_SIZE);
+        tx = Math.max(0, Math.min(board.size.w - 1, tx));
+        ty = Math.max(0, Math.min(board.size.h - 1, ty));
+        if (process.env.NODE_ENV !== "production") {
+          console.debug(
+            `[drop] GLOBAL: Far from source (dist=${distFromSource.toFixed(
+              2
+            )} >= ${(TILE_SIZE * 0.6).toFixed(2)}), rounding to ${tx},${ty}`
+          );
+        }
+      }
       const dropKey = `${tx},${ty}`;
       const tileX = offsetX + tx * TILE_SIZE;
       const tileZ = offsetY + ty * TILE_SIZE;
@@ -1386,15 +1419,24 @@ export default function Board({
         draggedOwner === 1
           ? -TILE_SIZE * 0.5 + marginZ
           : TILE_SIZE * 0.5 - marginZ;
+
       if (d.from === dropKey) {
+        // Same tile - just update offset
         const baseX =
           tileX +
           (-((Math.max((permanents[dropKey] || []).length, 1) - 1) * spacing) /
             2 +
             d.index * spacing);
         const baseZ = tileZ + zBase;
-        const offX = wx - baseX;
-        const offZ = wz - baseZ;
+        const offX = clampOffset(wx - baseX, TILE_OFFSET_LIMIT_X);
+        const offZ = clampOffset(wz - baseZ, TILE_OFFSET_LIMIT_Z);
+        if (process.env.NODE_ENV !== "production") {
+          console.debug(
+            `[drop] GLOBAL perm tile same ${d.from}[${d.index}] offX=${offX.toFixed(
+              2
+            )} offZ=${offZ.toFixed(2)}`
+          );
+        }
         dragTarget.current = null;
         draggedBody.current = null;
         requestAnimationFrame(() => {
@@ -1406,13 +1448,27 @@ export default function Board({
           snapBodyTo(targetId, wx, wz);
         }
       } else {
+        // Cross-tile move
         const toItems = permanents[dropKey] || [];
         const newIndex = toItems.length;
         const startX = -((Math.max(newIndex + 1, 1) - 1) * spacing) / 2;
         const baseX = tileX + (startX + newIndex * spacing);
         const baseZ = tileZ + zBase;
-        const offX = wx - baseX;
-        const offZ = wz - baseZ;
+        const offX = clampOffset(wx - baseX, TILE_OFFSET_LIMIT_X);
+        const offZ = clampOffset(wz - baseZ, TILE_OFFSET_LIMIT_Z);
+        if (process.env.NODE_ENV !== "production") {
+          console.debug(
+            `[drop] GLOBAL perm tile cross ${d.from}[${
+              d.index
+            }] -> ${dropKey} newIndex=${newIndex} wx=${wx.toFixed(
+              2
+            )} wz=${wz.toFixed(2)} baseX=${baseX.toFixed(
+              2
+            )} baseZ=${baseZ.toFixed(2)} offX=${offX.toFixed(
+              2
+            )} offZ=${offZ.toFixed(2)}`
+          );
+        }
         dragTarget.current = null;
         draggedBody.current = null;
         requestAnimationFrame(() => {
@@ -1638,6 +1694,56 @@ export default function Board({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isSpectator, overlayBlocking, playCardFlip]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const isEnterKey =
+        event.key === "Enter" ||
+        event.code === "Enter" ||
+        event.code === "NumpadEnter";
+      if (!isEnterKey) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (isSpectator || overlayBlocking) return;
+
+      const {
+        matchEnded,
+        phase,
+        actorKey,
+        currentPlayer,
+        endTurn,
+      } = resolvedStoreApi.getState();
+
+      if (matchEnded) return;
+      if (phase === "Setup") return;
+
+      const seat = actorKey === "p1" ? 1 : actorKey === "p2" ? 2 : null;
+      if (seat == null || seat !== currentPlayer) return;
+
+      event.preventDefault();
+      try {
+        endTurn();
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[board] Failed to end turn via keyboard:", err);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isSpectator, overlayBlocking, resolvedStoreApi]);
 
   // removed global pointerup fallback; drops are handled by tiles/cards precisely
 
@@ -1953,7 +2059,11 @@ export default function Board({
                             dragging.index
                           }] -> ${dropKey} newIndex=${newIndex} wx=${world.x.toFixed(
                             2
-                          )} wz=${world.z.toFixed(2)}`
+                          )} wz=${world.z.toFixed(2)} baseX=${baseX.toFixed(
+                            2
+                          )} baseZ=${baseZ.toFixed(2)} offX=${offX.toFixed(
+                            2
+                          )} offZ=${offZ.toFixed(2)}`
                         );
                       }
                       // No direct body API here; snap queue will position after render
@@ -4208,7 +4318,7 @@ export default function Board({
                                 elevation={-0.001} // Negative to render behind avatar
                                 renderOrder={artifactRenderOrder}
                                 depthWrite={false}
-                                depthTest={false}
+                                depthTest={true}
                                 interactive={true}
                                 onPointerOver={(e: ThreeEvent<PointerEvent>) => {
                                   e.stopPropagation();
