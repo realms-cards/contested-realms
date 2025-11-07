@@ -96,13 +96,7 @@ import {
   newPermanentInstanceId,
   newZoneCardInstanceId,
 } from "./store/utils/idHelpers";
-import {
-  computeAvailableMana,
-  computeThresholdTotals,
-  getCachedThresholdTotals,
-  playerKeyToOwner,
-  siteProvidesMana,
-} from "./store/utils/resourceHelpers";
+import { computeThresholdTotals } from "./store/utils/resourceHelpers";
 import {
   clearSnapshotsStorageFor,
   loadSnapshotsFromStorageFor,
@@ -114,6 +108,9 @@ import { createUiSlice } from "./store/uiState";
 import { createBoardUiSlice } from "./store/boardUiState";
 import { createHistorySlice } from "./store/historyState";
 import { createCoreSlice } from "./store/coreState";
+import { createResourceSlice } from "./store/resourceState";
+import { createPreferenceSlice } from "./store/preferenceState";
+import { createCardMetaSlice } from "./store/cardMetaState";
 import { createSessionSlice } from "./store/sessionState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import {
@@ -345,6 +342,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createBoardUiSlice(set, get, storeApi),
   ...createHistorySlice(set, get, storeApi),
   ...createCoreSlice(set, get, storeApi),
+  ...createResourceSlice(set, get, storeApi),
+  ...createPreferenceSlice(set, get, storeApi),
+  ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),
   ...createRemoteCursorSlice(set, get, storeApi),
   ...createInteractionSlice(set, get, storeApi),
@@ -475,58 +475,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
       } catch {}
     }
     return true;
-  },
-  // Feature flag: Interaction Guides (default OFF, persisted locally)
-  interactionGuides: (() => {
-    try {
-      if (typeof window !== "undefined") {
-        return localStorage.getItem("sorcery:interactionGuides") === "1";
-      }
-    } catch {}
-    return false;
-  })(),
-  setInteractionGuides: (on) => {
-    set({ interactionGuides: !!on } as Partial<GameState> as GameState);
-    try {
-      if (typeof window !== "undefined")
-        localStorage.setItem("sorcery:interactionGuides", on ? "1" : "0");
-    } catch {}
-  },
-  // Card meta cache for base power detection
-  metaByCardId: {},
-  fetchCardMeta: async (ids) => {
-    try {
-      const uniq = Array.from(
-        new Set(
-          (Array.isArray(ids) ? ids : [])
-            .map((n) => Number(n))
-            .filter((n) => Number.isFinite(n) && n > 0)
-        )
-      );
-      const need = uniq.filter((id) => !get().metaByCardId[id]);
-      if (!need.length) return;
-      const res = await fetch(
-        `/api/cards/meta?ids=${encodeURIComponent(need.join(","))}`,
-        { credentials: "include" }
-      );
-      if (!res.ok) return;
-      const rows = (await res.json()) as Array<{
-        cardId: number;
-        cost: number | null;
-        thresholds?: unknown;
-        attack: number | null;
-        defence: number | null;
-      }>;
-      const next = { ...(get().metaByCardId as Record<number, { attack: number | null; defence: number | null; cost: number | null }>) };
-      for (const r of rows) {
-        next[r.cardId] = {
-          attack: r.attack ?? null,
-          defence: r.defence ?? null,
-          cost: r.cost ?? null,
-        };
-      }
-      set({ metaByCardId: next } as Partial<GameState> as GameState);
-    } catch {}
   },
   // Minimal combat state (MVP)
   pendingCombat: null,
@@ -2036,33 +1984,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
     }),
 
   // Derived selectors (no state mutation)
-  getPlayerSites: (who) => {
-    const s = get();
-    const owner = who === "p1" ? 1 : 2;
-    return Object.entries(s.board.sites).filter(
-      ([, site]) => site.owner === owner
-    ) as Array<[CellKey, SiteTile]>;
-  },
-  getUntappedSitesCount: (who) => {
-    const s = get();
-    const owner = who === "p1" ? 1 : 2;
-    let count = 0;
-    for (const site of Object.values(s.board.sites)) {
-      if (site.owner === owner && !site.tapped) count++;
-    }
-    return count;
-  },
-  getAvailableMana: (who) => {
-    const s = get();
-    const base = computeAvailableMana(s.board, s.permanents, who);
-    const offset = Number(s.players[who]?.mana || 0);
-    return Math.max(0, base + offset);
-  },
-  getThresholdTotals: (who) => {
-    const s = get();
-    return getCachedThresholdTotals(s, who);
-  },
-
   toggleGridOverlay: () =>
     set((s) => ({ showGridOverlay: !s.showGridOverlay })),
   togglePlaymat: () => set((s) => ({ showPlaymat: !s.showPlaymat })),
