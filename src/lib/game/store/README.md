@@ -56,6 +56,7 @@ These modules are pure and shared across slices; future slice extraction should 
 - ✅ `positionState.ts` owns burrow/submerge/site/player positioning plus related helpers.
 - ✅ `avatarState.ts` manages avatar data (cards, placement/movement, tapping, offsets, artifact hauling).
 - ✅ `boardState.ts` owns the board grid (site placement/removal, control transfers, tap note).
+- ✅ `gameActions.ts` covers card play/move actions (hand/pile plays, permanent transfers, board zone moves).
 - ✅ `preferenceState.ts` keeps interaction guide preferences (localStorage-backed toggle).
 - ✅ `cardMetaState.ts` caches fetched card metadata (`metaByCardId`) with the existing `/api/cards/meta` endpoint.
 - ✅ `sessionState.ts` centralizes match/session metadata (matchId, actor/local IDs) and snapshot persistence helpers.
