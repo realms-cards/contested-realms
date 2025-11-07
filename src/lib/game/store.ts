@@ -84,6 +84,10 @@ import {
   createDefaultPlayerPositions,
   normalizePlayerPositions,
 } from "./store/utils/positionHelpers";
+import {
+  createDefaultAvatars,
+  normalizeAvatars,
+} from "./store/utils/avatarHelpers";
 import { mergeEvents } from "./store/utils/eventHelpers";
 import { newPermanentInstanceId } from "./store/utils/idHelpers";
 import { computeThresholdTotals } from "./store/utils/resourceHelpers";
@@ -101,6 +105,7 @@ import { createCoreSlice } from "./store/coreState";
 import { createResourceSlice } from "./store/resourceState";
 import { createPermanentSlice } from "./store/permanentState";
 import { createPositionSlice } from "./store/positionState";
+import { createAvatarSlice } from "./store/avatarState";
 import { createZoneSlice } from "./store/zoneState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createCardMetaSlice } from "./store/cardMetaState";
@@ -210,58 +215,6 @@ export type {
   Zones,
 } from "./store/types";
 
-function createEmptyAvatarState(): AvatarState {
-  return { card: null, pos: null, tapped: false };
-}
-
-function createDefaultAvatars(): Record<PlayerKey, AvatarState> {
-  return {
-    p1: createEmptyAvatarState(),
-    p2: createEmptyAvatarState(),
-  };
-}
-
-function ensureAvatarState(
-  candidate: Partial<AvatarState> | undefined,
-  fallback: AvatarState | undefined
-): AvatarState {
-  const base = fallback ? { ...fallback } : createEmptyAvatarState();
-  const next: AvatarState = {
-    ...base,
-    card:
-      candidate && "card" in candidate
-        ? candidate.card ?? null
-        : base.card ?? null,
-    pos:
-      candidate && Array.isArray(candidate.pos) && candidate.pos.length === 2
-        ? [candidate.pos[0] ?? 0, candidate.pos[1] ?? 0]
-        : base.pos ?? null,
-    tapped:
-      candidate && typeof candidate.tapped === "boolean"
-        ? candidate.tapped
-        : base.tapped ?? false,
-  };
-  if (candidate && "offset" in candidate) {
-    next.offset = candidate.offset ?? null;
-  } else if (base.offset !== undefined) {
-    next.offset = base.offset;
-  } else {
-    delete next.offset;
-  }
-  return next;
-}
-
-function normalizeAvatars(
-  avatars: Partial<Record<PlayerKey, Partial<AvatarState>>> | undefined,
-  prev?: Record<PlayerKey, AvatarState>
-): Record<PlayerKey, AvatarState> {
-  const base = prev ?? createDefaultAvatars();
-  return {
-    p1: ensureAvatarState(avatars?.p1, base.p1),
-    p2: ensureAvatarState(avatars?.p2, base.p2),
-  };
-}
-
 // Small random visual tilt for permanents to reduce overlap uniformity (radians ~ -0.05..+0.05)
 // ---- Shared helpers (pure) -------------------------------------------------
 
@@ -286,6 +239,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createResourceSlice(set, get, storeApi),
   ...createPermanentSlice(set, get, storeApi),
   ...createPositionSlice(set, get, storeApi),
+  ...createAvatarSlice(set, get, storeApi),
   ...createZoneSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
@@ -956,7 +910,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
 
   board: { size: { w: 5, h: 4 }, sites: {} },
-  avatars: createDefaultAvatars(),
   // Apply an incremental server patch into the store.
   // - Only whitelisted game-state fields are updated
   // - Arrays are replaced; objects are deep-merged
@@ -2471,253 +2424,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         board: { ...s.board, sites },
         ...(zonesNext !== s.zones ? { zones: zonesNext } : {}),
       } as Partial<GameState> as GameState;
-    }),
-
-  setAvatarCard: (who, card) =>
-    set((s) => {
-      get().log(`${who.toUpperCase()} sets Avatar to '${card.name}'`);
-      const avatarsNext = {
-        ...s.avatars,
-        [who]: { ...s.avatars[who], card },
-      } as GameState["avatars"];
-      {
-        const tr = get().transport;
-        if (tr) {
-          const patch: ServerPatchT = {
-            avatars: { [who]: { card } } as GameState["avatars"],
-          };
-          get().trySendPatch(patch);
-        }
-      }
-      return { avatars: avatarsNext } as Partial<GameState> as GameState;
-    }),
-
-  placeAvatarAtStart: (who) =>
-    set((s) => {
-      const w = s.board.size.w;
-      const h = s.board.size.h;
-      const x = Math.floor(w / 2);
-      // Board coordinate system: y=0 is bottom row, y=h-1 is top row.
-      // Desired: p1 at TOP middle, p2 at BOTTOM middle.
-      const y = who === "p1" ? h - 1 : 0;
-      const cellNo = y * w + x + 1;
-      get().log(`${who.toUpperCase()} places Avatar at #${cellNo}`);
-      const avatarsNext = {
-        ...s.avatars,
-        [who]: { ...s.avatars[who], pos: [x, y], offset: null },
-      } as GameState["avatars"];
-      {
-        const tr = get().transport;
-        if (tr) {
-          // Only send the acting seat to avoid touching opponent avatar state
-          const patch: ServerPatchT = {
-            avatars: { [who]: { pos: [x, y] as [number, number], offset: null } } as GameState["avatars"],
-          };
-          get().trySendPatch(patch);
-        }
-      }
-      return { avatars: avatarsNext } as Partial<GameState> as GameState;
-    }),
-
-  moveAvatarTo: (who, x, y) =>
-    set((s) => {
-      get().pushHistory();
-      const w = s.board.size.w;
-      const cellNo = y * w + x + 1;
-
-      // Get old avatar position
-      const oldPos = s.avatars[who]?.pos;
-      const oldKey = oldPos ? `${oldPos[0]},${oldPos[1]}` as CellKey : null;
-      const newKey = `${x},${y}` as CellKey;
-
-      // Check if this is a cross-tile move and avatar is not already tapped
-      const isCrossTileMove = oldKey && oldKey !== newKey;
-      const currentAvatar = s.avatars[who];
-      const shouldTap = isCrossTileMove && !currentAvatar?.tapped;
-
-      // Update avatar position with optional tapping
-      let avatars = buildAvatarUpdate(
-        s,
-        who,
-        [x, y] as [number, number],
-        null
-      );
-
-      // If cross-tile move, tap the avatar
-      if (shouldTap) {
-        avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
-      }
-
-      // Move attached artifacts if avatar moved to a different tile
-      let permanents = s.permanents;
-      if (isCrossTileMove) {
-        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey as CellKey, newKey);
-        permanents = result.permanents;
-        if (result.movedArtifacts.length > 0) {
-          get().log(`Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`);
-        }
-      }
-
-      if (shouldTap) {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (tapped)`);
-      } else {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
-      }
-
-      {
-        const tr = get().transport;
-        if (tr) {
-          const patch: ServerPatchT = {
-            avatars: {
-              [who]: {
-                pos: [x, y] as [number, number],
-                offset: null,
-                ...(shouldTap && { tapped: true })
-              },
-            } as GameState["avatars"],
-          };
-          // Also send permanents patch if artifacts moved
-          if (isCrossTileMove) {
-            patch.permanents = {
-              [oldKey as CellKey]: permanents[oldKey as CellKey] || [],
-              [newKey]: permanents[newKey] || [],
-            };
-          }
-          get().trySendPatch(patch);
-        }
-      }
-      return { avatars, permanents } as Partial<GameState> as GameState;
-    }),
-
-  moveAvatarToWithOffset: (who, x, y, offset) =>
-    set((s) => {
-      get().pushHistory();
-      const w = s.board.size.w;
-      const cellNo = y * w + x + 1;
-
-      // Get old avatar position
-      const oldPos = s.avatars[who]?.pos;
-      const oldKey = oldPos ? `${oldPos[0]},${oldPos[1]}` as CellKey : null;
-      const newKey = `${x},${y}` as CellKey;
-
-      // Check if this is a cross-tile move and avatar is not already tapped
-      const isCrossTileMove = oldKey && oldKey !== newKey;
-      const currentAvatar = s.avatars[who];
-      const shouldTap = isCrossTileMove && !currentAvatar?.tapped;
-
-      // Update avatar position with optional tapping
-      let avatars = buildAvatarUpdate(
-        s,
-        who,
-        [x, y] as [number, number],
-        offset
-      );
-
-      // If cross-tile move, tap the avatar
-      if (shouldTap) {
-        avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
-      }
-
-      // Move attached artifacts if avatar moved to a different tile
-      let permanents = s.permanents;
-      if (isCrossTileMove) {
-        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey as CellKey, newKey);
-        permanents = result.permanents;
-        if (result.movedArtifacts.length > 0) {
-          get().log(`Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`);
-        }
-      }
-
-      if (shouldTap) {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (tapped)`);
-      } else {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
-      }
-
-      {
-        const tr = get().transport;
-        if (tr) {
-          // Only send the acting seat to avoid opponent-zone write detection
-          const patch: ServerPatchT = {
-            avatars: {
-              [who]: {
-                pos: [x, y] as [number, number],
-                offset,
-                ...(shouldTap && { tapped: true })
-              },
-            } as GameState["avatars"],
-          };
-          // Also send permanents patch if artifacts moved
-          if (isCrossTileMove) {
-            patch.permanents = {
-              [oldKey as CellKey]: permanents[oldKey as CellKey] || [],
-              [newKey]: permanents[newKey] || [],
-            };
-          }
-          get().trySendPatch(patch);
-        }
-      }
-      return { avatars, permanents } as Partial<GameState> as GameState;
-    }),
-
-  setAvatarOffset: (who, offset) =>
-    set((s) => {
-      const cur = s.avatars[who];
-      if (!cur) return s;
-      const avatarsNext = {
-        ...s.avatars,
-        [who]: { ...cur, offset },
-      } as GameState["avatars"];
-      const updates: Partial<GameState> = {
-        avatars: avatarsNext,
-      };
-      const actorSeat = s.actorKey;
-      const patch: ServerPatchT = {
-        avatars: { [who]: { offset } } as GameState["avatars"],
-      };
-      if (!actorSeat) {
-        const pending = Array.isArray(s.pendingPatches)
-          ? s.pendingPatches
-          : [];
-        updates.pendingPatches = [...pending, patch];
-      } else if (actorSeat !== who) {
-        get().log("Cannot adjust opponent avatar offset");
-        return s as GameState;
-      } else {
-        get().trySendPatch(patch);
-      }
-      return updates as Partial<GameState> as GameState;
-    }),
-
-  toggleTapAvatar: (who) =>
-    set((s) => {
-      get().pushHistory();
-      const actorSeat = s.actorKey;
-      if (actorSeat && actorSeat !== who) {
-        get().log(`Cannot change tap on opponent avatar`);
-        return s as GameState;
-      }
-      const cur = s.avatars[who];
-      const next = { ...cur, tapped: !cur.tapped };
-      get().log(
-        `${who.toUpperCase()} ${next.tapped ? "taps" : "untaps"} Avatar`
-      );
-      const avatarsNext = { ...s.avatars, [who]: next } as GameState["avatars"];
-      const patch: ServerPatchT = {
-        avatars: { [who]: { tapped: next.tapped } } as GameState["avatars"],
-      };
-      const updates: Partial<GameState> = {
-        avatars: avatarsNext,
-      };
-      if (!actorSeat) {
-        const pending = Array.isArray(s.pendingPatches)
-          ? s.pendingPatches
-          : [];
-        updates.pendingPatches = [...pending, patch];
-      } else {
-        get().trySendPatch(patch);
-      }
-      return updates as Partial<GameState> as GameState;
     }),
 
 
