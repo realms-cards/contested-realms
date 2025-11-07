@@ -49,14 +49,7 @@ import {
   BOARD_PING_LIFETIME_MS,
   BOARD_PING_MAX_HISTORY,
 } from "./store/types";
-import type {
-  PermanentPosition,
-  SitePositionData,
-  BurrowAbility,
-  ContextMenuAction,
-  PermanentPositionState,
-  PlayerPositionReference,
-} from "./types";
+import type { PlayerPositionReference } from "./types";
 import {
   ensureCardInstanceId,
   prepareCardForSeat,
@@ -87,6 +80,10 @@ import {
   mergePermanentsMap,
   type PermanentDeltaUpdate,
 } from "./store/utils/patchHelpers";
+import {
+  createDefaultPlayerPositions,
+  normalizePlayerPositions,
+} from "./store/utils/positionHelpers";
 import { mergeEvents } from "./store/utils/eventHelpers";
 import { newPermanentInstanceId } from "./store/utils/idHelpers";
 import { computeThresholdTotals } from "./store/utils/resourceHelpers";
@@ -103,6 +100,7 @@ import { createHistorySlice } from "./store/historyState";
 import { createCoreSlice } from "./store/coreState";
 import { createResourceSlice } from "./store/resourceState";
 import { createPermanentSlice } from "./store/permanentState";
+import { createPositionSlice } from "./store/positionState";
 import { createZoneSlice } from "./store/zoneState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createCardMetaSlice } from "./store/cardMetaState";
@@ -264,58 +262,6 @@ function normalizeAvatars(
   };
 }
 
-function createDefaultPlayerPosition(who: PlayerKey): PlayerPositionReference {
-  return {
-    playerId: who === "p1" ? 1 : 2,
-    position: { x: 0, z: 0 },
-  };
-}
-
-function createDefaultPlayerPositions(): Record<
-  PlayerKey,
-  PlayerPositionReference
-> {
-  return {
-    p1: createDefaultPlayerPosition("p1"),
-    p2: createDefaultPlayerPosition("p2"),
-  };
-}
-
-function ensurePlayerPosition(
-  who: PlayerKey,
-  candidate: Partial<PlayerPositionReference> | undefined,
-  fallback: PlayerPositionReference | undefined
-): PlayerPositionReference {
-  const base = fallback ? { ...fallback } : createDefaultPlayerPosition(who);
-  const coord =
-    candidate && typeof candidate.position === "object"
-      ? candidate.position
-      : undefined;
-  return {
-    playerId:
-      candidate && typeof candidate.playerId === "number"
-        ? candidate.playerId
-        : base.playerId,
-    position: {
-      x: coord && typeof coord.x === "number" ? coord.x : base.position.x,
-      z: coord && typeof coord.z === "number" ? coord.z : base.position.z,
-    },
-  };
-}
-
-function normalizePlayerPositions(
-  positions:
-    | Partial<Record<PlayerKey, Partial<PlayerPositionReference>>>
-    | undefined,
-  prev?: Record<PlayerKey, PlayerPositionReference>
-): Record<PlayerKey, PlayerPositionReference> {
-  const base = prev ?? createDefaultPlayerPositions();
-  return {
-    p1: ensurePlayerPosition("p1", positions?.p1, base.p1),
-    p2: ensurePlayerPosition("p2", positions?.p2, base.p2),
-  };
-}
-
 // Small random visual tilt for permanents to reduce overlap uniformity (radians ~ -0.05..+0.05)
 // ---- Shared helpers (pure) -------------------------------------------------
 
@@ -339,6 +285,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createCoreSlice(set, get, storeApi),
   ...createResourceSlice(set, get, storeApi),
   ...createPermanentSlice(set, get, storeApi),
+  ...createPositionSlice(set, get, storeApi),
   ...createZoneSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
@@ -2773,223 +2720,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
       return updates as Partial<GameState> as GameState;
     }),
 
-
-  // ===== PERMANENT POSITION SLICE (Burrow/Submerge) =====
-
-  // State storage
-  permanentPositions: {},
-  permanentAbilities: {},
-  sitePositions: {},
-  playerPositions: {
-    p1: { playerId: 1, position: { x: 0, z: 0 } },
-    p2: { playerId: 2, position: { x: 0, z: 0 } },
-  },
-
-  // Position Actions
-  setPermanentPosition: (permanentId: number, position: PermanentPosition) =>
-    set((state) => ({
-      permanentPositions: {
-        ...state.permanentPositions,
-        [permanentId]: position,
-      },
-    })),
-
-  updatePermanentState: (
-    permanentId: number,
-    newState: PermanentPositionState
-  ) =>
-    set((state) => {
-      const currentPos = state.permanentPositions[permanentId];
-      if (!currentPos) return state;
-
-      // Calculate new Y position based on state
-      let newY = currentPos.position.y;
-      switch (newState) {
-        case "surface":
-          newY = 0;
-          break;
-        case "burrowed":
-        case "submerged":
-          newY = -0.25; // Underground depth
-          break;
-      }
-
-      const updatedPosition: PermanentPosition = {
-        ...currentPos,
-        state: newState,
-        position: {
-          ...currentPos.position,
-          y: newY,
-        },
-      };
-
-      const nextPositions = {
-        ...state.permanentPositions,
-        [permanentId]: updatedPosition,
-      } as GameState["permanentPositions"];
-
-      // Broadcast as a partial patch if online
-      try {
-        const tr = get().transport;
-        if (tr) {
-          const patch: ServerPatchT = { permanentPositions: nextPositions };
-          get().trySendPatch(patch);
-        }
-      } catch {}
-
-      return {
-        permanentPositions: nextPositions,
-      } as Partial<GameState> as GameState;
-    }),
-
-  setPermanentAbility: (permanentId: number, ability: BurrowAbility) =>
-    set((state) => ({
-      permanentAbilities: {
-        ...state.permanentAbilities,
-        [permanentId]: ability,
-      },
-    })),
-
-  setSitePosition: (siteId: number, positionData: SitePositionData) =>
-    set((state) => ({
-      sitePositions: {
-        ...state.sitePositions,
-        [siteId]: positionData,
-      },
-    })),
-
-  setPlayerPosition: (playerId: PlayerKey, position: PlayerPositionReference) =>
-    set((state) => ({
-      playerPositions: {
-        ...state.playerPositions,
-        [playerId]: position,
-      },
-    })),
-
-  // Validation and Utilities
-  canTransitionState: (
-    permanentId: number,
-    targetState: PermanentPositionState
-  ) => {
-    const state = get();
-    const currentPos = state.permanentPositions[permanentId];
-    const ability = state.permanentAbilities[permanentId];
-
-    if (!currentPos || !ability) return false;
-
-    const currentState = currentPos.state;
-
-    // Same state transitions not allowed
-    if (currentState === targetState) return false;
-
-    // Check ability requirements
-    if (targetState === "burrowed" && !ability.canBurrow) return false;
-    if (targetState === "submerged" && !ability.canSubmerge) return false;
-
-    // Direct burrowed ↔ submerged transitions forbidden
-    if (currentState === "burrowed" && targetState === "submerged")
-      return false;
-    if (currentState === "submerged" && targetState === "burrowed")
-      return false;
-
-    return true;
-  },
-
-  getAvailableActions: (permanentId: number): ContextMenuAction[] => {
-    const state = get();
-    const currentPos = state.permanentPositions[permanentId];
-    const ability = state.permanentAbilities[permanentId];
-
-    if (!currentPos || !ability) return [];
-
-    const actions: ContextMenuAction[] = [];
-    const currentState = currentPos.state;
-
-    // Add burrow action if possible
-    if (currentState === "surface" && ability.canBurrow) {
-      actions.push({
-        actionId: "burrow",
-        displayText: "Burrow",
-        icon: "arrow-down",
-        isEnabled: true,
-        targetPermanentId: permanentId,
-        newPositionState: "burrowed",
-        description: "Move this permanent under the current site",
-      });
-    }
-
-    // Add submerge action if possible
-    if (currentState === "surface" && ability.canSubmerge) {
-      // TODO: Check if at water site when site system is integrated
-      const isAtWaterSite = true; // Placeholder
-      actions.push({
-        actionId: "submerge",
-        displayText: "Submerge",
-        icon: "waves",
-        isEnabled: isAtWaterSite,
-        targetPermanentId: permanentId,
-        newPositionState: "submerged",
-        description: "Submerge this permanent underwater (water sites only)",
-      });
-    }
-
-    // Add surface/emerge actions if underground
-    if (currentState === "burrowed") {
-      actions.push({
-        actionId: "surface",
-        displayText: "Surface",
-        icon: "arrow-up",
-        isEnabled: true,
-        targetPermanentId: permanentId,
-        newPositionState: "surface",
-        description: "Bring this permanent back to the surface",
-      });
-    }
-
-    if (currentState === "submerged") {
-      actions.push({
-        actionId: "emerge",
-        displayText: "Emerge",
-        icon: "arrow-up",
-        isEnabled: true,
-        targetPermanentId: permanentId,
-        newPositionState: "surface",
-        description: "Emerge this permanent from underwater",
-      });
-    }
-
-    return actions;
-  },
-
-  calculateEdgePosition: (
-    tileCoords: { x: number; z: number },
-    playerPos: { x: number; z: number }
-  ) => {
-    // Calculate offset toward player position from tile center
-    const dx = playerPos.x - tileCoords.x;
-    const dz = playerPos.z - tileCoords.z;
-
-    // Normalize and scale to edge (max ±0.2 offset, closer to center)
-    const magnitude = Math.sqrt(dx * dx + dz * dz);
-    if (magnitude === 0) return { x: 0, z: 0 };
-
-    const scale = 0.2;
-    return {
-      x: (dx / magnitude) * scale,
-      z: (dz / magnitude) * scale,
-    };
-  },
-
-  calculatePlacementAngle: (
-    tilePos: { x: number; z: number },
-    playerPos: { x: number; z: number }
-  ) => {
-    // Calculate angle from tile to player (0 = east, π/2 = north)
-    const dx = playerPos.x - tilePos.x;
-    const dz = playerPos.z - tilePos.z;
-
-    return Math.atan2(dz, dx);
-  },
 
   // Reset all game state to initial values (for new matches)
   resetGameState: () =>
