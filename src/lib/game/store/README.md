@@ -52,6 +52,7 @@ These modules are pure and shared across slices; future slice extraction should 
 - ✅ `coreState.ts` now owns players, life changes, turn/phase transitions, setup flow (d20 + order), and match-end detection.
 - ✅ `resourceState.ts` centralizes resource selectors (sites, mana, thresholds) plus mana/threshold mutation helpers.
 - ✅ `zoneState.ts` manages hand/spellbook/atlas/graveyard/banished state, shuffles/draws/scry, token creation, and mulligan workflows.
+- ✅ `permanentState.ts` handles the battlefield permanents record (tapping, counters, attachments, avatar links, damage tracking).
 - ✅ `preferenceState.ts` keeps interaction guide preferences (localStorage-backed toggle).
 - ✅ `cardMetaState.ts` caches fetched card metadata (`metaByCardId`) with the existing `/api/cards/meta` endpoint.
 - ✅ `sessionState.ts` centralizes match/session metadata (matchId, actor/local IDs) and snapshot persistence helpers.
