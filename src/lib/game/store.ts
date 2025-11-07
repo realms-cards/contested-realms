@@ -100,6 +100,7 @@ import { createEventSlice } from "./store/eventState";
 import { createDialogSlice } from "./store/dialogState";
 import { createUiSlice } from "./store/uiState";
 import { createBoardUiSlice } from "./store/boardUiState";
+import { createBoardSlice } from "./store/boardState";
 import { createHistorySlice } from "./store/historyState";
 import { createCoreSlice } from "./store/coreState";
 import { createResourceSlice } from "./store/resourceState";
@@ -233,6 +234,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createEventSlice(set, get, storeApi),
   ...createDialogSlice(set, get, storeApi),
   ...createUiSlice(set, get, storeApi),
+  ...createBoardSlice(set, get, storeApi),
   ...createBoardUiSlice(set, get, storeApi),
   ...createHistorySlice(set, get, storeApi),
   ...createCoreSlice(set, get, storeApi),
@@ -1377,15 +1379,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   toggleGridOverlay: () =>
     set((s) => ({ showGridOverlay: !s.showGridOverlay })),
   togglePlaymat: () => set((s) => ({ showPlaymat: !s.showPlaymat })),
-  toggleTapSite: (x, y) =>
-    set((s) => {
-      void x;
-      void y;
-      // Sites do not tap in Sorcery
-      get().log("Sites do not tap.");
-      return s as GameState;
-    }),
-
 
 
   playSelectedTo: (x, y) =>
@@ -2114,77 +2107,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
       } as Partial<GameState> as GameState;
     }),
 
-  // Move a site from the board to a target zone
-  moveSiteToZone: (x, y, target, position) =>
-    set((s) => {
-      get().pushHistory();
-      const key: CellKey = `${x},${y}`;
-      const site = s.board.sites[key];
-      if (!site || !site.card) return s;
-      // Ownership guard in online play
-      if (s.transport) {
-        if (!s.actorKey) {
-          get().log(
-            "Cannot move sites until seat ownership is established"
-          );
-          return s as GameState;
-        }
-        const ownerKey = (site.owner === 1 ? "p1" : "p2") as PlayerKey;
-        if (s.actorKey !== ownerKey) {
-          get().log("Cannot move opponent's site to a zone");
-          return s as GameState;
-        }
-      }
-      const owner: PlayerKey = site.owner === 1 ? "p1" : "p2";
-      // Remove the site from the board
-      const sites = { ...s.board.sites };
-      delete sites[key];
-      const zones = { ...s.zones } as Record<PlayerKey, Zones>;
-      const z = { ...zones[owner] };
-      const movedSiteCard = site.card
-        ? prepareCardForSeat(site.card, owner)
-        : site.card;
-      if (target === "hand" && movedSiteCard) {
-        z.hand = [...z.hand, movedSiteCard];
-      } else if (target === "graveyard" && movedSiteCard) {
-        z.graveyard = [movedSiteCard, ...z.graveyard];
-      } else if (target === "atlas" && movedSiteCard) {
-        const pile = [...z.atlas];
-        if (position === "top") pile.unshift(movedSiteCard);
-        else pile.push(movedSiteCard);
-        z.atlas = pile;
-      } else if (movedSiteCard) {
-        z.banished = [...z.banished, movedSiteCard];
-      }
-      zones[owner] = z;
-      const cellNo = y * s.board.size.w + x + 1;
-      const label =
-        target === "hand"
-          ? "hand"
-          : target === "graveyard"
-          ? "graveyard"
-          : target === "atlas"
-          ? "atlas"
-          : "banished";
-      get().log(
-        `Moved site '${
-          site.card.name
-        }' from #${cellNo} to ${owner.toUpperCase()} ${label}`
-      );
-      {
-        const boardNext = { ...s.board, sites } as GameState["board"];
-        const patch: ServerPatchT = {
-          board: boardNext,
-          zones: zones as GameState["zones"],
-        };
-        get().trySendPatch(patch);
-      }
-      return {
-        board: { ...s.board, sites },
-        zones,
-      } as Partial<GameState> as GameState;
-    }),
-
   // Transfer control of a permanent at a given cell/index (toggle if 'to' not provided)
   transferPermanentControl: (at, index, to) =>
     set((s) => {
@@ -2355,73 +2277,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
       }
       return {
         permanents: per,
-        ...(zonesNext !== s.zones ? { zones: zonesNext } : {}),
-      } as Partial<GameState> as GameState;
-    }),
-
-  // Transfer control of a site at a given x,y (toggle if 'to' not provided)
-  transferSiteControl: (x, y, to) =>
-    set((s) => {
-      get().pushHistory();
-      if (s.transport) {
-        if (!s.actorKey) {
-          get().log("Cannot transfer control until seat is established");
-          return s as GameState;
-        }
-      }
-      const key: CellKey = `${x},${y}`;
-      const site = s.board.sites[key];
-      if (!site) return s;
-      if (s.transport && s.actorKey) {
-        const ownerSeat = site.owner === 1 ? "p1" : "p2";
-        if (s.actorKey !== ownerSeat) {
-          get().log("Cannot transfer opponent site");
-          return s as GameState;
-        }
-      }
-      const fromOwner = site.owner;
-      const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
-      const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
-      const updatedSiteCard = site.card
-        ? prepareCardForSeat(site.card, newOwnerSeat)
-        : site.card;
-      const sites = {
-        ...s.board.sites,
-        [key]: { ...site, owner: newOwner, card: updatedSiteCard },
-      };
-      let zonesNext = s.zones;
-      let changedSeats: PlayerKey[] = [];
-      if (updatedSiteCard?.instanceId) {
-        const removal = removeCardInstanceFromAllZones(
-          s.zones,
-          updatedSiteCard.instanceId
-        );
-        if (removal) {
-          zonesNext = removal.zones;
-          changedSeats = removal.seats;
-        }
-      }
-      const cellNo = y * s.board.size.w + x + 1;
-      const name = site.card?.name || `Site #${cellNo}`;
-      get().log(
-        `Control of '${name}' at #${cellNo} transferred to P${newOwner}`
-      );
-      {
-        const boardNext = { ...s.board, sites } as GameState["board"];
-        const patch: ServerPatchT = { board: boardNext };
-        if (changedSeats.length > 0 && zonesNext) {
-          const zonePatch = createZonesPatchFor(
-            zonesNext,
-            changedSeats as Array<keyof GameState["zones"]>
-          );
-          if (zonePatch?.zones) {
-            patch.zones = zonePatch.zones;
-          }
-        }
-        get().trySendPatch(patch);
-      }
-      return {
-        board: { ...s.board, sites },
         ...(zonesNext !== s.zones ? { zones: zonesNext } : {}),
       } as Partial<GameState> as GameState;
     }),
