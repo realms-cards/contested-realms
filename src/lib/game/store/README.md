@@ -55,6 +55,7 @@ These modules are pure and shared across slices; future slice extraction should 
 - ✅ `permanentState.ts` handles the battlefield permanents record (tapping, counters, attachments, avatar links, damage tracking).
 - ✅ `positionState.ts` owns burrow/submerge/site/player positioning plus related helpers.
 - ✅ `avatarState.ts` manages avatar data (cards, placement/movement, tapping, offsets, artifact hauling).
+- ✅ `boardState.ts` owns the board grid (site placement/removal, control transfers, tap note).
 - ✅ `preferenceState.ts` keeps interaction guide preferences (localStorage-backed toggle).
 - ✅ `cardMetaState.ts` caches fetched card metadata (`metaByCardId`) with the existing `/api/cards/meta` endpoint.
 - ✅ `sessionState.ts` centralizes match/session metadata (matchId, actor/local IDs) and snapshot persistence helpers.
