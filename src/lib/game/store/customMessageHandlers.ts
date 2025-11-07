@@ -1,0 +1,490 @@
+import type { StateCreator } from "zustand";
+import type {
+  GameState,
+  PlayerKey,
+  CellKey,
+  Permanents,
+  SiteTile,
+} from "./types";
+
+type StoreSet = Parameters<StateCreator<GameState>>[0];
+type StoreGet = Parameters<StateCreator<GameState>>[1];
+
+export function handleCustomMessage(
+  msg: unknown,
+  set: StoreSet,
+  get: StoreGet
+) {
+  if (!msg || typeof msg !== "object") return;
+  const t = (msg as { type?: unknown }).type;
+  if (typeof t !== "string" || !t) return;
+  if (t === "boardPing") {
+    const payload = msg as {
+      id?: string;
+      playerId?: string | null;
+      playerKey?: PlayerKey | null;
+      position?: { x?: number; z?: number };
+      ts?: number;
+    };
+    get().pushBoardPing({
+      id: payload.id ?? String(Math.random()),
+      playerId: payload.playerId ?? null,
+      playerKey:
+        payload.playerKey === "p1" || payload.playerKey === "p2"
+          ? payload.playerKey
+          : null,
+      position: {
+        x: Number(payload.position?.x) || 0,
+        z: Number(payload.position?.z) || 0,
+      },
+      ts:
+        typeof payload.ts === "number" && Number.isFinite(payload.ts)
+          ? payload.ts
+          : Date.now(),
+    });
+    return;
+  }
+  if (t === "interceptOffer") {
+    const idRaw = (msg as { id?: unknown }).id as string | undefined;
+    const tile = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+    const attacker = (msg as { attacker?: unknown }).attacker as { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown } | undefined;
+    const x = Number(tile?.x);
+    const y = Number(tile?.y);
+    const at = typeof attacker?.at === "string" ? (attacker?.at as string) : null;
+    const indexVal = Number(attacker?.index);
+    const ownerVal = Number(attacker?.owner);
+    const id = typeof idRaw === "string" && idRaw ? idRaw : `cmb_${Date.now().toString(36)}`;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+    const defenderSeat = (ownerVal === 1 ? "p2" : "p1") as PlayerKey;
+    const mySeat = get().actorKey as PlayerKey | null;
+    // Show intercept chooser only to defender seat, or in hotseat (no actorKey)
+    if (mySeat && mySeat !== defenderSeat) return;
+    set({
+      pendingCombat: {
+        id: String(id),
+        tile: { x, y },
+        attacker: { at, index: Number(indexVal), instanceId: (attacker?.instanceId as string | null) ?? null, owner: (ownerVal as 1 | 2) },
+        target: null,
+        defenderSeat,
+        defenders: [],
+        status: "defending",
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try { get().log("Intercept opportunity: choose interceptors"); } catch {}
+    return;
+  }
+  if (t === "toast") {
+    const text = (msg as { text?: unknown }).text;
+    if (typeof text === "string" && text.trim().length > 0) {
+      try { get().log(text); } catch {}
+    }
+    return;
+  }
+  if (t === "combatCommit") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const defendersAny = (msg as { defenders?: unknown }).defenders as unknown;
+    const targetAny = (msg as { target?: unknown }).target as unknown;
+    const tileMsg = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+    if (!id) return;
+    let defenders: Array<{ at: CellKey; index: number; owner: 1 | 2; instanceId: string | null }> = [];
+    if (Array.isArray(defendersAny)) {
+      defenders = defendersAny
+        .filter((d) => d && typeof d === "object")
+        .map((d) => d as Record<string, unknown>)
+        .map((rec) => {
+          const at = typeof rec.at === "string" ? (rec.at as string) : null;
+          const idx = Number(rec.index);
+          const ownerVal = Number(rec.owner);
+          const instanceId = typeof rec.instanceId === "string" ? (rec.instanceId as string) : null;
+          if (!at || !Number.isFinite(idx) || !Number.isFinite(ownerVal)) return null;
+          return { at: at as CellKey, index: Number(idx), owner: ownerVal as 1 | 2, instanceId };
+        })
+        .filter(Boolean) as Array<{ at: CellKey; index: number; owner: 1 | 2; instanceId: string | null }>;
+    }
+    let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
+    try {
+      if (targetAny && typeof targetAny === "object") {
+        const rec = targetAny as Record<string, unknown>;
+        const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+        const a = typeof rec.at === "string" ? (rec.at as string) : "";
+        const idx = rec.index == null ? null : Number(rec.index);
+        const ok = k === "permanent" || k === "avatar" || k === "site";
+        if (ok && a && (idx === null || Number.isFinite(idx))) {
+          const kind = k as "permanent" | "avatar" | "site";
+          target = { kind, at: a as CellKey, index: idx };
+        }
+      }
+    } catch {}
+    const x = Number(tileMsg?.x);
+    const y = Number(tileMsg?.y);
+    set((s) => {
+      if (!s.pendingCombat || s.pendingCombat.id !== id) return s as GameState;
+      return {
+        pendingCombat: {
+          ...s.pendingCombat,
+          defenders,
+          target: target ?? s.pendingCombat.target,
+          tile: Number.isFinite(x) && Number.isFinite(y) ? { x, y } : s.pendingCombat.tile,
+          status: "committed",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "combatAssign") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const asgnAny = (msg as { assignment?: unknown }).assignment as unknown;
+    if (!id || !Array.isArray(asgnAny)) return;
+    const records = asgnAny.filter((a) => a && typeof a === "object").map((a) => a as Record<string, unknown>);
+    const asgn = records
+      .map((rec) => {
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const idx = Number(rec.index);
+        const amt = Number(rec.amount);
+        if (!at || !Number.isFinite(idx) || !Number.isFinite(amt)) return null;
+        return { at: at as CellKey, index: Number(idx), amount: Math.max(0, Math.floor(amt)) };
+      })
+      .filter(Boolean) as Array<{ at: CellKey; index: number; amount: number }>;
+    set((s) => {
+      if (!s.pendingCombat || s.pendingCombat.id !== id) return s as GameState;
+      return { pendingCombat: { ...s.pendingCombat, assignment: asgn } } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "combatDamage") {
+    const dmgAny = (msg as { damage?: unknown }).damage as unknown;
+    if (!Array.isArray(dmgAny)) return;
+    const mySeat = get().actorKey as PlayerKey | null;
+    for (const d of dmgAny) {
+      if (!d || typeof d !== "object") continue;
+      const rec = d as Record<string, unknown>;
+      const at = typeof rec.at === "string" ? (rec.at as string) : "";
+      const idx = Number(rec.index);
+      const amt = Number(rec.amount);
+      if (!at || !Number.isFinite(idx) || !Number.isFinite(amt)) continue;
+      try {
+        const ownerNum = (get().permanents as Permanents)[at]?.[Number(idx)]?.owner;
+        const ownerSeat = ownerNum === 1 ? "p1" : ownerNum === 2 ? "p2" : null;
+        if (!mySeat || ownerSeat !== mySeat) continue;
+        get().applyDamageToPermanent(at as CellKey, Number(idx), Math.max(0, Math.floor(amt)));
+      } catch {}
+    }
+    return;
+  }
+  if (t === "combatAutoApply") {
+    const killsAny = (msg as { kills?: unknown }).kills as unknown;
+    console.log('[combatAutoApply] Received kills:', killsAny);
+    if (Array.isArray(killsAny)) {
+      const mySeat = get().actorKey as PlayerKey | null;
+      console.log('[combatAutoApply] mySeat:', mySeat, 'kills count:', killsAny.length);
+      for (const k of killsAny) {
+        if (!k || typeof k !== "object") continue;
+        const rec = k as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : "";
+        const idx = Number(rec.index);
+        const owner = (rec.owner as PlayerKey | undefined) ?? undefined;
+        console.log('[combatAutoApply] Processing kill:', { at, idx, owner }, 'owner === mySeat?', owner === mySeat);
+        if (!at || !Number.isFinite(idx)) continue;
+        if (!mySeat || owner !== mySeat) continue;
+        console.log('[combatAutoApply] Applying kill to graveyard:', at, idx);
+        try { get().movePermanentToZone(at as CellKey, Number(idx), "graveyard"); } catch (err) {
+          console.error('[combatAutoApply] Error moving to graveyard:', err);
+        }
+      }
+    }
+    return;
+  }
+
+  if (t === "combatSummary") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const text = (msg as { text?: unknown }).text as string | undefined;
+    const actor = (msg as { actor?: unknown }).actor as PlayerKey | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as PlayerKey | undefined;
+    if (id && typeof text === "string") {
+      set({ lastCombatSummary: { id, text, ts: Date.now(), actor, targetSeat }, pendingCombat: null } as Partial<GameState> as GameState);
+    }
+    return;
+  }
+  if (t === "attackDeclare") {
+    const id = (msg as { id?: unknown }).id;
+    const tile = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+    const attacker = (msg as { attacker?: unknown }).attacker as
+      | { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown }
+      | undefined;
+    const targetAny = (msg as { target?: unknown }).target as unknown;
+    const x = Number(tile?.x);
+    const y = Number(tile?.y);
+    const at = typeof attacker?.at === "string" ? (attacker?.at as string) : null;
+    const indexVal = Number(attacker?.index);
+    const ownerVal = Number(attacker?.owner);
+    if (!id || !Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+    const defenderSeat = (ownerVal === 1 ? "p2" : "p1") as PlayerKey;
+    let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
+    try {
+      if (targetAny && typeof targetAny === "object") {
+        const rec = targetAny as Record<string, unknown>;
+        const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+        const a = typeof rec.at === "string" ? (rec.at as string) : "";
+        const idx = rec.index == null ? null : Number(rec.index);
+        const okKind = k === "permanent" || k === "avatar" || k === "site";
+        if (okKind && a && (idx === null || Number.isFinite(idx))) {
+          target = { kind: k as "permanent" | "avatar" | "site", at: a as CellKey, index: idx as number | null };
+        }
+      }
+    } catch {}
+    set({
+      pendingCombat: {
+        id: String(id),
+        tile: { x, y },
+        attacker: { at, index: Number(indexVal), instanceId: (attacker?.instanceId as string | null) ?? null, owner: (ownerVal as 1 | 2) },
+        target,
+        defenderSeat,
+        defenders: [],
+        status: "declared",
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try { get().log(`Attack declared at #${y * get().board.size.w + x + 1}`); } catch {}
+    return;
+  }
+  if (t === "combatSetDefenders") {
+    const id = (msg as { id?: unknown }).id;
+    const defendersAny = (msg as { defenders?: unknown }).defenders as unknown;
+    if (!id || !Array.isArray(defendersAny)) return;
+    const records = defendersAny
+      .filter((d) => d && typeof d === "object")
+      .map((d) => d as Record<string, unknown>);
+    const defenders = records
+      .map((rec) => {
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId =
+          typeof rec.instanceId === "string"
+            ? (rec.instanceId as string)
+            : null;
+        if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return null;
+        return {
+          at,
+          index: Number(indexVal),
+          owner: ownerVal as 1 | 2,
+          instanceId: instanceId ?? null,
+        };
+      })
+      .filter((x): x is { at: CellKey; index: number; owner: 1 | 2; instanceId: string | null } => Boolean(x));
+    set((s) => {
+      if (!s.pendingCombat || s.pendingCombat.id !== (id as string)) return s as GameState;
+      const prev = s.pendingCombat.status;
+      return {
+        pendingCombat: {
+          ...s.pendingCombat,
+          defenders,
+          status: prev === "committed" ? "committed" : "defending",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    try { get().log(`Acting player selected ${defenders.length} defender${defenders.length === 1 ? "" : "s"}`); } catch {}
+    return;
+  }
+  if (t === "combatResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const attacker = (msg as { attacker?: unknown }).attacker as { at?: unknown; index?: unknown; owner?: unknown } | undefined;
+    const defendersAny = (msg as { defenders?: unknown }).defenders as unknown[] | undefined;
+    const targetAny = (msg as { target?: unknown }).target as unknown;
+    const tileMsg = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+    // Set taps idempotently: attacker taps on attack; defenders remain unchanged
+    const aAt = typeof attacker?.at === "string" ? (attacker.at as string) : null;
+    const aIdx = Number(attacker?.index);
+    if (aAt && Number.isFinite(aIdx)) {
+      try { get().setTapPermanent(aAt as CellKey, Number(aIdx), true); } catch {}
+    }
+    // Do not tap defenders here
+    const defenders = Array.isArray(defendersAny) ? defendersAny : [];
+    // Compute a fallback summary so both players see outcome even if a separate summary message is delayed
+    try {
+      const permanents = get().permanents as Permanents;
+      const meta = get().metaByCardId as Record<number, { attack: number | null; defence: number | null; cost: number | null }>;
+      const board = get().board;
+      const players = get().players;
+      function getAtkDef(at: string, index: number): { atk: number; def: number } {
+        try {
+          const cardId = permanents[at]?.[index]?.card?.cardId;
+          const m = cardId ? meta[Number(cardId)] : undefined;
+          const atk = Number(m?.attack ?? 0) || 0;
+          const def = Number(m?.defence ?? m?.attack ?? 0) || 0;
+          return { atk, def };
+        } catch { return { atk: 0, def: 0 }; }
+      }
+      function getAttachments(at: string, index: number): Permanents[string] {
+        const list = permanents[at] || [];
+        return list.filter((p) => p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index);
+      }
+      function listAttachmentEffects(at: string, index: number): string[] {
+        const effects: string[] = [];
+        for (const t of getAttachments(at, index)) {
+          const nm = (t.card?.name || "").trim();
+          const low = nm.toLowerCase();
+          if (low === "lance") effects.push("Lance(+1, FS)");
+          else if (low === "disabled") effects.push("Disabled(Atk=0)");
+          else if (nm) effects.push(nm);
+        }
+        return effects;
+      }
+      function getPermName(at: string, index: number): string {
+        try { return permanents[at]?.[index]?.card?.name || "Unit"; } catch { return "Unit"; }
+      }
+      function getAvatarName(seat: PlayerKey): string {
+        try { return (get().avatars?.[seat]?.card?.name as string) || "Avatar"; } catch { return "Avatar"; }
+      }
+      function computeEffectiveAttack(a: { at: CellKey; index: number }): { atk: number; firstStrike: boolean } {
+        const base = getAtkDef(a.at, a.index).atk;
+        const attachments = getAttachments(a.at, a.index);
+        let atk = base; let firstStrike = false; let disabled = false;
+        for (const tkn of attachments) {
+          const nm = (tkn.card?.name || "").toLowerCase();
+          if (nm === "lance") { firstStrike = true; atk += 1; }
+          if (nm === "disabled") { disabled = true; }
+        }
+        if (disabled) atk = 0;
+        if (!Number.isFinite(atk)) atk = 0;
+        return { atk, firstStrike };
+      }
+      const aCell = aAt && Number.isFinite(aIdx) ? { at: aAt as CellKey, index: Number(aIdx) } : null;
+      const eff = aCell ? computeEffectiveAttack(aCell) : { atk: 0, firstStrike: false };
+      const attackerName = aCell ? getPermName(aCell.at, aCell.index) : "Attacker";
+      const atkFx = aCell ? listAttachmentEffects(aCell.at, aCell.index) : [];
+      const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
+      const fsTag = eff.firstStrike ? " (FS)" : "";
+      const actorSeat = (Number(attacker?.owner) === 1 ? "p1" : "p2") as PlayerKey;
+      let targetSeat: PlayerKey | undefined = undefined;
+      // Parse optional target
+      let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
+      if (targetAny && typeof targetAny === "object") {
+        const rec = targetAny as Record<string, unknown>;
+        const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+        const a = typeof rec.at === "string" ? (rec.at as string) : "";
+        const idx = rec.index == null ? null : Number(rec.index);
+        const okKind = k === "permanent" || k === "avatar" || k === "site";
+        if (okKind && a && (idx === null || Number.isFinite(idx))) {
+          target = { kind: k as "permanent" | "avatar" | "site", at: a as CellKey, index: idx as number | null };
+        }
+      }
+      let summary = "Combat resolved";
+      const tileNo = (() => {
+        try {
+          const x = Number(tileMsg?.x);
+          const y = Number(tileMsg?.y);
+          if (Number.isFinite(x) && Number.isFinite(y)) return y * get().board.size.w + x + 1;
+        } catch {}
+        return null as number | null;
+      })();
+      if (target && target.kind === "site") {
+        const owner = board.sites[target.at]?.owner as 1 | 2 | undefined;
+        let seat: PlayerKey | null = null;
+        if (owner === 1 || owner === 2) {
+          seat = (owner === 1 ? "p1" : "p2") as PlayerKey;
+        } else {
+          seat =
+            (get().pendingCombat?.defenderSeat as PlayerKey | null) ??
+            ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
+        }
+        if (seat) {
+          targetSeat = seat as PlayerKey;
+          const dd = players[seat].lifeState === "dd";
+          const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+          const siteName = board.sites[target.at]?.card?.name || "Site";
+          const ddNote = dd ? " (DD rule)" : "";
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
+        }
+      } else if (target && target.kind === "avatar") {
+        const aOwner = Number(attacker?.owner);
+        const seat = (aOwner === 1 ? "p2" : "p1") as PlayerKey;
+        targetSeat = seat;
+        const state = players[seat];
+        const avatarName = getAvatarName(seat);
+        if (state.lifeState === "dd") {
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: ${seat.toUpperCase()} to 0 (lethal from DD, match ends)`;
+        } else {
+          const life = Number(state.life) || 0;
+          const dmg = Math.max(0, Math.floor(eff.atk));
+          const next = Math.max(0, life - dmg);
+          if (life > 0 && next <= 0) {
+            summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: reaches Death's Door; further avatar/site damage this turn won't reduce life`;
+          } else {
+            summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${tileNo ?? "?"} → Expected: ${dmg} dmg (life ${life} → ${next})`;
+          }
+        }
+      } else {
+        const tileKey = (() => {
+          try {
+            const x = Number(tileMsg?.x);
+            const y = Number(tileMsg?.y);
+            if (Number.isFinite(x) && Number.isFinite(y)) return `${x},${y}` as CellKey;
+          } catch {}
+          return null as CellKey | null;
+        })();
+        const siteAtTile = tileKey ? (board.sites[tileKey] as SiteTile | undefined) : undefined;
+        if (!target && siteAtTile && siteAtTile.card && defenders.length === 0) {
+          const owner = siteAtTile.owner as 1 | 2 | undefined;
+          let seat: PlayerKey | null = owner === 1 ? "p1" : owner === 2 ? "p2" : (get().pendingCombat?.defenderSeat as PlayerKey | null);
+          if (!seat) seat = ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
+          if (seat) {
+            targetSeat = seat as PlayerKey;
+            const dd = players[seat].lifeState === "dd";
+            const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+            const siteName = siteAtTile.card?.name || "Site";
+            const ddNote = dd ? " (DD rule)" : "";
+            summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
+          }
+        } else {
+          const aAtk = eff.atk;
+          let targetDef = 0;
+          let targetName = "target";
+          if (target && target.kind === "permanent" && target.index != null) {
+            targetDef = getAtkDef(target.at, target.index).def;
+            targetName = getPermName(target.at, target.index);
+          } else if (defenders.length > 0) {
+            const defRecs: Record<string, unknown>[] = (defenders as unknown[])
+              .filter((d: unknown) => d && typeof d === "object")
+              .map((d: unknown) => d as Record<string, unknown>);
+            targetDef = 0;
+            for (const rec of defRecs) {
+              const at = typeof rec.at === "string" ? (rec.at as string) : "";
+              const idx = Number(rec.index);
+              if (at && Number.isFinite(idx)) targetDef += getAtkDef(at, Number(idx)).def;
+            }
+            const names: string[] = [];
+            for (const rec of defRecs.slice(0, 3)) {
+              const at = typeof rec.at === "string" ? (rec.at as string) : "";
+              const idx = Number(rec.index);
+              if (at && Number.isFinite(idx)) names.push(getPermName(at, Number(idx)));
+            }
+            targetName = names.join(", ") + (defenders.length > 3 ? ", …" : "");
+          }
+          const kills = aAtk >= targetDef;
+          targetSeat = (get().pendingCombat?.defenderSeat ?? null) as PlayerKey | null || undefined;
+          summary = `Attacker ${attackerName}${fxTxt}${fsTag} vs ${targetName} @#${tileNo ?? "?"} → Expected: Atk ${aAtk} vs Def ${targetDef} (${kills ? "likely kill" : "may fail"})`;
+        }
+      }
+      const exists = get().lastCombatSummary;
+      if (exists && String(exists.id) === String(id || "")) {
+        // Keep the already received detailed summary; just clear pending state
+        set({ pendingCombat: null } as Partial<GameState> as GameState);
+      } else {
+        set({ lastCombatSummary: { id: String(id || Date.now()), text: summary, ts: Date.now(), actor: actorSeat, targetSeat }, pendingCombat: null } as Partial<GameState> as GameState);
+      }
+    } catch {
+      set({ pendingCombat: null } as Partial<GameState> as GameState);
+    }
+    try { get().log("Combat resolved"); } catch {}
+    return;
+  }
+  if (t === "combatCancel") {
+    set({ pendingCombat: null });
+    try {
+      get().log("Combat cancelled");
+    } catch {}
+    return;
+  }
+}

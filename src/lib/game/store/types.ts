@@ -211,6 +211,8 @@ export type GameState = {
   // Local seat/actor (only set in online play UI; null in offline)
   actorKey: PlayerKey | null;
   setActorKey: (key: PlayerKey | null) => void;
+  localPlayerId: string | null;
+  setLocalPlayerId: (id: string | null) => void;
   // Match end detection
   matchEnded: boolean;
   winner: PlayerKey | null;
@@ -536,12 +538,6 @@ export type GameState = {
   historyByPlayer: Record<PlayerKey, SerializedGame[]>;
   pushHistory: () => void;
   undo: () => void;
-  matchId: string | null;
-  setMatchId: (id: string | null) => void;
-  actorKey: PlayerKey | null;
-  setActorKey: (key: PlayerKey | null) => void;
-  localPlayerId: string | null;
-  setLocalPlayerId: (id: string | null) => void;
   snapshots: Array<{
     id: string;
     title: string;
@@ -599,20 +595,6 @@ export type GameState = {
     card: { cardId?: number | null; slug?: string | null } | null | undefined,
     options?: { instanceKey?: string | null }
   ) => string | null;
-  localPlayerId: string | null;
-  setLocalPlayerId: (id: string | null) => void;
-  snapshots: Array<{
-    id: string;
-    title: string;
-    ts: number;
-    includePrivate: boolean;
-    kind: "auto" | "manual";
-    turn: number;
-    actor: PlayerKey | null;
-    payload: ServerPatchT;
-  }>;
-  createSnapshot: (title: string, kind?: "auto" | "manual") => void;
-  hydrateSnapshotsFromStorage: () => void;
 };
 
 // Typed view of server patchable fields (subset of GameState, pure data only)

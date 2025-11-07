@@ -84,7 +84,8 @@ export const createSessionSlice: StateCreator<
   },
 
   localPlayerId: null,
-  setLocalPlayerId: (id) => set({ localPlayerId: id ?? null }),
+  setLocalPlayerId: (id: string | null) =>
+    set({ localPlayerId: id ?? null }),
 
   snapshots: initialSnapshots(),
   createSnapshot: (title: string, kind: "auto" | "manual" = "manual") =>

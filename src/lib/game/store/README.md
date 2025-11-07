@@ -49,6 +49,10 @@ These modules are pure and shared across slices; future slice extraction should 
 - ✅ `uiState.ts` contains camera mode, selection state, hover/drag flags, preview/mouse hand state, and their helper actions.
 - ✅ `boardUiState.ts` manages grid/playmat toggles, board pings, and pointer tracking helpers.
 - ✅ `historyState.ts` handles history stacks plus `pushHistory`/`undo`, including online snapshot broadcast logic.
+- ✅ `coreState.ts` now owns players, turn/phase transitions, setup flow (d20 + order), resource adjustments, and match-end detection.
 - ✅ `sessionState.ts` centralizes match/session metadata (matchId, actor/local IDs) and snapshot persistence helpers.
-- ⏩ Next: address remaining low-dependency UI utilities (e.g., board overlays that rely on transport) or begin extracting `coreState.ts`.
+- ✅ `remoteCursorState.ts` isolates remote cursor telemetry (set/prune/highlight color) away from gameplay logic.
+- ✅ `transportState.ts` now owns the transport handle, subscriptions, and pending patch queue helpers (`setTransport`, `trySendPatch`, `flushPendingPatches`).
+- ✅ `interactionState.ts` wraps the consent/interaction workflow (log, request/response handlers, network envelopes).
+- ⏩ Next: address the remaining low-dependency UI utilities (e.g., board overlays that rely on transport) before moving into the heavier gameplay slices (zones/permanents/combat).
 - As new slices are extracted, hook them into `createGameStoreState` via `...createXSlice(set, get, store)` to keep composition incremental.
