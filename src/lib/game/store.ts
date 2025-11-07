@@ -1128,6 +1128,7 @@ type MovePermanentResult = {
   removed: PermanentItem[];
   added: PermanentItem[];
   updated: PermanentItem[];
+  newIndex: number;
 };
 
 function movePermanentCore(
@@ -1143,7 +1144,7 @@ function movePermanentCore(
   const item = spliced[0];
   if (!item) {
     // Nothing to move; return original state
-    return { per: perIn, movedName: "", removed: [], added: [], updated: [] };
+    return { per: perIn, movedName: "", removed: [], added: [], updated: [], newIndex: -1 };
   }
 
   const removedItems: PermanentItem[] = [];
@@ -1240,6 +1241,7 @@ function movePermanentCore(
     removed: removedItems,
     added: addedItems,
     updated: updatedItems,
+    newIndex,
   };
 }
 
@@ -1274,7 +1276,18 @@ function moveAvatarAttachedArtifacts(
   });
 
   // Add attached artifacts to new tile with updated attachment reference
-  const newArr = [...(per[newTileKey] || [])];
+  let newArr = [...(per[newTileKey] || [])];
+  const movedIds = new Set(
+    movedArtifacts
+      .map((artifact) => ensurePermanentInstanceId(artifact))
+      .filter((id): id is string => !!id)
+  );
+  newArr = newArr.filter((item) => {
+    const id = ensurePermanentInstanceId(item as PermanentItem);
+    if (!id || !movedIds.has(id)) return true;
+    const at = (item as PermanentItem).attachedTo;
+    return !(at && at.index === -1 && at.at === newTileKey);
+  });
   movedArtifacts.reverse().forEach((artifact) => {
     const updatedArtifact = bumpPermanentVersion({
       ...artifact,
@@ -6959,7 +6972,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const toKey: CellKey = `${x},${y}`;
       const exists = (s.permanents[fromKey] || [])[sel.index];
       if (!exists) return s;
-      const { per, movedName, removed, added, updated } = movePermanentCore(
+      const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
         s.permanents,
         fromKey,
         sel.index,
@@ -6967,7 +6980,31 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         null
       );
       const cellNo = y * s.board.size.w + x + 1;
-      get().log(`Moved '${movedName}' to #${cellNo}`);
+
+      // If the unit moved to a different tile (not just repositioned on the same tile), tap it
+      let finalPer = per;
+      let finalUpdated = updated;
+      if (fromKey !== toKey && newIndex >= 0) {
+        const movedUnit = finalPer[toKey]?.[newIndex];
+        if (movedUnit && !movedUnit.tapped) {
+          const arr = [...(finalPer[toKey] || [])];
+          const nextTapVersion = Number(movedUnit.tapVersion ?? 0) + 1;
+          const tappedUnit = bumpPermanentVersion({
+            ...movedUnit,
+            tapped: true,
+            tapVersion: nextTapVersion,
+          });
+          arr[newIndex] = tappedUnit;
+          finalPer = { ...finalPer, [toKey]: arr };
+          finalUpdated = [...finalUpdated, tappedUnit];
+          get().log(`Moved '${movedName}' to #${cellNo} (tapped)`);
+        } else {
+          get().log(`Moved '${movedName}' to #${cellNo}`);
+        }
+      } else {
+        get().log(`Moved '${movedName}' to #${cellNo}`);
+      }
+
       {
         const tr = get().transport;
         if (tr) {
@@ -6975,16 +7012,16 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
             fromKey,
             toKey,
             removed,
-            updated,
+            finalUpdated,
             added,
-            per,
+            finalPer,
             s.permanents
           );
           get().trySendPatch(patch);
         }
       }
       return {
-        permanents: per,
+        permanents: finalPer,
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
@@ -6999,7 +7036,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const exists = (s.permanents[fromKey] || [])[sel.index];
       if (!exists) return s;
 
-      const { per, movedName, removed, added, updated } = movePermanentCore(
+      const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
         s.permanents,
         fromKey,
         sel.index,
@@ -7008,7 +7045,31 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       );
 
       const cellNo = y * s.board.size.w + x + 1;
-      get().log(`Moved '${movedName}' to #${cellNo}`);
+
+      // If the unit moved to a different tile (not just repositioned on the same tile), tap it
+      let finalPer = per;
+      let finalUpdated = updated;
+      if (fromKey !== toKey && newIndex >= 0) {
+        const movedUnit = finalPer[toKey]?.[newIndex];
+        if (movedUnit && !movedUnit.tapped) {
+          const arr = [...(finalPer[toKey] || [])];
+          const nextTapVersion = Number(movedUnit.tapVersion ?? 0) + 1;
+          const tappedUnit = bumpPermanentVersion({
+            ...movedUnit,
+            tapped: true,
+            tapVersion: nextTapVersion,
+          });
+          arr[newIndex] = tappedUnit;
+          finalPer = { ...finalPer, [toKey]: arr };
+          finalUpdated = [...finalUpdated, tappedUnit];
+          get().log(`Moved '${movedName}' to #${cellNo} (tapped)`);
+        } else {
+          get().log(`Moved '${movedName}' to #${cellNo}`);
+        }
+      } else {
+        get().log(`Moved '${movedName}' to #${cellNo}`);
+      }
+
       {
         const tr = get().transport;
         if (tr) {
@@ -7016,9 +7077,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
             fromKey,
             toKey,
             removed,
-            updated,
+            finalUpdated,
             added,
-            per,
+            finalPer,
             s.permanents
           );
           // Add a small delay to prevent rapid patch sends during transfers
@@ -7028,7 +7089,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
         }
       }
       return {
-        permanents: per,
+        permanents: finalPer,
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
@@ -7602,37 +7663,56 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const oldKey = oldPos ? `${oldPos[0]},${oldPos[1]}` as CellKey : null;
       const newKey = `${x},${y}` as CellKey;
 
-      // Update avatar position
-      const avatars = buildAvatarUpdate(
+      // Check if this is a cross-tile move and avatar is not already tapped
+      const isCrossTileMove = oldKey && oldKey !== newKey;
+      const currentAvatar = s.avatars[who];
+      const shouldTap = isCrossTileMove && !currentAvatar?.tapped;
+
+      // Update avatar position with optional tapping
+      let avatars = buildAvatarUpdate(
         s,
         who,
         [x, y] as [number, number],
         null
       );
 
+      // If cross-tile move, tap the avatar
+      if (shouldTap) {
+        avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
+      }
+
       // Move attached artifacts if avatar moved to a different tile
       let permanents = s.permanents;
-      if (oldKey && oldKey !== newKey) {
-        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey, newKey);
+      if (isCrossTileMove) {
+        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey as CellKey, newKey);
         permanents = result.permanents;
         if (result.movedArtifacts.length > 0) {
           get().log(`Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`);
         }
       }
 
-      get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+      if (shouldTap) {
+        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (tapped)`);
+      } else {
+        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+      }
+
       {
         const tr = get().transport;
         if (tr) {
           const patch: ServerPatchT = {
             avatars: {
-              [who]: { pos: [x, y] as [number, number], offset: null },
+              [who]: {
+                pos: [x, y] as [number, number],
+                offset: null,
+                ...(shouldTap && { tapped: true })
+              },
             } as GameState["avatars"],
           };
           // Also send permanents patch if artifacts moved
-          if (oldKey && oldKey !== newKey) {
+          if (isCrossTileMove) {
             patch.permanents = {
-              [oldKey]: permanents[oldKey] || [],
+              [oldKey as CellKey]: permanents[oldKey as CellKey] || [],
               [newKey]: permanents[newKey] || [],
             };
           }
@@ -7653,38 +7733,57 @@ const createGameStoreState: StateCreator<GameState> = (set, get) => ({
       const oldKey = oldPos ? `${oldPos[0]},${oldPos[1]}` as CellKey : null;
       const newKey = `${x},${y}` as CellKey;
 
-      // Update avatar position
-      const avatars = buildAvatarUpdate(
+      // Check if this is a cross-tile move and avatar is not already tapped
+      const isCrossTileMove = oldKey && oldKey !== newKey;
+      const currentAvatar = s.avatars[who];
+      const shouldTap = isCrossTileMove && !currentAvatar?.tapped;
+
+      // Update avatar position with optional tapping
+      let avatars = buildAvatarUpdate(
         s,
         who,
         [x, y] as [number, number],
         offset
       );
 
+      // If cross-tile move, tap the avatar
+      if (shouldTap) {
+        avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
+      }
+
       // Move attached artifacts if avatar moved to a different tile
       let permanents = s.permanents;
-      if (oldKey && oldKey !== newKey) {
-        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey, newKey);
+      if (isCrossTileMove) {
+        const result = moveAvatarAttachedArtifacts(s.permanents, oldKey as CellKey, newKey);
         permanents = result.permanents;
         if (result.movedArtifacts.length > 0) {
           get().log(`Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`);
         }
       }
 
-      get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+      if (shouldTap) {
+        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (tapped)`);
+      } else {
+        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+      }
+
       {
         const tr = get().transport;
         if (tr) {
           // Only send the acting seat to avoid opponent-zone write detection
           const patch: ServerPatchT = {
             avatars: {
-              [who]: { pos: [x, y] as [number, number], offset },
+              [who]: {
+                pos: [x, y] as [number, number],
+                offset,
+                ...(shouldTap && { tapped: true })
+              },
             } as GameState["avatars"],
           };
           // Also send permanents patch if artifacts moved
-          if (oldKey && oldKey !== newKey) {
+          if (isCrossTileMove) {
             patch.permanents = {
-              [oldKey]: permanents[oldKey] || [],
+              [oldKey as CellKey]: permanents[oldKey as CellKey] || [],
               [newKey]: permanents[newKey] || [],
             };
           }

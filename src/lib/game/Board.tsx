@@ -4158,10 +4158,19 @@ export default function Board({
                             p.attachedTo.index === -1 &&
                             p.attachedTo.at === avatarKey
                           );
+                        // Deduplicate by instanceId to prevent duplicate renders/keys during moves/patch merges
+                        const seenIds = new Set<string>();
+                        const attachedArtifactsUnique = attachedArtifacts.filter(({ p }) => {
+                          const id = (p.instanceId || p.card?.instanceId || "") as string;
+                          if (!id) return true;
+                          if (seenIds.has(id)) return false;
+                          seenIds.add(id);
+                          return true;
+                        });
 
-                        if (attachedArtifacts.length === 0) return null;
+                        if (attachedArtifactsUnique.length === 0) return null;
 
-                        return attachedArtifacts.map(({ p, idx }, attachIdx) => {
+                        return attachedArtifactsUnique.map(({ p, idx }, attachIdx) => {
                           const isArtifact = (p.card.type || "").toLowerCase().includes("artifact");
                           if (!isArtifact || !p.card.slug) return null;
 
@@ -4169,9 +4178,14 @@ export default function Board({
                           const artifactW = CARD_SHORT * 0.6;
                           const artifactH = CARD_LONG * 0.6;
                           const offsetMultiplier = 0.3;
-                          const offsetX = CARD_SHORT * offsetMultiplier * (attachIdx - (attachedArtifacts.length - 1) / 2);
+                          const offsetX = CARD_SHORT * offsetMultiplier * (attachIdx - (attachedArtifactsUnique.length - 1) / 2);
                           const offsetZ = CARD_LONG * 0.4; // Top of avatar card
-                          const artifactHoverKey = `artifact:avatar:${who}:${idx}`;
+
+                          // Include tile key in uniqueKey to prevent duplicate keys during patch merges
+                          // During avatar moves, the same artifact exists temporarily in both old and new tile arrays
+                          // Same instanceId but different tile keys = different React keys = no duplicates
+                          const uniqueKey = `${avatarKey}-${p.instanceId || idx}`;
+                          const artifactHoverKey = `artifact:avatar:${who}:${uniqueKey}`;
 
                           // Render artifacts underneath avatar
                           const avatarRenderOrder = isLastTouchedAvatar || isSel || dragAvatar === who ? 1200 : 100;
@@ -4179,7 +4193,7 @@ export default function Board({
 
                           return (
                             <group
-                              key={`avatar-attached-${idx}`}
+                              key={`avatar-attached-${uniqueKey}`}
                               position={[
                                 offsetX,
                                 BASE_CARD_ELEVATION - CARD_THICK * 0.05, // Lower Y to appear underneath
