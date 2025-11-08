@@ -32,12 +32,21 @@ export type UiSlice = Pick<
   | "toggleCameraMode"
 >;
 
-export const createUiSlice: StateCreator<
+type UiStateDefaults = Pick<
   GameState,
-  [],
-  [],
-  UiSlice
-> = (set, get, _api) => ({
+  | "cameraMode"
+  | "selectedCard"
+  | "selectedPermanent"
+  | "selectedAvatar"
+  | "mouseInHandZone"
+  | "handHoverCount"
+  | "dragFromHand"
+  | "dragFromPile"
+  | "hoverCell"
+  | "previewCard"
+>;
+
+export const createInitialUiState = (): UiStateDefaults => ({
   cameraMode: "orbit",
   selectedCard: null,
   selectedPermanent: null,
@@ -48,6 +57,15 @@ export const createUiSlice: StateCreator<
   dragFromPile: null,
   hoverCell: null,
   previewCard: null,
+});
+
+export const createUiSlice: StateCreator<
+  GameState,
+  [],
+  [],
+  UiSlice
+> = (set, get, _api) => ({
+  ...createInitialUiState(),
 
   selectHandCard: (who: PlayerKey, index: number) =>
     set((state) => {

@@ -5,6 +5,18 @@ import {
   BOARD_PING_MAX_HISTORY,
 } from "./types";
 
+type BoardUiDefaults = Pick<
+  GameState,
+  "showGridOverlay" | "showPlaymat" | "boardPings" | "lastPointerWorldPos"
+>;
+
+export const createInitialBoardUiState = (): BoardUiDefaults => ({
+  showGridOverlay: false,
+  showPlaymat: true,
+  boardPings: [],
+  lastPointerWorldPos: null,
+});
+
 export type BoardUiSlice = Pick<
   GameState,
   | "showGridOverlay"
@@ -24,10 +36,7 @@ export const createBoardUiSlice: StateCreator<
   [],
   BoardUiSlice
 > = (set, get) => ({
-  showGridOverlay: false,
-  showPlaymat: true,
-  boardPings: [],
-  lastPointerWorldPos: null,
+  ...createInitialBoardUiState(),
 
   toggleGridOverlay: () =>
     set((state) => ({ showGridOverlay: !state.showGridOverlay })),

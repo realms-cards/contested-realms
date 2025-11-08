@@ -40,8 +40,8 @@ type ZoneSlice = Pick<
   | "moveFromBanishedToZone"
 >;
 
-const initialMulligans = (): GameState["mulligans"] => ({ p1: 1, p2: 1 });
-const initialMulliganDrawn = (): GameState["mulliganDrawn"] => ({
+export const createInitialMulligans = (): GameState["mulligans"] => ({ p1: 1, p2: 1 });
+export const createInitialMulliganDrawn = (): GameState["mulliganDrawn"] => ({
   p1: [],
   p2: [],
 });
@@ -474,8 +474,8 @@ export const createZoneSlice: StateCreator<
       return { zones: zonesNext } as Partial<GameState> as GameState;
     }),
 
-  mulligans: initialMulligans(),
-  mulliganDrawn: initialMulliganDrawn(),
+  mulligans: createInitialMulligans(),
+  mulliganDrawn: createInitialMulliganDrawn(),
 
   mulligan: (who) =>
     set((state) => {

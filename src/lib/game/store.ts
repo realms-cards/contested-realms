@@ -59,16 +59,16 @@ import {
 } from "./store/utils/snapshotHelpers";
 import { createEventSlice } from "./store/eventState";
 import { createDialogSlice } from "./store/dialogState";
-import { createUiSlice } from "./store/uiState";
-import { createBoardUiSlice } from "./store/boardUiState";
+import { createUiSlice, createInitialUiState } from "./store/uiState";
+import { createBoardUiSlice, createInitialBoardUiState } from "./store/boardUiState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
 import { createHistorySlice } from "./store/historyState";
-import { createCoreSlice } from "./store/coreState";
+import { createCoreSlice, createInitialPlayers, createInitialD20Rolls } from "./store/coreState";
 import { createResourceSlice } from "./store/resourceState";
 import { createPermanentSlice } from "./store/permanentState";
 import { createPositionSlice } from "./store/positionState";
 import { createAvatarSlice } from "./store/avatarState";
-import { createZoneSlice } from "./store/zoneState";
+import { createZoneSlice, createInitialMulligans, createInitialMulliganDrawn } from "./store/zoneState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createCardMetaSlice } from "./store/cardMetaState";
 import { createSessionSlice } from "./store/sessionState";
@@ -225,54 +225,32 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
       console.log("[game] Resetting game state for new match");
       try { clearSnapshotsStorageFor(get().matchId ?? null); } catch {}
       const reset: Partial<GameState> = {
-        players: {
-          p1: {
-            life: 20,
-            lifeState: "alive",
-            mana: 0,
-            thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
-          },
-          p2: {
-            life: 20,
-            lifeState: "alive",
-            mana: 0,
-            thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
-          },
-        },
+        players: createInitialPlayers(),
         currentPlayer: 1,
         turn: 1,
         phase: "Setup",
         lastServerTs: 0,
         lastLocalActionTs: 0,
         setupWinner: null,
-        d20Rolls: { p1: null, p2: null },
+        d20Rolls: createInitialD20Rolls(),
         actorKey: state.actorKey, // Preserve actorKey during reset
         matchEnded: false,
         winner: null,
         board: createInitialBoard(),
         zones: createEmptyZonesRecord(),
-        selectedCard: null,
-        selectedPermanent: null,
-        selectedAvatar: null,
-        mouseInHandZone: false,
-        handHoverCount: 0,
+        ...createInitialUiState(),
+        ...createInitialBoardUiState(),
         avatars: createDefaultAvatars(),
         permanents: {},
         permanentPositions: {},
         permanentAbilities: {},
         sitePositions: {},
         playerPositions: createDefaultPlayerPositions(),
-        dragFromHand: false,
-        dragFromPile: null,
-        hoverCell: null,
-        previewCard: null,
         contextMenu: null,
-        boardPings: [],
-        lastPointerWorldPos: null,
         history: [],
         historyByPlayer: { p1: [], p2: [] },
-        mulligans: { p1: 1, p2: 1 },
-        mulliganDrawn: { p1: [], p2: [] },
+        mulligans: createInitialMulligans(),
+        mulliganDrawn: createInitialMulliganDrawn(),
         events: [],
         eventSeq: 0,
         pendingPatches: [],
