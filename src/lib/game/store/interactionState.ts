@@ -38,7 +38,7 @@ type InteractionSlice = Pick<
   | "clearInteraction"
 >;
 
-const normalizeGrantRequest = (
+export const normalizeGrantRequest = (
   candidate: unknown
 ): InteractionGrantRequest | null => {
   if (!candidate || typeof candidate !== "object") return null;
@@ -65,7 +65,7 @@ const normalizeGrantRequest = (
   return Object.keys(normalized).length > 0 ? normalized : null;
 };
 
-const pickNextPendingInteraction = (
+export const pickNextPendingInteraction = (
   log: InteractionStateMap
 ): InteractionRequestEntry | null => {
   let selected: InteractionRequestEntry | null = null;
@@ -89,7 +89,9 @@ const pickNextPendingInteraction = (
   return selected;
 };
 
-const computeInteractionFocus = (log: InteractionStateMap): {
+export const computeInteractionFocus = (
+  log: InteractionStateMap
+): {
   active: InteractionRequestEntry | null;
   pendingId: string | null;
 } => {
