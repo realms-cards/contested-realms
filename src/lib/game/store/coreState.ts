@@ -16,6 +16,26 @@ import {
 } from "./utils/patchHelpers";
 import { phases } from "./utils/resourceHelpers";
 
+export const createInitialPlayers = (): GameState["players"] => ({
+  p1: {
+    life: 20,
+    lifeState: "alive",
+    mana: 0,
+    thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
+  },
+  p2: {
+    life: 20,
+    lifeState: "alive",
+    mana: 0,
+    thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
+  },
+});
+
+export const createInitialD20Rolls = (): GameState["d20Rolls"] => ({
+  p1: null,
+  p2: null,
+});
+
 type CoreStateSlice = Pick<
   GameState,
   | "players"
@@ -42,20 +62,7 @@ export const createCoreSlice: StateCreator<
   [],
   CoreStateSlice
 > = (set, get) => ({
-  players: {
-    p1: {
-      life: 20,
-      lifeState: "alive",
-      mana: 0,
-      thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
-    },
-    p2: {
-      life: 20,
-      lifeState: "alive",
-      mana: 0,
-      thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
-    },
-  },
+  players: createInitialPlayers(),
   currentPlayer: 1,
   turn: 1,
   phase: "Setup",
@@ -86,7 +93,7 @@ export const createCoreSlice: StateCreator<
     }),
 
   // D20 Setup phase
-  d20Rolls: { p1: null, p2: null },
+  d20Rolls: createInitialD20Rolls(),
   setupWinner: null,
   rollD20: (who) => {
     const roll = Math.floor(Math.random() * 20) + 1;
