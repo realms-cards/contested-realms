@@ -21,13 +21,25 @@ export type DialogSlice = Pick<
   | "closePeekDialog"
 >;
 
+type DialogDefaults = Pick<
+  GameState,
+  "contextMenu" | "placementDialog" | "searchDialog" | "peekDialog"
+>;
+
+export const createInitialDialogState = (): DialogDefaults => ({
+  contextMenu: null,
+  placementDialog: null,
+  searchDialog: null,
+  peekDialog: null,
+});
+
 export const createDialogSlice: StateCreator<
   GameState,
   [],
   [],
   DialogSlice
 > = (set, get, _api) => ({
-  contextMenu: null,
+  ...createInitialDialogState(),
   openContextMenu: (target: ContextMenuTarget, screen) =>
     set({ contextMenu: { target, screen } }),
   closeContextMenu: () => set({ contextMenu: null }),

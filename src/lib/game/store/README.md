@@ -61,6 +61,7 @@ These modules are pure and shared across slices; future slice extraction should 
 - ✅ `preferenceState.ts` keeps interaction guide preferences (localStorage-backed toggle).
 - ✅ `cardMetaState.ts` caches fetched card metadata (`metaByCardId`) with the existing `/api/cards/meta` endpoint.
 - ✅ `sessionState.ts` centralizes match/session metadata (matchId, actor/local IDs) and snapshot persistence helpers.
+- ✅ `snapshotState.ts` owns snapshot storage (`snapshots`, `createSnapshot`, hydrate-from-storage) plus local persistence.
 - ✅ `remoteCursorState.ts` isolates remote cursor telemetry (set/prune/highlight color) away from gameplay logic.
 - ✅ `networkState.ts` handles server patch ingestion (`applyServerPatch`/`applyPatch`) plus timestamp tracking for undo gating.
 - ✅ `transportState.ts` now owns the transport handle, subscriptions, and pending patch queue helpers (`setTransport`, `trySendPatch`, `flushPendingPatches`).

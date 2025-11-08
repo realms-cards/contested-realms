@@ -58,11 +58,11 @@ import {
   saveSnapshotsToStorageFor,
 } from "./store/utils/snapshotHelpers";
 import { createEventSlice } from "./store/eventState";
-import { createDialogSlice } from "./store/dialogState";
+import { createDialogSlice, createInitialDialogState } from "./store/dialogState";
 import { createUiSlice, createInitialUiState } from "./store/uiState";
 import { createBoardUiSlice, createInitialBoardUiState } from "./store/boardUiState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
-import { createHistorySlice } from "./store/historyState";
+import { createHistorySlice, createInitialHistoryState } from "./store/historyState";
 import { createCoreSlice, createInitialPlayers, createInitialD20Rolls } from "./store/coreState";
 import { createResourceSlice } from "./store/resourceState";
 import { createPermanentSlice } from "./store/permanentState";
@@ -82,6 +82,10 @@ import { createInteractionSlice } from "./store/interactionState";
 import { createGameActionsSlice } from "./store/gameActions";
 import { createCombatSlice } from "./store/combatState";
 import { createNetworkSlice } from "./store/networkState";
+import {
+  createSnapshotSlice,
+  createEmptySnapshots,
+} from "./store/snapshotState";
 
 function normalizeGrantRequest(
   candidate: unknown
@@ -211,6 +215,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),
+  ...createSnapshotSlice(set, get, storeApi),
   ...createRemoteCursorSlice(set, get, storeApi),
   ...createInteractionSlice(set, get, storeApi),
   ...createTransportSlice(set, get, storeApi),
@@ -246,9 +251,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         permanentAbilities: {},
         sitePositions: {},
         playerPositions: createDefaultPlayerPositions(),
-        contextMenu: null,
-        history: [],
-        historyByPlayer: { p1: [], p2: [] },
+        ...createInitialDialogState(),
+        ...createInitialHistoryState(),
         mulligans: createInitialMulligans(),
         mulliganDrawn: createInitialMulliganDrawn(),
         events: [],
@@ -259,7 +263,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         acknowledgedInteractionIds: {},
         activeInteraction: null,
         transportSubscriptions: [],
-        snapshots: [],
+        snapshots: createEmptySnapshots(),
       };
       return reset as GameState;
     })

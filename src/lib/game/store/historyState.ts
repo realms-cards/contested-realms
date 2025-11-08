@@ -75,14 +75,23 @@ const sanitizeBoardSitesForUndo = (
   };
 };
 
+type HistoryDefaults = Pick<
+  GameState,
+  "history" | "historyByPlayer"
+>;
+
+export const createInitialHistoryState = (): HistoryDefaults => ({
+  history: [],
+  historyByPlayer: { p1: [], p2: [] },
+});
+
 export const createHistorySlice: StateCreator<
   GameState,
   [],
   [],
   HistorySlice
 > = (set, get, store) => ({
-  history: [],
-  historyByPlayer: { p1: [], p2: [] },
+  ...createInitialHistoryState(),
 
   pushHistory: () =>
     set((state) => {
