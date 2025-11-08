@@ -48,7 +48,6 @@ import {
   BOARD_PING_LIFETIME_MS,
   BOARD_PING_MAX_HISTORY,
 } from "./store/types";
-import type { PlayerPositionReference } from "./types";
 import { createEmptyZonesRecord } from "./store/utils/zoneHelpers";
 import { createDefaultAvatars } from "./store/utils/avatarHelpers";
 import { createDefaultPlayerPositions } from "./store/utils/positionHelpers";
@@ -62,7 +61,7 @@ import { createEventSlice } from "./store/eventState";
 import { createDialogSlice } from "./store/dialogState";
 import { createUiSlice } from "./store/uiState";
 import { createBoardUiSlice } from "./store/boardUiState";
-import { createBoardSlice } from "./store/boardState";
+import { createBoardSlice, createInitialBoard } from "./store/boardState";
 import { createHistorySlice } from "./store/historyState";
 import { createCoreSlice } from "./store/coreState";
 import { createResourceSlice } from "./store/resourceState";
@@ -220,24 +219,6 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   // Multiplayer transport (injected by online play UI)
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
 
-  // Derived selectors (no state mutation)
-  toggleGridOverlay: () =>
-    set((s) => ({ showGridOverlay: !s.showGridOverlay })),
-  togglePlaymat: () => set((s) => ({ showPlaymat: !s.showPlaymat })),
-
-
-  selectPermanent: (at, index) =>
-    set((s) => {
-      const arr = s.permanents[at] || [];
-      if (!arr[index]) return s;
-      return {
-        selectedPermanent: { at, index },
-        selectedCard: null,
-        selectedAvatar: null,
-        previewCard: null,
-      };
-    }),
-
   // Reset all game state to initial values (for new matches)
   resetGameState: () =>
     set((state) => {
@@ -268,7 +249,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         actorKey: state.actorKey, // Preserve actorKey during reset
         matchEnded: false,
         winner: null,
-        board: { size: { w: 5, h: 4 }, sites: {} },
+        board: createInitialBoard(),
         zones: createEmptyZonesRecord(),
         selectedCard: null,
         selectedPermanent: null,

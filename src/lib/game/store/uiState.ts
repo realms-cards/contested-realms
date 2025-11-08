@@ -27,6 +27,7 @@ export type UiSlice = Pick<
   | "setHoverCell"
   | "clearHoverCell"
   | "setPreviewCard"
+  | "selectPermanent"
   | "setCameraMode"
   | "toggleCameraMode"
 >;
@@ -66,6 +67,18 @@ export const createUiSlice: StateCreator<
       selectedCard: null,
       selectedPermanent: null,
       previewCard: null,
+    }),
+
+  selectPermanent: (at, index) =>
+    set((state) => {
+      const arr = state.permanents[at] || [];
+      if (!arr[index]) return state;
+      return {
+        selectedPermanent: { at, index },
+        selectedCard: null,
+        selectedAvatar: null,
+        previewCard: null,
+      };
     }),
 
   clearSelection: () =>

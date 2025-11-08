@@ -14,6 +14,11 @@ import {
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { removeCardInstanceFromAllZones } from "./utils/zoneHelpers";
 
+export const createInitialBoard = (): GameState["board"] => ({
+  size: { w: 5, h: 4 },
+  sites: {},
+});
+
 type BoardSlice = Pick<
   GameState,
   | "board"
@@ -28,7 +33,7 @@ export const createBoardSlice: StateCreator<
   [],
   BoardSlice
 > = (set, get) => ({
-  board: { size: { w: 5, h: 4 }, sites: {} },
+  board: createInitialBoard(),
 
   toggleTapSite: () =>
     set((state) => {
