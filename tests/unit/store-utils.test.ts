@@ -5,6 +5,15 @@ import {
   prepareCardForSeat,
 } from "@/lib/game/store/utils/cardHelpers";
 import {
+  toCellKey,
+  parseCellKey,
+  getCellNumber,
+  seatFromOwner,
+  ownerFromSeat,
+  opponentSeat,
+  opponentOwner,
+} from "@/lib/game/store/utils/boardHelpers";
+import {
   createEmptyPlayerZones,
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
@@ -45,6 +54,32 @@ const baseCard = (overrides: Partial<CardRef> = {}): CardRef => ({
   owner: null,
   instanceId: undefined,
   ...overrides,
+});
+
+describe("boardHelpers", () => {
+  it("converts coordinates to keys and back", () => {
+    const key = toCellKey(3, 2);
+    expect(key).toBe("3,2");
+    expect(parseCellKey(key)).toEqual({ x: 3, y: 2 });
+  });
+
+  it("computes cell numbers with correct origin", () => {
+    const width = 5;
+    expect(getCellNumber(0, 0, width)).toBe(1);
+    expect(getCellNumber(4, 0, width)).toBe(5);
+    expect(getCellNumber(0, 1, width)).toBe(6);
+  });
+
+  it("maps owner seats and opponents symmetrically", () => {
+    expect(seatFromOwner(1)).toBe("p1");
+    expect(seatFromOwner(2)).toBe("p2");
+    expect(ownerFromSeat("p1")).toBe(1);
+    expect(ownerFromSeat("p2")).toBe(2);
+    expect(opponentSeat("p1")).toBe("p2");
+    expect(opponentSeat("p2")).toBe("p1");
+    expect(opponentOwner(1)).toBe(2);
+    expect(opponentOwner(2)).toBe(1);
+  });
 });
 
 describe("cardHelpers", () => {

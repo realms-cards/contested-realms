@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore, type PlayerKey, type CardRef, type ServerPatchT } from "@/lib/game/store";
+import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 import { generateInteractionRequestId, type InteractionRequestKind } from "@/lib/net/interactions";
 
 export type GameToolboxProps = {
@@ -401,7 +402,7 @@ export default function GameToolbox({
     }
     const [xStr] = sel.at.split(",");
     const owner = permanents[sel.at]?.[sel.index]?.owner ?? 1;
-    const seat: PlayerKey = owner === 1 ? "p1" : "p2";
+    const seat: PlayerKey = seatFromOwner((owner ?? 1) as 1 | 2);
 
     const apply = () => {
       // Ensure ability and position exist, then update

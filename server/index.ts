@@ -38,6 +38,8 @@ const {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./modules/deck-utils");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+const { seatFromOwner } = require("../src/lib/game/store/utils/boardHelpers");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createLeaderboardService } = require("./modules/leaderboard");
 const {
   deepMergeReplaceArrays,
@@ -2010,7 +2012,7 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
       if (plays.length > 0) {
         const acc = (recording.cardPlays ||= { p1: new Set<number>(), p2: new Set<number>() });
         for (const it of plays) {
-          const seat = it.owner === 1 ? "p1" : "p2";
+          const seat = seatFromOwner(it.owner) as "p1" | "p2";
           acc[seat].add(it.cardId);
         }
       }
