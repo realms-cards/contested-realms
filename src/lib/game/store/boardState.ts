@@ -1,18 +1,19 @@
 import type { StateCreator } from "zustand";
 import type {
-  CardRef,
-  CellKey,
   GameState,
   PlayerKey,
   ServerPatchT,
   Zones,
 } from "./types";
-import {
-  createEmptyPlayerZones,
-  createZonesPatchFor,
-} from "./utils/zoneHelpers";
+import { createZonesPatchFor } from "./utils/zoneHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { removeCardInstanceFromAllZones } from "./utils/zoneHelpers";
+import {
+  getCellNumber,
+  ownerLabel,
+  seatFromOwner,
+  toCellKey,
+} from "./utils/boardHelpers";
 
 export const createInitialBoard = (): GameState["board"] => ({
   size: { w: 5, h: 4 },
@@ -44,7 +45,7 @@ export const createBoardSlice: StateCreator<
   moveSiteToZone: (x, y, target, position) =>
     set((state) => {
       get().pushHistory();
-      const key: CellKey = `${x},${y}`;
+      const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site || !site.card) return state;
       if (state.transport) {
@@ -52,13 +53,13 @@ export const createBoardSlice: StateCreator<
           get().log("Cannot move sites until seat ownership is established");
           return state as GameState;
         }
-        const ownerKey = (site.owner === 1 ? "p1" : "p2") as PlayerKey;
+        const ownerKey = seatFromOwner(site.owner);
         if (state.actorKey !== ownerKey) {
           get().log("Cannot move opponent's site to a zone");
           return state as GameState;
         }
       }
-      const owner: PlayerKey = site.owner === 1 ? "p1" : "p2";
+      const owner = seatFromOwner(site.owner);
       const sites = { ...state.board.sites };
       delete sites[key];
       const zones = { ...state.zones } as Record<PlayerKey, Zones>;
@@ -79,7 +80,7 @@ export const createBoardSlice: StateCreator<
         z.banished = [...z.banished, movedSiteCard];
       }
       zones[owner] = z;
-      const cellNo = y * state.board.size.w + x + 1;
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       const label =
         target === "hand"
           ? "hand"
@@ -89,7 +90,9 @@ export const createBoardSlice: StateCreator<
           ? "atlas"
           : "banished";
       get().log(
-        `Moved site '${site.card.name}' from #${cellNo} to ${owner.toUpperCase()} ${label}`
+        `Moved site '${site.card.name}' from #${cellNo} to ${ownerLabel(
+          owner
+        )} ${label}`
       );
       const boardNext = { ...state.board, sites } as GameState["board"];
       const tr = get().transport;
@@ -113,11 +116,11 @@ export const createBoardSlice: StateCreator<
         get().log("Cannot transfer control until seat is established");
         return state as GameState;
       }
-      const key: CellKey = `${x},${y}`;
+      const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site) return state;
       if (state.transport && state.actorKey) {
-        const ownerSeat = site.owner === 1 ? "p1" : "p2";
+        const ownerSeat = seatFromOwner(site.owner);
         if (state.actorKey !== ownerSeat) {
           get().log("Cannot transfer opponent site");
           return state as GameState;
@@ -125,7 +128,7 @@ export const createBoardSlice: StateCreator<
       }
       const fromOwner = site.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
-      const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
+      const newOwnerSeat = seatFromOwner(newOwner);
       const updatedSiteCard = site.card
         ? prepareCardForSeat(site.card, newOwnerSeat)
         : site.card;
@@ -151,7 +154,11 @@ export const createBoardSlice: StateCreator<
       );
       const boardNext = { ...state.board, sites } as GameState["board"];
       get().log(
-        `Site at #${y * state.board.size.w + x + 1} transfers to P${newOwner}`
+        `Site at #${getCellNumber(
+          x,
+          y,
+          state.board.size.w
+        )} transfers to P${newOwner}`
       );
       const tr = get().transport;
       if (tr) {

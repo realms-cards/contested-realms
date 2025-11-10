@@ -51,6 +51,7 @@ import {
 import type { CellKey } from "@/lib/game/store";
 import {
   useGameStore,
+  createInitialBoard,
   type CardRef,
   type BoardState,
   type RemoteCursorState,
@@ -67,6 +68,7 @@ import {
   tokenTextureUrl,
 } from "@/lib/game/tokens";
 import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
+import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
 const ENABLE_SNAP = true;
@@ -172,8 +174,6 @@ interface BoardProps {
   storeApi?: UseBoundStore<StoreApi<GameState>>;
 }
 
-const DEFAULT_BOARD_STATE: BoardState = { size: { w: 5, h: 4 }, sites: {} };
-
 // No-op raycast handler to make a mesh ignore pointer events (lets objects above receive them)
 function noopRaycast(
   this: Object3D,
@@ -217,7 +217,8 @@ export default function Board({
     resolvedStoreApi(selector);
   const isSpectator = interactionMode === "spectator";
   const boardState = useScopedStore((s) => s.board);
-  const board = boardState ?? DEFAULT_BOARD_STATE;
+  const fallbackBoard = useMemo(() => createInitialBoard(), []);
+  const board = boardState ?? fallbackBoard;
   const showGrid = useScopedStore((s) => s.showGridOverlay);
   const showPlaymat = useScopedStore((s) => s.showPlaymat);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
@@ -355,10 +356,15 @@ export default function Board({
     const checkTile = (tx: number, ty: number) => {
       const k = `${tx},${ty}` as CellKey;
       try {
-        const list = (permanents[k] || []) as Array<{ /* shape only */ } & { } >;
+        const list = (permanents[k] || []) as Array<{ attachedTo?: { at: CellKey; index: number } | null }>;
         if (list.length > 0) {
-          const topIndex = list.length - 1;
-          return { kind: "permanent" as const, at: k, index: topIndex };
+          // Scan from topmost downwards and pick the first non-attachment (host minion)
+          for (let i = list.length - 1; i >= 0; i--) {
+            const it = list[i] as { attachedTo?: { at: CellKey; index: number } | null } | null | undefined;
+            if (it && !it.attachedTo) {
+              return { kind: "permanent" as const, at: k, index: i };
+            }
+          }
         }
       } catch {}
       try {
@@ -2533,7 +2539,7 @@ export default function Board({
                     }
 
                     // Calculate edge-based positioning toward owning player
-                    const ownerKey = site.owner === 1 ? "p1" : "p2";
+                    const ownerKey = seatFromOwner(site.owner);
                     const playerPos = playerPositions[ownerKey];
                     const tileCoords = { x, z: y };
                     const edgeOffset = calculateEdgePosition(
@@ -2548,8 +2554,7 @@ export default function Board({
                       }
                     );
                     const siteGlowColor =
-                      siteRemoteColor ??
-                      (site.owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
+                      siteRemoteColor ?? PLAYER_COLORS[ownerKey];
                     const renderSiteGlow =
                       !isHandVisible && (isSel || !!siteRemoteColor);
 
@@ -2651,10 +2656,9 @@ export default function Board({
                               }
                               // Magic flow: pick target on site click
                               if (pendingMagic) {
-                                const ownerSeat =
-                                  (pendingMagic.spell.owner === 1
-                                    ? "p1"
-                                    : "p2") as "p1" | "p2";
+                                const ownerSeat = seatFromOwner(
+                                  pendingMagic.spell.owner
+                                );
                                 const amActor = actorKey === ownerSeat;
                                 const actorIsActive =
                                   (actorKey === "p1" && currentPlayer === 1) ||
@@ -2808,10 +2812,9 @@ export default function Board({
                               }
                               // Magic flow: pick target on empty site click
                               if (pendingMagic) {
-                                const ownerSeat =
-                                  (pendingMagic.spell.owner === 1
-                                    ? "p1"
-                                    : "p2") as "p1" | "p2";
+                                const ownerSeat = seatFromOwner(
+                                  pendingMagic.spell.owner
+                                );
                                 const amActor = actorKey === ownerSeat;
                                 const actorIsActive =
                                   (actorKey === "p1" && currentPlayer === 1) ||
@@ -2882,8 +2885,8 @@ export default function Board({
                   const hoverKey = `${key}:${idx}`;
 
                   const owner = p.owner; // 1 or 2
-                  const ownerKeyForTile = owner === 1 ? "p1" : "p2";
-                  const ownerAvatar = avatars?.[ownerKeyForTile];
+                  const ownerSeat = seatFromOwner(owner);
+                  const ownerAvatar = avatars?.[ownerSeat];
                   const avatarOnThisTile =
                     ownerAvatar?.pos &&
                     ownerAvatar.pos[0] === x &&
@@ -2961,8 +2964,7 @@ export default function Board({
                     }
                   );
                   const permanentGlowColor =
-                    remotePermanentColor ??
-                    (owner === 1 ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2);
+                    remotePermanentColor ?? PLAYER_COLORS[ownerSeat];
                   const renderPermanentGlow =
                     !isHandVisible && (isSel || !!remotePermanentColor);
                   const isLocalDragGhost =
@@ -3136,7 +3138,9 @@ export default function Board({
                           }
                           // Magic flow: select caster/target via click
                           if (pendingMagic) {
-                            const ownerSeat = (pendingMagic.spell.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+                            const ownerSeat = seatFromOwner(
+                              pendingMagic.spell.owner
+                            );
                             const amActor = actorKey === ownerSeat;
                             const actorIsActive =
                               (actorKey === "p1" && currentPlayer === 1) ||
@@ -4228,7 +4232,7 @@ export default function Board({
                       hl = HIGHLIGHT_TARGET;
                     // Magic: highlight selected caster/target avatars
                     if (pendingMagic) {
-                      const ownerSeat = (pendingMagic.spell.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+                      const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
                       if (
                         pendingMagic.caster &&
                         pendingMagic.caster.kind === "avatar" &&
@@ -4299,7 +4303,7 @@ export default function Board({
                       if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
                       // Magic flow: select caster/target avatars by click
                       if (pendingMagic) {
-                        const ownerSeat = (pendingMagic.spell.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+                        const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
                         const amActor = actorKey === ownerSeat;
                         const actorIsActive =
                           (actorKey === "p1" && currentPlayer === 1) ||

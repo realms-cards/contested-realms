@@ -9,6 +9,12 @@ import type {
   CardRef,
   MagicTarget,
 } from "./types";
+import {
+  getCellNumber,
+  opponentSeat,
+  seatFromOwner,
+  toCellKey,
+} from "./utils/boardHelpers";
 
 type StoreSet = Parameters<StateCreator<GameState>>[0];
 type StoreGet = Parameters<StateCreator<GameState>>[1];
@@ -177,7 +183,10 @@ export function handleCustomMessage(
     const ownerVal = Number(attacker?.owner);
     const id = typeof idRaw === "string" && idRaw ? idRaw : `cmb_${Date.now().toString(36)}`;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
-    const defenderSeat = (ownerVal === 1 ? "p2" : "p1") as PlayerKey;
+    const defenderSeat =
+      ownerVal === 1 || ownerVal === 2
+        ? opponentSeat(seatFromOwner(ownerVal as 1 | 2))
+        : "p1";
     const mySeat = get().actorKey as PlayerKey | null;
     // Show intercept chooser only to defender seat, or in hotseat (no actorKey)
     if (mySeat && mySeat !== defenderSeat) return;
@@ -341,7 +350,10 @@ export function handleCustomMessage(
     const indexVal = Number(attacker?.index);
     const ownerVal = Number(attacker?.owner);
     if (!id || !Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
-    const defenderSeat = (ownerVal === 1 ? "p2" : "p1") as PlayerKey;
+    const defenderSeat =
+      ownerVal === 1 || ownerVal === 2
+        ? opponentSeat(seatFromOwner(ownerVal as 1 | 2))
+        : "p1";
     let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
     try {
       if (targetAny && typeof targetAny === "object") {
@@ -367,7 +379,10 @@ export function handleCustomMessage(
         createdAt: Date.now(),
       },
     } as Partial<GameState> as GameState);
-    try { get().log(`Attack declared at #${y * get().board.size.w + x + 1}`); } catch {}
+    try {
+      const cellNo = getCellNumber(x, y, get().board.size.w);
+      get().log(`Attack declared at #${cellNo}`);
+    } catch {}
     return;
   }
   if (t === "combatSetDefenders") {
@@ -478,7 +493,11 @@ export function handleCustomMessage(
       const atkFx = aCell ? listAttachmentEffects(aCell.at, aCell.index) : [];
       const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
       const fsTag = eff.firstStrike ? " (FS)" : "";
-      const actorSeat = (Number(attacker?.owner) === 1 ? "p1" : "p2") as PlayerKey;
+      const attackerOwner = Number(attacker?.owner);
+      let actorSeat: PlayerKey = "p2";
+      if (attackerOwner === 1 || attackerOwner === 2) {
+        actorSeat = seatFromOwner(attackerOwner as 1 | 2);
+      }
       let targetSeat: PlayerKey | undefined = undefined;
       // Parse optional target
       let target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null = null;
@@ -497,7 +516,9 @@ export function handleCustomMessage(
         try {
           const x = Number(tileMsg?.x);
           const y = Number(tileMsg?.y);
-          if (Number.isFinite(x) && Number.isFinite(y)) return y * get().board.size.w + x + 1;
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            return getCellNumber(x, y, get().board.size.w);
+          }
         } catch {}
         return null as number | null;
       })();
@@ -505,11 +526,11 @@ export function handleCustomMessage(
         const owner = board.sites[target.at]?.owner as 1 | 2 | undefined;
         let seat: PlayerKey | null = null;
         if (owner === 1 || owner === 2) {
-          seat = (owner === 1 ? "p1" : "p2") as PlayerKey;
+          seat = seatFromOwner(owner);
         } else {
           seat =
             (get().pendingCombat?.defenderSeat as PlayerKey | null) ??
-            ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
+            opponentSeat(actorSeat);
         }
         if (seat) {
           targetSeat = seat as PlayerKey;
@@ -520,8 +541,7 @@ export function handleCustomMessage(
           summary = `Attacker ${attackerName}${fxTxt}${fsTag} hits Site ${siteName} @#${tileNo ?? "?"} → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
         }
       } else if (target && target.kind === "avatar") {
-        const aOwner = Number(attacker?.owner);
-        const seat = (aOwner === 1 ? "p2" : "p1") as PlayerKey;
+        const seat = opponentSeat(actorSeat);
         targetSeat = seat;
         const state = players[seat];
         const avatarName = getAvatarName(seat);
@@ -542,15 +562,19 @@ export function handleCustomMessage(
           try {
             const x = Number(tileMsg?.x);
             const y = Number(tileMsg?.y);
-            if (Number.isFinite(x) && Number.isFinite(y)) return `${x},${y}` as CellKey;
+            if (Number.isFinite(x) && Number.isFinite(y))
+              return toCellKey(x, y) as CellKey;
           } catch {}
           return null as CellKey | null;
         })();
         const siteAtTile = tileKey ? (board.sites[tileKey] as SiteTile | undefined) : undefined;
         if (!target && siteAtTile && siteAtTile.card && defenders.length === 0) {
           const owner = siteAtTile.owner as 1 | 2 | undefined;
-          let seat: PlayerKey | null = owner === 1 ? "p1" : owner === 2 ? "p2" : (get().pendingCombat?.defenderSeat as PlayerKey | null);
-          if (!seat) seat = ((Number(attacker?.owner) === 1 ? "p2" : "p1") as PlayerKey);
+          let seat: PlayerKey | null =
+            owner === 1 || owner === 2
+              ? seatFromOwner(owner)
+              : (get().pendingCombat?.defenderSeat as PlayerKey | null);
+          if (!seat) seat = opponentSeat(actorSeat);
           if (seat) {
             targetSeat = seat as PlayerKey;
             const dd = players[seat].lifeState === "dd";

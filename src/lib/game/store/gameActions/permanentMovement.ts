@@ -4,12 +4,18 @@ import type {
   CellKey,
   GameState,
   Permanents,
-  PermanentItem,
   PlayerKey,
   ServerPatchT,
   Zones,
   CardRef,
 } from "../types";
+import {
+  getCellNumber,
+  ownerLabel,
+  parseCellKey,
+  seatFromOwner,
+  toCellKey,
+} from "../utils/boardHelpers";
 import { prepareCardForSeat } from "../utils/cardHelpers";
 import {
   createPermanentDeltaPatch,
@@ -47,7 +53,7 @@ moveSelectedPermanentTo: (x, y) =>
       if (!sel) return state;
       get().pushHistory();
       const fromKey: CellKey = sel.at;
-      const toKey: CellKey = `${x},${y}`;
+      const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
       const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
@@ -57,7 +63,7 @@ moveSelectedPermanentTo: (x, y) =>
         toKey,
         null
       );
-      const cellNo = y * state.board.size.w + x + 1;
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       let finalPer = per;
       const finalUpdated = updated;
       let finalAdded = added;
@@ -110,7 +116,7 @@ moveSelectedPermanentToWithOffset: (x, y, offset) =>
       if (!sel) return state;
       get().pushHistory();
       const fromKey: CellKey = sel.at;
-      const toKey: CellKey = `${x},${y}`;
+      const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
       const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
@@ -120,7 +126,7 @@ moveSelectedPermanentToWithOffset: (x, y, offset) =>
         toKey,
         offset
       );
-      const cellNo = y * state.board.size.w + x + 1;
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       let finalPer = per;
       const finalUpdated = updated;
       let finalAdded = added;
@@ -176,7 +182,7 @@ movePermanentToZone: (at, index, target, position) =>
       const arr = [...(per[at] || [])];
       const item = arr.splice(index, 1)[0];
       if (!item) return state;
-      const ownerKey = (item.owner === 1 ? "p1" : "p2") as PlayerKey;
+      const ownerKey = seatFromOwner(item.owner);
       if (state.transport) {
         if (!state.actorKey) {
           get().log("Cannot move permanents until seat ownership is established");
@@ -188,7 +194,7 @@ movePermanentToZone: (at, index, target, position) =>
         }
       }
       per[at] = arr;
-      const owner: PlayerKey = item.owner === 1 ? "p1" : "p2";
+      const owner = seatFromOwner(item.owner);
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
       const seatZones = { ...zonesNext[owner] };
       const movedCard = prepareCardForSeat(item.card, owner);
@@ -211,17 +217,29 @@ movePermanentToZone: (at, index, target, position) =>
         seatZones.banished = [...seatZones.banished, movedCard];
       }
       zonesNext[owner] = seatZones;
-      const cell = at.split(",");
-      const x = Number(cell[0] || 0);
-      const y = Number(cell[1] || 0);
-      const cellNo = y * state.board.size.w + x + 1;
+      const { x, y } = parseCellKey(at);
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       get().log(
-        `Moved '${item.card.name}' from #${cellNo} to ${owner.toUpperCase()} ${finalTarget}`
+        `Moved '${item.card.name}' from #${cellNo} to ${ownerLabel(
+          owner
+        )} ${finalTarget}`
       );
-      const fallbackPatch = createPermanentsPatch(per, at);
+      const removedId = ensurePermanentInstanceId(item);
+      const deltaPatch = removedId
+        ? createPermanentDeltaPatch([
+            {
+              at,
+              entry: { instanceId: removedId },
+              remove: true,
+            },
+          ])
+        : null;
+      const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, at);
       const zonePatch = createZonesPatchFor(zonesNext, owner);
       const patch: ServerPatchT = {};
-      if (fallbackPatch?.permanents)
+      if (deltaPatch?.permanents)
+        patch.permanents = deltaPatch.permanents;
+      else if (fallbackPatch?.permanents)
         patch.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) patch.zones = zonePatch.zones;
       if (Object.keys(patch).length > 0) get().trySendPatch(patch);
@@ -242,7 +260,7 @@ transferPermanentControl: (at, index, to) =>
       const item = arr[index];
       if (!item) return state;
       if (state.transport && state.actorKey) {
-        const ownerSeat = item.owner === 1 ? "p1" : "p2";
+        const ownerSeat = seatFromOwner(item.owner);
         if (state.actorKey !== ownerSeat) {
           get().log("Cannot transfer opponent permanent");
           return state as GameState;
@@ -250,7 +268,7 @@ transferPermanentControl: (at, index, to) =>
       }
       const fromOwner = item.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
-      const newOwnerSeat: PlayerKey = newOwner === 1 ? "p1" : "p2";
+      const newOwnerSeat = seatFromOwner(newOwner);
       const TILE_SIZE = 2.0;
       const STACK_MARGIN_Z = TILE_SIZE * 0.1;
       const oldOffsetZ = Number(item.offset?.[1] ?? 0);
@@ -297,10 +315,8 @@ transferPermanentControl: (at, index, to) =>
           }
         }
       }
-      const cell = at.split(",");
-      const x = Number(cell[0] || 0);
-      const y = Number(cell[1] || 0);
-      const cellNo = y * state.board.size.w + x + 1;
+      const { x, y } = parseCellKey(at);
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       get().log(
         `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
       );
@@ -327,7 +343,7 @@ transferPermanentControl: (at, index, to) =>
         patch.permanents = fallbackPatch.permanents;
       if (zonesNext !== state.zones) {
         const seatsForZone: PlayerKey[] = [
-          fromOwner === 1 ? "p1" : "p2",
+          seatFromOwner(fromOwner),
           newOwnerSeat,
         ];
         const zonePatch = createZonesPatchFor(
