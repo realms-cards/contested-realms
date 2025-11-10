@@ -1,12 +1,5 @@
 import type { StateCreator } from "zustand";
-import type {
-  AvatarState,
-  CardRef,
-  CellKey,
-  GameState,
-  PlayerKey,
-  ServerPatchT,
-} from "./types";
+import type { AvatarState, CellKey, GameState, ServerPatchT } from "./types";
 import {
   buildAvatarUpdate,
   createDefaultAvatars,
@@ -22,6 +15,10 @@ type AvatarSlice = Pick<
   | "moveAvatarToWithOffset"
   | "setAvatarOffset"
   | "toggleTapAvatar"
+  | "addCounterOnAvatar"
+  | "incrementAvatarCounter"
+  | "decrementAvatarCounter"
+  | "clearAvatarCounter"
 >;
 
 export const createAvatarSlice: StateCreator<
@@ -249,5 +246,67 @@ export const createAvatarSlice: StateCreator<
         get().trySendPatch(patch);
       }
       return updates as Partial<GameState> as GameState;
+    }),
+
+  addCounterOnAvatar: (who) =>
+    set((state) => {
+      const cur = state.avatars[who];
+      const nextCount = Math.max(1, Number(cur?.counters || 0) + 1);
+      const next = { ...cur, counters: nextCount } as AvatarState;
+      const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
+      get().log(
+        `${who.toUpperCase()} ${cur?.counters ? "increments" : "adds"} avatar counter (now ${nextCount})`
+      );
+      const patch: ServerPatchT = { avatars: { [who]: { counters: nextCount } } as GameState["avatars"] };
+      get().trySendPatch(patch);
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
+    }),
+
+  incrementAvatarCounter: (who) =>
+    set((state) => {
+      const cur = state.avatars[who];
+      const nextCount = Math.max(1, Number(cur?.counters || 0) + 1);
+      const next = { ...cur, counters: nextCount } as AvatarState;
+      const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
+      get().log(`${who.toUpperCase()} increments avatar counter (now ${nextCount})`);
+      const patch: ServerPatchT = { avatars: { [who]: { counters: nextCount } } as GameState["avatars"] };
+      get().trySendPatch(patch);
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
+    }),
+
+  decrementAvatarCounter: (who) =>
+    set((state) => {
+      const cur = state.avatars[who];
+      const curCount = Math.max(0, Number(cur?.counters || 0));
+      if (curCount <= 1) {
+        const cleared = { ...cur } as AvatarState;
+        delete (cleared as { counters?: number | null }).counters;
+        const avatarsNext = { ...state.avatars, [who]: cleared } as GameState["avatars"];
+        get().log(`${who.toUpperCase()} removes avatar counter`);
+        const patch: ServerPatchT = { avatars: { [who]: { counters: null } } as GameState["avatars"] };
+        get().trySendPatch(patch);
+        return { avatars: avatarsNext } as Partial<GameState> as GameState;
+      } else {
+        const nextCount = curCount - 1;
+        const next = { ...cur, counters: nextCount } as AvatarState;
+        const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
+        get().log(`${who.toUpperCase()} decrements avatar counter (now ${nextCount})`);
+        const patch: ServerPatchT = { avatars: { [who]: { counters: nextCount } } as GameState["avatars"] };
+        get().trySendPatch(patch);
+        return { avatars: avatarsNext } as Partial<GameState> as GameState;
+      }
+    }),
+
+  clearAvatarCounter: (who) =>
+    set((state) => {
+      const cur = state.avatars[who];
+      if (!cur || cur.counters == null) return state as GameState;
+      const cleared = { ...cur } as AvatarState;
+      delete (cleared as { counters?: number | null }).counters;
+      const avatarsNext = { ...state.avatars, [who]: cleared } as GameState["avatars"];
+      get().log(`${who.toUpperCase()} removes avatar counter`);
+      const patch: ServerPatchT = { avatars: { [who]: { counters: null } } as GameState["avatars"] };
+      get().trySendPatch(patch);
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
 });

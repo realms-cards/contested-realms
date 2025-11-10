@@ -37,6 +37,7 @@ import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import TokenPile3D from "@/lib/game/components/TokenPile3D";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
+import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import {
   MAT_PIXEL_H,
   MAT_PIXEL_W,
@@ -2069,6 +2070,8 @@ const canPanCamera =
 
           {/* Combat HUD Overlay (layout-level, not inside Canvas) */}
           <CombatHudOverlay />
+          {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
+          <MagicHudOverlay />
 
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (

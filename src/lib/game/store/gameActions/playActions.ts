@@ -179,6 +179,21 @@ playSelectedTo: (x, y) =>
         combined.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) combined.zones = zonePatch.zones;
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
+      // If this is a Magic card, begin the magic casting flow after placing it
+      try {
+        if (type.includes("magic") && newest) {
+          get().beginMagicCast({
+            tile: { x, y },
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+          });
+        }
+      } catch {}
       const nextInteractionLog = expireInteractionGrant(
         state,
         consumeInstantId
@@ -379,6 +394,21 @@ playFromPileTo: (x, y) =>
         combined.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) combined.zones = zonePatch.zones;
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
+      // If this is a Magic card, begin the magic casting flow after placing it
+      try {
+        if (type.includes("magic") && newest) {
+          get().beginMagicCast({
+            tile: { x, y },
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+          });
+        }
+      } catch {}
       const nextInteractionLog = expireInteractionGrant(
         state,
         consumeInstantId

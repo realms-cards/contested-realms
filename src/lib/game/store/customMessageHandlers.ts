@@ -1,10 +1,13 @@
 import type { StateCreator } from "zustand";
+import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
 import type {
   GameState,
   PlayerKey,
   CellKey,
   Permanents,
   SiteTile,
+  CardRef,
+  MagicTarget,
 } from "./types";
 
 type StoreSet = Parameters<StateCreator<GameState>>[0];
@@ -41,6 +44,125 @@ export function handleCustomMessage(
         typeof payload.ts === "number" && Number.isFinite(payload.ts)
           ? payload.ts
           : Date.now(),
+    });
+    return;
+  }
+  if (t === "magicBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const tile = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    if (!id || !tile || typeof spellAny !== "object") return;
+    const x = Number(tile?.x);
+    const y = Number(tile?.y);
+    const rec = spellAny as Record<string, unknown>;
+    const at = typeof rec.at === "string" ? (rec.at as string) : null;
+    const idx = Number(rec.index);
+    const ownerVal = Number(rec.owner);
+    const card = rec.card as CardRef | undefined;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(idx) || !(ownerVal === 1 || ownerVal === 2) || !card) return;
+    const cardName = (card?.name || "");
+    const hints = extractMagicTargetingHintsSync(cardName, null);
+    set({
+      pendingMagic: {
+        id: String(id),
+        tile: { x, y },
+        spell: { at: at as CellKey, index: Number(idx), instanceId: (rec.instanceId as string | null) ?? null, owner: ownerVal as 1 | 2, card: card as CardRef },
+        caster: null,
+        target: null,
+        status: "choosingCaster",
+        hints,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+  if (t === "magicSetCaster") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterAny = (msg as { caster?: unknown }).caster as unknown;
+    set((s) => {
+      if (!id || !s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
+      let caster: ({ kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null) = null;
+      try {
+        if (casterAny && typeof casterAny === "object") {
+          const c = casterAny as Record<string, unknown>;
+          const kind = c.kind === "avatar" || c.kind === "permanent" ? (c.kind as "avatar" | "permanent") : null;
+          if (kind === "avatar") caster = { kind: "avatar", seat: c.seat as PlayerKey };
+          if (kind === "permanent") caster = { kind: "permanent", at: c.at as CellKey, index: Number(c.index), owner: Number(c.owner) as 1 | 2 };
+        }
+      } catch {}
+      return { pendingMagic: { ...s.pendingMagic, caster: caster ?? null, status: caster ? "choosingTarget" : "choosingCaster" } } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "magicSetTarget") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const targetAny = (msg as { target?: unknown }).target as unknown;
+    set((s) => {
+      if (!id || !s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
+      let target: MagicTarget | null = null;
+      try {
+        if (targetAny && typeof targetAny === "object") {
+          const rec = targetAny as Record<string, unknown>;
+          const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+          if (k === "location") target = { kind: "location", at: rec.at as CellKey };
+          else if (k === "permanent") target = { kind: "permanent", at: rec.at as CellKey, index: Number(rec.index) };
+          else if (k === "avatar") target = { kind: "avatar", seat: rec.seat as PlayerKey };
+          else if (k === "projectile") target = { kind: "projectile", direction: (rec.direction as "N" | "E" | "S" | "W") };
+        }
+      } catch {}
+      return { pendingMagic: { ...s.pendingMagic, target, status: target ? "confirm" : "choosingTarget" } } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "magicResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    if (!id || !spellAny || typeof spellAny !== "object") return;
+    const rec = spellAny as Record<string, unknown>;
+    const at = typeof rec.at === "string" ? (rec.at as string) : null;
+    const idx = Number(rec.index);
+    const ownerVal = Number(rec.owner);
+    const mySeat = get().actorKey as PlayerKey | null;
+    const ownerSeat = ownerVal === 1 ? "p1" : ownerVal === 2 ? "p2" : null;
+    // Only the owning seat applies the zone change locally to avoid double patches
+    if (at && Number.isFinite(idx) && mySeat && ownerSeat && mySeat === ownerSeat) {
+      try { get().movePermanentToZone(at as CellKey, Number(idx), "graveyard"); } catch {}
+    }
+    set((s) => {
+      if (!s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
+      return { pendingMagic: null } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "magicSummary") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const text = (msg as { text?: unknown }).text as string | undefined;
+    if (typeof text === "string") {
+      try { get().log(text); } catch {}
+    }
+    set((s) => {
+      if (!id || !s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
+      return { pendingMagic: null } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "magicCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    if (spellAny && typeof spellAny === "object") {
+      const rec = spellAny as Record<string, unknown>;
+      const at = typeof rec.at === "string" ? (rec.at as string) : null;
+      const idx = Number(rec.index);
+      const ownerVal = Number(rec.owner);
+      const mySeat = get().actorKey as PlayerKey | null;
+      const ownerSeat = ownerVal === 1 ? "p1" : ownerVal === 2 ? "p2" : null;
+      if (at && Number.isFinite(idx) && mySeat && ownerSeat && mySeat === ownerSeat) {
+        try { get().movePermanentToZone(at as CellKey, Number(idx), "hand"); } catch {}
+      }
+    }
+    set((s) => {
+      if (!s.pendingMagic || (id && s.pendingMagic.id !== id)) return s as GameState;
+      return { pendingMagic: null } as Partial<GameState> as GameState;
     });
     return;
   }
