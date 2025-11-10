@@ -2,6 +2,10 @@
 
 import React from "react";
 import { useGameStore } from "@/lib/game/store";
+import {
+  getCellNumber,
+  seatFromOwner,
+} from "@/lib/game/store/utils/boardHelpers";
 
 export default function MagicHudOverlay() {
   const magicGuides = useGameStore((s) => s.magicGuides);
@@ -18,13 +22,15 @@ export default function MagicHudOverlay() {
 
   if (!magicGuides || !pendingMagic) return null;
 
-  const tileNum = pendingMagic ? pendingMagic.tile.y * board.size.w + pendingMagic.tile.x + 1 : null;
+  const tileNum = pendingMagic
+    ? getCellNumber(pendingMagic.tile.x, pendingMagic.tile.y, board.size.w)
+    : null;
   const cardName = (() => {
     try { return pendingMagic.spell.card?.name || "Magic"; } catch { return "Magic"; }
   })();
   const status = pendingMagic.status;
 
-  const ownerSeat = pendingMagic.spell.owner === 1 ? "p1" : (pendingMagic.spell.owner === 2 ? "p2" : null);
+  const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
   const actorIsActive = ownerSeat ? ((actorKey === "p1" && currentPlayer === 1) || (actorKey === "p2" && currentPlayer === 2)) && actorKey === ownerSeat : true;
 
   function TopBar() {

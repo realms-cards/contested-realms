@@ -5,6 +5,13 @@ import { useSound } from "@/lib/contexts/SoundContext";
 import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync, detectRangedAbilitySync } from "@/lib/game/cardAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
+import {
+  getCellNumber,
+  parseCellKey,
+  seatFromOwner,
+  toCellKey,
+  opponentOwner,
+} from "@/lib/game/store/utils/boardHelpers";
 import type { ContextMenuAction } from "@/lib/game/types";
 
 interface ContextMenuProps {
@@ -216,19 +223,20 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let isMine = false; // Ownership check for attached items operations
 
   if (t.kind === "site") {
-    const key = `${t.x},${t.y}`;
+    const key = toCellKey(t.x, t.y);
     const site = board.sites[key];
-    header = site?.card?.name || `Site #${t.y * board.size.w + t.x + 1}`;
+    header =
+      site?.card?.name || `Site #${getCellNumber(t.x, t.y, board.size.w)}`;
     tapped = !!site?.tapped;
     // Sites do not tap in Sorcery: never show a toggle for sites
     hasToggle = false;
     doToggle = null;
 
-    const ownerKey = site ? (site.owner === 1 ? "p1" : "p2") : null;
+    const ownerKey = site ? seatFromOwner(site.owner) : null;
     const isMine = !actorKey || (ownerKey && actorKey === ownerKey);
 
     if (site && isMine) {
-      transferTo = site.owner === 1 ? 2 : 1;
+      transferTo = opponentOwner(site.owner);
       doTransfer = () => {
         transferSiteControl(t.x, t.y);
         onClose();
@@ -271,7 +279,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const item = arr[t.index];
     header = item?.card?.name || "Permanent";
     tapped = !!item?.tapped;
-    const ownerKey = item ? (item.owner === 1 ? "p1" : "p2") : null;
+    const ownerKey = item ? seatFromOwner(item.owner) : null;
     const canToggle = !actorKey || (ownerKey && actorKey === ownerKey);
     hasToggle = !!canToggle;
     if (canToggle) {
@@ -284,7 +292,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     isMine = !actorKey || !!(ownerKey && actorKey === ownerKey);
     if (item && isMine) {
-      transferTo = item.owner === 1 ? 2 : 1;
+      transferTo = opponentOwner(item.owner);
       doTransfer = () => {
         transferPermanentControl(t.at, t.index);
         onClose();
@@ -372,7 +380,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           });
 
         // Check if there's an avatar on this tile
-        const ownerKey = item.owner === 1 ? "p1" : "p2";
+        const ownerKey = seatFromOwner(item.owner);
         const avatar = avatars[ownerKey];
         const avatarPos = Array.isArray(avatar?.pos) && avatar.pos.length === 2 ? avatar.pos : null;
         const [artifactX, artifactY] = t.at.split(",").map(Number);
@@ -427,11 +435,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     // Combat actions (same-tile and ranged-adjacent)
     try {
       const canAct = isMine && ((actorKey === "p1" && currentPlayer === 1) || (actorKey === "p2" && currentPlayer === 2) || !actorKey);
-      const ownerNum: 1 | 2 | null = item ? (item.owner === 1 ? 1 : item.owner === 2 ? 2 : null) : null;
-      const enemyOwner: 1 | 2 | null = ownerNum === 1 ? 2 : ownerNum === 2 ? 1 : null;
-      const [sx, sy] = t.at.split(",");
-      const x = Number(sx), y = Number(sy);
-      const tileKey = `${x},${y}`;
+      const ownerNum: 1 | 2 | null = item ? item.owner : null;
+      const enemyOwner: 1 | 2 | null =
+        ownerNum != null ? opponentOwner(ownerNum) : null;
+      const { x, y } = parseCellKey(t.at as string);
+      const tileKey = t.at;
       const unitsHere = enemyOwner != null ? (permanents[tileKey] || []).some((p) => p && p.owner === enemyOwner) : false;
       const siteHereEnemy = enemyOwner != null ? (board.sites[tileKey]?.owner === enemyOwner) : false;
       const canAttackHere = canAct && !tapped && (unitsHere || siteHereEnemy);
@@ -445,7 +453,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       ].filter((p) => p.x >= 0 && p.y >= 0 && p.x < boardW && p.y < boardH);
       const rangedTargets = isRanged && enemyOwner != null && canAct && !tapped
         ? neighbors.filter((p) => {
-            const k = `${p.x},${p.y}`;
+            const k = toCellKey(p.x, p.y);
             const list = permanents[k] || [];
             return list.some((u) => u && u.owner === enemyOwner);
           })
@@ -464,7 +472,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
       if (rangedTargets.length > 0 && item) {
         for (const p of rangedTargets) {
-          const cellNo = p.y * board.size.w + p.x + 1;
+          const cellNo = getCellNumber(p.x, p.y, board.size.w);
           extraActions.push({
             actionId: `__attack_adj_${p.x}_${p.y}__`,
             displayText: `Ranged attack T${cellNo}`,
@@ -508,7 +516,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const avatarPos = Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
     if (avatarPos) {
       const [ax, ay] = avatarPos;
-      const avatarTileKey = `${ax},${ay}`;
+      const avatarTileKey = toCellKey(ax, ay);
       const tilePermanents = permanents[avatarTileKey] || [];
       attachedTokens = tilePermanents
         .map((perm, idx) => ({ perm, idx }))

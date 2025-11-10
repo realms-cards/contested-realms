@@ -41,6 +41,7 @@ export {
   MAX_EVENTS,
   REMOTE_CURSOR_TTL_MS,
 } from "./store/types";
+export { createInitialBoard } from "./store/boardState";
 export type {
   AvatarState,
   BoardPingEvent,

@@ -25,6 +25,11 @@ import {
   evaluateInstantPermission,
   expireInteractionGrant,
 } from "./helpers";
+import {
+  getCellNumber,
+  ownerFromSeat,
+  toCellKey,
+} from "../utils/boardHelpers";
 
 export type PlayActionsSlice = Pick<
   GameState,
@@ -93,8 +98,8 @@ playSelectedTo: (x, y) =>
       get().pushHistory();
       const hand = [...state.zones[who].hand];
       hand.splice(index, 1);
-      const key: CellKey = `${x},${y}`;
-      const cellNo = y * state.board.size.w + x + 1;
+      const key: CellKey = toCellKey(x, y);
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       const isRubble =
         type.includes("token") &&
         TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
@@ -107,7 +112,7 @@ playSelectedTo: (x, y) =>
         }
         const sites = {
           ...state.board.sites,
-          [key]: { owner: (who === "p1" ? 1 : 2) as 1 | 2, tapped: false, card },
+          [key]: { owner: ownerFromSeat(who), tapped: false, card },
         };
         get().log(`${who.toUpperCase()} plays site '${card.name}' at #${cellNo}`);
         const tr = get().transport;
@@ -147,7 +152,7 @@ playSelectedTo: (x, y) =>
       const arr = [...(per[key] || [])];
       const cardWithId = prepareCardForSeat(card, who);
       arr.push({
-        owner: (who === "p1" ? 1 : 2) as 1 | 2,
+        owner: ownerFromSeat(who),
         card: cardWithId,
         offset: null,
         tilt: randomTilt(),
@@ -287,8 +292,8 @@ playFromPileTo: (x, y) =>
           } as Partial<GameState> as GameState;
         }
       }
-      const key: CellKey = `${x},${y}`;
-      const cellNo = y * state.board.size.w + x + 1;
+      const key: CellKey = toCellKey(x, y);
+      const cellNo = getCellNumber(x, y, state.board.size.w);
       const isRubble =
         type.includes("token") &&
         TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
@@ -315,7 +320,7 @@ playFromPileTo: (x, y) =>
         const sites = {
           ...state.board.sites,
           [key]: {
-            owner: (who === "p1" ? 1 : 2) as 1 | 2,
+            owner: ownerFromSeat(who),
             tapped: false,
             card: ensuredSiteCard,
           },
@@ -355,7 +360,7 @@ playFromPileTo: (x, y) =>
       const arr = [...(per[key] || [])];
       const cardWithId = prepareCardForSeat(card, who);
       arr.push({
-        owner: (who === "p1" ? 1 : 2) as 1 | 2,
+        owner: ownerFromSeat(who),
         card: cardWithId,
         offset: null,
         tilt: randomTilt(),
