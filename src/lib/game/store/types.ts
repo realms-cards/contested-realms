@@ -128,6 +128,7 @@ export type EntityBase<TCard> = {
 
 export type AvatarState = EntityBase<CardRef | null> & {
   pos: [number, number] | null;
+  counters?: number | null;
 };
 
 export type PermanentItem = EntityBase<CardRef> & {
@@ -143,6 +144,26 @@ export type PermanentItem = EntityBase<CardRef> & {
   damage?: number | null;
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
+
+// --- Magic Interaction (casting) -------------------------------------------------
+
+export type MagicTarget =
+  | { kind: "location"; at: CellKey }
+  | { kind: "permanent"; at: CellKey; index: number }
+  | { kind: "avatar"; seat: PlayerKey }
+  | { kind: "projectile"; direction: "N" | "E" | "S" | "W"; firstHit?: { kind: "permanent" | "avatar"; at: CellKey; index?: number } };
+
+export type PendingMagic = {
+  id: string;
+  tile: { x: number; y: number };
+  // The spell card placed on board for UX; resolved to cemetery on completion
+  spell: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2; card: CardRef };
+  caster?: { kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null;
+  target?: MagicTarget | null;
+  status: "choosingCaster" | "choosingTarget" | "confirm" | "resolving" | "cancelled" | "resolved";
+  hints?: { scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null; allow: { location?: boolean; permanent?: boolean; avatar?: boolean } } | null;
+  createdAt: number;
+};
 
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
@@ -242,6 +263,9 @@ export type GameState = {
   // Feature flag: opt-in guided overlays for combat interactions
   interactionGuides: boolean;
   setInteractionGuides: (on: boolean) => void;
+  // Feature flag: opt-in guided overlays for magic casting
+  magicGuides: boolean;
+  setMagicGuides: (on: boolean) => void;
   // Card meta cache (subset) used to detect base power quickly
   metaByCardId: Record<
     number,
@@ -306,6 +330,20 @@ export type GameState = {
   applyDamageToPermanent: (at: CellKey, index: number, amount: number) => void;
   clearAllDamageForSeat: (seat: PlayerKey) => void;
   setTapPermanent: (at: CellKey, index: number, tapped: boolean) => void;
+  // Magic casting flow (MVP)
+  pendingMagic: PendingMagic | null;
+  beginMagicCast: (input: {
+    tile: { x: number; y: number };
+    spell: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2; card: CardRef };
+    presetCaster?: { kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null;
+  }) => void;
+  setMagicCasterChoice: (
+    caster: { kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null
+  ) => void;
+  setMagicTargetChoice: (target: MagicTarget | null) => void;
+  confirmMagic: () => void;
+  resolveMagic: () => void;
+  cancelMagic: () => void;
   // Generic lightweight message handler
   receiveCustomMessage: (msg: CustomMessage) => void;
   // Safe patch sending
@@ -438,6 +476,10 @@ export type GameState = {
   ) => void;
   setAvatarOffset: (who: PlayerKey, offset: [number, number] | null) => void;
   toggleTapAvatar: (who: PlayerKey) => void;
+  addCounterOnAvatar: (who: PlayerKey) => void;
+  incrementAvatarCounter: (who: PlayerKey) => void;
+  decrementAvatarCounter: (who: PlayerKey) => void;
+  clearAvatarCounter: (who: PlayerKey) => void;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
   mulligan: (who: PlayerKey) => void;

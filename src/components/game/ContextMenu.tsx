@@ -24,6 +24,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const setAttackTargetChoice = useGameStore((s) => s.setAttackTargetChoice);
   const addCounterOnPermanent = useGameStore((s) => s.addCounterOnPermanent);
   const clearPermanentCounter = useGameStore((s) => s.clearPermanentCounter);
+  const addCounterOnAvatar = useGameStore((s) => s.addCounterOnAvatar);
+  const clearAvatarCounter = useGameStore((s) => s.clearAvatarCounter);
   const toggleTapAvatar = useGameStore((s) => s.toggleTapAvatar);
   const moveSiteToZone = useGameStore((s) => s.moveSiteToZone);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
@@ -485,6 +487,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       doToggle = () => {
         toggleTapAvatar(t.who);
         try { playCardFlip(); } catch {}
+        onClose();
+      };
+    }
+
+    // Avatar counter toggle (same UX as permanents)
+    if (a) {
+      hasCounter = Number(a.counters || 0) > 0;
+      doToggleCounter = () => {
+        if (hasCounter) {
+          clearAvatarCounter(t.who);
+        } else {
+          addCounterOnAvatar(t.who);
+        }
         onClose();
       };
     }

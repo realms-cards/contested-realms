@@ -66,6 +66,7 @@ import {
   TOKEN_BY_KEY,
   tokenTextureUrl,
 } from "@/lib/game/tokens";
+import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
 const ENABLE_SNAP = true;
@@ -263,6 +264,12 @@ export default function Board({
   const decrementPermanentCounter = useScopedStore(
     (s) => s.decrementPermanentCounter
   );
+  const incrementAvatarCounter = useScopedStore(
+    (s) => s.incrementAvatarCounter
+  );
+  const decrementAvatarCounter = useScopedStore(
+    (s) => s.decrementAvatarCounter
+  );
   const attachTokenToPermanent = useScopedStore(
     (s) => s.attachTokenToPermanent
   );
@@ -307,6 +314,10 @@ export default function Board({
   const selectPermanent = useScopedStore((s) => s.selectPermanent);
   const setDefenderSelection = useScopedStore((s) => s.setDefenderSelection);
   const revertCrossMoveTick = useScopedStore((s) => s.revertCrossMoveTick);
+  // Magic casting flow
+  const pendingMagic = useScopedStore((s) => s.pendingMagic);
+  const setMagicCasterChoice = useScopedStore((s) => s.setMagicCasterChoice);
+  const setMagicTargetChoice = useScopedStore((s) => s.setMagicTargetChoice);
 
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
@@ -323,6 +334,69 @@ export default function Board({
     const isAutomaton = cardSubTypes.includes("automaton");
     return isArtifact && !isMonument && !isAutomaton;
   };
+
+  // Compute first hits for projectile scope along cardinal directions from the spell tile
+  const computeProjectileFirstHits = useCallback((): Record<
+    "N" | "E" | "S" | "W",
+    | { kind: "permanent" | "avatar"; at: CellKey; index?: number }
+    | null
+  > => {
+    const hits: Record<
+      "N" | "E" | "S" | "W",
+      | { kind: "permanent" | "avatar"; at: CellKey; index?: number }
+      | null
+    > = { N: null, E: null, S: null, W: null };
+    const pm = resolvedStoreApi.getState().pendingMagic;
+    if (!pm) return hits;
+    const originX = pm.tile.x;
+    const originY = pm.tile.y;
+    const w = board.size.w;
+    const h = board.size.h;
+    const checkTile = (tx: number, ty: number) => {
+      const k = `${tx},${ty}` as CellKey;
+      try {
+        const list = (permanents[k] || []) as Array<{ /* shape only */ } & { } >;
+        if (list.length > 0) {
+          const topIndex = list.length - 1;
+          return { kind: "permanent" as const, at: k, index: topIndex };
+        }
+      } catch {}
+      try {
+        const p1 = avatars?.p1?.pos as [number, number] | null;
+        if (Array.isArray(p1) && p1[0] === tx && p1[1] === ty) {
+          return { kind: "avatar" as const, at: k };
+        }
+      } catch {}
+      try {
+        const p2 = avatars?.p2?.pos as [number, number] | null;
+        if (Array.isArray(p2) && p2[0] === tx && p2[1] === ty) {
+          return { kind: "avatar" as const, at: k };
+        }
+      } catch {}
+      return null;
+    };
+    // North
+    for (let yy = originY - 1; yy >= 0; yy--) {
+      const hit = checkTile(originX, yy);
+      if (hit) { hits.N = hit; break; }
+    }
+    // East
+    for (let xx = originX + 1; xx < w; xx++) {
+      const hit = checkTile(xx, originY);
+      if (hit) { hits.E = hit; break; }
+    }
+    // South
+    for (let yy = originY + 1; yy < h; yy++) {
+      const hit = checkTile(originX, yy);
+      if (hit) { hits.S = hit; break; }
+    }
+    // West
+    for (let xx = originX - 1; xx >= 0; xx--) {
+      const hit = checkTile(xx, originY);
+      if (hit) { hits.W = hit; break; }
+    }
+    return hits;
+  }, [avatars, board.size.h, board.size.w, permanents, resolvedStoreApi]);
 
   // Site edge placement functions
   const calculateEdgePosition = useScopedStore((s) => s.calculateEdgePosition);
@@ -2393,6 +2467,57 @@ export default function Board({
                 <meshStandardMaterial color={"#000"} opacity={0} transparent depthWrite={false} />
               </mesh>
 
+              {(() => {
+                if (!(pendingMagic && pendingMagic.status === "choosingTarget")) return null;
+                const hints = pendingMagic.hints;
+                const scope = hints?.scope || null;
+                // Projectile: highlight collinear tiles to indicate direction selection
+                if (scope === "projectile") {
+                  const ox = pendingMagic.tile.x;
+                  const oy = pendingMagic.tile.y;
+                  const collinear = (ox === x || oy === y) && !(ox === x && oy === y);
+                  if (!collinear) return null;
+                  return (
+                    <group>
+                      <CardOutline
+                        width={CARD_SHORT}
+                        height={CARD_LONG}
+                        rotationZ={0}
+                        elevation={0.00015}
+                        color={HIGHLIGHT_TARGET}
+                        renderOrder={1100}
+                        pulse
+                      />
+                    </group>
+                  );
+                }
+                // Non-projectile: highlight tiles allowed by location + scope
+                const allowLoc = hints?.allow?.location !== false;
+                if (!allowLoc) return null;
+                const dx = Math.abs(x - pendingMagic.tile.x);
+                const dy = Math.abs(y - pendingMagic.tile.y);
+                const man = dx + dy;
+                let show = false;
+                if (scope === null || scope === "global") show = true;
+                else if (scope === "here") show = man === 0;
+                else if (scope === "adjacent") show = man === 1;
+                else if (scope === "nearby") show = man <= 2;
+                if (!show) return null;
+                return (
+                  <group>
+                    <CardOutline
+                      width={CARD_SHORT}
+                      height={CARD_LONG}
+                      rotationZ={0}
+                      elevation={0.00015}
+                      color={HIGHLIGHT_TARGET}
+                      renderOrder={1100}
+                      pulse
+                    />
+                  </group>
+                );
+              })()}
+
               {site && (
                 <group>
                   {(() => {
@@ -2457,6 +2582,29 @@ export default function Board({
                             pendingCombat.target.at === siteKey
                           )
                             hl = HIGHLIGHT_TARGET;
+                          // Magic: highlight chosen location target
+                          if (
+                            pendingMagic?.target &&
+                            pendingMagic.target.kind === "location" &&
+                            pendingMagic.target.at === siteKey
+                          )
+                            hl = HIGHLIGHT_TARGET;
+                          if (!hl && pendingMagic && pendingMagic.status === "choosingTarget") {
+                            const hints = pendingMagic.hints;
+                            const allowLoc = hints?.allow?.location !== false;
+                            const scope = hints?.scope || null;
+                            if (allowLoc && scope !== "projectile") {
+                              const dx = Math.abs(x - pendingMagic.tile.x);
+                              const dy = Math.abs(y - pendingMagic.tile.y);
+                              const man = dx + dy;
+                              let ok = false;
+                              if (scope === null || scope === "global") ok = true;
+                              else if (scope === "here") ok = man === 0;
+                              else if (scope === "adjacent") ok = man === 1;
+                              else if (scope === "nearby") ok = man <= 2;
+                              if (ok) hl = HIGHLIGHT_TARGET;
+                            }
+                          }
                           if (!hl) return null;
                           return (
                             <group position={[edgeOffset.x, 0, edgeOffset.z]}>
@@ -2500,6 +2648,43 @@ export default function Board({
                                       { x: cx, y: cy }
                                     );
                                   }, 500) as unknown as number;
+                              }
+                              // Magic flow: pick target on site click
+                              if (pendingMagic) {
+                                const ownerSeat =
+                                  (pendingMagic.spell.owner === 1
+                                    ? "p1"
+                                    : "p2") as "p1" | "p2";
+                                const amActor = actorKey === ownerSeat;
+                                const actorIsActive =
+                                  (actorKey === "p1" && currentPlayer === 1) ||
+                                  (actorKey === "p2" && currentPlayer === 2);
+                                if (amActor && actorIsActive) {
+                                  e.stopPropagation();
+                                  if (pendingMagic.status === "choosingTarget") {
+                                    const hints = pendingMagic.hints;
+                                    const scope = hints?.scope || null;
+                                    if (scope === "projectile") {
+                                      const ox = pendingMagic.tile.x;
+                                      const oy = pendingMagic.tile.y;
+                                      if (ox === x || oy === y) {
+                                        const dir = ox === x ? (y < oy ? "N" : "S") : x > ox ? "E" : "W";
+                                        const hits = computeProjectileFirstHits();
+                                        setMagicTargetChoice({ kind: "projectile", direction: dir, firstHit: hits[dir] || undefined });
+                                      }
+                                      return;
+                                    }
+                                    if (hints && hints.allow && hints.allow.location === false) return;
+                                    const dx = Math.abs(x - pendingMagic.tile.x);
+                                    const dy = Math.abs(y - pendingMagic.tile.y);
+                                    const man = dx + dy;
+                                    if (scope === "here" && man !== 0) return;
+                                    if (scope === "adjacent" && man !== 1) return;
+                                    if (scope === "nearby" && man > 2) return;
+                                    setMagicTargetChoice({ kind: "location", at: `${x},${y}` as CellKey });
+                                    return;
+                                  }
+                                }
                               }
                               // HUD flow: select site as target
                               if (attackTargetChoice) {
@@ -2620,6 +2805,43 @@ export default function Board({
                                       { x: cx, y: cy }
                                     );
                                   }, 500) as unknown as number;
+                              }
+                              // Magic flow: pick target on empty site click
+                              if (pendingMagic) {
+                                const ownerSeat =
+                                  (pendingMagic.spell.owner === 1
+                                    ? "p1"
+                                    : "p2") as "p1" | "p2";
+                                const amActor = actorKey === ownerSeat;
+                                const actorIsActive =
+                                  (actorKey === "p1" && currentPlayer === 1) ||
+                                  (actorKey === "p2" && currentPlayer === 2);
+                                if (amActor && actorIsActive) {
+                                  e.stopPropagation();
+                                  if (pendingMagic.status === "choosingTarget") {
+                                    const hints = pendingMagic.hints;
+                                    const scope = hints?.scope || null;
+                                    if (scope === "projectile") {
+                                      const ox = pendingMagic.tile.x;
+                                      const oy = pendingMagic.tile.y;
+                                      if (ox === x || oy === y) {
+                                        const dir = ox === x ? (y < oy ? "N" : "S") : x > ox ? "E" : "W";
+                                        const hits = computeProjectileFirstHits();
+                                        setMagicTargetChoice({ kind: "projectile", direction: dir, firstHit: hits[dir] || undefined });
+                                      }
+                                      return;
+                                    }
+                                    if (hints && hints.allow && hints.allow.location === false) return;
+                                    const dx = Math.abs(x - pendingMagic.tile.x);
+                                    const dy = Math.abs(y - pendingMagic.tile.y);
+                                    const man = dx + dy;
+                                    if (scope === "here" && man !== 0) return;
+                                    if (scope === "adjacent" && man !== 1) return;
+                                    if (scope === "nearby" && man > 2) return;
+                                    setMagicTargetChoice({ kind: "location", at: `${x},${y}` as CellKey });
+                                    return;
+                                  }
+                                }
                               }
                             }}
                             onContextMenu={(e: ThreeEvent<PointerEvent>) => {
@@ -2748,7 +2970,7 @@ export default function Board({
                     dragging &&
                     dragging.from === key &&
                     dragging.index === idx;
-                  // Role-based combat glow
+                  // Role-based combat/magic glow
                   let roleGlow: string | null = null;
                   if (
                     attackTargetChoice &&
@@ -2784,6 +3006,56 @@ export default function Board({
                       )
                     )
                       roleGlow = HIGHLIGHT_DEFENDER;
+                  }
+                  // Magic glow: caster/target highlights and simple candidate hint (friendly as caster)
+                  if (pendingMagic) {
+                    if (
+                      pendingMagic.caster &&
+                      pendingMagic.caster.kind === "permanent" &&
+                      pendingMagic.caster.at === (key as CellKey) &&
+                      pendingMagic.caster.index === idx
+                    ) {
+                      roleGlow = HIGHLIGHT_ATTACKER;
+                    }
+                    if (
+                      pendingMagic.target &&
+                      pendingMagic.target.kind === "permanent" &&
+                      pendingMagic.target.at === (key as CellKey) &&
+                      pendingMagic.target.index === idx
+                    ) {
+                      roleGlow = HIGHLIGHT_TARGET;
+                    }
+                    // Candidate: choosing caster (friendly permanents that are spellcasters)
+                    if (!roleGlow && !pendingMagic.caster && pendingMagic.status === "choosingCaster" && p.owner === pendingMagic.spell.owner) {
+                      const nm = p.card?.name || "";
+                      if (nm && detectSpellcasterSync(nm)) {
+                        roleGlow = HIGHLIGHT_ATTACKER;
+                      }
+                    }
+                    // Candidate: choosing target (permanents allowed by hints + scope)
+                    if (!roleGlow && pendingMagic.status === "choosingTarget") {
+                      const allowPerm = pendingMagic.hints?.allow?.permanent !== false;
+                      const scope = pendingMagic.hints?.scope || null;
+                      if (allowPerm && scope === "projectile") {
+                        const hits = computeProjectileFirstHits();
+                        const k = key as CellKey;
+                        const isFirstHit =
+                          (hits.N && hits.N.kind === "permanent" && hits.N.at === k && hits.N.index === idx) ||
+                          (hits.E && hits.E.kind === "permanent" && hits.E.at === k && hits.E.index === idx) ||
+                          (hits.S && hits.S.kind === "permanent" && hits.S.at === k && hits.S.index === idx) ||
+                          (hits.W && hits.W.kind === "permanent" && hits.W.at === k && hits.W.index === idx);
+                        if (isFirstHit) roleGlow = HIGHLIGHT_TARGET;
+                      } else if (allowPerm) {
+                        const dx = Math.abs(x - pendingMagic.tile.x);
+                        const dy = Math.abs(y - pendingMagic.tile.y);
+                        const man = dx + dy;
+                        let inScope = true;
+                        if (scope === "here") inScope = man === 0;
+                        else if (scope === "adjacent") inScope = man === 1;
+                        else if (scope === "nearby") inScope = man <= 2;
+                        if (inScope) roleGlow = HIGHLIGHT_TARGET;
+                      }
+                    }
                   }
                   const showPermanentGlow =
                     (renderPermanentGlow && !isLocalDragGhost) || !!roleGlow;
@@ -2861,6 +3133,50 @@ export default function Board({
                             setLastTouchedId(permId);
                             clearHoverPreview(hoverKey);
                             return;
+                          }
+                          // Magic flow: select caster/target via click
+                          if (pendingMagic) {
+                            const ownerSeat = (pendingMagic.spell.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+                            const amActor = actorKey === ownerSeat;
+                            const actorIsActive =
+                              (actorKey === "p1" && currentPlayer === 1) ||
+                              (actorKey === "p2" && currentPlayer === 2);
+                            if (amActor && actorIsActive) {
+                              e.stopPropagation();
+                              if (pendingMagic.status === "choosingCaster") {
+                                if (p.owner === pendingMagic.spell.owner) {
+                                  const nm = p.card?.name || "";
+                                  if (nm && detectSpellcasterSync(nm)) {
+                                    setMagicCasterChoice({ kind: "permanent", at: key as CellKey, index: idx, owner: p.owner as 1 | 2 });
+                                  }
+                                }
+                                return;
+                              }
+                              if (pendingMagic.status === "choosingTarget") {
+                                const hints = pendingMagic.hints;
+                                const scope = hints?.scope || null;
+                                if (scope === "projectile") {
+                                  const ox = pendingMagic.tile.x;
+                                  const oy = pendingMagic.tile.y;
+                                  if (ox === x || oy === y) {
+                                    const dir = ox === x ? (y < oy ? "N" : "S") : x > ox ? "E" : "W";
+                                    const hits = computeProjectileFirstHits();
+                                    setMagicTargetChoice({ kind: "projectile", direction: dir, firstHit: hits[dir] || undefined });
+                                  }
+                                  return;
+                                }
+                                const allowPerm = hints?.allow?.permanent !== false;
+                                if (!allowPerm) return;
+                                const dx = Math.abs(x - pendingMagic.tile.x);
+                                const dy = Math.abs(y - pendingMagic.tile.y);
+                                const man = dx + dy;
+                                if (scope === "here" && man !== 0) return;
+                                if (scope === "adjacent" && man !== 1) return;
+                                if (scope === "nearby" && man > 2) return;
+                                setMagicTargetChoice({ kind: "permanent", at: key as CellKey, index: idx });
+                                return;
+                              }
+                            }
                           }
                           // HUD flow: target selection or defender toggling by click
                           if (attackTargetChoice) {
@@ -3891,7 +4207,7 @@ export default function Board({
                       renderOrder={1201}
                     />
                   )}
-                  {/* Additional highlights for HUD flow */}
+                  {/* Additional highlights for HUD + Magic flow */}
                   {(() => {
                     let hl: string | null = null;
                     const pos = Array.isArray(a.pos) ? a.pos : null;
@@ -3910,6 +4226,54 @@ export default function Board({
                       `${pos[0]},${pos[1]}` === pendingCombat.target.at
                     )
                       hl = HIGHLIGHT_TARGET;
+                    // Magic: highlight selected caster/target avatars
+                    if (pendingMagic) {
+                      const ownerSeat = (pendingMagic.spell.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+                      if (
+                        pendingMagic.caster &&
+                        pendingMagic.caster.kind === "avatar" &&
+                        who === pendingMagic.caster.seat
+                      ) {
+                        hl = HIGHLIGHT_ATTACKER;
+                      }
+                      if (
+                        pendingMagic.target &&
+                        pendingMagic.target.kind === "avatar" &&
+                        who === pendingMagic.target.seat
+                      ) {
+                        hl = HIGHLIGHT_TARGET;
+                      }
+                      if (!pendingMagic.caster && pendingMagic.status === "choosingCaster" && who === ownerSeat) {
+                        hl = HIGHLIGHT_ATTACKER;
+                      }
+                      if (!hl && pendingMagic.status === "choosingTarget") {
+                        const hints = pendingMagic.hints;
+                        const allowAvatar = hints?.allow?.avatar !== false;
+                        const pos2 = Array.isArray(a.pos) ? a.pos : null;
+                        const scope = hints?.scope || null;
+                        if (allowAvatar && pos && pos2) {
+                          if (scope === "projectile") {
+                            const hits = computeProjectileFirstHits();
+                            const k = `${pos2[0]},${pos2[1]}` as CellKey;
+                            const isFirstHit =
+                              (hits.N && hits.N.kind === "avatar" && hits.N.at === k) ||
+                              (hits.E && hits.E.kind === "avatar" && hits.E.at === k) ||
+                              (hits.S && hits.S.kind === "avatar" && hits.S.at === k) ||
+                              (hits.W && hits.W.kind === "avatar" && hits.W.at === k);
+                            if (isFirstHit) hl = HIGHLIGHT_TARGET;
+                          } else {
+                            const dx = Math.abs(pos2[0] - pendingMagic.tile.x);
+                            const dy = Math.abs(pos2[1] - pendingMagic.tile.y);
+                            const man = dx + dy;
+                            let inScope = true;
+                            if (scope === "here") inScope = man === 0;
+                            else if (scope === "adjacent") inScope = man === 1;
+                            else if (scope === "nearby") inScope = man <= 2;
+                            if (inScope) hl = HIGHLIGHT_TARGET;
+                          }
+                        }
+                      }
+                    }
                     if (hl)
                       return (
                         <CardOutline
@@ -3931,9 +4295,55 @@ export default function Board({
                         e.stopPropagation();
                         return;
                       }
-                      // Only start potential drag on left-click
+                      // Only start potential drag on left-click; but allow magic/combat click selection below
                       if (dragFromHand || dragFromPile) return; // let tiles handle drops during hand/pile drags
-                      // HUD flow: avatar as target or defender toggle
+                      // Magic flow: select caster/target avatars by click
+                      if (pendingMagic) {
+                        const ownerSeat = (pendingMagic.spell.owner === 1 ? "p1" : "p2") as "p1" | "p2";
+                        const amActor = actorKey === ownerSeat;
+                        const actorIsActive =
+                          (actorKey === "p1" && currentPlayer === 1) ||
+                          (actorKey === "p2" && currentPlayer === 2);
+                        if (amActor && actorIsActive) {
+                          e.stopPropagation();
+                          if (pendingMagic.status === "choosingCaster") {
+                            setMagicCasterChoice({ kind: "avatar", seat: who });
+                            return;
+                          }
+                          if (pendingMagic.status === "choosingTarget") {
+                            const hints = pendingMagic.hints;
+                            const scope = hints?.scope || null;
+                            if (scope === "projectile") {
+                              const pos2 = Array.isArray(a.pos) ? a.pos : null;
+                              if (pos2) {
+                                const ox = pendingMagic.tile.x;
+                                const oy = pendingMagic.tile.y;
+                                const [vx, vy] = pos2;
+                                if (ox === vx || oy === vy) {
+                                  const dir = ox === vx ? (vy < oy ? "N" : "S") : vx > ox ? "E" : "W";
+                                  const hits = computeProjectileFirstHits();
+                                  setMagicTargetChoice({ kind: "projectile", direction: dir, firstHit: hits[dir] || undefined });
+                                }
+                              }
+                              return;
+                            }
+                            const allowAvatar = hints?.allow?.avatar !== false;
+                            if (!allowAvatar) return;
+                            const pos2 = Array.isArray(a.pos) ? a.pos : null;
+                            if (pos2) {
+                              const dx = Math.abs(pos2[0] - pendingMagic.tile.x);
+                              const dy = Math.abs(pos2[1] - pendingMagic.tile.y);
+                              const man = dx + dy;
+                              if (scope === "here" && man !== 0) return;
+                              if (scope === "adjacent" && man !== 1) return;
+                              if (scope === "nearby" && man > 2) return;
+                            }
+                            setMagicTargetChoice({ kind: "avatar", seat: who });
+                            return;
+                          }
+                        }
+                      }
+                      // HUD flow: avatar as target
                       if (attackTargetChoice) {
                         e.stopPropagation();
                         const enemySeat: "p1" | "p2" =
@@ -4253,6 +4663,70 @@ export default function Board({
                             : "/api/assets/cardback_spellbook.png"
                         }
                       />
+                      {/* Counter overlay for avatar (follows card) */}
+                      {(() => {
+                        const count = Math.max(0, Number(a.counters || 0));
+                        if (count <= 0) return null;
+                        const digits = Math.floor(count)
+                          .toString()
+                          .split("")
+                          .map((d) => Number(d) as Digit);
+                        const leftEdgeX = -CARD_SHORT * 0.5; // center on left edge
+                        const centerZ = 0;
+                        return (
+                          <Html
+                            position={[leftEdgeX, 0.004, centerZ]}
+                            transform
+                            rotation-x={-Math.PI / 2}
+                            rotation-z={rotZ}
+                            zIndexRange={[0, 0]}
+                          >
+                            <div className="pointer-events-auto select-none">
+                              <div className="relative inline-flex group">
+                                <div className="flex items-center gap-0.5">
+                                  {digits.map((d, i) => (
+                                    <NumberBadge
+                                      key={i}
+                                      value={d}
+                                      size={8}
+                                      strokeWidth={2}
+                                      backgroundOpacity={0.5}
+                                      textAsSvg
+                                    />
+                                  ))}
+                                </div>
+                                {/* Overlay click zones: top half increment, bottom half decrement */}
+                                <div className="absolute inset-0 flex flex-col opacity-80">
+                                  <button
+                                    type="button"
+                                    aria-label="Increment counter"
+                                    title="Increment counter"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      incrementAvatarCounter(who);
+                                    }}
+                                    className="flex-1 transition-opacity rounded-t-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30"
+                                  >
+                                    <span className="sr-only">+</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label="Decrement counter"
+                                    title="Decrement counter"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      decrementAvatarCounter(who);
+                                    }}
+                                    className="flex-1 transition-opacity rounded-b-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30"
+                                  >
+                                    <span className="sr-only">-</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </Html>
+                        );
+                      })()}
                       {/* Render artifacts attached to this avatar */}
                       {(() => {
                         if (!a.pos) return null;

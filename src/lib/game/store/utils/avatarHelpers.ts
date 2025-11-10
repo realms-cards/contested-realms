@@ -40,6 +40,14 @@ export function ensureAvatarState(
   } else {
     delete next.offset;
   }
+  // Normalize counters if present
+  if (candidate && Object.prototype.hasOwnProperty.call(candidate, "counters")) {
+    next.counters = (candidate as { counters?: number | null }).counters ?? null;
+  } else if ((base as { counters?: number | null }).counters !== undefined) {
+    next.counters = (base as { counters?: number | null }).counters ?? null;
+  } else {
+    delete (next as { counters?: number | null }).counters;
+  }
   return next;
 }
 

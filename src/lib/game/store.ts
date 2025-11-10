@@ -29,6 +29,7 @@ import { createInteractionSlice } from "./store/interactionState";
 import { createGameActionsSlice } from "./store/gameActions";
 import { createCombatSlice } from "./store/combatState";
 import { createNetworkSlice } from "./store/networkState";
+import { createMagicSlice } from "./store/magicState";
 import {
   createSnapshotSlice,
   createEmptySnapshots,
@@ -83,6 +84,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createZoneSlice(set, get, storeApi),
   ...createGameActionsSlice(set, get, storeApi),
   ...createCombatSlice(set, get, storeApi),
+  ...createMagicSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),
@@ -135,6 +137,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         activeInteraction: null,
         transportSubscriptions: [],
         snapshots: createEmptySnapshots(),
+        pendingMagic: null,
       };
       return reset as GameState;
     })
