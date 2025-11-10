@@ -1,10 +1,11 @@
 import type { StateCreator } from "zustand";
-import type { CellKey, GameState, Permanents, PlayerKey } from "../types";
-import { bumpPermanentVersion } from "../utils/permanentHelpers";
+import type { GameState, Permanents } from "../types";
+import { seatFromOwner } from "../utils/boardHelpers";
 import {
   createPermanentDeltaPatch,
   createPermanentsPatch,
 } from "../utils/patchHelpers";
+import { bumpPermanentVersion } from "../utils/permanentHelpers";
 
 export type TapActionsSlice = Pick<
   GameState,
@@ -28,7 +29,7 @@ export const createTapActionsSlice: StateCreator<
       if (!arr[index]) return state as GameState;
       const cur = arr[index];
       if (state.transport && state.actorKey) {
-        const ownerKey = (cur.owner === 1 ? "p1" : "p2") as PlayerKey;
+        const ownerKey = seatFromOwner(cur.owner);
         if (state.actorKey !== ownerKey) return state as GameState;
       }
       const nextTapVersion =

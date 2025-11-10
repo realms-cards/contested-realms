@@ -7,6 +7,13 @@ import type {
   PlayerKey,
   SiteTile,
 } from "./types";
+import {
+  getCellNumber,
+  opponentOwner,
+  opponentSeat,
+  seatFromOwner,
+  toCellKey,
+} from "./utils/boardHelpers";
 
 type CombatSlice = Pick<
   GameState,
@@ -196,7 +203,7 @@ export const createCombatSlice: StateCreator<
       const id = `cmb_${Date.now().toString(36)}_${Math.random()
         .toString(36)
         .slice(2, 6)}`;
-      const defenderSeat = (attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+      const defenderSeat = opponentSeat(seatFromOwner(attacker.owner));
       const combatState = {
         id,
         tile,
@@ -253,7 +260,7 @@ export const createCombatSlice: StateCreator<
         }
       }
       try {
-        const cellNo = tile.y * state.board.size.w + tile.x + 1;
+        const cellNo = getCellNumber(tile.x, tile.y, state.board.size.w);
         if (targetLabel) {
           get().log(`${attackerLabel} attacks ${targetLabel} at #${cellNo}`);
         } else {
@@ -267,11 +274,11 @@ export const createCombatSlice: StateCreator<
 
   offerIntercept: (tile, attacker) => {
     try {
-      const defenderSeat = (attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
-      const key = `${tile.x},${tile.y}` as CellKey;
+      const defenderSeat = opponentSeat(seatFromOwner(attacker.owner));
+      const key = toCellKey(tile.x, tile.y);
       const allPermanents = get().permanents as Permanents;
       const unitsHere = (allPermanents[key] || []).filter(
-        (p) => p && p.owner === (attacker.owner === 1 ? 2 : 1) && !p.tapped
+        (p) => p && p.owner === opponentOwner(attacker.owner) && !p.tapped
       );
       let avatarHere = false;
       try {
@@ -462,21 +469,23 @@ export const createCombatSlice: StateCreator<
     const fsTag = eff.firstStrike ? " (FS)" : "";
     const tileNo = (() => {
       try {
-        return pending.tile.y * get().board.size.w + pending.tile.x + 1;
+        return getCellNumber(
+          pending.tile.x,
+          pending.tile.y,
+          get().board.size.w
+        );
       } catch {
         return null;
       }
     })();
-    const actorSeat = (pending.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
+    const actorSeat = seatFromOwner(pending.attacker.owner);
     let targetSeat: PlayerKey | undefined;
 
     if (pending.target && pending.target.kind === "site") {
       const owner = board.sites[pending.target.at]?.owner as 1 | 2 | undefined;
       const seat =
-        owner === 1
-          ? "p1"
-          : owner === 2
-          ? "p2"
+        owner === 1 || owner === 2
+          ? seatFromOwner(owner)
           : (pending.defenderSeat as PlayerKey);
       if (seat) {
         targetSeat = seat;
@@ -489,10 +498,10 @@ export const createCombatSlice: StateCreator<
         } → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
       }
     } else if (pending.target && pending.target.kind === "avatar") {
-      const seat = pending.attacker.owner === 1 ? "p2" : "p1";
-      targetSeat = seat as PlayerKey;
-      const state = players[seat as PlayerKey];
-      const avatarName = getAvatarName(seat as PlayerKey);
+      const seat = opponentSeat(actorSeat);
+      targetSeat = seat;
+      const state = players[seat];
+      const avatarName = getAvatarName(seat);
       if (state.lifeState === "dd") {
         summary = `Attacker ${attackerName}${effectText}${fsTag} hits Avatar ${avatarName} (${seat.toUpperCase()}) @#${
           tileNo ?? "?"
@@ -514,7 +523,7 @@ export const createCombatSlice: StateCreator<
     } else {
       const tileKey = (() => {
         try {
-          return `${pending.tile.x},${pending.tile.y}` as CellKey;
+          return toCellKey(pending.tile.x, pending.tile.y);
         } catch {
           return null;
         }
@@ -524,14 +533,12 @@ export const createCombatSlice: StateCreator<
         : undefined;
       if (!pending.target && siteAtTile && siteAtTile.card && !pending.defenders?.length) {
         const owner = siteAtTile.owner as 1 | 2 | undefined;
-        let seat =
-          owner === 1
-            ? "p1"
-            : owner === 2
-            ? "p2"
+        let seat: PlayerKey | null =
+          owner === 1 || owner === 2
+            ? seatFromOwner(owner)
             : (pending.defenderSeat as PlayerKey | null);
         if (!seat) {
-          seat = (pending.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+          seat = opponentSeat(actorSeat);
         }
         if (seat) {
           targetSeat = seat as PlayerKey;
@@ -631,7 +638,7 @@ export const createCombatSlice: StateCreator<
     if (pending.status !== "committed") return;
     const actor = get().actorKey as PlayerKey | null;
     const isIntercept = !pending.target;
-    const attackerSeat = (pending.attacker.owner === 1 ? "p1" : "p2") as PlayerKey;
+    const attackerSeat = seatFromOwner(pending.attacker.owner);
     const defenderSeat = pending.defenderSeat as PlayerKey | null;
     if (actor) {
       const defenderMayResolve =
@@ -798,7 +805,7 @@ export const createCombatSlice: StateCreator<
             killList.push({
               at: defender.at,
               index: defender.index,
-              owner: (defender.owner === 1 ? "p1" : "p2") as PlayerKey,
+              owner: seatFromOwner(defender.owner),
             });
             aliveDefenders.delete(key);
           } else if (assigned > 0) {
@@ -828,7 +835,7 @@ export const createCombatSlice: StateCreator<
           killList.push({
             at: defender.at,
             index: defender.index,
-            owner: (defender.owner === 1 ? "p1" : "p2") as PlayerKey,
+            owner: seatFromOwner(defender.owner),
           });
           aliveDefenders.delete(key);
         } else if (assigned > 0) {
@@ -885,8 +892,8 @@ export const createCombatSlice: StateCreator<
       if (pending.target && pending.target.kind === "site") {
         const owner = board.sites[pending.target.at]?.owner as 1 | 2 | undefined;
         if (owner === 1 || owner === 2) {
-          const seat = owner === 1 ? "p1" : "p2";
-          targetSeat = seat as PlayerKey;
+          const seat = seatFromOwner(owner);
+          targetSeat = seat;
           const dd = players[seat].lifeState === "dd";
           if (!dd) {
             const dmg = Math.max(0, Math.floor(eff.atk));
@@ -900,7 +907,7 @@ export const createCombatSlice: StateCreator<
           }
         }
       } else if (pending.target && pending.target.kind === "avatar") {
-        const seat = (pending.attacker.owner === 1 ? "p2" : "p1") as PlayerKey;
+        const seat = opponentSeat(attackerSeat);
         targetSeat = seat;
         const isDD = players[seat].lifeState === "dd";
         const dmg = Math.max(0, Math.floor(eff.atk));
@@ -1069,8 +1076,7 @@ export const createCombatSlice: StateCreator<
           : "No casualties";
       }
     } else if (pending.target && pending.target.kind === "avatar") {
-      const seat: PlayerKey =
-        pending.attacker.owner === 1 ? "p2" : "p1";
+      const seat: PlayerKey = opponentSeat(attackerSeat);
       const before = Number(
         (players as GameState["players"])[seat]?.life ?? 0
       );
@@ -1098,7 +1104,7 @@ export const createCombatSlice: StateCreator<
         | 2
         | undefined;
       const seat: PlayerKey | null =
-        owner === 1 ? "p1" : owner === 2 ? "p2" : null;
+        owner === 1 || owner === 2 ? seatFromOwner(owner) : null;
       const siteName = (() => {
         try {
           return (

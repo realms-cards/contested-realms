@@ -1,7 +1,11 @@
 import type { StateCreator } from "zustand";
-import type { CustomMessage } from "@/lib/net/transport";
-import type { CellKey, GameState, PlayerKey } from "./types";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import type { CustomMessage } from "@/lib/net/transport";
+import type { CellKey, GameState } from "./types";
+import {
+  getCellNumber,
+  seatFromOwner,
+} from "./utils/boardHelpers";
 
 function newMagicId() {
   return `mag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -29,7 +33,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const spell = input.spell;
     const tile = input.tile;
     const createdAt = Date.now();
-    const ownerSeat = (spell.owner === 1 ? "p1" : "p2") as PlayerKey;
+    const ownerSeat = seatFromOwner(spell.owner);
     const autoCaster = input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
     const hints = extractMagicTargetingHintsSync(spell.card?.name || "", null);
     set({
@@ -58,7 +62,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         } as unknown as CustomMessage);
         // Also show a toast for UX feedback
         const cardName = spell.card?.name || "Magic";
-        const cellNo = tile.y * get().board.size.w + tile.x + 1;
+        const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w);
         transport.sendMessage({ type: "toast", text: `Casting '${cardName}' at #${cellNo}` } as unknown as CustomMessage);
         // Immediately broadcast chosen caster (avatar by default)
         transport.sendMessage({ type: "magicSetCaster", id, caster: autoCaster, ts: Date.now() } as unknown as CustomMessage);
@@ -131,7 +135,11 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       try {
         transport.sendMessage({ type: "magicResolve", id: pending.id, spell: pending.spell, tile: pending.tile, ts: Date.now() } as unknown as CustomMessage);
         const nm = pending.spell.card?.name || "Magic";
-        const cellNo = pending.tile.y * get().board.size.w + pending.tile.x + 1;
+        const cellNo = getCellNumber(
+          pending.tile.x,
+          pending.tile.y,
+          get().board.size.w
+        );
         transport.sendMessage({ type: "magicSummary", id: pending.id, text: `'${nm}' resolved @#${cellNo}` } as unknown as CustomMessage);
       } catch {}
     }
