@@ -37,8 +37,8 @@ const {
   validateDeckCards,
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./modules/deck-utils");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { seatFromOwner } = require("../src/lib/game/store/utils/boardHelpers");
+const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
+  owner === 1 ? "p1" : "p2";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createLeaderboardService } = require("./modules/leaderboard");
 const {
@@ -2968,7 +2968,7 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
             return { at: dat, index: Number(didx) };
           })
           .filter(Boolean);
-        const out = { type: "combatResolve", id, tile, attacker, defenders, playerKey, ts: Date.now() } as const;
+        const out = { type: "combatResolve", id, ...(tile ? { tile } : {}), ...(attacker ? { attacker } : {}), defenders, playerKey, ts: Date.now() } as const;
         io.to(room).emit("message", out);
         try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
@@ -3022,90 +3022,6 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         io.to(room).emit("message", out);
         try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
-    } else if (type === "combatAssign") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; assignment?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.assignment) ? (msg.assignment as unknown[]) : [];
-        const assignment = raw
-          .map((a) => (a && typeof a === "object" ? (a as Record<string, unknown>) : null))
-          .filter(Boolean)
-          .map((a) => {
-            const at = typeof a!.at === "string" ? (a!.at as string) : null;
-            const indexVal = Number(a!.index);
-            const amount = Number(a!.amount);
-            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(amount)) return null;
-            return { at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
-          })
-          .filter(Boolean);
-        const out = { type: "combatAssign", id, assignment, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatAutoApply") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; kills?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.kills) ? (msg.kills as unknown[]) : [];
-        const kills = raw
-          .map((k) => (k && typeof k === "object" ? (k as Record<string, unknown>) : null))
-          .filter(Boolean)
-          .map((k) => {
-            const at = typeof k!.at === "string" ? (k!.at as string) : null;
-            const indexVal = Number(k!.index);
-            const owner = ((): "p1" | "p2" | null => {
-              const o = Number((k as Record<string, unknown>).owner as unknown);
-              return o === 1 ? "p1" : o === 2 ? "p2" : null;
-            })();
-            if (!at || !Number.isFinite(indexVal) || !owner) return null;
-            return { at, index: Number(indexVal), owner };
-          })
-          .filter(Boolean);
-        const out = { type: "combatAutoApply", id, kills, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatDamage") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; damage?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
-        const damage = raw
-          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
-          .filter(Boolean)
-          .map((d) => {
-            const at = typeof d!.at === "string" ? (d!.at as string) : null;
-            const indexVal = Number(d!.index);
-            const amount = Number(d!.amount);
-            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(amount)) return null;
-            return { at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
-          })
-          .filter(Boolean);
-        const out = { type: "combatDamage", id, damage, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatSummary") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; text?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const text = typeof msg.text === "string" ? msg.text : "";
-        const out = { type: "combatSummary", id, text, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
     } else if (type === "toast") {
       try {
         const match = await getOrLoadMatch(matchId);
@@ -3115,6 +3031,171 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         const text = typeof raw === "string" ? raw.slice(0, 200) : null;
         if (!text) return;
         const out = { type: "toast", text, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicBegin") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; tile?: { x?: unknown; y?: unknown }; spell?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const rec = (msg.spell && typeof msg.spell === "object" ? (msg.spell as Record<string, unknown>) : {}) as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId = typeof rec.instanceId === "string" ? (rec.instanceId as string) : null;
+        const card = (rec.card && typeof rec.card === "object") ? (rec.card as Record<string, unknown>) : undefined;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !(ownerVal === 1 || ownerVal === 2) || !card) return;
+        const out = { type: "magicBegin", id, tile: { x, y }, spell: { at, index: Number(indexVal), instanceId, owner: ownerVal as 1 | 2, card }, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicSetCaster") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; caster?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        let caster: { kind: "avatar" | "permanent"; seat?: "p1" | "p2"; at?: string; index?: number; owner?: 1 | 2 } | null = null;
+        try {
+          if (msg.caster && typeof msg.caster === "object") {
+            const c = msg.caster as Record<string, unknown>;
+            const kind = c.kind === "avatar" || c.kind === "permanent" ? (c.kind as "avatar" | "permanent") : null;
+            if (kind === "avatar") {
+              const seat = c.seat === "p1" || c.seat === "p2" ? (c.seat as "p1" | "p2") : null;
+              if (seat) caster = { kind: "avatar", seat };
+            } else if (kind === "permanent") {
+              const at = typeof c.at === "string" ? (c.at as string) : null;
+              const indexVal = Number(c.index);
+              const ownerVal = Number(c.owner);
+              if (at && Number.isFinite(indexVal) && (ownerVal === 1 || ownerVal === 2)) caster = { kind: "permanent", at, index: Number(indexVal), owner: ownerVal as 1 | 2 };
+            }
+          }
+        } catch {}
+        const out = { type: "magicSetCaster", id, caster, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicSetTarget") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; target?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        let target: { kind: "location" | "permanent" | "avatar" | "projectile"; at?: string; index?: number; seat?: "p1" | "p2"; direction?: "N" | "E" | "S" | "W" } | null = null;
+        try {
+          if (msg.target && typeof msg.target === "object") {
+            const rec = msg.target as Record<string, unknown>;
+            const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+            if (k === "location") {
+              const at = typeof rec.at === "string" ? (rec.at as string) : null;
+              if (at) target = { kind: "location", at };
+            } else if (k === "permanent") {
+              const at = typeof rec.at === "string" ? (rec.at as string) : null;
+              const indexVal = Number(rec.index);
+              if (at && Number.isFinite(indexVal)) target = { kind: "permanent", at, index: Number(indexVal) };
+            } else if (k === "avatar") {
+              const seat = rec.seat === "p1" || rec.seat === "p2" ? (rec.seat as "p1" | "p2") : null;
+              if (seat) target = { kind: "avatar", seat };
+            } else if (k === "projectile") {
+              const dir = rec.direction === "N" || rec.direction === "E" || rec.direction === "S" || rec.direction === "W" ? (rec.direction as "N" | "E" | "S" | "W") : null;
+              if (dir) target = { kind: "projectile", direction: dir };
+            }
+          }
+        } catch {}
+        const out = { type: "magicSetTarget", id, target, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicResolve") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; tile?: { x?: unknown; y?: unknown }; spell?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const tile = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+        const rec = (msg.spell && typeof msg.spell === "object" ? (msg.spell as Record<string, unknown>) : {}) as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId = typeof rec.instanceId === "string" ? (rec.instanceId as string) : null;
+        const card = (rec.card && typeof rec.card === "object") ? (rec.card as Record<string, unknown>) : undefined;
+        const spell = at && Number.isFinite(indexVal) && (ownerVal === 1 || ownerVal === 2) && card ? { at, index: Number(indexVal), instanceId, owner: ownerVal as 1 | 2, card } : undefined;
+        const out = { type: "magicResolve", id, ...(tile ? { tile } : {}), ...(spell ? { spell } : {}), playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicSummary") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; text?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const text = typeof msg.text === "string" ? msg.text.slice(0, 400) : "";
+        const out = { type: "magicSummary", id, text, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicCancel") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; tile?: { x?: unknown; y?: unknown }; spell?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const tile = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+        const rec = (msg.spell && typeof msg.spell === "object" ? (msg.spell as Record<string, unknown>) : {}) as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId = typeof rec.instanceId === "string" ? (rec.instanceId as string) : null;
+        const card = (rec.card && typeof rec.card === "object") ? (rec.card as Record<string, unknown>) : undefined;
+        const spell = at && Number.isFinite(indexVal) && (ownerVal === 1 || ownerVal === 2) && card ? { at, index: Number(indexVal), instanceId, owner: ownerVal as 1 | 2, card } : undefined;
+        const out = { type: "magicCancel", id, ...(tile ? { tile } : {}), ...(spell ? { spell } : {}), playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+      } catch {}
+    } else if (type === "magicDamage") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; damage?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
+        const damage = raw
+          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .map((d) => {
+            const kind = d!.kind === "permanent" || d!.kind === "avatar" ? (d!.kind as "permanent" | "avatar") : null;
+            const amount = Number(d!.amount);
+            if (!Number.isFinite(amount)) return null;
+            if (kind === "permanent") {
+              const at = typeof d!.at === "string" ? (d!.at as string) : null;
+              const indexVal = Number(d!.index);
+              if (!at || !Number.isFinite(indexVal)) return null;
+              return { kind: "permanent" as const, at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
+            } else if (kind === "avatar") {
+              const seat = d!.seat === "p1" || d!.seat === "p2" ? (d!.seat as "p1" | "p2") : null;
+              if (!seat) return null;
+              return { kind: "avatar" as const, seat, amount: Math.max(0, Math.floor(amount)) };
+            }
+            return null;
+          })
+          .filter(Boolean);
+        const out = { type: "magicDamage", id, damage, playerKey, ts: Date.now() } as const;
         io.to(room).emit("message", out);
         try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
       } catch {}
@@ -3263,6 +3344,7 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         debugLog(`[cursor] sent for player ${player.id} in room ${room}`);
       } catch {}
     }
+
   });
 
   socket.on("resyncRequest", async () => {

@@ -167,12 +167,13 @@ export async function extractMagicTargetingHints(cardName: string): Promise<Magi
 
 export function extractMagicTargetingHintsSync(cardName: string, rulesText?: string | null): MagicTargetHints {
   const txt = (rulesText || abilityCache.get(cardName.toLowerCase())?.rulesText || "").toLowerCase();
+  const nameLc = (cardName || "").toLowerCase();
   const hints: MagicTargetHints = {
     scope: null,
     allow: { location: false, permanent: true, avatar: true },
   };
-  if (!txt) return hints;
-  if (txt.includes("projectile")) hints.scope = "projectile";
+  const projectileByName = /\b(grapple|shot|missile|arrow|bolt)\b/.test(nameLc);
+  if (txt.includes("projectile") || projectileByName) hints.scope = "projectile";
   else if (txt.includes("adjacent")) hints.scope = "adjacent";
   else if (txt.includes("nearby") || txt.includes("near")) hints.scope = "nearby";
   else if (txt.includes("here")) hints.scope = "here";

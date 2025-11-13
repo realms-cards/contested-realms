@@ -151,7 +151,14 @@ export type MagicTarget =
   | { kind: "location"; at: CellKey }
   | { kind: "permanent"; at: CellKey; index: number }
   | { kind: "avatar"; seat: PlayerKey }
-  | { kind: "projectile"; direction: "N" | "E" | "S" | "W"; firstHit?: { kind: "permanent" | "avatar"; at: CellKey; index?: number } };
+  | {
+      kind: "projectile";
+      direction: "N" | "E" | "S" | "W";
+      firstHit?: { kind: "permanent" | "avatar"; at: CellKey; index?: number };
+      intended?:
+        | { kind: "permanent"; at: CellKey; index: number }
+        | { kind: "avatar"; seat: PlayerKey };
+    };
 
 export type PendingMagic = {
   id: string;
@@ -163,6 +170,7 @@ export type PendingMagic = {
   status: "choosingCaster" | "choosingTarget" | "confirm" | "resolving" | "cancelled" | "resolved";
   hints?: { scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null; allow: { location?: boolean; permanent?: boolean; avatar?: boolean } } | null;
   createdAt: number;
+  summaryText?: string | null;
 };
 
 // Context menu targeting for click-driven actions
