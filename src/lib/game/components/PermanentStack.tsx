@@ -9,9 +9,10 @@ import type {
 import { flushSync } from "react-dom";
 import { Group } from "three";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
+import { BASE_CARD_ELEVATION, BodyApi } from "@/lib/game/boardShared";
+import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
-import { BASE_CARD_ELEVATION, BodyApi } from "@/lib/game/boardShared";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -32,7 +33,6 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
-import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 type ProjectileHit = {

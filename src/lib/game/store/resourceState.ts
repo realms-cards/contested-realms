@@ -2,7 +2,6 @@ import type { StateCreator } from "zustand";
 import type {
   CellKey,
   GameState,
-  PlayerKey,
   ServerPatchT,
   SiteTile,
 } from "./types";

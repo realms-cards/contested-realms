@@ -40,6 +40,13 @@ export default function MagicHudOverlay() {
     try { return pendingMagic.spell.card?.name || "Magic"; } catch { return "Magic"; }
   })();
   const status = pendingMagic.status;
+  const getPermanentName = (
+    at: string,
+    index?: number | null | undefined
+  ): string => {
+    if (typeof index !== "number") return "Permanent";
+    return permanents?.[at]?.[index]?.card?.name || "Permanent";
+  };
 
   // actorIsActive computed above
 
@@ -91,7 +98,9 @@ export default function MagicHudOverlay() {
           if (t.intended.kind === "permanent") label = permanents?.[t.intended.at]?.[t.intended.index]?.card?.name || "Permanent";
           else label = `Avatar ${t.intended.seat.toUpperCase()}`;
         } else if (t.firstHit) {
-          if (t.firstHit.kind === "permanent") label = permanents?.[t.firstHit.at]?.[t.firstHit.index!]?.card?.name || "Permanent";
+          if (t.firstHit.kind === "permanent") {
+            label = getPermanentName(t.firstHit.at, t.firstHit.index);
+          }
           else {
             // map avatar seat from cell if possible
             const seatByCell: Record<string, "p1" | "p2"> = (() => {
@@ -205,7 +214,7 @@ export default function MagicHudOverlay() {
           }
         } else if (t.firstHit) {
           if (t.firstHit.kind === "permanent") {
-            const nm = permanents?.[t.firstHit.at]?.[t.firstHit.index!]?.card?.name || "Permanent";
+            const nm = getPermanentName(t.firstHit.at, t.firstHit.index);
             label = `-> ${nm} (${t.direction})`;
           } else {
             const seatByCell: Record<string, "p1" | "p2"> = (() => {
@@ -241,7 +250,8 @@ export default function MagicHudOverlay() {
         // intended avatar: try to match seat via position
         const seatAt = (() => {
           try {
-            const pos = avatars?.[t.intended!.seat]?.pos;
+            if (t.intended.kind !== "avatar") return null;
+            const pos = avatars?.[t.intended.seat]?.pos;
             if (Array.isArray(pos)) return `${pos[0]},${pos[1]}`;
           } catch {}
           return null;
@@ -250,9 +260,14 @@ export default function MagicHudOverlay() {
       }
       if (!mismatch) return null;
       // Build names for message
-      const intendedName = t.intended.kind === "permanent" ? (permanents?.[t.intended.at]?.[t.intended.index]?.card?.name || "Permanent") : `Avatar ${t.intended.seat.toUpperCase()}`;
+      const intendedName =
+        t.intended.kind === "permanent"
+          ? getPermanentName(t.intended.at, t.intended.index)
+          : `Avatar ${t.intended.seat.toUpperCase()}`;
       let hitName = "something";
-      if (t.firstHit.kind === "permanent") hitName = permanents?.[t.firstHit.at]?.[t.firstHit.index!]?.card?.name || "a unit";
+      if (t.firstHit.kind === "permanent") {
+        hitName = getPermanentName(t.firstHit.at, t.firstHit.index) || "a unit";
+      }
       else {
         const seat = seatByCell[t.firstHit.at];
         hitName = seat ? `Avatar ${seat.toUpperCase()}` : "an avatar";

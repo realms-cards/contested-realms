@@ -1,15 +1,15 @@
 import { Text } from "@react-three/drei";
 import type { MutableRefObject } from "react";
-import {
-  TileInteractionPlane,
-  type TileInteractionPlaneProps,
-} from "@/lib/game/components/TileInteractionPlane";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
-import { SiteCard } from "@/lib/game/components/SiteCard";
 import {
   PermanentStack,
   type PermanentStackProps,
 } from "@/lib/game/components/PermanentStack";
+import { SiteCard } from "@/lib/game/components/SiteCard";
+import {
+  TileInteractionPlane,
+  type TileInteractionPlaneProps,
+} from "@/lib/game/components/TileInteractionPlane";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import type {
   BoardState,

@@ -1,8 +1,8 @@
 import { Html } from "@react-three/drei";
 import { useCallback, useState } from "react";
 import TokenAttachmentDialog from "@/lib/game/components/TokenAttachmentDialog";
-import type { AvatarState, CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
 import { useGameStore } from "@/lib/game/store";
+import type { AvatarState, CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
 
 type AttachmentTarget = {
   at: string;

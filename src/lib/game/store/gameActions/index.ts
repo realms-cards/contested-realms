@@ -1,13 +1,13 @@
 import type { StateCreator } from "zustand";
 import type { GameState } from "../types";
 import {
-  createPlayActionsSlice,
-  type PlayActionsSlice,
-} from "./playActions";
-import {
   createPermanentMovementSlice,
   type PermanentMovementSlice,
 } from "./permanentMovement";
+import {
+  createPlayActionsSlice,
+  type PlayActionsSlice,
+} from "./playActions";
 
 export type GameActionsSlice = PlayActionsSlice & PermanentMovementSlice;
 

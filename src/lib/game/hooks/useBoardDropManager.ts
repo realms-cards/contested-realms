@@ -6,15 +6,14 @@ import {
   TILE_OFFSET_LIMIT_X,
   TILE_OFFSET_LIMIT_Z,
 } from "@/lib/game/boardShared";
-import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import {
   CARD_LONG,
   CARD_SHORT,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import type {
   BoardState,
-  CellKey,
   GameState,
   Permanents,
   PlayerKey,
@@ -310,26 +309,34 @@ export function useBoardDropManager({
     actorKey,
     avatars,
     board,
+    boardOffset.x,
+    boardOffset.y,
     currentPlayer,
     dragAvatar,
     dragContext,
     dragFromHand,
     dragFromPile,
+    dragTarget,
+    draggedBody,
+    draggingRef,
     fetchCardMeta,
     interactionGuides,
     isSpectator,
+    lastDropAt,
+    lastPointerRef,
     metaByCardId,
     movePermanentToZone,
     moveSelectedPermanentToWithOffset,
     permanents,
     playCardFlip,
+    snapBodyTo,
     setAttackChoice,
     setDragFromHand,
     setPermanentOffset,
     setDragging,
     setGhost,
     useGhostOnlyBoardDrag,
-    boardOffset.x,
-    boardOffset.y,
+    offsetX,
+    offsetY,
   ]);
 }

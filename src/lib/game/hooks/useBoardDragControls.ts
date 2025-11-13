@@ -10,8 +10,8 @@ import {
   useState,
 } from "react";
 import { Group, Raycaster } from "three";
-import { DRAG_LIFT } from "@/lib/game/constants";
 import { BASE_CARD_ELEVATION, type BodyApi } from "@/lib/game/boardShared";
+import { DRAG_LIFT } from "@/lib/game/constants";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
 
 type DragState = { from: string; index: number } | null;

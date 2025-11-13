@@ -9,10 +9,12 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import CardPreview from "@/components/game/CardPreview";
+import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
 import GameToolbox from "@/components/game/GameToolbox";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -36,8 +38,6 @@ import Hud3D from "@/lib/game/components/Hud3D";
 import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
 import TokenPile3D from "@/lib/game/components/TokenPile3D";
-import CombatHudOverlay from "@/components/game/CombatHudOverlay";
-import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import {
   MAT_PIXEL_H,
   MAT_PIXEL_W,

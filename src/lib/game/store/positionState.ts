@@ -1,19 +1,7 @@
 import type { StateCreator } from "zustand";
-import type { GameState, PlayerKey, ServerPatchT } from "./types";
-import type {
-  ContextMenuAction,
-  PermanentPosition,
-  PermanentPositionState,
-  PlayerPositionReference,
-  SitePositionData,
-} from "../types";
-import {
-  createPermanentDeltaPatch,
-  createPermanentsPatch,
-} from "./utils/patchHelpers";
-import {
-  createDefaultPlayerPositions,
-} from "./utils/positionHelpers";
+import type { GameState, ServerPatchT } from "./types";
+import type { ContextMenuAction, PermanentPosition } from "../types";
+import { createDefaultPlayerPositions } from "./utils/positionHelpers";
 
 type PositionSlice = Pick<
   GameState,

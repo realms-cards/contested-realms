@@ -1,7 +1,7 @@
-import { Suspense } from "react";
 import { useTexture } from "@react-three/drei";
-import { SRGBColorSpace, type Intersection, type Object3D, type Raycaster } from "three";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
+import { Suspense } from "react";
+import { SRGBColorSpace, type Intersection, type Object3D, type Raycaster } from "three";
 import {
   EDGE_MARGIN,
   GROUND_HALF_THICK,

@@ -1,14 +1,5 @@
 import type { StateCreator } from "zustand";
 import type {
-  CardRef,
-  GameState,
-  InteractionRequestEntry,
-  InteractionStateMap,
-  PlayerKey,
-  SendInteractionRequestInput,
-  InteractionResponseOptions,
-} from "./types";
-import type {
   InteractionEnvelope,
   InteractionMessage,
   InteractionResultMessage,
@@ -23,6 +14,15 @@ import {
   createInteractionResponse,
 } from "@/lib/net/interactions";
 import type { CustomMessage } from "@/lib/net/transport";
+import type {
+  CardRef,
+  GameState,
+  InteractionRequestEntry,
+  InteractionStateMap,
+  PlayerKey,
+  SendInteractionRequestInput,
+  InteractionResponseOptions,
+} from "./types";
 
 type InteractionSlice = Pick<
   GameState,

@@ -19,8 +19,13 @@ interface MouseTrackerProps {
 export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
   const { camera, scene, raycaster, pointer, gl } = useThree();
   const lastHoveredSlug = useRef<string | null>(null);
+  const cardSignature = useMemo(
+    () => cards.map((card) => card.id).join("|"),
+    [cards]
+  );
 
   const interactableObjects = useMemo(() => {
+    void cardSignature;
     const objects: THREE.Object3D[] = [];
     scene.traverse((child) => {
       if (child.userData?.cardId && child.userData?.slug) {
@@ -33,7 +38,7 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
       }
     });
     return objects;
-  }, [scene, cards]); // Re-build when cards array changes
+  }, [scene, cardSignature]); // Re-build when cards array changes
   
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {

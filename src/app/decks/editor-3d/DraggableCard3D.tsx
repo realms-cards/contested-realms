@@ -34,8 +34,8 @@ export default function DraggableCard3D({
   onRelease,
   getTopRenderOrder,
   onHoverChange,
-  onHoverStart, // Not used in editor (MouseTracker handles it), kept for draft screens
-  onHoverEnd, // Not used in editor (MouseTracker handles it), kept for draft screens
+  onHoverStart,
+  onHoverEnd,
   lockUpright,
   onDoubleClick,
   onContextMenu,
@@ -61,8 +61,8 @@ export default function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
-  onHoverStart?: (card: { slug: string; name: string; type: string | null }) => void; // Not used in editor, kept for draft compatibility
-  onHoverEnd?: () => void; // Not used in editor, kept for draft compatibility
+  onHoverStart?: (card: { slug: string; name: string; type: string | null }) => void;
+  onHoverEnd?: () => void;
   lockUpright?: boolean;
   onDoubleClick?: () => void;
   onContextMenu?: (clientX: number, clientY: number) => void;
@@ -181,6 +181,18 @@ export default function DraggableCard3D({
               window.removeEventListener("pointerup", earlyUp);
           }
         }}
+        onPointerOver={() => {
+          if (!interactive) return;
+          onHoverStart?.({
+            slug,
+            name: cardName ?? slug,
+            type: cardType ?? null,
+          });
+        }}
+        onPointerOut={() => {
+          if (!interactive) return;
+          onHoverEnd?.();
+        }}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           const s = dragStart.current;
@@ -286,4 +298,3 @@ export default function DraggableCard3D({
     </group>
   );
 }
-

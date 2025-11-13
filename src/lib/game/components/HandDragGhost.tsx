@@ -2,8 +2,8 @@ import type { MutableRefObject } from "react";
 import { Group } from "three";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
-import { tokenTextureUrl, TOKEN_BY_KEY } from "@/lib/game/tokens";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
+import { tokenTextureUrl, TOKEN_BY_KEY } from "@/lib/game/tokens";
 
 type DragState = { from: string; index: number } | null;
 

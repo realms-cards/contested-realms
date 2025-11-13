@@ -1,26 +1,16 @@
 
 import type { StateCreator } from "zustand";
+import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import type {
   CardRef,
   CellKey,
   GameState,
   Permanents,
   PermanentItem,
-  PlayerKey,
   ServerPatchT,
   Thresholds,
   Zones,
 } from "../types";
-import { TOKEN_BY_NAME } from "@/lib/game/tokens";
-import { prepareCardForSeat } from "../utils/cardHelpers";
-import {
-  createPermanentDeltaPatch,
-  createPermanentsPatch,
-} from "../utils/patchHelpers";
-import { randomTilt } from "../utils/permanentHelpers";
-import { createZonesPatchFor } from "../utils/zoneHelpers";
-import { computeThresholdTotals } from "../utils/resourceHelpers";
-import { newPermanentInstanceId } from "../utils/idHelpers";
 import {
   evaluateInstantPermission,
   expireInteractionGrant,
@@ -30,6 +20,15 @@ import {
   ownerFromSeat,
   toCellKey,
 } from "../utils/boardHelpers";
+import { prepareCardForSeat } from "../utils/cardHelpers";
+import { newPermanentInstanceId } from "../utils/idHelpers";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+} from "../utils/patchHelpers";
+import { randomTilt } from "../utils/permanentHelpers";
+import { computeThresholdTotals } from "../utils/resourceHelpers";
+import { createZonesPatchFor } from "../utils/zoneHelpers";
 
 export type PlayActionsSlice = Pick<
   GameState,
@@ -100,9 +99,6 @@ playSelectedTo: (x, y) =>
       hand.splice(index, 1);
       const key: CellKey = toCellKey(x, y);
       const cellNo = getCellNumber(x, y, state.board.size.w);
-      const isRubble =
-        type.includes("token") &&
-        TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
       if (type.includes("site")) {
         if (state.board.sites[key]) {
           get().log(

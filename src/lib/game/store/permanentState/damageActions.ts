@@ -1,11 +1,11 @@
 import type { StateCreator } from "zustand";
 import type { CellKey, GameState, Permanents } from "../types";
-import { bumpPermanentVersion } from "../utils/permanentHelpers";
 import {
   createPermanentDeltaPatch,
   createPermanentsPatch,
   type PermanentDeltaUpdate,
 } from "../utils/patchHelpers";
+import { bumpPermanentVersion } from "../utils/permanentHelpers";
 
 export type DamageActionsSlice = Pick<
   GameState,
