@@ -1,9 +1,5 @@
 import type { StateCreator } from "zustand";
-import type {
-  CardRef,
-  ContextMenuTarget,
-  GameState,
-} from "./types";
+import type { ContextMenuTarget, GameState } from "./types";
 
 export type DialogSlice = Pick<
   GameState,
@@ -38,7 +34,7 @@ export const createDialogSlice: StateCreator<
   [],
   [],
   DialogSlice
-> = (set, get, _api) => ({
+> = (set, get) => ({
   ...createInitialDialogState(),
   openContextMenu: (target: ContextMenuTarget, screen) =>
     set({ contextMenu: { target, screen } }),

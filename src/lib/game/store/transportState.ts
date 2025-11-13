@@ -1,12 +1,12 @@
 import type { StateCreator } from "zustand";
+import { wrapInteractionMessage } from "@/lib/net/interactions";
+import type { GameTransport, CustomMessage } from "@/lib/net/transport";
 import type {
   GameState,
   PlayerKey,
   ServerPatchT,
   Zones,
 } from "./types";
-import type { GameTransport, CustomMessage } from "@/lib/net/transport";
-import { wrapInteractionMessage } from "@/lib/net/interactions";
 import { clonePatchForQueue } from "./utils/patchHelpers";
 
 type TransportSlice = Pick<

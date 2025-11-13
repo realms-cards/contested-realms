@@ -1,8 +1,8 @@
-import type { MutableRefObject } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
+import type { MutableRefObject } from "react";
 import { TILE_SIZE } from "@/lib/game/constants";
-import type { GameState } from "@/lib/game/store/types";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
+import type { GameState } from "@/lib/game/store/types";
 
 export type TileInteractionPlaneProps = {
   position: [number, number, number];

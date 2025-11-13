@@ -1,5 +1,5 @@
-import type { PlayerKey } from "../types";
 import type { PlayerPositionReference } from "../../types";
+import type { PlayerKey } from "../types";
 
 export function createDefaultPlayerPosition(
   who: PlayerKey

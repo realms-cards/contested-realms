@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import type { StoreApi, UseBoundStore } from "zustand";
 import { PLAYER_COLORS, TILE_SIZE, CARD_SHORT, CARD_LONG } from "@/lib/game/constants";
-import { TOKEN_BY_NAME, TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
+import type {
+  RemoteCursorDragMeta,
+  RemoteCursorHighlight,
+  RemoteCursorState,
+} from "@/lib/game/store/remoteCursor";
 import type {
   BoardState,
   CardRef,
@@ -9,11 +13,7 @@ import type {
   Permanents,
   PlayerKey,
 } from "@/lib/game/store/types";
-import type {
-  RemoteCursorDragMeta,
-  RemoteCursorHighlight,
-  RemoteCursorState,
-} from "@/lib/game/store/remoteCursor";
+import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 export type RemotePermanentDrag = {
   key: string;

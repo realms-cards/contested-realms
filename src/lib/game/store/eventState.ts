@@ -9,7 +9,7 @@ export const createEventSlice: StateCreator<
   [],
   [],
   EventSlice
-> = (set, get, _api) => ({
+> = (set, get) => ({
   events: [],
   eventSeq: 0,
   log: (text: string) =>

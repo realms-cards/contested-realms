@@ -7,8 +7,9 @@ export type InstantPermission = {
 
 export function evaluateInstantPermission(
   state: GameState,
-  who: PlayerKey
+  _who: PlayerKey
 ): InstantPermission {
+  void _who;
   if (!state.transport) return { allow: false, consumeId: null };
   const myId = state.localPlayerId;
   for (const [rid, rawEntry] of Object.entries(state.interactionLog)) {

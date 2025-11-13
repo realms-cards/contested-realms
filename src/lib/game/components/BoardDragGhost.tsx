@@ -7,12 +7,12 @@ import {
   CARD_SHORT,
   PLAYER_COLORS,
 } from "@/lib/game/constants";
-import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 import type {
   GameState,
   Permanents,
   PlayerKey,
 } from "@/lib/game/store/types";
+import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 type DragState = { from: string; index: number } | null;
 

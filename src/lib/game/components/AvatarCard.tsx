@@ -3,14 +3,14 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { MutableRefObject } from "react";
 import { flushSync } from "react-dom";
-import CardOutline from "@/lib/game/components/CardOutline";
-import CardPlane from "@/lib/game/components/CardPlane";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
 import {
   BASE_CARD_ELEVATION,
   BodyApi,
   STACK_LAYER_LIFT,
 } from "@/lib/game/boardShared";
+import CardOutline from "@/lib/game/components/CardOutline";
+import CardPlane from "@/lib/game/components/CardPlane";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -21,6 +21,7 @@ import {
   PLAYER_COLORS,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import type {
   AvatarState,
   BoardState,
@@ -30,7 +31,6 @@ import type {
   Permanents,
   PlayerKey,
 } from "@/lib/game/store/types";
-import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
 type HoverContext = {
@@ -106,7 +106,6 @@ export type AvatarCardProps = {
 
 const HIGHLIGHT_ATTACKER = "#22c55e";
 const HIGHLIGHT_TARGET = "#ef4444";
-const HIGHLIGHT_DEFENDER = "#3b82f6";
 
 export function AvatarCard({
   seat,
@@ -136,7 +135,6 @@ export function AvatarCard({
 }: AvatarCardProps) {
   if (!avatar.pos) return null;
   const {
-    dragging,
     dragAvatar,
     setDragAvatar,
     setGhost,
@@ -153,7 +151,6 @@ export function AvatarCard({
   } = dragContext;
   const {
     beginHoverPreview,
-    clearHoverPreview,
     clearHoverPreviewDebounced,
     clearTouchTimers,
     touchPreviewTimerRef,

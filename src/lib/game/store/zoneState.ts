@@ -11,12 +11,12 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { prepareCardForSeat } from "./utils/cardHelpers";
+import { newZoneCardInstanceId } from "./utils/idHelpers";
 import {
   createEmptyZonesRecord,
   createZonesPatchFor,
 } from "./utils/zoneHelpers";
-import { prepareCardForSeat } from "./utils/cardHelpers";
-import { newZoneCardInstanceId } from "./utils/idHelpers";
 
 type ZoneSlice = Pick<
   GameState,

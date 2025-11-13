@@ -8,12 +8,12 @@ import type {
   ServerPatchT,
 } from "./types";
 import {
-  bumpPermanentVersion,
-} from "./utils/permanentHelpers";
-import {
   createPermanentDeltaPatch,
   type PermanentDeltaUpdate,
 } from "./utils/patchHelpers";
+import {
+  bumpPermanentVersion,
+} from "./utils/permanentHelpers";
 import { phases } from "./utils/resourceHelpers";
 
 export const createInitialPlayers = (): GameState["players"] => ({

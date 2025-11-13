@@ -1,9 +1,5 @@
-import { useCallback } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
-import type { PlayerKey, CardRef, GameState, BoardState, Permanents } from "@/lib/game/store/types";
-import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
-import type { AttachmentPileInfo } from "@/lib/game/hooks/useAttachmentDialog";
-import { TILE_SIZE } from "@/lib/game/constants";
+import { useCallback } from "react";
 import {
   clampOffset,
   STACK_MARGIN_Z,
@@ -11,6 +7,10 @@ import {
   TILE_OFFSET_LIMIT_X,
   TILE_OFFSET_LIMIT_Z,
 } from "@/lib/game/boardShared";
+import { TILE_SIZE } from "@/lib/game/constants";
+import type { AttachmentPileInfo } from "@/lib/game/hooks/useAttachmentDialog";
+import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
+import type { PlayerKey, CardRef, GameState, BoardState, Permanents } from "@/lib/game/store/types";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 
 type LastCrossMove = {

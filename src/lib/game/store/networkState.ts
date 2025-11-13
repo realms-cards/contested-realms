@@ -7,23 +7,23 @@ import type {
   ServerPatchT,
 } from "./types";
 import type { PlayerPositionReference } from "../types";
-import {
-  normalizeZones,
-} from "./utils/zoneHelpers";
+import { filterEchoPatchIfAny } from "./transportState";
 import {
   normalizeAvatars,
 } from "./utils/avatarHelpers";
+import { mergeEvents } from "./utils/eventHelpers";
+import { deepMergeReplaceArrays, mergePermanentsMap } from "./utils/patchHelpers";
 import { normalizePermanentsRecord } from "./utils/permanentHelpers";
 import {
   createDefaultPlayerPositions,
   normalizePlayerPositions,
 } from "./utils/positionHelpers";
-import { mergeEvents } from "./utils/eventHelpers";
-import { deepMergeReplaceArrays, mergePermanentsMap } from "./utils/patchHelpers";
 import {
   clearSnapshotsStorageFor,
 } from "./utils/snapshotHelpers";
-import { filterEchoPatchIfAny } from "./transportState";
+import {
+  normalizeZones,
+} from "./utils/zoneHelpers";
 
 type NetworkSlice = Pick<
   GameState,

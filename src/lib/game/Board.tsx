@@ -6,43 +6,38 @@ import { type Object3D } from "three";
 import { type StoreApi, type UseBoundStore } from "zustand";
 // (overlay components are no longer used)
 import { useSound } from "@/lib/contexts/SoundContext";
-import BoardCursorLayer from "@/lib/game/components/BoardCursorLayer";
-import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
-import { AvatarCard } from "@/lib/game/components/AvatarCard";
-import { RemoteDragOverlays } from "@/lib/game/components/RemoteDragOverlays";
-import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
-import { HandDragGhost } from "@/lib/game/components/HandDragGhost";
-import { BoardDragGhost } from "@/lib/game/components/BoardDragGhost";
-import { BoardTile } from "@/lib/game/components/BoardTile";
-import { BASE_TILE_SIZE, TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import {
   AVATAR_AVOID_Z,
   BASE_CARD_ELEVATION,
-  BodyApi,
   BURROWED_ELEVATION,
   RUBBLE_ELEVATION,
   STACK_LAYER_LIFT,
   STACK_MARGIN_Z,
   STACK_SPACING,
-  TILE_OFFSET_LIMIT_X,
-  TILE_OFFSET_LIMIT_Z,
-  clampOffset,
 } from "@/lib/game/boardShared";
+import { AvatarCard } from "@/lib/game/components/AvatarCard";
+import BoardCursorLayer from "@/lib/game/components/BoardCursorLayer";
+import { BoardDragGhost } from "@/lib/game/components/BoardDragGhost";
+import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
+import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
+import { BoardTile } from "@/lib/game/components/BoardTile";
+import { HandDragGhost } from "@/lib/game/components/HandDragGhost";
+import { RemoteDragOverlays } from "@/lib/game/components/RemoteDragOverlays";
+import { BASE_TILE_SIZE, TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
+import { useAttachmentDialog } from "@/lib/game/hooks/useAttachmentDialog";
+import { useBoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
+import { useBoardDropManager } from "@/lib/game/hooks/useBoardDropManager";
+import { useBoardHotkeys } from "@/lib/game/hooks/useBoardHotkeys";
+import { useRemoteCursorSystem } from "@/lib/game/hooks/useRemoteCursorSystem";
+import { useTileDropHandler } from "@/lib/game/hooks/useTileDropHandler";
 import type { CellKey } from "@/lib/game/store";
 import {
   useGameStore,
   createInitialBoard,
   type CardRef,
-  type BoardState,
   type GameState,
   type PlayerKey,
 } from "@/lib/game/store";
-import { useBoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
-import { useBoardDropManager } from "@/lib/game/hooks/useBoardDropManager";
-import { useAttachmentDialog } from "@/lib/game/hooks/useAttachmentDialog";
-import { useRemoteCursorSystem } from "@/lib/game/hooks/useRemoteCursorSystem";
-import { useBoardHotkeys } from "@/lib/game/hooks/useBoardHotkeys";
-import { useTileDropHandler } from "@/lib/game/hooks/useTileDropHandler";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
 const ENABLE_SNAP = true;
@@ -299,10 +294,8 @@ export default function Board({
     dragging,
     setDragging,
     dragAvatar,
-    setDragAvatar,
     setGhost,
     dragStartRef,
-    avatarDragStartRef,
     ghostGroupRef,
     lastGhostPosRef,
     boardGhostRef,
@@ -337,10 +330,8 @@ export default function Board({
   }, [resolvedStoreApi]);
 
   // Attack chooser state moved to store so HUD can render at layout level
-  const attackChoice = useScopedStore((s) => s.attackChoice);
-  const setAttackChoice = useScopedStore((s) => s.setAttackChoice);
   const attackTargetChoice = useScopedStore((s) => s.attackTargetChoice);
-  const setAttackTargetChoice = useScopedStore((s) => s.setAttackTargetChoice);
+  const setAttackChoice = useScopedStore((s) => s.setAttackChoice);
   const attackConfirm = useScopedStore((s) => s.attackConfirm);
   const setAttackConfirm = useScopedStore((s) => s.setAttackConfirm);
   const [lastCrossMove, setLastCrossMove] = useState<{
@@ -353,10 +344,7 @@ export default function Board({
   const interactionGuides = useScopedStore((s) => s.interactionGuides);
   const metaByCardId = useScopedStore((s) => s.metaByCardId);
   const fetchCardMeta = useScopedStore((s) => s.fetchCardMeta);
-  const declareAttack = useScopedStore((s) => s.declareAttack);
   const pendingCombat = useScopedStore((s) => s.pendingCombat);
-  const resolveCombat = useScopedStore((s) => s.resolveCombat);
-  const cancelCombat = useScopedStore((s) => s.cancelCombat);
   const selectPermanent = useScopedStore((s) => s.selectPermanent);
   const setDefenderSelection = useScopedStore((s) => s.setDefenderSelection);
   const revertCrossMoveTick = useScopedStore((s) => s.revertCrossMoveTick);
@@ -452,15 +440,8 @@ export default function Board({
   // Site edge placement functions
   const calculateEdgePosition = useScopedStore((s) => s.calculateEdgePosition);
   const playerPositions = useScopedStore((s) => s.playerPositions);
-  const setPlayerPosition = useScopedStore((s) => s.setPlayerPosition);
 
   // Removed baseline-shift helper to ensure only the moved card changes position
-
-  // Respond to layout-level cancel requests
-  useEffect(() => {
-    // Any tick change requests revert of the last cross-tile move
-    revertLastCrossTileMove();
-  }, [revertCrossMoveTick]);
 
   // Compute mat world size using BASE tile size (keeps mat size unchanged even if TILE_SIZE changes)
   const baseGridW = board.size.w * BASE_TILE_SIZE;
@@ -687,6 +668,12 @@ useBoardDropManager({
       setLastCrossMove(null);
     }
   }, [lastCrossMove, moveSelectedPermanentToWithOffset, selectPermanent]);
+
+  // Respond to layout-level cancel requests
+  useEffect(() => {
+    // Any tick change requests revert of the last cross-tile move
+    revertLastCrossTileMove();
+  }, [revertCrossMoveTick, revertLastCrossTileMove]);
 
   return (
     <group>

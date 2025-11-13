@@ -64,7 +64,7 @@ export const createUiSlice: StateCreator<
   [],
   [],
   UiSlice
-> = (set, get, _api) => ({
+> = (set) => ({
   ...createInitialUiState(),
 
   selectHandCard: (who: PlayerKey, index: number) =>

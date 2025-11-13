@@ -541,7 +541,7 @@ useEffect(() => {
       lastEventTime: new Date().toISOString()
     }));
     queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentsDebounced, currentTournament?.creatorId, currentTournament?.id, currentUserId]);
+  }, [queueStatisticsRefresh, refreshTournamentsDebounced]);
 
   const handlePlayerLeft = useCallback((data: { 
     tournamentId: string;

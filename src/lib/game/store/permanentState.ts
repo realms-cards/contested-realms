@@ -1,9 +1,9 @@
 import type { StateCreator } from "zustand";
-import type { GameState } from "./types";
-import { createTapActionsSlice } from "./permanentState/tapActions";
-import { createDamageActionsSlice } from "./permanentState/damageActions";
 import { createAttachmentActionsSlice } from "./permanentState/attachmentActions";
 import { createCounterActionsSlice } from "./permanentState/counterActions";
+import { createDamageActionsSlice } from "./permanentState/damageActions";
+import { createTapActionsSlice } from "./permanentState/tapActions";
+import type { GameState } from "./types";
 
 type PermanentSlice = Pick<
   GameState,
