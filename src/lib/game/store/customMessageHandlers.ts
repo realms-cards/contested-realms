@@ -53,6 +53,36 @@ export function handleCustomMessage(
     });
     return;
   }
+  if (t === "magicDamage") {
+    const dmgAny = (msg as { damage?: unknown }).damage as unknown;
+    if (!Array.isArray(dmgAny)) return;
+    const mySeat = get().actorKey as PlayerKey | null;
+    for (const d of dmgAny) {
+      if (!d || typeof d !== "object") continue;
+      const rec = d as Record<string, unknown>;
+      const kind = typeof rec.kind === "string" ? (rec.kind as string) : "";
+      const amt = Number(rec.amount);
+      if (!Number.isFinite(amt)) continue;
+      if (kind === "permanent") {
+        const at = typeof rec.at === "string" ? (rec.at as string) : "";
+        const idx = Number(rec.index);
+        if (!at || !Number.isFinite(idx)) continue;
+        try {
+          const ownerNum = (get().permanents as Permanents)[at]?.[Number(idx)]?.owner;
+          const ownerSeat = ownerNum === 1 ? "p1" : ownerNum === 2 ? "p2" : null;
+          if (mySeat && ownerSeat === mySeat) {
+            get().applyDamageToPermanent(at as CellKey, Number(idx), Math.max(0, Math.floor(amt)));
+          }
+        } catch {}
+      } else if (kind === "avatar") {
+        const seat = (rec.seat as PlayerKey | undefined) ?? undefined;
+        if (seat && mySeat && seat === mySeat) {
+          try { get().addLife(seat, -Math.max(0, Math.floor(amt))); } catch {}
+        }
+      }
+    }
+    return;
+  }
   if (t === "magicBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;
     const tile = (msg as { tile?: unknown }).tile as { x?: unknown; y?: unknown } | undefined;
@@ -113,10 +143,40 @@ export function handleCustomMessage(
           if (k === "location") target = { kind: "location", at: rec.at as CellKey };
           else if (k === "permanent") target = { kind: "permanent", at: rec.at as CellKey, index: Number(rec.index) };
           else if (k === "avatar") target = { kind: "avatar", seat: rec.seat as PlayerKey };
-          else if (k === "projectile") target = { kind: "projectile", direction: (rec.direction as "N" | "E" | "S" | "W") };
+          else if (k === "projectile") {
+            const dir = rec.direction as "N" | "E" | "S" | "W";
+            let firstHit: { kind: "permanent" | "avatar"; at: CellKey; index?: number } | undefined = undefined;
+            try {
+              const fh = rec.firstHit as Record<string, unknown> | undefined;
+              if (fh && typeof fh === "object") {
+                const kind = fh.kind === "permanent" || fh.kind === "avatar" ? (fh.kind as "permanent" | "avatar") : null;
+                if (kind === "permanent") firstHit = { kind: "permanent", at: fh.at as CellKey, index: Number(fh.index) };
+                else if (kind === "avatar") firstHit = { kind: "avatar", at: fh.at as CellKey };
+              }
+            } catch {}
+            let intended: ({ kind: "permanent"; at: CellKey; index: number } | { kind: "avatar"; seat: PlayerKey }) | undefined = undefined;
+            try {
+              const it = rec.intended as Record<string, unknown> | undefined;
+              if (it && typeof it === "object") {
+                const kind = it.kind === "permanent" || it.kind === "avatar" ? (it.kind as "permanent" | "avatar") : null;
+                if (kind === "permanent") intended = { kind: "permanent", at: it.at as CellKey, index: Number(it.index) };
+                else if (kind === "avatar") intended = { kind: "avatar", seat: it.seat as PlayerKey };
+              }
+            } catch {}
+            target = { kind: "projectile", direction: dir, firstHit, intended };
+          }
         }
       } catch {}
-      return { pendingMagic: { ...s.pendingMagic, target, status: target ? "confirm" : "choosingTarget" } } as Partial<GameState> as GameState;
+      // Do not auto-confirm on target set; wait for explicit confirm
+      return { pendingMagic: { ...s.pendingMagic, target, status: "choosingTarget" } } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "magicConfirm") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!id || !s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
+      return { pendingMagic: { ...s.pendingMagic, status: "confirm" } } as Partial<GameState> as GameState;
     });
     return;
   }
@@ -148,7 +208,7 @@ export function handleCustomMessage(
     }
     set((s) => {
       if (!id || !s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
-      return { pendingMagic: null } as Partial<GameState> as GameState;
+      return { pendingMagic: { ...s.pendingMagic, status: "confirm", summaryText: text ?? s.pendingMagic.summaryText ?? null } } as Partial<GameState> as GameState;
     });
     return;
   }
