@@ -17,7 +17,7 @@ const {
   INTERACTION_ENFORCEMENT_ENABLED,
   INTERACTION_REQUEST_KINDS,
   INTERACTION_DECISIONS,
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./modules/interactions");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const modules = require("./modules");
@@ -30,20 +30,22 @@ const {
   getPlayerIdForSeat,
   getOpponentSeat: getOpponentSeatRaw,
   inferLoserId,
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./modules/match-utils");
 const {
   normalizeDeckPayload,
   validateDeckCards,
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./modules/deck-utils");
+const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
+  owner === 1 ? "p1" : "p2";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createLeaderboardService } = require("./modules/leaderboard");
 const {
   deepMergeReplaceArrays,
   dedupePermanents,
   mergeEvents,
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./modules/shared/match-helpers");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createRequestHandler } = require("./http/request-handler");
@@ -60,7 +62,7 @@ const {
   createRngFromString,
   generateBoosterDeterministic,
   generateCubeBoosterDeterministic,
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./booster");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { BotManager } = require("./botManager");
@@ -71,7 +73,7 @@ const {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ensureCosts,
   applyMovementAndCombat,
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./rules");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
@@ -106,11 +108,7 @@ import {
   tryConsume,
   cleanupRateLimits,
 } from "./rateLimiter";
-import {
-  incrementMetric,
-  incrementRateLimitHit,
-  debugLog,
-} from "./metrics";
+import { incrementMetric, incrementRateLimitHit, debugLog } from "./metrics";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 type SocketServer = import("socket.io").Server;
@@ -157,7 +155,8 @@ const TOURNAMENT_BROADCAST_EVENT_NAMES = [
   "matchEnded",
 ] as const;
 
-type TournamentBroadcastEventName = (typeof TOURNAMENT_BROADCAST_EVENT_NAMES)[number];
+type TournamentBroadcastEventName =
+  (typeof TOURNAMENT_BROADCAST_EVENT_NAMES)[number];
 
 const TOURNAMENT_BROADCAST_EVENT_SET: ReadonlySet<string> = new Set(
   TOURNAMENT_BROADCAST_EVENT_NAMES
@@ -188,7 +187,11 @@ interface ChatPayload extends Record<string, unknown> {
   scope?: unknown;
 }
 
-const CHAT_SCOPE_VALUES: ReadonlySet<ChatScope> = new Set(["global", "lobby", "match"]);
+const CHAT_SCOPE_VALUES: ReadonlySet<ChatScope> = new Set([
+  "global",
+  "lobby",
+  "match",
+]);
 
 interface DraggingPayload extends Record<string, unknown> {
   kind?: unknown;
@@ -221,11 +224,15 @@ interface HighlightPayload extends Record<string, unknown> {
   slug?: unknown;
 }
 
-function isTournamentBroadcastEvent(value: unknown): value is TournamentBroadcastEventName {
+function isTournamentBroadcastEvent(
+  value: unknown
+): value is TournamentBroadcastEventName {
   return typeof value === "string" && TOURNAMENT_BROADCAST_EVENT_SET.has(value);
 }
 
-function normalizeTournamentBroadcastData(input: unknown): TournamentBroadcastData {
+function normalizeTournamentBroadcastData(
+  input: unknown
+): TournamentBroadcastData {
   if (!input || typeof input !== "object") {
     return {};
   }
@@ -243,7 +250,9 @@ function toOptionalString(value: unknown): string | null {
 function toOptionalNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value)
     ? value
-    : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))
+    : typeof value === "string" &&
+      value.trim() !== "" &&
+      Number.isFinite(Number(value))
     ? Number(value)
     : null;
 }
@@ -266,7 +275,9 @@ function sanitizeMatchInfoForSpectator(info: AnyRecord): AnyRecord {
   }
 }
 
-function sanitizeGameForSpectator(game: AnyRecord | null | undefined): AnyRecord | null {
+function sanitizeGameForSpectator(
+  game: AnyRecord | null | undefined
+): AnyRecord | null {
   if (!isRecord(game)) return null;
   try {
     const out: AnyRecord = { ...game };
@@ -287,23 +298,39 @@ async function broadcastSpectatorsUpdated(matchId: string) {
       count = sockets ? sockets.size : 0;
     } catch {}
     const out = { type: "spectatorsUpdated", matchId, count };
-    try { io.to(room).emit("message", out); } catch {}
-    try { io.to(`match:${matchId}`).emit("message", out); } catch {}
+    try {
+      io.to(room).emit("message", out);
+    } catch {}
+    try {
+      io.to(`match:${matchId}`).emit("message", out);
+    } catch {}
   } catch {}
 }
 
 type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
 
 interface MatchDraftService {
-  leaderDraftPlayerReady(matchId: string, playerId: string, ready: boolean): Promise<void>;
+  leaderDraftPlayerReady(
+    matchId: string,
+    playerId: string,
+    ready: boolean
+  ): Promise<void>;
   leaderStartDraft(
     matchId: string,
     requestingPlayerId?: string | null,
     overrideConfig?: AnyRecord | null,
     requestingSocketId?: string | null
   ): Promise<void>;
-  leaderMakeDraftPick(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
-  leaderChooseDraftPack(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
+  leaderMakeDraftPick(
+    matchId: string,
+    playerId: string,
+    payload: AnyRecord
+  ): Promise<void>;
+  leaderChooseDraftPack(
+    matchId: string,
+    playerId: string,
+    payload: AnyRecord
+  ): Promise<void>;
   updateDraftPresence(
     sessionId: string,
     playerId: string,
@@ -319,7 +346,11 @@ const getOpponentSeat = (seat: Seat | null | undefined): Seat | null =>
   seat ? (getOpponentSeatRaw(seat) as Seat | null) : null;
 const getOpponentSeatStrict = (seat: Seat): Seat => {
   const result = getOpponentSeatRaw(seat);
-  return result === "p1" || result === "p2" ? result : seat === "p1" ? "p2" : "p1";
+  return result === "p1" || result === "p2"
+    ? result
+    : seat === "p1"
+    ? "p2"
+    : "p1";
 };
 const enrichPatchWithCostsSafe = async (
   patch: MatchPatch | null,
@@ -363,7 +394,10 @@ interface MatchRecordingEntry {
   initialState?: AnyRecord;
   cardPlays?: { p1: Set<number>; p2: Set<number> };
   lastZones?: { p1?: Record<string, unknown>; p2?: Record<string, unknown> };
-  lastAvatars?: { p1?: Record<string, unknown> | null; p2?: Record<string, unknown> | null };
+  lastAvatars?: {
+    p1?: Record<string, unknown> | null;
+    p2?: Record<string, unknown> | null;
+  };
 }
 
 const safeErrorMessage = (err: unknown): unknown => {
@@ -457,11 +491,16 @@ function promSafe(name: string): string {
   return String(name).replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
-let getPersistenceBufferStats: () => { bufferCount: number; bufferedActions: number } = () => ({
+let getPersistenceBufferStats: () => {
+  bufferCount: number;
+  bufferedActions: number;
+} = () => ({
   bufferCount: 0,
   bufferedActions: 0,
 });
-let flushAllPersistenceBuffers: (reason?: string) => Promise<void> = async () => {};
+let flushAllPersistenceBuffers: (
+  reason?: string
+) => Promise<void> = async () => {};
 
 function collectMetricsSnapshot(): MetricsSnapshot {
   const now = Date.now();
@@ -520,7 +559,12 @@ function buildPromMetrics(): string {
     lines.push(`# TYPE ${n} counter`);
     lines.push(`${n} ${Number(value)}`);
   };
-  const pushSummary = (name: string, sum: unknown, count: unknown, help?: string) => {
+  const pushSummary = (
+    name: string,
+    sum: unknown,
+    count: unknown,
+    help?: string
+  ) => {
     const base = `sorcery_${promSafe(name)}`;
     if (help) lines.push(`# HELP ${base} ${help}`);
     lines.push(`# TYPE ${base} summary`);
@@ -605,7 +649,6 @@ const LOBBY_STATE_CHANNEL = "lobby:state";
 let clusterStateReady = false; // flip after maps are initialized
 
 // Basic health endpoints (liveness/readiness) and lightweight HTTP API
-
 
 // In-memory state
 // Players keyed by stable playerId (not socket id)
@@ -709,7 +752,9 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   prisma,
   players,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getOrLoadMatch: getOrLoadMatch as unknown as (matchId: string) => Promise<any>,
+  getOrLoadMatch: getOrLoadMatch as unknown as (
+    matchId: string
+  ) => Promise<any>,
   ensurePlayerCached,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getMatchInfo: getMatchInfo as unknown as (match: any) => unknown,
@@ -738,7 +783,10 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   enrichPatchWithCosts: enrichPatchWithCostsSafe,
   recordMatchAction,
   persistMatchUpdate,
-  finalizeMatch: finalizeMatch as unknown as (match: unknown, options: Record<string, unknown>) => Promise<void>,
+  finalizeMatch: finalizeMatch as unknown as (
+    match: unknown,
+    options: Record<string, unknown>
+  ) => Promise<void>,
   rulesEnforceMode: RULES_ENFORCE_MODE,
   interactionEnforcementEnabled: INTERACTION_ENFORCEMENT_ENABLED,
   interactionKinds: INTERACTION_REQUEST_KINDS,
@@ -880,8 +928,11 @@ const handleHttpRequest = createRequestHandler({
   matchesMap: matches,
   players,
   tournamentBroadcast: {
-    emitTournamentUpdate: (_io: SocketServer, tournamentId: string, data: AnyRecord) =>
-      broadcastTournamentUpdate(tournamentId, data),
+    emitTournamentUpdate: (
+      _io: SocketServer,
+      tournamentId: string,
+      data: AnyRecord
+    ) => broadcastTournamentUpdate(tournamentId, data),
     emitPhaseChanged: (
       _io: SocketServer,
       tournamentId: string,
@@ -893,31 +944,38 @@ const handleHttpRequest = createRequestHandler({
       tournamentId: string,
       roundNumber: number,
       matchesPayload: unknown
-    ) => broadcastRoundStarted(tournamentId, roundNumber, matchesPayload as AnyRecord[]),
+    ) =>
+      broadcastRoundStarted(
+        tournamentId,
+        roundNumber,
+        matchesPayload as AnyRecord[]
+      ),
     emitPlayerJoined: (
       _io: SocketServer,
       tournamentId: string,
       playerId: string,
       playerName: string | undefined,
       currentPlayerCount: number | undefined
-    ) => broadcastPlayerJoined(
-      tournamentId,
-      playerId,
-      playerName ?? "",
-      typeof currentPlayerCount === "number" ? currentPlayerCount : 0
-    ),
+    ) =>
+      broadcastPlayerJoined(
+        tournamentId,
+        playerId,
+        playerName ?? "",
+        typeof currentPlayerCount === "number" ? currentPlayerCount : 0
+      ),
     emitPlayerLeft: (
       _io: SocketServer,
       tournamentId: string,
       playerId: string,
       playerName: string | undefined,
       currentPlayerCount: number | undefined
-    ) => broadcastPlayerLeft(
-      tournamentId,
-      playerId,
-      playerName ?? "",
-      typeof currentPlayerCount === "number" ? currentPlayerCount : 0
-    ),
+    ) =>
+      broadcastPlayerLeft(
+        tournamentId,
+        playerId,
+        playerName ?? "",
+        typeof currentPlayerCount === "number" ? currentPlayerCount : 0
+      ),
     emitDraftReady: (
       _io: SocketServer,
       tournamentId: string,
@@ -966,7 +1024,9 @@ container.initialize().catch((err: unknown) => {
   }
 });
 
-function getVoiceRoomIdForPlayer(player: PlayerState | null | undefined): string | null {
+function getVoiceRoomIdForPlayer(
+  player: PlayerState | null | undefined
+): string | null {
   if (!player) return null;
   if (player.lobbyId) return `lobby:${player.lobbyId}`;
   if (player.matchId) return `match:${player.matchId}`;
@@ -1004,7 +1064,9 @@ function lobbyHasHumanPlayers(lobby: LobbyState | null | undefined): boolean {
 }
 
 // Returns true if there is at least one non-CPU (human) player in the match
-function matchHasHumanPlayers(match: ServerMatchState | null | undefined): boolean {
+function matchHasHumanPlayers(
+  match: ServerMatchState | null | undefined
+): boolean {
   if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0)
     return false;
   for (const pid of match.playerIds) {
@@ -1013,7 +1075,10 @@ function matchHasHumanPlayers(match: ServerMatchState | null | undefined): boole
   return false;
 }
 
-async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): Promise<void> {
+async function finalizeMatch(
+  match: ServerMatchState,
+  options: AnyRecord = {}
+): Promise<void> {
   if (!match) return;
   if (match._finalized) {
     if (!match.winnerId && typeof options?.winnerId === "string") {
@@ -1089,17 +1154,28 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
     const endPatch = {
       matchEnded: true,
       // Explicitly normalize to "p1" | "p2" | null for the client reducer
-      winner: (winnerSeat === "p1" || winnerSeat === "p2") ? (winnerSeat as "p1" | "p2") : null,
+      winner:
+        winnerSeat === "p1" || winnerSeat === "p2"
+          ? (winnerSeat as "p1" | "p2")
+          : null,
     };
     io.to(room).emit("statePatch", { patch: endPatch, t: now });
-    try { io.to(`spectate:${match.id}`).emit("statePatch", { patch: endPatch, t: now }); } catch {}
+    try {
+      io.to(`spectate:${match.id}`).emit("statePatch", {
+        patch: endPatch,
+        t: now,
+      });
+    } catch {}
     // Also emit an explicit event for compatibility with clients that rely on a
     // status transition rather than the game patch (older builds or dropped patch).
     io.to(room).emit("matchEnded", {
       matchId: match.id,
       winnerId: winnerId || null,
       result: isDraw ? "draw" : "win",
-      reason: (options && typeof options.reason === "string" ? options.reason : "normal_end"),
+      reason:
+        options && typeof options.reason === "string"
+          ? options.reason
+          : "normal_end",
     });
   } catch {}
   try {
@@ -1112,15 +1188,25 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
     finishMatchRecording(match.id);
   } catch {}
   try {
-    const allHuman = Array.isArray(match.playerIds) && match.playerIds.length > 0 && match.playerIds.every((pid) => !isCpuPlayerId(pid));
+    const allHuman =
+      Array.isArray(match.playerIds) &&
+      match.playerIds.length > 0 &&
+      match.playerIds.every((pid) => !isCpuPlayerId(pid));
     if (allHuman) {
       const rec = matchRecordings.get(match.id);
-      const formatRaw = (match.matchType === "draft" || match.matchType === "sealed" || match.matchType === "constructed") ? match.matchType : "constructed";
+      const formatRaw =
+        match.matchType === "draft" ||
+        match.matchType === "sealed" ||
+        match.matchType === "constructed"
+          ? match.matchType
+          : "constructed";
       if (rec && rec.cardPlays && prisma?.humanCardStats) {
         const p1Cards = Array.from(rec.cardPlays.p1 || []);
         const p2Cards = Array.from(rec.cardPlays.p2 || []);
-        const winnerSeatVal = winnerSeat === "p1" || winnerSeat === "p2" ? winnerSeat : null;
-        const loserSeatVal = loserSeat === "p1" || loserSeat === "p2" ? loserSeat : null;
+        const winnerSeatVal =
+          winnerSeat === "p1" || winnerSeat === "p2" ? winnerSeat : null;
+        const loserSeatVal =
+          loserSeat === "p1" || loserSeat === "p2" ? loserSeat : null;
         const ops: Promise<unknown>[] = [];
         const bump = (cardId: number, seat: "p1" | "p2") => {
           const isWin = winnerSeatVal ? seat === winnerSeatVal : false;
@@ -1194,19 +1280,23 @@ async function finalizeMatch(match: ServerMatchState, options: AnyRecord = {}): 
 
         // Use standings service for atomic updates; failures shouldn't prevent round completion
         try {
-          const playersVal: Array<{ id?: string; playerId?: string; userId?: string } | null> = Array.isArray(
-            tMatch.players
-          )
-            ? tMatch.players
-            : [];
+          const playersVal: Array<{
+            id?: string;
+            playerId?: string;
+            userId?: string;
+          } | null> = Array.isArray(tMatch.players) ? tMatch.players : [];
           const playerIds = playersVal
-            .map((p: { id?: string; playerId?: string; userId?: string } | null) => {
-              if (p && typeof p === "object") {
-                const id = p.id || p.playerId || p.userId;
-                return typeof id === "string" ? id : null;
+            .map(
+              (
+                p: { id?: string; playerId?: string; userId?: string } | null
+              ) => {
+                if (p && typeof p === "object") {
+                  const id = p.id || p.playerId || p.userId;
+                  return typeof id === "string" ? id : null;
+                }
+                return null;
               }
-              return null;
-            })
+            )
             .filter(Boolean);
           if (playerIds.length === 2) {
             const [p1, p2] = playerIds;
@@ -1308,7 +1398,10 @@ function rid(prefix: string): string {
 
 type BasicPlayerInfo = { id: string; displayName: string; seat?: Seat };
 
-function getPlayerInfo(playerId: string, seat: Seat | null = null): BasicPlayerInfo | null {
+function getPlayerInfo(
+  playerId: string,
+  seat: Seat | null = null
+): BasicPlayerInfo | null {
   const p = players.get(playerId);
   if (!p) return null;
   const info: BasicPlayerInfo = { id: p.id, displayName: p.displayName };
@@ -1318,7 +1411,9 @@ function getPlayerInfo(playerId: string, seat: Seat | null = null): BasicPlayerI
   return info;
 }
 
-function getPlayerBySocket(socket: SocketClient | null | undefined): PlayerState | null {
+function getPlayerBySocket(
+  socket: SocketClient | null | undefined
+): PlayerState | null {
   if (!socket) return null;
   const pid = playerIdBySocket.get(socket.id);
   if (!pid) return null;
@@ -1388,7 +1483,9 @@ async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
   }
 }
 
-async function getOrLoadMatch(matchId: string): Promise<ServerMatchState | null> {
+async function getOrLoadMatch(
+  matchId: string
+): Promise<ServerMatchState | null> {
   if (matches.has(matchId)) return matches.get(matchId) ?? null;
   // Try Redis cache first
   try {
@@ -1451,10 +1548,15 @@ async function getOrLoadMatch(matchId: string): Promise<ServerMatchState | null>
           .map((it) => {
             if (typeof it === "string") return it;
             if (it && typeof it === "object") {
-              const value = (it as Record<string, unknown>).id ??
+              const value =
+                (it as Record<string, unknown>).id ??
                 (it as Record<string, unknown>).playerId ??
                 (it as Record<string, unknown>).userId;
-              return typeof value === "string" ? value : value != null ? String(value) : null;
+              return typeof value === "string"
+                ? value
+                : value != null
+                ? String(value)
+                : null;
             }
             return null;
           })
@@ -1622,7 +1724,9 @@ async function cleanupMatchNow(
 
 // Handle per-player mulligan completion as the cluster leader
 function getMatchInfo(match: ServerMatchState): AnyRecord {
-  const serializeSealedPacks = (packs: unknown): Record<string, unknown> | undefined => {
+  const serializeSealedPacks = (
+    packs: unknown
+  ): Record<string, unknown> | undefined => {
     if (!packs) return undefined;
     if (packs instanceof Map) {
       const out: Record<string, unknown> = {};
@@ -1633,7 +1737,9 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     }
     if (typeof packs === "object") {
       const out: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(packs as Record<string, unknown>)) {
+      for (const [key, value] of Object.entries(
+        packs as Record<string, unknown>
+      )) {
         out[String(key)] = Array.isArray(value) ? value : value ?? [];
       }
       return out;
@@ -1641,7 +1747,9 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     return undefined;
   };
 
-  const serializePlayerDecks = (decks: unknown): Record<string, unknown> | undefined => {
+  const serializePlayerDecks = (
+    decks: unknown
+  ): Record<string, unknown> | undefined => {
     if (!decks) return undefined;
     if (decks instanceof Map) return Object.fromEntries(decks);
     if (typeof decks === "object") return decks as Record<string, unknown>;
@@ -1687,7 +1795,10 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
   };
 }
 
-async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState): Promise<void> {
+async function hydrateMatchFromDatabase(
+  matchId: string,
+  match: ServerMatchState
+): Promise<void> {
   console.log("[hydrateMatchFromDatabase] Called for match:", {
     matchId,
     matchType: match.matchType,
@@ -1712,7 +1823,8 @@ async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState
       } catch {}
       if (dbMatch.playerDecks && typeof dbMatch.playerDecks === "object") {
         try {
-          const hasExisting = match.playerDecks instanceof Map && match.playerDecks.size > 0;
+          const hasExisting =
+            match.playerDecks instanceof Map && match.playerDecks.size > 0;
           if (!hasExisting) {
             match.playerDecks = new Map(Object.entries(dbMatch.playerDecks));
           }
@@ -1737,43 +1849,44 @@ async function hydrateMatchFromDatabase(matchId: string, match: ServerMatchState
         { matchId, tournamentId: match.tournamentId }
       );
       try {
-          const draftSession = await prisma.draftSession.findFirst({
-            where: { tournamentId: match.tournamentId },
-            select: { settings: true, packConfiguration: true },
-          });
-          if (draftSession) {
-            // Extract cubeId from DraftSession settings
-            const settings =
-              draftSession.settings && typeof draftSession.settings === "object"
-                ? (draftSession.settings as Record<string, unknown>)
-                : {};
-            const cubeId = toOptionalString(settings.cubeId);
+        const draftSession = await prisma.draftSession.findFirst({
+          where: { tournamentId: match.tournamentId },
+          select: { settings: true, packConfiguration: true },
+        });
+        if (draftSession) {
+          // Extract cubeId from DraftSession settings
+          const settings =
+            draftSession.settings && typeof draftSession.settings === "object"
+              ? (draftSession.settings as Record<string, unknown>)
+              : {};
+          const cubeId = toOptionalString(settings.cubeId);
 
-            // Build draftConfig from DraftSession
-            type DraftPackConfigurationEntry = {
-              setId?: string | null;
-              packCount?: number | null;
-            };
-            const packConfig = Array.isArray(draftSession.packConfiguration)
-              ? (draftSession.packConfiguration as DraftPackConfigurationEntry[])
-              : [];
-            const packCounts: Record<string, number> = {};
-            for (const entry of packConfig) {
-              const setId =
-                entry && typeof entry.setId === "string" && entry.setId
-                  ? entry.setId
-                  : "Beta";
-              const packs =
-                typeof entry?.packCount === "number" && Number.isFinite(entry.packCount)
-                  ? entry.packCount
-                  : 0;
-              packCounts[setId] = (packCounts[setId] || 0) + packs;
-            }
+          // Build draftConfig from DraftSession
+          type DraftPackConfigurationEntry = {
+            setId?: string | null;
+            packCount?: number | null;
+          };
+          const packConfig = Array.isArray(draftSession.packConfiguration)
+            ? (draftSession.packConfiguration as DraftPackConfigurationEntry[])
+            : [];
+          const packCounts: Record<string, number> = {};
+          for (const entry of packConfig) {
+            const setId =
+              entry && typeof entry.setId === "string" && entry.setId
+                ? entry.setId
+                : "Beta";
+            const packs =
+              typeof entry?.packCount === "number" &&
+              Number.isFinite(entry.packCount)
+                ? entry.packCount
+                : 0;
+            packCounts[setId] = (packCounts[setId] || 0) + packs;
+          }
 
-            match.draftConfig = {
-              cubeId: cubeId || undefined,
-              packCounts,
-              packCount:
+          match.draftConfig = {
+            cubeId: cubeId || undefined,
+            packCounts,
+            packCount:
               Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
             packSize: 15,
           };
@@ -1827,25 +1940,37 @@ function startMatchRecording(match: ServerMatchState): void {
     cardPlays: { p1: new Set<number>(), p2: new Set<number>() },
     lastZones: (() => {
       const g = (match as AnyRecord).game as AnyRecord | undefined;
-      const zones = g && typeof g === "object" ? (g.zones as AnyRecord | undefined) : undefined;
+      const zones =
+        g && typeof g === "object"
+          ? (g.zones as AnyRecord | undefined)
+          : undefined;
       if (zones && typeof zones === "object") {
         return {
           p1: zones.p1 as Record<string, unknown> | undefined,
           p2: zones.p2 as Record<string, unknown> | undefined,
         };
       }
-      return {} as { p1?: Record<string, unknown>; p2?: Record<string, unknown> };
+      return {} as {
+        p1?: Record<string, unknown>;
+        p2?: Record<string, unknown>;
+      };
     })(),
     lastAvatars: (() => {
       const g = (match as AnyRecord).game as AnyRecord | undefined;
-      const avatars = g && typeof g === "object" ? (g.avatars as AnyRecord | undefined) : undefined;
+      const avatars =
+        g && typeof g === "object"
+          ? (g.avatars as AnyRecord | undefined)
+          : undefined;
       if (avatars && typeof avatars === "object") {
         return {
           p1: avatars.p1 as Record<string, unknown> | null,
           p2: avatars.p2 as Record<string, unknown> | null,
         };
       }
-      return {} as { p1?: Record<string, unknown> | null; p2?: Record<string, unknown> | null };
+      return {} as {
+        p1?: Record<string, unknown> | null;
+        p2?: Record<string, unknown> | null;
+      };
     })(),
   };
 
@@ -1859,7 +1984,11 @@ function startMatchRecording(match: ServerMatchState): void {
   } catch {}
 }
 
-function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: string): void {
+function recordMatchAction(
+  matchId: string,
+  patch: MatchPatch | null,
+  playerId: string
+): void {
   const recording = matchRecordings.get(matchId);
   if (!recording) {
     try {
@@ -1886,9 +2015,11 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
             const e = entry as Record<string, unknown>;
             const card = e.card as Record<string, unknown> | undefined;
             const ownerVal = e.owner as unknown;
-            const owner: 1 | 2 | null = ownerVal === 2 ? 2 : ownerVal === 1 ? 1 : null;
+            const owner: 1 | 2 | null =
+              ownerVal === 2 ? 2 : ownerVal === 1 ? 1 : null;
             const cardIdRaw = card ? (card.cardId as unknown) : null;
-            const cardId = typeof cardIdRaw === "number" ? cardIdRaw : Number(cardIdRaw);
+            const cardId =
+              typeof cardIdRaw === "number" ? cardIdRaw : Number(cardIdRaw);
             if (owner && Number.isFinite(cardId)) {
               plays.push({ owner, cardId: Number(cardId) });
             }
@@ -1896,7 +2027,10 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
         }
       }
       const board = p.board as Record<string, unknown> | undefined;
-      const sites = board && typeof board.sites === "object" ? (board.sites as Record<string, unknown>) : null;
+      const sites =
+        board && typeof board.sites === "object"
+          ? (board.sites as Record<string, unknown>)
+          : null;
       if (sites) {
         for (const tile of Object.values(sites)) {
           if (!tile || typeof tile !== "object") continue;
@@ -1904,9 +2038,11 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
           const card = t.card as Record<string, unknown> | undefined;
           if (!card || typeof card !== "object") continue;
           const ownerVal = t.owner as unknown;
-          const owner: 1 | 2 | null = ownerVal === 2 ? 2 : ownerVal === 1 ? 1 : null;
+          const owner: 1 | 2 | null =
+            ownerVal === 2 ? 2 : ownerVal === 1 ? 1 : null;
           const cardIdRaw = card.cardId as unknown;
-          const cardId = typeof cardIdRaw === "number" ? cardIdRaw : Number(cardIdRaw);
+          const cardId =
+            typeof cardIdRaw === "number" ? cardIdRaw : Number(cardIdRaw);
           if (owner && Number.isFinite(cardId)) {
             plays.push({ owner, cardId: Number(cardId) });
           }
@@ -1916,12 +2052,21 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
       if (avatars && typeof avatars === "object") {
         for (const seatKey of ["p1", "p2"]) {
           const seat = seatKey as "p1" | "p2";
-          const av = (avatars as Record<string, unknown>)[seat] as Record<string, unknown> | undefined;
-          const card = av && typeof av === "object" ? (av.card as Record<string, unknown> | undefined) : undefined;
+          const av = (avatars as Record<string, unknown>)[seat] as
+            | Record<string, unknown>
+            | undefined;
+          const card =
+            av && typeof av === "object"
+              ? (av.card as Record<string, unknown> | undefined)
+              : undefined;
           const cardIdRaw = card ? (card.cardId as unknown) : null;
-          const cardId = typeof cardIdRaw === "number" ? cardIdRaw : Number(cardIdRaw);
+          const cardId =
+            typeof cardIdRaw === "number" ? cardIdRaw : Number(cardIdRaw);
           if (Number.isFinite(cardId)) {
-            plays.push({ owner: seat === "p1" ? 1 : 2, cardId: Number(cardId) });
+            plays.push({
+              owner: seat === "p1" ? 1 : 2,
+              cardId: Number(cardId),
+            });
           }
         }
       }
@@ -1931,22 +2076,46 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
           if (seatKey !== "p1" && seatKey !== "p2") continue;
           const seat = seatKey as "p1" | "p2";
           const nextSeatZones = (zones[seat] as Record<string, unknown>) || {};
-          const prevSeatZones = (recording.lastZones && recording.lastZones[seat]) || null;
-          const piles = ["hand", "atlas", "spellbook", "graveyard", "battlefield", "banished"] as const;
+          const prevSeatZones =
+            (recording.lastZones && recording.lastZones[seat]) || null;
+          const piles = [
+            "hand",
+            "atlas",
+            "spellbook",
+            "graveyard",
+            "battlefield",
+            "banished",
+          ] as const;
           const toIds = (arr: unknown): string[] =>
             Array.isArray(arr)
               ? (arr as unknown[])
-                  .map((it) => (it && typeof it === "object" ? ((it as Record<string, unknown>).instanceId as unknown) : null))
+                  .map((it) =>
+                    it && typeof it === "object"
+                      ? ((it as Record<string, unknown>).instanceId as unknown)
+                      : null
+                  )
                   .map((v) => (typeof v === "string" ? v : null))
                   .filter((v): v is string => !!v)
               : [];
-          const prevByPile: Record<string, { ids: Set<string>; byId: Map<string, Record<string, unknown>> }> = {};
-          const nextByPile: Record<string, { ids: Set<string>; byId: Map<string, Record<string, unknown>> }> = {};
+          const prevByPile: Record<
+            string,
+            { ids: Set<string>; byId: Map<string, Record<string, unknown>> }
+          > = {};
+          const nextByPile: Record<
+            string,
+            { ids: Set<string>; byId: Map<string, Record<string, unknown>> }
+          > = {};
           for (const pile of piles) {
-            const prevArr = prevSeatZones && Array.isArray((prevSeatZones as Record<string, unknown>)[pile])
-              ? ((prevSeatZones as Record<string, unknown>)[pile] as unknown[])
-              : [];
-            const nextArr = Array.isArray((nextSeatZones as Record<string, unknown>)[pile])
+            const prevArr =
+              prevSeatZones &&
+              Array.isArray((prevSeatZones as Record<string, unknown>)[pile])
+                ? ((prevSeatZones as Record<string, unknown>)[
+                    pile
+                  ] as unknown[])
+                : [];
+            const nextArr = Array.isArray(
+              (nextSeatZones as Record<string, unknown>)[pile]
+            )
               ? ((nextSeatZones as Record<string, unknown>)[pile] as unknown[])
               : [];
             const prevIds = toIds(prevArr);
@@ -1956,41 +2125,63 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
             for (const item of prevArr) {
               if (!item || typeof item !== "object") continue;
               const id = (item as Record<string, unknown>).instanceId;
-              if (typeof id === "string") prevMap.set(id, item as Record<string, unknown>);
+              if (typeof id === "string")
+                prevMap.set(id, item as Record<string, unknown>);
             }
             for (const item of nextArr) {
               if (!item || typeof item !== "object") continue;
               const id = (item as Record<string, unknown>).instanceId;
-              if (typeof id === "string") nextMap.set(id, item as Record<string, unknown>);
+              if (typeof id === "string")
+                nextMap.set(id, item as Record<string, unknown>);
             }
             prevByPile[pile] = { ids: new Set(prevIds), byId: prevMap };
             nextByPile[pile] = { ids: new Set(nextIds), byId: nextMap };
           }
           const originPiles = ["hand", "atlas", "spellbook"] as const;
           for (const origin of originPiles) {
-            const removed = Array.from(prevByPile[origin].ids).filter((id) => !nextByPile[origin].ids.has(id));
+            const removed = Array.from(prevByPile[origin].ids).filter(
+              (id) => !nextByPile[origin].ids.has(id)
+            );
             for (const instId of removed) {
-              const stillInOriginPiles = originPiles.some((pile) => nextByPile[pile].ids.has(instId));
+              const stillInOriginPiles = originPiles.some((pile) =>
+                nextByPile[pile].ids.has(instId)
+              );
               if (stillInOriginPiles) continue;
-              const playedToGraveOrBanished = nextByPile["graveyard"].ids.has(instId) || nextByPile["banished"].ids.has(instId);
+              const playedToGraveOrBanished =
+                nextByPile["graveyard"].ids.has(instId) ||
+                nextByPile["banished"].ids.has(instId);
               const onBattlefield = nextByPile["battlefield"].ids.has(instId);
               if (playedToGraveOrBanished || onBattlefield) {
                 let cardIdNum: number | null = null;
                 const prevItem = prevByPile[origin].byId.get(instId) || null;
-                const srcCard = prevItem && typeof prevItem.card === "object" ? (prevItem.card as Record<string, unknown>) : null;
+                const srcCard =
+                  prevItem && typeof prevItem.card === "object"
+                    ? (prevItem.card as Record<string, unknown>)
+                    : null;
                 const raw = srcCard ? (srcCard.cardId as unknown) : null;
                 const cid = typeof raw === "number" ? raw : Number(raw);
                 if (Number.isFinite(cid)) cardIdNum = Number(cid);
                 if (!cardIdNum) {
-                  const lookup = (pile: string) => nextByPile[pile].byId.get(instId);
-                  const candidate = lookup("graveyard") || lookup("banished") || lookup("battlefield") || null;
-                  const candCard = candidate && typeof candidate.card === "object" ? (candidate.card as Record<string, unknown>) : null;
+                  const lookup = (pile: string) =>
+                    nextByPile[pile].byId.get(instId);
+                  const candidate =
+                    lookup("graveyard") ||
+                    lookup("banished") ||
+                    lookup("battlefield") ||
+                    null;
+                  const candCard =
+                    candidate && typeof candidate.card === "object"
+                      ? (candidate.card as Record<string, unknown>)
+                      : null;
                   const raw2 = candCard ? (candCard.cardId as unknown) : null;
                   const cid2 = typeof raw2 === "number" ? raw2 : Number(raw2);
                   if (Number.isFinite(cid2)) cardIdNum = Number(cid2);
                 }
                 if (cardIdNum) {
-                  plays.push({ owner: seat === "p1" ? 1 : 2, cardId: cardIdNum });
+                  plays.push({
+                    owner: seat === "p1" ? 1 : 2,
+                    cardId: cardIdNum,
+                  });
                 }
               }
             }
@@ -2003,14 +2194,19 @@ function recordMatchAction(matchId: string, patch: MatchPatch | null, playerId: 
         if (!recording.lastAvatars) recording.lastAvatars = {};
         for (const seatKey of ["p1", "p2"]) {
           const seat = seatKey as "p1" | "p2";
-          const av = (avatars as Record<string, unknown>)[seat] as Record<string, unknown> | undefined;
+          const av = (avatars as Record<string, unknown>)[seat] as
+            | Record<string, unknown>
+            | undefined;
           if (av) recording.lastAvatars[seat] = av;
         }
       }
       if (plays.length > 0) {
-        const acc = (recording.cardPlays ||= { p1: new Set<number>(), p2: new Set<number>() });
+        const acc = (recording.cardPlays ||= {
+          p1: new Set<number>(),
+          p2: new Set<number>(),
+        });
         for (const it of plays) {
-          const seat = it.owner === 1 ? "p1" : "p2";
+          const seat = seatFromOwner(it.owner) as "p1" | "p2";
           acc[seat].add(it.cardId);
         }
       }
@@ -2037,16 +2233,21 @@ function finishMatchRecording(matchId: string): void {
 
 const REQUIRE_JWT = Boolean(
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "1" ||
-  (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
+    (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
 );
 
 // Enforce NextAuth-signed JWT at connect time
 io.use((socket: SocketClient, next: (err?: Error) => void) => {
   try {
-    const handshakeAuth = socket.handshake?.auth as { token?: string } | undefined;
+    const handshakeAuth = socket.handshake?.auth as
+      | { token?: string }
+      | undefined;
     const token = handshakeAuth?.token ?? null;
     if (token && process.env.NEXTAUTH_SECRET) {
-      const payload = jwt.verify(token, process.env.NEXTAUTH_SECRET) as NextAuthJwtPayload;
+      const payload = jwt.verify(
+        token,
+        process.env.NEXTAUTH_SECRET
+      ) as NextAuthJwtPayload;
       socket.data = socket.data || {};
       socket.data.authUser = {
         id: payload?.uid || payload?.sub || null,
@@ -2215,120 +2416,123 @@ io.on("connection", async (socket: SocketClient) => {
         }
       } catch {}
     }
-});
+  });
 
-// --- Tournament Draft session rooms + presence ---
-socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
-  if (!authed) return;
-  const sessionId = payload?.sessionId;
-  if (!sessionId) return;
-  try {
-    await socket.join(`draft:${sessionId}`);
-    currentDraftSessionId = sessionId;
-    // Ack
-    try {
-      socket.emit("draft:session:joined", { sessionId });
-    } catch {}
-    // Presence update
-    try {
-      const pid = playerIdBySocket.get(socket.id);
-      const p = pid ? players.get(pid) : null;
-      const list = await updateDraftPresence(
-        sessionId,
-        pid || "unknown",
-        p?.displayName || null,
-        true
-      );
-      if (pid) {
-        try {
-          await prisma.draftParticipant.updateMany({
-            where: { draftSessionId: sessionId, playerId: pid },
-            data: { status: "active" },
-          });
-        } catch (err) {
-          try {
-            console.warn(
-              "[draft] failed to mark participant active",
-              safeErrorMessage(err)
-            );
-          } catch {}
-        }
-      }
-      io.to(`draft:${sessionId}`).emit("draft:session:presence", {
-        sessionId,
-        players: list,
-      });
-      // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
-      try {
-        setTimeout(() => {
-          try {
-            io.to(socket.id).emit("draft:session:presence", {
-              sessionId,
-              players: list,
-            });
-          } catch {}
-        }, 25);
-      } catch {}
-      // Send current draft state snapshot to the joining socket (tournament draft engine)
-      try {
-        const mod = await tournamentModules.loadEngine();
-        if (mod && typeof mod.getState === "function") {
-          const s = await mod.getState(sessionId);
-          if (s) {
-            try {
-              io.to(socket.id).emit("draftUpdate", s);
-            } catch {}
-          }
-        }
-      } catch {}
-    } catch {}
-  } catch (e) {
-    try {
-      socket.emit("draft:error", {
-        errorCode: "join_failed",
-        errorMessage: String(safeErrorMessage(e)),
-      });
-    } catch {}
-  }
-});
-
-  socket.on("draft:session:leave", async (payload?: DraftSessionLeavePayload) => {
-    const sessionId = payload?.sessionId || currentDraftSessionId;
+  // --- Tournament Draft session rooms + presence ---
+  socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
+    if (!authed) return;
+    const sessionId = payload?.sessionId;
     if (!sessionId) return;
     try {
-      await socket.leave(`draft:${sessionId}`);
-    } finally {
-      if (currentDraftSessionId === sessionId) currentDraftSessionId = null;
+      await socket.join(`draft:${sessionId}`);
+      currentDraftSessionId = sessionId;
+      // Ack
+      try {
+        socket.emit("draft:session:joined", { sessionId });
+      } catch {}
+      // Presence update
       try {
         const pid = playerIdBySocket.get(socket.id);
+        const p = pid ? players.get(pid) : null;
+        const list = await updateDraftPresence(
+          sessionId,
+          pid || "unknown",
+          p?.displayName || null,
+          true
+        );
         if (pid) {
-          const list = await updateDraftPresence(
-            sessionId,
-            pid,
-            players.get(pid)?.displayName || null,
-            false
-          );
-          io.to(`draft:${sessionId}`).emit("draft:session:presence", {
-            sessionId,
-            players: list,
-          });
           try {
             await prisma.draftParticipant.updateMany({
               where: { draftSessionId: sessionId, playerId: pid },
-              data: { status: "disconnected" },
+              data: { status: "active" },
             });
           } catch (err) {
             try {
               console.warn(
-                "[draft] failed to mark participant disconnected",
+                "[draft] failed to mark participant active",
                 safeErrorMessage(err)
               );
             } catch {}
           }
         }
+        io.to(`draft:${sessionId}`).emit("draft:session:presence", {
+          sessionId,
+          players: list,
+        });
+        // Also emit directly to the joining socket after a short delay to avoid missing the snapshot
+        try {
+          setTimeout(() => {
+            try {
+              io.to(socket.id).emit("draft:session:presence", {
+                sessionId,
+                players: list,
+              });
+            } catch {}
+          }, 25);
+        } catch {}
+        // Send current draft state snapshot to the joining socket (tournament draft engine)
+        try {
+          const mod = await tournamentModules.loadEngine();
+          if (mod && typeof mod.getState === "function") {
+            const s = await mod.getState(sessionId);
+            if (s) {
+              try {
+                io.to(socket.id).emit("draftUpdate", s);
+              } catch {}
+            }
+          }
+        } catch {}
+      } catch {}
+    } catch (e) {
+      try {
+        socket.emit("draft:error", {
+          errorCode: "join_failed",
+          errorMessage: String(safeErrorMessage(e)),
+        });
       } catch {}
     }
   });
+
+  socket.on(
+    "draft:session:leave",
+    async (payload?: DraftSessionLeavePayload) => {
+      const sessionId = payload?.sessionId || currentDraftSessionId;
+      if (!sessionId) return;
+      try {
+        await socket.leave(`draft:${sessionId}`);
+      } finally {
+        if (currentDraftSessionId === sessionId) currentDraftSessionId = null;
+        try {
+          const pid = playerIdBySocket.get(socket.id);
+          if (pid) {
+            const list = await updateDraftPresence(
+              sessionId,
+              pid,
+              players.get(pid)?.displayName || null,
+              false
+            );
+            io.to(`draft:${sessionId}`).emit("draft:session:presence", {
+              sessionId,
+              players: list,
+            });
+            try {
+              await prisma.draftParticipant.updateMany({
+                where: { draftSessionId: sessionId, playerId: pid },
+                data: { status: "disconnected" },
+              });
+            } catch (err) {
+              try {
+                console.warn(
+                  "[draft] failed to mark participant disconnected",
+                  safeErrorMessage(err)
+                );
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+    }
+  );
 
   // Per-player mulligan completion. When all players are done, advance to Main.
   socket.on("mulliganDone", async () => {
@@ -2408,7 +2612,8 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
   });
 
   socket.on("watchMatch", async (payload) => {
-    const matchId = payload && typeof payload.matchId === "string" ? payload.matchId : null;
+    const matchId =
+      payload && typeof payload.matchId === "string" ? payload.matchId : null;
     if (!matchId) return;
     const player = getPlayerBySocket(socket);
     try {
@@ -2420,9 +2625,16 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         return;
       }
       // Disallow spectating your own active match
-      if (player && Array.isArray(match.playerIds) && match.playerIds.includes(player.id)) {
+      if (
+        player &&
+        Array.isArray(match.playerIds) &&
+        match.playerIds.includes(player.id)
+      ) {
         try {
-          socket.emit("watch:error", { matchId, message: "cannot_spectate_own_match" });
+          socket.emit("watch:error", {
+            matchId,
+            message: "cannot_spectate_own_match",
+          });
         } catch {}
         return;
       }
@@ -2433,8 +2645,12 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
       } catch {}
       try {
         socket.data = socket.data || {};
-        (socket.data as { isSpectator?: boolean; watchMatchId?: string }).isSpectator = true;
-        (socket.data as { isSpectator?: boolean; watchMatchId?: string }).watchMatchId = matchId;
+        (
+          socket.data as { isSpectator?: boolean; watchMatchId?: string }
+        ).isSpectator = true;
+        (
+          socket.data as { isSpectator?: boolean; watchMatchId?: string }
+        ).watchMatchId = matchId;
         // Commentator mode: tournament host or IDs listed in env COMMENTATOR_IDS can view hands
         let canViewHands = false;
         try {
@@ -2454,21 +2670,34 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           });
         } catch {}
         if (canViewHands) {
-          try { await socket.join(`spectate:${matchId}:hands`); } catch {}
+          try {
+            await socket.join(`spectate:${matchId}:hands`);
+          } catch {}
         }
       } catch {}
-      try { await broadcastSpectatorsUpdated(matchId); } catch {}
+      try {
+        await broadcastSpectatorsUpdated(matchId);
+      } catch {}
 
       // Announce spectator join to players via console event
       try {
         const name = player?.displayName || "Spectator";
-        const canViewHands = Boolean((socket as unknown as { data?: { canViewHands?: boolean } | undefined }).data?.canViewHands);
+        const canViewHands = Boolean(
+          (
+            socket as unknown as {
+              data?: { canViewHands?: boolean } | undefined;
+            }
+          ).data?.canViewHands
+        );
         const handsText = canViewHands ? " (can see hands)" : "";
         io.to(`match:${matchId}`).emit("statePatch", {
           patch: {
             events: [
-              { ts: Date.now(), text: `${name} joined as spectator${handsText}` }
-            ]
+              {
+                ts: Date.now(),
+                text: `${name} joined as spectator${handsText}`,
+              },
+            ],
           },
           t: Date.now(),
         });
@@ -2485,7 +2714,8 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
       try {
         const base = getMatchInfo(match);
         const info = sanitizeMatchInfoForSpectator(base);
-        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = { match: info };
+        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } =
+          { match: info };
         const game = match?.game;
         let meaningful = false;
         if (isRecord(game)) {
@@ -2493,8 +2723,13 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           else meaningful = Object.keys(game).length > 0;
         }
         if (meaningful) {
-          const enriched = await enrichPatchWithCostsSafe((match.game ?? null) as MatchPatch | null, prisma);
-          snap.game = sanitizeGameForSpectator(enriched as unknown as AnyRecord) as unknown as MatchPatch | null;
+          const enriched = await enrichPatchWithCostsSafe(
+            (match.game ?? null) as MatchPatch | null,
+            prisma
+          );
+          snap.game = sanitizeGameForSpectator(
+            enriched as unknown as AnyRecord
+          ) as unknown as MatchPatch | null;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
         }
         io.to(socket.id).emit("resyncResponse", { snapshot: snap });
@@ -2525,11 +2760,20 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
     let forfeitWinnerSeat: Seat | null = null;
     try {
       if (match) {
-        const leftSeat = getSeatForPlayer(match as unknown as { playerIds?: string[] | null }, player.id) as Seat | null;
+        const leftSeat = getSeatForPlayer(
+          match as unknown as { playerIds?: string[] | null },
+          player.id
+        ) as Seat | null;
         const oppSeat = leftSeat ? getOpponentSeatStrict(leftSeat) : null;
         const candidate = oppSeat
-          ? (getPlayerIdForSeat(match as unknown as { playerIds?: string[] | null }, oppSeat) as string | null)
-          : (inferLoserId(match as unknown as { playerIds?: string[] | null }, player.id) as string | null);
+          ? (getPlayerIdForSeat(
+              match as unknown as { playerIds?: string[] | null },
+              oppSeat
+            ) as string | null)
+          : (inferLoserId(
+              match as unknown as { playerIds?: string[] | null },
+              player.id
+            ) as string | null);
         if (candidate && (oppSeat === "p1" || oppSeat === "p2")) {
           forfeitWinnerId = candidate;
           forfeitWinnerSeat = oppSeat;
@@ -2815,7 +3059,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           ts: Date.now(),
         };
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "d20Roll") {
       try {
@@ -2837,7 +3083,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           ts: Date.now(),
         } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "attackDeclare") {
       try {
@@ -2847,28 +3095,53 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         const msg = payload as {
           id?: unknown;
           tile?: { x?: unknown; y?: unknown };
-          attacker?: { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown };
+          attacker?: {
+            at?: unknown;
+            index?: unknown;
+            instanceId?: unknown;
+            owner?: unknown;
+          };
           target?: { kind?: unknown; at?: unknown; index?: unknown };
         };
         const id = typeof msg.id === "string" ? msg.id : rid("cmb");
         const x = Number(msg.tile?.x);
         const y = Number(msg.tile?.y);
-        const at = typeof msg.attacker?.at === "string" ? (msg.attacker?.at as string) : null;
+        const at =
+          typeof msg.attacker?.at === "string"
+            ? (msg.attacker?.at as string)
+            : null;
         const indexVal = Number(msg.attacker?.index);
         const ownerVal = Number(msg.attacker?.owner);
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !at ||
+          !Number.isFinite(indexVal) ||
+          !Number.isFinite(ownerVal)
+        )
+          return;
         // Normalize optional target
-        let target: { kind: "permanent" | "avatar" | "site"; at: string; index: number | null } | null = null;
+        let target: {
+          kind: "permanent" | "avatar" | "site";
+          at: string;
+          index: number | null;
+        } | null = null;
         try {
           const raw = msg.target as unknown;
           if (raw && typeof raw === "object") {
             const rec = raw as Record<string, unknown>;
             const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
             const a = typeof rec.at === "string" ? (rec.at as string) : "";
-            const idx = (rec.index == null ? null : Number(rec.index)) as number | null;
+            const idx = (rec.index == null ? null : Number(rec.index)) as
+              | number
+              | null;
             const okKind = k === "permanent" || k === "avatar" || k === "site";
             if (okKind && a && (idx === null || Number.isFinite(idx))) {
-              target = { kind: k as "permanent" | "avatar" | "site", at: a, index: idx };
+              target = {
+                kind: k as "permanent" | "avatar" | "site",
+                at: a,
+                index: idx,
+              };
             }
           }
         } catch {}
@@ -2876,13 +3149,23 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           type: "attackDeclare",
           id,
           tile: { x, y },
-          attacker: { at, index: Number(indexVal), instanceId: typeof msg.attacker?.instanceId === "string" ? (msg.attacker?.instanceId as string) : null, owner: Number(ownerVal) as 1 | 2 },
+          attacker: {
+            at,
+            index: Number(indexVal),
+            instanceId:
+              typeof msg.attacker?.instanceId === "string"
+                ? (msg.attacker?.instanceId as string)
+                : null,
+            owner: Number(ownerVal) as 1 | 2,
+          },
           ...(target ? { target } : {}),
           playerKey,
           ts: Date.now(),
         } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "interceptOffer") {
       try {
@@ -2892,26 +3175,51 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         const msg = payload as {
           id?: unknown;
           tile?: { x?: unknown; y?: unknown };
-          attacker?: { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown };
+          attacker?: {
+            at?: unknown;
+            index?: unknown;
+            instanceId?: unknown;
+            owner?: unknown;
+          };
         };
         const id = typeof msg.id === "string" ? msg.id : rid("cmb");
         const x = Number(msg.tile?.x);
         const y = Number(msg.tile?.y);
-        const at = typeof msg.attacker?.at === "string" ? (msg.attacker?.at as string) : null;
+        const at =
+          typeof msg.attacker?.at === "string"
+            ? (msg.attacker?.at as string)
+            : null;
         const indexVal = Number(msg.attacker?.index);
         const ownerVal = Number(msg.attacker?.owner);
-        const instanceId = typeof msg.attacker?.instanceId === "string" ? (msg.attacker?.instanceId as string) : null;
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return;
+        const instanceId =
+          typeof msg.attacker?.instanceId === "string"
+            ? (msg.attacker?.instanceId as string)
+            : null;
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !at ||
+          !Number.isFinite(indexVal) ||
+          !Number.isFinite(ownerVal)
+        )
+          return;
         const out = {
           type: "interceptOffer",
           id,
           tile: { x, y },
-          attacker: { at, index: Number(indexVal), instanceId, owner: Number(ownerVal) as 1 | 2 },
+          attacker: {
+            at,
+            index: Number(indexVal),
+            instanceId,
+            owner: Number(ownerVal) as 1 | 2,
+          },
           playerKey,
           ts: Date.now(),
         } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "combatSetDefenders") {
       try {
@@ -2920,22 +3228,43 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         const playerKey = getSeatForPlayer(match, player.id) || "p1";
         const msg = payload as { id?: unknown; defenders?: unknown };
         const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.defenders) ? (msg.defenders as unknown[]) : [];
+        const raw = Array.isArray(msg.defenders)
+          ? (msg.defenders as unknown[])
+          : [];
         const defenders = raw
-          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .map((d) =>
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+          )
           .filter(Boolean)
           .map((d) => {
             const at = typeof d!.at === "string" ? (d!.at as string) : null;
             const indexVal = Number(d!.index);
             const ownerVal = Number(d!.owner);
-            const instanceId = typeof d!.instanceId === "string" ? (d!.instanceId as string) : null;
-            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return null;
-            return { at, index: Number(indexVal), owner: Number(ownerVal) as 1 | 2, instanceId };
+            const instanceId =
+              typeof d!.instanceId === "string"
+                ? (d!.instanceId as string)
+                : null;
+            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal))
+              return null;
+            return {
+              at,
+              index: Number(indexVal),
+              owner: Number(ownerVal) as 1 | 2,
+              instanceId,
+            };
           })
           .filter(Boolean);
-        const out = { type: "combatSetDefenders", id, defenders, playerKey, ts: Date.now() } as const;
+        const out = {
+          type: "combatSetDefenders",
+          id,
+          defenders,
+          playerKey,
+          ts: Date.now(),
+        } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "combatResolve") {
       try {
@@ -2945,19 +3274,35 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         const msg = payload as {
           id?: unknown;
           tile?: { x?: unknown; y?: unknown };
-          attacker?: { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown };
+          attacker?: {
+            at?: unknown;
+            index?: unknown;
+            instanceId?: unknown;
+            owner?: unknown;
+          };
           defenders?: unknown[];
         };
         const id = typeof msg.id === "string" ? msg.id : rid("cmb");
         const x = Number(msg.tile?.x);
         const y = Number(msg.tile?.y);
-        const tile = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
-        const at = typeof msg.attacker?.at === "string" ? (msg.attacker?.at as string) : null;
+        const tile =
+          Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+        const at =
+          typeof msg.attacker?.at === "string"
+            ? (msg.attacker?.at as string)
+            : null;
         const indexVal = Number(msg.attacker?.index);
-        const attacker = at && Number.isFinite(indexVal) ? { at, index: Number(indexVal) } : undefined;
-        const raw = Array.isArray(msg.defenders) ? (msg.defenders as unknown[]) : [];
+        const attacker =
+          at && Number.isFinite(indexVal)
+            ? { at, index: Number(indexVal) }
+            : undefined;
+        const raw = Array.isArray(msg.defenders)
+          ? (msg.defenders as unknown[])
+          : [];
         const defenders = raw
-          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .map((d) =>
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+          )
           .filter(Boolean)
           .map((d) => {
             const dat = typeof d!.at === "string" ? (d!.at as string) : null;
@@ -2966,17 +3311,33 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
             return { at: dat, index: Number(didx) };
           })
           .filter(Boolean);
-        const out = { type: "combatResolve", id, tile, attacker, defenders, playerKey, ts: Date.now() } as const;
+        const out = {
+          type: "combatResolve",
+          id,
+          ...(tile ? { tile } : {}),
+          ...(attacker ? { attacker } : {}),
+          defenders,
+          playerKey,
+          ts: Date.now(),
+        } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "combatCancel") {
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
-        const out = { type: "combatCancel", id: (payload as { id?: unknown })?.id ?? rid("cmb"), ts: Date.now() } as const;
+        const out = {
+          type: "combatCancel",
+          id: (payload as { id?: unknown })?.id ?? rid("cmb"),
+          ts: Date.now(),
+        } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "combatCommit") {
       try {
@@ -2990,119 +3351,77 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           tile?: { x?: unknown; y?: unknown };
         };
         const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const rawDefs = Array.isArray(msg.defenders) ? (msg.defenders as unknown[]) : [];
+        const rawDefs = Array.isArray(msg.defenders)
+          ? (msg.defenders as unknown[])
+          : [];
         const defenders = rawDefs
-          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
+          .map((d) =>
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+          )
           .filter(Boolean)
           .map((d) => {
             const at = typeof d!.at === "string" ? (d!.at as string) : null;
             const indexVal = Number(d!.index);
             const ownerVal = Number(d!.owner);
-            const instanceId = typeof d!.instanceId === "string" ? (d!.instanceId as string) : null;
-            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal)) return null;
-            return { at, index: Number(indexVal), owner: Number(ownerVal) as 1 | 2, instanceId };
+            const instanceId =
+              typeof d!.instanceId === "string"
+                ? (d!.instanceId as string)
+                : null;
+            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal))
+              return null;
+            return {
+              at,
+              index: Number(indexVal),
+              owner: Number(ownerVal) as 1 | 2,
+              instanceId,
+            };
           })
           .filter(Boolean);
         const tx = Number(msg.tile?.x);
         const ty = Number(msg.tile?.y);
-        const tile = Number.isFinite(tx) && Number.isFinite(ty) ? { x: tx, y: ty } : undefined;
-        let target: { kind: "permanent" | "avatar" | "site"; at: string; index: number | null } | undefined;
+        const tile =
+          Number.isFinite(tx) && Number.isFinite(ty)
+            ? { x: tx, y: ty }
+            : undefined;
+        let target:
+          | {
+              kind: "permanent" | "avatar" | "site";
+              at: string;
+              index: number | null;
+            }
+          | undefined;
         try {
           const rec = msg.target as Record<string, unknown> | null | undefined;
           const k = typeof rec?.kind === "string" ? (rec!.kind as string) : "";
           const a = typeof rec?.at === "string" ? (rec!.at as string) : "";
-          const idx = (rec?.index == null ? null : Number(rec!.index)) as number | null;
-          if ((k === "permanent" || k === "avatar" || k === "site") && a && (idx === null || Number.isFinite(idx))) {
-            target = { kind: k as "permanent" | "avatar" | "site", at: a, index: idx };
+          const idx = (rec?.index == null ? null : Number(rec!.index)) as
+            | number
+            | null;
+          if (
+            (k === "permanent" || k === "avatar" || k === "site") &&
+            a &&
+            (idx === null || Number.isFinite(idx))
+          ) {
+            target = {
+              kind: k as "permanent" | "avatar" | "site",
+              at: a,
+              index: idx,
+            };
           }
         } catch {}
-        const out = { type: "combatCommit", id, defenders, ...(tile ? { tile } : {}), ...(target ? { target } : {}), playerKey, ts: Date.now() } as const;
+        const out = {
+          type: "combatCommit",
+          id,
+          defenders,
+          ...(tile ? { tile } : {}),
+          ...(target ? { target } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatAssign") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; assignment?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.assignment) ? (msg.assignment as unknown[]) : [];
-        const assignment = raw
-          .map((a) => (a && typeof a === "object" ? (a as Record<string, unknown>) : null))
-          .filter(Boolean)
-          .map((a) => {
-            const at = typeof a!.at === "string" ? (a!.at as string) : null;
-            const indexVal = Number(a!.index);
-            const amount = Number(a!.amount);
-            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(amount)) return null;
-            return { at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
-          })
-          .filter(Boolean);
-        const out = { type: "combatAssign", id, assignment, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatAutoApply") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; kills?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.kills) ? (msg.kills as unknown[]) : [];
-        const kills = raw
-          .map((k) => (k && typeof k === "object" ? (k as Record<string, unknown>) : null))
-          .filter(Boolean)
-          .map((k) => {
-            const at = typeof k!.at === "string" ? (k!.at as string) : null;
-            const indexVal = Number(k!.index);
-            const owner = ((): "p1" | "p2" | null => {
-              const o = Number((k as Record<string, unknown>).owner as unknown);
-              return o === 1 ? "p1" : o === 2 ? "p2" : null;
-            })();
-            if (!at || !Number.isFinite(indexVal) || !owner) return null;
-            return { at, index: Number(indexVal), owner };
-          })
-          .filter(Boolean);
-        const out = { type: "combatAutoApply", id, kills, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatDamage") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; damage?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
-        const damage = raw
-          .map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>) : null))
-          .filter(Boolean)
-          .map((d) => {
-            const at = typeof d!.at === "string" ? (d!.at as string) : null;
-            const indexVal = Number(d!.index);
-            const amount = Number(d!.amount);
-            if (!at || !Number.isFinite(indexVal) || !Number.isFinite(amount)) return null;
-            return { at, index: Number(indexVal), amount: Math.max(0, Math.floor(amount)) };
-          })
-          .filter(Boolean);
-        const out = { type: "combatDamage", id, damage, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
-      } catch {}
-    } else if (type === "combatSummary") {
-      try {
-        const match = await getOrLoadMatch(matchId);
-        const room = `match:${matchId}`;
-        const playerKey = getSeatForPlayer(match, player.id) || "p1";
-        const msg = payload as { id?: unknown; text?: unknown };
-        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
-        const text = typeof msg.text === "string" ? msg.text : "";
-        const out = { type: "combatSummary", id, text, playerKey, ts: Date.now() } as const;
-        io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "toast") {
       try {
@@ -3114,7 +3433,457 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         if (!text) return;
         const out = { type: "toast", text, playerKey, ts: Date.now() } as const;
         io.to(room).emit("message", out);
-        try { io.to(`spectate:${matchId}`).emit("message", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicBegin") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          tile?: { x?: unknown; y?: unknown };
+          spell?: unknown;
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const rec = (
+          msg.spell && typeof msg.spell === "object"
+            ? (msg.spell as Record<string, unknown>)
+            : {}
+        ) as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId =
+          typeof rec.instanceId === "string"
+            ? (rec.instanceId as string)
+            : null;
+        const card =
+          rec.card && typeof rec.card === "object"
+            ? (rec.card as Record<string, unknown>)
+            : undefined;
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !at ||
+          !Number.isFinite(indexVal) ||
+          !(ownerVal === 1 || ownerVal === 2) ||
+          !card
+        )
+          return;
+        const out = {
+          type: "magicBegin",
+          id,
+          tile: { x, y },
+          spell: {
+            at,
+            index: Number(indexVal),
+            instanceId,
+            owner: ownerVal as 1 | 2,
+            card,
+          },
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicSetCaster") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; caster?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        let caster: {
+          kind: "avatar" | "permanent";
+          seat?: "p1" | "p2";
+          at?: string;
+          index?: number;
+          owner?: 1 | 2;
+        } | null = null;
+        try {
+          if (msg.caster && typeof msg.caster === "object") {
+            const c = msg.caster as Record<string, unknown>;
+            const kind =
+              c.kind === "avatar" || c.kind === "permanent"
+                ? (c.kind as "avatar" | "permanent")
+                : null;
+            if (kind === "avatar") {
+              const seat =
+                c.seat === "p1" || c.seat === "p2"
+                  ? (c.seat as "p1" | "p2")
+                  : null;
+              if (seat) caster = { kind: "avatar", seat };
+            } else if (kind === "permanent") {
+              const at = typeof c.at === "string" ? (c.at as string) : null;
+              const indexVal = Number(c.index);
+              const ownerVal = Number(c.owner);
+              if (
+                at &&
+                Number.isFinite(indexVal) &&
+                (ownerVal === 1 || ownerVal === 2)
+              )
+                caster = {
+                  kind: "permanent",
+                  at,
+                  index: Number(indexVal),
+                  owner: ownerVal as 1 | 2,
+                };
+            }
+          }
+        } catch {}
+        const out = {
+          type: "magicSetCaster",
+          id,
+          caster,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicSetTarget") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; target?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        let target:
+          | {
+              kind: "location" | "permanent" | "avatar";
+              at?: string;
+              index?: number;
+              seat?: "p1" | "p2";
+            }
+          | {
+              kind: "projectile";
+              direction: "N" | "E" | "S" | "W";
+              firstHit?: {
+                kind: "permanent" | "avatar";
+                at: string;
+                index?: number;
+              };
+              intended?:
+                | { kind: "permanent"; at: string; index: number }
+                | { kind: "avatar"; seat: "p1" | "p2" };
+            }
+          | null = null;
+        try {
+          if (msg.target && typeof msg.target === "object") {
+            const rec = msg.target as Record<string, unknown>;
+            const k = typeof rec.kind === "string" ? (rec.kind as string) : "";
+            if (k === "location") {
+              const at = typeof rec.at === "string" ? (rec.at as string) : null;
+              if (at) target = { kind: "location", at };
+            } else if (k === "permanent") {
+              const at = typeof rec.at === "string" ? (rec.at as string) : null;
+              const indexVal = Number(rec.index);
+              if (at && Number.isFinite(indexVal))
+                target = { kind: "permanent", at, index: Number(indexVal) };
+            } else if (k === "avatar") {
+              const seat =
+                rec.seat === "p1" || rec.seat === "p2"
+                  ? (rec.seat as "p1" | "p2")
+                  : null;
+              if (seat) target = { kind: "avatar", seat };
+            } else if (k === "projectile") {
+              const dir =
+                rec.direction === "N" ||
+                rec.direction === "E" ||
+                rec.direction === "S" ||
+                rec.direction === "W"
+                  ? (rec.direction as "N" | "E" | "S" | "W")
+                  : null;
+              if (dir) {
+                let firstHit:
+                  | { kind: "permanent" | "avatar"; at: string; index?: number }
+                  | undefined;
+                let intended:
+                  | { kind: "permanent"; at: string; index: number }
+                  | { kind: "avatar"; seat: "p1" | "p2" }
+                  | undefined;
+                try {
+                  const fh = rec.firstHit as
+                    | Record<string, unknown>
+                    | null
+                    | undefined;
+                  if (fh && typeof fh === "object") {
+                    const fhKind =
+                      fh.kind === "permanent" || fh.kind === "avatar"
+                        ? (fh.kind as "permanent" | "avatar")
+                        : null;
+                    const fhAt =
+                      typeof fh.at === "string" ? (fh.at as string) : null;
+                    if (fhKind && fhAt) {
+                      if (fhKind === "permanent") {
+                        const idx = Number(fh.index);
+                        if (Number.isFinite(idx)) {
+                          firstHit = {
+                            kind: "permanent",
+                            at: fhAt,
+                            index: Number(idx),
+                          };
+                        }
+                      } else {
+                        firstHit = { kind: "avatar", at: fhAt };
+                      }
+                    }
+                  }
+                } catch {}
+                try {
+                  const it = rec.intended as
+                    | Record<string, unknown>
+                    | null
+                    | undefined;
+                  if (it && typeof it === "object") {
+                    const itKind =
+                      it.kind === "permanent" || it.kind === "avatar"
+                        ? (it.kind as "permanent" | "avatar")
+                        : null;
+                    if (itKind === "permanent") {
+                      const itAt =
+                        typeof it.at === "string" ? (it.at as string) : null;
+                      const itIdx = Number(it.index);
+                      if (itAt && Number.isFinite(itIdx)) {
+                        intended = {
+                          kind: "permanent",
+                          at: itAt,
+                          index: Number(itIdx),
+                        };
+                      }
+                    } else if (itKind === "avatar") {
+                      const seat =
+                        it.seat === "p1" || it.seat === "p2"
+                          ? (it.seat as "p1" | "p2")
+                          : null;
+                      if (seat) {
+                        intended = { kind: "avatar", seat };
+                      }
+                    }
+                  }
+                } catch {}
+                target = {
+                  kind: "projectile",
+                  direction: dir,
+                  ...(firstHit ? { firstHit } : {}),
+                  ...(intended ? { intended } : {}),
+                };
+              }
+            }
+          }
+        } catch {}
+        const out = {
+          type: "magicSetTarget",
+          id,
+          target,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicResolve") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          tile?: { x?: unknown; y?: unknown };
+          spell?: unknown;
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const tile =
+          Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+        const rec = (
+          msg.spell && typeof msg.spell === "object"
+            ? (msg.spell as Record<string, unknown>)
+            : {}
+        ) as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId =
+          typeof rec.instanceId === "string"
+            ? (rec.instanceId as string)
+            : null;
+        const card =
+          rec.card && typeof rec.card === "object"
+            ? (rec.card as Record<string, unknown>)
+            : undefined;
+        const spell =
+          at &&
+          Number.isFinite(indexVal) &&
+          (ownerVal === 1 || ownerVal === 2) &&
+          card
+            ? {
+                at,
+                index: Number(indexVal),
+                instanceId,
+                owner: ownerVal as 1 | 2,
+                card,
+              }
+            : undefined;
+        const out = {
+          type: "magicResolve",
+          id,
+          ...(tile ? { tile } : {}),
+          ...(spell ? { spell } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicSummary") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; text?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const text = typeof msg.text === "string" ? msg.text.slice(0, 400) : "";
+        const out = {
+          type: "magicSummary",
+          id,
+          text,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicCancel") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          tile?: { x?: unknown; y?: unknown };
+          spell?: unknown;
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const x = Number(msg.tile?.x);
+        const y = Number(msg.tile?.y);
+        const tile =
+          Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+        const rec = (
+          msg.spell && typeof msg.spell === "object"
+            ? (msg.spell as Record<string, unknown>)
+            : {}
+        ) as Record<string, unknown>;
+        const at = typeof rec.at === "string" ? (rec.at as string) : null;
+        const indexVal = Number(rec.index);
+        const ownerVal = Number(rec.owner);
+        const instanceId =
+          typeof rec.instanceId === "string"
+            ? (rec.instanceId as string)
+            : null;
+        const card =
+          rec.card && typeof rec.card === "object"
+            ? (rec.card as Record<string, unknown>)
+            : undefined;
+        const spell =
+          at &&
+          Number.isFinite(indexVal) &&
+          (ownerVal === 1 || ownerVal === 2) &&
+          card
+            ? {
+                at,
+                index: Number(indexVal),
+                instanceId,
+                owner: ownerVal as 1 | 2,
+                card,
+              }
+            : undefined;
+        const out = {
+          type: "magicCancel",
+          id,
+          ...(tile ? { tile } : {}),
+          ...(spell ? { spell } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "magicDamage") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; damage?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("mag");
+        const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
+        const damage = raw
+          .map((d) =>
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+          )
+          .filter(Boolean)
+          .map((d) => {
+            const kind =
+              d!.kind === "permanent" || d!.kind === "avatar"
+                ? (d!.kind as "permanent" | "avatar")
+                : null;
+            const amount = Number(d!.amount);
+            if (!Number.isFinite(amount)) return null;
+            if (kind === "permanent") {
+              const at = typeof d!.at === "string" ? (d!.at as string) : null;
+              const indexVal = Number(d!.index);
+              if (!at || !Number.isFinite(indexVal)) return null;
+              return {
+                kind: "permanent" as const,
+                at,
+                index: Number(indexVal),
+                amount: Math.max(0, Math.floor(amount)),
+              };
+            } else if (kind === "avatar") {
+              const seat =
+                d!.seat === "p1" || d!.seat === "p2"
+                  ? (d!.seat as "p1" | "p2")
+                  : null;
+              if (!seat) return null;
+              return {
+                kind: "avatar" as const,
+                seat,
+                amount: Math.max(0, Math.floor(amount)),
+              };
+            }
+            return null;
+          })
+          .filter(Boolean);
+        const out = {
+          type: "magicDamage",
+          id,
+          damage,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
       } catch {}
     } else if (type === "boardCursor") {
       try {
@@ -3145,14 +3914,12 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
             : null;
         if (draggingCandidate) {
           const kind =
-            typeof draggingCandidate.kind === "string" ? draggingCandidate.kind : null;
-          const allowedKinds: ReadonlySet<NormalizedDragging["kind"]> = new Set([
-            "permanent",
-            "hand",
-            "pile",
-            "avatar",
-            "token",
-          ]);
+            typeof draggingCandidate.kind === "string"
+              ? draggingCandidate.kind
+              : null;
+          const allowedKinds: ReadonlySet<NormalizedDragging["kind"]> = new Set(
+            ["permanent", "hand", "pile", "avatar", "token"]
+          );
           if (kind && allowedKinds.has(kind)) {
             const next: NormalizedDragging = { kind };
             if (kind === "permanent") {
@@ -3161,12 +3928,15 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
                   ? draggingCandidate.from.slice(0, 32)
                   : null;
               const indexValue =
-                typeof draggingCandidate.index === "number" && Number.isFinite(draggingCandidate.index)
+                typeof draggingCandidate.index === "number" &&
+                Number.isFinite(draggingCandidate.index)
                   ? draggingCandidate.index
                   : typeof draggingCandidate.index === "string"
                   ? Number(draggingCandidate.index)
                   : NaN;
-              const index = Number.isFinite(indexValue) ? Number(indexValue) : null;
+              const index = Number.isFinite(indexValue)
+                ? Number(indexValue)
+                : null;
               if (from) next.from = from;
               if (index !== null) next.index = index;
             }
@@ -3189,7 +3959,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
                 : typeof draggingCandidate.cardId === "string"
                 ? Number(draggingCandidate.cardId)
                 : NaN;
-            const cardId = Number.isFinite(cardIdValue) ? Number(cardIdValue) : null;
+            const cardId = Number.isFinite(cardIdValue)
+              ? Number(cardIdValue)
+              : null;
             if (cardId !== null) next.cardId = cardId;
             const slug =
               typeof draggingCandidate.slug === "string"
@@ -3197,13 +3969,15 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
                 : null;
             if (slug) next.slug = slug;
             const metaRaw =
-              typeof draggingCandidate.meta === "object" && draggingCandidate.meta
+              typeof draggingCandidate.meta === "object" &&
+              draggingCandidate.meta
                 ? (draggingCandidate.meta as Record<string, unknown>)
                 : null;
             if (metaRaw) {
               const meta: DraggingMeta = {};
               const ownerValue =
-                typeof metaRaw.owner === "number" && Number.isFinite(metaRaw.owner)
+                typeof metaRaw.owner === "number" &&
+                Number.isFinite(metaRaw.owner)
                   ? metaRaw.owner
                   : typeof metaRaw.owner === "string"
                   ? Number(metaRaw.owner)
@@ -3233,7 +4007,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
               : typeof highlightCandidate.cardId === "string"
               ? Number(highlightCandidate.cardId)
               : NaN;
-          const cardId = Number.isFinite(cardIdValue) ? Number(cardIdValue) : null;
+          const cardId = Number.isFinite(cardIdValue)
+            ? Number(cardIdValue)
+            : null;
           const slug =
             typeof highlightCandidate.slug === "string"
               ? highlightCandidate.slug.slice(0, 64)
@@ -3256,7 +4032,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         };
         // Only emit on boardCursor channel (no duplicate message broadcast)
         io.to(room).emit("boardCursor", out);
-        try { io.to(`spectate:${matchId}`).emit("boardCursor", out); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("boardCursor", out);
+        } catch {}
         incrementMetric("cursorSentTotal");
         debugLog(`[cursor] sent for player ${player.id} in room ${room}`);
       } catch {}
@@ -3269,10 +4047,19 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
     if (player && player.matchId) {
       const match = await getOrLoadMatch(player.matchId);
       if (match) {
-        const isSpectator = Boolean((socket as unknown as { data?: { isSpectator?: boolean } | undefined }).data?.isSpectator);
+        const isSpectator = Boolean(
+          (
+            socket as unknown as {
+              data?: { isSpectator?: boolean } | undefined;
+            }
+          ).data?.isSpectator
+        );
         const baseMatchInfo = getMatchInfo(match);
-        const matchInfo = isSpectator ? sanitizeMatchInfoForSpectator(baseMatchInfo) : baseMatchInfo;
-        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = { match: matchInfo };
+        const matchInfo = isSpectator
+          ? sanitizeMatchInfoForSpectator(baseMatchInfo)
+          : baseMatchInfo;
+        const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } =
+          { match: matchInfo };
         // Only include a game snapshot when it's meaningful.
         // During sealed/draft setup the server-side game can be an empty object ({}),
         // while the client has already loaded decks locally. Sending an empty game here
@@ -3295,7 +4082,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
             return true;
           }
           const phase =
-            typeof game["phase"] === "string" ? (game["phase"] as string) : null;
+            typeof game["phase"] === "string"
+              ? (game["phase"] as string)
+              : null;
           if (phase === "Setup" && hasKey("mulligans")) return true;
           // Consider avatars meaningful when at least one seat has a card or position
           try {
@@ -3333,7 +4122,11 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
             (match.game ?? null) as MatchPatch | null,
             prisma
           );
-          snap.game = isSpectator ? (sanitizeGameForSpectator(enrichedGameRaw as unknown as AnyRecord) as unknown as MatchPatch | null) : enrichedGameRaw;
+          snap.game = isSpectator
+            ? (sanitizeGameForSpectator(
+                enrichedGameRaw as unknown as AnyRecord
+              ) as unknown as MatchPatch | null)
+            : enrichedGameRaw;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
             console.log("[resync] sending game state with d20Rolls:", {
@@ -3354,7 +4147,7 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
           } catch {}
         }
         socket.emit("resyncResponse", { snapshot: snap });
-      // If a draft is in progress, proactively sync draft state to this socket
+        // If a draft is in progress, proactively sync draft state to this socket
         try {
           if (
             match.matchType === "draft" &&
@@ -3369,15 +4162,30 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
       }
     }
     // Spectator resync: if this socket is watching a match, send a sanitized snapshot
-    const watchMatchId = (socket as unknown as { data?: { isSpectator?: boolean; watchMatchId?: string } | undefined }).data?.watchMatchId;
-    const isSpectatorSock = Boolean((socket as unknown as { data?: { isSpectator?: boolean } | undefined }).data?.isSpectator);
-    if (isSpectatorSock && typeof watchMatchId === "string" && watchMatchId.length > 0) {
+    const watchMatchId = (
+      socket as unknown as {
+        data?: { isSpectator?: boolean; watchMatchId?: string } | undefined;
+      }
+    ).data?.watchMatchId;
+    const isSpectatorSock = Boolean(
+      (socket as unknown as { data?: { isSpectator?: boolean } | undefined })
+        .data?.isSpectator
+    );
+    if (
+      isSpectatorSock &&
+      typeof watchMatchId === "string" &&
+      watchMatchId.length > 0
+    ) {
       try {
         const match = await getOrLoadMatch(watchMatchId);
         if (match) {
           const baseMatchInfo = getMatchInfo(match);
           const matchInfo = sanitizeMatchInfoForSpectator(baseMatchInfo);
-          const snap: { match: AnyRecord; game?: MatchPatch | null; t?: number } = { match: matchInfo };
+          const snap: {
+            match: AnyRecord;
+            game?: MatchPatch | null;
+            t?: number;
+          } = { match: matchInfo };
           const hasMeaningfulGame = (() => {
             const game = match?.game;
             if (!isRecord(game)) return false;
@@ -3391,11 +4199,20 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
               (match.game ?? null) as MatchPatch | null,
               prisma
             );
-            const canViewHands = Boolean((socket as unknown as { data?: { canViewHands?: boolean } | undefined }).data?.canViewHands);
+            const canViewHands = Boolean(
+              (
+                socket as unknown as {
+                  data?: { canViewHands?: boolean } | undefined;
+                }
+              ).data?.canViewHands
+            );
             snap.game = canViewHands
-              ? ((enrichedGameRaw as unknown) as MatchPatch | null)
-              : (sanitizeGameForSpectator(enrichedGameRaw as unknown as AnyRecord) as unknown as MatchPatch | null);
-            snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
+              ? (enrichedGameRaw as unknown as MatchPatch | null)
+              : (sanitizeGameForSpectator(
+                  enrichedGameRaw as unknown as AnyRecord
+                ) as unknown as MatchPatch | null);
+            snap.t =
+              typeof match.lastTs === "number" ? match.lastTs : Date.now();
           }
           socket.emit("resyncResponse", { snapshot: snap });
           return;
@@ -3517,9 +4334,7 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
         // Exclude if any player is a bot (ID starts with 'cpu_' or 'host_')
         return !playerIds.some((playerId) => {
           const pid =
-            typeof playerId === "string"
-              ? playerId
-              : String(playerId ?? "");
+            typeof playerId === "string" ? playerId : String(playerId ?? "");
           return pid.startsWith("cpu_") || pid.startsWith("host_");
         });
       });
@@ -3797,7 +4612,9 @@ socket.on("draft:session:join", async (payload?: DraftSessionJoinPayload) => {
 
   socket.on("disconnect", () => {
     try {
-      const watchId = (socket as unknown as { data?: { watchMatchId?: string } | undefined }).data?.watchMatchId;
+      const watchId = (
+        socket as unknown as { data?: { watchMatchId?: string } | undefined }
+      ).data?.watchMatchId;
       if (typeof watchId === "string" && watchId.length > 0) {
         void broadcastSpectatorsUpdated(watchId);
       }

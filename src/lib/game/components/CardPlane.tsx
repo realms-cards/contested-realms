@@ -37,6 +37,9 @@ interface CardPlaneProps {
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerMove?: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerUp?: (e: ThreeEvent<PointerEvent>) => void;
+  onDoubleClick?: (e: ThreeEvent<PointerEvent>) => void;
   onClick?: (e: ThreeEvent<PointerEvent>) => void;
   cardId?: number; // for raycasting identification
 }
@@ -60,6 +63,9 @@ function CardFallback({
   onPointerDown,
   onPointerOver,
   onPointerOut,
+  onPointerMove,
+  onPointerUp,
+  onDoubleClick,
   onClick,
 }: Omit<CardPlaneProps, "slug" | "textureUrl">) {
   return (
@@ -73,6 +79,9 @@ function CardFallback({
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onDoubleClick={onDoubleClick}
       onClick={onClick}
       castShadow
     >
@@ -110,6 +119,9 @@ function CardBackFallback({
   onPointerDown,
   onPointerOver,
   onPointerOut,
+  onPointerMove,
+  onPointerUp,
+  onDoubleClick,
   onClick,
   preferRaster = false,
   textureRotation,
@@ -148,6 +160,9 @@ function CardBackFallback({
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={onDoubleClick}
         onClick={onClick}
       />
     );
@@ -163,6 +178,9 @@ function CardBackFallback({
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onDoubleClick={onDoubleClick}
       onClick={onClick}
       castShadow
     >
@@ -205,6 +223,9 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     onPointerDown,
     onPointerOver,
     onPointerOut,
+    onPointerMove,
+    onPointerUp,
+    onDoubleClick,
     onClick,
     cardId,
     textureRotation,
@@ -263,6 +284,9 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onDoubleClick={onDoubleClick}
       onClick={onClick}
       castShadow
       userData={{ 
