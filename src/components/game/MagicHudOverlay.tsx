@@ -37,7 +37,11 @@ export default function MagicHudOverlay() {
     ? getCellNumber(pendingMagic.tile.x, pendingMagic.tile.y, board.size.w)
     : null;
   const cardName = (() => {
-    try { return pendingMagic.spell.card?.name || "Magic"; } catch { return "Magic"; }
+    try {
+      return pendingMagic.spell.card?.name || "Magic";
+    } catch {
+      return "Magic";
+    }
   })();
   const status = pendingMagic.status;
   const getPermanentName = (
@@ -51,7 +55,78 @@ export default function MagicHudOverlay() {
   // actorIsActive computed above
 
   function TopBar() {
+    const defenderSeat = ownerSeat ? opponentSeat(ownerSeat) : null;
+    const iAmDefender = defenderSeat && actorKey === defenderSeat;
+
+    const pm = pendingMagic as NonNullable<typeof pendingMagic>;
+
+    const targetNameForText = (() => {
+      const t = pm.target;
+      if (!t) return null as string | null;
+      if (t.kind === "location") return String(t.at);
+      if (t.kind === "permanent") {
+        try {
+          return permanents?.[t.at]?.[t.index]?.card?.name || "Permanent";
+        } catch {}
+        return "Permanent";
+      }
+      if (t.kind === "avatar") {
+        return `Avatar ${t.seat.toUpperCase()}`;
+      }
+      if (t.kind === "projectile") {
+        if (t.intended) {
+          if (t.intended.kind === "permanent") {
+            try {
+              return (
+                permanents?.[t.intended.at]?.[t.intended.index]?.card?.name ||
+                "Permanent"
+              );
+            } catch {}
+            return "Permanent";
+          }
+          return `Avatar ${t.intended.seat.toUpperCase()}`;
+        }
+        if (t.firstHit) {
+          if (t.firstHit.kind === "permanent") {
+            return getPermanentName(t.firstHit.at, t.firstHit.index);
+          }
+          // Map avatar seat from cell if possible
+          const seatByCell: Record<string, "p1" | "p2"> = (() => {
+            const map: Record<string, "p1" | "p2"> = {};
+            try {
+              const p1 = avatars?.p1?.pos;
+              if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1";
+            } catch {}
+            try {
+              const p2 = avatars?.p2?.pos;
+              if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2";
+            } catch {}
+            return map;
+          })();
+          const seat = seatByCell[t.firstHit.at];
+          return seat ? `Avatar ${seat.toUpperCase()}` : "Avatar";
+        }
+      }
+      return null as string | null;
+    })();
+
     const stepsText = (() => {
+      // For the non-active defending player, once a target is chosen,
+      // show an explicit "Spell targets Target" sentence.
+      if (
+        !actorIsActive &&
+        iAmDefender &&
+        pm.target &&
+        (status === "choosingTarget" || status === "confirm")
+      ) {
+        const tn = targetNameForText;
+        if (tn) {
+          // Tile prefix [T#] is rendered outside stepsText; keep only the
+          // "Spell" targets "Target" portion here.
+          return `"${cardName}" targets "${tn}"`;
+        }
+      }
+
       if (status === "choosingCaster") return `Select a Spellcaster`;
       if (status === "choosingTarget") return `Select a target`;
       if (status === "confirm") return `Cast ${cardName}`;
@@ -59,24 +134,31 @@ export default function MagicHudOverlay() {
       return `Casting ${cardName}`;
     })();
 
-    const defenderSeat = ownerSeat ? opponentSeat(ownerSeat) : null;
-    const iAmDefender = defenderSeat && actorKey === defenderSeat;
-
-    const pm = pendingMagic as NonNullable<typeof pendingMagic>;
-
     const casterChip = (() => {
       const c = pm.caster;
       if (!c) return null;
-      if (c.kind === "avatar") return <span className="px-2 py-0.5 rounded bg-white/10">Caster: Avatar {c.seat.toUpperCase()}</span>;
+      if (c.kind === "avatar")
+        return (
+          <span className="px-2 py-0.5 rounded bg-white/10">
+            Caster: Avatar {c.seat.toUpperCase()}
+          </span>
+        );
       if (c.kind === "permanent") {
         try {
-          const name = permanents?.[c.at]?.[Number(c.index)]?.card?.name || null;
+          const name =
+            permanents?.[c.at]?.[Number(c.index)]?.card?.name || null;
           const at = c.at;
           return (
-            <span className="px-2 py-0.5 rounded bg-white/10">Caster: {name ? name : "Permanent"} @{at}</span>
+            <span className="px-2 py-0.5 rounded bg-white/10">
+              Caster: {name ? name : "Permanent"} @{at}
+            </span>
           );
         } catch {}
-        return <span className="px-2 py-0.5 rounded bg-white/10">Caster: Permanent @{c.at}</span>;
+        return (
+          <span className="px-2 py-0.5 rounded bg-white/10">
+            Caster: Permanent @{c.at}
+          </span>
+        );
       }
       return null;
     })();
@@ -86,27 +168,47 @@ export default function MagicHudOverlay() {
     const targetChip = (() => {
       const t = pm.target;
       if (!t) return null;
-      if (t.kind === "location") return <span className="px-2 py-0.5 rounded bg-white/10">Target: {t.at}</span>;
+      if (t.kind === "location")
+        return (
+          <span className="px-2 py-0.5 rounded bg-white/10">
+            Target: {t.at}
+          </span>
+        );
       if (t.kind === "permanent") {
         const nm = permanents?.[t.at]?.[t.index]?.card?.name || "Permanent";
-        return <span className="px-2 py-0.5 rounded bg-white/10">Target: {nm}</span>;
+        return (
+          <span className="px-2 py-0.5 rounded bg-white/10">Target: {nm}</span>
+        );
       }
-      if (t.kind === "avatar") return <span className="px-2 py-0.5 rounded bg-white/10">Target: Avatar {t.seat.toUpperCase()}</span>;
+      if (t.kind === "avatar")
+        return (
+          <span className="px-2 py-0.5 rounded bg-white/10">
+            Target: Avatar {t.seat.toUpperCase()}
+          </span>
+        );
       if (t.kind === "projectile") {
         let label: string | null = null;
         if (t.intended) {
-          if (t.intended.kind === "permanent") label = permanents?.[t.intended.at]?.[t.intended.index]?.card?.name || "Permanent";
+          if (t.intended.kind === "permanent")
+            label =
+              permanents?.[t.intended.at]?.[t.intended.index]?.card?.name ||
+              "Permanent";
           else label = `Avatar ${t.intended.seat.toUpperCase()}`;
         } else if (t.firstHit) {
           if (t.firstHit.kind === "permanent") {
             label = getPermanentName(t.firstHit.at, t.firstHit.index);
-          }
-          else {
+          } else {
             // map avatar seat from cell if possible
             const seatByCell: Record<string, "p1" | "p2"> = (() => {
               const map: Record<string, "p1" | "p2"> = {};
-              try { const p1 = avatars?.p1?.pos; if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1"; } catch {}
-              try { const p2 = avatars?.p2?.pos; if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2"; } catch {}
+              try {
+                const p1 = avatars?.p1?.pos;
+                if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1";
+              } catch {}
+              try {
+                const p2 = avatars?.p2?.pos;
+                if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2";
+              } catch {}
               return map;
             })();
             const seat = seatByCell[t.firstHit.at];
@@ -115,7 +217,14 @@ export default function MagicHudOverlay() {
         }
         return (
           <span className="px-2 py-0.5 rounded bg-white/10">
-            {label ? <>Target: {label} <span className="opacity-70">({t.direction})</span></> : <>Direction: {t.direction}</>}
+            {label ? (
+              <>
+                Target: {label}{" "}
+                <span className="opacity-70">({t.direction})</span>
+              </>
+            ) : (
+              <>Direction: {t.direction}</>
+            )}
           </span>
         );
       }
@@ -129,10 +238,15 @@ export default function MagicHudOverlay() {
             {tileNum ? `[T${tileNum}] ` : ""}
             <span className="font-fantaisie">{stepsText}</span>
           </span>
+          {/* Always show target chip when available, hide other chips on mobile */}
+          {targetChip && (
+            <span className="inline-flex items-center gap-2 text-sm opacity-90">
+              {targetChip}
+            </span>
+          )}
           <span className="hidden md:inline-flex items-center gap-2 text-sm opacity-90">
             {casterChip}
             {cardChip}
-            {targetChip}
           </span>
           {actorIsActive && status === "choosingTarget" ? (
             <>
@@ -140,7 +254,9 @@ export default function MagicHudOverlay() {
                 <button
                   className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 select-none"
                   onClick={() => {
-                    try { confirmMagic(); } catch {}
+                    try {
+                      confirmMagic();
+                    } catch {}
                   }}
                 >
                   Confirm
@@ -193,10 +309,12 @@ export default function MagicHudOverlay() {
     const seatByCell: Record<string, "p1" | "p2"> = (() => {
       const map: Record<string, "p1" | "p2"> = {};
       try {
-        const p1 = avatars?.p1?.pos; if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1";
+        const p1 = avatars?.p1?.pos;
+        if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1";
       } catch {}
       try {
-        const p2 = avatars?.p2?.pos; if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2";
+        const p2 = avatars?.p2?.pos;
+        if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2";
       } catch {}
       return map;
     })();
@@ -207,10 +325,14 @@ export default function MagicHudOverlay() {
         let label = "";
         if (t.intended) {
           if (t.intended.kind === "permanent") {
-            const nm = permanents?.[t.intended.at]?.[t.intended.index]?.card?.name || "Permanent";
+            const nm =
+              permanents?.[t.intended.at]?.[t.intended.index]?.card?.name ||
+              "Permanent";
             label = `-> ${nm} (${t.direction})`;
           } else {
-            label = `-> Avatar ${t.intended.seat.toUpperCase()} (${t.direction})`;
+            label = `-> Avatar ${t.intended.seat.toUpperCase()} (${
+              t.direction
+            })`;
           }
         } else if (t.firstHit) {
           if (t.firstHit.kind === "permanent") {
@@ -219,12 +341,20 @@ export default function MagicHudOverlay() {
           } else {
             const seatByCell: Record<string, "p1" | "p2"> = (() => {
               const map: Record<string, "p1" | "p2"> = {};
-              try { const p1 = avatars?.p1?.pos; if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1"; } catch {}
-              try { const p2 = avatars?.p2?.pos; if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2"; } catch {}
+              try {
+                const p1 = avatars?.p1?.pos;
+                if (Array.isArray(p1)) map[`${p1[0]},${p1[1]}`] = "p1";
+              } catch {}
+              try {
+                const p2 = avatars?.p2?.pos;
+                if (Array.isArray(p2)) map[`${p2[0]},${p2[1]}`] = "p2";
+              } catch {}
               return map;
             })();
             const seat = seatByCell[t.firstHit.at];
-            label = `-> ${seat ? `Avatar ${seat.toUpperCase()}` : "Avatar"} (${t.direction})`;
+            label = `-> ${seat ? `Avatar ${seat.toUpperCase()}` : "Avatar"} (${
+              t.direction
+            })`;
           }
         } else {
           label = `-> ${t.direction}`;
@@ -241,11 +371,16 @@ export default function MagicHudOverlay() {
     })();
 
     const projectileMismatchWarning = (() => {
-      if (!t || t.kind !== "projectile" || !t.intended || !t.firstHit) return null;
+      if (!t || t.kind !== "projectile" || !t.intended || !t.firstHit)
+        return null;
       // compare intended vs firstHit
       let mismatch = false;
       if (t.intended.kind === "permanent") {
-        mismatch = !(t.firstHit.kind === "permanent" && t.firstHit.at === t.intended.at && t.firstHit.index === t.intended.index);
+        mismatch = !(
+          t.firstHit.kind === "permanent" &&
+          t.firstHit.at === t.intended.at &&
+          t.firstHit.index === t.intended.index
+        );
       } else {
         // intended avatar: try to match seat via position
         const seatAt = (() => {
@@ -256,7 +391,11 @@ export default function MagicHudOverlay() {
           } catch {}
           return null;
         })();
-        mismatch = !(t.firstHit.kind === "avatar" && seatAt && t.firstHit.at === seatAt);
+        mismatch = !(
+          t.firstHit.kind === "avatar" &&
+          seatAt &&
+          t.firstHit.at === seatAt
+        );
       }
       if (!mismatch) return null;
       // Build names for message
@@ -267,17 +406,23 @@ export default function MagicHudOverlay() {
       let hitName = "something";
       if (t.firstHit.kind === "permanent") {
         hitName = getPermanentName(t.firstHit.at, t.firstHit.index) || "a unit";
-      }
-      else {
+      } else {
         const seat = seatByCell[t.firstHit.at];
         hitName = seat ? `Avatar ${seat.toUpperCase()}` : "an avatar";
       }
       return (
-        <div className="mt-2 text-amber-300/90 text-sm">Warning: projectile will hit {hitName} first and may not reach {intendedName}.</div>
+        <div className="mt-2 text-amber-300/90 text-sm">
+          Warning: projectile will hit {hitName} first and may not reach{" "}
+          {intendedName}.
+        </div>
       );
     })();
     const cardName = (() => {
-      try { return pm.spell.card?.name || "Magic"; } catch { return "Magic"; }
+      try {
+        return pm.spell.card?.name || "Magic";
+      } catch {
+        return "Magic";
+      }
     })();
     return (
       <div className="fixed inset-x-0 top-24 z-40 pointer-events-none flex justify-center px-4">
@@ -285,14 +430,22 @@ export default function MagicHudOverlay() {
           <div className="text-base md:text-lg mb-2">
             <span className="font-fantaisie">{cardName}</span>
             <span className="opacity-75">&nbsp;[T{tileNo}]</span>
-            {targetLabel ? <span className="opacity-80">&nbsp;{targetLabel}</span> : null}
+            {targetLabel ? (
+              <span className="opacity-80">&nbsp;{targetLabel}</span>
+            ) : null}
           </div>
           <div className="whitespace-pre-wrap leading-relaxed">
-            {text === undefined ? "Loading rules…" : text && text.length > 0 ? text : "No rules text available."}
+            {text === undefined
+              ? "Loading rules…"
+              : text && text.length > 0
+              ? text
+              : "No rules text available."}
           </div>
           {projectileMismatchWarning}
           {!actorIsActive ? (
-            <div className="mt-3 text-xs opacity-70">Waiting for opponent to resolve…</div>
+            <div className="mt-3 text-xs opacity-70">
+              Waiting for opponent to resolve…
+            </div>
           ) : null}
         </div>
       </div>

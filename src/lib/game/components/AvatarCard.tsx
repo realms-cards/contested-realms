@@ -279,17 +279,24 @@ export function AvatarCard({
       if (scope === "projectile") {
         const pos2 = Array.isArray(avatar.pos) ? avatar.pos : null;
         if (pos2) {
-          const ox = pendingMagic.tile.x;
-          const oy = pendingMagic.tile.y;
-          const [vx, vy] = pos2;
-          if (ox === vx || oy === vy) {
-            const dir =
-              ox === vx ? (vy < oy ? "N" : "S") : vx > ox ? "E" : "W";
-            const hits = computeProjectileFirstHits();
+          const hits = computeProjectileFirstHits();
+          const avatarCell = `${pos2[0]},${pos2[1]}`;
+
+          // Check if this avatar is a first hit in any direction
+          let matchedDirection: "N" | "E" | "S" | "W" | null = null;
+          for (const dir of ["N", "E", "S", "W"] as const) {
+            const hit = hits[dir];
+            if (hit && hit.kind === "avatar" && hit.at === avatarCell) {
+              matchedDirection = dir;
+              break;
+            }
+          }
+
+          if (matchedDirection) {
             setMagicTargetChoice({
               kind: "projectile",
-              direction: dir,
-              firstHit: hits[dir] || undefined,
+              direction: matchedDirection,
+              firstHit: hits[matchedDirection] || undefined,
             });
           }
         }
