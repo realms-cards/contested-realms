@@ -1,11 +1,7 @@
 import { Html } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
-import type {
-  Dispatch,
-  MutableRefObject,
-  SetStateAction,
-} from "react";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { flushSync } from "react-dom";
 import { Group } from "three";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
@@ -58,9 +54,7 @@ type DragContext = {
   dragAvatar: PlayerKey | null;
   dragFromHand: boolean;
   dragFromPile: boolean;
-  setDragging: Dispatch<
-    SetStateAction<{ from: string; index: number } | null>
-  >;
+  setDragging: Dispatch<SetStateAction<{ from: string; index: number } | null>>;
   setDragFromHand: GameState["setDragFromHand"];
   dragStartRef: MutableRefObject<DragStart | null>;
   dragTarget: MutableRefObject<{ x: number; z: number; lift: boolean } | null>;
@@ -169,9 +163,7 @@ export type PermanentStackProps = {
   highlightColors: HighlightColors;
   stackConfig: StackConfig;
   playCardFlip: () => void;
-  isPrimaryCardHit: (
-    e: ThreeEvent<PointerEvent | MouseEvent>
-  ) => boolean;
+  isPrimaryCardHit: (e: ThreeEvent<PointerEvent | MouseEvent>) => boolean;
 };
 
 export function PermanentStack({
@@ -258,11 +250,21 @@ export function PermanentStack({
   const { increment, decrement } = counterHandlers;
   const { setOffset, moveToWithOffset, moveToZone } = movementHandlers;
 
-  const { attacker: HIGHLIGHT_ATTACKER, target: HIGHLIGHT_TARGET, defender: HIGHLIGHT_DEFENDER } =
-    highlightColors;
+  const {
+    attacker: HIGHLIGHT_ATTACKER,
+    target: HIGHLIGHT_TARGET,
+    defender: HIGHLIGHT_DEFENDER,
+  } = highlightColors;
 
-  const { spacing, marginZ: baseMarginZ, layerLift, baseElevation, burrowedElevation, rubbleElevation, avatarAvoidZ } =
-    stackConfig;
+  const {
+    spacing,
+    marginZ: baseMarginZ,
+    layerLift,
+    baseElevation,
+    burrowedElevation,
+    rubbleElevation,
+    avatarAvoidZ,
+  } = stackConfig;
 
   const key = tileKey;
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
@@ -296,8 +298,7 @@ export function PermanentStack({
           ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
           : undefined;
         const tokenSiteReplace = !!tokenDef?.siteReplacement;
-        const marginZ =
-          baseMarginZ + (avatarOnThisTile ? TILE_SIZE * 0.08 : 0);
+        const marginZ = baseMarginZ + (avatarOnThisTile ? TILE_SIZE * 0.08 : 0);
         const avatarShiftZ = avatarOnThisTile
           ? owner === 1
             ? -avatarAvoidZ
@@ -330,9 +331,7 @@ export function PermanentStack({
           ? rubbleElevation
           : baseElevation;
         const isTopCandidate =
-          (dragging &&
-            dragging.from === key &&
-            dragging.index === idx) ||
+          (dragging && dragging.from === key && dragging.index === idx) ||
           isSel ||
           isLastTouched;
         const effectiveStackIndex =
@@ -418,8 +417,7 @@ export function PermanentStack({
             }
           }
           if (!roleGlow && pendingMagic.status === "choosingTarget") {
-            const allowPerm =
-              pendingMagic.hints?.allow?.permanent !== false;
+            const allowPerm = pendingMagic.hints?.allow?.permanent !== false;
             const scope = pendingMagic.hints?.scope || null;
             if (allowPerm && scope === "projectile") {
               const hits = computeProjectileFirstHits();
@@ -545,8 +543,41 @@ export function PermanentStack({
                       const hints = pendingMagic.hints;
                       const scope = hints?.scope || null;
                       if (scope === "projectile") {
-                        const ox = pendingMagic.tile.x;
-                        const oy = pendingMagic.tile.y;
+                        // Use caster position as origin, not spell tile
+                        let ox = pendingMagic.tile.x;
+                        let oy = pendingMagic.tile.y;
+                        try {
+                          const caster = pendingMagic.caster;
+                          if (caster && caster.kind === "avatar") {
+                            const pos = avatars?.[caster.seat]?.pos as
+                              | [number, number]
+                              | null;
+                            if (Array.isArray(pos)) {
+                              ox = pos[0];
+                              oy = pos[1];
+                            }
+                          } else if (caster && caster.kind === "permanent") {
+                            const [cx, cy] = String(caster.at)
+                              .split(",")
+                              .map(Number);
+                            if (Number.isFinite(cx) && Number.isFinite(cy)) {
+                              ox = cx;
+                              oy = cy;
+                            }
+                          } else {
+                            // Default to spell owner's avatar
+                            const ownerSeat = seatFromOwner(
+                              pendingMagic.spell.owner
+                            );
+                            const pos = avatars?.[ownerSeat]?.pos as
+                              | [number, number]
+                              | null;
+                            if (Array.isArray(pos)) {
+                              ox = pos[0];
+                              oy = pos[1];
+                            }
+                          }
+                        } catch {}
                         if (ox === tileX || oy === tileY) {
                           const dir =
                             ox === tileX
@@ -557,16 +588,33 @@ export function PermanentStack({
                               ? "E"
                               : "W";
                           const hits = computeProjectileFirstHits();
+                          const first = hits[dir] || null;
+                          let intended:
+                            | { kind: "permanent"; at: CellKey; index: number }
+                            | undefined;
+                          // If multiple units share the first-hit tile, let the player
+                          // explicitly choose which one by clicking that unit.
+                          if (
+                            first &&
+                            first.kind === "permanent" &&
+                            first.at === (key as CellKey)
+                          ) {
+                            intended = {
+                              kind: "permanent",
+                              at: key as CellKey,
+                              index: idx,
+                            };
+                          }
                           setMagicTargetChoice({
                             kind: "projectile",
                             direction: dir,
-                            firstHit: hits[dir] || undefined,
+                            firstHit: first || undefined,
+                            ...(intended ? { intended } : {}),
                           });
                         }
                         return;
                       }
-                      const allowPerm =
-                        hints?.allow?.permanent !== false;
+                      const allowPerm = hints?.allow?.permanent !== false;
                       if (!allowPerm) return;
                       const dx = Math.abs(tileX - pendingMagic.tile.x);
                       const dy = Math.abs(tileY - pendingMagic.tile.y);
@@ -678,10 +726,9 @@ export function PermanentStack({
                     const actorIsActive =
                       (actorKey === "p1" && currentPlayer === 1) ||
                       (actorKey === "p2" && currentPlayer === 2);
-                    const canDefendNow =
-                      !!(
-                        pendingCombat && pendingCombat.defenderSeat === actorKey
-                      );
+                    const canDefendNow = !!(
+                      pendingCombat && pendingCombat.defenderSeat === actorKey
+                    );
                     if (!actorIsActive && !mine) {
                       clearHoverPreview(hoverKey);
                       return;
@@ -833,10 +880,8 @@ export function PermanentStack({
                   try {
                     const gridHalfW = boardHalfW;
                     const gridHalfH = boardHalfH;
-                    const rightX =
-                      gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
-                    const leftX =
-                      -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
+                    const rightX = gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
+                    const leftX = -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
                     const zSpacing = CARD_LONG * 1.1;
                     const halfW = CARD_SHORT / 2 + 0.2;
                     const halfH = CARD_LONG / 2 + 0.2;
@@ -897,8 +942,7 @@ export function PermanentStack({
                       return;
                     }
                     if (overP1GY || overP2GY) {
-                      const tokenType =
-                        (p.card?.type || "").toLowerCase();
+                      const tokenType = (p.card?.type || "").toLowerCase();
                       const goTo = tokenType.includes("token")
                         ? "banished"
                         : "graveyard";
@@ -928,8 +972,8 @@ export function PermanentStack({
                   const draggedOwner =
                     permanents[dragging.from]?.[dragging.index]?.owner ?? 1;
                   const draggedInstId =
-                    permanents[dragging.from]?.[dragging.index]
-                      ?.instanceId || null;
+                    permanents[dragging.from]?.[dragging.index]?.instanceId ||
+                    null;
                   const localZBase =
                     draggedOwner === 1
                       ? -TILE_SIZE * 0.5 + marginZ
@@ -1021,7 +1065,11 @@ export function PermanentStack({
                   }
                   e.stopPropagation();
                   if (isSpectator) return;
-                  if (dragging && dragging.from === key && dragging.index === idx)
+                  if (
+                    dragging &&
+                    dragging.from === key &&
+                    dragging.index === idx
+                  )
                     return;
                   selectPermanent(key, idx);
                   setLastTouchedId(permId);
@@ -1044,7 +1092,9 @@ export function PermanentStack({
                 {isToken ? (
                   <CardPlane
                     slug=""
-                    textureUrl={tokenDef ? tokenTextureUrl(tokenDef) : undefined}
+                    textureUrl={
+                      tokenDef ? tokenTextureUrl(tokenDef) : undefined
+                    }
                     forceTextureUrl
                     width={
                       tokenDef && tokenDef.size === "small"

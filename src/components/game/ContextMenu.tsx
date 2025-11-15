@@ -574,7 +574,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             : "Cemetery";
         if (t.from === "graveyard") {
           // Graveyard search is read-only for both players
-          openSearchDialog(displayName, pile, () => {});
+          openSearchDialog(displayName, pile, (selectedCard) => {
+            if (!isMine) return;
+            setDragFromPile({ who: t.who, from: t.from, card: selectedCard });
+            drawFromPileToHand();
+          });
         } else {
           openSearchDialog(displayName, pile, (selectedCard) => {
             // Draw the selected card to hand (only own piles)

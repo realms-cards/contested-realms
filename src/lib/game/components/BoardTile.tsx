@@ -144,6 +144,7 @@ export function BoardTile({
         tileX={tileX}
         tileY={tileY}
         pendingMagic={pendingMagic}
+        avatars={avatars}
         highlightColor={magicHighlightColor}
       />
 

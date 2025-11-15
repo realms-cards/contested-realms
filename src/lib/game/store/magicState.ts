@@ -2,13 +2,12 @@ import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { CellKey, GameState } from "./types";
-import {
-  getCellNumber,
-  seatFromOwner,
-} from "./utils/boardHelpers";
+import { getCellNumber, seatFromOwner } from "./utils/boardHelpers";
 
 function newMagicId() {
-  return `mag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  return `mag_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
 }
 
 export type MagicSlice = Pick<
@@ -34,7 +33,8 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const tile = input.tile;
     const createdAt = Date.now();
     const ownerSeat = seatFromOwner(spell.owner);
-    const autoCaster = input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
+    const autoCaster =
+      input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
     const hints = extractMagicTargetingHintsSync(spell.card?.name || "", null);
     set({
       pendingMagic: {
@@ -54,13 +54,18 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       if (cardName) {
         void (async () => {
           try {
-            const res = await fetch(`/api/cards/rules?name=${encodeURIComponent(cardName)}`);
+            const res = await fetch(
+              `/api/cards/rules?name=${encodeURIComponent(cardName)}`
+            );
             if (!res.ok) return;
             const data = (await res.json()) as { rulesText?: string | null };
             const rulesText = (data?.rulesText ?? null) as string | null;
             set((s) => {
-              if (!s.pendingMagic || s.pendingMagic.id !== id) return s as GameState;
-              return { pendingMagic: { ...s.pendingMagic, summaryText: rulesText } } as Partial<GameState> as GameState;
+              if (!s.pendingMagic || s.pendingMagic.id !== id)
+                return s as GameState;
+              return {
+                pendingMagic: { ...s.pendingMagic, summaryText: rulesText },
+              } as Partial<GameState> as GameState;
             });
           } catch {}
         })();
@@ -81,9 +86,17 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         // Also show a toast for UX feedback
         const cardName = spell.card?.name || "Magic";
         const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w);
-        transport.sendMessage({ type: "toast", text: `Casting '${cardName}' at #${cellNo}` } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "toast",
+          text: `Casting '${cardName}' at #${cellNo}`,
+        } as unknown as CustomMessage);
         // Immediately broadcast chosen caster (avatar by default)
-        transport.sendMessage({ type: "magicSetCaster", id, caster: autoCaster, ts: Date.now() } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "magicSetCaster",
+          id,
+          caster: autoCaster,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
       } catch {}
     }
   },
@@ -103,7 +116,12 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const transport = get().transport;
     if (transport?.sendMessage && id) {
       try {
-        transport.sendMessage({ type: "magicSetCaster", id, caster: caster ?? null, ts: Date.now() } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "magicSetCaster",
+          id,
+          caster: caster ?? null,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
       } catch {}
     }
   },
@@ -124,7 +142,12 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const transport = get().transport;
     if (transport?.sendMessage && id) {
       try {
-        transport.sendMessage({ type: "magicSetTarget", id, target: target ?? null, ts: Date.now() } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "magicSetTarget",
+          id,
+          target: target ?? null,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
       } catch {}
     }
   },
@@ -143,7 +166,11 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       const pending = get().pendingMagic;
       const transport = get().transport;
       if (pending && transport?.sendMessage) {
-        transport.sendMessage({ type: "magicConfirm", id: pending.id, ts: Date.now() } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "magicConfirm",
+          id: pending.id,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
       }
     } catch {}
     // Proactively fetch rules (or use cache) and emit a summary so both players can review before resolution
@@ -155,7 +182,9 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         let rulesText: string | null = get().pendingMagic?.summaryText ?? null;
         if (rulesText === null) {
           try {
-            const res = await fetch(`/api/cards/rules?name=${encodeURIComponent(nm)}`);
+            const res = await fetch(
+              `/api/cards/rules?name=${encodeURIComponent(nm)}`
+            );
             if (res.ok) {
               const data = (await res.json()) as { rulesText?: string | null };
               rulesText = (data?.rulesText ?? null) as string | null;
@@ -163,13 +192,21 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
           } catch {}
         }
         set((s) => {
-          if (!s.pendingMagic || s.pendingMagic.id !== pending.id) return s as GameState;
-          return { pendingMagic: { ...s.pendingMagic, summaryText: rulesText } } as Partial<GameState> as GameState;
+          if (!s.pendingMagic || s.pendingMagic.id !== pending.id)
+            return s as GameState;
+          return {
+            pendingMagic: { ...s.pendingMagic, summaryText: rulesText },
+          } as Partial<GameState> as GameState;
         });
         const transport = get().transport;
         if (transport?.sendMessage) {
           try {
-            transport.sendMessage({ type: "magicSummary", id: pending.id, text: (rulesText ?? ""), ts: Date.now() } as unknown as CustomMessage);
+            transport.sendMessage({
+              type: "magicSummary",
+              id: pending.id,
+              text: rulesText ?? "",
+              ts: Date.now(),
+            } as unknown as CustomMessage);
           } catch {}
         }
       })();
@@ -191,7 +228,9 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         // Heuristic: fetch rules to extract intended damage amount (first integer in text)
         const fetchRulesText = async (name: string): Promise<string | null> => {
           try {
-            const res = await fetch(`/api/cards/rules?name=${encodeURIComponent(name)}`);
+            const res = await fetch(
+              `/api/cards/rules?name=${encodeURIComponent(name)}`
+            );
             if (!res.ok) return null;
             const data = (await res.json()) as { rulesText?: string | null };
             return (data?.rulesText ?? null) as string | null;
@@ -199,23 +238,38 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
             return null;
           }
         };
-        const parseDamageAmount = (text: string | null, fallback = 1): number => {
+        const parseDamageAmount = (
+          text: string | null,
+          fallback = 1
+        ): number => {
           if (!text) return fallback;
-          const m = text.match(/(?:deal|deals)?\s*(\d+)/i) || text.match(/(\d+)/);
+          const m =
+            text.match(/(?:deal|deals)?\s*(\d+)/i) || text.match(/(\d+)/);
           const n = m ? Number(m[1]) : NaN;
           return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : fallback;
         };
 
         // Compute projectile first-hit using board state
-        const computeProjectileFirstHit = (): { kind: "permanent" | "avatar"; at: CellKey; index?: number; seat?: ReturnType<typeof seatFromOwner> } | null => {
+        const computeProjectileFirstHit = (): {
+          kind: "permanent" | "avatar";
+          at: CellKey;
+          index?: number;
+          seat?: ReturnType<typeof seatFromOwner>;
+        } | null => {
           // Use caster as origin rather than the spell tile
           let ox = pending.tile.x;
           let oy = pending.tile.y;
           try {
             const c = pending.caster;
             if (c?.kind === "avatar") {
-              const pos = get().avatars?.[c.seat]?.pos as [number, number] | null;
-              if (Array.isArray(pos) && Number.isFinite(pos[0]) && Number.isFinite(pos[1])) {
+              const pos = get().avatars?.[c.seat]?.pos as
+                | [number, number]
+                | null;
+              if (
+                Array.isArray(pos) &&
+                Number.isFinite(pos[0]) &&
+                Number.isFinite(pos[1])
+              ) {
                 ox = Number(pos[0]);
                 oy = Number(pos[1]);
               }
@@ -231,7 +285,15 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
           const h = get().board.size.h;
           const avatars = get().avatars;
           const permanents = get().permanents;
-          const checkTile = (tx: number, ty: number): { kind: "permanent" | "avatar"; at: CellKey; index?: number; seat?: ReturnType<typeof seatFromOwner> } | null => {
+          const checkTile = (
+            tx: number,
+            ty: number
+          ): {
+            kind: "permanent" | "avatar";
+            at: CellKey;
+            index?: number;
+            seat?: ReturnType<typeof seatFromOwner>;
+          } | null => {
             const k = `${tx},${ty}` as CellKey;
             try {
               const list = permanents[k] || [];
@@ -262,28 +324,70 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
           let dir: "N" | "E" | "S" | "W" | null = null;
           if (t && t.kind === "projectile") dir = t.direction;
           if (!dir) return null;
-          if (dir === "N") {
-            for (let yy = oy - 1; yy >= 0; yy--) {
-              const hit = checkTile(ox, yy);
-              if (hit) return hit;
+
+          const scanFirstHit = (): {
+            kind: "permanent" | "avatar";
+            at: CellKey;
+            index?: number;
+            seat?: ReturnType<typeof seatFromOwner>;
+          } | null => {
+            if (dir === "N") {
+              for (let yy = oy - 1; yy >= 0; yy--) {
+                const hit = checkTile(ox, yy);
+                if (hit) return hit;
+              }
+            } else if (dir === "E") {
+              for (let xx = ox + 1; xx < w; xx++) {
+                const hit = checkTile(xx, oy);
+                if (hit) return hit;
+              }
+            } else if (dir === "S") {
+              for (let yy = oy + 1; yy < h; yy++) {
+                const hit = checkTile(ox, yy);
+                if (hit) return hit;
+              }
+            } else if (dir === "W") {
+              for (let xx = ox - 1; xx >= 0; xx--) {
+                const hit = checkTile(xx, oy);
+                if (hit) return hit;
+              }
             }
-          } else if (dir === "E") {
-            for (let xx = ox + 1; xx < w; xx++) {
-              const hit = checkTile(xx, oy);
-              if (hit) return hit;
-            }
-          } else if (dir === "S") {
-            for (let yy = oy + 1; yy < h; yy++) {
-              const hit = checkTile(ox, yy);
-              if (hit) return hit;
-            }
-          } else if (dir === "W") {
-            for (let xx = ox - 1; xx >= 0; xx--) {
-              const hit = checkTile(xx, oy);
-              if (hit) return hit;
+            return null;
+          };
+
+          const first = scanFirstHit();
+          if (!first) return null;
+
+          if (t && t.kind === "projectile" && t.intended) {
+            if (t.intended.kind === "permanent" && t.intended.at === first.at) {
+              try {
+                const list = permanents[first.at] || [];
+                const idx = Number(t.intended.index);
+                const it = list[idx];
+                if (Number.isFinite(idx) && it && !it.attachedTo) {
+                  return { kind: "permanent", at: first.at, index: idx };
+                }
+              } catch {}
+            } else if (t.intended.kind === "avatar") {
+              try {
+                const pos = avatars?.[t.intended.seat]?.pos as
+                  | [number, number]
+                  | null;
+                if (Array.isArray(pos)) {
+                  const cell = `${pos[0]},${pos[1]}` as CellKey;
+                  if (cell === first.at) {
+                    return {
+                      kind: "avatar",
+                      at: cell,
+                      seat: t.intended.seat as ReturnType<typeof seatFromOwner>,
+                    };
+                  }
+                }
+              } catch {}
             }
           }
-          return null;
+
+          return first;
         };
 
         // Prepare effect messages if we recognize the spell
@@ -292,7 +396,11 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         const isGrappleShot = nameLc.includes("grapple shot");
         const damageRecords: Array<
           | { kind: "permanent"; at: CellKey; index: number; amount: number }
-          | { kind: "avatar"; seat: ReturnType<typeof seatFromOwner>; amount: number }
+          | {
+              kind: "avatar";
+              seat: ReturnType<typeof seatFromOwner>;
+              amount: number;
+            }
         > = [];
 
         if (isMagicMissiles || isGrappleShot) {
@@ -302,7 +410,12 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
             if (isMagicMissiles) {
               const tgt = pending.target;
               if (tgt?.kind === "permanent") {
-                damageRecords.push({ kind: "permanent", at: tgt.at, index: Number(tgt.index), amount });
+                damageRecords.push({
+                  kind: "permanent",
+                  at: tgt.at,
+                  index: Number(tgt.index),
+                  amount,
+                });
               } else if (tgt?.kind === "avatar") {
                 damageRecords.push({ kind: "avatar", seat: tgt.seat, amount });
               }
@@ -310,34 +423,60 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
               const hit = computeProjectileFirstHit();
               if (hit) {
                 if (hit.kind === "permanent" && typeof hit.index === "number") {
-                  damageRecords.push({ kind: "permanent", at: hit.at, index: Number(hit.index), amount });
+                  damageRecords.push({
+                    kind: "permanent",
+                    at: hit.at,
+                    index: Number(hit.index),
+                    amount,
+                  });
                 } else if (hit.kind === "avatar" && hit.seat) {
-                  damageRecords.push({ kind: "avatar", seat: hit.seat, amount });
+                  damageRecords.push({
+                    kind: "avatar",
+                    seat: hit.seat,
+                    amount,
+                  });
                 }
               }
             }
             if (damageRecords.length > 0) {
-              transport?.sendMessage?.({ type: "magicDamage", damage: damageRecords } as unknown as CustomMessage);
+              transport?.sendMessage?.({
+                type: "magicDamage",
+                damage: damageRecords,
+              } as unknown as CustomMessage);
             }
           })();
         }
 
-        transport.sendMessage({ type: "magicResolve", id: pending.id, spell: pending.spell, tile: pending.tile, ts: Date.now() } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "magicResolve",
+          id: pending.id,
+          spell: pending.spell,
+          tile: pending.tile,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
         // If a summary was already sent at confirm/target stage, avoid duplicating here
         if (!pending.summaryText) {
           // Fetch rules text to include in the summary for both players
           void (async () => {
             let rulesText: string | null = null;
             try {
-              const res = await fetch(`/api/cards/rules?name=${encodeURIComponent(nm)}`);
+              const res = await fetch(
+                `/api/cards/rules?name=${encodeURIComponent(nm)}`
+              );
               if (res.ok) {
-                const data = (await res.json()) as { rulesText?: string | null };
+                const data = (await res.json()) as {
+                  rulesText?: string | null;
+                };
                 rulesText = (data?.rulesText ?? null) as string | null;
               }
             } catch {}
             const txt = rulesText ?? "";
             try {
-              transport?.sendMessage?.({ type: "magicSummary", id: pending.id, text: txt } as unknown as CustomMessage);
+              transport?.sendMessage?.({
+                type: "magicSummary",
+                id: pending.id,
+                text: txt,
+              } as unknown as CustomMessage);
             } catch {}
           })();
         }
@@ -350,12 +489,22 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const pending = get().pendingMagic;
     if (!pending) return;
     try {
-      get().movePermanentToZone(pending.spell.at as CellKey, Number(pending.spell.index), "hand");
+      get().movePermanentToZone(
+        pending.spell.at as CellKey,
+        Number(pending.spell.index),
+        "hand"
+      );
     } catch {}
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {
-        transport.sendMessage({ type: "magicCancel", id: pending.id, spell: pending.spell, tile: pending.tile, ts: Date.now() } as unknown as CustomMessage);
+        transport.sendMessage({
+          type: "magicCancel",
+          id: pending.id,
+          spell: pending.spell,
+          tile: pending.tile,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
       } catch {}
     }
     set({ pendingMagic: null } as Partial<GameState> as GameState);

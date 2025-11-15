@@ -27,6 +27,7 @@ type AttachmentDialogState = {
 type UseAttachmentDialogOptions = {
   setDragFromPile: GameState["setDragFromPile"];
   playFromPileTo: (x: number, y: number) => void;
+  playSelectedTo: (x: number, y: number) => void;
   attachTokenToPermanent: GameState["attachTokenToPermanent"];
   attachPermanentToAvatar: GameState["attachPermanentToAvatar"];
 };
@@ -34,6 +35,7 @@ type UseAttachmentDialogOptions = {
 export function useAttachmentDialog({
   setDragFromPile,
   playFromPileTo,
+  playSelectedTo,
   attachTokenToPermanent,
   attachPermanentToAvatar,
 }: UseAttachmentDialogOptions) {
@@ -73,21 +75,25 @@ export function useAttachmentDialog({
         setDragFromPile(null);
       }, 100);
     } else {
-      const state = useGameStore.getState();
-      const perms = state.permanents[targetPermanent.at] || [];
-      const cardIndex = perms.findIndex(
-        (p) => !p.attachedTo && p.card.name === token.name
-      );
-      if (cardIndex >= 0) {
-        if (isAvatarTarget) {
-          const avatarSeat = findAvatarSeatAt(targetPermanent.at, state.avatars);
-          if (avatarSeat) {
-            attachPermanentToAvatar(targetPermanent.at, cardIndex, avatarSeat);
+      // From hand: place the selected card onto the tile first, then attach
+      playSelectedTo(dropCoords.x, dropCoords.y);
+      setTimeout(() => {
+        const state = useGameStore.getState();
+        const perms = state.permanents[targetPermanent.at] || [];
+        const cardIndex = perms.findIndex(
+          (p) => !p.attachedTo && p.card.name === token.name
+        );
+        if (cardIndex >= 0) {
+          if (isAvatarTarget) {
+            const avatarSeat = findAvatarSeatAt(targetPermanent.at, state.avatars);
+            if (avatarSeat) {
+              attachPermanentToAvatar(targetPermanent.at, cardIndex, avatarSeat);
+            }
+          } else {
+            attachTokenToPermanent(targetPermanent.at, cardIndex, targetPermanent.index);
           }
-        } else {
-          attachTokenToPermanent(targetPermanent.at, cardIndex, targetPermanent.index);
         }
-      }
+      }, 100);
     }
 
     setDialog(null);
@@ -96,6 +102,7 @@ export function useAttachmentDialog({
     attachPermanentToAvatar,
     attachTokenToPermanent,
     playFromPileTo,
+    playSelectedTo,
     setDragFromPile,
   ]);
 
@@ -105,9 +112,12 @@ export function useAttachmentDialog({
       setDragFromPile(dialog.pileInfo);
       playFromPileTo(dialog.dropCoords.x, dialog.dropCoords.y);
       setTimeout(() => setDragFromPile(null), 50);
+    } else {
+      // From hand: place the card without attaching
+      playSelectedTo(dialog.dropCoords.x, dialog.dropCoords.y);
     }
     setDialog(null);
-  }, [dialog, playFromPileTo, setDragFromPile]);
+  }, [dialog, playFromPileTo, playSelectedTo, setDragFromPile]);
 
   const attachmentDialogNode = dialog ? (
     <Html fullscreen zIndexRange={[10, 0]}>

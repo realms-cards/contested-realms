@@ -22,6 +22,7 @@ import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
 import { BoardTile } from "@/lib/game/components/BoardTile";
 import { HandDragGhost } from "@/lib/game/components/HandDragGhost";
+import { MagicConnectionLines } from "@/lib/game/components/MagicConnectionLines";
 import { RemoteDragOverlays } from "@/lib/game/components/RemoteDragOverlays";
 import { BASE_TILE_SIZE, TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import { useAttachmentDialog } from "@/lib/game/hooks/useAttachmentDialog";
@@ -38,6 +39,7 @@ import {
   type GameState,
   type PlayerKey,
 } from "@/lib/game/store";
+import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
 const ENABLE_SNAP = true;
@@ -312,6 +314,7 @@ export default function Board({
   const { openAttachmentDialog, attachmentDialogNode } = useAttachmentDialog({
     setDragFromPile,
     playFromPileTo,
+    playSelectedTo,
     attachTokenToPermanent,
     attachPermanentToAvatar,
   });
@@ -369,7 +372,7 @@ export default function Board({
     return isArtifact && !isMonument && !isAutomaton;
   };
 
-  // Compute first hits for projectile scope along cardinal directions from the spell tile
+  // Compute first hits for projectile scope along cardinal directions from the caster
   const computeProjectileFirstHits = useCallback((): Record<
     "N" | "E" | "S" | "W",
     | { kind: "permanent" | "avatar"; at: CellKey; index?: number }
@@ -382,8 +385,34 @@ export default function Board({
     > = { N: null, E: null, S: null, W: null };
     const pm = resolvedStoreApi.getState().pendingMagic;
     if (!pm) return hits;
-    const originX = pm.tile.x;
-    const originY = pm.tile.y;
+
+    // Use caster position as origin, not spell tile
+    let originX = pm.tile.x;
+    let originY = pm.tile.y;
+    try {
+      const caster = pm.caster;
+      if (caster && caster.kind === "avatar") {
+        const pos = avatars?.[caster.seat]?.pos as [number, number] | null;
+        if (Array.isArray(pos)) {
+          originX = pos[0];
+          originY = pos[1];
+        }
+      } else if (caster && caster.kind === "permanent") {
+        const [cx, cy] = String(caster.at).split(",").map(Number);
+        if (Number.isFinite(cx) && Number.isFinite(cy)) {
+          originX = cx;
+          originY = cy;
+        }
+      } else {
+        // Default to spell owner's avatar
+        const ownerSeat = seatFromOwner(pm.spell.owner);
+        const pos = avatars?.[ownerSeat]?.pos as [number, number] | null;
+        if (Array.isArray(pos)) {
+          originX = pos[0];
+          originY = pos[1];
+        }
+      }
+    } catch {}
     const w = board.size.w;
     const h = board.size.h;
     const checkTile = (tx: number, ty: number) => {
@@ -747,6 +776,15 @@ useBoardDropManager({
 
       {/* Remote cursors */}
       <BoardCursorLayer />
+
+      {/* Magic spell connection lines */}
+      {pendingMagic && (
+        <MagicConnectionLines
+          pendingMagic={pendingMagic}
+          avatars={avatars}
+          boardOffset={{ x: offsetX, y: offsetY }}
+        />
+      )}
 
       <RemoteDragOverlays
         handDrags={remoteHandDrags}
