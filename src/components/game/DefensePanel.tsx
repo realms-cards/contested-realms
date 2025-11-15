@@ -17,7 +17,7 @@ export default function DefensePanel() {
 
   const isOpen = useMemo(
     () => Boolean(pending && pending.status === "defending"),
-    [pending?.status]
+    [pending]
   );
   const defenderSeat: PlayerKey | null = (pending?.defenderSeat as PlayerKey | null) ?? null;
   const mySeat = actorKey;

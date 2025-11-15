@@ -31,6 +31,8 @@ export default function MatchInfoPopup({
   const flushPending = useGameStore((s) => s.flushPendingPatches);
   const interactionGuides = useGameStore((s) => s.interactionGuides);
   const setInteractionGuides = useGameStore((s) => s.setInteractionGuides);
+  const magicGuides = useGameStore((s) => s.magicGuides);
+  const setMagicGuides = useGameStore((s) => s.setMagicGuides);
 
   if (!isOpen) return null;
 
@@ -107,13 +109,23 @@ export default function MatchInfoPopup({
                 <span className="font-medium">{lastServerTs || 0}</span>
               </div>
               <div className="flex items-center justify-between pt-1">
-                <span>Interaction Guides</span>
+                <span>Combat Guides</span>
                 <button
                   className={`rounded-full px-3 py-1 text-xs transition-colors ${interactionGuides ? "bg-emerald-600/90 hover:bg-emerald-500" : "bg-white/15 hover:bg-white/25"}`}
                   onClick={() => setInteractionGuides(!interactionGuides)}
                   aria-pressed={interactionGuides}
                 >
                   {interactionGuides ? "On" : "Off"}
+                </button>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span>Magic Guides</span>
+                <button
+                  className={`rounded-full px-3 py-1 text-xs transition-colors ${magicGuides ? "bg-indigo-600/90 hover:bg-indigo-500" : "bg-white/15 hover:bg-white/25"}`}
+                  onClick={() => setMagicGuides(!magicGuides)}
+                  aria-pressed={magicGuides}
+                >
+                  {magicGuides ? "On" : "Off"}
                 </button>
               </div>
             </div>

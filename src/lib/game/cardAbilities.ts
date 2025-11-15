@@ -19,15 +19,14 @@ async function fetchCardAbilities(cardName: string): Promise<{
     if (!response.ok) {
       return { canBurrow: false, canSubmerge: false, rulesText: null };
     }
-    
     const data = await response.json();
     return {
       canBurrow: data.canBurrow || false,
       canSubmerge: data.canSubmerge || false,
-      rulesText: data.rulesText || null
+      rulesText: data.rulesText || null,
     };
   } catch (error) {
-    console.warn('Failed to fetch card abilities for', cardName, error);
+    console.warn("Failed to fetch card abilities for", cardName, error);
     return { canBurrow: false, canSubmerge: false, rulesText: null };
   }
 }
@@ -124,4 +123,63 @@ export function detectRangedAbilitySync(cardName: string): boolean {
   if (n.includes("sling")) return true;
   if (n.includes("ranger")) return true;
   return false;
+}
+
+// --- Magic spellcasting + targeting hints (heuristic, v1) --------------------
+
+export type MagicTargetHints = {
+  scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null;
+  allow: { location?: boolean; permanent?: boolean; avatar?: boolean };
+};
+
+export async function detectSpellcaster(cardName: string): Promise<boolean> {
+  try {
+    const abilities = await fetchCardAbilities(cardName);
+    const txt = (abilities.rulesText || "").toLowerCase();
+    const name = cardName.toLowerCase();
+    const nameCaster = /mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name);
+    if (nameCaster) return true;
+    if (!txt) return false;
+    if (txt.includes("cast") || txt.includes("spellcaster")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function detectSpellcasterSync(cardName: string, rulesText?: string | null): boolean {
+  const name = (cardName || "").toLowerCase();
+  if (/mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name)) return true;
+  const t = (rulesText || abilityCache.get(name)?.rulesText || "").toLowerCase();
+  if (!t) return false;
+  if (t.includes("cast") || t.includes("spellcaster")) return true;
+  return false;
+}
+
+export async function extractMagicTargetingHints(cardName: string): Promise<MagicTargetHints> {
+  try {
+    const abilities = await fetchCardAbilities(cardName);
+    return extractMagicTargetingHintsSync(cardName, abilities.rulesText || "");
+  } catch {
+    return extractMagicTargetingHintsSync(cardName, null);
+  }
+}
+
+export function extractMagicTargetingHintsSync(cardName: string, rulesText?: string | null): MagicTargetHints {
+  const txt = (rulesText || abilityCache.get(cardName.toLowerCase())?.rulesText || "").toLowerCase();
+  const nameLc = (cardName || "").toLowerCase();
+  const hints: MagicTargetHints = {
+    scope: null,
+    allow: { location: false, permanent: true, avatar: true },
+  };
+  const projectileByName = /\b(grapple|shot|missile|arrow|bolt)\b/.test(nameLc);
+  if (txt.includes("projectile") || projectileByName) hints.scope = "projectile";
+  else if (txt.includes("adjacent")) hints.scope = "adjacent";
+  else if (txt.includes("nearby") || txt.includes("near")) hints.scope = "nearby";
+  else if (txt.includes("here")) hints.scope = "here";
+  else hints.scope = "global";
+  if (/(tile|site|here|there|location)/.test(txt)) hints.allow.location = true;
+  if (/(unit|minion|creature|permanent|artifact|relic|totem)/.test(txt)) hints.allow.permanent = true;
+  if (/(avatar|player|opponent)/.test(txt)) hints.allow.avatar = true;
+  return hints;
 }

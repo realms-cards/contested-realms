@@ -1,8 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore, type CellKey } from "@/lib/game/store";
+import {
+  getCellNumber,
+  seatFromOwner,
+} from "@/lib/game/store/utils/boardHelpers";
 
 export default function CombatHudOverlay() {
   const actorKey = useGameStore((s) => s.actorKey);
@@ -33,13 +37,14 @@ export default function CombatHudOverlay() {
     (actorKey === "p1" && currentPlayer === 1) ||
     (actorKey === "p2" && currentPlayer === 2);
 
-  const tileNum = attackChoice
-    ? attackChoice.tile.y * board.size.w + attackChoice.tile.x + 1
-    : attackTargetChoice
-    ? attackTargetChoice.tile.y * board.size.w + attackTargetChoice.tile.x + 1
-    : attackConfirm
-    ? attackConfirm.tile.y * board.size.w + attackConfirm.tile.x + 1
-    : null;
+  const tileNum = (() => {
+    const source =
+      attackChoice?.tile ??
+      attackTargetChoice?.tile ??
+      attackConfirm?.tile ??
+      null;
+    return source ? getCellNumber(source.x, source.y, board.size.w) : null;
+  })();
 
   const attackerLabel = (() => {
     const pc = pendingCombat?.attacker;
@@ -55,20 +60,16 @@ export default function CombatHudOverlay() {
     const actorKey = useGameStore((s) => s.actorKey);
     const pendingCombat = useGameStore((s) => s.pendingCombat);
     const setDamageAssignment = useGameStore((s) => s.setDamageAssignment);
-    const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
     const permanents = useGameStore((s) => s.permanents);
     const metaByCardId = useGameStore((s) => s.metaByCardId);
     const [assign, setAssign] = useState<Record<string, number>>({});
 
     const pc = pendingCombat;
-    const defs = useMemo(
-      () => (pc?.defenders ? pc.defenders : []),
-      [pc?.id, pc?.defenders]
-    );
-    const aSeat: "p1" | "p2" = useMemo(
-      () => (pc?.attacker?.owner === 1 ? "p1" : "p2"),
-      [pc?.attacker?.owner]
-    ) as "p1" | "p2";
+    const defs = pc?.defenders ? pc.defenders : [];
+    const aSeat: "p1" | "p2" = (() => {
+      const owner = pc?.attacker?.owner;
+      return owner === 1 || owner === 2 ? seatFromOwner(owner) : "p1";
+    })();
     const amAttacker = actorKey ? actorKey === aSeat : true;
 
     function getAtkDef(
@@ -117,39 +118,25 @@ export default function CombatHudOverlay() {
       return { atk, firstStrike };
     }
 
-    const totalAtk = useMemo(() => {
+    const totalAtk = (() => {
       if (!pc) return 0;
       const eff = computeEffectiveAttack({
         at: pc.attacker.at,
         index: pc.attacker.index,
       });
       return Math.max(0, Math.floor(eff.atk));
-    }, [
-      pc?.attacker?.at,
-      pc?.attacker?.index,
-      permanents,
-      metaByCardId,
-      computeEffectiveAttack,
-    ]);
-    const asList = useMemo(
-      () =>
-        defs.map((d) => ({
-          key: `${d.at}:${d.index}`,
-          at: d.at as CellKey,
-          index: d.index,
-        })),
-      [defs]
-    );
+    })();
+    const asList = defs.map((d) => ({
+      key: `${d.at}:${d.index}`,
+      at: d.at as CellKey,
+      index: d.index,
+    }));
     useEffect(() => {
       setAssign({});
     }, [pc?.id]);
-    const sum = useMemo(
-      () =>
-        Object.values(assign).reduce(
-          (a, v) => a + (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0),
-          0
-        ),
-      [assign]
+    const sum = Object.values(assign).reduce(
+      (a, v) => a + (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0),
+      0
     );
     const valid = defs.length <= 1 || sum === totalAtk;
     const quickFill = () => {
@@ -346,7 +333,8 @@ export default function CombatHudOverlay() {
         }
       })();
       if (owner === 1 || owner === 2) {
-        const seat: "p1" | "p2" = owner === 1 ? "p1" : "p2";
+        const seat: "p1" | "p2" =
+          owner === 1 || owner === 2 ? seatFromOwner(owner) : "p1";
         const dd = players[seat].lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
         return (
@@ -867,7 +855,7 @@ export default function CombatHudOverlay() {
             {pendingCombat.status === "committed"
               ? (() => {
                   const aSeat = (
-                    pendingCombat.attacker.owner === 1 ? "p1" : "p2"
+                    seatFromOwner(pendingCombat.attacker.owner)
                   ) as "p1" | "p2";
                   const amAttacker = actorKey ? actorKey === aSeat : true;
                   if (!amAttacker) return null;
