@@ -2,7 +2,12 @@ import { Html } from "@react-three/drei";
 import { useCallback, useState } from "react";
 import TokenAttachmentDialog from "@/lib/game/components/TokenAttachmentDialog";
 import { useGameStore } from "@/lib/game/store";
-import type { AvatarState, CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
+import type {
+  AvatarState,
+  CardRef,
+  GameState,
+  PlayerKey,
+} from "@/lib/game/store/types";
 
 type AttachmentTarget = {
   at: string;
@@ -12,7 +17,7 @@ type AttachmentTarget = {
 
 export type AttachmentPileInfo = {
   who: PlayerKey;
-  from: "tokens" | "spellbook" | "atlas" | "graveyard";
+  from: "tokens" | "spellbook" | "atlas" | "graveyard" | "collection";
   card: CardRef;
 };
 
@@ -41,12 +46,9 @@ export function useAttachmentDialog({
 }: UseAttachmentDialogOptions) {
   const [dialog, setDialog] = useState<AttachmentDialogState | null>(null);
 
-  const openAttachmentDialog = useCallback(
-    (payload: AttachmentDialogState) => {
-      setDialog(payload);
-    },
-    []
-  );
+  const openAttachmentDialog = useCallback((payload: AttachmentDialogState) => {
+    setDialog(payload);
+  }, []);
 
   const handleConfirm = useCallback(() => {
     if (!dialog) return;
@@ -64,12 +66,23 @@ export function useAttachmentDialog({
         );
         if (cardIndex >= 0) {
           if (isAvatarTarget) {
-            const avatarSeat = findAvatarSeatAt(targetPermanent.at, state.avatars);
+            const avatarSeat = findAvatarSeatAt(
+              targetPermanent.at,
+              state.avatars
+            );
             if (avatarSeat) {
-              attachPermanentToAvatar(targetPermanent.at, cardIndex, avatarSeat);
+              attachPermanentToAvatar(
+                targetPermanent.at,
+                cardIndex,
+                avatarSeat
+              );
             }
           } else {
-            attachTokenToPermanent(targetPermanent.at, cardIndex, targetPermanent.index);
+            attachTokenToPermanent(
+              targetPermanent.at,
+              cardIndex,
+              targetPermanent.index
+            );
           }
         }
         setDragFromPile(null);
@@ -85,12 +98,23 @@ export function useAttachmentDialog({
         );
         if (cardIndex >= 0) {
           if (isAvatarTarget) {
-            const avatarSeat = findAvatarSeatAt(targetPermanent.at, state.avatars);
+            const avatarSeat = findAvatarSeatAt(
+              targetPermanent.at,
+              state.avatars
+            );
             if (avatarSeat) {
-              attachPermanentToAvatar(targetPermanent.at, cardIndex, avatarSeat);
+              attachPermanentToAvatar(
+                targetPermanent.at,
+                cardIndex,
+                avatarSeat
+              );
             }
           } else {
-            attachTokenToPermanent(targetPermanent.at, cardIndex, targetPermanent.index);
+            attachTokenToPermanent(
+              targetPermanent.at,
+              cardIndex,
+              targetPermanent.index
+            );
           }
         }
       }, 100);
@@ -142,10 +166,10 @@ function findAvatarSeatAt(
 ): PlayerKey | undefined {
   const [x, y] = key.split(",").map(Number);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
-  return (Object.entries(avatars || {}) as Array<[PlayerKey, AvatarState]>).find(
-    ([, avatar]) => {
-      const pos = avatar.pos;
-      return pos && pos[0] === x && pos[1] === y;
-    }
-  )?.[0];
+  return (
+    Object.entries(avatars || {}) as Array<[PlayerKey, AvatarState]>
+  ).find(([, avatar]) => {
+    const pos = avatar.pos;
+    return pos && pos[0] === x && pos[1] === y;
+  })?.[0];
 }

@@ -33,7 +33,7 @@ export type Pick3D = {
   // Optional vertical offset used by some UIs to influence render order
   y?: number;
   // Explicit zone tracking - no longer derived from z coordinate
-  zone: "Deck" | "Sideboard";
+  zone: "Deck" | "Sideboard" | "Collection";
 };
 
 export type StackPosition = {
@@ -65,7 +65,9 @@ export function weightForRarity(r: Rarity): number {
   }
 }
 
-export function choiceWeighted<T>(items: { item: T; weight: number }[]): T | null {
+export function choiceWeighted<T>(
+  items: { item: T; weight: number }[]
+): T | null {
   const total = items.reduce((s, x) => s + Math.max(0, x.weight), 0);
   if (total <= 0) return null;
   let r = Math.random() * total;
@@ -197,8 +199,12 @@ export function computeStackPositions(
   const cardSpacing = 0.15; // Vertical spacing between cards (increased for easier hover)
 
   // Separate cards by explicit zone (no longer infer from Z)
-  const deckCards = treatAllAsDeck ? picks : picks.filter((pick) => pick.zone === "Deck");
-  const sideboardCards = treatAllAsDeck ? [] : picks.filter((pick) => pick.zone === "Sideboard");
+  const deckCards = treatAllAsDeck
+    ? picks
+    : picks.filter((pick) => pick.zone === "Deck");
+  const sideboardCards = treatAllAsDeck
+    ? []
+    : picks.filter((pick) => pick.zone === "Sideboard");
 
   // Sort mode selection (default: mana)
   const sortMode = options?.sortMode === "element" ? "element" : "mana";
@@ -220,9 +226,13 @@ export function computeStackPositions(
       // Artifacts: no thresholds (null or all zeros), non-site, non-avatar
       const thresholds = meta?.thresholds as Record<string, number> | undefined;
       const totalThresh = thresholds
-        ? ["air", "water", "earth", "fire"].reduce((s, k) => s + (thresholds?.[k] || 0), 0)
+        ? ["air", "water", "earth", "fire"].reduce(
+            (s, k) => s + (thresholds?.[k] || 0),
+            0
+          )
         : 0;
-      const isArtifact = !isSite && !isAvatar && (!thresholds || totalThresh === 0);
+      const isArtifact =
+        !isSite && !isAvatar && (!thresholds || totalThresh === 0);
 
       if (isAvatar) {
         const k = "avatars";

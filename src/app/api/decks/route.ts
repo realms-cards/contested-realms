@@ -1,8 +1,8 @@
-import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { NextRequest } from "next/server";
+import { getServerAuthSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 // Cache avatar metadata for a short time to improve performance
 type AvatarCacheValue = {
@@ -10,7 +10,10 @@ type AvatarCacheValue = {
   avatarCard?: { name: string; slug: string | null };
 };
 
-const avatarCache = new Map<string, { summary: AvatarCacheValue; timestamp: number }>();
+const avatarCache = new Map<
+  string,
+  { summary: AvatarCacheValue; timestamp: number }
+>();
 const AVATAR_CACHE_TTL = 60 * 1000; // 1 minute
 
 // GET /api/decks
@@ -21,24 +24,33 @@ const AVATAR_CACHE_TTL = 60 * 1000; // 1 minute
 export async function GET() {
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
   try {
     const userId = session.user.id;
     // Get user's own decks (both public and private)
     const myDecks = await prisma.deck.findMany({
       where: { userId },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, name: true, format: true, isPublic: true, imported: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        format: true,
+        isPublic: true,
+        imported: true,
+        updatedAt: true,
+      },
     });
 
     // Get public decks from other users
     const publicDecks = await prisma.deck.findMany({
       where: {
         isPublic: true,
-        userId: { not: session.user.id }
+        userId: { not: session.user.id },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 50, // Limit to recent 50 public decks
       select: {
         id: true,
@@ -46,12 +58,15 @@ export async function GET() {
         format: true,
         imported: true,
         updatedAt: true,
-        user: { select: { name: true } }
+        user: { select: { name: true } },
       },
     });
 
     // Compute avatar metadata with caching to improve performance
-    const allIds = [...myDecks.map(d => d.id), ...publicDecks.map(d => d.id)];
+    const allIds = [
+      ...myDecks.map((d) => d.id),
+      ...publicDecks.map((d) => d.id),
+    ];
     const avatarSummaryByDeckId = new Map<string, AvatarCacheValue>();
     const now = Date.now();
 
@@ -59,7 +74,7 @@ export async function GET() {
     const uncachedIds: string[] = [];
     for (const id of allIds) {
       const cached = avatarCache.get(id);
-      if (cached && (now - cached.timestamp) < AVATAR_CACHE_TTL) {
+      if (cached && now - cached.timestamp < AVATAR_CACHE_TTL) {
         avatarSummaryByDeckId.set(id, cached.summary);
       } else {
         uncachedIds.push(id);
@@ -72,16 +87,28 @@ export async function GET() {
       const avatarCards = await prisma.deckCard.findMany({
         where: {
           deckId: { in: uncachedIds },
-          zone: { in: ['Spellbook', 'Atlas', 'Sideboard'] },
+          zone: { in: ["Spellbook", "Atlas", "Sideboard"] },
           OR: [
-            { variant: { typeText: { contains: 'Avatar', mode: 'insensitive' } } },
+            {
+              variant: {
+                typeText: { contains: "Avatar", mode: "insensitive" },
+              },
+            },
             {
               AND: [
                 { setId: { not: null } },
-                { card: { meta: { some: { type: { contains: 'Avatar', mode: 'insensitive' } } } } }
-              ]
-            }
-          ]
+                {
+                  card: {
+                    meta: {
+                      some: {
+                        type: { contains: "Avatar", mode: "insensitive" },
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
         },
         select: {
           deckId: true,
@@ -108,25 +135,26 @@ export async function GET() {
 
         let summary: AvatarCacheValue;
         if (totalCount === 1) {
-          const avatarEntry = entries.find(item => item.count > 0) ?? entries[0];
+          const avatarEntry =
+            entries.find((item) => item.count > 0) ?? entries[0];
           if (avatarEntry && avatarEntry.card?.name) {
             const slug = avatarEntry.variant?.slug
               ? avatarEntry.variant.slug.toLowerCase()
               : null;
             summary = {
-              state: 'single',
+              state: "single",
               avatarCard: {
                 name: avatarEntry.card.name,
                 slug,
               },
             };
           } else {
-            summary = { state: 'single' };
+            summary = { state: "single" };
           }
         } else if (totalCount > 1) {
-          summary = { state: 'multiple' };
+          summary = { state: "multiple" };
         } else {
-          summary = { state: 'none' };
+          summary = { state: "none" };
         }
 
         avatarCache.set(deckId, { summary, timestamp: now });
@@ -138,14 +166,16 @@ export async function GET() {
     for (const id of allIds) {
       if (!avatarSummaryByDeckId.has(id)) {
         const cached = avatarCache.get(id);
-        const summary = cached?.summary ?? { state: 'none' as const };
+        const summary = cached?.summary ?? { state: "none" as const };
         avatarSummaryByDeckId.set(id, summary);
       }
     }
 
     const response = {
       myDecks: myDecks.map((d) => {
-        const avatarSummary = avatarSummaryByDeckId.get(d.id) ?? { state: 'none' as const };
+        const avatarSummary = avatarSummaryByDeckId.get(d.id) ?? {
+          state: "none" as const,
+        };
         return {
           id: d.id,
           name: d.name,
@@ -164,15 +194,25 @@ export async function GET() {
         imported: deck.imported,
         isPublic: true,
         updatedAt: deck.updatedAt.toISOString(),
-        userName: deck.user.name || 'Unknown Player',
-        avatarState: (avatarSummaryByDeckId.get(deck.id) ?? { state: 'none' as const }).state,
-        avatarCard: (avatarSummaryByDeckId.get(deck.id)?.avatarCard) ?? null,
+        userName: deck.user.name || "Unknown Player",
+        avatarState: (
+          avatarSummaryByDeckId.get(deck.id) ?? { state: "none" as const }
+        ).state,
+        avatarCard: avatarSummaryByDeckId.get(deck.id)?.avatarCard ?? null,
       })),
     };
 
-    return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
@@ -185,7 +225,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
   try {
     const userId = session.user.id;
@@ -195,110 +237,183 @@ export async function POST(req: NextRequest) {
       return new Response(
         JSON.stringify({
           error:
-            'Your account could not be found in the database. If you already have a user account, please sign out, clear your browser cookies and sign back in',
+            "Your account could not be found in the database. If you already have a user account, please sign out, clear your browser cookies and sign back in",
         }),
-        { status: 401, headers: { 'content-type': 'application/json' } },
+        { status: 401, headers: { "content-type": "application/json" } }
       );
     }
     const body = await req.json();
-    const name = String(body?.name || '').trim();
-    const format = (body?.format && String(body.format)) || 'Sealed';
+    const name = String(body?.name || "").trim();
+    const format = (body?.format && String(body.format)) || "Sealed";
     const isPublic = Boolean(body?.isPublic || false);
     const setName = body?.set ? String(body.set) : undefined;
     const cards = Array.isArray(body?.cards) ? body.cards : [];
 
     if (!name) {
-      return new Response(JSON.stringify({ error: 'Missing deck name' }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing deck name" }), {
+        status: 400,
+      });
     }
     if (!cards.length) {
-      return new Response(JSON.stringify({ error: 'No cards provided' }), { status: 400 });
+      return new Response(JSON.stringify({ error: "No cards provided" }), {
+        status: 400,
+      });
     }
 
     let setId: number | undefined = undefined;
     if (setName) {
       const set = await prisma.set.findUnique({ where: { name: setName } });
-      if (!set) return new Response(JSON.stringify({ error: `Unknown set: ${setName}` }), { status: 400 });
+      if (!set)
+        return new Response(
+          JSON.stringify({ error: `Unknown set: ${setName}` }),
+          { status: 400 }
+        );
       setId = set.id;
     }
 
     // Validate zones and normalize items
-    const allowedZones = new Set(['Spellbook', 'Atlas', 'Sideboard']);
+    const allowedZones = new Set([
+      "Spellbook",
+      "Atlas",
+      "Collection",
+      "Sideboard",
+    ]);
 
     // Aggregate by (cardId, zone, variantId?)
-    const agg = new Map<string, { cardId: number; zone: string; count: number; variantId: number | null }>();
+    const agg = new Map<
+      string,
+      { cardId: number; zone: string; count: number; variantId: number | null }
+    >();
     for (const c of cards) {
       const cardId = Number(c.cardId);
       const zone = String(c.zone);
       const count = Math.max(1, Number(c.count || 1));
       const variantId = c.variantId ? Number(c.variantId) : null;
       if (!allowedZones.has(zone)) {
-        return new Response(JSON.stringify({ error: `Invalid zone: ${zone}` }), { status: 400 });
+        return new Response(
+          JSON.stringify({ error: `Invalid zone: ${zone}` }),
+          { status: 400 }
+        );
       }
       if (!Number.isFinite(cardId) || cardId <= 0) {
-        return new Response(JSON.stringify({ error: `Invalid cardId: ${c.cardId}` }), { status: 400 });
+        return new Response(
+          JSON.stringify({ error: `Invalid cardId: ${c.cardId}` }),
+          { status: 400 }
+        );
       }
-      const key = `${cardId}:${zone}:${variantId ?? 'x'}`;
+      const key = `${cardId}:${zone}:${variantId ?? "x"}`;
       const prev = agg.get(key);
-      if (prev) prev.count += count; else agg.set(key, { cardId, zone, count, variantId });
+      if (prev) prev.count += count;
+      else agg.set(key, { cardId, zone, count, variantId });
+    }
+
+    // Enforce collection capacity: at most 10 cards in Collection zone
+    let collectionCount = 0;
+    for (const { zone, count } of agg.values()) {
+      if (zone === "Collection") collectionCount += count;
+    }
+    if (collectionCount > 10) {
+      return new Response(
+        JSON.stringify({
+          error: "Collection zone may contain at most 10 cards",
+        }),
+        { status: 400 }
+      );
     }
 
     // If any items have variantId, prefetch their setIds to infer per-card set
-    const variantIds = Array.from(new Set(
-      Array.from(agg.values())
-        .map(v => v.variantId)
-        .filter((id): id is number => id != null)
-    ));
+    const variantIds = Array.from(
+      new Set(
+        Array.from(agg.values())
+          .map((v) => v.variantId)
+          .filter((id): id is number => id != null)
+      )
+    );
     const variants = variantIds.length
-      ? await prisma.variant.findMany({ where: { id: { in: variantIds } }, select: { id: true, setId: true } })
+      ? await prisma.variant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, setId: true },
+        })
       : [];
     const setByVariant = new Map<number, number>();
     for (const v of variants) setByVariant.set(v.id, v.setId);
 
     // Validate constructed rules if format is 'constructed'
-    const isConstructed = String(format).toLowerCase() === 'constructed';
+    const isConstructed = String(format).toLowerCase() === "constructed";
     if (isConstructed) {
       // Determine (cardId, setId, zone, count) for validation
-      type FlatItem = { cardId: number; setId: number | null; zone: string; count: number };
+      type FlatItem = {
+        cardId: number;
+        setId: number | null;
+        zone: string;
+        count: number;
+      };
       const flat: FlatItem[] = [];
       for (const { cardId, zone, count, variantId } of agg.values()) {
-        const sId = variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null);
+        const sId =
+          variantId != null
+            ? setByVariant.get(variantId) ?? null
+            : setId ?? null;
         flat.push({ cardId, setId: sId, zone, count });
       }
-      const pairs = Array.from(new Set(flat
-        .filter((it) => it.setId != null)
-        .map(it => `${it.cardId}:${it.setId as number}`)
-      ));
-      const orPairs = pairs.map(k => ({ cardId: Number(k.split(':')[0]), setId: Number(k.split(':')[1]) }));
+      const pairs = Array.from(
+        new Set(
+          flat
+            .filter((it) => it.setId != null)
+            .map((it) => `${it.cardId}:${it.setId as number}`)
+        )
+      );
+      const orPairs = pairs.map((k) => ({
+        cardId: Number(k.split(":")[0]),
+        setId: Number(k.split(":")[1]),
+      }));
       const metaMap = new Map<string, string | null>();
       if (orPairs.length) {
-        const metas = await prisma.cardSetMetadata.findMany({ where: { OR: orPairs }, select: { cardId: true, setId: true, type: true } });
+        const metas = await prisma.cardSetMetadata.findMany({
+          where: { OR: orPairs },
+          select: { cardId: true, setId: true, type: true },
+        });
         for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
       }
-      let avatarCount = 0; let spellbook = 0; let atlas = 0;
+      let avatarCount = 0;
+      let spellbook = 0;
+      let atlas = 0;
       for (const it of flat) {
-        if (it.zone === 'Spellbook') spellbook += it.count;
-        if (it.zone === 'Atlas') atlas += it.count;
-        const type = (it.setId != null ? (metaMap.get(`${it.cardId}:${it.setId}`) || '') : '').toLowerCase();
-        if (type.includes('avatar')) avatarCount += it.count;
+        if (it.zone === "Spellbook") spellbook += it.count;
+        if (it.zone === "Atlas") atlas += it.count;
+        const type = (
+          it.setId != null ? metaMap.get(`${it.cardId}:${it.setId}`) || "" : ""
+        ).toLowerCase();
+        if (type.includes("avatar")) avatarCount += it.count;
       }
       if (!(avatarCount === 1 && spellbook >= 50 && atlas >= 30)) {
-        return new Response(JSON.stringify({
-          error: `Constructed deck invalid: requires exactly 1 Avatar, >=50 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`
-        }), { status: 400 });
+        return new Response(
+          JSON.stringify({
+            error: `Constructed deck invalid: requires exactly 1 Avatar, >=50 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`,
+          }),
+          { status: 400 }
+        );
       }
     }
 
     // Create deck and all cards in a single transaction to minimize latency
     const result = await prisma.$transaction(async (tx) => {
-      const deck = await tx.deck.create({ data: { name, format, isPublic, userId } });
-      const createData = Array.from(agg.values()).map(({ cardId, zone, count, variantId }) => ({
-        deckId: deck.id,
-        cardId,
-        setId: (variantId != null ? (setByVariant.get(variantId) ?? null) : (setId ?? null)),
-        variantId: variantId ?? null,
-        zone,
-        count,
-      }));
+      const deck = await tx.deck.create({
+        data: { name, format, isPublic, userId },
+      });
+      const createData = Array.from(agg.values()).map(
+        ({ cardId, zone, count, variantId }) => ({
+          deckId: deck.id,
+          cardId,
+          setId:
+            variantId != null
+              ? setByVariant.get(variantId) ?? null
+              : setId ?? null,
+          variantId: variantId ?? null,
+          zone,
+          count,
+        })
+      );
       if (createData.length) {
         await tx.deckCard.createMany({ data: createData });
       }
@@ -307,10 +422,15 @@ export async function POST(req: NextRequest) {
 
     return new Response(JSON.stringify(result), {
       status: 201,
-      headers: { 'content-type': 'application/json' },
+      headers: { "content-type": "application/json" },
     });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

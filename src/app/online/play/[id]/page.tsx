@@ -110,11 +110,33 @@ export default function OnlineMatchPage() {
 
   const {
     myPlayerId,
+    orderedPlayerIds,
     myPlayerNumber,
     myPlayerKey,
     opponentSeat,
     opponentPlayerId,
   } = usePlayerIdentity(match, me);
+
+  const resolvedSeat = useMemo<PlayerKey | null>(() => {
+    if (myPlayerKey === "p1" || myPlayerKey === "p2") {
+      return myPlayerKey;
+    }
+    if (myPlayerId) {
+      const order = Array.isArray(orderedPlayerIds)
+        ? orderedPlayerIds
+        : Array.isArray(match?.playerIds)
+        ? (match?.playerIds as string[])
+        : [];
+      const idx = order.indexOf(myPlayerId);
+      if (idx === 0) return "p1";
+      if (idx === 1) return "p2";
+    }
+    const players = Array.isArray(match?.players) ? match?.players : [];
+    const idx = players.findIndex((p) => p?.id === myPlayerId);
+    if (idx === 0) return "p1";
+    if (idx === 1) return "p2";
+    return null;
+  }, [myPlayerKey, myPlayerId, orderedPlayerIds, match?.playerIds, match?.players]);
 
   const [spectatorSeat, setSpectatorSeat] = useState<PlayerKey>("p1");
   useEffect(() => {
@@ -138,13 +160,13 @@ export default function OnlineMatchPage() {
 
   // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {
-    setActorKey(myPlayerKey);
+    setActorKey(resolvedSeat);
     setLocalPlayerId(myPlayerId ?? null);
     return () => {
       setActorKey(null);
       setLocalPlayerId(null);
     };
-  }, [setActorKey, setLocalPlayerId, myPlayerKey, myPlayerId]);
+  }, [setActorKey, setLocalPlayerId, resolvedSeat, myPlayerId]);
 
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
