@@ -86,6 +86,14 @@ const tournamentModules = modules.tournament;
 const draftModules = modules.draft;
 const { replay } = modules;
 const tournamentBroadcast = tournamentModules.broadcast;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { registerChatHandlers } = require("./socket/chat-handlers");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const {
+  sanitizeMatchInfoForSpectator,
+  sanitizeGameForSpectator,
+  broadcastSpectatorsUpdated,
+} = require("./modules/spectator");
 // T021: Import draft config service
 const draftConfig = modules.draft.config;
 const { createMatchDraftService } = modules.draft;
@@ -180,19 +188,6 @@ interface TournamentBroadcastData extends Record<string, unknown> {
   matchId?: string;
 }
 
-type ChatScope = "global" | "lobby" | "match";
-
-interface ChatPayload extends Record<string, unknown> {
-  content?: unknown;
-  scope?: unknown;
-}
-
-const CHAT_SCOPE_VALUES: ReadonlySet<ChatScope> = new Set([
-  "global",
-  "lobby",
-  "match",
-]);
-
 interface DraggingPayload extends Record<string, unknown> {
   kind?: unknown;
   from?: unknown;
@@ -239,10 +234,6 @@ function normalizeTournamentBroadcastData(
   return { ...(input as Record<string, unknown>) };
 }
 
-function isChatScope(value: unknown): value is ChatScope {
-  return typeof value === "string" && CHAT_SCOPE_VALUES.has(value as ChatScope);
-}
-
 function toOptionalString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -259,52 +250,6 @@ function toOptionalNumber(value: unknown): number | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
-}
-
-// --- Spectator sanitization helpers ---
-function sanitizeMatchInfoForSpectator(info: AnyRecord): AnyRecord {
-  try {
-    const out: AnyRecord = { ...info };
-    delete (out as AnyRecord).playerDecks;
-    delete (out as AnyRecord).sealedPacks;
-    delete (out as AnyRecord).deckSubmissions;
-    delete (out as AnyRecord).draftState;
-    return out;
-  } catch {
-    return info;
-  }
-}
-
-function sanitizeGameForSpectator(
-  game: AnyRecord | null | undefined
-): AnyRecord | null {
-  if (!isRecord(game)) return null;
-  try {
-    const out: AnyRecord = { ...game };
-    if (isRecord(out.zones)) delete out.zones;
-    return out;
-  } catch {
-    return null;
-  }
-}
-
-// --- Spectator presence helpers ---
-async function broadcastSpectatorsUpdated(matchId: string) {
-  try {
-    const room = `spectate:${matchId}`;
-    let count = 0;
-    try {
-      const sockets = await io.in(room).allSockets();
-      count = sockets ? sockets.size : 0;
-    } catch {}
-    const out = { type: "spectatorsUpdated", matchId, count };
-    try {
-      io.to(room).emit("message", out);
-    } catch {}
-    try {
-      io.to(`match:${matchId}`).emit("message", out);
-    } catch {}
-  } catch {}
 }
 
 type MatchLeaderService = ReturnType<typeof createMatchLeaderService>;
@@ -2309,6 +2254,19 @@ io.on("connection", async (socket: SocketClient) => {
     rid,
   });
 
+  registerChatHandlers({
+    io,
+    socket,
+    isAuthed: () => authed,
+    getPlayerBySocket,
+    getPlayerInfo,
+    getRateLimitsForSocket,
+    tryConsume,
+    incrementMetric,
+    incrementRateLimitHit,
+    debugLog,
+  });
+
   // Read auth result from middleware (fallback to soft-allow if not required)
   if (socket.data && socket.data.authUser) {
     authUser = socket.data.authUser;
@@ -2676,7 +2634,7 @@ io.on("connection", async (socket: SocketClient) => {
         }
       } catch {}
       try {
-        await broadcastSpectatorsUpdated(matchId);
+        await broadcastSpectatorsUpdated(io, matchId);
       } catch {}
 
       // Announce spectator join to players via console event
@@ -2939,78 +2897,6 @@ io.on("connection", async (socket: SocketClient) => {
           safeErrorMessage(err)
         );
       } catch {}
-    }
-  });
-
-  socket.on("chat", (incoming?: ChatPayload) => {
-    if (!authed) return;
-    const payload = incoming ?? {};
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
-
-    // Increment receive metric
-    incrementMetric("chatRecvTotal");
-
-    // Rate limit check - return error if exceeded
-    const rateLimits = getRateLimitsForSocket(socket.id);
-    if (!tryConsume(rateLimits.chat)) {
-      incrementRateLimitHit("chat");
-      debugLog(`[chat] rate limit exceeded for socket ${socket.id}`);
-      socket.emit("chat", {
-        from: null,
-        content: "Rate limit exceeded. Please slow down.",
-        scope: "global" as ChatScope,
-        error: "rate_limited",
-      });
-      return;
-    }
-
-    const rawContent = payload.content;
-    const normalizedContent =
-      typeof rawContent === "string"
-        ? rawContent
-        : rawContent != null
-        ? String(rawContent)
-        : "";
-    const content = normalizedContent.slice(0, 500);
-    if (!content) return;
-    const requestedScope = isChatScope(payload.scope) ? payload.scope : null;
-
-    const from = getPlayerInfo(player.id);
-
-    // Global chat: broadcast to all connected clients
-    if (requestedScope === "global") {
-      io.emit("chat", { from, content, scope: "global" as ChatScope });
-      incrementMetric("chatSentTotal");
-      debugLog(`[chat] global message sent from ${player.id}`);
-      return;
-    }
-
-    // Room-scoped chat (lobby or match). Prefer requested scope if valid and the player is in that context; otherwise infer from player state.
-    let scope: Exclude<ChatScope, "global"> = "lobby";
-    let room: string | null = null;
-
-    if (requestedScope === "match" && player.matchId) {
-      scope = "match";
-      room = `match:${player.matchId}`;
-    } else if (requestedScope === "lobby" && player.lobbyId) {
-      scope = "lobby";
-      room = `lobby:${player.lobbyId}`;
-    } else if (player.matchId) {
-      scope = "match";
-      room = `match:${player.matchId}`;
-    } else if (player.lobbyId) {
-      scope = "lobby";
-      room = `lobby:${player.lobbyId}`;
-    }
-
-    if (room) {
-      io.to(room).emit("chat", { from, content, scope });
-      incrementMetric("chatSentTotal");
-      debugLog(`[chat] room message sent from ${player.id} to ${room}`);
-    } else {
-      socket.emit("chat", { from: null, content, scope });
-      incrementMetric("chatSentTotal");
     }
   });
 
@@ -4611,14 +4497,14 @@ io.on("connection", async (socket: SocketClient) => {
   });
 
   socket.on("disconnect", () => {
-    try {
-      const watchId = (
-        socket as unknown as { data?: { watchMatchId?: string } | undefined }
-      ).data?.watchMatchId;
-      if (typeof watchId === "string" && watchId.length > 0) {
-        void broadcastSpectatorsUpdated(watchId);
-      }
-    } catch {}
+      try {
+        const watchId = (
+          socket as unknown as { data?: { watchMatchId?: string } | undefined }
+        ).data?.watchMatchId;
+        if (typeof watchId === "string" && watchId.length > 0) {
+          void broadcastSpectatorsUpdated(io, watchId);
+        }
+      } catch {}
     const pid = playerIdBySocket.get(socket.id);
     if (!pid) return;
     const player = players.get(pid);
