@@ -10,11 +10,12 @@ import LobbiesCentral, {
 } from "@/components/online/LobbiesCentral";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
-import {
-  useRealtimeTournaments,
-} from "@/contexts/RealtimeTournamentContext";
+import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
-import { normalizeCubeSummary, type CubeSummaryInput } from "@/lib/cubes/normalizers";
+import {
+  normalizeCubeSummary,
+  type CubeSummaryInput,
+} from "@/lib/cubes/normalizers";
 import type {
   TournamentInfo as ProtocolTournamentInfo,
   SealedConfig,
@@ -167,15 +168,17 @@ type CubeOption = {
   cardCount: number;
 };
 
-function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI }) {
+function LobbyPageContent({
+  tournamentsApi,
+}: {
+  tournamentsApi?: TournamentsAPI;
+}) {
   const router = useRouter();
   const {
     connected,
     lobby,
     match,
     me,
-    ready,
-    toggleReady,
     joinLobby,
     createLobby,
     leaveLobby,
@@ -348,7 +351,10 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   const [cubesLoading, setCubesLoading] = useState(false);
   const [cubeError, setCubeError] = useState<string | null>(null);
   const [selectedCubeId, setSelectedCubeId] = useState<string | null>(null);
-  const [savedPackCounts, setSavedPackCounts] = useState<Record<string, number> | null>(null);
+  const [savedPackCounts, setSavedPackCounts] = useState<Record<
+    string,
+    number
+  > | null>(null);
 
   const loadCubes = useCallback(async () => {
     if (!draftUseCube) return;
@@ -361,9 +367,9 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
       }
       const data = await res.json().catch(() => null);
       const candidateList: CubeSummaryInput[] = Array.isArray(
-        (data as { myCubes?: CubeSummaryInput[] } | null)?.myCubes,
+        (data as { myCubes?: CubeSummaryInput[] } | null)?.myCubes
       )
-        ? ((data as { myCubes: CubeSummaryInput[] }).myCubes)
+        ? (data as { myCubes: CubeSummaryInput[] }).myCubes
         : Array.isArray(data)
         ? (data as CubeSummaryInput[])
         : [];
@@ -377,12 +383,20 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
       }));
       setAvailableCubes(normalized);
       if (!normalized.length) {
-        setCubeError("You don't have any cubes yet. Visit the Cubes page to create one.");
+        setCubeError(
+          "You don't have any cubes yet. Visit the Cubes page to create one."
+        );
         setSelectedCubeId(null);
-        setDraftConfig((prev) => ({ ...prev, cubeId: null, cubeName: null, packCounts: {} }));
+        setDraftConfig((prev) => ({
+          ...prev,
+          cubeId: null,
+          cubeName: null,
+          packCounts: {},
+        }));
         return;
       }
-      const existing = normalized.find((cube) => cube.id === selectedCubeId) ?? normalized[0];
+      const existing =
+        normalized.find((cube) => cube.id === selectedCubeId) ?? normalized[0];
       setSelectedCubeId(existing.id);
       setDraftConfig((prev) => ({
         ...prev,
@@ -394,7 +408,13 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     } catch (err) {
       setCubeError(err instanceof Error ? err.message : "Failed to load cubes");
       setSelectedCubeId(null);
-      setDraftConfig((prev) => ({ ...prev, cubeId: null, cubeName: null, packCounts: {}, setMix: prev.setMix }));
+      setDraftConfig((prev) => ({
+        ...prev,
+        cubeId: null,
+        cubeName: null,
+        packCounts: {},
+        setMix: prev.setMix,
+      }));
     } finally {
       setCubesLoading(false);
     }
@@ -412,7 +432,12 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
       setAvailableCubes([]);
       setCubeError(null);
       setSelectedCubeId((prev) => prev);
-      setDraftConfig((prev) => ({ ...prev, cubeId: null, cubeName: null, packCounts: {} }));
+      setDraftConfig((prev) => ({
+        ...prev,
+        cubeId: null,
+        cubeName: null,
+        packCounts: {},
+      }));
     } else {
       setDraftUseCube(false);
       setCubeError(null);
@@ -420,16 +445,22 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
       setAvailableCubes([]);
       setSelectedCubeId(null);
       setDraftConfig((prev) => {
-      const restore = savedPackCounts ?? { Beta: prev.packCount, "Arthurian Legends": 0 };
-      const total = Object.values(restore).reduce((sum, count) => sum + count, 0);
-      const fallback = { Beta: prev.packCount, "Arthurian Legends": 0 };
-      return {
-        ...prev,
-        cubeId: null,
-        cubeName: null,
-        packCounts: total === prev.packCount ? restore : fallback,
-        setMix: total === prev.packCount ? prev.setMix : ["Beta"],
-      };
+        const restore = savedPackCounts ?? {
+          Beta: prev.packCount,
+          "Arthurian Legends": 0,
+        };
+        const total = Object.values(restore).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        const fallback = { Beta: prev.packCount, "Arthurian Legends": 0 };
+        return {
+          ...prev,
+          cubeId: null,
+          cubeName: null,
+          packCounts: total === prev.packCount ? restore : fallback,
+          setMix: total === prev.packCount ? prev.setMix : ["Beta"],
+        };
       });
     }
   };
@@ -454,7 +485,6 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     [availableCubes, setDraftConfig]
   );
 
-
   // UI validation helpers
   const sealedTotalPacks = useMemo(
     () => Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0),
@@ -474,7 +504,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
   );
   const draftValid = useMemo(
     () =>
-      draftAssigned === draftConfig.packCount && (!draftUseCube || !!draftConfig.cubeId),
+      draftAssigned === draftConfig.packCount &&
+      (!draftUseCube || !!draftConfig.cubeId),
     [draftAssigned, draftConfig.packCount, draftUseCube, draftConfig.cubeId]
   );
   const chatRef = useRef<HTMLDivElement | null>(null);
@@ -583,6 +614,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
     );
   }, [lobby]);
 
+  const hasAtLeastTwoPlayers = !!lobby && lobby.players.length > 1;
+
   // Determine if this client is rejoining an ongoing match (not used in simplified CTA)
 
   // Local flags: has deck been submitted for sealed/draft flows?
@@ -650,8 +683,12 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
         const label = draftConfig.cubeName || "Custom Cube";
         return `Planned: Draft • Cube: ${label} • Packs: ${draftConfig.packCount}`;
       }
-      const entries = Object.entries(draftConfig.packCounts || {}).filter(([, c]) => c > 0);
-      const mix = entries.length ? entries.map(([s, c]) => `${s}×${c}`).join(", ") : draftConfig.setMix.join(", ");
+      const entries = Object.entries(draftConfig.packCounts || {}).filter(
+        ([, c]) => c > 0
+      );
+      const mix = entries.length
+        ? entries.map(([s, c]) => `${s}×${c}`).join(", ")
+        : draftConfig.setMix.join(", ");
       return `Planned: Draft • Mix: ${mix} • Packs: ${draftConfig.packCount}`;
     }
     const totalPacks = Object.values(sealedConfig.packCounts).reduce(
@@ -804,19 +841,23 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
           myId={me?.id ?? null}
           joinedLobbyId={lobby?.id ?? null}
           onJoin={(id) => joinLobby(id)}
-          onCreate={(cfg) => {
+          onCreate={async (cfg) => {
             console.log(
               `Creating lobby: "${cfg.name}" with ${cfg.maxPlayers} max players`
             );
-            createLobby({
-              name: cfg.name,
-              visibility: cfg.visibility,
-              maxPlayers: cfg.maxPlayers,
-            });
+            try {
+              await createLobby({
+                name: cfg.name,
+                visibility: cfg.visibility,
+                maxPlayers: cfg.maxPlayers,
+              });
+            } catch (error) {
+              console.error("Failed to create lobby:", error);
+              return;
+            }
+            setConfigOpen(true);
           }}
           onLeaveLobby={leaveLobby}
-          ready={ready}
-          onToggleReady={toggleReady}
           onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
           onResync={() => resync()}
           onAddCpuBot={addCpuBot}
@@ -1209,12 +1250,16 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                             onChange={(e) => handleCubeToggle(e.target.checked)}
                             className="rounded"
                           />
-                          <span>Use one of your cubes as the booster source</span>
+                          <span>
+                            Use one of your cubes as the booster source
+                          </span>
                         </label>
                         {draftUseCube ? (
                           <div className="space-y-2 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 p-3 text-sm">
                             {cubesLoading ? (
-                              <div className="text-xs text-slate-300">Loading cubes...</div>
+                              <div className="text-xs text-slate-300">
+                                Loading cubes...
+                              </div>
                             ) : null}
                             {cubeError ? (
                               <div className="text-xs text-red-300 bg-red-900/30 rounded px-3 py-2 ring-1 ring-red-800/40">
@@ -1222,10 +1267,14 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                               </div>
                             ) : (
                               <>
-                                <label className="block text-xs font-medium mb-1">Select cube</label>
+                                <label className="block text-xs font-medium mb-1">
+                                  Select cube
+                                </label>
                                 <select
                                   value={selectedCubeId ?? ""}
-                                  onChange={(e) => onCubeSelectChange(e.target.value)}
+                                  onChange={(e) =>
+                                    onCubeSelectChange(e.target.value)
+                                  }
                                   className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
                                 >
                                   <option value="" disabled>
@@ -1239,14 +1288,19 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                                 </select>
                                 {selectedCubeId && !cubeError ? (
                                   <div className="text-xs text-slate-300/90">
-                                    Packs will be generated from {
-                                      availableCubes.find((cube) => cube.id === selectedCubeId)?.name ?? "your cube"
-                                    }.
+                                    Packs will be generated from{" "}
+                                    {availableCubes.find(
+                                      (cube) => cube.id === selectedCubeId
+                                    )?.name ?? "your cube"}
+                                    .
                                   </div>
                                 ) : null}
                                 <p className="text-xs text-slate-400">
                                   Manage cubes on the{" "}
-                                  <Link href="/cubes" className="underline text-slate-200 hover:text-white">
+                                  <Link
+                                    href="/cubes"
+                                    className="underline text-slate-200 hover:text-white"
+                                  >
                                     Cubes page
                                   </Link>
                                   .
@@ -1256,7 +1310,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                           </div>
                         ) : (
                           <p className="text-xs text-slate-400">
-                            Draft from official set boosters. Adjust the pack mix below.
+                            Draft from official set boosters. Adjust the pack
+                            mix below.
                           </p>
                         )}
                       </div>
@@ -1271,22 +1326,34 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                             setDraftConfig((prev) => {
                               if (draftUseCube) {
                                 const cube =
-                                  availableCubes.find((entry) => entry.id === (selectedCubeId ?? prev.cubeId ?? "")) ?? null;
-                                const label = cube?.name ?? prev.cubeName ?? null;
+                                  availableCubes.find(
+                                    (entry) =>
+                                      entry.id ===
+                                      (selectedCubeId ?? prev.cubeId ?? "")
+                                  ) ?? null;
+                                const label =
+                                  cube?.name ?? prev.cubeName ?? null;
                                 return {
                                   ...prev,
                                   packCount: nextCount,
-                                  packCounts: label ? { [label]: nextCount } : {},
+                                  packCounts: label
+                                    ? { [label]: nextCount }
+                                    : {},
                                   setMix: label ? [label] : prev.setMix,
                                 };
                               }
-                              const total = Object.values(prev.packCounts).reduce((s, c) => s + c, 0);
+                              const total = Object.values(
+                                prev.packCounts
+                              ).reduce((s, c) => s + c, 0);
                               const packs = { ...prev.packCounts };
                               if (total > nextCount) {
                                 const order = ["Arthurian Legends", "Beta"];
                                 let excess = total - nextCount;
                                 for (const name of order) {
-                                  const take = Math.min(excess, packs[name] || 0);
+                                  const take = Math.min(
+                                    excess,
+                                    packs[name] || 0
+                                  );
                                   if (take > 0) {
                                     packs[name] = (packs[name] || 0) - take;
                                     excess -= take;
@@ -1294,7 +1361,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                                   if (excess <= 0) break;
                                 }
                               } else if (total < nextCount) {
-                                packs["Beta"] = (packs["Beta"] || 0) + (nextCount - total);
+                                packs["Beta"] =
+                                  (packs["Beta"] || 0) + (nextCount - total);
                               }
                               return {
                                 ...prev,
@@ -1312,7 +1380,8 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                       {!draftUseCube && (
                         <div>
                           <label className="block text-xs font-medium mb-2">
-                            Exact Pack Mix (sum must equal {draftConfig.packCount})
+                            Exact Pack Mix (sum must equal{" "}
+                            {draftConfig.packCount})
                             <span
                               className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
                                 draftValid
@@ -1323,18 +1392,27 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                               {draftValid
                                 ? "OK"
                                 : draftAssigned < draftConfig.packCount
-                                ? `Need ${draftConfig.packCount - draftAssigned}`
-                                : `Remove ${draftAssigned - draftConfig.packCount}`}
+                                ? `Need ${
+                                    draftConfig.packCount - draftAssigned
+                                  }`
+                                : `Remove ${
+                                    draftAssigned - draftConfig.packCount
+                                  }`}
                             </span>
                           </label>
                           <div className="space-y-2">
                             {["Beta", "Arthurian Legends"].map((set) => {
                               const count = draftConfig.packCounts[set] || 0;
-                              const total = Object.values(draftConfig.packCounts).reduce((s, c) => s + c, 0);
+                              const total = Object.values(
+                                draftConfig.packCounts
+                              ).reduce((s, c) => s + c, 0);
                               const canInc = total < draftConfig.packCount;
                               const canDec = count > 0;
                               return (
-                                <div key={set} className="flex items-center justify-between">
+                                <div
+                                  key={set}
+                                  className="flex items-center justify-between"
+                                >
                                   <span className="text-sm">{set}</span>
                                   <div className="flex items-center gap-2">
                                     <button
@@ -1342,24 +1420,45 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                                       onClick={() =>
                                         setDraftConfig((prev) => ({
                                           ...prev,
-                                          setMix: Array.from(new Set([...(prev.setMix || []), set])),
-                                          packCounts: { ...prev.packCounts, [set]: Math.max(0, (prev.packCounts[set] || 0) - 1) },
+                                          setMix: Array.from(
+                                            new Set([
+                                              ...(prev.setMix || []),
+                                              set,
+                                            ])
+                                          ),
+                                          packCounts: {
+                                            ...prev.packCounts,
+                                            [set]: Math.max(
+                                              0,
+                                              (prev.packCounts[set] || 0) - 1
+                                            ),
+                                          },
                                         }))
                                       }
                                       disabled={!canDec}
                                     >
                                       −
                                     </button>
-                                    <span className="w-8 text-center text-sm font-medium">{count}</span>
+                                    <span className="w-8 text-center text-sm font-medium">
+                                      {count}
+                                    </span>
                                     <button
                                       className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
                                       onClick={() =>
                                         setDraftConfig((prev) => ({
                                           ...prev,
-                                          setMix: Array.from(new Set([...(prev.setMix || []), set])),
+                                          setMix: Array.from(
+                                            new Set([
+                                              ...(prev.setMix || []),
+                                              set,
+                                            ])
+                                          ),
                                           packCounts: {
                                             ...prev.packCounts,
-                                            [set]: Math.min(prev.packCount, (prev.packCounts[set] || 0) + 1),
+                                            [set]: Math.min(
+                                              prev.packCount,
+                                              (prev.packCounts[set] || 0) + 1
+                                            ),
                                           },
                                         }))
                                       }
@@ -1503,6 +1602,14 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                   <button
                     className="rounded bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-40"
                     onClick={() => {
+                      // If there aren't enough players yet or not all are ready,
+                      // treat this as "confirm setup" only: close the overlay and
+                      // let the host return to the lobby while waiting for others.
+                      if (!hasAtLeastTwoPlayers || !allReady) {
+                        setConfigOpen(false);
+                        return;
+                      }
+
                       if (matchType === "constructed") {
                         startMatch({ matchType: "constructed" });
                         setConfigOpen(false);
@@ -1510,12 +1617,18 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                       }
                       if (matchType === "draft") {
                         if (draftUseCube && !draftConfig.cubeId) {
-                          alert("Select a cube to draft from before starting the draft.");
+                          alert(
+                            "Select a cube to draft from before starting the draft."
+                          );
                           return;
                         }
-                        const total = Object.values(draftConfig.packCounts).reduce((s, c) => s + c, 0);
+                        const total = Object.values(
+                          draftConfig.packCounts
+                        ).reduce((s, c) => s + c, 0);
                         if (total !== draftConfig.packCount) {
-                          alert(`Draft pack mix must sum to ${draftConfig.packCount}.`);
+                          alert(
+                            `Draft pack mix must sum to ${draftConfig.packCount}.`
+                          );
                           return;
                         }
                         const activeSets = Object.entries(
@@ -1567,17 +1680,19 @@ function LobbyPageContent({ tournamentsApi }: { tournamentsApi?: TournamentsAPI 
                       setConfigOpen(false);
                     }}
                     disabled={
-                      !allReady ||
                       (matchType === "sealed" && !sealedValid) ||
                       (matchType === "draft" && !draftValid)
                     }
                     title={
-                      !allReady
-                        ? "All players must be ready to start"
-                        : `Start ${matchType} match`
+                      (matchType === "sealed" && !sealedValid) ||
+                      (matchType === "draft" && !draftValid)
+                        ? "Fix configuration issues before confirming setup"
+                        : hasAtLeastTwoPlayers && allReady
+                        ? `Confirm setup and start ${matchType} match`
+                        : "Confirm setup and return to lobby"
                     }
                   >
-                    Confirm Start
+                    Confirm Setup
                   </button>
                 </div>
               </div>
