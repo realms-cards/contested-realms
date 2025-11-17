@@ -3542,7 +3542,7 @@ function AuthenticatedDeckEditor() {
                       );
                     }}
                     onHoverEnd={() => {
-                      clearHoverPreview(`card-${p.id}`);
+                      clearHoverPreviewDebounced(null, 20);
                     }}
                     onContextMenu={(cx, cy) =>
                       openContextMenuForCard(
