@@ -56,6 +56,12 @@ moveSelectedPermanentTo: (x, y) =>
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
+      if (state.transport) {
+        const ownerSeat = seatFromOwner(exists.owner);
+        if (!state.actorKey || state.actorKey !== ownerSeat) {
+          return state;
+        }
+      }
       const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
         state.permanents,
         fromKey,
@@ -119,6 +125,12 @@ moveSelectedPermanentToWithOffset: (x, y, offset) =>
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
+      if (state.transport) {
+        const ownerSeat = seatFromOwner(exists.owner);
+        if (!state.actorKey || state.actorKey !== ownerSeat) {
+          return state;
+        }
+      }
       const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
         state.permanents,
         fromKey,
@@ -166,9 +178,7 @@ moveSelectedPermanentToWithOffset: (x, y, offset) =>
           finalPer,
           state.permanents
         );
-        setTimeout(() => {
-          get().trySendPatch(patch);
-        }, 50);
+        get().trySendPatch(patch);
       }
       return {
         permanents: finalPer,

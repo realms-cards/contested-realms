@@ -460,9 +460,12 @@ export function PermanentStack({
         const isDraggingPermanent =
           dragging && dragging.from === key && dragging.index === idx;
 
-        const bodyType =
-          useGhostOnlyBoardDrag || tokenSiteReplace ? "fixed" : "dynamic";
-        const gravityScale = useGhostOnlyBoardDrag ? 0 : 1;
+        const bodyType = tokenSiteReplace
+          ? "fixed"  // Rubble tokens are truly fixed (site replacements)
+          : isDraggingPermanent && !useGhostOnlyBoardDrag
+            ? "kinematicPosition"  // Active drag: body follows physics during drag
+            : "fixed";  // Not dragging: locked in place to prevent unwanted position updates
+        const gravityScale = (useGhostOnlyBoardDrag || tokenSiteReplace || !isDraggingPermanent) ? 0 : 1;
 
         return (
           <RigidBody

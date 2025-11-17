@@ -18,6 +18,7 @@ import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
 import FloatingChat from "@/components/chat/FloatingChat";
+import CardPreview from "@/components/game/CardPreview";
 import { TournamentControls } from "@/components/deck-editor";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import {
@@ -25,9 +26,10 @@ import {
   CardMeta,
   computeStackPositions,
 } from "@/lib/game/cardSorting";
-import MouseTracker from "@/lib/game/components/MouseTracker";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { useCardHover, CardPreviewData } from "@/lib/game/hooks/useCardHover";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import { createInitialBoard } from "@/lib/game/store";
 
 const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
   ssr: false,
@@ -70,8 +72,8 @@ function pickStandardSiteResult(
 
 // --- Deck Editor data types (same as 2D editor) ---
 
-type Zone = "Deck" | "Sideboard";
-type ApiZone = "Spellbook" | "Atlas" | "Sideboard"; // API zones for saving/loading
+type Zone = "Deck" | "Sideboard" | "Collection";
+type ApiZone = "Spellbook" | "Atlas" | "Collection" | "Sideboard"; // API zones for saving/loading
 // SearchType and SearchResult moved to '@/lib/deckEditor/search'
 
 // Matches server shape from GET /api/decks/[id]
@@ -105,6 +107,15 @@ type PickItem = {
 
 // DraggableCard3D moved to its own module for clarity and bundle-splitting
 
+// Board-based anchor for the Collection fan layout (bottom-left of the playmat)
+const INITIAL_BOARD = createInitialBoard();
+const GRID_HALF_W = (INITIAL_BOARD.size.w * TILE_SIZE) / 2;
+const GRID_HALF_H = (INITIAL_BOARD.size.h * TILE_SIZE) / 2;
+// Place the collection fan inside the board, at the lower-left corner region.
+// We keep a small margin from the true edge so cards remain fully on the mat.
+const COLLECTION_ANCHOR_X = -GRID_HALF_W + CARD_SHORT * 0.6;
+const COLLECTION_ANCHOR_Z = GRID_HALF_H - CARD_LONG * 0.6;
+
 function AuthenticatedDeckEditor() {
   const { status } = useSession();
   const searchParams = useSearchParams();
@@ -129,15 +140,19 @@ function AuthenticatedDeckEditor() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/tournaments/${encodeURIComponent(String(tournamentId))}`);
+        const res = await fetch(
+          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`
+        );
         if (!res.ok) return;
         const detail = await res.json();
-        if (!cancelled && detail?.name && typeof detail.name === 'string') {
+        if (!cancelled && detail?.name && typeof detail.name === "string") {
           setDeckName(detail.name);
         }
       } catch {}
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   // Debug: Track picks changes
@@ -166,7 +181,9 @@ function AuthenticatedDeckEditor() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [waitingForOtherPlayers, setWaitingForOtherPlayers] = useState(false);
-  const [waitingOverlayStage, setWaitingOverlayStage] = useState<"submitting" | "waiting">("waiting");
+  const [waitingOverlayStage, setWaitingOverlayStage] = useState<
+    "submitting" | "waiting"
+  >("waiting");
   const [orbitLocked, setOrbitLocked] = useState(false);
 
   // Clear transient errors when auth status changes to authenticated
@@ -244,7 +261,10 @@ function AuthenticatedDeckEditor() {
   // Reliable navigation helper back to the match page
   const goBackToMatch = useCallback(
     (targetId?: string | null) => {
-      const id = typeof targetId === "string" && targetId.trim().length ? targetId : null;
+      const id =
+        typeof targetId === "string" && targetId.trim().length
+          ? targetId
+          : null;
       const url = id ? `/online/play/${id}` : null;
       try {
         if (url) {
@@ -711,7 +731,8 @@ function AuthenticatedDeckEditor() {
     if (!isSealed || sealedInitDone) return;
     const matchId = searchParams?.get("matchId");
     const tournamentId = searchParams?.get("tournament");
-    const idKey = matchId || (tournamentId ? `tournament_${tournamentId}` : null);
+    const idKey =
+      matchId || (tournamentId ? `tournament_${tournamentId}` : null);
     if (!idKey) return;
 
     let raw: string | null = null;
@@ -772,27 +793,34 @@ function AuthenticatedDeckEditor() {
     const draft = searchParams?.get("draft");
     const matchId = searchParams?.get("matchId");
     const sessionId = searchParams?.get("sessionId"); // Tournament draft session
-    const playerIdParam = searchParams?.get("playerId") || searchParams?.get("player") || null;
+    const playerIdParam =
+      searchParams?.get("playerId") || searchParams?.get("player") || null;
     const draftId = matchId || sessionId; // Support both match-based and tournament drafts
 
-    console.log('[Draft Init] useEffect run', { draft, draftId, draftInitDone });
+    console.log("[Draft Init] useEffect run", {
+      draft,
+      draftId,
+      draftInitDone,
+    });
 
     if (draft !== "true" || !draftId) return;
     if (draftInitDone) {
-      console.log('[Draft Init] Already initialized, skipping');
+      console.log("[Draft Init] Already initialized, skipping");
       return;
     }
     if (draftInitRef.current) {
-      console.log('[Draft Init] Guard hit - initialization already running');
+      console.log("[Draft Init] Guard hit - initialization already running");
       return;
     }
     draftInitRef.current = true;
 
-    console.log('[Draft Init] Initializing draft mode for', draftId);
+    console.log("[Draft Init] Initializing draft mode for", draftId);
     setIsDraftMode(true);
 
     let raw: string | null = null;
-    const storageSuffix = playerIdParam ? `${draftId}_${playerIdParam}` : draftId;
+    const storageSuffix = playerIdParam
+      ? `${draftId}_${playerIdParam}`
+      : draftId;
     try {
       raw = localStorage.getItem(`draftedCards_${storageSuffix}`);
       if (!raw && playerIdParam) {
@@ -806,25 +834,49 @@ function AuthenticatedDeckEditor() {
     if (!raw) {
       const sessionIdParam = searchParams?.get("sessionId");
       if (sessionIdParam) {
-        console.log('[Draft Init] No local data, fetching from server:', sessionIdParam);
+        console.log(
+          "[Draft Init] No local data, fetching from server:",
+          sessionIdParam
+        );
         (async () => {
           try {
-            const res = await fetch(`/api/draft-sessions/${sessionIdParam}/state`, { cache: 'no-store' });
+            const res = await fetch(
+              `/api/draft-sessions/${sessionIdParam}/state`,
+              { cache: "no-store" }
+            );
             if (res.ok) {
               const payload = await res.json();
-              const myPicks = Array.isArray(payload?.myPicks) ? (payload.myPicks as Array<{ slug?: string; cardName?: string; name?: string; setName?: string; type?: string | null; rarity?: string | null }>) : [];
+              const myPicks = Array.isArray(payload?.myPicks)
+                ? (payload.myPicks as Array<{
+                    slug?: string;
+                    cardName?: string;
+                    name?: string;
+                    setName?: string;
+                    type?: string | null;
+                    rarity?: string | null;
+                  }>)
+                : [];
               if (myPicks.length > 0) {
                 const json = JSON.stringify(myPicks);
-                try { localStorage.setItem(`draftedCards_${draftId}`, json); } catch {}
+                try {
+                  localStorage.setItem(`draftedCards_${draftId}`, json);
+                } catch {}
 
                 // Pre-resolve to SearchResult[] by grouping slugs per set and using meta-by-variant
-                console.log('[Draft Init] Resolving', myPicks.length, 'cards from server');
+                console.log(
+                  "[Draft Init] Resolving",
+                  myPicks.length,
+                  "cards from server"
+                );
                 try {
                   const bySet = new Map<string | null, Set<string>>();
                   for (const c of myPicks) {
-                    const slug = typeof c.slug === 'string' ? c.slug : '';
+                    const slug = typeof c.slug === "string" ? c.slug : "";
                     if (!slug) continue;
-                    const setName = (typeof c.setName === 'string' && c.setName) ? c.setName : null;
+                    const setName =
+                      typeof c.setName === "string" && c.setName
+                        ? c.setName
+                        : null;
                     let group = bySet.get(setName);
                     if (!group) {
                       group = new Set<string>();
@@ -832,12 +884,14 @@ function AuthenticatedDeckEditor() {
                     }
                     group.add(slug);
                   }
-                  const requests: Promise<Array<{ slug: string; cardId: number }>>[] = [];
+                  const requests: Promise<
+                    Array<{ slug: string; cardId: number }>
+                  >[] = [];
                   for (const [setName, slugs] of bySet.entries()) {
                     if (!slugs || slugs.size === 0) continue;
                     const params = new URLSearchParams();
-                    params.set('slugs', Array.from(slugs).join(','));
-                    if (setName) params.set('set', setName);
+                    params.set("slugs", Array.from(slugs).join(","));
+                    if (setName) params.set("set", setName);
                     requests.push(
                       fetch(`/api/cards/meta-by-variant?${params.toString()}`)
                         .then((r) => r.json())
@@ -850,32 +904,44 @@ function AuthenticatedDeckEditor() {
                     const idBySlug = new Map<string, number>();
                     for (const r of rows) {
                       const cid = Number((r as { cardId: number }).cardId) || 0;
-                      const slug = String((r as { slug: string }).slug || '');
+                      const slug = String((r as { slug: string }).slug || "");
                       if (slug) idBySlug.set(slug, cid);
                     }
                     const resolved: SearchResult[] = myPicks
                       .map((c) => {
-                        const slug = typeof c.slug === 'string' ? c.slug : '';
-                        const cardId = slug ? (idBySlug.get(slug) || 0) : 0;
-                        const name = (c.cardName || c.name) as string | undefined;
-                        const setName = (c.setName || 'Beta') as string;
+                        const slug = typeof c.slug === "string" ? c.slug : "";
+                        const cardId = slug ? idBySlug.get(slug) || 0 : 0;
+                        const name = (c.cardName || c.name) as
+                          | string
+                          | undefined;
+                        const setName = (c.setName || "Beta") as string;
                         return cardId > 0 && slug && name
-                          ? {
+                          ? ({
                               variantId: 0,
                               slug,
-                              finish: 'Standard' as 'Standard' | 'Foil',
-                              product: 'Draft',
+                              finish: "Standard" as "Standard" | "Foil",
+                              product: "Draft",
                               cardId,
                               cardName: name,
                               set: setName,
                               type: (c.type as string | null) || null,
-                              rarity: (c.rarity as 'Common' | 'Uncommon' | 'Rare' | 'Exceptional' | null) || null,
-                            } as SearchResult
+                              rarity:
+                                (c.rarity as
+                                  | "Common"
+                                  | "Uncommon"
+                                  | "Rare"
+                                  | "Exceptional"
+                                  | null) || null,
+                            } as SearchResult)
                           : null;
                       })
                       .filter((x): x is SearchResult => x !== null);
 
-                    console.log('[Draft Init] Resolved', resolved.length, 'cards, loading into editor');
+                    console.log(
+                      "[Draft Init] Resolved",
+                      resolved.length,
+                      "cards, loading into editor"
+                    );
 
                     try {
                       localStorage.setItem(
@@ -896,7 +962,9 @@ function AuthenticatedDeckEditor() {
                         const next = { ...prev } as Record<PickKey, PickItem>;
                         for (const r of resolved) {
                           const zone: Zone = "Sideboard";
-                          const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+                          const key = `${r.cardId}:${zone}:${
+                            r.variantId ?? "x"
+                          }` as PickKey;
                           const exists = next[key];
                           next[key] = exists
                             ? { ...exists, count: exists.count + 1 }
@@ -934,12 +1002,17 @@ function AuthenticatedDeckEditor() {
                         setDeckName(matchName || "Draft Deck");
                       }
                       setDraftInitDone(true);
-                      console.log('[Draft Init] Done! Cards loaded into editor');
+                      console.log(
+                        "[Draft Init] Done! Cards loaded into editor"
+                      );
                       return;
                     }
                   }
                 } catch (err) {
-                  console.warn('[Draft Init] Failed to pre-resolve cards:', err);
+                  console.warn(
+                    "[Draft Init] Failed to pre-resolve cards:",
+                    err
+                  );
                 }
               } else {
                 setError("No drafted cards found for this draft.");
@@ -995,36 +1068,52 @@ function AuthenticatedDeckEditor() {
 
     // Fast path: use resolved picks if present to avoid any network lookups
     try {
-      const resolvedRaw = localStorage.getItem(`draftedCardsResolved_${storageSuffix}`) ?? (playerIdParam ? localStorage.getItem(`draftedCardsResolved_${draftId}`) : null);
+      const resolvedRaw =
+        localStorage.getItem(`draftedCardsResolved_${storageSuffix}`) ??
+        (playerIdParam
+          ? localStorage.getItem(`draftedCardsResolved_${draftId}`)
+          : null);
       if (resolvedRaw) {
         const resolvedParsed = JSON.parse(resolvedRaw) as unknown;
         const resolvedList = Array.isArray(resolvedParsed)
           ? (resolvedParsed as SearchResult[])
           : [];
-        const allPositiveIds = resolvedList.every((r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0);
+        const allPositiveIds = resolvedList.every(
+          (r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0
+        );
         if (resolvedList.length > 0 && allPositiveIds) {
           if (resolvedList.length !== drafted.length) {
-            console.warn('[Draft Init] Resolved card cache length mismatch', {
+            console.warn("[Draft Init] Resolved card cache length mismatch", {
               cached: resolvedList.length,
               drafted: drafted.length,
             });
           }
-          console.log('[Draft Init] Loading', resolvedList.length, 'cards from resolved cache');
+          console.log(
+            "[Draft Init] Loading",
+            resolvedList.length,
+            "cards from resolved cache"
+          );
 
           setPicks((prev) => {
             const next = { ...prev } as Record<PickKey, PickItem>;
-            console.log('[Draft Init] Prev picks has', Object.keys(prev).length, 'items');
+            console.log(
+              "[Draft Init] Prev picks has",
+              Object.keys(prev).length,
+              "items"
+            );
 
             for (const r of resolvedList) {
               const zone: Zone = "Sideboard";
-              const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+              const key = `${r.cardId}:${zone}:${
+                r.variantId ?? "x"
+              }` as PickKey;
               const exists = next[key];
               if (exists) {
-                console.warn('[Draft Init] Card already exists in picks!', {
+                console.warn("[Draft Init] Card already exists in picks!", {
                   cardId: r.cardId,
                   name: r.cardName,
                   existingCount: exists.count,
-                  key
+                  key,
                 });
               }
               next[key] = exists
@@ -1040,7 +1129,11 @@ function AuthenticatedDeckEditor() {
                     set: r.set,
                   };
             }
-            console.log('[Draft Init] After adding, picks has', Object.keys(next).length, 'items');
+            console.log(
+              "[Draft Init] After adding, picks has",
+              Object.keys(next).length,
+              "items"
+            );
             return next;
           });
           // Infer default set from resolved cards
@@ -1072,7 +1165,12 @@ function AuthenticatedDeckEditor() {
       try {
         // Resolve each drafted card to a concrete SearchResult via slug first, fallback to name
         // Optimize: dedupe identical queries and resolve in parallel with a modest concurrency cap
-        type Lookup = { slug: string; name: string; set: string; count: number };
+        type Lookup = {
+          slug: string;
+          name: string;
+          set: string;
+          count: number;
+        };
         type ResolvedEntry = { lookup: Lookup; result: SearchResult | null };
         const resolvedEntries: ResolvedEntry[] = [];
         const slugPrefixToSet: Record<string, string> = {
@@ -1083,14 +1181,16 @@ function AuthenticatedDeckEditor() {
           drl: "Dragonlord",
         };
         const deriveSetHint = (card: DraftCardLike): string => {
-          const withName = typeof card.setName === "string" ? card.setName.trim() : "";
+          const withName =
+            typeof card.setName === "string" ? card.setName.trim() : "";
           if (withName) return withName;
           const withSet = (() => {
             const raw = (card as Record<string, unknown>).set;
             return typeof raw === "string" ? raw.trim() : "";
           })();
           if (withSet) return withSet;
-          const slug = typeof card.slug === "string" ? card.slug.toLowerCase() : "";
+          const slug =
+            typeof card.slug === "string" ? card.slug.toLowerCase() : "";
           if (slug.length >= 4 && slugPrefixToSet[slug.slice(0, 3)]) {
             return slugPrefixToSet[slug.slice(0, 3)];
           }
@@ -1129,7 +1229,11 @@ function AuthenticatedDeckEditor() {
 
         const tasks = lookupEntries.map((q) => async () => {
           try {
-            const result = await fetchSearchResult({ slug: q.slug, name: q.name, set: q.set });
+            const result = await fetchSearchResult({
+              slug: q.slug,
+              name: q.name,
+              set: q.set,
+            });
             return { lookup: q, result } as ResolvedEntry;
           } catch {
             return { lookup: q, result: null } as ResolvedEntry;
@@ -1144,19 +1248,21 @@ function AuthenticatedDeckEditor() {
           let idx = 0;
           let done = 0;
           const total = fns.length;
-          const workers = new Array(Math.min(limit, fns.length)).fill(0).map(async () => {
-            while (idx < fns.length) {
-              const cur = idx++;
-              try {
-                const v = await fns[cur]();
-                out.push(v);
-              } catch {
-                // ignore individual failures
+          const workers = new Array(Math.min(limit, fns.length))
+            .fill(0)
+            .map(async () => {
+              while (idx < fns.length) {
+                const cur = idx++;
+                try {
+                  const v = await fns[cur]();
+                  out.push(v);
+                } catch {
+                  // ignore individual failures
+                }
+                done += 1;
+                if (onProgress) onProgress(done, total);
               }
-              done += 1;
-              if (onProgress) onProgress(done, total);
-            }
-          });
+            });
           await Promise.all(workers);
           return out;
         };
@@ -1173,9 +1279,12 @@ function AuthenticatedDeckEditor() {
           tasks,
           lookupConcurrencyCap,
           (done) => {
-            const cardsResolved = done <= 0
-              ? 0
-              : cumulativeCounts[Math.min(done, cumulativeCounts.length) - 1] ?? 0;
+            const cardsResolved =
+              done <= 0
+                ? 0
+                : cumulativeCounts[
+                    Math.min(done, cumulativeCounts.length) - 1
+                  ] ?? 0;
             setDraftLoadProgress({
               processed: Math.min(cardsResolved, totalDraftedCards),
               total: totalDraftedCards,
@@ -1216,7 +1325,9 @@ function AuthenticatedDeckEditor() {
             for (let i = 0; i < copies; i++) {
               // All draft picks should start in sideboard, not directly in deck zones
               const zone: Zone = "Sideboard";
-              const key = `${result.cardId}:${zone}:${result.variantId ?? "x"}` as PickKey;
+              const key = `${result.cardId}:${zone}:${
+                result.variantId ?? "x"
+              }` as PickKey;
               const exists = next[key];
               next[key] = exists
                 ? { ...exists, count: exists.count + 1 }
@@ -1254,7 +1365,10 @@ function AuthenticatedDeckEditor() {
             }
           }
         } catch (storageError) {
-          console.warn("[Draft Init] Unable to cache resolved draft cards", storageError);
+          console.warn(
+            "[Draft Init] Unable to cache resolved draft cards",
+            storageError
+          );
         }
 
         // Infer deck set from majority of resolved hits for better metadata/search defaults
@@ -1290,7 +1404,14 @@ function AuthenticatedDeckEditor() {
         setDraftInitDone(true);
       }
     })();
-  }, [searchParams, draftInitDone, addSearchResultsToSideboard, deckName, setName, fetchSearchResult]);
+  }, [
+    searchParams,
+    draftInitDone,
+    addSearchResultsToSideboard,
+    deckName,
+    setName,
+    fetchSearchResult,
+  ]);
 
   // (moved) Load deck from URL parameter after loadDeck is declared
 
@@ -1304,7 +1425,7 @@ function AuthenticatedDeckEditor() {
   const [tournamentControlsVisible, setTournamentControlsVisible] =
     useState(false);
 
-  // Context menu for duplicate card selection
+  // Context menu for card move actions (deck/sideboard/collection)
   const [contextMenu, setContextMenu] = useState<{
     cardId: number;
     cardName: string;
@@ -1312,6 +1433,8 @@ function AuthenticatedDeckEditor() {
     y: number;
     deckCards: Pick3D[];
     sideboardCards: Pick3D[];
+    collectionCopies: number;
+    totalCollection: number;
   } | null>(null);
 
   const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
@@ -1322,7 +1445,7 @@ function AuthenticatedDeckEditor() {
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [, setNextPickId] = useState(1);
 
-  // Open duplicate-move context menu for a given card at screen coords
+  // Open move context menu for a given card at screen coords
   const openContextMenuForCard = useCallback(
     (cardId: number, cardName: string, clientX: number, clientY: number) => {
       const deckCards = pick3D.filter(
@@ -1331,44 +1454,87 @@ function AuthenticatedDeckEditor() {
       const sideboardCards = pick3D.filter(
         (p) => p.card.cardId === cardId && p.zone === "Sideboard"
       );
-      // Only open context menu if there are copies of this card in BOTH zones
-      if (deckCards.length > 0 && sideboardCards.length > 0) {
-        setContextMenu({
-          cardId,
-          cardName,
-          x: clientX,
-          y: clientY,
-          deckCards,
-          sideboardCards,
-        });
+      let collectionCopies = 0;
+      let totalCollection = 0;
+      for (const item of Object.values(picks)) {
+        if (item.zone !== "Collection") continue;
+        totalCollection += item.count;
+        if (item.cardId === cardId) collectionCopies += item.count;
       }
+      // Always open context menu; available actions depend on which zones have copies
+      setContextMenu({
+        cardId,
+        cardName,
+        x: clientX,
+        y: clientY,
+        deckCards,
+        sideboardCards,
+        collectionCopies,
+        totalCollection,
+      });
     },
-    [pick3D]
+    [pick3D, picks]
   );
 
-  // Hover preview (exact same as draft-3d)
-  const [hoverPreview, setHoverPreview] = useState<{
-    slug: string;
-    name: string;
-    type: string | null;
-  } | null>(null);
+  // Hover preview state (modeled after match Board hover behavior)
+  const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
+    null
+  );
+  const hoverPreviewSourceRef = useRef<string | null>(null);
+  const hoverPreviewClearTimerRef = useRef<number | null>(null);
 
-  // Hover state management using the draft-3d pattern
-  const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
-    onShow: (card: CardPreviewData) => {
+  const beginHoverPreview = useCallback(
+    (card: CardPreviewData | null | undefined, sourceKey?: string | null) => {
+      if (hoverPreviewClearTimerRef.current) {
+        window.clearTimeout(hoverPreviewClearTimerRef.current);
+        hoverPreviewClearTimerRef.current = null;
+      }
+      if (!card) return;
+      hoverPreviewSourceRef.current = sourceKey ?? null;
       setHoverPreview(card);
     },
-    onHide: () => {
-      setHoverPreview(null);
-    },
-  });
+    []
+  );
 
-  // Cleanup hover timers on component unmount
+  const clearHoverPreview = useCallback((sourceKey?: string | null) => {
+    if (
+      sourceKey &&
+      hoverPreviewSourceRef.current &&
+      sourceKey !== hoverPreviewSourceRef.current
+    ) {
+      return;
+    }
+    if (hoverPreviewClearTimerRef.current) {
+      window.clearTimeout(hoverPreviewClearTimerRef.current);
+      hoverPreviewClearTimerRef.current = null;
+    }
+    hoverPreviewSourceRef.current = null;
+    setHoverPreview(null);
+  }, []);
+
+  const clearHoverPreviewDebounced = useCallback(
+    (sourceKey?: string | null, delay = 60) => {
+      if (hoverPreviewClearTimerRef.current) {
+        window.clearTimeout(hoverPreviewClearTimerRef.current);
+        hoverPreviewClearTimerRef.current = null;
+      }
+      hoverPreviewClearTimerRef.current = window.setTimeout(() => {
+        hoverPreviewClearTimerRef.current = null;
+        clearHoverPreview(sourceKey);
+      }, Math.max(0, delay)) as unknown as number;
+    },
+    [clearHoverPreview]
+  );
+
+  // Cleanup hover timer on unmount
   useEffect(() => {
     return () => {
-      clearHoverTimers();
+      if (hoverPreviewClearTimerRef.current) {
+        window.clearTimeout(hoverPreviewClearTimerRef.current);
+        hoverPreviewClearTimerRef.current = null;
+      }
     };
-  }, [clearHoverTimers]);
+  }, []);
 
   // (Removed unused deckItems/deckCards/sideboardCards memos)
 
@@ -1383,8 +1549,6 @@ function AuthenticatedDeckEditor() {
       avatars: 0,
     };
     for (const p of pick3D) {
-      if (p.zone === "Deck") res.deck += 1;
-      else res.sideboard += 1;
       const t = (p.card.type || "").toLowerCase();
       if (t.includes("avatar")) res.avatars += 1;
       else if (t.includes("site")) res.sites += 1;
@@ -1392,8 +1556,25 @@ function AuthenticatedDeckEditor() {
         res.creatures += 1;
       else if (t.includes("spell")) res.spells += 1;
     }
+    for (const item of Object.values(picks)) {
+      if (item.zone === "Deck") res.deck += item.count;
+      else if (item.zone === "Sideboard") res.sideboard += item.count;
+    }
     return res;
-  }, [pick3D]);
+  }, [pick3D, picks]);
+
+  const { collectionCount, collectionCountsByCardId } = useMemo(() => {
+    const counts: Record<number, number> = {};
+    let total = 0;
+    for (const item of Object.values(picks)) {
+      if (item.zone !== "Collection") continue;
+      const current = counts[item.cardId] ?? 0;
+      const next = current + item.count;
+      counts[item.cardId] = next;
+      total += item.count;
+    }
+    return { collectionCount: total, collectionCountsByCardId: counts };
+  }, [picks]);
 
   const yourCounts = useMemo(() => {
     // Build counts from pick3D to preserve visual order on board
@@ -1404,7 +1585,9 @@ function AuthenticatedDeckEditor() {
     for (const p of pick3D) {
       if (!seenCards.has(p.card.cardId)) {
         seenCards.add(p.card.cardId);
-        const count = pick3D.filter(item => item.card.cardId === p.card.cardId).length;
+        const count = pick3D.filter(
+          (item) => item.card.cardId === p.card.cardId
+        ).length;
         counts.push({
           cardId: p.card.cardId,
           name: p.card.cardName,
@@ -1419,7 +1602,7 @@ function AuthenticatedDeckEditor() {
   const manaCurve = useMemo(() => {
     const curve: Record<number, number> = {};
     for (const p of pick3D) {
-      if (p.zone === "Sideboard") continue; // deck zone only
+      if (p.zone !== "Deck") continue; // deck zone only
       const meta = metaByCardId[p.card.cardId];
       const c = meta?.cost;
       if (typeof c === "number") {
@@ -1435,7 +1618,7 @@ function AuthenticatedDeckEditor() {
     const summary: Record<string, number> = {};
     const elements = new Set<string>();
     for (const p of pick3D) {
-      if (p.zone === "Sideboard") continue; // deck zone only
+      if (p.zone !== "Deck") continue; // deck zone only
       const th = metaByCardId[p.card.cardId]?.thresholds as
         | Record<string, number>
         | undefined
@@ -1448,6 +1631,266 @@ function AuthenticatedDeckEditor() {
     }
     return { elements: Array.from(elements), summary };
   }, [pick3D, metaByCardId]);
+
+  const moveOneFromDeckToCollection = useCallback(
+    (cardId: number) => {
+      if (collectionCount >= 10) {
+        setFeedbackMessage("Collection is full (maximum 10 cards)");
+        setTimeout(() => setFeedbackMessage(null), 2000);
+        return;
+      }
+
+      // Move one visible copy from Deck to Collection in 3D layout
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const idx = updated.findIndex(
+          (p) => p.card.cardId === cardId && p.zone === "Deck"
+        );
+        if (idx === -1) return prev;
+        const card = updated[idx];
+        updated[idx] = {
+          ...card,
+          x: card.x,
+          z: card.z,
+          y: undefined,
+          zone: "Collection",
+        };
+        return updated;
+      });
+
+      // Sync logical picks: Deck → Collection
+      setPicks((prev) => {
+        const next = { ...prev } as Record<PickKey, PickItem>;
+        for (const [key, item] of Object.entries(next)) {
+          if (
+            item.cardId === cardId &&
+            item.zone === "Deck" &&
+            item.count > 0
+          ) {
+            const variantId = item.variantId ?? undefined;
+
+            if (item.count > 1) {
+              next[key] = { ...item, count: item.count - 1 };
+            } else {
+              delete next[key];
+            }
+
+            const collectionKey = `${cardId}:Collection:${
+              variantId ?? "x"
+            }` as PickKey;
+            const existing = next[collectionKey];
+            next[collectionKey] = existing
+              ? { ...existing, count: existing.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: item.name,
+                  type: item.type,
+                  slug: item.slug,
+                  zone: "Collection" as Zone,
+                  count: 1,
+                  set: item.set,
+                };
+            break;
+          }
+        }
+        return next;
+      });
+    },
+    [collectionCount]
+  );
+
+  const moveOneFromSideboardToCollection = useCallback(
+    (cardId: number) => {
+      if (collectionCount >= 10) {
+        setFeedbackMessage("Collection is full (maximum 10 cards)");
+        setTimeout(() => setFeedbackMessage(null), 2000);
+        return;
+      }
+
+      // Keep 3D layout in sync: move one visible copy from Sideboard to Collection
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const idx = updated.findIndex(
+          (p) => p.card.cardId === cardId && p.zone === "Sideboard"
+        );
+        if (idx === -1) return prev;
+        const card = updated[idx];
+        updated[idx] = {
+          ...card,
+          // Precise placement will be handled by the Collection fan layout
+          x: card.x,
+          z: card.z,
+          y: undefined,
+          zone: "Collection",
+        };
+        return updated;
+      });
+
+      setPicks((prev) => {
+        const next = { ...prev } as Record<PickKey, PickItem>;
+        for (const [key, item] of Object.entries(next)) {
+          if (
+            item.cardId === cardId &&
+            item.zone === "Sideboard" &&
+            item.count > 0
+          ) {
+            const variantId = item.variantId ?? undefined;
+
+            if (item.count > 1) {
+              next[key] = { ...item, count: item.count - 1 };
+            } else {
+              delete next[key];
+            }
+
+            const collectionKey = `${cardId}:Collection:${
+              variantId ?? "x"
+            }` as PickKey;
+            const existing = next[collectionKey];
+            next[collectionKey] = existing
+              ? { ...existing, count: existing.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: item.name,
+                  type: item.type,
+                  slug: item.slug,
+                  zone: "Collection" as Zone,
+                  count: 1,
+                  set: item.set,
+                };
+            break;
+          }
+        }
+        return next;
+      });
+    },
+    [collectionCount]
+  );
+
+  const moveOneFromCollectionToSideboard = useCallback(
+    (cardId: number) => {
+      // Update 3D layout: move one visible copy from Collection back to Sideboard
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const idx = updated.findIndex(
+          (p) => p.card.cardId === cardId && p.zone === "Collection"
+        );
+        if (idx === -1) return prev;
+        const card = updated[idx];
+        const newZ = isSortingEnabled ? 1.5 + Math.random() * 0.5 : card.z;
+        const newX = isSortingEnabled ? 0.5 + Math.random() * 3 : card.x;
+        updated[idx] = {
+          ...card,
+          x: newX,
+          z: newZ,
+          y: undefined,
+          zone: "Sideboard",
+        };
+        return updated;
+      });
+
+      setPicks((prev) => {
+        const next = { ...prev } as Record<PickKey, PickItem>;
+        for (const [key, item] of Object.entries(next)) {
+          if (
+            item.cardId === cardId &&
+            item.zone === "Collection" &&
+            item.count > 0
+          ) {
+            const variantId = item.variantId ?? undefined;
+
+            if (item.count > 1) {
+              next[key] = { ...item, count: item.count - 1 };
+            } else {
+              delete next[key];
+            }
+
+            const sideboardKey = `${cardId}:Sideboard:${
+              variantId ?? "x"
+            }` as PickKey;
+            const existing = next[sideboardKey];
+            next[sideboardKey] = existing
+              ? { ...existing, count: existing.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: item.name,
+                  type: item.type,
+                  slug: item.slug,
+                  zone: "Sideboard" as Zone,
+                  count: 1,
+                  set: item.set,
+                };
+            break;
+          }
+        }
+        return next;
+      });
+    },
+    [isSortingEnabled]
+  );
+
+  const moveOneFromCollectionToDeck = useCallback(
+    (cardId: number) => {
+      // Update 3D layout: move one visible copy from Collection back to Deck
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const idx = updated.findIndex(
+          (p) => p.card.cardId === cardId && p.zone === "Collection"
+        );
+        if (idx === -1) return prev;
+        const card = updated[idx];
+        const newZ = isSortingEnabled ? -1.5 - Math.random() * 0.5 : card.z;
+        const newX = isSortingEnabled ? -2 + Math.random() * 4 : card.x;
+        updated[idx] = {
+          ...card,
+          x: newX,
+          z: newZ,
+          y: undefined,
+          zone: "Deck",
+        };
+        return updated;
+      });
+
+      setPicks((prev) => {
+        const next = { ...prev } as Record<PickKey, PickItem>;
+        for (const [key, item] of Object.entries(next)) {
+          if (
+            item.cardId === cardId &&
+            item.zone === "Collection" &&
+            item.count > 0
+          ) {
+            const variantId = item.variantId ?? undefined;
+
+            if (item.count > 1) {
+              next[key] = { ...item, count: item.count - 1 };
+            } else {
+              delete next[key];
+            }
+
+            const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
+            const existing = next[deckKey];
+            next[deckKey] = existing
+              ? { ...existing, count: existing.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: item.name,
+                  type: item.type,
+                  slug: item.slug,
+                  zone: "Deck" as Zone,
+                  count: 1,
+                  set: item.set,
+                };
+            break;
+          }
+        }
+        return next;
+      });
+    },
+    [isSortingEnabled]
+  );
 
   // Basic add-card helpers for the search UI
   const addCardAuto = useCallback(
@@ -1529,32 +1972,49 @@ function AuthenticatedDeckEditor() {
         );
       }
 
-      // Build cards payload from 3D picks using explicit zone field
+      // Build cards payload from logical picks (Deck / Atlas / Spellbook / Collection / Sideboard)
       const agg = new Map<
         string,
         { cardId: number; zone: ApiZone; count: number; variantId?: number }
       >();
-      for (const p of pick3D) {
-        const inDeck = p.zone === "Deck";
-        const t = (p.card.type || "").toLowerCase();
-        // Convert back to API zones for saving
-        const apiZone: ApiZone = inDeck
-          ? t.includes("site")
-            ? "Atlas"
-            : "Spellbook"
-          : "Sideboard";
-        const variantId = p.card.variantId || undefined; // treat 0/undefined as absent
-        const key = `${p.card.cardId}:${apiZone}:${variantId ?? "x"}`;
+      for (const item of Object.values(picks)) {
+        const t = (item.type || "").toLowerCase();
+        let apiZone: ApiZone;
+        if (item.zone === "Collection") {
+          apiZone = "Collection";
+        } else if (item.zone === "Sideboard") {
+          apiZone = "Sideboard";
+        } else {
+          apiZone = t.includes("site") ? "Atlas" : "Spellbook";
+        }
+        const variantId = item.variantId ?? undefined; // preserve 0 as valid key
+        const key = `${item.cardId}:${apiZone}:${variantId ?? "x"}`;
         const prev = agg.get(key);
-        if (prev) prev.count += 1;
-        else
+        if (prev) {
+          prev.count += item.count;
+        } else {
           agg.set(key, {
-            cardId: p.card.cardId,
+            cardId: item.cardId,
             zone: apiZone,
-            count: 1,
+            count: item.count,
             variantId,
           });
+        }
       }
+
+      // Enforce collection capacity client-side as well (server also validates)
+      let collectionCount = 0;
+      for (const v of agg.values()) {
+        if (v.zone === "Collection") collectionCount += v.count;
+      }
+      if (collectionCount > 10) {
+        throw new Error(
+          "Collection invalid. Maximum 10 cards allowed (current: " +
+            collectionCount +
+            ")"
+        );
+      }
+
       const cards = Array.from(agg.values());
 
       if (deckId) {
@@ -1624,7 +2084,17 @@ function AuthenticatedDeckEditor() {
       // auto-clear success message after a short delay
       setTimeout(() => setSaveMsg(null), 1500);
     }
-  }, [pick3D, deckId, deckName, isDraftMode, setName, isSealed, status, searchParams]);
+  }, [
+    pick3D,
+    picks,
+    deckId,
+    deckName,
+    isDraftMode,
+    setName,
+    isSealed,
+    status,
+    searchParams,
+  ]);
 
   // Toggle deck public/private status
   const togglePublic = useCallback(
@@ -1705,7 +2175,7 @@ function AuthenticatedDeckEditor() {
       const matchName = searchParams?.get("matchName");
       const sealedDeckName = matchName
         ? `${matchName} (Sealed)`
-      : `sealed_opponent_${today}`;
+        : `sealed_opponent_${today}`;
       setDeckName(sealedDeckName);
 
       // Determine submission mode (match vs tournament)
@@ -1713,7 +2183,9 @@ function AuthenticatedDeckEditor() {
       const tournamentId = searchParams?.get("tournament");
 
       // Ensure the "Standard cards" overlay is closed and show the submission overlay
-      try { setTournamentControlsVisible(false); } catch {}
+      try {
+        setTournamentControlsVisible(false);
+      } catch {}
       setWaitingOverlayStage("submitting");
       setWaitingForOtherPlayers(true);
 
@@ -1724,34 +2196,50 @@ function AuthenticatedDeckEditor() {
         for (const c of deckCards) {
           counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
         }
-      const deckList = Array.from(counts.entries()).map(([cardId, quantity]) => ({ cardId: String(cardId), quantity }));
+        const deckList = Array.from(counts.entries()).map(
+          ([cardId, quantity]) => ({ cardId: String(cardId), quantity })
+        );
 
-      // Submit to tournament preparation API
-      const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}/preparation/submit`, {
-        method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            preparationData: {
-              sealed: {
-                packsOpened: true,
-                deckBuilt: true,
-                deckList
-              }
-            }
-          })
-        });
+        // Submit to tournament preparation API
+        const res = await fetch(
+          `/api/tournaments/${encodeURIComponent(
+            tournamentId
+          )}/preparation/submit`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              preparationData: {
+                sealed: {
+                  packsOpened: true,
+                  deckBuilt: true,
+                  deckList,
+                },
+              },
+            }),
+          }
+        );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err?.error || 'Failed to submit tournament sealed deck');
+          throw new Error(
+            err?.error || "Failed to submit tournament sealed deck"
+          );
         }
 
         // Mark local submission for UX consistency
-        try { localStorage.setItem(`sealed_submitted_tournament_${tournamentId}`, 'true'); } catch {}
+        try {
+          localStorage.setItem(
+            `sealed_submitted_tournament_${tournamentId}`,
+            "true"
+          );
+        } catch {}
         setWaitingOverlayStage("waiting");
       } else if (matchId) {
         // Match-based submission workflow
         // Mark deck as submitted to prevent redirect loop
-        try { localStorage.setItem(`sealed_submitted_${matchId}`, "true"); } catch {}
+        try {
+          localStorage.setItem(`sealed_submitted_${matchId}`, "true");
+        } catch {}
 
         // Submit to match server using postMessage to parent window (online match page)
         if (window.opener) {
@@ -1772,26 +2260,38 @@ function AuthenticatedDeckEditor() {
         }
         setWaitingOverlayStage("waiting");
       } else {
-        throw new Error('Missing match ID or tournament ID for sealed submission');
+        throw new Error(
+          "Missing match ID or tournament ID for sealed submission"
+        );
       }
 
       // Save to account in the background (do not block submission UX)
       saveDeck().catch(() => {});
 
-      setSaveMsg(tournamentId ? "Submitting deck to tournament…" : "Sealed deck submitted successfully!");
+      setSaveMsg(
+        tournamentId
+          ? "Submitting deck to tournament…"
+          : "Sealed deck submitted successfully!"
+      );
 
       // Toast notification
       try {
-        localStorage.setItem('app:toast', 'Sealed deck submitted!');
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Sealed deck submitted!' } }));
+        localStorage.setItem("app:toast", "Sealed deck submitted!");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: { message: "Sealed deck submitted!" },
+            })
+          );
         }
       } catch {}
 
       // Navigate back to tournament or match page
       if (tournamentId && !matchId) {
         setTimeout(() => {
-          window.location.href = `/tournaments/${encodeURIComponent(tournamentId)}`;
+          window.location.href = `/tournaments/${encodeURIComponent(
+            tournamentId
+          )}`;
         }, 1200);
       } else if (matchId) {
         // Multiple attempts for match page navigation (handles popup window edge cases)
@@ -1805,7 +2305,15 @@ function AuthenticatedDeckEditor() {
     } finally {
       setSaving(false);
     }
-  }, [isSealed, pick3D, searchParams, saveDeck, setName, metaByCardId, goBackToMatch]);
+  }, [
+    isSealed,
+    pick3D,
+    searchParams,
+    saveDeck,
+    setName,
+    metaByCardId,
+    goBackToMatch,
+  ]);
 
   const submitDraftDeck = useCallback(async () => {
     if (!isDraftMode) return;
@@ -1849,7 +2357,9 @@ function AuthenticatedDeckEditor() {
       const tournamentId = searchParams?.get("tournament");
 
       // Ensure the "Standard cards" overlay is closed and show the submission overlay
-      try { setTournamentControlsVisible(false); } catch {}
+      try {
+        setTournamentControlsVisible(false);
+      } catch {}
       setWaitingOverlayStage("submitting");
       setWaitingForOtherPlayers(true);
 
@@ -1860,32 +2370,48 @@ function AuthenticatedDeckEditor() {
         for (const c of deckCards) {
           counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
         }
-        const deckList = Array.from(counts.entries()).map(([cardId, quantity]) => ({ cardId: String(cardId), quantity }));
+        const deckList = Array.from(counts.entries()).map(
+          ([cardId, quantity]) => ({ cardId: String(cardId), quantity })
+        );
 
         // Submit to tournament preparation API (draft)
-        const res = await fetch(`/api/tournaments/${encodeURIComponent(tournamentId)}/preparation/submit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            preparationData: {
-              draft: {
-                draftCompleted: true,
-                deckBuilt: true,
-                deckList
-              }
-            }
-          })
-        });
+        const res = await fetch(
+          `/api/tournaments/${encodeURIComponent(
+            tournamentId
+          )}/preparation/submit`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              preparationData: {
+                draft: {
+                  draftCompleted: true,
+                  deckBuilt: true,
+                  deckList,
+                },
+              },
+            }),
+          }
+        );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err?.error || 'Failed to submit tournament draft deck');
+          throw new Error(
+            err?.error || "Failed to submit tournament draft deck"
+          );
         }
-        try { localStorage.setItem(`draft_submitted_tournament_${tournamentId}`, 'true'); } catch {}
+        try {
+          localStorage.setItem(
+            `draft_submitted_tournament_${tournamentId}`,
+            "true"
+          );
+        } catch {}
         setWaitingOverlayStage("waiting");
       } else if (matchId) {
         // Match-based submission workflow
         // Mark deck as submitted to prevent redirect loop
-        try { localStorage.setItem(`draft_submitted_${matchId}`, "true"); } catch {}
+        try {
+          localStorage.setItem(`draft_submitted_${matchId}`, "true");
+        } catch {}
 
         // Submit to match server using postMessage to parent window
         if (window.opener) {
@@ -1899,11 +2425,16 @@ function AuthenticatedDeckEditor() {
           );
         } else {
           // Fallback: save to localStorage for the match page to pick up
-          localStorage.setItem(`draftDeck_${matchId}`, JSON.stringify(deckCards));
+          localStorage.setItem(
+            `draftDeck_${matchId}`,
+            JSON.stringify(deckCards)
+          );
         }
         setWaitingOverlayStage("waiting");
       } else {
-        throw new Error('Missing match ID or tournament ID for draft submission');
+        throw new Error(
+          "Missing match ID or tournament ID for draft submission"
+        );
       }
 
       // Save to account in the background (do not block submission UX)
@@ -1911,20 +2442,30 @@ function AuthenticatedDeckEditor() {
         void saveDeck();
       } catch {}
 
-      setSaveMsg(tournamentId ? "Submitting draft deck to tournament…" : "Draft deck submitted successfully!");
+      setSaveMsg(
+        tournamentId
+          ? "Submitting draft deck to tournament…"
+          : "Draft deck submitted successfully!"
+      );
 
       // Toast notification
       try {
-        localStorage.setItem('app:toast', 'Draft deck submitted!');
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Draft deck submitted!' } }));
+        localStorage.setItem("app:toast", "Draft deck submitted!");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: { message: "Draft deck submitted!" },
+            })
+          );
         }
       } catch {}
 
       // Navigate back to tournament or match page
       if (tournamentId && !matchId) {
         setTimeout(() => {
-          window.location.href = `/tournaments/${encodeURIComponent(tournamentId)}`;
+          window.location.href = `/tournaments/${encodeURIComponent(
+            tournamentId
+          )}`;
         }, 1200);
       } else if (matchId) {
         // Multiple attempts for match page navigation (handles popup window edge cases)
@@ -1938,7 +2479,15 @@ function AuthenticatedDeckEditor() {
     } finally {
       setSaving(false);
     }
-  }, [isDraftMode, pick3D, searchParams, saveDeck, setName, metaByCardId, goBackToMatch]);
+  }, [
+    isDraftMode,
+    pick3D,
+    searchParams,
+    saveDeck,
+    setName,
+    metaByCardId,
+    goBackToMatch,
+  ]);
 
   const loadDeck = useCallback(
     async (id: string) => {
@@ -1959,7 +2508,7 @@ function AuthenticatedDeckEditor() {
         if (typeof data?.userName === "string")
           setDeckCreatorName(data.userName);
 
-        // Build picks from zones
+        // Build picks from zones (Spellbook/Atlas/Collection/Sideboard)
         const next: Record<PickKey, PickItem> = {};
         const addZone = (zone: Zone, arr: ApiCardRef[] | undefined) => {
           if (!arr || !Array.isArray(arr)) return;
@@ -1979,9 +2528,10 @@ function AuthenticatedDeckEditor() {
                 };
           }
         };
-        // Map API zones (Atlas/Spellbook) to our simplified zones (Deck)
+        // Map API zones to logical editor zones
         addZone("Deck", data?.atlas as ApiCardRef[]);
         addZone("Deck", data?.spellbook as ApiCardRef[]);
+        addZone("Collection", data?.collection as ApiCardRef[]);
         addZone("Sideboard", data?.sideboard as ApiCardRef[]);
         setPicks(next);
 
@@ -1991,6 +2541,9 @@ function AuthenticatedDeckEditor() {
           ...(Array.isArray(data?.atlas) ? (data.atlas as ApiCardRef[]) : []),
           ...(Array.isArray(data?.spellbook)
             ? (data.spellbook as ApiCardRef[])
+            : []),
+          ...(Array.isArray(data?.collection)
+            ? (data.collection as ApiCardRef[])
             : []),
           ...(Array.isArray(data?.sideboard)
             ? (data.sideboard as ApiCardRef[])
@@ -2250,31 +2803,32 @@ function AuthenticatedDeckEditor() {
   // }, [generateSealedPacks]);
 
   // Keep track of card render orders for proper layering
-  const nextRenderOrder = useRef(1500);
+  const nextRenderOrder = useRef(9000);
 
   // Track interaction order for unstacked mode - maps cardId to layer index
-  const [cardLayerOrder, setCardLayerOrder] = useState<Map<number, number>>(new Map());
+  const [cardLayerOrder, setCardLayerOrder] = useState<Map<number, number>>(
+    new Map()
+  );
   const nextLayerIndex = useRef(0);
 
   const getTopRenderOrder = useCallback(() => {
-    // When sorting is enabled, use much higher temporary render order for dragging
-    // This ensures dragged cards appear above stacks during interaction
-    if (isSortingEnabled) {
-      return 9999; // High temporary order for dragging
-    }
-    nextRenderOrder.current += 1;
-    return nextRenderOrder.current;
-  }, [isSortingEnabled]);
+    // Always use high temporary render order for dragging (both stacked and unstacked modes)
+    // This ensures dragged cards appear above all other cards during interaction
+    return 9999;
+  }, []);
 
   // Bring a card to the front (highest layer)
-  const bringCardToFront = useCallback((cardId: number) => {
-    if (isSortingEnabled) return; // Only applies to unstacked mode
-    setCardLayerOrder(prev => {
-      const newMap = new Map(prev);
-      newMap.set(cardId, nextLayerIndex.current++);
-      return newMap;
-    });
-  }, [isSortingEnabled]);
+  const bringCardToFront = useCallback(
+    (cardId: number) => {
+      if (isSortingEnabled) return; // Only applies to unstacked mode
+      setCardLayerOrder((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(cardId, nextLayerIndex.current++);
+        return newMap;
+      });
+    },
+    [isSortingEnabled]
+  );
 
   // Reset render orders when sorting is toggled to ensure proper stacking
   useEffect(() => {
@@ -2317,6 +2871,36 @@ function AuthenticatedDeckEditor() {
     return sizeMap;
   }, [stackPositions]);
 
+  // Precomputed layout for cards in the Collection zone: bottom-left horizontal stack
+  const collectionLayout = useMemo(() => {
+    const layout = new Map<
+      number,
+      { x: number; z: number; rotationZ: number }
+    >();
+
+    const collectionCards = pick3D.filter((p) => p.zone === "Collection");
+    const n = collectionCards.length;
+    if (n === 0) return layout;
+
+    // Horizontal spacing smaller than card width to create overlap
+    const spacing = CARD_SHORT * 0.35;
+
+    for (let i = 0; i < n; i++) {
+      const p = collectionCards[i];
+
+      const x = COLLECTION_ANCHOR_X + i * spacing;
+      const z = COLLECTION_ANCHOR_Z;
+
+      layout.set(p.id, {
+        x,
+        z,
+        rotationZ: 0,
+      });
+    }
+
+    return layout;
+  }, [pick3D]);
+
   // Convert deck picks to Pick3D format - preserve existing positions when possible
   const positionsRef = useRef<Map<string, { z: number; x: number }>>(new Map());
   const zoneCountsRef = useRef<Map<string, number>>(new Map());
@@ -2324,7 +2908,10 @@ function AuthenticatedDeckEditor() {
 
   useEffect(() => {
     // Calculate total card count from picks
-    const totalCards = Object.values(picks).reduce((sum, item) => sum + item.count, 0);
+    const totalCards = Object.values(picks).reduce(
+      (sum, item) => sum + item.count,
+      0
+    );
 
     // Skip rebuilding pick3D if card count hasn't changed
     // This preserves positions when cards are just moved between zones
@@ -2366,12 +2953,15 @@ function AuthenticatedDeckEditor() {
           (remainingDeckByCard.get(item.cardId) ?? 0) - 1
         );
 
-        // Always use the zone from picks as the source of truth
-        const zoneKey: "Deck" | "Sideboard" = item.zone;
+        // Use logical zone from picks, but map non-deck zones (Sideboard/Collection)
+        // into the Sideboard region for initial 3D layout placement.
+        const logicalZone = item.zone as Zone;
+        const layoutZone: "Deck" | "Sideboard" =
+          logicalZone === "Deck" ? "Deck" : "Sideboard";
 
         // Use existing position if available (sealed only) and per-zone cached positions
         const existingPos = positionsRef.current.get(
-          `${item.cardId}:${zoneKey}`
+          `${item.cardId}:${layoutZone}`
         );
         const shouldPreservePosition =
           !!existingPos && (isSealed || isDraftMode);
@@ -2381,9 +2971,9 @@ function AuthenticatedDeckEditor() {
           : -3 + Math.random() * 6;
         const z = shouldPreservePosition
           ? existingPos.z
-          : zoneKey === "Deck"
+          : layoutZone === "Deck"
           ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
-          : 0.5 + Math.random() * 3; // Sideboard zone: z from 0.5 to 3.5
+          : 0.5 + Math.random() * 3; // Sideboard/Collection layout zone: z from 0.5 to 3.5
 
         newPick3D.push({
           id: id++,
@@ -2400,7 +2990,10 @@ function AuthenticatedDeckEditor() {
           },
           x,
           z,
-          zone: zoneKey, // Add explicit zone field
+          // Keep the logical zone from picks so Collection cards can
+          // have their own dedicated fan layout while reusing the
+          // Sideboard region for initial placement.
+          zone: logicalZone,
         });
       }
     }
@@ -2415,8 +3008,11 @@ function AuthenticatedDeckEditor() {
     const newZoneCounts = new Map<string, number>();
     for (const pick of pick3D) {
       const cardId = pick.card.cardId;
-      const zoneKey = pick.zone; // Use explicit zone field
-      const key = `${cardId}:${zoneKey}`;
+      // Map logical zones into layout buckets so that Collection shares
+      // the Sideboard region for purposes of preserving positions.
+      const layoutZone: "Deck" | "Sideboard" =
+        pick.zone === "Deck" ? "Deck" : "Sideboard";
+      const key = `${cardId}:${layoutZone}`;
       if (!newPositions.has(key)) {
         newPositions.set(key, { z: pick.z, x: pick.x });
       }
@@ -2476,7 +3072,7 @@ function AuthenticatedDeckEditor() {
     let n = 0;
     for (const pick of pick3D) {
       // Only count cards in deck zone
-      if (pick.zone === "Sideboard") continue;
+      if (pick.zone !== "Deck") continue;
       const t = (pick.card.type || "").toLowerCase();
       if (t.includes("avatar")) n += 1;
     }
@@ -2487,7 +3083,7 @@ function AuthenticatedDeckEditor() {
     let n = 0;
     for (const pick of pick3D) {
       // Only count non-avatar, non-site cards in deck zone
-      if (pick.zone === "Sideboard") continue;
+      if (pick.zone !== "Deck") continue;
       const t = (pick.card.type || "").toLowerCase();
       if (!t.includes("avatar") && !t.includes("site")) n += 1;
     }
@@ -2499,7 +3095,7 @@ function AuthenticatedDeckEditor() {
     let n = 0;
     for (const pick of pick3D) {
       // Only count sites in deck zone
-      if (pick.zone === "Sideboard") continue;
+      if (pick.zone !== "Deck") continue;
       const t = (pick.card.type || "").toLowerCase();
       if (t.includes("site")) n += 1;
     }
@@ -2555,7 +3151,8 @@ function AuthenticatedDeckEditor() {
             const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
             const deckItem = next[deckKey];
             if (deckItem) {
-              if (deckItem.count > 1) next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+              if (deckItem.count > 1)
+                next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
               else delete next[deckKey];
             }
             return next;
@@ -2617,67 +3214,70 @@ function AuthenticatedDeckEditor() {
     [isStandardSite, isSortingEnabled]
   );
 
-  const moveOneFromSideboardToDeck = useCallback((cardId: number) => {
-    setPick3D((prev) => {
-      const updated = [...prev];
-      const idx = updated.findIndex(
-        (p) => p.card.cardId === cardId && p.zone === "Sideboard"
-      );
-      if (idx === -1) return prev;
-      const card = updated[idx];
-      // When sorting is disabled, preserve the card's current position (just update zone)
-      // When sorting is enabled, assign a new random position in the deck area
-      const newZ = isSortingEnabled ? -1.5 - Math.random() * 0.5 : card.z;
-      const newX = isSortingEnabled ? -2 + Math.random() * 4 : card.x;
-      updated[idx] = {
-        ...updated[idx],
-        x: newX,
-        z: newZ,
-        y: undefined,
-        zone: "Deck",
-      };
+  const moveOneFromSideboardToDeck = useCallback(
+    (cardId: number) => {
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const idx = updated.findIndex(
+          (p) => p.card.cardId === cardId && p.zone === "Sideboard"
+        );
+        if (idx === -1) return prev;
+        const card = updated[idx];
+        // When sorting is disabled, preserve the card's current position (just update zone)
+        // When sorting is enabled, assign a new random position in the deck area
+        const newZ = isSortingEnabled ? -1.5 - Math.random() * 0.5 : card.z;
+        const newX = isSortingEnabled ? -2 + Math.random() * 4 : card.x;
+        updated[idx] = {
+          ...updated[idx],
+          x: newX,
+          z: newZ,
+          y: undefined,
+          zone: "Deck",
+        };
 
-      // Sync picks state for all modes (draft, sealed, and normal editor)
-      const variantId = card.card.variantId ?? undefined; // preserve 0
-      setPicks((prevPicks) => {
-        const next = { ...prevPicks } as Record<PickKey, PickItem>;
-        const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
-        const sideboardKey = `${cardId}:Sideboard:${
-          variantId ?? "x"
-        }` as PickKey;
+        // Sync picks state for all modes (draft, sealed, and normal editor)
+        const variantId = card.card.variantId ?? undefined; // preserve 0
+        setPicks((prevPicks) => {
+          const next = { ...prevPicks } as Record<PickKey, PickItem>;
+          const deckKey = `${cardId}:Deck:${variantId ?? "x"}` as PickKey;
+          const sideboardKey = `${cardId}:Sideboard:${
+            variantId ?? "x"
+          }` as PickKey;
 
-        const sideboardItem = next[sideboardKey];
-        if (sideboardItem && sideboardItem.count > 0) {
-          // Move one from sideboard to deck zone
-          if (sideboardItem.count > 1) {
-            next[sideboardKey] = {
-              ...sideboardItem,
-              count: sideboardItem.count - 1,
-            };
-          } else {
-            delete next[sideboardKey];
-          }
-
-          const deckItem = next[deckKey];
-          next[deckKey] = deckItem
-            ? { ...deckItem, count: deckItem.count + 1 }
-            : {
-                cardId,
-                variantId: variantId ?? null,
-                name: card.card.cardName,
-                type: card.card.type,
-                slug: card.card.slug || "",
-                zone: "Deck" as Zone,
-                count: 1,
-                set: card.card.setName || "",
+          const sideboardItem = next[sideboardKey];
+          if (sideboardItem && sideboardItem.count > 0) {
+            // Move one from sideboard to deck zone
+            if (sideboardItem.count > 1) {
+              next[sideboardKey] = {
+                ...sideboardItem,
+                count: sideboardItem.count - 1,
               };
-        }
-        return next;
-      });
+            } else {
+              delete next[sideboardKey];
+            }
 
-      return updated;
-    });
-  }, [isSortingEnabled]);
+            const deckItem = next[deckKey];
+            next[deckKey] = deckItem
+              ? { ...deckItem, count: deckItem.count + 1 }
+              : {
+                  cardId,
+                  variantId: variantId ?? null,
+                  name: card.card.cardName,
+                  type: card.card.type,
+                  slug: card.card.slug || "",
+                  zone: "Deck" as Zone,
+                  count: 1,
+                  set: card.card.setName || "",
+                };
+          }
+          return next;
+        });
+
+        return updated;
+      });
+    },
+    [isSortingEnabled]
+  );
 
   // Helper function to move specific card by its unique ID
   const moveSpecificCardToSideboard = useCallback(
@@ -2727,8 +3327,12 @@ function AuthenticatedDeckEditor() {
         const variantId = card.card.variantId ?? undefined; // preserve 0
         setPicks((prevPicks) => {
           const next = { ...prevPicks } as Record<PickKey, PickItem>;
-          const deckKey = `${card.card.cardId}:Deck:${variantId ?? "x"}` as PickKey;
-          const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? "x"}` as PickKey;
+          const deckKey = `${card.card.cardId}:Deck:${
+            variantId ?? "x"
+          }` as PickKey;
+          const sideboardKey = `${card.card.cardId}:Sideboard:${
+            variantId ?? "x"
+          }` as PickKey;
           const deckItem = next[deckKey];
           if (deckItem) {
             if (deckItem.count > 1)
@@ -2847,29 +3451,14 @@ function AuthenticatedDeckEditor() {
           </div>
         </div>
       )}
-      {/* 3D Game View as the stage - EXACT same as draft-3d */}
+
+      {/* 3D Game View as the stage - EXACT same as draft-3d (minus draft hand) */}
       <div className="absolute inset-0 w-full h-full">
         <EditorCanvas orbitLocked={orbitLocked}>
-          {/* Mouse tracking for hover detection on arranged cards */}
-          <MouseTracker
-            cards={pick3D}
-            onHover={(card) => {
-              if (card) {
-                showCardPreview({
-                  slug: card.slug,
-                  name: card.name,
-                  type: card.type,
-                });
-              } else {
-                hideCardPreview();
-              }
-            }}
-          />
-
           {/* 3D Cards with proper stacking order */}
           <group>
             {(() => {
-              const sortedCards = pick3D.sort((a, b) => {
+              const sortedCards = [...pick3D].sort((a, b) => {
                 // Sort by Y position so cards with lower Y render first (appear behind)
                 const aY = isSortingEnabled ? a.y || 0.002 : 0.002;
                 const bY = isSortingEnabled ? b.y || 0.002 : 0.002;
@@ -2884,26 +3473,37 @@ function AuthenticatedDeckEditor() {
                 // Use sorted position if sorting is enabled, otherwise use card's position
                 const stackPos = stackPositions?.get(p.id);
                 // Add X offset for each card in stack for better targeting (fan effect)
-                const x = stackPos
+                let x = stackPos
                   ? stackPos.x + stackPos.stackIndex * 0.03
                   : p.x;
-                const z = stackPos ? stackPos.z : p.z;
+                let z = stackPos ? stackPos.z : p.z;
+
+                // Collection zone: override position with bottom-left fan layout
+                let rotationZ = 0;
+                if (p.zone === "Collection") {
+                  const layout = collectionLayout.get(p.id);
+                  if (layout) {
+                    x = layout.x;
+                    z = layout.z;
+                    rotationZ = layout.rotationZ;
+                  }
+                }
 
                 // Calculate base render order like draft-3d
                 // Higher stack index = higher render order = rendered on top
                 // In unstacked mode, use interaction-based layering (most recently interacted cards on top)
-                const layerIndex = !stackPos ? (cardLayerOrder.get(p.id) ?? cardIndex) : 0;
+                const layerIndex = !stackPos
+                  ? cardLayerOrder.get(p.id) ?? cardIndex
+                  : 0;
                 const baseRenderOrder = stackPos
                   ? 1600 + stackPos.stackIndex * 10
                   : 1500 + layerIndex;
 
-                // Calculate Y position with proper stack height like draft-3d
-                // Use stackPos.stackIndex * 0.05 for proper visual stacking height
-                // In unstacked mode, use interaction-based layering for Y offset (0.001 per layer = 1mm)
-                // This allows MouseTracker to distinguish overlapping cards by Y position
-                // Most recently interacted cards get higher Y values and appear "on top"
+                // Calculate Y position with very small stack height so cards "lie" on the mat
+                // rather than floating in tall vertical stacks. We keep a tiny offset per
+                // stackIndex/layerIndex to avoid z-fighting but visually this should look flat.
                 const y = stackPos
-                  ? 0.002 + stackPos.stackIndex * 0.05
+                  ? 0.002 + stackPos.stackIndex * 0.003
                   : 0.002 + layerIndex * 0.001;
 
                 // Calculate stack information for proper hitbox sizing
@@ -2930,6 +3530,20 @@ function AuthenticatedDeckEditor() {
                     stackIndex={stackIndex}
                     totalInStack={totalInStack}
                     interactive={true}
+                    rotationZ={rotationZ}
+                    onHoverStart={(card) => {
+                      beginHoverPreview(
+                        {
+                          slug: card.slug,
+                          name: card.name,
+                          type: card.type,
+                        },
+                        `card-${p.id}`
+                      );
+                    }}
+                    onHoverEnd={() => {
+                      clearHoverPreviewDebounced(null, 20);
+                    }}
                     onContextMenu={(cx, cy) =>
                       openContextMenuForCard(
                         p.card.cardId,
@@ -2938,8 +3552,6 @@ function AuthenticatedDeckEditor() {
                         cy
                       )
                     }
-                    onHoverStart={showCardPreview}
-                    onHoverEnd={hideCardPreview}
                     onDrop={(wx, wz) => {
                       // Move card to drop position - only sort if sorting is enabled and this is a manual drag
                       const newZone = wz < 0 ? "Deck" : "Sideboard";
@@ -3027,7 +3639,8 @@ function AuthenticatedDeckEditor() {
 
                         // Dedupe: if we recently toggled this cardId via click, ignore repeats briefly
                         const now = Date.now();
-                        const last = cardClickGuardRef.current.get(p.card.cardId) || 0;
+                        const last =
+                          cardClickGuardRef.current.get(p.card.cardId) || 0;
                         if (now - last < 150) {
                           return;
                         }
@@ -3116,9 +3729,9 @@ function AuthenticatedDeckEditor() {
             metaByCardId={metaByCardId}
             pickInfoById={pickInfoById}
             onHoverPreview={(slug, name, type) =>
-              setHoverPreview({ slug, name, type })
+              beginHoverPreview({ slug, name, type }, `sidebar:${slug}`)
             }
-            onHoverClear={() => setHoverPreview(null)}
+            onHoverClear={() => clearHoverPreviewDebounced()}
             moveOneToSideboard={moveOneToSideboard}
             moveOneFromSideboardToDeck={moveOneFromSideboardToDeck}
             openContextMenu={openContextMenuForCard}
@@ -3126,6 +3739,10 @@ function AuthenticatedDeckEditor() {
               setFeedbackMessage(msg);
               setTimeout(() => setFeedbackMessage(null), 2000);
             }}
+            collectionCount={collectionCount}
+            collectionCountsByCardId={collectionCountsByCardId}
+            moveOneFromSideboardToCollection={moveOneFromSideboardToCollection}
+            moveOneFromCollectionToSideboard={moveOneFromCollectionToSideboard}
           />
         </Suspense>
 
@@ -3294,35 +3911,13 @@ function AuthenticatedDeckEditor() {
           </div>
         )}
 
-        {/* Card preview - exact copy from draft-3d */}
-        {hoverPreview && (
-          <div className="fixed bottom-6 left-6 z-50 pointer-events-none select-none">
-            {(() => {
-              const isSite = (hoverPreview.type || "")
-                .toLowerCase()
-                .includes("site");
-              // Clamp size and preserve aspect; use padding-bottom to enforce aspect box
-              const base = isSite
-                ? "w-[30vw] max-w-[600px] min-w-[200px] aspect-[4/3]" // matches rotated site (4:3)
-                : "w-[22vw] max-w-[360px] min-w-[180px] aspect-[3/4]"; // portrait cards
-              return (
-                <div
-                  className={`relative ${base} rounded-xl overflow-hidden shadow-2xl ${
-                    isSite ? "rotate-90" : ""
-                  }`}
-                >
-                  <Image
-                    src={`/api/images/${hoverPreview.slug}`}
-                    alt={hoverPreview.name}
-                    fill
-                    sizes="(max-width:640px) 50vw, (max-width:1024px) 30vw, 25vw"
-                    className={`${isSite ? "object-contain" : "object-cover"}`}
-                    priority
-                  />
-                </div>
-              );
-            })()}
-          </div>
+        {/* Card preview - match match play behavior; hide when context menu is open */}
+        {hoverPreview && !contextMenu && (
+          <CardPreview
+            card={hoverPreview}
+            anchor="bottom-left"
+            zIndexClass="z-50"
+          />
         )}
 
         {/* Context Menu for Duplicate Cards */}
@@ -3358,11 +3953,25 @@ function AuthenticatedDeckEditor() {
                       Copy {index + 1} → Sideboard
                     </button>
                   ))}
+
+                  {/* Aggregate Deck → Collection action */}
+                  <button
+                    className="mt-1 w-full text-left px-2 py-1 text-xs text-purple-100 hover:bg-purple-700/40 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                    disabled={collectionCount >= 10}
+                    onClick={() => {
+                      moveOneFromDeckToCollection(contextMenu.cardId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    {collectionCount >= 10
+                      ? "Collection is full (10/10)"
+                      : "Move one copy → Collection"}
+                  </button>
                 </div>
               )}
 
               {contextMenu.sideboardCards.length > 0 && (
-                <div>
+                <div className="mb-2">
                   <div className="text-blue-300 text-xs px-2 mb-1">
                     From Sideboard ({contextMenu.sideboardCards.length}):
                   </div>
@@ -3382,6 +3991,55 @@ function AuthenticatedDeckEditor() {
                       Copy {index + 1} → Deck
                     </button>
                   ))}
+
+                  {/* Aggregate Sideboard → Collection action */}
+                  <button
+                    className="mt-1 w-full text-left px-2 py-1 text-xs text-purple-100 hover:bg-purple-700/40 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                    disabled={collectionCount >= 10}
+                    onClick={() => {
+                      moveOneFromSideboardToCollection(contextMenu.cardId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    {collectionCount >= 10
+                      ? "Collection is full (10/10)"
+                      : "Move one copy → Collection"}
+                  </button>
+                </div>
+              )}
+
+              {contextMenu.collectionCopies > 0 && (
+                <div>
+                  <div className="text-purple-300 text-xs px-2 mb-1">
+                    From Collection ({contextMenu.collectionCopies} copies,
+                    total {contextMenu.totalCollection}/10):
+                  </div>
+                  <button
+                    className="w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                    onClick={() => {
+                      moveOneFromCollectionToDeck(contextMenu.cardId);
+                      setFeedbackMessage(
+                        `Moved "${contextMenu.cardName}" from Collection to Deck`
+                      );
+                      setTimeout(() => setFeedbackMessage(null), 2000);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Move one copy → Deck
+                  </button>
+                  <button
+                    className="mt-1 w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                    onClick={() => {
+                      moveOneFromCollectionToSideboard(contextMenu.cardId);
+                      setFeedbackMessage(
+                        `Moved "${contextMenu.cardName}" from Collection to Sideboard`
+                      );
+                      setTimeout(() => setFeedbackMessage(null), 2000);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Move one copy → Sideboard
+                  </button>
                 </div>
               )}
             </div>
@@ -3460,13 +4118,15 @@ function AuthenticatedDeckEditor() {
                 <p className="text-gray-600">
                   {waitingOverlayStage === "submitting"
                     ? "Validating your deck and syncing with the event server. Please keep this window open."
-                    : searchParams?.get("tournament") && !searchParams?.get("matchId")
-                      ? "Waiting for other players to submit their decks..."
-                      : "Returning you to the match momentarily."}
+                    : searchParams?.get("tournament") &&
+                      !searchParams?.get("matchId")
+                    ? "Waiting for other players to submit their decks..."
+                    : "Returning you to the match momentarily."}
                 </p>
                 {waitingOverlayStage === "waiting" && (
                   <div className="text-sm text-gray-500">
-                    {searchParams?.get("tournament") && !searchParams?.get("matchId")
+                    {searchParams?.get("tournament") &&
+                    !searchParams?.get("matchId")
                       ? "The page will refresh automatically when the tournament advances."
                       : "If nothing happens, you can jump back manually."}
                   </div>
@@ -3480,13 +4140,16 @@ function AuthenticatedDeckEditor() {
                         const tournamentId = searchParams?.get("tournament");
                         const matchId = searchParams?.get("matchId");
                         if (tournamentId && !matchId) {
-                          window.location.href = `/tournaments/${encodeURIComponent(tournamentId)}`;
+                          window.location.href = `/tournaments/${encodeURIComponent(
+                            tournamentId
+                          )}`;
                         } else {
                           goBackToMatch(matchId);
                         }
                       }}
                     >
-                      {searchParams?.get("tournament") && !searchParams?.get("matchId")
+                      {searchParams?.get("tournament") &&
+                      !searchParams?.get("matchId")
                         ? "Return to Tournament Now"
                         : "Return to Match Now"}
                     </button>

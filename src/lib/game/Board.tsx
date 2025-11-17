@@ -702,7 +702,8 @@ useBoardDropManager({
   useEffect(() => {
     // Any tick change requests revert of the last cross-tile move
     revertLastCrossTileMove();
-  }, [revertCrossMoveTick, revertLastCrossTileMove]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revertCrossMoveTick]);  // Only run when tick counter changes, not when callback recreates
 
   return (
     <group>

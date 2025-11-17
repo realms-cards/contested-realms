@@ -13,7 +13,7 @@ interface TokenAttachmentDialogProps {
   fromPile?: boolean;
   pileInfo?: {
     who: "p1" | "p2";
-    from: "tokens" | "spellbook" | "atlas" | "graveyard";
+    from: "tokens" | "spellbook" | "atlas" | "graveyard" | "collection";
     card: CardRef;
   } | null;
 }

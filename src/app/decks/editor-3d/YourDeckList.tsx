@@ -26,10 +26,13 @@ export type YourDeckListProps = {
     clientY: number
   ) => void;
   setFeedback: (msg: string) => void;
-  onColumnsChange?: (columns: 2 | 3 | 4) => void;
+  onColumnsChange?: (columns: 2 | 3 | 4 | 5) => void;
+  collectionCountsByCardId: Record<number, number>;
+  moveOneFromSideboardToCollection: (cardId: number) => void;
+  moveOneFromCollectionToSideboard: (cardId: number) => void;
 };
 
-type SortMode = "name" | "cost" | "type" | "none";
+type SortMode = "name" | "cost" | "type" | "element" | "none";
 
 export default function YourDeckList(props: YourDeckListProps) {
   const {
@@ -45,12 +48,15 @@ export default function YourDeckList(props: YourDeckListProps) {
     openContextMenu,
     setFeedback,
     onColumnsChange,
+    collectionCountsByCardId,
+    moveOneFromSideboardToCollection,
+    moveOneFromCollectionToSideboard,
   } = props;
 
-  const [columns, setColumns] = useState<2 | 3 | 4>(2);
+  const [columns, setColumns] = useState<2 | 3 | 4 | 5>(2);
   const [sortMode, setSortMode] = useState<SortMode>("none");
 
-  const handleColumnsChange = (newColumns: 2 | 3 | 4) => {
+  const handleColumnsChange = (newColumns: 2 | 3 | 4 | 5) => {
     setColumns(newColumns);
     onColumnsChange?.(newColumns);
   };
@@ -72,6 +78,41 @@ export default function YourDeckList(props: YourDeckListProps) {
       const costB = metaByCardId[b.cardId]?.cost ?? 0;
       if (costA !== costB) return costA - costB;
       return a.name.localeCompare(b.name);
+    } else if (sortMode === "element") {
+      const thresholdsA =
+        (metaByCardId[a.cardId]?.thresholds as
+          | Record<string, number>
+          | undefined
+          | null) || {};
+      const thresholdsB =
+        (metaByCardId[b.cardId]?.thresholds as
+          | Record<string, number>
+          | undefined
+          | null) || {};
+
+      const getPrimaryElementIndex = (
+        thresholds: Record<string, number>
+      ): number => {
+        let bestIndex: number = order.length; // colorless / no thresholds last
+        let bestValue = 0;
+        order.forEach((el, idx) => {
+          const v = thresholds[el] || 0;
+          if (v > bestValue) {
+            bestValue = v;
+            bestIndex = idx;
+          }
+        });
+        return bestIndex;
+      };
+
+      const idxA = getPrimaryElementIndex(
+        thresholdsA as Record<string, number>
+      );
+      const idxB = getPrimaryElementIndex(
+        thresholdsB as Record<string, number>
+      );
+      if (idxA !== idxB) return idxA - idxB;
+      return a.name.localeCompare(b.name);
     } else if (sortMode === "type") {
       const typeA = (pickInfoById[a.cardId]?.type || "").toLowerCase();
       const typeB = (pickInfoById[b.cardId]?.type || "").toLowerCase();
@@ -83,7 +124,10 @@ export default function YourDeckList(props: YourDeckListProps) {
   });
 
   // When sort mode is "none", skip grouping to preserve exact visual order
-  const groups: Array<{ key: "avatar" | "spellbook" | "atlas" | "all"; items: typeof yourCounts }> =
+  const groups: Array<{
+    key: "avatar" | "spellbook" | "atlas" | "all";
+    items: typeof yourCounts;
+  }> =
     sortMode === "none"
       ? [{ key: "all", items: sortedFiltered }]
       : [
@@ -109,15 +153,22 @@ export default function YourDeckList(props: YourDeckListProps) {
     const thresholds: Record<string, number> = {};
     for (const [k, v] of Object.entries(raw)) {
       const key = k.toLowerCase();
-      if (v && ["air", "water", "earth", "fire"].includes(key)) thresholds[key] = v;
+      if (v && ["air", "water", "earth", "fire"].includes(key))
+        thresholds[key] = v;
     }
     const pickInfo = pickInfoById[it.cardId];
     const slug = pickInfo?.slug || undefined;
     const typeText = (pickInfo?.type || "").toLowerCase();
     const isSite = typeText.includes("site");
 
-    const cardInDeck = pick3D.filter((p) => p.card.cardId === it.cardId && p.zone === "Deck").length;
-    const cardInSideboard = pick3D.filter((p) => p.card.cardId === it.cardId && p.zone === "Sideboard").length;
+    const cardInDeck = pick3D.filter(
+      (p) => p.card.cardId === it.cardId && p.zone === "Deck"
+    ).length;
+    const totalNonDeck = pick3D.filter(
+      (p) => p.card.cardId === it.cardId && p.zone === "Sideboard"
+    ).length;
+    const cardInCollection = collectionCountsByCardId[it.cardId] ?? 0;
+    const cardInSideboard = Math.max(totalNonDeck - cardInCollection, 0);
 
     const handleClick = (e: React.MouseEvent) => {
       e.preventDefault();
@@ -127,16 +178,18 @@ export default function YourDeckList(props: YourDeckListProps) {
         if (cardInDeck > 0) {
           moveOneToSideboard(it.cardId);
           const remaining = cardInDeck - 1;
-          const msg = remaining > 0
-            ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-            : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
+          const msg =
+            remaining > 0
+              ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+              : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
           setFeedback(msg);
         } else if (cardInSideboard > 0) {
           moveOneFromSideboardToDeck(it.cardId);
           const remaining = cardInSideboard - 1;
-          const msg = remaining > 0
-            ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
-            : `Moved "${it.name}" to Deck (no copies remain in sideboard)`;
+          const msg =
+            remaining > 0
+              ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
+              : `Moved "${it.name}" to Deck (no copies remain in sideboard)`;
           setFeedback(msg);
         }
       } else {
@@ -144,9 +197,10 @@ export default function YourDeckList(props: YourDeckListProps) {
         if (cardInDeck > 0) {
           moveOneToSideboard(it.cardId);
           const remaining = cardInDeck - 1;
-          const msg = remaining > 0
-            ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-            : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
+          const msg =
+            remaining > 0
+              ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+              : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
           setFeedback(msg);
         }
       }
@@ -180,7 +234,9 @@ export default function YourDeckList(props: YourDeckListProps) {
                 src={`/api/images/${slug}`}
                 alt={it.name}
                 fill
-                className={`${isSite ? "object-contain rotate-90" : "object-cover"}`}
+                className={`${
+                  isSite ? "object-contain rotate-90" : "object-cover"
+                }`}
                 sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
               />
             </div>
@@ -202,6 +258,11 @@ export default function YourDeckList(props: YourDeckListProps) {
                       Sideboard: {cardInSideboard}
                     </span>
                   )}
+                  {cardInCollection > 0 && (
+                    <span className="bg-purple-600/20 text-purple-300 px-1 py-0.5 rounded text-[10px]">
+                      Collection: {cardInCollection}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="text-right font-semibold">x{it.count}</div>
@@ -210,8 +271,16 @@ export default function YourDeckList(props: YourDeckListProps) {
               <div className="flex items-center gap-2">
                 {order.map((k) =>
                   thresholds[k] ? (
-                    <span key={k} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10">
-                      <Image src={`/api/assets/${k}.png`} alt={k} width={12} height={12} />
+                    <span
+                      key={k}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10"
+                    >
+                      <Image
+                        src={`/api/assets/${k}.png`}
+                        alt={k}
+                        width={12}
+                        height={12}
+                      />
                       {thresholds[k]}
                     </span>
                   ) : null
@@ -220,7 +289,11 @@ export default function YourDeckList(props: YourDeckListProps) {
               {meta?.cost != null && !isSite && (
                 <div className="ml-auto flex items-center gap-1">
                   {meta.cost >= 0 && meta.cost <= 9 ? (
-                    <NumberBadge value={meta.cost as Digit} size={16} strokeWidth={8} />
+                    <NumberBadge
+                      value={meta.cost as Digit}
+                      size={16}
+                      strokeWidth={8}
+                    />
                   ) : (
                     <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
                       {meta.cost}
@@ -229,6 +302,40 @@ export default function YourDeckList(props: YourDeckListProps) {
                 </div>
               )}
             </div>
+            {(cardInSideboard > 0 || cardInCollection > 0) && (
+              <div className="mt-1 flex flex-wrap gap-1 text-[10px] opacity-90">
+                {cardInSideboard > 0 && (
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveOneFromSideboardToCollection(it.cardId);
+                      setFeedback(
+                        `Moved "${it.name}" from Sideboard to Collection`
+                      );
+                    }}
+                  >
+                    +1 to Collection
+                  </button>
+                )}
+                {cardInCollection > 0 && (
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveOneFromCollectionToSideboard(it.cardId);
+                      setFeedback(
+                        `Moved "${it.name}" from Collection to Sideboard`
+                      );
+                    }}
+                  >
+                    -1 from Collection
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -236,9 +343,13 @@ export default function YourDeckList(props: YourDeckListProps) {
   };
 
   const gridColsClass =
-    columns === 2 ? "grid-cols-2" :
-    columns === 3 ? "grid-cols-3" :
-    "grid-cols-4";
+    columns === 2
+      ? "grid-cols-2"
+      : columns === 3
+      ? "grid-cols-3"
+      : columns === 4
+      ? "grid-cols-4"
+      : "grid-cols-5";
 
   return (
     <div className="max-h-[calc(100vh-9rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
@@ -246,9 +357,11 @@ export default function YourDeckList(props: YourDeckListProps) {
       <div className="sticky top-0 z-10 bg-black/90 backdrop-blur-sm p-2 rounded space-y-2 border border-white/10">
         {/* Column selector */}
         <div className="flex items-center gap-2">
-          <span className="text-white/60 text-[10px] uppercase tracking-wide">Columns:</span>
+          <span className="text-white/60 text-[10px] uppercase tracking-wide">
+            Columns:
+          </span>
           <div className="flex gap-1">
-            {([2, 3, 4] as const).map((col) => (
+            {([2, 3, 4, 5] as const).map((col) => (
               <button
                 key={col}
                 onClick={() => handleColumnsChange(col)}
@@ -266,13 +379,16 @@ export default function YourDeckList(props: YourDeckListProps) {
 
         {/* Sort selector */}
         <div className="flex items-center gap-2">
-          <span className="text-white/60 text-[10px] uppercase tracking-wide">Sort:</span>
+          <span className="text-white/60 text-[10px] uppercase tracking-wide">
+            Sort:
+          </span>
           <div className="flex gap-1 flex-wrap">
             {[
               { value: "none", label: "None" },
               { value: "name", label: "Name" },
               { value: "cost", label: "Cost" },
               { value: "type", label: "Type" },
+              { value: "element", label: "Element" },
             ].map((option) => (
               <button
                 key={option.value}
@@ -297,7 +413,11 @@ export default function YourDeckList(props: YourDeckListProps) {
             {/* Only show group label when not in "none" mode */}
             {g.key !== "all" && (
               <div className="mb-1 text-white/70 text-[11px] uppercase tracking-wide">
-                {g.key === "avatar" ? "Avatar" : g.key === "spellbook" ? "Spellbook" : "Atlas"}
+                {g.key === "avatar"
+                  ? "Avatar"
+                  : g.key === "spellbook"
+                  ? "Spellbook"
+                  : "Atlas"}
               </div>
             )}
             <div className={`grid ${gridColsClass} gap-2`}>

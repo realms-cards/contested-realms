@@ -2,7 +2,7 @@
 
 import type { ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Group } from "three";
+import type { Group, Object3D } from "three";
 import { createCardMeshUserData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
@@ -19,6 +19,42 @@ import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
  * - Unstacked mode: Minimal Y offset (0.001 per card index) → visually flat but pickable
  */
 const STACK_VERTICAL_STEP = 0.001;
+
+function isPrimaryCardHit(e: ThreeEvent<PointerEvent>): boolean {
+  const intersections = e.intersections;
+  if (!intersections || intersections.length === 0) {
+    return true;
+  }
+
+  const primaryObject = (intersections[0]?.object ?? null) as Object3D | null;
+  const eventObject = (e.object as Object3D | undefined) ?? null;
+
+  if (!primaryObject || !eventObject) {
+    return true;
+  }
+
+  if (primaryObject.uuid === eventObject.uuid) {
+    return true;
+  }
+
+  let cursor: Object3D | null = eventObject.parent ?? null;
+  while (cursor) {
+    if (cursor.uuid === primaryObject.uuid) {
+      return true;
+    }
+    cursor = cursor.parent ?? null;
+  }
+
+  cursor = primaryObject.parent ?? null;
+  while (cursor) {
+    if (cursor.uuid === eventObject.uuid) {
+      return true;
+    }
+    cursor = cursor.parent ?? null;
+  }
+
+  return false;
+}
 
 export default function DraggableCard3D({
   slug,
@@ -61,7 +97,11 @@ export default function DraggableCard3D({
   onRelease?: (wx: number, wz: number, wasDragging: boolean) => void;
   getTopRenderOrder?: () => number;
   onHoverChange?: (hovering: boolean) => void;
-  onHoverStart?: (card: { slug: string; name: string; type: string | null }) => void;
+  onHoverStart?: (card: {
+    slug: string;
+    name: string;
+    type: string | null;
+  }) => void;
   onHoverEnd?: () => void;
   lockUpright?: boolean;
   onDoubleClick?: () => void;
@@ -113,10 +153,13 @@ export default function DraggableCard3D({
   // Only offset Y when actually stacked (totalInStack > 1), otherwise keep all cards on same plane
   const cardY = totalInStack > 1 ? y + stackIndex * STACK_VERTICAL_STEP : y;
 
-  const setPos = useCallback((wx: number, wz: number, lift = false) => {
-    if (!ref.current) return;
-    ref.current.position.set(wx, lift ? 0.25 : cardY, wz);
-  }, [cardY]);
+  const setPos = useCallback(
+    (wx: number, wz: number, lift = false) => {
+      if (!ref.current) return;
+      ref.current.position.set(wx, lift ? 0.25 : cardY, wz);
+    },
+    [cardY]
+  );
 
   const rotZ =
     (isSite ? -Math.PI / 2 : 0) +
@@ -148,6 +191,7 @@ export default function DraggableCard3D({
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
+          if (!isPrimaryCardHit(e)) return;
           e.stopPropagation();
           onHoverChange?.(false);
           // Record potential drag start in both world and screen space
@@ -181,8 +225,9 @@ export default function DraggableCard3D({
               window.removeEventListener("pointerup", earlyUp);
           }
         }}
-        onPointerOver={() => {
+        onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           if (!interactive) return;
+          if (!isPrimaryCardHit(e)) return;
           onHoverStart?.({
             slug,
             name: cardName ?? slug,
@@ -274,7 +319,12 @@ export default function DraggableCard3D({
         }}
       >
         <planeGeometry args={[visibleWidth, visibleHeight]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={true} depthTest={true} />
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthWrite={true}
+          depthTest={true}
+        />
         {/* Allow raycasting to pass through to cards below by setting raycast layers */}
       </mesh>
 

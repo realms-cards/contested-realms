@@ -24,10 +24,11 @@ export default function OnlineD20Screen({
   const setupWinner = useGameStore((s) => s.setupWinner);
   const choosePlayerOrder = useGameStore((s) => s.choosePlayerOrder);
   const phase = useGameStore((s) => s.phase);
+  const avatars = useGameStore((s) => s.avatars);
 
   // Set screen type for video overlay
   useEffect(() => {
-    updateScreenType('game');
+    updateScreenType("game");
     return undefined;
   }, [updateScreenType]);
 
@@ -35,6 +36,8 @@ export default function OnlineD20Screen({
   const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
   const opponentRoll = d20Rolls[opponentKey];
   const opponentName = playerNames[opponentKey];
+  const myAvatarName = avatars[myPlayerKey]?.card?.name || null;
+  const opponentAvatarName = avatars[opponentKey]?.card?.name || null;
 
   // Debug logging for d20 state
   useEffect(() => {
@@ -45,9 +48,17 @@ export default function OnlineD20Screen({
       opponentRoll,
       d20Rolls,
       setupWinner,
-      phase
+      phase,
     });
-  }, [myPlayerKey, myRoll, opponentKey, opponentRoll, d20Rolls, setupWinner, phase]);
+  }, [
+    myPlayerKey,
+    myRoll,
+    opponentKey,
+    opponentRoll,
+    d20Rolls,
+    setupWinner,
+    phase,
+  ]);
 
   const bothRolled = myRoll !== null && opponentRoll !== null;
   const canChoose = setupWinner === myPlayerKey;
@@ -143,7 +154,23 @@ export default function OnlineD20Screen({
             {playerNames[myPlayerKey]}
           </span>
         </div>
-        <div className="text-xs opacity-60 mt-1">
+        {(myAvatarName || opponentAvatarName) && (
+          <div className="mt-2 text-xs opacity-75 space-y-0.5">
+            {myAvatarName && (
+              <div>
+                Your Avatar:{" "}
+                <span className="font-fantaisie">{myAvatarName}</span>
+              </div>
+            )}
+            {opponentAvatarName && (
+              <div>
+                Opponent Avatar:{" "}
+                <span className="font-fantaisie">{opponentAvatarName}</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="text-xs opacity-60 mt-2">
           Click your die to roll. Highest roll gets to choose player order.
         </div>
       </div>

@@ -1,9 +1,4 @@
-import type {
-  GameState,
-  PlayerKey,
-  ServerPatchT,
-  Zones,
-} from "../types";
+import type { GameState, PlayerKey, ServerPatchT, Zones } from "../types";
 import { normalizeCardRefList, prepareCardForSeat } from "./cardHelpers";
 
 const ZONE_PILES: Array<keyof Zones> = [
@@ -12,6 +7,7 @@ const ZONE_PILES: Array<keyof Zones> = [
   "hand",
   "graveyard",
   "battlefield",
+  "collection",
   "banished",
 ];
 
@@ -22,6 +18,7 @@ export function createEmptyPlayerZones(): Zones {
     hand: [],
     graveyard: [],
     battlefield: [],
+    collection: [],
     banished: [],
   };
 }
@@ -50,6 +47,7 @@ export function ensurePlayerZones(
     hand: normalizeCardRefList(hand, base.hand),
     graveyard: normalizeCardRefList(graveyard, base.graveyard),
     battlefield: normalizeCardRefList(battlefield, base.battlefield),
+    collection: normalizeCardRefList(candidate?.collection, base.collection),
     banished: normalizeCardRefList(banished, base.banished),
   };
 }
@@ -78,6 +76,7 @@ export function cloneSeatZones(
     hand: cloneList(z.hand),
     graveyard: cloneList(z.graveyard),
     battlefield: cloneList(z.battlefield),
+    collection: cloneList(z.collection),
     banished: cloneList(z.banished),
   };
 }
@@ -118,7 +117,9 @@ export function removeCardInstanceFromAllZones(
       changedSeats.push(seat);
     }
   }
-  return changedSeats.length > 0 ? { zones: result, seats: changedSeats } : null;
+  return changedSeats.length > 0
+    ? { zones: result, seats: changedSeats }
+    : null;
 }
 
 export function createZonesPatchFor(

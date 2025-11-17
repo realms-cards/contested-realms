@@ -1,4 +1,3 @@
-
 import type { StateCreator } from "zustand";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import type {
@@ -11,15 +10,8 @@ import type {
   Thresholds,
   Zones,
 } from "../types";
-import {
-  evaluateInstantPermission,
-  expireInteractionGrant,
-} from "./helpers";
-import {
-  getCellNumber,
-  ownerFromSeat,
-  toCellKey,
-} from "../utils/boardHelpers";
+import { evaluateInstantPermission, expireInteractionGrant } from "./helpers";
+import { getCellNumber, ownerFromSeat, toCellKey } from "../utils/boardHelpers";
 import { prepareCardForSeat } from "../utils/cardHelpers";
 import { newPermanentInstanceId } from "../utils/idHelpers";
 import {
@@ -44,7 +36,7 @@ export const createPlayActionsSlice: StateCreator<
   [],
   PlayActionsSlice
 > = (set, get) => ({
-playSelectedTo: (x, y) =>
+  playSelectedTo: (x, y) =>
     set((state) => {
       const sel = state.selectedCard;
       if (!sel) {
@@ -58,10 +50,14 @@ playSelectedTo: (x, y) =>
         ? evaluateInstantPermission(state, who)
         : { allow: false, consumeId: null };
       const allowInstant = !isCurrent && instantPermission.allow;
-      const consumeInstantId = allowInstant ? instantPermission.consumeId : null;
+      const consumeInstantId = allowInstant
+        ? instantPermission.consumeId
+        : null;
       if (!isCurrent && !allowInstant && !typeEarly.includes("token")) {
         get().log(
-          `Cannot play '${card.name}': ${who.toUpperCase()} is not the current player`
+          `Cannot play '${
+            card.name
+          }': ${who.toUpperCase()} is not the current player`
         );
         return state;
       }
@@ -110,7 +106,9 @@ playSelectedTo: (x, y) =>
           ...state.board.sites,
           [key]: { owner: ownerFromSeat(who), tapped: false, card },
         };
-        get().log(`${who.toUpperCase()} plays site '${card.name}' at #${cellNo}`);
+        get().log(
+          `${who.toUpperCase()} plays site '${card.name}' at #${cellNo}`
+        );
         const tr = get().transport;
         if (tr) {
           const zonesNext = {
@@ -207,7 +205,7 @@ playSelectedTo: (x, y) =>
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
       } as Partial<GameState> as GameState;
     }),
-playFromPileTo: (x, y) =>
+  playFromPileTo: (x, y) =>
     set((state) => {
       const info = state.dragFromPile;
       if (!info || !info.card) return state;
@@ -232,10 +230,14 @@ playFromPileTo: (x, y) =>
         ? evaluateInstantPermission(state, who)
         : { allow: false, consumeId: null };
       const allowInstant = !isCurrent && instantPermission.allow;
-      const consumeInstantId = allowInstant ? instantPermission.consumeId : null;
+      const consumeInstantId = allowInstant
+        ? instantPermission.consumeId
+        : null;
       if (!isCurrent && !allowInstant && !type.includes("token")) {
         get().log(
-          `Cannot play '${card.name}' from ${from}: ${who.toUpperCase()} is not the current player`
+          `Cannot play '${
+            card.name
+          }' from ${from}: ${who.toUpperCase()} is not the current player`
         );
         return {
           dragFromPile: null,
@@ -322,7 +324,9 @@ playFromPileTo: (x, y) =>
           },
         };
         get().log(
-          `${who.toUpperCase()} plays site '${card.name}' from ${from} at #${cellNo}`
+          `${who.toUpperCase()} plays site '${
+            card.name
+          }' from ${from} at #${cellNo}`
         );
         const zonesNext =
           pileName !== null
@@ -386,9 +390,7 @@ playFromPileTo: (x, y) =>
           ])
         : null;
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, key);
-      const zonePatch = zonesNext
-        ? createZonesPatchFor(zonesNext, who)
-        : null;
+      const zonePatch = zonesNext ? createZonesPatchFor(zonesNext, who) : null;
       const combined: ServerPatchT = {};
       if (deltaPatch) Object.assign(combined, deltaPatch);
       else if (fallbackPatch?.permanents)
@@ -422,7 +424,7 @@ playFromPileTo: (x, y) =>
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
       } as Partial<GameState> as GameState;
     }),
-drawFromPileToHand: () =>
+  drawFromPileToHand: () =>
     set((state) => {
       const info = state.dragFromPile;
       if (!info || !info.card) return state;
@@ -436,7 +438,16 @@ drawFromPileToHand: () =>
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `Cannot draw '${card.name}' from ${from}: ${who.toUpperCase()} is not the current player`
+          `Cannot draw '${
+            card.name
+          }' from ${from}: ${who.toUpperCase()} is not the current player`
+        );
+        return { dragFromPile: null } as Partial<GameState> as GameState;
+      }
+      // Collection-to-hand moves are only legal during the controlling player's own Main phase.
+      if (from === "collection" && state.phase !== "Main") {
+        get().log(
+          `Cannot draw '${card.name}' from Collection during ${state.phase} phase (Main phase only)`
         );
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
@@ -466,7 +477,9 @@ drawFromPileToHand: () =>
       }
       const ensured = prepareCardForSeat(removed, who);
       const hand = [...z.hand, ensured];
-      get().log(`${who.toUpperCase()} draws '${card.name}' from ${from} to hand`);
+      get().log(
+        `${who.toUpperCase()} draws '${card.name}' from ${from} to hand`
+      );
       const zonesNext = {
         ...state.zones,
         [who]: { ...z, [pileName]: pile, hand },
@@ -481,7 +494,7 @@ drawFromPileToHand: () =>
         dragFromPile: null,
       } as Partial<GameState> as GameState;
     }),
-moveCardFromHandToPile: (who, pile, position) =>
+  moveCardFromHandToPile: (who, pile, position) =>
     set((state) => {
       const selectedCard = state.selectedCard;
       if (!selectedCard || selectedCard.who !== who) return state;
@@ -507,7 +520,9 @@ moveCardFromHandToPile: (who, pile, position) =>
       if (position === "top") targetPile.unshift(ensuredCard);
       else targetPile.push(ensuredCard);
       get().log(
-        `${who.toUpperCase()} moves '${ensuredCard.name}' from hand to ${position} of ${pile}`
+        `${who.toUpperCase()} moves '${
+          ensuredCard.name
+        }' from hand to ${position} of ${pile}`
       );
       const zonesNext = {
         ...state.zones,

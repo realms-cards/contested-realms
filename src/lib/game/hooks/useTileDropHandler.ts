@@ -236,70 +236,70 @@ export function useTileDropHandler({
             instanceId: movedPre?.instanceId ?? null,
           });
           try {
-            selectPermanent(dropKey, newIndex);
-          } catch {}
-        } catch {}
-        requestAnimationFrame(() => {
-          moveSelectedPermanentToWithOffset(tileX, tileY, [offX, offZ]);
-        });
-        if (!useGhostOnlyBoardDrag) {
-          snapBodyTo(`perm:${dropKey}:${newIndex}`, world.x, world.z);
-        }
-        try {
-          if (interactionGuides) {
-            const moved = permanents[dragging.from]?.[dragging.index];
-            const cardId = Number(moved?.card?.cardId);
-            if (Number.isFinite(cardId) && cardId > 0 && !metaByCardId[cardId]) {
-              void fetchCardMeta([cardId]);
-            }
-            let hasBasePower = false;
-            if (Number.isFinite(cardId) && cardId > 0) {
-              const meta = metaByCardId[cardId];
-              if (meta) {
-                const atk = Number(meta.attack);
-                hasBasePower = Number.isFinite(atk) && atk !== 0;
-              } else {
-                hasBasePower = true;
-              }
-            }
-            if (hasBasePower) {
-              const enemyOwner: 1 | 2 = owner === 1 ? 2 : 1;
-              let hasTarget = (permanents[dropKey] || []).some(
-                (p) => p && p.owner === enemyOwner
-              );
-              if (!hasTarget) {
-                const enemySeat = enemyOwner === 1 ? "p1" : "p2";
-                const av = avatars?.[enemySeat];
-                if (av?.pos && av.pos[0] === tileX && av.pos[1] === tileY) {
-                  hasTarget = true;
-                }
-              }
-              if (!hasTarget) {
-                const site = board.sites[dropKey];
-                if (site && site.owner === enemyOwner) {
-                  hasTarget = true;
-                }
-              }
-              const mine =
-                (actorKey === "p1" && owner === 1) ||
-                (actorKey === "p2" && owner === 2);
-              const actorIsActive =
-                (actorKey === "p1" && currentPlayer === 1) ||
-                (actorKey === "p2" && currentPlayer === 2);
-              if (hasTarget && mine && actorIsActive) {
-                setAttackChoice({
-                  tile: { x: tileX, y: tileY },
-                  attacker: {
-                    at: dropKey,
-                    index: newIndex,
-                    instanceId: permanents[dragging.from]?.[dragging.index]?.instanceId ?? null,
-                    owner,
-                  },
-                  attackerName: permanents[dragging.from]?.[dragging.index]?.card?.name || null,
-                });
-              }
-            }
+            selectPermanent(dragging.from, dragging.index);
+          } catch (err) {
+            console.error("[useTileDropHandler] Select failed:", err);
           }
+          moveSelectedPermanentToWithOffset(tileX, tileY, [offX, offZ]);
+          if (!useGhostOnlyBoardDrag) {
+            snapBodyTo(`perm:${dropKey}:${newIndex}`, world.x, world.z);
+          }
+          try {
+            if (interactionGuides) {
+              const moved = permanents[dragging.from]?.[dragging.index];
+              const cardId = Number(moved?.card?.cardId);
+              if (Number.isFinite(cardId) && cardId > 0 && !metaByCardId[cardId]) {
+                void fetchCardMeta([cardId]);
+              }
+              let hasBasePower = false;
+              if (Number.isFinite(cardId) && cardId > 0) {
+                const meta = metaByCardId[cardId];
+                if (meta) {
+                  const atk = Number(meta.attack);
+                  hasBasePower = Number.isFinite(atk) && atk !== 0;
+                } else {
+                  hasBasePower = true;
+                }
+              }
+              if (hasBasePower) {
+                const enemyOwner: 1 | 2 = owner === 1 ? 2 : 1;
+                let hasTarget = (permanents[dropKey] || []).some(
+                  (p) => p && p.owner === enemyOwner
+                );
+                if (!hasTarget) {
+                  const enemySeat = enemyOwner === 1 ? "p1" : "p2";
+                  const av = avatars?.[enemySeat];
+                  if (av?.pos && av.pos[0] === tileX && av.pos[1] === tileY) {
+                    hasTarget = true;
+                  }
+                }
+                if (!hasTarget) {
+                  const site = board.sites[dropKey];
+                  if (site && site.owner === enemyOwner) {
+                    hasTarget = true;
+                  }
+                }
+                const mine =
+                  (actorKey === "p1" && owner === 1) ||
+                  (actorKey === "p2" && owner === 2);
+                const actorIsActive =
+                  (actorKey === "p1" && currentPlayer === 1) ||
+                  (actorKey === "p2" && currentPlayer === 2);
+                if (hasTarget && mine && actorIsActive) {
+                  setAttackChoice({
+                    tile: { x: tileX, y: tileY },
+                    attacker: {
+                      at: dropKey,
+                      index: newIndex,
+                      instanceId: permanents[dragging.from]?.[dragging.index]?.instanceId ?? null,
+                      owner,
+                    },
+                    attackerName: permanents[dragging.from]?.[dragging.index]?.card?.name || null,
+                  });
+                }
+              }
+            }
+          } catch {}
         } catch {}
       };
 
