@@ -1,9 +1,5 @@
 import type { StateCreator } from "zustand";
-import type {
-  CardRef,
-  GameState,
-  PlayerKey,
-} from "./types";
+import type { CardRef, GameState, PlayerKey } from "./types";
 
 export type UiSlice = Pick<
   GameState,
@@ -59,12 +55,9 @@ export const createInitialUiState = (): UiStateDefaults => ({
   previewCard: null,
 });
 
-export const createUiSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  UiSlice
-> = (set) => ({
+export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
+  set
+) => ({
   ...createInitialUiState(),
 
   selectHandCard: (who: PlayerKey, index: number) =>
@@ -102,15 +95,14 @@ export const createUiSlice: StateCreator<
   clearSelection: () =>
     set({ selectedCard: null, selectedPermanent: null, selectedAvatar: null }),
 
-  setMouseInHandZone: (inZone: boolean) =>
-    set({ mouseInHandZone: inZone }),
+  setMouseInHandZone: (inZone: boolean) => set({ mouseInHandZone: inZone }),
   setHandHoverCount: (count: number) => set({ handHoverCount: count }),
 
   setDragFromHand: (on: boolean) => set({ dragFromHand: on }),
   setDragFromPile: (
     info: {
       who: PlayerKey;
-      from: "spellbook" | "atlas" | "graveyard" | "tokens";
+      from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
       card: CardRef | null;
     } | null
   ) => set({ dragFromPile: info }),

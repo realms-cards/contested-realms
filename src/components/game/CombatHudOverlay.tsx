@@ -677,8 +677,8 @@ export default function CombatHudOverlay() {
             <button
               className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
               onClick={() => {
-                requestRevertCrossMove();
                 setAttackChoice(null);
+                requestRevertCrossMove();  // Revert the movement
               }}
             >
               Cancel
@@ -693,7 +693,6 @@ export default function CombatHudOverlay() {
             <button
               className="mx-2 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
               onClick={() => {
-                requestRevertCrossMove();
                 setAttackTargetChoice(null);
               }}
             >

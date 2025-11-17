@@ -142,7 +142,7 @@ model DeckCard {
   cardId    Int
   setId     Int?
   variantId Int?
-  zone      String  // Spellbook | Atlas | Sideboard
+  zone      String  // Spellbook | Atlas | Collection | Sideboard
   count     Int
 
   deck    Deck    @relation(fields: [deckId], references: [id], onDelete: Cascade)

@@ -1,10 +1,10 @@
-import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { TargetBullseye } from "@/lib/game/components/TargetBullseye";
 import { TILE_SIZE, PLAYER_COLORS } from "@/lib/game/constants";
 import type { GameState } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
-import { TargetBullseye } from "@/lib/game/components/TargetBullseye";
 
 type MagicConnectionLinesProps = {
   pendingMagic: NonNullable<GameState["pendingMagic"]>;
@@ -49,7 +49,9 @@ function ConnectionLine({
     const lineLength = startVec.distanceTo(endVec);
 
     // Calculate rotation to align cylinder with line
-    const direction = new THREE.Vector3().subVectors(endVec, startVec).normalize();
+    const direction = new THREE.Vector3()
+      .subVectors(endVec, startVec)
+      .normalize();
 
     // Cylinder is oriented along Y axis by default, we need to rotate it
     // to point in the direction of our line
@@ -65,7 +67,11 @@ function ConnectionLine({
     const euler = new THREE.Euler().setFromQuaternion(quaternion);
 
     return {
-      position: [midpoint.x, midpoint.y, midpoint.z] as [number, number, number],
+      position: [midpoint.x, midpoint.y, midpoint.z] as [
+        number,
+        number,
+        number
+      ],
       rotation: [euler.x, euler.y, euler.z] as [number, number, number],
       length: lineLength,
     };
@@ -74,7 +80,13 @@ function ConnectionLine({
   return (
     <mesh position={position} rotation={rotation} renderOrder={10500}>
       <cylinderGeometry args={[0.04, 0.04, length, 8]} />
-      <meshBasicMaterial ref={materialRef} color={color} transparent opacity={0.8} depthTest={false} />
+      <meshBasicMaterial
+        ref={materialRef}
+        color={color}
+        transparent
+        opacity={0.8}
+        depthTest={false}
+      />
     </mesh>
   );
 }
@@ -104,7 +116,9 @@ export function MagicConnectionLines({
     let casterPos: [number, number, number] | null = null;
     if (caster) {
       if (caster.kind === "avatar") {
-        const avatarPos = avatars?.[caster.seat]?.pos as [number, number] | null;
+        const avatarPos = avatars?.[caster.seat]?.pos as
+          | [number, number]
+          | null;
         if (Array.isArray(avatarPos)) {
           const cx = boardOffset.x + avatarPos[0] * TILE_SIZE;
           const cz = boardOffset.y + avatarPos[1] * TILE_SIZE;
@@ -149,7 +163,9 @@ export function MagicConnectionLines({
           targetPos = [worldX, elevation, worldZ];
         }
       } else if (target.kind === "avatar") {
-        const avatarPos = avatars?.[target.seat]?.pos as [number, number] | null;
+        const avatarPos = avatars?.[target.seat]?.pos as
+          | [number, number]
+          | null;
         if (Array.isArray(avatarPos)) {
           const worldX = boardOffset.x + avatarPos[0] * TILE_SIZE;
           const worldZ = boardOffset.y + avatarPos[1] * TILE_SIZE;
@@ -169,7 +185,9 @@ export function MagicConnectionLines({
             }
           } else if ("seat" in hitTarget) {
             // intended target with seat (fallback for when firstHit not available)
-            const avatarPos = avatars?.[hitTarget.seat]?.pos as [number, number] | null;
+            const avatarPos = avatars?.[hitTarget.seat]?.pos as
+              | [number, number]
+              | null;
             if (Array.isArray(avatarPos)) {
               const worldX = boardOffset.x + avatarPos[0] * TILE_SIZE;
               const worldZ = boardOffset.y + avatarPos[1] * TILE_SIZE;
@@ -181,7 +199,7 @@ export function MagicConnectionLines({
     }
 
     return { spellPos, casterPos, targetPos };
-  }, [pendingMagic, avatars, boardOffset, tile, spell, caster, target]);
+  }, [avatars, boardOffset, tile, spell, caster, target]);
 
   // Don't render if we don't have necessary positions
   if (!positions.casterPos && !positions.targetPos) {

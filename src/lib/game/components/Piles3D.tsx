@@ -6,11 +6,7 @@ import { useSound } from "@/lib/contexts/SoundContext";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
-import {
-  CARD_LONG,
-  CARD_SHORT,
-  TILE_SIZE,
-} from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 
@@ -24,15 +20,19 @@ export interface Piles3DProps {
   hideCardPreview?: () => void;
 }
 
-const labels: Record<"spellbook" | "atlas" | "graveyard", string> = {
+const labels: Record<
+  "spellbook" | "atlas" | "graveyard" | "collection",
+  string
+> = {
   spellbook: "Spellbook",
   atlas: "Atlas",
   graveyard: "Cemetery",
+  collection: "Collection",
 };
 
 type PileKey = keyof Pick<
   ReturnType<typeof useGameStore.getState>["zones"]["p1"],
-  "spellbook" | "atlas" | "graveyard"
+  "spellbook" | "atlas" | "graveyard" | "collection"
 >;
 
 type PlayerZones = ReturnType<typeof useGameStore.getState>["zones"]["p1"];
@@ -59,14 +59,18 @@ export default function Piles3D({
   void _matW;
   void _matH;
 
-  const emptyPlayerZones = useMemo<PlayerZones>(() => ({
-    spellbook: [],
-    atlas: [],
-    hand: [],
-    graveyard: [],
-    battlefield: [],
-    banished: [],
-  }), []);
+  const emptyPlayerZones = useMemo<PlayerZones>(
+    () => ({
+      spellbook: [],
+      atlas: [],
+      hand: [],
+      graveyard: [],
+      battlefield: [],
+      collection: [],
+      banished: [],
+    }),
+    []
+  );
 
   const playerZones = zones?.[owner] ?? emptyPlayerZones;
   // Seat mapping: p1 at TOP, p2 at BOTTOM
@@ -79,6 +83,8 @@ export default function Piles3D({
   const rightX = gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
   const leftX = -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
   const pilesX = isBottom ? leftX - 0.1 : rightX + 0.1;
+  // Collection pile: fixed at lower-right edge of the board to avoid threshold UI
+  const collectionX = rightX + 0.1;
   // Anchor just outside the grid on the player's own edge
   const topEdgeZ = -gridHalfH;
   const bottomEdgeZ = gridHalfH;
@@ -89,6 +95,8 @@ export default function Piles3D({
   const zSpacing = CARD_LONG * 1.1;
   // Step toward the grid for both players
   const step = isBottom ? -zSpacing : +zSpacing;
+  // Collection pile Z: always just outside the bottom edge for both seats
+  const collectionZ = bottomEdgeZ + TILE_SIZE * 0.8;
 
   const piles: {
     key: PileKey;
@@ -117,14 +125,23 @@ export default function Piles3D({
         label: labels.graveyard,
         cards: playerZones.graveyard,
       },
+      {
+        key: "collection",
+        x: collectionX,
+        z: collectionZ,
+        cards: playerZones.collection,
+      },
     ],
     [
       pilesX,
+      collectionX,
+      collectionZ,
       startZ,
       step,
       playerZones.atlas,
       playerZones.spellbook,
       playerZones.graveyard,
+      playerZones.collection,
     ]
   );
 
@@ -132,7 +149,7 @@ export default function Piles3D({
   function beginHoverPreview(card?: CardRef | null) {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     if (!card?.slug) return;
-    
+
     // Use enhanced preview if available, otherwise fall back to legacy
     if (showCardPreview) {
       const preview = cardRefToPreview(card);
@@ -150,7 +167,7 @@ export default function Piles3D({
   function clearHoverPreview() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
-    
+
     // Use enhanced preview if available, otherwise fall back to legacy
     if (hideCardPreview) {
       hideCardPreview();
@@ -190,11 +207,15 @@ export default function Piles3D({
         const isCemetery = key === "graveyard";
         // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
         const ownerRot = owner === "p1" ? Math.PI : 0;
-        const rotZ = isCemetery ? (owner === "p1" ? 0 : Math.PI) : ownerRot + Math.PI;
-        const cardbackUrl = isCemetery 
-          ? undefined 
-          : key === "atlas" 
-          ? "/api/assets/cardback_atlas.png" 
+        const rotZ = isCemetery
+          ? owner === "p1"
+            ? 0
+            : Math.PI
+          : ownerRot + Math.PI;
+        const cardbackUrl = isCemetery
+          ? undefined
+          : key === "atlas"
+          ? "/api/assets/cardback_atlas.png"
           : "/api/assets/cardback_spellbook.png";
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
@@ -210,7 +231,7 @@ export default function Piles3D({
                   .map((card, stackIndex) => (
                     <CardPlane
                       key={`stack-${card.slug}-${stackIndex}`}
-                      slug={card.slug || ''}
+                      slug={card.slug || ""}
                       textureUrl={cardbackUrl}
                       forceTextureUrl={!isCemetery}
                       width={w}
@@ -267,6 +288,8 @@ export default function Piles3D({
                           ? "atlas"
                           : key === "graveyard"
                           ? "graveyard"
+                          : key === "collection"
+                          ? "collection"
                           : "spellbook";
                       openContextMenu(
                         { kind: "pile", who: owner, from: pileType },
@@ -277,7 +300,7 @@ export default function Piles3D({
                     onClick={() => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
-                      if (isCemetery) return;
+                      if (isCemetery || key === "collection") return;
                       const store = useGameStore.getState();
                       const actorKey = store.actorKey;
                       const isMine = !actorKey || actorKey === owner;
@@ -286,10 +309,12 @@ export default function Piles3D({
                         | "atlas"
                         | "spellbook";
                       store.drawFrom(owner, from, 1);
-                      try { playCardSelect(); } catch {}
+                      try {
+                        playCardSelect();
+                      } catch {}
                     }}
                     // Dragging from piles is disabled
-                    onPointerMove={( _e: ThreeEvent<PointerEvent>) => {
+                    onPointerMove={(_e: ThreeEvent<PointerEvent>) => {
                       // touch the arg to avoid unused-var lint
                       void _e;
                       // Keep allowing propagation for orbit/ghost updates, but do nothing here
@@ -306,7 +331,9 @@ export default function Piles3D({
                       const store = useGameStore.getState();
                       if (dragFromHand && store.selectedCard) {
                         const card = store.selectedCard;
-                        const typeLc = String(card.card?.type || "").toLowerCase();
+                        const typeLc = String(
+                          card.card?.type || ""
+                        ).toLowerCase();
                         // Non-site cards go to Spellbook
                         if (key === "spellbook" && !typeLc.includes("site")) {
                           const pileName = "Spellbook";
@@ -319,13 +346,15 @@ export default function Piles3D({
                                 "spellbook",
                                 position
                               );
-                              try { playCardFlip(); } catch {}
+                              try {
+                                playCardFlip();
+                              } catch {}
                               setDragFromHand(false);
                               store.clearSelection();
                               store.closePlacementDialog();
                             }
                           );
-                        // Site cards go to Atlas
+                          // Site cards go to Atlas
                         } else if (key === "atlas" && typeLc.includes("site")) {
                           const pileName = "Atlas";
                           openPlacementDialog(
@@ -337,7 +366,9 @@ export default function Piles3D({
                                 "atlas",
                                 position
                               );
-                              try { playCardFlip(); } catch {}
+                              try {
+                                playCardFlip();
+                              } catch {}
                               setDragFromHand(false);
                               store.clearSelection();
                               store.closePlacementDialog();
@@ -390,7 +421,13 @@ export default function Piles3D({
                   // Cancel any pending drag gating when opening the menu
                   pileDragStartRef.current = null;
                   const pileType =
-                    key === "atlas" ? "atlas" : key === "graveyard" ? "graveyard" : "spellbook";
+                    key === "atlas"
+                      ? "atlas"
+                      : key === "graveyard"
+                      ? "graveyard"
+                      : key === "collection"
+                      ? "collection"
+                      : "spellbook";
                   openContextMenu(
                     { kind: "pile", who: owner, from: pileType },
                     { x: e.clientX, y: e.clientY }
@@ -412,23 +449,43 @@ export default function Piles3D({
                     // Non-site cards go to Spellbook
                     if (key === "spellbook" && !typeLc.includes("site")) {
                       const pileName = "Spellbook";
-                      openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
-                        store.moveCardFromHandToPile(owner, "spellbook", position);
-                        try { playCardFlip(); } catch {}
-                        setDragFromHand(false);
-                        store.clearSelection();
-                        store.closePlacementDialog();
-                      });
-                    // Site cards go to Atlas
+                      openPlacementDialog(
+                        card.card?.name || "Card",
+                        pileName,
+                        (position) => {
+                          store.moveCardFromHandToPile(
+                            owner,
+                            "spellbook",
+                            position
+                          );
+                          try {
+                            playCardFlip();
+                          } catch {}
+                          setDragFromHand(false);
+                          store.clearSelection();
+                          store.closePlacementDialog();
+                        }
+                      );
+                      // Site cards go to Atlas
                     } else if (key === "atlas" && typeLc.includes("site")) {
                       const pileName = "Atlas";
-                      openPlacementDialog(card.card?.name || "Card", pileName, (position) => {
-                        store.moveCardFromHandToPile(owner, "atlas", position);
-                        try { playCardFlip(); } catch {}
-                        setDragFromHand(false);
-                        store.clearSelection();
-                        store.closePlacementDialog();
-                      });
+                      openPlacementDialog(
+                        card.card?.name || "Card",
+                        pileName,
+                        (position) => {
+                          store.moveCardFromHandToPile(
+                            owner,
+                            "atlas",
+                            position
+                          );
+                          try {
+                            playCardFlip();
+                          } catch {}
+                          setDragFromHand(false);
+                          store.clearSelection();
+                          store.closePlacementDialog();
+                        }
+                      );
                     } else {
                       // Invalid drop - cancel
                       setDragFromHand(false);

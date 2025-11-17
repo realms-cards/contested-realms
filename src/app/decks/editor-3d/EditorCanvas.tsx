@@ -53,7 +53,7 @@ export default function EditorCanvas({
         <ambientLight intensity={0.8} />
         <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
         <Physics gravity={[0, -9.81, 0]}>
-          <Board interactionMode="spectator" storeApi={storeApi} />
+          <Board noRaycast interactionMode="spectator" storeApi={storeApi} />
           {children}
         </Physics>
         <OrbitControls

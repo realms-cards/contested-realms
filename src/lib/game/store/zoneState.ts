@@ -40,21 +40,22 @@ type ZoneSlice = Pick<
   | "moveFromBanishedToZone"
 >;
 
-export const createInitialMulligans = (): GameState["mulligans"] => ({ p1: 1, p2: 1 });
+export const createInitialMulligans = (): GameState["mulligans"] => ({
+  p1: 1,
+  p2: 1,
+});
 export const createInitialMulliganDrawn = (): GameState["mulliganDrawn"] => ({
   p1: [],
   p2: [],
 });
 
-export const createZoneSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  ZoneSlice
-> = (set, get) => ({
+export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
+  set,
+  get
+) => ({
   zones: createEmptyZonesRecord(),
 
-  initLibraries: (who, spellbook, atlas) =>
+  initLibraries: (who, spellbook, atlas, collection) =>
     set((state) => {
       const mapForSeat = (cards: CardRef[]) =>
         cards.map((card) => prepareCardForSeat(card, who));
@@ -65,6 +66,7 @@ export const createZoneSlice: StateCreator<
         hand: [],
         graveyard: [],
         battlefield: [],
+        collection: collection ? mapForSeat(collection as CardRef[]) : [],
         banished: [],
       };
       const zonesNext = { ...state.zones, [who]: sub } as GameState["zones"];
@@ -253,9 +255,7 @@ export const createZoneSlice: StateCreator<
       const rest = pile.slice(k).map((c) => prepareCardForSeat(c, who));
       const setBottom = new Set(
         Array.isArray(bottomIndexes)
-          ? bottomIndexes.filter(
-              (i) => Number.isInteger(i) && i >= 0 && i < k
-            )
+          ? bottomIndexes.filter((i) => Number.isInteger(i) && i >= 0 && i < k)
           : []
       );
       const keepers = top.filter((_, i) => !setBottom.has(i));
@@ -271,7 +271,9 @@ export const createZoneSlice: StateCreator<
         },
       } as GameState["zones"];
       get().log(
-        `${who.toUpperCase()} scries ${k} from ${from} (${movers.length} to bottom)`
+        `${who.toUpperCase()} scries ${k} from ${from} (${
+          movers.length
+        } to bottom)`
       );
       const tr = get().transport;
       if (tr) {
@@ -631,7 +633,9 @@ export const createZoneSlice: StateCreator<
         const who = get().actorKey;
         if (who === "p1" || who === "p2") {
           const patch: ServerPatchT = {
-            mulliganDrawn: { [who]: [] } as unknown as GameState["mulliganDrawn"],
+            mulliganDrawn: {
+              [who]: [],
+            } as unknown as GameState["mulliganDrawn"],
           };
           get().trySendPatch(patch);
         }

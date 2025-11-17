@@ -63,7 +63,10 @@ export type BoardPingEvent = {
 
 // --- Remote cursor telemetry -----------------------------------------------
 
-export type InteractionRecordStatus = "pending" | InteractionDecision | "expired";
+export type InteractionRecordStatus =
+  | "pending"
+  | InteractionDecision
+  | "expired";
 
 export type InteractionRequestEntry = {
   request: InteractionRequestMessage;
@@ -116,6 +119,7 @@ export type Zones = {
   hand: CardRef[];
   graveyard: CardRef[];
   battlefield: CardRef[]; // non-site permanents for now
+  collection: CardRef[];
   banished: CardRef[]; // removed for the rest of the game
 };
 
@@ -164,11 +168,29 @@ export type PendingMagic = {
   id: string;
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion
-  spell: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2; card: CardRef };
-  caster?: { kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  caster?:
+    | { kind: "avatar"; seat: PlayerKey }
+    | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
+    | null;
   target?: MagicTarget | null;
-  status: "choosingCaster" | "choosingTarget" | "confirm" | "resolving" | "cancelled" | "resolved";
-  hints?: { scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null; allow: { location?: boolean; permanent?: boolean; avatar?: boolean } } | null;
+  status:
+    | "choosingCaster"
+    | "choosingTarget"
+    | "confirm"
+    | "resolving"
+    | "cancelled"
+    | "resolved";
+  hints?: {
+    scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null;
+    allow: { location?: boolean; permanent?: boolean; avatar?: boolean };
+  } | null;
   createdAt: number;
   summaryText?: string | null;
 };
@@ -178,7 +200,11 @@ export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
   | { kind: "permanent"; at: CellKey; index: number }
   | { kind: "avatar"; who: PlayerKey }
-  | { kind: "pile"; who: PlayerKey; from: "spellbook" | "atlas" | "graveyard" }
+  | {
+      kind: "pile";
+      who: PlayerKey;
+      from: "spellbook" | "atlas" | "graveyard" | "collection";
+    }
   | { kind: "tokenpile"; who: PlayerKey };
 
 export type GameEvent = { id: number; ts: number; text: string; turn?: number };
@@ -284,10 +310,24 @@ export type GameState = {
   pendingCombat: {
     id: string;
     tile: { x: number; y: number };
-    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
-    target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null;
+    attacker: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    };
+    target?: {
+      kind: "permanent" | "avatar" | "site";
+      at: CellKey;
+      index: number | null;
+    } | null;
     defenderSeat: PlayerKey | null;
-    defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>;
+    defenders: Array<{
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    }>;
     status: "declared" | "defending" | "committed" | "resolved" | "cancelled";
     assignment?: Array<{ at: CellKey; index: number; amount: number }> | null;
     createdAt: number;
@@ -295,18 +335,42 @@ export type GameState = {
   // HUD-driven combat UI (lifted from Board for layout-level overlays)
   attackChoice: {
     tile: { x: number; y: number };
-    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
+    attacker: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    };
     attackerName?: string | null;
   } | null;
   attackTargetChoice: {
     tile: { x: number; y: number };
-    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
-    candidates: Array<{ kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null; label: string }>;
+    attacker: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    };
+    candidates: Array<{
+      kind: "permanent" | "avatar" | "site";
+      at: CellKey;
+      index: number | null;
+      label: string;
+    }>;
   } | null;
   attackConfirm: {
     tile: { x: number; y: number };
-    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 };
-    target: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null };
+    attacker: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    };
+    target: {
+      kind: "permanent" | "avatar" | "site";
+      at: CellKey;
+      index: number | null;
+    };
     targetLabel: string;
   } | null;
   setAttackChoice: (v: GameState["attackChoice"]) => void;
@@ -315,23 +379,58 @@ export type GameState = {
   // Signal Board to revert last cross-tile move (handled locally there)
   revertCrossMoveTick: number;
   requestRevertCrossMove: () => void;
-  lastCombatSummary: { id: string; text: string; ts: number; actor?: PlayerKey; targetSeat?: PlayerKey } | null;
-  setLastCombatSummary: (smm: { id: string; text: string; ts: number; actor?: PlayerKey; targetSeat?: PlayerKey } | null) => void;
+  lastCombatSummary: {
+    id: string;
+    text: string;
+    ts: number;
+    actor?: PlayerKey;
+    targetSeat?: PlayerKey;
+  } | null;
+  setLastCombatSummary: (
+    smm: {
+      id: string;
+      text: string;
+      ts: number;
+      actor?: PlayerKey;
+      targetSeat?: PlayerKey;
+    } | null
+  ) => void;
   declareAttack: (
     tile: { x: number; y: number },
-    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 },
-    target?: { kind: "permanent" | "avatar" | "site"; at: CellKey; index: number | null } | null
+    attacker: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    },
+    target?: {
+      kind: "permanent" | "avatar" | "site";
+      at: CellKey;
+      index: number | null;
+    } | null
   ) => void;
   // Trigger an intercept offer after a Move Only action by the attacker
   offerIntercept: (
     tile: { x: number; y: number },
-    attacker: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }
+    attacker: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    }
   ) => void;
   setDefenderSelection: (
-    defenders: Array<{ at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2 }>
+    defenders: Array<{
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    }>
   ) => void;
   commitDefenders: () => void;
-  setDamageAssignment: (asgn: Array<{ at: CellKey; index: number; amount: number }>) => boolean;
+  setDamageAssignment: (
+    asgn: Array<{ at: CellKey; index: number; amount: number }>
+  ) => boolean;
   resolveCombat: () => void;
   autoResolveCombat: () => void;
   cancelCombat: () => void;
@@ -342,11 +441,23 @@ export type GameState = {
   pendingMagic: PendingMagic | null;
   beginMagicCast: (input: {
     tile: { x: number; y: number };
-    spell: { at: CellKey; index: number; instanceId?: string | null; owner: 1 | 2; card: CardRef };
-    presetCaster?: { kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null;
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    presetCaster?:
+      | { kind: "avatar"; seat: PlayerKey }
+      | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
+      | null;
   }) => void;
   setMagicCasterChoice: (
-    caster: { kind: "avatar"; seat: PlayerKey } | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 } | null
+    caster:
+      | { kind: "avatar"; seat: PlayerKey }
+      | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
+      | null
   ) => void;
   setMagicTargetChoice: (target: MagicTarget | null) => void;
   confirmMagic: () => void;
@@ -383,7 +494,8 @@ export type GameState = {
   initLibraries: (
     who: PlayerKey,
     spellbook: CardRef[],
-    atlas: CardRef[]
+    atlas: CardRef[],
+    collection?: CardRef[]
   ) => void;
   shuffleSpellbook: (who: PlayerKey) => void;
   shuffleAtlas: (who: PlayerKey) => void;
@@ -509,14 +621,14 @@ export type GameState = {
   dragFromHand: boolean;
   dragFromPile: {
     who: PlayerKey;
-    from: "spellbook" | "atlas" | "graveyard" | "tokens";
+    from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
     card: CardRef | null;
   } | null;
   setDragFromHand: (on: boolean) => void;
   setDragFromPile: (
     info: {
       who: PlayerKey;
-      from: "spellbook" | "atlas" | "graveyard" | "tokens";
+      from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
       card: CardRef | null;
     } | null
   ) => void;

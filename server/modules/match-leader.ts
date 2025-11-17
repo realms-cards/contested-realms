@@ -29,6 +29,7 @@ interface PlayerZones {
   hand: unknown[];
   graveyard: unknown[];
   battlefield: unknown[];
+  collection: unknown[];
   banished: unknown[];
 }
 
@@ -172,7 +173,10 @@ interface MatchLeaderDeps {
   getOpponentSeat: (seat: Seat) => Seat;
   ensureInteractionState: (match: MatchState) => void;
   purgeExpiredGrants: (match: MatchState, now: number) => void;
-  collectInteractionRequirements: (patch: MatchPatch, actorSeat: Seat) => InteractionRequirements;
+  collectInteractionRequirements: (
+    patch: MatchPatch,
+    actorSeat: Seat
+  ) => InteractionRequirements;
   usePermitForRequirement: (
     match: MatchState,
     playerId: string,
@@ -192,7 +196,9 @@ interface MatchLeaderDeps {
     playerId: string,
     ctx: { match: MatchState }
   ) => MatchPatch | null | undefined;
-  applyTurnStart: (state: MatchGameState | undefined) => MatchPatch | null | undefined;
+  applyTurnStart: (
+    state: MatchGameState | undefined
+  ) => MatchPatch | null | undefined;
   applyGenesis: (
     state: MatchGameState | undefined,
     patch: MatchPatch,
@@ -205,7 +211,10 @@ interface MatchLeaderDeps {
     playerId: string,
     ctx: { match: MatchState }
   ) => MatchPatch | null | undefined;
-  enrichPatchWithCosts: (patch: MatchPatch | null, prisma: PrismaClient) => Promise<MatchPatch | null>;
+  enrichPatchWithCosts: (
+    patch: MatchPatch | null,
+    prisma: PrismaClient
+  ) => Promise<MatchPatch | null>;
   sanitizeGrantOptions: (
     grantValue: unknown,
     seat: Seat
@@ -238,16 +247,26 @@ interface MatchLeaderDeps {
     entry: InteractionRequestEntry,
     now: number
   ) => Promise<MatchPatch | null>;
-  emitInteraction: (matchId: string, message: InteractionRequestMessage | InteractionResponseMessage) => void;
+  emitInteraction: (
+    matchId: string,
+    message: InteractionRequestMessage | InteractionResponseMessage
+  ) => void;
   emitInteractionResult: (matchId: string, result: MatchPatch) => void;
-  recordMatchAction: (matchId: string, patch: MatchPatch | null, playerId: string) => void;
+  recordMatchAction: (
+    matchId: string,
+    patch: MatchPatch | null,
+    playerId: string
+  ) => void;
   persistMatchUpdate: (
     match: MatchState,
     patch: MatchPatch | null,
     playerId: string,
     timestamp: number
   ) => Promise<void>;
-  finalizeMatch: (match: MatchState, options: Record<string, unknown>) => Promise<void>;
+  finalizeMatch: (
+    match: MatchState,
+    options: Record<string, unknown>
+  ) => Promise<void>;
   rulesEnforceMode: string;
   interactionEnforcementEnabled: boolean;
   interactionKinds: Set<string>;
@@ -262,7 +281,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const newZoneCardInstanceId = () =>
   `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
 
-function normalizeZoneCard(entry: unknown, seat?: Seat): Record<string, unknown> | null {
+function normalizeZoneCard(
+  entry: unknown,
+  seat?: Seat
+): Record<string, unknown> | null {
   if (!entry || typeof entry !== "object") return null;
   const src = entry as Record<string, unknown>;
   const normalized: Record<string, unknown> = { ...src };
@@ -331,6 +353,7 @@ function cloneZones(zones: PlayerZones, seat: Seat): PlayerZones {
     hand: normalizeZoneList(zones.hand, seat),
     graveyard: normalizeZoneList(zones.graveyard, seat),
     battlefield: normalizeZoneList(zones.battlefield, seat),
+    collection: normalizeZoneList(zones.collection ?? [], seat),
     banished: normalizeZoneList(zones.banished, seat),
   };
 }
@@ -343,6 +366,7 @@ function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
       hand: [],
       graveyard: [],
       battlefield: [],
+      collection: [],
       banished: [],
     };
   }
@@ -356,6 +380,7 @@ function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
     hand: arr("hand"),
     graveyard: arr("graveyard"),
     battlefield: arr("battlefield"),
+    collection: arr("collection"),
     banished: arr("banished"),
   };
 }
@@ -391,7 +416,10 @@ function zoneCardsEqual(a: unknown[], b: unknown[]): boolean {
   return true;
 }
 
-function syncBattlefieldZones(match: MatchState, patch: MatchPatch): MatchPatch {
+function syncBattlefieldZones(
+  match: MatchState,
+  patch: MatchPatch
+): MatchPatch {
   if (!match.game) return patch;
   const battlefield = buildBattlefieldFromPermanents(match.game.permanents);
   const baseZones = match.game.zones ?? {};
@@ -433,17 +461,19 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
   if (!isRecord(value)) {
     return { ...fallback };
   }
-  const posCandidate = isRecord(value.position)
-    ? value.position
-    : null;
+  const posCandidate = isRecord(value.position) ? value.position : null;
   const pos: [number, number] | null =
-    posCandidate && typeof posCandidate.x === "number" && typeof posCandidate.z === "number"
+    posCandidate &&
+    typeof posCandidate.x === "number" &&
+    typeof posCandidate.z === "number"
       ? [posCandidate.x, posCandidate.z]
       : fallback.pos;
   const tapped =
     typeof value.tapped === "boolean" ? value.tapped : fallback.tapped ?? false;
   const avatar: AvatarState = {
-    card: Object.prototype.hasOwnProperty.call(value, "card") ? value.card ?? null : fallback.card ?? null,
+    card: Object.prototype.hasOwnProperty.call(value, "card")
+      ? value.card ?? null
+      : fallback.card ?? null,
     pos,
     tapped,
   };
@@ -455,13 +485,23 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
   return avatar;
 }
 
-function ensurePlayerPosition(seat: Seat, value: unknown, fallback: PlayerPosition): PlayerPosition {
+function ensurePlayerPosition(
+  seat: Seat,
+  value: unknown,
+  fallback: PlayerPosition
+): PlayerPosition {
   if (!isRecord(value)) {
     return { ...fallback };
   }
   const positionCandidate = isRecord(value.position) ? value.position : {};
-  const x = typeof positionCandidate.x === "number" ? positionCandidate.x : fallback.position.x;
-  const z = typeof positionCandidate.z === "number" ? positionCandidate.z : fallback.position.z;
+  const x =
+    typeof positionCandidate.x === "number"
+      ? positionCandidate.x
+      : fallback.position.x;
+  const z =
+    typeof positionCandidate.z === "number"
+      ? positionCandidate.z
+      : fallback.position.z;
   return {
     playerId:
       typeof value.playerId === "number"
@@ -519,7 +559,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   } = deps;
 
   // --- Spectator patch broadcasting ---
-  function sanitizePatchForSpectator(patch: MatchPatch | null | undefined): MatchPatch | null {
+  function sanitizePatchForSpectator(
+    patch: MatchPatch | null | undefined
+  ): MatchPatch | null {
     if (!patch || typeof patch !== "object") return patch ?? null;
     const out = { ...(patch as Record<string, unknown>) };
     if (out.zones && typeof out.zones === "object") {
@@ -528,13 +570,27 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     return out as MatchPatch;
   }
 
-  function broadcastSpectatePatch(matchId: string, enrichedPatch: MatchPatch, now: number): void {
+  function broadcastSpectatePatch(
+    matchId: string,
+    enrichedPatch: MatchPatch,
+    now: number
+  ): void {
     try {
       const sanitized = sanitizePatchForSpectator(enrichedPatch);
       if (sanitized) {
-        try { io.to(`spectate:${matchId}`).emit("statePatch", { patch: sanitized, t: now }); } catch {}
+        try {
+          io.to(`spectate:${matchId}`).emit("statePatch", {
+            patch: sanitized,
+            t: now,
+          });
+        } catch {}
       }
-      try { io.to(`spectate:${matchId}:hands`).emit("statePatch", { patch: enrichedPatch, t: now }); } catch {}
+      try {
+        io.to(`spectate:${matchId}:hands`).emit("statePatch", {
+          patch: enrichedPatch,
+          t: now,
+        });
+      } catch {}
     } catch {}
   }
 
@@ -567,7 +623,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       return;
     }
 
-    const patchInput = isRecord(incomingPatch) ? (incomingPatch as MatchPatch) : null;
+    const patchInput = isRecord(incomingPatch)
+      ? (incomingPatch as MatchPatch)
+      : null;
 
     try {
       const patch = patchInput;
@@ -582,7 +640,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         patch.phase === "Main"
       ) {
         match.status = "in_progress";
-        io.to(matchRoom).emit("matchStarted", { match: { ...match, game: match.game } });
+        io.to(matchRoom).emit("matchStarted", {
+          match: { ...match, game: match.game },
+        });
         if (match.tournamentId) {
           try {
             await prisma.match.updateMany({
@@ -608,10 +668,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const isSnapshot = replaceKeys.length > 0;
 
         if (isSnapshot) {
-          const replaceLog =
-            Array.isArray(patchToApply.__replaceKeys) ? patchToApply.__replaceKeys : [];
+          const replaceLog = Array.isArray(patchToApply.__replaceKeys)
+            ? patchToApply.__replaceKeys
+            : [];
           const keys =
-            Array.isArray(replaceLog) && replaceLog.every((key) => typeof key === "string")
+            Array.isArray(replaceLog) &&
+            replaceLog.every((key) => typeof key === "string")
               ? replaceLog
               : [];
           try {
@@ -639,7 +701,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               : { p1: null, p2: null };
           const incomingRolls = patchToApply.d20Rolls;
           const inc: Partial<D20Rolls> = {};
-          if (actorSeat === "p1" && Object.prototype.hasOwnProperty.call(incomingRolls, "p1")) {
+          if (
+            actorSeat === "p1" &&
+            Object.prototype.hasOwnProperty.call(incomingRolls, "p1")
+          ) {
             if (prevRolls.p1 == null) {
               const value = incomingRolls.p1;
               const numeric = typeof value === "number" ? value : Number(value);
@@ -648,12 +713,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               }
             } else {
               try {
-                console.warn("[d20] ignoring extra roll from p1; already rolled", {
-                  prev: prevRolls,
-                  incRaw: incomingRolls,
-                  matchId,
-                  playerId,
-                });
+                console.warn(
+                  "[d20] ignoring extra roll from p1; already rolled",
+                  {
+                    prev: prevRolls,
+                    incRaw: incomingRolls,
+                    matchId,
+                    playerId,
+                  }
+                );
               } catch {
                 // ignore
               }
@@ -670,12 +738,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               }
             } else {
               try {
-                console.warn("[d20] ignoring extra roll from p2; already rolled", {
-                  prev: prevRolls,
-                  incRaw: incomingRolls,
-                  matchId,
-                  playerId,
-                });
+                console.warn(
+                  "[d20] ignoring extra roll from p2; already rolled",
+                  {
+                    prev: prevRolls,
+                    incRaw: incomingRolls,
+                    matchId,
+                    playerId,
+                  }
+                );
               } catch {
                 // ignore
               }
@@ -697,14 +768,22 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             p2: inc.p2 ?? prevRolls.p2 ?? null,
           };
           try {
-            console.log("[d20] merge", { prev: prevRolls, inc: incomingRolls, merged, matchId });
+            console.log("[d20] merge", {
+              prev: prevRolls,
+              inc: incomingRolls,
+              merged,
+              matchId,
+            });
           } catch {
             // ignore
           }
           if (merged.p1 != null && merged.p2 != null) {
             if (Number(merged.p1) === Number(merged.p2)) {
               try {
-                console.log("[d20] tie detected -> resetting for reroll", { merged, matchId });
+                console.log("[d20] tie detected -> resetting for reroll", {
+                  merged,
+                  matchId,
+                });
               } catch {
                 // ignore
               }
@@ -723,7 +802,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               }
               match._autoSeatApplied = false;
             } else {
-              const winnerSeat: Seat = Number(merged.p1) > Number(merged.p2) ? "p1" : "p2";
+              const winnerSeat: Seat =
+                Number(merged.p1) > Number(merged.p2) ? "p1" : "p2";
               patchToApply = {
                 ...patchToApply,
                 d20Rolls: merged,
@@ -761,7 +841,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           } else {
             patchToApply = { ...patchToApply, d20Rolls: merged };
             try {
-              console.log("[d20] partial roll - waiting for second player", { merged, matchId });
+              console.log("[d20] partial roll - waiting for second player", {
+                merged,
+                matchId,
+              });
             } catch {
               // ignore
             }
@@ -772,7 +855,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const appliedEvents = sanitizeEvents(patchToApply.events);
         const combinedEvents = [...eventsAdded, ...appliedEvents];
         if (combinedEvents.length > 0) {
-          const previousEvents = Array.isArray(match.game?.events) ? match.game?.events : [];
+          const previousEvents = Array.isArray(match.game?.events)
+            ? match.game?.events
+            : [];
           const mergedEvents = mergeEvents(previousEvents, combinedEvents);
           const mergedMaxId = mergedEvents.reduce<number>((max, event) => {
             const idValue = event.id;
@@ -796,7 +881,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           };
         }
 
-        const baseForMerge: MatchGameState = match.game ? { ...match.game } : {};
+        const baseForMerge: MatchGameState = match.game
+          ? { ...match.game }
+          : {};
 
         if (isSnapshot && replaceKeys.length > 0) {
           for (const key of replaceKeys) {
@@ -814,6 +901,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             hand: [],
             graveyard: [],
             battlefield: [],
+            collection: [],
             banished: [],
           };
 
@@ -849,16 +937,29 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               : normalizedPrevZones.p2,
           };
 
-          const prevAvatars = match.game?.avatars ?? { p1: undefined, p2: undefined };
-          const defaultAvatar: AvatarState = { card: null, pos: null, tapped: false };
+          const prevAvatars = match.game?.avatars ?? {
+            p1: undefined,
+            p2: undefined,
+          };
+          const defaultAvatar: AvatarState = {
+            card: null,
+            pos: null,
+            tapped: false,
+          };
           const fallbackAvatars: AvatarsState = {
             p1: ensureAvatar(prevAvatars.p1, defaultAvatar),
             p2: ensureAvatar(prevAvatars.p2, defaultAvatar),
           };
           const incomingAvatars = patchToApply.avatars ?? {};
           const normalizedAvatars: AvatarsState = {
-            p1: ensureAvatar(incomingAvatars?.p1, fallbackAvatars.p1 ?? defaultAvatar),
-            p2: ensureAvatar(incomingAvatars?.p2, fallbackAvatars.p2 ?? defaultAvatar),
+            p1: ensureAvatar(
+              incomingAvatars?.p1,
+              fallbackAvatars.p1 ?? defaultAvatar
+            ),
+            p2: ensureAvatar(
+              incomingAvatars?.p2,
+              fallbackAvatars.p2 ?? defaultAvatar
+            ),
           };
 
           const prevPositions = match.game?.playerPositions ?? {
@@ -902,9 +1003,17 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         if (patchToApply.zones && isRecord(patchToApply.zones)) {
           const incomingZones = patchToApply.zones as ZonesState;
           const sanitizedZones: Partial<ZonesState> = {};
-          if (isRecord(incomingZones) && "p1" in incomingZones && actorSeat === "p1") {
+          if (
+            isRecord(incomingZones) &&
+            "p1" in incomingZones &&
+            actorSeat === "p1"
+          ) {
             sanitizedZones.p1 = ensurePlayerZones(incomingZones.p1, "p1");
-          } else if (isRecord(incomingZones) && "p1" in incomingZones && actorSeat !== "p1") {
+          } else if (
+            isRecord(incomingZones) &&
+            "p1" in incomingZones &&
+            actorSeat !== "p1"
+          ) {
             try {
               console.warn("[match] dropped opponent zone update", {
                 matchId,
@@ -916,9 +1025,17 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               // ignore
             }
           }
-          if (isRecord(incomingZones) && "p2" in incomingZones && actorSeat === "p2") {
+          if (
+            isRecord(incomingZones) &&
+            "p2" in incomingZones &&
+            actorSeat === "p2"
+          ) {
             sanitizedZones.p2 = ensurePlayerZones(incomingZones.p2, "p2");
-          } else if (isRecord(incomingZones) && "p2" in incomingZones && actorSeat !== "p2") {
+          } else if (
+            isRecord(incomingZones) &&
+            "p2" in incomingZones &&
+            actorSeat !== "p2"
+          ) {
             try {
               console.warn("[match] dropped opponent zone update", {
                 matchId,
@@ -930,8 +1047,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               // ignore logging failures
             }
           }
-          const zoneKeys = Object.keys(sanitizedZones).filter((key) =>
-            sanitizedZones[key as keyof ZonesState]
+          const zoneKeys = Object.keys(sanitizedZones).filter(
+            (key) => sanitizedZones[key as keyof ZonesState]
           );
           if (zoneKeys.length > 0) {
             patchToApply = {
@@ -1008,11 +1125,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           const currentTurn = Number(match.game?.turn || 1);
           match.game = {
             ...match.game,
-            turn: currentTurn + 1
+            turn: currentTurn + 1,
           } as MatchGameState;
           patchToApply = {
             ...patchToApply,
-            turn: currentTurn + 1
+            turn: currentTurn + 1,
           };
         }
 
@@ -1028,7 +1145,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           ) as MatchPatch;
         }
 
-        const genesisPatch = applyGenesis(match.game, patchToApply, playerId, { match });
+        const genesisPatch = applyGenesis(match.game, patchToApply, playerId, {
+          match,
+        });
         if (genesisPatch && isRecord(genesisPatch)) {
           match.game = deepMergeReplaceArrays(
             match.game as Record<string, unknown>,
@@ -1040,7 +1159,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           ) as MatchPatch;
         }
 
-        const keywordPatch = applyKeywordAnnotations(match.game, patchToApply, playerId, { match });
+        const keywordPatch = applyKeywordAnnotations(
+          match.game,
+          patchToApply,
+          playerId,
+          { match }
+        );
         if (keywordPatch && isRecord(keywordPatch)) {
           match.game = deepMergeReplaceArrays(
             match.game as Record<string, unknown>,
@@ -1052,9 +1176,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           ) as MatchPatch;
         }
 
-        const requirements = collectInteractionRequirements(patchToApply, actorSeat);
+        const requirements = collectInteractionRequirements(
+          patchToApply,
+          actorSeat
+        );
         const shouldEnforceInteraction =
-          interactionEnforcementEnabled && match.status === "in_progress" && !isSnapshot;
+          interactionEnforcementEnabled &&
+          match.status === "in_progress" &&
+          !isSnapshot;
         if (shouldEnforceInteraction && requirements.needsOpponentZoneWrite) {
           // eslint-disable-next-line react-hooks/rules-of-hooks
           const grant = usePermitForRequirement(
@@ -1066,11 +1195,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           );
           if (!grant) {
             try {
-              console.warn("[interaction] opponent zone write allowed without permit", {
-                matchId,
-                playerId,
-                actorSeat,
-              });
+              console.warn(
+                "[interaction] opponent zone write allowed without permit",
+                {
+                  matchId,
+                  playerId,
+                  actorSeat,
+                }
+              );
             } catch {
               // ignore logging failure
             }
@@ -1084,7 +1216,18 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           }
         }
 
-        patchToApply = syncBattlefieldZones(match, patchToApply);
+        // Skip syncBattlefieldZones for simple permanent movements to preserve echo filter
+        // Only sync zones when explicitly needed (zone changes, game state changes, etc.)
+        const isPurePermMovement =
+          patchToApply.permanents &&
+          !patchToApply.zones &&
+          !patchToApply.matchEnded &&
+          !patchToApply.phase &&
+          !patchToApply.turn;
+
+        if (!isPurePermMovement) {
+          patchToApply = syncBattlefieldZones(match, patchToApply);
+        }
 
         const nextMatchEnded = Boolean(match.game && match.game.matchEnded);
         if (!prevMatchEnded && nextMatchEnded) {
@@ -1138,13 +1281,19 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;
         if (senderSocketId) {
-          io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedPatchToApply, t: now });
+          io.to(matchRoom)
+            .except(senderSocketId)
+            .emit("statePatch", { patch: enrichedPatchToApply, t: now });
         } else {
-          io.to(matchRoom).emit("statePatch", { patch: enrichedPatchToApply, t: now });
+          io.to(matchRoom).emit("statePatch", {
+            patch: enrichedPatchToApply,
+            t: now,
+          });
         }
         // Also broadcast to spectators (sanitized unless commentator)
         try {
-          const patchForSpectators = (enrichedPatchToApply ?? patchToApply) as MatchPatch;
+          const patchForSpectators = (enrichedPatchToApply ??
+            patchToApply) as MatchPatch;
           broadcastSpectatePatch(matchId, patchForSpectators, now);
         } catch {}
 
@@ -1155,7 +1304,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             await finalizeMatch(match, finalizeOptions ?? {});
           } catch (err) {
             try {
-              console.warn("[match] finalize failed", err instanceof Error ? err.message : err);
+              console.warn(
+                "[match] finalize failed",
+                err instanceof Error ? err.message : err
+              );
             } catch {
               // ignore
             }
@@ -1168,14 +1320,19 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;
         if (senderSocketId) {
-          io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedPatch, t: now });
+          io.to(matchRoom)
+            .except(senderSocketId)
+            .emit("statePatch", { patch: enrichedPatch, t: now });
         } else {
           io.to(matchRoom).emit("statePatch", { patch: enrichedPatch, t: now });
         }
         // Also broadcast to spectators (sanitized unless commentator)
         try {
-          const patchForSpectators = (enrichedPatch ?? (patch ?? undefined)) as MatchPatch | undefined;
-          if (patchForSpectators) broadcastSpectatePatch(matchId, patchForSpectators, now);
+          const patchForSpectators = (enrichedPatch ?? patch ?? undefined) as
+            | MatchPatch
+            | undefined;
+          if (patchForSpectators)
+            broadcastSpectatePatch(matchId, patchForSpectators, now);
         } catch {}
 
         await persistMatchUpdate(match, patch ?? null, playerId, now);
@@ -1191,14 +1348,22 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       const senderSocketId = sender?.socketId;
       const tNow = Date.now();
       if (senderSocketId) {
-        io.to(matchRoom).except(senderSocketId).emit("statePatch", { patch: enrichedIncoming, t: tNow });
+        io.to(matchRoom)
+          .except(senderSocketId)
+          .emit("statePatch", { patch: enrichedIncoming, t: tNow });
       } else {
-        io.to(matchRoom).emit("statePatch", { patch: enrichedIncoming, t: tNow });
+        io.to(matchRoom).emit("statePatch", {
+          patch: enrichedIncoming,
+          t: tNow,
+        });
       }
       // Also broadcast to spectators (sanitized unless commentator)
       try {
-        const patchForSpectators = (enrichedIncoming ?? (patchInput as MatchPatch | null) ?? undefined) as MatchPatch | undefined;
-        if (patchForSpectators) broadcastSpectatePatch(matchId, patchForSpectators, tNow);
+        const patchForSpectators = (enrichedIncoming ??
+          (patchInput as MatchPatch | null) ??
+          undefined) as MatchPatch | undefined;
+        if (patchForSpectators)
+          broadcastSpectatePatch(matchId, patchForSpectators, tNow);
       } catch {}
 
       if (error instanceof Error) {
@@ -1255,7 +1420,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
   }
 
-  async function joinMatch(matchId: string, playerId: string, socketId: string): Promise<void> {
+  async function joinMatch(
+    matchId: string,
+    playerId: string,
+    socketId: string
+  ): Promise<void> {
     const playerState = await ensurePlayerCached(playerId);
     const previousSocketId = playerState.socketId || socketId;
 
@@ -1280,7 +1449,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     const room = `match:${matchId}`;
     try {
       await io.in(socketId).socketsJoin(room);
-      console.log("[joinMatch] Socket joined room", { socketId, room, playerId });
+      console.log("[joinMatch] Socket joined room", {
+        socketId,
+        room,
+        playerId,
+      });
     } catch (err) {
       console.error("[joinMatch] Failed to join room", {
         socketId,
@@ -1321,18 +1494,25 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
   }
 
-  async function handleMulliganDone(matchId: string, playerId: string): Promise<void> {
+  async function handleMulliganDone(
+    matchId: string,
+    playerId: string
+  ): Promise<void> {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
     // Allow sealed tournament matches to proceed from deck_construction if both decks are present
     const decks = match.playerDecks instanceof Map ? match.playerDecks : null;
     const allDecksSubmitted = !!(
-      decks && Array.isArray(match.playerIds) && match.playerIds.every((pid) => decks.has(pid))
+      decks &&
+      Array.isArray(match.playerIds) &&
+      match.playerIds.every((pid) => decks.has(pid))
     );
     const canProceedStatus =
       match.status === "waiting" ||
       match.status === "in_progress" ||
-      (match.status === "deck_construction" && match.matchType === "sealed" && allDecksSubmitted);
+      (match.status === "deck_construction" &&
+        match.matchType === "sealed" &&
+        allDecksSubmitted);
     if (!canProceedStatus) return;
     const game = match.game;
     if (!game) return;
@@ -1353,9 +1533,13 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       const waitingFor = Array.isArray(match.playerIds)
         ? match.playerIds.filter((pid) => !match.mulliganDone!.has(pid))
         : [];
-      const names = waitingFor.map((pid) => players.get(pid)?.displayName ?? pid);
+      const names = waitingFor.map(
+        (pid) => players.get(pid)?.displayName ?? pid
+      );
       console.log(
-        `[Setup] mulliganDone <= ${playerId}${wasAlreadyDone ? " (duplicate)" : ""}. ${doneCount}/${total} complete. Waiting for: ${
+        `[Setup] mulliganDone <= ${playerId}${
+          wasAlreadyDone ? " (duplicate)" : ""
+        }. ${doneCount}/${total} complete. Waiting for: ${
           names.length > 0 ? names.join(", ") : "none"
         }`
       );
@@ -1363,7 +1547,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       // ignore logging errors
     }
 
-    const totalPlayers = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
+    const totalPlayers = Array.isArray(match.playerIds)
+      ? match.playerIds.length
+      : 0;
     if (match.mulliganDone.size < totalPlayers || totalPlayers === 0) {
       return;
     }
@@ -1378,13 +1564,27 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     const patch: MatchPatch = {
       phase: "Main",
       status: "in_progress",
-      currentPlayer: typeof game.currentPlayer === "number" ? game.currentPlayer : 1,
+      currentPlayer:
+        typeof game.currentPlayer === "number" ? game.currentPlayer : 1,
       interactionGrants: {},
       interactionRequests: {},
       ...(d20Rolls ? { d20Rolls } : {}),
       __replaceKeys: d20Rolls
-        ? ["phase", "status", "currentPlayer", "interactionGrants", "interactionRequests", "d20Rolls"]
-        : ["phase", "status", "currentPlayer", "interactionGrants", "interactionRequests"],
+        ? [
+            "phase",
+            "status",
+            "currentPlayer",
+            "interactionGrants",
+            "interactionRequests",
+            "d20Rolls",
+          ]
+        : [
+            "phase",
+            "status",
+            "currentPlayer",
+            "interactionGrants",
+            "interactionRequests",
+          ],
     };
 
     try {
@@ -1415,7 +1615,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
     // Also emit updated match info so clients update match.status immediately
     try {
-      io.to(`match:${match.id}`).emit("matchStarted", { match: getMatchInfo(match) });
+      io.to(`match:${match.id}`).emit("matchStarted", {
+        match: getMatchInfo(match),
+      });
     } catch {}
   }
 
@@ -1426,7 +1628,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   ): Promise<LeaderResult> {
     try {
       const match = await getOrLoadMatch(matchId);
-      if (!match) return { ok: false, error: "Match not found", code: "interaction_internal" };
+      if (!match)
+        return {
+          ok: false,
+          error: "Match not found",
+          code: "interaction_internal",
+        };
       if (!(match.interactionRequests instanceof Map)) {
         match.interactionRequests = new Map<string, InteractionRequestEntry>();
       }
@@ -1446,7 +1653,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
       const opponentSeat = getOpponentSeat(actorSeat);
       const opponentIndex = actorSeat === "p1" ? 1 : 0;
-      const opponentId = Array.isArray(match.playerIds) ? match.playerIds[opponentIndex] : null;
+      const opponentId = Array.isArray(match.playerIds)
+        ? match.playerIds[opponentIndex]
+        : null;
       if (!opponentId) {
         return {
           ok: false,
@@ -1456,7 +1665,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       }
 
       const rawKind =
-        payload && typeof payload.kind === "string" ? (payload.kind as string) : null;
+        payload && typeof payload.kind === "string"
+          ? (payload.kind as string)
+          : null;
       if (!rawKind || !interactionKinds.has(rawKind)) {
         return {
           ok: false,
@@ -1466,19 +1677,25 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       }
 
       const requestId =
-        payload && typeof payload.requestId === "string" && payload.requestId.length >= 6
+        payload &&
+        typeof payload.requestId === "string" &&
+        payload.requestId.length >= 6
           ? (payload.requestId as string)
           : rid("intl");
       const expiresAtRaw = Number(payload?.expiresAt);
       const expiresAt =
-        Number.isFinite(expiresAtRaw) && expiresAtRaw > now ? expiresAtRaw : null;
+        Number.isFinite(expiresAtRaw) && expiresAtRaw > now
+          ? expiresAtRaw
+          : null;
       const note =
         payload && typeof payload.note === "string"
           ? (payload.note as string).slice(0, 280)
           : undefined;
 
       const rawPayload =
-        payload && typeof payload.payload === "object" && payload.payload !== null
+        payload &&
+        typeof payload.payload === "object" &&
+        payload.payload !== null
           ? (payload.payload as Record<string, unknown>)
           : {};
       const sanitizedPayload: Record<string, unknown> = {};
@@ -1510,9 +1727,19 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         message.payload = sanitizedPayload;
       }
 
-      const pendingAction = sanitizePendingAction(rawKind, sanitizedPayload, actorSeat, playerId);
+      const pendingAction = sanitizePendingAction(
+        rawKind,
+        sanitizedPayload,
+        actorSeat,
+        playerId
+      );
 
-      recordInteractionRequest(match, message, proposedGrant ?? null, pendingAction);
+      recordInteractionRequest(
+        match,
+        message,
+        proposedGrant ?? null,
+        pendingAction
+      );
       match.lastTs = now;
       emitInteraction(matchId, message);
       try {
@@ -1546,7 +1773,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   ): Promise<LeaderResult> {
     try {
       const match = await getOrLoadMatch(matchId);
-      if (!match) return { ok: false, error: "Match not found", code: "interaction_internal" };
+      if (!match)
+        return {
+          ok: false,
+          error: "Match not found",
+          code: "interaction_internal",
+        };
       ensureInteractionState(match);
       if (!(match.interactionRequests instanceof Map)) {
         match.interactionRequests = new Map<string, InteractionRequestEntry>();
@@ -1559,7 +1791,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       const actorSeat = getSeatForPlayer(match, playerId);
 
       const requestId =
-        payload && typeof payload.requestId === "string" ? (payload.requestId as string) : null;
+        payload && typeof payload.requestId === "string"
+          ? (payload.requestId as string)
+          : null;
       if (!requestId) {
         return {
           ok: false,
@@ -1611,7 +1845,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           ? (payload.reason as string).slice(0, 280)
           : undefined;
       const rawPayload =
-        payload && typeof payload.payload === "object" && payload.payload !== null
+        payload &&
+        typeof payload.payload === "object" &&
+        payload.payload !== null
           ? (payload.payload as Record<string, unknown>)
           : {};
       const sanitizedPayload: Record<string, unknown> = {};
@@ -1622,7 +1858,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
       let grantOpts: Record<string, unknown> | null = null;
       if (rawDecision === "approved") {
-        const grantSeat = actorSeat ?? getOpponentSeat(getSeatForPlayer(match, request.from)!);
+        const grantSeat =
+          actorSeat ?? getOpponentSeat(getSeatForPlayer(match, request.from)!);
         grantOpts = sanitizeGrantOptions(
           payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
           grantSeat
@@ -1653,7 +1890,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       if (rawDecision === "approved" && grantOpts) {
         const entryRecord = match.interactionRequests.get(request.requestId);
         if (entryRecord) {
-          const grantRecord = createGrantRecord(entryRecord, responseMessage, grantOpts, now);
+          const grantRecord = createGrantRecord(
+            entryRecord,
+            responseMessage,
+            grantOpts,
+            now
+          );
           match.interactionGrants.set(grantRecord.grantedTo, [
             ...(match.interactionGrants.get(grantRecord.grantedTo) ?? []),
             grantRecord,

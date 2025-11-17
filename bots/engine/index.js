@@ -6,11 +6,11 @@ let cardEvalCache = null;
 let cacheInitialized = false;
 
 try {
-  cardEvalLoader = require('../card-evaluations/loader');
+  cardEvalLoader = require("../card-evaluations/loader");
   // Note: Cache not loaded at module time - use initCardEvaluations() for async DB loading
   // or cache will be lazy-loaded from JSON on first use
 } catch (e) {
-  console.warn('[Engine] Card evaluation system not available:', e.message);
+  console.warn("[Engine] Card evaluation system not available:", e.message);
 }
 
 /**
@@ -20,35 +20,48 @@ try {
  */
 async function initCardEvaluations() {
   if (cacheInitialized) {
-    return { loaded: cardEvalCache ? cardEvalCache.getStats().loaded : 0, source: 'already_initialized' };
+    return {
+      loaded: cardEvalCache ? cardEvalCache.getStats().loaded : 0,
+      source: "already_initialized",
+    };
   }
 
   if (!cardEvalLoader) {
-    console.warn('[Engine] Card evaluation system not available');
-    return { loaded: 0, source: 'unavailable' };
+    console.warn("[Engine] Card evaluation system not available");
+    return { loaded: 0, source: "unavailable" };
   }
 
   try {
     // Try database first
-    console.log('[Engine] Loading card evaluations from database...');
+    console.log("[Engine] Loading card evaluations from database...");
     cardEvalCache = await cardEvalLoader.initCacheFromDatabase();
     const stats = cardEvalCache.getStats();
-    console.log(`[Engine] Card evaluation cache loaded from database: ${stats.loaded} cards`);
+    console.log(
+      `[Engine] Card evaluation cache loaded from database: ${stats.loaded} cards`
+    );
     cacheInitialized = true;
-    return { loaded: stats.loaded, source: 'database' };
+    return { loaded: stats.loaded, source: "database" };
   } catch (dbError) {
     // Fall back to JSON
-    console.warn('[Engine] Database loading failed, falling back to JSON:', dbError.message);
+    console.warn(
+      "[Engine] Database loading failed, falling back to JSON:",
+      dbError.message
+    );
     try {
       cardEvalCache = cardEvalLoader.getCache();
       const stats = cardEvalCache.getStats();
-      console.log(`[Engine] Card evaluation cache loaded from JSON: ${stats.loaded} cards`);
+      console.log(
+        `[Engine] Card evaluation cache loaded from JSON: ${stats.loaded} cards`
+      );
       cacheInitialized = true;
-      return { loaded: stats.loaded, source: 'json' };
+      return { loaded: stats.loaded, source: "json" };
     } catch (jsonError) {
-      console.error('[Engine] Failed to load evaluations from both database and JSON:', jsonError.message);
+      console.error(
+        "[Engine] Failed to load evaluations from both database and JSON:",
+        jsonError.message
+      );
       cacheInitialized = false;
-      return { loaded: 0, source: 'failed', error: jsonError.message };
+      return { loaded: 0, source: "failed", error: jsonError.message };
     }
   }
 }
@@ -80,8 +93,18 @@ function createRng(seedString) {
 // Updated: v3 with site-prioritization and no-sites-no-units rule
 function loadTheta() {
   return {
-    meta: { id: "refined/v3", description: "Site-prioritization + no units without mana base" },
-    search: { beamWidth: 8, maxDepth: 3, quiescenceDepth: 1, nodeCap: 2000, budgetMs: 60, gamma: 0.6 },
+    meta: {
+      id: "refined/v3",
+      description: "Site-prioritization + no units without mana base",
+    },
+    search: {
+      beamWidth: 8,
+      maxDepth: 3,
+      quiescenceDepth: 1,
+      nodeCap: 2000,
+      budgetMs: 60,
+      gamma: 0.6,
+    },
     exploration: { epsilon_root: 0, gumbel_leaf: 0 },
     weights: {
       // Existing weights
@@ -109,16 +132,20 @@ function loadTheta() {
       w_thresholds_total: 0.5, // Increased: reward threshold diversity
       w_advance: 0.08,
       // New refined weights (T009)
-      w_board_development: 0.8,        // Reward deploying permanents
-      w_mana_efficiency: 0.7,          // Reward spending mana
-      w_mana_efficiency_waste: -0.5,   // Penalize wasted mana
-      w_threat_deployment: 0.6,        // Reward ATK on board
-      w_life_pressure: 1.2,            // Reward damage potential
-      w_site_spam_penalty: -2.0,       // Penalize site spam (sites >= 6)
-      w_wasted_resources: -1.5,        // Penalize passing with playable cards
-      w_card_specific: 1.0,            // Weight for card-specific evaluation (T036)
+      w_board_development: 0.8, // Reward deploying permanents
+      w_mana_efficiency: 0.7, // Reward spending mana
+      w_mana_efficiency_waste: -0.5, // Penalize wasted mana
+      w_threat_deployment: 0.6, // Reward ATK on board
+      w_life_pressure: 1.2, // Reward damage potential
+      w_site_spam_penalty: -2.0, // Penalize site spam (sites >= 6)
+      w_wasted_resources: -1.5, // Penalize passing with playable cards
+      w_card_specific: 1.0, // Weight for card-specific evaluation (T036)
     },
-    constraints: { clamp_eval_min: -50, clamp_eval_max: 50, legal_move_fallback: "pass_or_minimal" },
+    constraints: {
+      clamp_eval_min: -50,
+      clamp_eval_max: 50,
+      legal_move_fallback: "pass_or_minimal",
+    },
   };
 }
 
@@ -167,17 +194,30 @@ function otherSeat(seat) {
 }
 
 function getZones(state, seat) {
-  const z = state && state.zones && typeof state.zones === "object" ? state.zones[seat] : null;
+  const z =
+    state && state.zones && typeof state.zones === "object"
+      ? state.zones[seat]
+      : null;
   if (z && typeof z === "object") return z;
-  return { spellbook: [], atlas: [], hand: [], graveyard: [], battlefield: [], banished: [] };
+  return {
+    spellbook: [],
+    atlas: [],
+    hand: [],
+    graveyard: [],
+    battlefield: [],
+    collection: [],
+    banished: [],
+  };
 }
 
 function getAvatarPos(state, seat) {
   const av = state && state.avatars && state.avatars[seat];
   const pos = av && Array.isArray(av.pos) ? av.pos : null;
   if (pos) return pos;
-  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
-  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+  const w =
+    (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h =
+    (state && state.board && state.board.size && state.board.size.h) || 5;
   const cx = Math.floor(Math.max(1, Number(w) || 5) / 2);
   const yy = seat === "p1" ? (Number(h) || 5) - 1 : 0;
   return [cx, yy];
@@ -218,7 +258,8 @@ function inBounds(x, y, w, h) {
 
 function isEmpty(state, x, y) {
   const key = `${x},${y}`;
-  const tile = state && state.board && state.board.sites && state.board.sites[key];
+  const tile =
+    state && state.board && state.board.sites && state.board.sites[key];
   return !(tile && tile.card);
 }
 
@@ -230,13 +271,16 @@ function hasVoidwalk(unit) {
 
   // Check keywords array
   const keywords = card.keywords || [];
-  if (Array.isArray(keywords) && keywords.some(k => String(k).toLowerCase().includes('voidwalk'))) {
+  if (
+    Array.isArray(keywords) &&
+    keywords.some((k) => String(k).toLowerCase().includes("voidwalk"))
+  ) {
     return true;
   }
 
   // Check rulesText for voidwalk mention
-  const rulesText = String(card.rulesText || '').toLowerCase();
-  if (rulesText.includes('voidwalk')) {
+  const rulesText = String(card.rulesText || "").toLowerCase();
+  if (rulesText.includes("voidwalk")) {
     return true;
   }
 
@@ -259,9 +303,12 @@ function isValidMovement(state, fromKey, toKey, unit) {
 }
 
 function findAnyEmptyCell(state) {
-  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
-  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (isEmpty(state, x, y)) return `${x},${y}`;
+  const w =
+    (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h =
+    (state && state.board && state.board.size && state.board.size.h) || 5;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) if (isEmpty(state, x, y)) return `${x},${y}`;
   return "0,0";
 }
 
@@ -278,8 +325,10 @@ function findAnyOwnedSiteCell(state, seat) {
 }
 
 function findAdjacentEmptyToOwned(state, seat) {
-  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
-  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+  const w =
+    (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h =
+    (state && state.board && state.board.size && state.board.size.h) || 5;
   const dirs = [
     [1, 0],
     [-1, 0],
@@ -302,7 +351,10 @@ function findAdjacentEmptyToOwned(state, seat) {
 
 function chooseSiteFromHand(z) {
   const hand = Array.isArray(z.hand) ? z.hand : [];
-  const idx = hand.findIndex((c) => c && typeof c.type === "string" && c.type.toLowerCase().includes("site"));
+  const idx = hand.findIndex(
+    (c) =>
+      c && typeof c.type === "string" && c.type.toLowerCase().includes("site")
+  );
   if (idx === -1) return null;
   return { idx, card: hand[idx] };
 }
@@ -310,14 +362,16 @@ function chooseSiteFromHand(z) {
 function getCardThresholds(card) {
   try {
     const th = card && card.thresholds ? card.thresholds : null;
-    if (!th || typeof th !== 'object') return null;
+    if (!th || typeof th !== "object") return null;
     const out = { air: 0, water: 0, earth: 0, fire: 0 };
     if (Number.isFinite(Number(th.air))) out.air = Number(th.air);
     if (Number.isFinite(Number(th.water))) out.water = Number(th.water);
     if (Number.isFinite(Number(th.earth))) out.earth = Number(th.earth);
     if (Number.isFinite(Number(th.fire))) out.fire = Number(th.fire);
     return out;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -336,15 +390,15 @@ function chooseNonSiteFromHand(state, seat, z) {
   const hand = Array.isArray(z.hand) ? z.hand : [];
   // Prefer board permanents: minion/unit/relic/structure/artifact; exclude sites/avatars
   const isPermanent = (c) => {
-    const t = String(c?.type || '').toLowerCase();
+    const t = String(c?.type || "").toLowerCase();
     if (!t) return true;
-    if (t.includes('site')) return false;
-    if (t.includes('avatar')) return false;
-    if (t.includes('minion')) return true;
-    if (t.includes('unit')) return true;
-    if (t.includes('relic')) return true;
-    if (t.includes('structure')) return true;
-    if (t.includes('artifact')) return true;
+    if (t.includes("site")) return false;
+    if (t.includes("avatar")) return false;
+    if (t.includes("minion")) return true;
+    if (t.includes("unit")) return true;
+    if (t.includes("relic")) return true;
+    if (t.includes("structure")) return true;
+    if (t.includes("artifact")) return true;
     // Fallback: treat unknown non-site, non-avatar as permanent
     return true;
   };
@@ -375,7 +429,17 @@ function drawFromAtlasPatch(state, seat) {
 }
 
 function getAvatar(state, seat) {
-  try { return (state && state.avatars && typeof state.avatars === 'object' && state.avatars[seat]) || {}; } catch { return {}; }
+  try {
+    return (
+      (state &&
+        state.avatars &&
+        typeof state.avatars === "object" &&
+        state.avatars[seat]) ||
+      {}
+    );
+  } catch {
+    return {};
+  }
 }
 
 // Tap avatar to draw a site (cannot play a site afterward because avatar is tapped)
@@ -399,11 +463,19 @@ function playSitePatch(state, seat) {
   const hand = Array.isArray(z.hand) ? [...z.hand] : [];
   // Prefer Earth-like sites first (helps satisfy common early thresholds)
   let pick = null;
-  const earthIdx = hand.findIndex((c) => c && typeof c.type === 'string' && c.type.toLowerCase().includes('site') && String(c.name || '').toLowerCase().includes('valley'));
+  const earthIdx = hand.findIndex(
+    (c) =>
+      c &&
+      typeof c.type === "string" &&
+      c.type.toLowerCase().includes("site") &&
+      String(c.name || "")
+        .toLowerCase()
+        .includes("valley")
+  );
   if (earthIdx !== -1) pick = { idx: earthIdx, card: hand[earthIdx] };
   if (!pick) pick = chooseSiteFromHand({ hand });
   if (!pick) {
-    console.log('[Bot Engine] playSitePatch: No site in hand');
+    console.log("[Bot Engine] playSitePatch: No site in hand");
     return null;
   }
   hand.splice(pick.idx, 1);
@@ -419,36 +491,48 @@ function playSitePatch(state, seat) {
     // Strategy 1: First site goes ON avatar position (or adjacent if occupied)
     const [ax, ay] = avatarPos;
     cell = isEmpty(state, ax, ay) ? `${ax},${ay}` : findAnyEmptyCell(state);
-    console.log(`[Bot Engine] playSitePatch: First site at avatar position ${ax},${ay} -> cell ${cell}`);
+    console.log(
+      `[Bot Engine] playSitePatch: First site at avatar position ${ax},${ay} -> cell ${cell}`
+    );
   } else if (siteCount < 3) {
     // Strategy 2: Create defensive line near avatar (2-3 sites)
-    cell = findDefensivePosition(state, seat, avatarPos) || findAdjacentEmptyToOwned(state, seat) || findAnyEmptyCell(state);
+    cell =
+      findDefensivePosition(state, seat, avatarPos) ||
+      findAdjacentEmptyToOwned(state, seat) ||
+      findAnyEmptyCell(state);
   } else {
     // Strategy 3: Expand toward opponent (4+ sites)
     const oppAvatarPos = getOpponentAvatarPos(state, seat);
-    cell = findExpansionPosition(state, seat, oppAvatarPos, ownedSites) || findAdjacentEmptyToOwned(state, seat) || findAnyEmptyCell(state);
+    cell =
+      findExpansionPosition(state, seat, oppAvatarPos, ownedSites) ||
+      findAdjacentEmptyToOwned(state, seat) ||
+      findAnyEmptyCell(state);
   }
 
   const myNum = seatNum(seat);
   const patch = { zones: {}, board: { sites: {} } };
   patch.zones[seat] = { ...z, hand };
   patch.board.sites[cell] = { owner: myNum, tapped: false, card: pick.card };
-  console.log(`[Bot Engine] playSitePatch: Placing ${pick.card.name} at ${cell}, hand size after: ${hand.length}`);
+  console.log(
+    `[Bot Engine] playSitePatch: Placing ${pick.card.name} at ${cell}, hand size after: ${hand.length}`
+  );
   return patch;
 }
 
 // T045: Find defensive position near avatar
 function findDefensivePosition(state, seat, avatarPos) {
   const [ax, ay] = avatarPos;
-  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
-  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+  const w =
+    (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h =
+    (state && state.board && state.board.size && state.board.size.h) || 5;
 
   // Defensive positions: directly adjacent to avatar in cardinal directions
   const defensiveOffsets = [
-    [1, 0],   // Right
-    [-1, 0],  // Left
-    [0, 1],   // Down
-    [0, -1],  // Up
+    [1, 0], // Right
+    [-1, 0], // Left
+    [0, 1], // Down
+    [0, -1], // Up
   ];
 
   for (const [dx, dy] of defensiveOffsets) {
@@ -465,16 +549,20 @@ function findDefensivePosition(state, seat, avatarPos) {
 // T045: Find expansion position toward opponent
 // T051: Strategic expansion - prioritize placing sites adjacent to enemy sites for traversal
 function findExpansionPosition(state, seat, oppAvatarPos, ownedSites) {
-  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
-  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+  const w =
+    (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h =
+    (state && state.board && state.board.size && state.board.size.h) || 5;
 
   // Get enemy sites for adjacency checking
   const oppSiteKeys = getOpponentSiteKeys(state, seat);
-  const oppSitePositions = oppSiteKeys.map(sk => parseCellKey(sk)).filter(Boolean);
+  const oppSitePositions = oppSiteKeys
+    .map((sk) => parseCellKey(sk))
+    .filter(Boolean);
 
   // Helper: Check if position is adjacent to any enemy site
   const isAdjacentToEnemySite = (x, y) => {
-    return oppSitePositions.some(oppPos => {
+    return oppSitePositions.some((oppPos) => {
       const dx = Math.abs(oppPos.x - x);
       const dy = Math.abs(oppPos.y - y);
       return dx + dy === 1; // Manhattan distance of 1 = adjacent
@@ -496,7 +584,12 @@ function findExpansionPosition(state, seat, oppAvatarPos, ownedSites) {
 
     // Filter to empty cells adjacent to enemy sites
     const adjacentToEnemy = candidates
-      .filter(([x, y]) => inBounds(x, y, w, h) && isEmpty(state, x, y) && isAdjacentToEnemySite(x, y))
+      .filter(
+        ([x, y]) =>
+          inBounds(x, y, w, h) &&
+          isEmpty(state, x, y) &&
+          isAdjacentToEnemySite(x, y)
+      )
       .map(([x, y]) => ({ x, y }));
 
     if (adjacentToEnemy.length > 0) {
@@ -512,11 +605,13 @@ function findExpansionPosition(state, seat, oppAvatarPos, ownedSites) {
   }
 
   // Strategy 2 (FALLBACK): Move closer to opponent if no enemy-adjacent positions available
-  const sitesWithDist = ownedSites.map(sk => {
-    const p = parseCellKey(sk);
-    const dist = p ? manhattan([p.x, p.y], oppAvatarPos) : 999;
-    return { key: sk, pos: p, dist };
-  }).filter(s => s.pos !== null);
+  const sitesWithDist = ownedSites
+    .map((sk) => {
+      const p = parseCellKey(sk);
+      const dist = p ? manhattan([p.x, p.y], oppAvatarPos) : 999;
+      return { key: sk, pos: p, dist };
+    })
+    .filter((s) => s.pos !== null);
 
   sitesWithDist.sort((a, b) => a.dist - b.dist);
 
@@ -557,7 +652,9 @@ function playUnitPatch(state, seat, placedCell, specificCard = null) {
 
   // If specific card provided, use it and find its index
   if (specificCard) {
-    const idx = hand.findIndex(c => c === specificCard || (c && c.slug === specificCard.slug));
+    const idx = hand.findIndex(
+      (c) => c === specificCard || (c && c.slug === specificCard.slug)
+    );
     if (idx !== -1) {
       pick = { idx, card: hand[idx] };
     }
@@ -580,7 +677,10 @@ function playUnitPatch(state, seat, placedCell, specificCard = null) {
   const existing = (state && state.permanents && state.permanents[cell]) || [];
   const patch = { zones: {}, permanents: {} };
   patch.zones[seat] = { ...z, hand };
-  patch.permanents[cell] = [...existing, { owner: myNum, card: pick.card, tapped: false }];
+  patch.permanents[cell] = [
+    ...existing,
+    { owner: myNum, card: pick.card, tapped: false },
+  ];
   return patch;
 }
 
@@ -588,7 +688,7 @@ function playUnitPatch(state, seat, placedCell, specificCard = null) {
 function isSiteCard(card) {
   if (!card || !card.type) return false;
   const cardType = String(card.type).toLowerCase();
-  return cardType.includes('site');
+  return cardType.includes("site");
 }
 
 // T043: Spell Type Detection - identify Magic/Sorcery/Aura cards
@@ -597,19 +697,19 @@ function isSpellCard(card) {
   const cardType = String(card.type).toLowerCase();
 
   // Exclude non-spell types
-  if (cardType.includes('site')) return false;
-  if (cardType.includes('avatar')) return false;
-  if (cardType.includes('minion')) return false;
-  if (cardType.includes('unit')) return false;
-  if (cardType.includes('relic')) return false;
-  if (cardType.includes('structure')) return false;
-  if (cardType.includes('artifact')) return false;
+  if (cardType.includes("site")) return false;
+  if (cardType.includes("avatar")) return false;
+  if (cardType.includes("minion")) return false;
+  if (cardType.includes("unit")) return false;
+  if (cardType.includes("relic")) return false;
+  if (cardType.includes("structure")) return false;
+  if (cardType.includes("artifact")) return false;
 
   // Include spell types
-  if (cardType.includes('magic')) return true;      // Instant spells
-  if (cardType.includes('sorcery')) return true;    // Slow spells
-  if (cardType.includes('aura')) return true;       // Enchantments
-  if (cardType.includes('enchantment')) return true; // Alternative naming
+  if (cardType.includes("magic")) return true; // Instant spells
+  if (cardType.includes("sorcery")) return true; // Slow spells
+  if (cardType.includes("aura")) return true; // Enchantments
+  if (cardType.includes("enchantment")) return true; // Alternative naming
 
   return false;
 }
@@ -618,7 +718,7 @@ function isSpellCard(card) {
 function isAuraCard(card) {
   if (!card || !card.type) return false;
   const cardType = String(card.type).toLowerCase();
-  return cardType.includes('aura') || cardType.includes('enchantment');
+  return cardType.includes("aura") || cardType.includes("enchantment");
 }
 
 // T043: Spell Casting - create patch for playing spells
@@ -630,7 +730,9 @@ function playSpellPatch(state, seat, specificCard = null) {
 
   // If specific card provided, use it
   if (specificCard) {
-    const idx = hand.findIndex(c => c === specificCard || (c && c.slug === specificCard.slug));
+    const idx = hand.findIndex(
+      (c) => c === specificCard || (c && c.slug === specificCard.slug)
+    );
     if (idx !== -1 && isSpellCard(hand[idx])) {
       pick = { idx, card: hand[idx] };
     }
@@ -657,18 +759,22 @@ function playSpellPatch(state, seat, specificCard = null) {
 
   // Auras and enchantments go to battlefield (attached to permanents)
   // Instant spells (Magic) and Sorceries resolve immediately (server handles effect)
-  const cardType = String(pick.card.type || '').toLowerCase();
+  const cardType = String(pick.card.type || "").toLowerCase();
 
-  if (cardType.includes('aura') || cardType.includes('enchantment')) {
+  if (cardType.includes("aura") || cardType.includes("enchantment")) {
     // Place aura on battlefield at owned site
     let cell = findAnyOwnedSiteCell(state, seat);
     if (!cell) cell = findAnyEmptyCell(state);
 
     const myNum = seatNum(seat);
-    const existing = (state && state.permanents && state.permanents[cell]) || [];
+    const existing =
+      (state && state.permanents && state.permanents[cell]) || [];
     const patch = { zones: {}, permanents: {} };
     patch.zones[seat] = { ...z, hand };
-    patch.permanents[cell] = [...existing, { owner: myNum, card: pick.card, tapped: false }];
+    patch.permanents[cell] = [
+      ...existing,
+      { owner: myNum, card: pick.card, tapped: false },
+    ];
     return patch;
   } else {
     // Magic (instant) / Sorcery - just remove from hand, server resolves effect
@@ -699,7 +805,7 @@ function getOpponentAvatarPos(state, seat) {
   try {
     return getAvatarPos(state, otherSeat(seat));
   } catch {
-    return [2, seat === 'p1' ? 0 : 3];
+    return [2, seat === "p1" ? 0 : 3];
   }
 }
 
@@ -712,7 +818,8 @@ function myUnits(state, seat) {
     for (let i = 0; i < arr.length; i++) {
       const item = arr[i];
       try {
-        if (item && Number(item.owner) === myNum) out.push({ at: cellKey, index: i, item });
+        if (item && Number(item.owner) === myNum)
+          out.push({ at: cellKey, index: i, item });
       } catch {}
     }
   }
@@ -721,8 +828,10 @@ function myUnits(state, seat) {
 
 function neighborsInBounds(state, atKey) {
   const pos = parseCellKey(atKey);
-  const w = (state && state.board && state.board.size && state.board.size.w) || 5;
-  const h = (state && state.board && state.board.size && state.board.size.h) || 5;
+  const w =
+    (state && state.board && state.board.size && state.board.size.w) || 5;
+  const h =
+    (state && state.board && state.board.size && state.board.size.h) || 5;
   if (!pos) return [];
   const candidates = [
     [pos.x + 1, pos.y],
@@ -731,7 +840,8 @@ function neighborsInBounds(state, atKey) {
     [pos.x, pos.y - 1],
   ];
   const res = [];
-  for (const [x,y] of candidates) if (inBounds(x, y, w, h)) res.push(`${x},${y}`);
+  for (const [x, y] of candidates)
+    if (inBounds(x, y, w, h)) res.push(`${x},${y}`);
   return res;
 }
 
@@ -739,7 +849,10 @@ function hasEnemyAt(state, seat, cellKey) {
   const opp = seatNum(otherSeat(seat));
   const arr = (state && state.permanents && state.permanents[cellKey]) || [];
   if (!Array.isArray(arr)) return false;
-  for (const p of arr) try { if (Number(p.owner) === opp) return true; } catch {}
+  for (const p of arr)
+    try {
+      if (Number(p.owner) === opp) return true;
+    } catch {}
   return false;
 }
 
@@ -747,12 +860,19 @@ function hasFriendlyAt(state, seat, cellKey) {
   const me = seatNum(seat);
   const arr = (state && state.permanents && state.permanents[cellKey]) || [];
   if (!Array.isArray(arr)) return false;
-  for (const p of arr) try { if (Number(p.owner) === me) return true; } catch {}
+  for (const p of arr)
+    try {
+      if (Number(p.owner) === me) return true;
+    } catch {}
   return false;
 }
 
 function manhattan(a, b) {
-  try { return Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]); } catch { return 0; }
+  try {
+    return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+  } catch {
+    return 0;
+  }
 }
 
 function buildMovePatch(state, seat, fromKey, index, toKey) {
@@ -766,7 +886,9 @@ function buildMovePatch(state, seat, fromKey, index, toKey) {
     const toArrPrev = Array.isArray(perPrev[toKey]) ? perPrev[toKey] : [];
     const toArr = [...toArrPrev, { ...item, tapped: true }];
     return { permanents: { [fromKey]: fromArr, [toKey]: toArr } };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 // T044: Enhanced movement with site targeting
@@ -777,7 +899,7 @@ function buildMovePatch(state, seat, fromKey, index, toKey) {
 // Units with summoning sickness CAN move/defend but CANNOT attack
 function generateMoveCandidates(state, seat) {
   // T057: Filter out tapped units AND units with summoning sickness
-  const units = myUnits(state, seat).filter(u => {
+  const units = myUnits(state, seat).filter((u) => {
     if (u.item?.tapped) return false; // Must be untapped
     if (u.item?.summonedThisTurn) return false; // T057: Cannot attack with summoning sickness
     return true;
@@ -803,10 +925,12 @@ function generateMoveCandidates(state, seat) {
   } else {
     // Opponent still has life - can target sites OR avatar
     // Include both as valid targets (prioritize closer ones)
-    const sitePositions = oppSites.map(sk => {
-      const p = parseCellKey(sk);
-      return p ? [p.x, p.y] : null;
-    }).filter(Boolean);
+    const sitePositions = oppSites
+      .map((sk) => {
+        const p = parseCellKey(sk);
+        return p ? [p.x, p.y] : null;
+      })
+      .filter(Boolean);
 
     targetPositions = [oppPos, ...sitePositions];
   }
@@ -820,8 +944,12 @@ function generateMoveCandidates(state, seat) {
     const ap = parseCellKey(a.at);
     const bp = parseCellKey(b.at);
 
-    const aDistances = targetPositions.map(t => ap ? manhattan([ap.x, ap.y], t) : 999);
-    const bDistances = targetPositions.map(t => bp ? manhattan([bp.x, bp.y], t) : 999);
+    const aDistances = targetPositions.map((t) =>
+      ap ? manhattan([ap.x, ap.y], t) : 999
+    );
+    const bDistances = targetPositions.map((t) =>
+      bp ? manhattan([bp.x, bp.y], t) : 999
+    );
 
     const aMin = Math.min(...aDistances);
     const bMin = Math.min(...bDistances);
@@ -832,22 +960,27 @@ function generateMoveCandidates(state, seat) {
   const chosen = units[0];
   // T050: Filter neighbors to exclude void unless unit has voidwalk
   const neigh = neighborsInBounds(state, chosen.at)
-    .filter(k => !hasFriendlyAt(state, seat, k))
-    .filter(k => isValidMovement(state, chosen.at, k, chosen));
+    .filter((k) => !hasFriendlyAt(state, seat, k))
+    .filter((k) => isValidMovement(state, chosen.at, k, chosen));
 
   // Prefer moving into a cell with an enemy (unit, avatar, or site)
-  const intoEnemy = neigh.filter(k => hasEnemyAt(state, seat, k));
-  const intoSite = !oppAtDeathsDoor ? neigh.filter(k => {
-    const oppSiteNum = seatNum(otherSeat(seat));
-    const sites = (state && state.board && state.board.sites) || {};
-    const tile = sites[k];
-    return tile && Number(tile.owner) === oppSiteNum;
-  }) : [];
+  const intoEnemy = neigh.filter((k) => hasEnemyAt(state, seat, k));
+  const intoSite = !oppAtDeathsDoor
+    ? neigh.filter((k) => {
+        const oppSiteNum = seatNum(otherSeat(seat));
+        const sites = (state && state.board && state.board.sites) || {};
+        const tile = sites[k];
+        return tile && Number(tile.owner) === oppSiteNum;
+      })
+    : [];
 
   const candidates = [];
 
   // Prioritize: 1. Enemy units/avatar, 2. Enemy sites (if not death's door), 3. Move toward target
-  const priorityTargets = [...intoEnemy, ...intoSite.filter(k => !intoEnemy.includes(k))];
+  const priorityTargets = [
+    ...intoEnemy,
+    ...intoSite.filter((k) => !intoEnemy.includes(k)),
+  ];
 
   if (priorityTargets.length > 0) {
     for (const k of priorityTargets.slice(0, 2)) {
@@ -860,8 +993,12 @@ function generateMoveCandidates(state, seat) {
       const p1 = parseCellKey(k1);
       const p2 = parseCellKey(k2);
 
-      const d1Arr = targetPositions.map(t => p1 ? manhattan([p1.x, p1.y], t) : 999);
-      const d2Arr = targetPositions.map(t => p2 ? manhattan([p2.x, p2.y], t) : 999);
+      const d1Arr = targetPositions.map((t) =>
+        p1 ? manhattan([p1.x, p1.y], t) : 999
+      );
+      const d2Arr = targetPositions.map((t) =>
+        p2 ? manhattan([p2.x, p2.y], t) : 999
+      );
 
       const d1 = Math.min(...d1Arr);
       const d2 = Math.min(...d2Arr);
@@ -880,48 +1017,48 @@ function generateMoveCandidates(state, seat) {
 
 // Minimal providers (copied subset from server rules to avoid imports)
 const MANA_PROVIDER_BY_NAME = new Set([
-  'abundance',
-  'amethyst core',
-  'aquamarine core',
-  'atlantean fate',
-  'avalon',
-  'blacksmith family',
-  'caerleon-upon-usk',
-  'castle servants',
-  'common cottagers',
-  'finwife',
+  "abundance",
+  "amethyst core",
+  "aquamarine core",
+  "atlantean fate",
+  "avalon",
+  "blacksmith family",
+  "caerleon-upon-usk",
+  "castle servants",
+  "common cottagers",
+  "finwife",
   "fisherman's family",
-  'glastonbury tor',
-  'joyous garde',
-  'onyx core',
-  'pristine paradise',
-  'ruby core',
-  'shrine of the dragonlord',
-  'the colour out of space',
-  'tintagel',
-  'valley of delight',
-  'wedding hall',
-  'älvalinne dryads',
+  "glastonbury tor",
+  "joyous garde",
+  "onyx core",
+  "pristine paradise",
+  "ruby core",
+  "shrine of the dragonlord",
+  "the colour out of space",
+  "tintagel",
+  "valley of delight",
+  "wedding hall",
+  "älvalinne dryads",
 ]);
 
 const THRESHOLD_GRANT_BY_NAME = {
-  'amethyst core': { air: 1 },
-  'aquamarine core': { water: 1 },
-  'onyx core': { earth: 1 },
-  'ruby core': { fire: 1 },
+  "amethyst core": { air: 1 },
+  "aquamarine core": { water: 1 },
+  "onyx core": { earth: 1 },
+  "ruby core": { fire: 1 },
 };
 
 // Fallback thresholds for standard sites by name when card.thresholds is missing
 const SITE_THRESHOLD_BY_NAME = {
-  'spire': { air: 1 },
-  'stream': { water: 1 },
-  'valley': { earth: 1 },
-  'wasteland': { fire: 1 },
+  spire: { air: 1 },
+  stream: { water: 1 },
+  valley: { earth: 1 },
+  wasteland: { fire: 1 },
 };
 
 function accumulateThresholds(acc, src) {
-  if (!src || typeof src !== 'object') return;
-  const keys = ['air','water','earth','fire'];
+  if (!src || typeof src !== "object") return;
+  const keys = ["air", "water", "earth", "fire"];
   for (const k of keys) {
     const v = Number(src[k] || 0);
     if (Number.isFinite(v) && v !== 0) acc[k] = (acc[k] || 0) + v;
@@ -935,10 +1072,13 @@ function countThresholdsForSeat(state, seat) {
   for (const key of Object.keys(sites)) {
     const tile = sites[key];
     if (!tile || Number(tile.owner) !== myNum) continue;
-    let th = tile && tile.card && tile.card.thresholds ? tile.card.thresholds : null;
+    let th =
+      tile && tile.card && tile.card.thresholds ? tile.card.thresholds : null;
     if (!th) {
       try {
-        const nm = (tile && tile.card && tile.card.name ? String(tile.card.name) : '').toLowerCase();
+        const nm = (
+          tile && tile.card && tile.card.name ? String(tile.card.name) : ""
+        ).toLowerCase();
         if (nm && SITE_THRESHOLD_BY_NAME[nm]) th = SITE_THRESHOLD_BY_NAME[nm];
       } catch {}
     }
@@ -949,7 +1089,9 @@ function countThresholdsForSeat(state, seat) {
     const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
     for (const p of arr) {
       if (!p || Number(p.owner) !== myNum) continue;
-      const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+      const nm = (
+        p.card && p.card.name ? String(p.card.name) : ""
+      ).toLowerCase();
       const grant = THRESHOLD_GRANT_BY_NAME[nm];
       if (grant) accumulateThresholds(out, grant);
     }
@@ -979,7 +1121,9 @@ function countManaProvidersFromPermanents(state, seat) {
     for (const p of arr) {
       try {
         if (!p || Number(p.owner) !== myNum) continue;
-        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        const nm = (
+          p.card && p.card.name ? String(p.card.name) : ""
+        ).toLowerCase();
         if (MANA_PROVIDER_BY_NAME.has(nm)) n++;
       } catch {}
     }
@@ -992,14 +1136,14 @@ function countManaProvidersFromPermanents(state, seat) {
 function getCardManaCost(card) {
   // Extract generic mana cost from card
   try {
-    if (card && typeof card.cost === 'number') return Number(card.cost);
-    if (card && card.cost && typeof card.cost === 'string') {
+    if (card && typeof card.cost === "number") return Number(card.cost);
+    if (card && card.cost && typeof card.cost === "string") {
       const parsed = parseInt(card.cost, 10);
       if (Number.isFinite(parsed)) return parsed;
     }
     // Try alternate cost fields
-    if (card && typeof card.manaCost === 'number') return Number(card.manaCost);
-    if (card && typeof card.generic === 'number') return Number(card.generic);
+    if (card && typeof card.manaCost === "number") return Number(card.manaCost);
+    if (card && typeof card.generic === "number") return Number(card.generic);
     // Sites don't have costs - they're played via Avatar ability
     return 0;
   } catch {
@@ -1028,7 +1172,9 @@ function countUntappedMana(state, seat) {
     for (const p of arr) {
       try {
         if (!p || Number(p.owner) !== myNum || p.tapped === true) continue;
-        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        const nm = (
+          p.card && p.card.name ? String(p.card.name) : ""
+        ).toLowerCase();
         if (MANA_PROVIDER_BY_NAME.has(nm)) mana++;
       } catch {}
     }
@@ -1053,8 +1199,8 @@ function canAffordCard(state, seat, card) {
   if (!card) return false;
 
   // Sites don't cost mana (played via Avatar ability)
-  const cardType = (card.type || '').toLowerCase();
-  if (cardType.includes('site')) return true;
+  const cardType = (card.type || "").toLowerCase();
+  if (cardType.includes("site")) return true;
 
   // CRITICAL: Cannot play units when you have no sites on the board
   // This is a fundamental game rule - you need mana base before deploying creatures
@@ -1109,7 +1255,7 @@ function detectWinCondition(state, seat) {
   return {
     oppAtDeathsDoor,
     canDealLethal: oppAtDeathsDoor && canDealDamage,
-    oppLife
+    oppLife,
   };
 }
 
@@ -1120,7 +1266,8 @@ function buildGameStateModel(serverState, seat) {
 
   // Count untapped vs tapped sites for mana tracking
   const myNum = seatNum(me);
-  const sites = (serverState && serverState.board && serverState.board.sites) || {};
+  const sites =
+    (serverState && serverState.board && serverState.board.sites) || {};
   let sitesUntappedMy = 0;
   let sitesTappedMy = 0;
   let sitesUntappedOpp = 0;
@@ -1151,7 +1298,9 @@ function buildGameStateModel(serverState, seat) {
     for (const p of arr) {
       try {
         if (!p) continue;
-        const nm = (p.card && p.card.name ? String(p.card.name) : '').toLowerCase();
+        const nm = (
+          p.card && p.card.name ? String(p.card.name) : ""
+        ).toLowerCase();
         if (!MANA_PROVIDER_BY_NAME.has(nm)) continue;
         const owner = Number(p.owner);
         const tapped = p.tapped === true;
@@ -1179,15 +1328,15 @@ function buildGameStateModel(serverState, seat) {
 
   // Get turn state
   const currentPlayer = (serverState && serverState.currentPlayer) || 1;
-  const phase = (serverState && serverState.phase) || 'Main';
+  const phase = (serverState && serverState.phase) || "Main";
   const turnNumber = (serverState && serverState.turnIndex) || 0;
 
   // Get avatar status
   const players = (serverState && serverState.players) || {};
   const p1 = players.p1 || {};
   const p2 = players.p2 || {};
-  const lifeMy = me === 'p1' ? (Number(p1.life) || 0) : (Number(p2.life) || 0);
-  const lifeOpp = opp === 'p1' ? (Number(p1.life) || 0) : (Number(p2.life) || 0);
+  const lifeMy = me === "p1" ? Number(p1.life) || 0 : Number(p2.life) || 0;
+  const lifeOpp = opp === "p1" ? Number(p1.life) || 0 : Number(p2.life) || 0;
   const atDeathsDoorMy = lifeMy <= 0;
   const atDeathsDoorOpp = lifeOpp <= 0;
 
@@ -1206,21 +1355,21 @@ function buildGameStateModel(serverState, seat) {
         sitesUntapped: sitesUntappedOpp,
         sitesTapped: sitesTappedOpp,
         providersUntapped: providersUntappedOpp,
-      }
+      },
     },
     thresholds: {
       [me]: thresholdsMy,
-      [opp]: thresholdsOpp
+      [opp]: thresholdsOpp,
     },
     turnState: {
       currentPlayer,
       phase,
-      turnNumber
+      turnNumber,
     },
     avatarStatus: {
       [me]: { life: lifeMy, atDeathsDoor: atDeathsDoorMy },
-      [opp]: { life: lifeOpp, atDeathsDoor: atDeathsDoorOpp }
-    }
+      [opp]: { life: lifeOpp, atDeathsDoor: atDeathsDoorOpp },
+    },
   };
 }
 
@@ -1249,14 +1398,15 @@ function extractManaEfficiency(state, prevState, seat) {
   const manaAvailable = myRes.manaAvailable;
   const manaSpent = myRes.manaSpent;
 
-  const spentRatio = manaAvailable > 0 ? manaSpent / Math.max(1, manaAvailable) : 0;
+  const spentRatio =
+    manaAvailable > 0 ? manaSpent / Math.max(1, manaAvailable) : 0;
   const manaWasted = Math.max(0, manaAvailable - manaSpent);
 
   return {
     efficiency: spentRatio,
     wasted: manaWasted,
     available: manaAvailable,
-    spent: manaSpent
+    spent: manaSpent,
   };
 }
 
@@ -1319,14 +1469,14 @@ function extractAntiPatterns(state, prevState, seat, candidateAction) {
   const manaAvailable = stateModel.resources[seat].manaAvailable;
 
   // Site spam penalty: sites >= 6 and playing another site
-  if (ownedSites >= 6 && candidateAction === 'play_site') {
+  if (ownedSites >= 6 && candidateAction === "play_site") {
     penalty += 2.0;
   }
 
   // Wasted resources penalty: mana >= 3, playable cards exist, but passing
-  if (manaAvailable >= 3 && candidateAction === 'pass') {
+  if (manaAvailable >= 3 && candidateAction === "pass") {
     const hand = getZones(state, seat).hand || [];
-    const hasPlayableCards = hand.some(c => canAffordCard(state, seat, c));
+    const hasPlayableCards = hand.some((c) => canAffordCard(state, seat, c));
     if (hasPlayableCards) {
       penalty += 1.5;
     }
@@ -1360,45 +1510,45 @@ function getStrategicModifiers(state, seat, _theta) {
   // Phase 1: Establish initial mana base (turns 1-3, sites < 3)
   // Priority: Play sites aggressively, avoid drawing
   if (turnNumber <= 3 && ownedSites < 3) {
-    modifiers.play_site = 3.0;  // MUST build mana base
-    modifiers.play_unit = 0.3;  // Don't play units yet
+    modifiers.play_site = 3.0; // MUST build mana base
+    modifiers.play_unit = 0.3; // Don't play units yet
     modifiers.play_minion = 0.3;
-    modifiers.draw = 0.5;       // Discourage draw spam
+    modifiers.draw = 0.5; // Discourage draw spam
   }
 
   // Phase 2: Expand toward opponent (sites 3-5)
   // Priority: Continue site expansion while deploying some threats
   else if (ownedSites >= 3 && ownedSites < 6) {
-    modifiers.play_site = 2.5;  // Keep expanding
-    modifiers.play_unit = 1.2;  // Start deploying threats
+    modifiers.play_site = 2.5; // Keep expanding
+    modifiers.play_unit = 1.2; // Start deploying threats
     modifiers.play_minion = 1.2;
-    modifiers.draw = 0.4;       // Discourage draw spam
+    modifiers.draw = 0.4; // Discourage draw spam
   }
 
   // Phase 3: Deploy threats (sites >= 3, need board presence)
   // Priority: Play creatures and continue expanding
   if (ownedSites >= 3 && boardDev < 3) {
-    modifiers.play_minion = 2.0;  // Deploy creatures aggressively
+    modifiers.play_minion = 2.0; // Deploy creatures aggressively
     modifiers.play_unit = 2.0;
-    modifiers.play_site = 1.5;    // Keep expanding
-    modifiers.draw = 0.3;         // Heavily discourage draw spam
+    modifiers.play_site = 1.5; // Keep expanding
+    modifiers.draw = 0.3; // Heavily discourage draw spam
   }
 
   // Phase 4: Attack phase (developed board, enough sites)
   // Priority: Attack and continue developing
   if (boardDev >= 2 && ownedSites >= 4) {
-    modifiers.attack = 2.0;       // ATTACK!
-    modifiers.play_minion = 1.3;  // Keep deploying threats
-    modifiers.play_site = 1.8;    // Continue expansion
-    modifiers.draw = 0.2;         // Minimal drawing
+    modifiers.attack = 2.0; // ATTACK!
+    modifiers.play_minion = 1.3; // Keep deploying threats
+    modifiers.play_site = 1.8; // Continue expansion
+    modifiers.draw = 0.2; // Minimal drawing
   }
 
   // Override: Defend against lethal threat
   if (oppThreatDeploy >= myLife && myLife > 0) {
-    modifiers.play_unit = 2.5;    // Prioritize blockers
+    modifiers.play_unit = 2.5; // Prioritize blockers
     modifiers.play_minion = 2.5;
-    modifiers.attack = 0.3;       // Don't attack when defending
-    modifiers.draw = 0.1;         // No time for drawing
+    modifiers.attack = 0.3; // Don't attack when defending
+    modifiers.draw = 0.1; // No time for drawing
   }
 
   return modifiers;
@@ -1410,8 +1560,10 @@ function extractFeatures(prevState, nextState, seat) {
   const players = (nextState && nextState.players) || {};
   const p1 = players.p1 || {};
   const p2 = players.p2 || {};
-  const lifeMy = me === "p1" ? Number(p1.life || 0) || 0 : Number(p2.life || 0) || 0;
-  const lifeOpp = me === "p1" ? Number(p2.life || 0) || 0 : Number(p1.life || 0) || 0;
+  const lifeMy =
+    me === "p1" ? Number(p1.life || 0) || 0 : Number(p2.life || 0) || 0;
+  const lifeOpp =
+    me === "p1" ? Number(p2.life || 0) || 0 : Number(p1.life || 0) || 0;
   const zMy = getZones(nextState, me);
   const zOpp = getZones(nextState, opp);
   const handMy = Array.isArray(zMy.hand) ? zMy.hand.length : 0;
@@ -1427,34 +1579,72 @@ function extractFeatures(prevState, nextState, seat) {
     }
   }
   const meKey = me;
-  const prevSpent = (prevState && prevState.resources && prevState.resources[meKey] && Number(prevState.resources[meKey].spentThisTurn)) || 0;
-  const nextSpent = (nextState && nextState.resources && nextState.resources[meKey] && Number(nextState.resources[meKey].spentThisTurn)) || 0;
-  const available = countOwnedManaSites(nextState, me) + countManaProvidersFromPermanents(nextState, me);
+  const prevSpent =
+    (prevState &&
+      prevState.resources &&
+      prevState.resources[meKey] &&
+      Number(prevState.resources[meKey].spentThisTurn)) ||
+    0;
+  const nextSpent =
+    (nextState &&
+      nextState.resources &&
+      nextState.resources[meKey] &&
+      Number(nextState.resources[meKey].spentThisTurn)) ||
+    0;
+  const available =
+    countOwnedManaSites(nextState, me) +
+    countManaProvidersFromPermanents(nextState, me);
   const spentInc = Math.max(0, nextSpent - prevSpent);
-  const onCurve = available > 0 ? Math.min(1, spentInc / Math.max(1, available)) : 0;
+  const onCurve =
+    available > 0 ? Math.min(1, spentInc / Math.max(1, available)) : 0;
   const manaWasted = Math.max(0, available - nextSpent);
-  const sitesMy = (() => { let n=0; const s=(nextState&&nextState.board&&nextState.board.sites)||{}; for(const k of Object.keys(s)){ const t=s[k]; if(t&&t.card&&Number(t.owner)===seatNum(me)) n++; } return n; })();
-  const sitesOpp = (() => { let n=0; const s=(nextState&&nextState.board&&nextState.board.sites)||{}; for(const k of Object.keys(s)){ const t=s[k]; if(t&&t.card&&Number(t.owner)===seatNum(opp)) n++; } return n; })();
+  const sitesMy = (() => {
+    let n = 0;
+    const s = (nextState && nextState.board && nextState.board.sites) || {};
+    for (const k of Object.keys(s)) {
+      const t = s[k];
+      if (t && t.card && Number(t.owner) === seatNum(me)) n++;
+    }
+    return n;
+  })();
+  const sitesOpp = (() => {
+    let n = 0;
+    const s = (nextState && nextState.board && nextState.board.sites) || {};
+    for (const k of Object.keys(s)) {
+      const t = s[k];
+      if (t && t.card && Number(t.owner) === seatNum(opp)) n++;
+    }
+    return n;
+  })();
   const providersMy = countManaProvidersFromPermanents(nextState, me);
   const providersOpp = countManaProvidersFromPermanents(nextState, opp);
   const thMy = countThresholdsForSeat(nextState, me);
   const thOpp = countThresholdsForSeat(nextState, opp);
-  const thTotMy = (thMy.air||0)+(thMy.water||0)+(thMy.earth||0)+(thMy.fire||0);
-  const thTotOpp = (thOpp.air||0)+(thOpp.water||0)+(thOpp.earth||0)+(thOpp.fire||0);
+  const thTotMy =
+    (thMy.air || 0) + (thMy.water || 0) + (thMy.earth || 0) + (thMy.fire || 0);
+  const thTotOpp =
+    (thOpp.air || 0) +
+    (thOpp.water || 0) +
+    (thOpp.earth || 0) +
+    (thOpp.fire || 0);
   // Advancement: closer average distance of my units to opponent avatar
   const oppPos = getAvatarPos(nextState, opp);
-  let myCount = 0; let distSum = 0;
+  let myCount = 0;
+  let distSum = 0;
   for (const key of Object.keys(per)) {
     const arr = Array.isArray(per[key]) ? per[key] : [];
     const p = parseCellKey(key);
     if (!p) continue;
     for (const it of arr) {
       try {
-        if (Number(it.owner) === seatNum(me)) { myCount++; distSum += manhattan([p.x,p.y], oppPos); }
+        if (Number(it.owner) === seatNum(me)) {
+          myCount++;
+          distSum += manhattan([p.x, p.y], oppPos);
+        }
       } catch {}
     }
   }
-  const advance = myCount > 0 ? - (distSum / myCount) : 0;
+  const advance = myCount > 0 ? -(distSum / myCount) : 0;
 
   // T009: Add new evaluation features
   const boardDevelopment = extractBoardDevelopment(nextState, me);
@@ -1507,15 +1697,21 @@ function evalFeatures(f, w) {
   s += (w.w_atk || 0) * (f.atk_my - f.atk_opp);
   s += (w.w_hp || 0) * (f.hp_my - f.hp_opp);
   s += (w.w_hand || 0) * (f.hand_my - f.hand_opp);
-  s += (w.w_threats_my || 0) * f.threats_my + (w.w_threats_opp || 0) * f.threats_opp;
+  s +=
+    (w.w_threats_my || 0) * f.threats_my +
+    (w.w_threats_opp || 0) * f.threats_opp;
   s += (w.w_mana_waste || 0) * f.mana_wasted;
   s += (w.w_mana_avail || 0) * f.mana_avail;
   s += (w.w_sites || 0) * (f.sites_my - f.sites_opp);
   s += (w.w_providers || 0) * (f.providers_my - f.providers_opp);
   s += (w.w_thresholds_total || 0) * (f.th_total_my - f.th_total_opp);
   s += (w.w_on_curve || 0) * f.on_curve;
-  s += (w.w_lethal_now || 0) * f.lethal_now + (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
-  s += (w.w_engine_online || 0) * f.engines_online + (w.w_sweeper_risk || 0) * f.sweeper_risk;
+  s +=
+    (w.w_lethal_now || 0) * f.lethal_now +
+    (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
+  s +=
+    (w.w_engine_online || 0) * f.engines_online +
+    (w.w_sweeper_risk || 0) * f.sweeper_risk;
   s += (w.w_action_count_penalty || 0) * 0;
   s += (w.w_advance || 0) * (f.advance || 0);
 
@@ -1537,21 +1733,31 @@ function evalFeaturesWithBreakdown(f, w) {
   breakdown.atk = (w.w_atk || 0) * (f.atk_my - f.atk_opp);
   breakdown.hp = (w.w_hp || 0) * (f.hp_my - f.hp_opp);
   breakdown.hand = (w.w_hand || 0) * (f.hand_my - f.hand_opp);
-  breakdown.threats = (w.w_threats_my || 0) * f.threats_my + (w.w_threats_opp || 0) * f.threats_opp;
+  breakdown.threats =
+    (w.w_threats_my || 0) * f.threats_my +
+    (w.w_threats_opp || 0) * f.threats_opp;
   breakdown.mana_waste = (w.w_mana_waste || 0) * f.mana_wasted;
   breakdown.mana_avail = (w.w_mana_avail || 0) * f.mana_avail;
   breakdown.sites = (w.w_sites || 0) * (f.sites_my - f.sites_opp);
-  breakdown.providers = (w.w_providers || 0) * (f.providers_my - f.providers_opp);
-  breakdown.thresholds = (w.w_thresholds_total || 0) * (f.th_total_my - f.th_total_opp);
+  breakdown.providers =
+    (w.w_providers || 0) * (f.providers_my - f.providers_opp);
+  breakdown.thresholds =
+    (w.w_thresholds_total || 0) * (f.th_total_my - f.th_total_opp);
   breakdown.on_curve = (w.w_on_curve || 0) * f.on_curve;
-  breakdown.lethal = (w.w_lethal_now || 0) * f.lethal_now + (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
+  breakdown.lethal =
+    (w.w_lethal_now || 0) * f.lethal_now +
+    (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
   breakdown.engines = (w.w_engine_online || 0) * f.engines_online;
   breakdown.sweeper_risk = (w.w_sweeper_risk || 0) * f.sweeper_risk;
   breakdown.advance = (w.w_advance || 0) * (f.advance || 0);
-  breakdown.board_development = (w.w_board_development || 0) * (f.board_development || 0);
-  breakdown.mana_efficiency = (w.w_mana_efficiency || 0) * (f.mana_efficiency || 0);
-  breakdown.mana_efficiency_waste = (w.w_mana_efficiency_waste || 0) * (f.mana_efficiency_wasted || 0);
-  breakdown.threat_deployment = (w.w_threat_deployment || 0) * (f.threat_deployment || 0);
+  breakdown.board_development =
+    (w.w_board_development || 0) * (f.board_development || 0);
+  breakdown.mana_efficiency =
+    (w.w_mana_efficiency || 0) * (f.mana_efficiency || 0);
+  breakdown.mana_efficiency_waste =
+    (w.w_mana_efficiency_waste || 0) * (f.mana_efficiency_wasted || 0);
+  breakdown.threat_deployment =
+    (w.w_threat_deployment || 0) * (f.threat_deployment || 0);
   breakdown.life_pressure = (w.w_life_pressure || 0) * (f.life_pressure || 0);
 
   let total = 0;
@@ -1566,50 +1772,58 @@ function evalFeaturesWithBreakdown(f, w) {
 // T011: Helper to determine action type from patch
 function getActionType(patch) {
   try {
-    if (!patch || typeof patch !== 'object') return 'pass';
+    if (!patch || typeof patch !== "object") return "pass";
 
     // Check for site playing
     if (patch.board && patch.board.sites) {
       const keys = Object.keys(patch.board.sites);
-      if (keys.length > 0) return 'play_site';
+      if (keys.length > 0) return "play_site";
     }
 
     // Check for unit/minion playing
     if (patch.permanents) {
       const cells = Object.keys(patch.permanents);
       for (const cell of cells) {
-        const arr = Array.isArray(patch.permanents[cell]) ? patch.permanents[cell] : [];
+        const arr = Array.isArray(patch.permanents[cell])
+          ? patch.permanents[cell]
+          : [];
         if (arr.length > 0) {
           // Check if this is a movement (tapped: true) or a play (tapped: false)
-          const hasNewPermanent = arr.some(p => p && p.card && p.tapped === false);
-          if (hasNewPermanent) return 'play_unit';
+          const hasNewPermanent = arr.some(
+            (p) => p && p.card && p.tapped === false
+          );
+          if (hasNewPermanent) return "play_unit";
         }
       }
       // If we have permanents array changes but no new untapped units, it's movement (attack)
-      return 'attack';
+      return "attack";
     }
 
     // Check for draw actions
-    if (patch.zones && typeof patch.zones === 'object') {
+    if (patch.zones && typeof patch.zones === "object") {
       const seats = Object.keys(patch.zones);
       if (seats.length > 0) {
         const z = patch.zones[seats[0]];
-        if (z && typeof z === 'object' && Object.prototype.hasOwnProperty.call(z, 'hand')) {
-          return 'draw';
+        if (
+          z &&
+          typeof z === "object" &&
+          Object.prototype.hasOwnProperty.call(z, "hand")
+        ) {
+          return "draw";
         }
       }
     }
 
-    return 'pass';
+    return "pass";
   } catch {
-    return 'pass';
+    return "pass";
   }
 }
 
 // T036: Helper to extract card being played from patch
 function getCardFromPatch(patch) {
   try {
-    if (!patch || typeof patch !== 'object') return null;
+    if (!patch || typeof patch !== "object") return null;
 
     // Check for site being played
     if (patch.board && patch.board.sites) {
@@ -1624,7 +1838,9 @@ function getCardFromPatch(patch) {
     if (patch.permanents) {
       const cells = Object.keys(patch.permanents);
       for (const cell of cells) {
-        const arr = Array.isArray(patch.permanents[cell]) ? patch.permanents[cell] : [];
+        const arr = Array.isArray(patch.permanents[cell])
+          ? patch.permanents[cell]
+          : [];
         for (const p of arr) {
           // Only return newly played cards (not tapped, which indicates movement)
           if (p && p.card && p.tapped === false) {
@@ -1671,31 +1887,37 @@ function generateCandidates(state, seat, options = {}) {
 
   // T012: Filter playable units by cost/threshold validation
   // Exclude sites AND avatars (avatars are part of setup, cannot be played from hand)
-  const allUnits = hand.filter(c => {
-    const cardType = (c.type || '').toLowerCase();
-    if (cardType.includes('site')) return false;
-    if (cardType.includes('avatar')) return false; // CRITICAL: avatars can't be played
+  const allUnits = hand.filter((c) => {
+    const cardType = (c.type || "").toLowerCase();
+    if (cardType.includes("site")) return false;
+    if (cardType.includes("avatar")) return false; // CRITICAL: avatars can't be played
     if (isSpellCard(c)) return false; // T043: Exclude spells from units
     return true;
   });
   stats.totalUnitsInHand = allUnits.length;
 
-  const playableUnits = allUnits.filter(c => {
-    const affordable = canAffordCard(base, seat, c);
-    if (!affordable) stats.filteredUnaffordable++;
-    return affordable;
-  }).slice(0, 8); // Limit to 8 playable units
+  const playableUnits = allUnits
+    .filter((c) => {
+      const affordable = canAffordCard(base, seat, c);
+      if (!affordable) stats.filteredUnaffordable++;
+      return affordable;
+    })
+    .slice(0, 8); // Limit to 8 playable units
   stats.playableUnits = playableUnits.length;
 
   // T043: Filter playable spells (Magic/Sorcery/Aura)
-  const allSpells = hand.filter(c => isSpellCard(c));
+  const allSpells = hand.filter((c) => isSpellCard(c));
   stats.totalSpellsInHand = allSpells.length;
 
-  const playableSpells = allSpells.filter(c => canAffordCard(base, seat, c)).slice(0, 6);
+  const playableSpells = allSpells
+    .filter((c) => canAffordCard(base, seat, c))
+    .slice(0, 6);
   stats.playableSpells = playableSpells.length;
 
   // Draw patches
-  const drawSpell = skipDraw ? null : drawFromPilePatch(base, seat, "spellbook");
+  const drawSpell = skipDraw
+    ? null
+    : drawFromPilePatch(base, seat, "spellbook");
   const drawAtlas = skipDraw ? null : drawFromAtlasPatch(base, seat);
   const pass = {};
 
@@ -1710,13 +1932,15 @@ function generateCandidates(state, seat, options = {}) {
       const afterDraw = applyPatch(base, drawSpell);
       // Re-check affordability after draw (hand changed)
       const newHand = getZones(afterDraw, seat).hand || [];
-      const affordableAfterDraw = newHand.filter(c => {
-        const cardType = (c.type || '').toLowerCase();
-        if (cardType.includes('site')) return false;
-        if (cardType.includes('avatar')) return false; // CRITICAL: avatars can't be played
-        if (isSpellCard(c)) return false; // Exclude spells
-        return canAffordCard(afterDraw, seat, c);
-      }).slice(0, 3); // Limit to 3 after draw
+      const affordableAfterDraw = newHand
+        .filter((c) => {
+          const cardType = (c.type || "").toLowerCase();
+          if (cardType.includes("site")) return false;
+          if (cardType.includes("avatar")) return false; // CRITICAL: avatars can't be played
+          if (isSpellCard(c)) return false; // Exclude spells
+          return canAffordCard(afterDraw, seat, c);
+        })
+        .slice(0, 3); // Limit to 3 after draw
 
       for (const unit of affordableAfterDraw) {
         const unitAfterDraw = playUnitPatch(afterDraw, seat, null, unit);
@@ -1735,10 +1959,12 @@ function generateCandidates(state, seat, options = {}) {
     if (drawSpell) {
       const afterDraw = applyPatch(base, drawSpell);
       const newHand = getZones(afterDraw, seat).hand || [];
-      const affordableSpellsAfterDraw = newHand.filter(c => {
-        if (!isSpellCard(c)) return false;
-        return canAffordCard(afterDraw, seat, c);
-      }).slice(0, 2); // Limit to 2 spells after draw
+      const affordableSpellsAfterDraw = newHand
+        .filter((c) => {
+          if (!isSpellCard(c)) return false;
+          return canAffordCard(afterDraw, seat, c);
+        })
+        .slice(0, 2); // Limit to 2 spells after draw
 
       for (const spell of affordableSpellsAfterDraw) {
         const spellAfterDraw = playSpellPatch(afterDraw, seat, spell);
@@ -1774,10 +2000,12 @@ function generateCandidates(state, seat, options = {}) {
 
   // T076/T078: Draw candidates - only generate when hand is small OR no playable actions available
   // Check if there are actually sites in hand before considering site-playing as an action
-  const sitesInHand = hand.filter(c => isSiteCard(c)).length;
-  const hasSiteToPlay = allowSitePlaying && ownedSitesNow < 8 && sitesInHand > 0;
+  const sitesInHand = hand.filter((c) => isSiteCard(c)).length;
+  const hasSiteToPlay =
+    allowSitePlaying && ownedSitesNow < 8 && sitesInHand > 0;
   const handSize = getZones(base, seat).hand?.length || 0;
-  const hasPlayableActions = playableUnits.length > 0 || playableSpells.length > 0 || hasSiteToPlay;
+  const hasPlayableActions =
+    playableUnits.length > 0 || playableSpells.length > 0 || hasSiteToPlay;
   const shouldGenerateDraws = handSize < 6 || !hasPlayableActions;
 
   if (shouldGenerateDraws) {
@@ -1801,18 +2029,21 @@ function generateCandidates(state, seat, options = {}) {
 
 function search(state, seat, theta, rng, options) {
   const start = Date.now();
-  const thetaUse = (theta && theta.weights) ? theta : loadTheta();
+  const thetaUse = theta && theta.weights ? theta : loadTheta();
   const w = (thetaUse && thetaUse.weights) || {};
   const conf = (thetaUse && thetaUse.search) || {};
   const beamWidth = Number(conf.beamWidth || 8) || 8;
   const maxDepth = Math.max(1, Number(conf.maxDepth || 2) || 2);
   const budgetMs = Math.max(1, Number(conf.budgetMs || 60) || 60);
-  const gamma = (typeof conf.gamma === 'number') ? conf.gamma : 0.6;
+  const gamma = typeof conf.gamma === "number" ? conf.gamma : 0.6;
   const softDeadline = start + Math.floor(budgetMs * 2); // soft budget, never hard-fail
 
   // T015: Collect generation stats for telemetry
-  const collectStats = options && typeof options.logger === 'function';
-  const genResult = generateCandidates(state, seat, { ...options, collectStats });
+  const collectStats = options && typeof options.logger === "function";
+  const genResult = generateCandidates(state, seat, {
+    ...options,
+    collectStats,
+  });
   const list = collectStats ? genResult.candidates : genResult;
   const generationStats = collectStats ? genResult.stats : null;
 
@@ -1838,11 +2069,15 @@ function search(state, seat, theta, rng, options) {
         const card = getCardFromPatch(p);
         if (card && card.name) {
           cardName = card.name;
-          const context = cardEvalLoader.buildEvaluationContext(state, seat, card);
+          const context = cardEvalLoader.buildEvaluationContext(
+            state,
+            seat,
+            card
+          );
           const cardScore = cardEvalLoader.evaluateCard(card.name, context);
           if (cardScore !== null) {
             // Card-specific score is 0-10, add as bonus weighted by theta
-            const cardWeight = (w.w_card_specific || 1.0);
+            const cardWeight = w.w_card_specific || 1.0;
             cardBonus = cardScore * cardWeight;
             s = s + cardBonus;
           }
@@ -1852,7 +2087,16 @@ function search(state, seat, theta, rng, options) {
       }
     }
 
-    scored.push({ patch: p, score: s, features: f, state: next, actionType, modifier, cardBonus, cardName });
+    scored.push({
+      patch: p,
+      score: s,
+      features: f,
+      state: next,
+      actionType,
+      modifier,
+      cardBonus,
+      cardName,
+    });
   }
 
   let nodes = scored.length;
@@ -1878,15 +2122,27 @@ function search(state, seat, theta, rng, options) {
       const cf = extractFeatures(parentState, cstate, seat);
       const cs = evalFeatures(cf, w);
       nodes++;
-      if (cs > bestScore) { bestScore = cs; bestState = cstate; bestF = cf; }
+      if (cs > bestScore) {
+        bestScore = cs;
+        bestState = cstate;
+        bestF = cf;
+      }
       if (Date.now() >= softDeadline) break;
     }
     if (bestState && depthLeft > 1) {
-      depthReached = Math.max(depthReached, (maxDepth - depthLeft + 2));
-      return bestScore + gamma * bestChildValue(bestState, bestF, depthLeft - 1, qLeft);
+      depthReached = Math.max(depthReached, maxDepth - depthLeft + 2);
+      return (
+        bestScore +
+        gamma * bestChildValue(bestState, bestF, depthLeft - 1, qLeft)
+      );
     }
-    if (bestState && depthLeft === 1 && qLeft > 0 && isTactical(parentF, bestF)) {
-      depthReached = Math.max(depthReached, (maxDepth - depthLeft + 2));
+    if (
+      bestState &&
+      depthLeft === 1 &&
+      qLeft > 0 &&
+      isTactical(parentF, bestF)
+    ) {
+      depthReached = Math.max(depthReached, maxDepth - depthLeft + 2);
       return bestScore + gamma * bestChildValue(bestState, bestF, 1, qLeft - 1);
     }
     return bestScore;
@@ -1896,18 +2152,35 @@ function search(state, seat, theta, rng, options) {
     for (let i = 0; i < scored.length; i++) {
       if (Date.now() >= softDeadline) break;
       const root = scored[i];
-      const refinedTail = bestChildValue(root.state, root.features, maxDepth - 1, Number(conf.quiescenceDepth || 0));
-      root.refined = root.score + gamma * (Number.isFinite(refinedTail) ? refinedTail : 0);
+      const refinedTail = bestChildValue(
+        root.state,
+        root.features,
+        maxDepth - 1,
+        Number(conf.quiescenceDepth || 0)
+      );
+      root.refined =
+        root.score + gamma * (Number.isFinite(refinedTail) ? refinedTail : 0);
     }
   }
 
   // Root exploration (training mode): ε-greedy random pick
-  const epsilon = options && options.exploration && Number.isFinite(options.exploration.epsilon_root)
-    ? options.exploration.epsilon_root
-    : 0;
+  const epsilon =
+    options &&
+    options.exploration &&
+    Number.isFinite(options.exploration.epsilon_root)
+      ? options.exploration.epsilon_root
+      : 0;
   let chosen = null;
-  if (options && options.mode === "train" && rng && epsilon > 0 && rng() < epsilon) {
-    const idx = Math.floor((rng() || Math.random()) * scored.length) % Math.max(1, scored.length);
+  if (
+    options &&
+    options.mode === "train" &&
+    rng &&
+    epsilon > 0 &&
+    rng() < epsilon
+  ) {
+    const idx =
+      Math.floor((rng() || Math.random()) * scored.length) %
+      Math.max(1, scored.length);
     chosen = scored[idx] || null;
   } else {
     // Pick highest refined score (fallback to root score)
@@ -1926,19 +2199,30 @@ function search(state, seat, theta, rng, options) {
   const timeMs = Date.now() - start;
   function summarizeChosenCards(patch) {
     try {
-      if (!patch || typeof patch !== 'object') return null;
+      if (!patch || typeof patch !== "object") return null;
       const out = {};
       // Draw source detection (heuristic from patch contents)
       try {
-        if (patch.zones && typeof patch.zones === 'object') {
+        if (patch.zones && typeof patch.zones === "object") {
           const seats = Object.keys(patch.zones);
           const sk = seats && seats.length ? seats[0] : null;
           const z = sk ? patch.zones[sk] : null;
-          if (z && typeof z === 'object') {
-            if (Object.prototype.hasOwnProperty.call(z, 'spellbook') && Object.prototype.hasOwnProperty.call(z, 'hand')) out.drawFrom = 'spellbook';
-            if (Object.prototype.hasOwnProperty.call(z, 'atlas') && Object.prototype.hasOwnProperty.call(z, 'hand')) {
-              const tapped = patch.avatars && sk && patch.avatars[sk] && patch.avatars[sk].tapped === true;
-              out.drawFrom = tapped ? 'atlas_tap' : 'atlas';
+          if (z && typeof z === "object") {
+            if (
+              Object.prototype.hasOwnProperty.call(z, "spellbook") &&
+              Object.prototype.hasOwnProperty.call(z, "hand")
+            )
+              out.drawFrom = "spellbook";
+            if (
+              Object.prototype.hasOwnProperty.call(z, "atlas") &&
+              Object.prototype.hasOwnProperty.call(z, "hand")
+            ) {
+              const tapped =
+                patch.avatars &&
+                sk &&
+                patch.avatars[sk] &&
+                patch.avatars[sk].tapped === true;
+              out.drawFrom = tapped ? "atlas_tap" : "atlas";
             }
           }
         }
@@ -1956,13 +2240,18 @@ function search(state, seat, theta, rng, options) {
       }
       if (patch.permanents) {
         for (const cell of Object.keys(patch.permanents)) {
-          const arr = Array.isArray(patch.permanents[cell]) ? patch.permanents[cell] : [];
+          const arr = Array.isArray(patch.permanents[cell])
+            ? patch.permanents[cell]
+            : [];
           for (const p of arr) {
             const c = p && p.card;
             if (c && (c.slug || c.name)) {
               // T049: Distinguish auras from units based on type
-              const cardType = String(c.type || '').toLowerCase();
-              if (cardType.includes('aura') || cardType.includes('enchantment')) {
+              const cardType = String(c.type || "").toLowerCase();
+              if (
+                cardType.includes("aura") ||
+                cardType.includes("enchantment")
+              ) {
                 out.playedAura = { slug: c.slug || null, name: c.name || null };
               } else {
                 out.playedUnit = { slug: c.slug || null, name: c.name || null };
@@ -1974,7 +2263,9 @@ function search(state, seat, theta, rng, options) {
         }
       }
       return Object.keys(out).length ? out : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
   try {
     if (options && typeof options.logger === "function") {
@@ -1990,9 +2281,18 @@ function search(state, seat, theta, rng, options) {
         const cards = summarizeChosenCards(x.patch);
         let actionLabel = "pass";
         if (cards) {
-          if (cards.playedUnit) actionLabel = `play_unit:${cards.playedUnit.name || cards.playedUnit.slug || "?"}`;
-          else if (cards.playedAura) actionLabel = `play_aura:${cards.playedAura.name || cards.playedAura.slug || "?"}`; // T049
-          else if (cards.playedSite) actionLabel = `play_site:${cards.playedSite.name || cards.playedSite.slug || "?"}`;
+          if (cards.playedUnit)
+            actionLabel = `play_unit:${
+              cards.playedUnit.name || cards.playedUnit.slug || "?"
+            }`;
+          else if (cards.playedAura)
+            actionLabel = `play_aura:${
+              cards.playedAura.name || cards.playedAura.slug || "?"
+            }`; // T049
+          else if (cards.playedSite)
+            actionLabel = `play_site:${
+              cards.playedSite.name || cards.playedSite.slug || "?"
+            }`;
           else if (cards.drawFrom) actionLabel = `draw:${cards.drawFrom}`;
         }
         return {
@@ -2008,27 +2308,39 @@ function search(state, seat, theta, rng, options) {
         seed: options.seed || null,
         thetaId: (theta && theta.meta && theta.meta.id) || null,
         candidates: scored.map((x) => ({ score: x.score, refined: x.refined })),
-        chosen: chosen ? { score: chosen.score, refined: chosen.refined } : null,
+        chosen: chosen
+          ? { score: chosen.score, refined: chosen.refined }
+          : null,
         rootFeatures: chosen ? chosen.features : null,
-        rootEval: chosen ? (Number.isFinite(chosen.refined) ? chosen.refined : chosen.score) : null,
+        rootEval: chosen
+          ? Number.isFinite(chosen.refined)
+            ? chosen.refined
+            : chosen.score
+          : null,
         nodes,
         depth: depthReached,
         beam: beamWidth,
-        epsilonRoot: options && options.exploration ? options.exploration.epsilon_root : undefined,
+        epsilonRoot:
+          options && options.exploration
+            ? options.exploration.epsilon_root
+            : undefined,
         timeMs,
         t: Date.now(),
-        chosenCards: chosen && chosen.patch ? summarizeChosenCards(chosen.patch) : null,
+        chosenCards:
+          chosen && chosen.patch ? summarizeChosenCards(chosen.patch) : null,
         // T015: Enhanced telemetry fields
         evaluationBreakdown,
         candidateDetails,
-        filteredCandidates: generationStats ? {
-          totalUnitsInHand: generationStats.totalUnitsInHand,
-          filteredUnaffordable: generationStats.filteredUnaffordable,
-          playableUnits: generationStats.playableUnits,
-          sitesGated: generationStats.sitesGated,
-          candidatesGenerated: generationStats.candidatesGenerated,
-          candidatesAfterLimit: list.length,
-        } : null,
+        filteredCandidates: generationStats
+          ? {
+              totalUnitsInHand: generationStats.totalUnitsInHand,
+              filteredUnaffordable: generationStats.filteredUnaffordable,
+              playableUnits: generationStats.playableUnits,
+              sitesGated: generationStats.sitesGated,
+              candidatesGenerated: generationStats.candidatesGenerated,
+              candidatesAfterLimit: list.length,
+            }
+          : null,
       });
     }
   } catch {}

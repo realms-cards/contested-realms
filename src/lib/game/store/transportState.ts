@@ -121,45 +121,109 @@ const makePatchSignature = (
 export const filterEchoPatchIfAny = (
   patch: ServerPatchT
 ): { patch: ServerPatchT | null; matched: boolean } => {
+  if (!patch || typeof patch !== "object") {
+    return { patch, matched: false };
+  }
+
+  const now = Date.now();
+  prunePatchSignatures(now);
+
+  type MatchResult = {
+    entry: PatchSignatureEntry;
+    fields: TrackedPatchField[];
+  };
+
+  const patchRecord = patch as Record<string, unknown>;
+
+  // Pre-compute normalized per-field signatures for the incoming patch
+  const perFieldSerialized: Partial<Record<TrackedPatchField, string>> = {};
+  for (const field of PATCH_SIGNATURE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(patchRecord, field)) continue;
+    const raw = patchRecord[field];
+    if (raw === undefined) continue;
+    perFieldSerialized[field] = stableSerialize(normalizeForSignature(raw));
+  }
+
+  let matched: MatchResult | null = null;
+
+  // 1) Try an exact match on the combined signature (fast path)
   const signature = makePatchSignature(patch);
-  if (!signature) return { patch, matched: false };
-  prunePatchSignatures(Date.now());
-  const list = pendingPatchSignatures.get(signature.id);
-  if (!list || list.length === 0) return { patch, matched: false };
-  let matchIndex = -1;
-  for (let i = 0; i < list.length; i++) {
-    const candidate = list[i];
-    const fields = candidate.fields ?? [];
-    let matches = true;
-    for (const field of fields) {
-      if (!Object.prototype.hasOwnProperty.call(patch, field)) {
-        matches = false;
-        break;
+  if (signature) {
+    const list = pendingPatchSignatures.get(signature.id);
+    if (list && list.length > 0) {
+      let matchIndex = -1;
+      for (let i = 0; i < list.length; i++) {
+        const candidate = list[i];
+        const fields = candidate.fields ?? [];
+        let matches = true;
+        for (const field of fields) {
+          const serialized = perFieldSerialized[field];
+          if (serialized === undefined) {
+            matches = false;
+            break;
+          }
+          if (candidate.payload?.[field] !== serialized) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) {
+          matchIndex = i;
+          break;
+        }
       }
-      const serialized = stableSerialize(
-        normalizeForSignature((patch as Record<string, unknown>)[field])
-      );
-      if (candidate.payload?.[field] !== serialized) {
-        matches = false;
-        break;
+      if (matchIndex >= 0) {
+        const [entry] = list.splice(matchIndex, 1);
+        if (list.length === 0) {
+          pendingPatchSignatures.delete(signature.id);
+        } else {
+          pendingPatchSignatures.set(signature.id, list);
+        }
+        matched = {
+          entry,
+          fields: entry.fields ?? [],
+        };
       }
-    }
-    if (matches) {
-      matchIndex = i;
-      break;
     }
   }
-  if (matchIndex < 0) return { patch, matched: false };
-  const [entry] = list.splice(matchIndex, 1);
-  if (list.length === 0) pendingPatchSignatures.delete(signature.id);
-  else pendingPatchSignatures.set(signature.id, list);
+
+  // 2) Fallback: per-field echo detection for permanents only.
+  // This handles cases where the server enriches the patch
+  // (e.g. adds resources or events) so the combined signature changes.
+  if (!matched && perFieldSerialized.permanents) {
+    outer: for (const [sigId, entries] of pendingPatchSignatures.entries()) {
+      for (let i = 0; i < entries.length; i++) {
+        const candidate = entries[i];
+        if (!candidate.fields?.includes("permanents")) continue;
+        const expected = candidate.payload?.permanents;
+        if (!expected || expected !== perFieldSerialized.permanents) continue;
+        const [entry] = entries.splice(i, 1);
+        if (entries.length === 0) {
+          pendingPatchSignatures.delete(sigId);
+        } else {
+          pendingPatchSignatures.set(sigId, entries);
+        }
+        matched = {
+          entry,
+          fields: ["permanents"],
+        };
+        break outer;
+      }
+    }
+  }
+
+  if (!matched) {
+    return { patch, matched: false };
+  }
+
+  const { entry, fields } = matched;
 
   if (getStateAccessor) {
     try {
       const state = getStateAccessor();
       const payload = entry.payload ?? {};
       let mustKeep = false;
-      for (const field of entry.fields ?? []) {
+      for (const field of fields) {
         if (!(field in payload)) continue;
         const currentValue = (state as Record<string, unknown>)[field];
         const serializedCurrent = stableSerialize(
@@ -178,7 +242,6 @@ export const filterEchoPatchIfAny = (
     }
   }
 
-  const fields = entry.fields ?? [];
   let mutated = false;
   const filtered: ServerPatchT = { ...patch };
   for (const field of fields) {
