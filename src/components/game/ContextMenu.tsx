@@ -2,7 +2,11 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
-import { detectBurrowSubmergeAbilities, detectBurrowSubmergeAbilitiesSync, detectRangedAbilitySync } from "@/lib/game/cardAbilities";
+import {
+  detectBurrowSubmergeAbilities,
+  detectBurrowSubmergeAbilitiesSync,
+  detectRangedAbilitySync,
+} from "@/lib/game/cardAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import {
@@ -47,12 +51,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const addTokenToHand = useGameStore((s) => s.addTokenToHand);
-  const attachTokenToTopPermanent = useGameStore((s) => s.attachTokenToTopPermanent);
+  const attachTokenToTopPermanent = useGameStore(
+    (s) => s.attachTokenToTopPermanent
+  );
   const attachTokenToPermanent = useGameStore((s) => s.attachTokenToPermanent);
-  const attachPermanentToAvatar = useGameStore((s) => s.attachPermanentToAvatar);
+  const attachPermanentToAvatar = useGameStore(
+    (s) => s.attachPermanentToAvatar
+  );
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
-  
+
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
   const updatePermanentState = useGameStore((s) => s.updatePermanentState);
@@ -62,7 +70,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
     null
   );
-  const [positionActions, setPositionActions] = useState<ContextMenuAction[]>([]);
+  const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
+    []
+  );
   // Extra combat actions computed per-open menu (do not store in state to avoid duplication)
   const extraActions: ContextMenuAction[] = [];
 
@@ -104,88 +114,122 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (t.kind === "permanent") {
       const item = permanents[t.at]?.[t.index];
       if (item?.card) {
-        const permanentId = item?.card?.cardId ?? (parseInt(t.at.split(',')[0]) * 1000 + t.index);
-        
+        const permanentId =
+          item?.card?.cardId ?? parseInt(t.at.split(",")[0]) * 1000 + t.index;
+
         // Fetch abilities asynchronously from API
         (async () => {
           try {
-            const abilities = await detectBurrowSubmergeAbilities(item.card.name);
+            const abilities = await detectBurrowSubmergeAbilities(
+              item.card.name
+            );
             const canBurrow = abilities.canBurrow;
             const canSubmerge = abilities.canSubmerge;
-            
+
             if (canBurrow || canSubmerge) {
               setPermanentAbility(permanentId, {
                 permanentId,
                 canBurrow,
                 canSubmerge,
                 requiresWaterSite: canSubmerge, // Submerge typically requires water sites
-                abilitySource: `${item.card.name} - ${canBurrow && canSubmerge ? 'Burrowing/Submerge' : canBurrow ? 'Burrowing' : 'Submerge'} ability`
+                abilitySource: `${item.card.name} - ${
+                  canBurrow && canSubmerge
+                    ? "Burrowing/Submerge"
+                    : canBurrow
+                    ? "Burrowing"
+                    : "Submerge"
+                } ability`,
               });
-              
+
               // Initialize position data if it doesn't exist - permanent starts on surface
               const state = useGameStore.getState();
               if (!state.permanentPositions[permanentId]) {
                 state.setPermanentPosition(permanentId, {
                   permanentId,
-                  state: 'surface',
+                  state: "surface",
                   position: {
                     x: 0, // Default position - will be updated by actual game logic
                     y: 0,
-                    z: 0
-                  }
+                    z: 0,
+                  },
                 });
               }
             }
-            
+
             // Get available position actions after abilities are set
             const actions = getAvailableActions(permanentId);
-            console.log('Debug - Permanent ID:', permanentId);
-            console.log('Debug - Available actions:', actions);
-            console.log('Debug - Abilities set:', { canBurrow, canSubmerge });
-            
+            console.log("Debug - Permanent ID:", permanentId);
+            console.log("Debug - Available actions:", actions);
+            console.log("Debug - Abilities set:", { canBurrow, canSubmerge });
+
             // Debug store state
             const state = useGameStore.getState();
-            console.log('Debug - Position data:', state.permanentPositions[permanentId]);
-            console.log('Debug - Ability data:', state.permanentAbilities[permanentId]);
-            console.log('Debug - All positions:', Object.keys(state.permanentPositions));
-            console.log('Debug - All abilities:', Object.keys(state.permanentAbilities));
-            
+            console.log(
+              "Debug - Position data:",
+              state.permanentPositions[permanentId]
+            );
+            console.log(
+              "Debug - Ability data:",
+              state.permanentAbilities[permanentId]
+            );
+            console.log(
+              "Debug - All positions:",
+              Object.keys(state.permanentPositions)
+            );
+            console.log(
+              "Debug - All abilities:",
+              Object.keys(state.permanentAbilities)
+            );
+
             setPositionActions(actions);
           } catch (error) {
-            console.warn('Failed to fetch abilities for', item.card.name, error);
+            console.warn(
+              "Failed to fetch abilities for",
+              item.card.name,
+              error
+            );
             // Fallback to sync detection as backup
             const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
             const canBurrow = abilities.canBurrow;
             const canSubmerge = abilities.canSubmerge;
-            
+
             if (canBurrow || canSubmerge) {
               setPermanentAbility(permanentId, {
                 permanentId,
                 canBurrow,
                 canSubmerge,
                 requiresWaterSite: canSubmerge,
-                abilitySource: `${item.card.name} - ${canBurrow && canSubmerge ? 'Burrowing/Submerge' : canBurrow ? 'Burrowing' : 'Submerge'} ability`
+                abilitySource: `${item.card.name} - ${
+                  canBurrow && canSubmerge
+                    ? "Burrowing/Submerge"
+                    : canBurrow
+                    ? "Burrowing"
+                    : "Submerge"
+                } ability`,
               });
-              
+
               // Initialize position data if it doesn't exist - permanent starts on surface
               const state = useGameStore.getState();
               if (!state.permanentPositions[permanentId]) {
                 state.setPermanentPosition(permanentId, {
                   permanentId,
-                  state: 'surface',
+                  state: "surface",
                   position: {
                     x: 0, // Default position - will be updated by actual game logic
                     y: 0,
-                    z: 0
-                  }
+                    z: 0,
+                  },
                 });
               }
             }
-            
+
             const actions = getAvailableActions(permanentId);
-            console.log('Debug - Fallback - Permanent ID:', permanentId);
-            console.log('Debug - Fallback - Available actions:', actions);
-            console.log('Debug - Fallback - Abilities set:', { canBurrow, canSubmerge });
+            console.log("Debug - Fallback - Permanent ID:", permanentId);
+            console.log("Debug - Fallback - Available actions:", actions);
+            console.log("Debug - Fallback - Abilities set:", {
+              canBurrow,
+              canSubmerge,
+            });
             setPositionActions(actions);
           }
         })();
@@ -218,7 +262,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doDetachToken: (() => void) | null = null;
   let doToggleCounter: (() => void) | null = null;
   let hasCounter = false;
-  let attachedTokens: Array<{ name: string; index: number; type: string | null; subTypes: string | null; tileKey: string }> = [];
+  let attachedTokens: Array<{
+    name: string;
+    index: number;
+    type: string | null;
+    subTypes: string | null;
+    tileKey: string;
+  }> = [];
   let isCarryableArtifact = false;
   let isMine = false; // Ownership check for attached items operations
 
@@ -246,30 +296,39 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (isMine) {
       doToHand = () => {
         moveSiteToZone(t.x, t.y, "hand");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
       doToGY = () => {
         moveSiteToZone(t.x, t.y, "graveyard");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
       doBanish = () => {
         moveSiteToZone(t.x, t.y, "banished");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
     }
 
     if (
-      isMine && site?.card?.name &&
+      isMine &&
+      site?.card?.name &&
       (site.card?.type || "").toLowerCase().includes("site")
     ) {
       doAddToAtlas = () => {
-        const cardName = site.card?.name || 'Card';
+        const cardName = site.card?.name || "Card";
         openPlacementDialog(cardName, "Atlas", (position) => {
           moveSiteToZone(t.x, t.y, "atlas", position);
-          try { playCardFlip(); } catch {}
+          try {
+            playCardFlip();
+          } catch {}
         });
         onClose();
       };
@@ -285,7 +344,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (canToggle) {
       doToggle = () => {
         toggleTapPermanent(t.at, t.index);
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
     }
@@ -313,7 +374,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     // Counter toggle for non-site tokens and regular permanents
     if (item) {
-      hasCounter = (Number(item.counters || 0) > 0);
+      hasCounter = Number(item.counters || 0) > 0;
       doToggleCounter = () => {
         if (hasCounter) {
           clearPermanentCounter(t.at, t.index);
@@ -328,26 +389,32 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (!isToken) {
       attachedTokens = arr
         .map((perm, idx) => ({ perm, idx }))
-        .filter(({ perm }) =>
-          perm.attachedTo &&
-          perm.attachedTo.at === t.at &&
-          perm.attachedTo.index === t.index
+        .filter(
+          ({ perm }) =>
+            perm.attachedTo &&
+            perm.attachedTo.at === t.at &&
+            perm.attachedTo.index === t.index
         )
         .map(({ perm, idx }) => ({
           name: perm.card.name,
           index: idx,
           type: perm.card.type || null,
           subTypes: perm.card.subTypes || null,
-          tileKey: t.at
+          tileKey: t.at,
         }));
     }
 
     if (isToken && isMine) {
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
-        .filter(({ it }) => !((it.card.type || "").toLowerCase().includes("token")));
+        .filter(
+          ({ it }) => !(it.card.type || "").toLowerCase().includes("token")
+        );
       const tokenName = (item?.card?.name || "").toLowerCase();
-      const isAttachableToken = tokenName === "lance" || tokenName === "stealth" || tokenName === "disabled";
+      const isAttachableToken =
+        tokenName === "lance" ||
+        tokenName === "stealth" ||
+        tokenName === "disabled";
 
       if (item?.attachedTo) {
         doDetachToken = () => {
@@ -363,7 +430,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
     } else if (isMine) {
@@ -375,25 +444,34 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           .map((it, i) => ({ it, i }))
           .filter(({ it, i }) => {
             const type = (it.card.type || "").toLowerCase();
-            const isUnit = !type.includes("artifact") && !type.includes("token") && !type.includes("site");
+            const isUnit =
+              !type.includes("artifact") &&
+              !type.includes("token") &&
+              !type.includes("site");
             return isUnit && i !== t.index; // Exclude the artifact itself
           });
 
         // Check if there's an avatar on this tile
         const ownerKey = seatFromOwner(item.owner);
         const avatar = avatars[ownerKey];
-        const avatarPos = Array.isArray(avatar?.pos) && avatar.pos.length === 2 ? avatar.pos : null;
+        const avatarPos =
+          Array.isArray(avatar?.pos) && avatar.pos.length === 2
+            ? avatar.pos
+            : null;
         const [artifactX, artifactY] = t.at.split(",").map(Number);
-        const isOnAvatarTile = avatarPos && avatarPos[0] === artifactX && avatarPos[1] === artifactY;
+        const isOnAvatarTile =
+          avatarPos && avatarPos[0] === artifactX && avatarPos[1] === artifactY;
 
         // Can attach to minion or avatar
-        const hasAttachableTarget = nonArtifactPermanents.length > 0 || isOnAvatarTile;
+        const hasAttachableTarget =
+          nonArtifactPermanents.length > 0 || isOnAvatarTile;
 
         if (hasAttachableTarget) {
           doAttachToken = () => {
             if (nonArtifactPermanents.length > 0) {
               // Attach to the top-most minion on the same tile
-              const targetIdx = nonArtifactPermanents[nonArtifactPermanents.length - 1].i;
+              const targetIdx =
+                nonArtifactPermanents[nonArtifactPermanents.length - 1].i;
               attachTokenToPermanent(t.at, t.index, targetIdx);
               log(`Attached artifact '${item.card.name}' to minion`);
             } else if (isOnAvatarTile) {
@@ -407,63 +485,84 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
       doToHand = () => {
         movePermanentToZone(t.at, t.index, "hand");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
       doToGY = () => {
         movePermanentToZone(t.at, t.index, "graveyard");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
       if (item?.card?.name) {
         doToSpellbook = () => {
-          const cardName = item.card?.name || 'Card';
+          const cardName = item.card?.name || "Card";
           openPlacementDialog(cardName, "Spellbook", (position) => {
             movePermanentToZone(t.at, t.index, "spellbook", position);
-            try { playCardFlip(); } catch {}
+            try {
+              playCardFlip();
+            } catch {}
           });
           onClose();
         };
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
     }
 
     // Combat actions (same-tile and ranged-adjacent)
     try {
-      const canAct = isMine && ((actorKey === "p1" && currentPlayer === 1) || (actorKey === "p2" && currentPlayer === 2) || !actorKey);
+      const canAct =
+        isMine &&
+        ((actorKey === "p1" && currentPlayer === 1) ||
+          (actorKey === "p2" && currentPlayer === 2) ||
+          !actorKey);
       const ownerNum: 1 | 2 | null = item ? item.owner : null;
       const enemyOwner: 1 | 2 | null =
         ownerNum != null ? opponentOwner(ownerNum) : null;
       const { x, y } = parseCellKey(t.at as string);
       const tileKey = t.at;
-      const unitsHere = enemyOwner != null ? (permanents[tileKey] || []).some((p) => p && p.owner === enemyOwner) : false;
-      const siteHereEnemy = enemyOwner != null ? (board.sites[tileKey]?.owner === enemyOwner) : false;
+      const unitsHere =
+        enemyOwner != null
+          ? (permanents[tileKey] || []).some((p) => p && p.owner === enemyOwner)
+          : false;
+      const siteHereEnemy =
+        enemyOwner != null ? board.sites[tileKey]?.owner === enemyOwner : false;
       const canAttackHere = canAct && !tapped && (unitsHere || siteHereEnemy);
-      const isRanged = !!(item?.card?.name && detectRangedAbilitySync(item.card.name));
-      const boardW = board.size.w, boardH = board.size.h;
+      const isRanged = !!(
+        item?.card?.name && detectRangedAbilitySync(item.card.name)
+      );
+      const boardW = board.size.w,
+        boardH = board.size.h;
       const neighbors: Array<{ x: number; y: number }> = [
         { x: x - 1, y },
         { x: x + 1, y },
         { x, y: y - 1 },
         { x, y: y + 1 },
       ].filter((p) => p.x >= 0 && p.y >= 0 && p.x < boardW && p.y < boardH);
-      const rangedTargets = isRanged && enemyOwner != null && canAct && !tapped
-        ? neighbors.filter((p) => {
-            const k = toCellKey(p.x, p.y);
-            const list = permanents[k] || [];
-            return list.some((u) => u && u.owner === enemyOwner);
-          })
-        : [];
+      const rangedTargets =
+        isRanged && enemyOwner != null && canAct && !tapped
+          ? neighbors.filter((p) => {
+              const k = toCellKey(p.x, p.y);
+              const list = permanents[k] || [];
+              return list.some((u) => u && u.owner === enemyOwner);
+            })
+          : [];
 
       if (canAttackHere && item) {
         // Insert button to render later
         extraActions.push({
           actionId: "__attack_here__",
-          displayText: siteHereEnemy && !unitsHere ? "Attack site here" : "Attack here",
+          displayText:
+            siteHereEnemy && !unitsHere ? "Attack site here" : "Attack here",
           isEnabled: true,
           targetPermanentId: 0,
           description: "Start an attack on this tile",
@@ -483,7 +582,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         }
       }
     } catch {}
-
   } else if (t.kind === "avatar") {
     const a = avatars[t.who];
     header = a?.card?.name || `${t.who.toUpperCase()} Avatar`;
@@ -494,7 +592,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (canToggle) {
       doToggle = () => {
         toggleTapAvatar(t.who);
-        try { playCardFlip(); } catch {}
+        try {
+          playCardFlip();
+        } catch {}
         onClose();
       };
     }
@@ -513,24 +613,26 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     // Find artifacts attached to this avatar (attachedTo.index === -1)
-    const avatarPos = Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
+    const avatarPos =
+      Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
     if (avatarPos) {
       const [ax, ay] = avatarPos;
       const avatarTileKey = toCellKey(ax, ay);
       const tilePermanents = permanents[avatarTileKey] || [];
       attachedTokens = tilePermanents
         .map((perm, idx) => ({ perm, idx }))
-        .filter(({ perm }) =>
-          perm.attachedTo &&
-          perm.attachedTo.at === avatarTileKey &&
-          perm.attachedTo.index === -1
+        .filter(
+          ({ perm }) =>
+            perm.attachedTo &&
+            perm.attachedTo.at === avatarTileKey &&
+            perm.attachedTo.index === -1
         )
         .map(({ perm, idx }) => ({
           name: perm.card.name,
           index: idx,
           type: perm.card.type || null,
           subTypes: perm.card.subTypes || null,
-          tileKey: avatarTileKey
+          tileKey: avatarTileKey,
         }));
     }
   } else if (t.kind === "pile") {
@@ -541,7 +643,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         ? "Spellbook"
         : t.from === "atlas"
         ? "Atlas"
-        : "Cemetery";
+        : t.from === "graveyard"
+        ? "Cemetery"
+        : "Collection";
     header = `${name} (${count} cards)`;
     const isMine = !actorKey || actorKey === t.who;
     const isCurrent = (t.who === "p1" ? 1 : 2) === currentPlayer;
@@ -551,19 +655,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         if (!top) return;
         setDragFromPile({ who: t.who, from: t.from, card: top });
         drawFromPileToHand();
-        try { playCardSelect(); } catch {}
+        try {
+          playCardSelect();
+        } catch {}
         onClose();
       };
     }
-    if (isMine && isCurrent && t.from !== "graveyard") {
+    // Only Spellbook/Atlas can be shuffled; Collection and Cemetery are not shuffled
+    if (isMine && isCurrent && (t.from === "spellbook" || t.from === "atlas")) {
       doShufflePile = () => {
         if (t.from === "spellbook") shuffleSpellbook(t.who);
         else shuffleAtlas(t.who);
-        try { playCardShuffle(); } catch {}
+        try {
+          playCardShuffle();
+        } catch {}
         onClose();
       };
     }
-    const canSearch = (t.from === "graveyard" ? count > 0 : isMine && count > 0);
+    const canSearch = t.from === "graveyard" ? count > 0 : isMine && count > 0;
     if (canSearch) {
       doSearchPile = () => {
         const displayName =
@@ -571,7 +680,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             ? "Spellbook"
             : t.from === "atlas"
             ? "Atlas"
-            : "Cemetery";
+            : t.from === "graveyard"
+            ? "Cemetery"
+            : "Collection";
         if (t.from === "graveyard") {
           // Graveyard search is read-only for both players
           openSearchDialog(displayName, pile, (selectedCard) => {
@@ -601,14 +712,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     doSearchPile = () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { TOKEN_DEFS, tokenSlug } = require("@/lib/game/tokens");
-      const tokenCards = (TOKEN_DEFS || []).map((def: { name: string; key: string; size?: string }) => ({
-        cardId: -1,
-        variantId: null,
-        name: def.name,
-        type: "Token",
-        slug: tokenSlug(def),
-        thresholds: null,
-      })) as CardRef[];
+      const tokenCards = (TOKEN_DEFS || []).map(
+        (def: { name: string; key: string; size?: string }) => ({
+          cardId: -1,
+          variantId: null,
+          name: def.name,
+          type: "Token",
+          slug: tokenSlug(def),
+          thresholds: null,
+        })
+      ) as CardRef[];
       openSearchDialog("Tokens", tokenCards, (selected) => {
         addTokenToHand(who, selected.name);
       });
@@ -666,7 +779,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
                     onClick={doAttachToken}
                   >
-                    {t.kind === "permanent" && isCarryableArtifact ? "Attach to unit" : "Attach to permanent"}
+                    {t.kind === "permanent" && isCarryableArtifact
+                      ? "Attach to unit"
+                      : "Attach to permanent"}
                   </button>
                 )}
                 {doDetachToken && (
@@ -680,57 +795,44 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               </div>
             )}
             {/* Attached tokens section - show for permanents and avatars */}
-            {attachedTokens && attachedTokens.length > 0 && (t.kind === "permanent" || t.kind === "avatar") && (
-              <div className="space-y-2">
-                <div className="text-xs text-white/70 px-3 py-1">Attached Items:</div>
-                {attachedTokens.map((token) => {
-                  const tokenName = token.name.toLowerCase();
-                  const isLance = tokenName === "lance";
-                  const isStealth = tokenName === "stealth";
-                  const isDisabled = tokenName === "disabled";
+            {attachedTokens &&
+              attachedTokens.length > 0 &&
+              (t.kind === "permanent" || t.kind === "avatar") && (
+                <div className="space-y-2">
+                  <div className="text-xs text-white/70 px-3 py-1">
+                    Attached Items:
+                  </div>
+                  {attachedTokens.map((token) => {
+                    const tokenName = token.name.toLowerCase();
+                    const isLance = tokenName === "lance";
+                    const isStealth = tokenName === "stealth";
+                    const isDisabled = tokenName === "disabled";
 
-                  // Check if this is a carryable artifact
-                  const tokenType = (token.type || "").toLowerCase();
-                  const tokenSubTypes = (token.subTypes || "").toLowerCase();
-                  const isArtifact = tokenType.includes("artifact");
-                  const isMonument = tokenSubTypes.includes("monument");
-                  const isAutomaton = tokenSubTypes.includes("automaton");
-                  const isCarryableArt = isArtifact && !isMonument && !isAutomaton;
+                    // Check if this is a carryable artifact
+                    const tokenType = (token.type || "").toLowerCase();
+                    const tokenSubTypes = (token.subTypes || "").toLowerCase();
+                    const isArtifact = tokenType.includes("artifact");
+                    const isMonument = tokenSubTypes.includes("monument");
+                    const isAutomaton = tokenSubTypes.includes("automaton");
+                    const isCarryableArt =
+                      isArtifact && !isMonument && !isAutomaton;
 
-                  if (isCarryableArt) {
-                    // Carryable artifacts: offer Drop option (like Lance) - only if we own the parent
-                    if (!isMine) {
+                    if (isCarryableArt) {
+                      // Carryable artifacts: offer Drop option (like Lance) - only if we own the parent
+                      if (!isMine) {
+                        return (
+                          <div
+                            key={token.index}
+                            className="w-full text-left text-xs text-white/50 px-3 py-1"
+                          >
+                            {token.name} (opponent&apos;s)
+                          </div>
+                        );
+                      }
                       return (
-                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent&apos;s)
-                        </div>
-                      );
-                    }
-                    return (
-                      <button
-                        key={token.index}
-                        className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
-                        onClick={() => {
-                          detachToken(token.tileKey, token.index);
-                          onClose();
-                        }}
-                      >
-                        Drop {token.name}
-                      </button>
-                    );
-                  } else if (isLance) {
-                    // Lance: offer Drop or Destroy options - only if we own the parent
-                    if (!isMine) {
-                      return (
-                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent&apos;s)
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={token.index} className="space-y-1">
                         <button
-                          className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
+                          key={token.index}
+                          className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
                           onClick={() => {
                             detachToken(token.tileKey, token.index);
                             onClose();
@@ -738,83 +840,126 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         >
                           Drop {token.name}
                         </button>
+                      );
+                    } else if (isLance) {
+                      // Lance: offer Drop or Destroy options - only if we own the parent
+                      if (!isMine) {
+                        return (
+                          <div
+                            key={token.index}
+                            className="w-full text-left text-xs text-white/50 px-3 py-1"
+                          >
+                            {token.name} (opponent&apos;s)
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={token.index} className="space-y-1">
+                          <button
+                            className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
+                            onClick={() => {
+                              detachToken(token.tileKey, token.index);
+                              onClose();
+                            }}
+                          >
+                            Drop {token.name}
+                          </button>
+                          <button
+                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                            onClick={() => {
+                              movePermanentToZone(
+                                token.tileKey,
+                                token.index,
+                                "banished"
+                              );
+                              try {
+                                playCardFlip();
+                              } catch {}
+                              onClose();
+                            }}
+                          >
+                            Destroy {token.name}
+                          </button>
+                        </div>
+                      );
+                    } else if (isStealth || isDisabled) {
+                      // Stealth/Disabled: banish when detached - only if we own the parent
+                      if (!isMine) {
+                        return (
+                          <div
+                            key={token.index}
+                            className="w-full text-left text-xs text-white/50 px-3 py-1"
+                          >
+                            {token.name} (opponent&apos;s)
+                          </div>
+                        );
+                      }
+                      return (
                         <button
+                          key={token.index}
                           className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
                           onClick={() => {
-                            movePermanentToZone(token.tileKey, token.index, "banished");
-                            try { playCardFlip(); } catch {}
+                            // First detach, then immediately banish
+                            detachToken(token.tileKey, token.index);
+                            // Use setTimeout to ensure detach completes first
+                            setTimeout(() => {
+                              const permanents =
+                                useGameStore.getState().permanents;
+                              const items = permanents[token.tileKey] || [];
+                              // Find the token that was just detached
+                              const detachedToken = items.find(
+                                (item) =>
+                                  !item.attachedTo &&
+                                  item.card.name.toLowerCase() === tokenName
+                              );
+                              if (detachedToken) {
+                                const tokenIndex = items.indexOf(detachedToken);
+                                if (tokenIndex >= 0) {
+                                  movePermanentToZone(
+                                    token.tileKey,
+                                    tokenIndex,
+                                    "banished"
+                                  );
+                                  try {
+                                    playCardFlip();
+                                  } catch {}
+                                }
+                              }
+                            }, 50);
                             onClose();
                           }}
                         >
-                          Destroy {token.name}
+                          Remove {token.name}
                         </button>
-                      </div>
-                    );
-                  } else if (isStealth || isDisabled) {
-                    // Stealth/Disabled: banish when detached - only if we own the parent
-                    if (!isMine) {
+                      );
+                    } else {
+                      // Other tokens: simple detach - only if we own the parent
+                      if (!isMine) {
+                        return (
+                          <div
+                            key={token.index}
+                            className="w-full text-left text-xs text-white/50 px-3 py-1"
+                          >
+                            {token.name} (opponent&apos;s)
+                          </div>
+                        );
+                      }
                       return (
-                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent&apos;s)
-                        </div>
+                        <button
+                          key={token.index}
+                          className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                          onClick={() => {
+                            detachToken(token.tileKey, token.index);
+                            onClose();
+                          }}
+                        >
+                          Detach {token.name}
+                        </button>
                       );
                     }
-                    return (
-                      <button
-                        key={token.index}
-                        className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
-                        onClick={() => {
-                          // First detach, then immediately banish
-                          detachToken(token.tileKey, token.index);
-                          // Use setTimeout to ensure detach completes first
-                          setTimeout(() => {
-                            const permanents = useGameStore.getState().permanents;
-                            const items = permanents[token.tileKey] || [];
-                            // Find the token that was just detached
-                            const detachedToken = items.find(
-                              (item) =>
-                                !item.attachedTo &&
-                                item.card.name.toLowerCase() === tokenName
-                            );
-                            if (detachedToken) {
-                              const tokenIndex = items.indexOf(detachedToken);
-                              if (tokenIndex >= 0) {
-                                movePermanentToZone(token.tileKey, tokenIndex, "banished");
-                                try { playCardFlip(); } catch {}
-                              }
-                            }
-                          }, 50);
-                          onClose();
-                        }}
-                      >
-                        Remove {token.name}
-                      </button>
-                    );
-                  } else {
-                    // Other tokens: simple detach - only if we own the parent
-                    if (!isMine) {
-                      return (
-                        <div key={token.index} className="w-full text-left text-xs text-white/50 px-3 py-1">
-                          {token.name} (opponent&apos;s)
-                        </div>
-                      );
-                    }
-                    return (
-                      <button
-                        key={token.index}
-                        className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
-                        onClick={() => {
-                          detachToken(token.tileKey, token.index);
-                          onClose();
-                        }}
-                      >
-                        Detach {token.name}
-                      </button>
-                    );
-                  }
-                })}
-              </div>
-            )}
+                  })}
+                </div>
+              )}
 
             {/* Counter toggle */}
             {doToggleCounter && (
@@ -827,11 +972,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             )}
 
             {/* Burrow/Submerge Actions */}
-            {(positionActions.length > 0 || (Array.isArray(extraActions) && extraActions.length > 0)) && (
+            {(positionActions.length > 0 ||
+              (Array.isArray(extraActions) && extraActions.length > 0)) && (
               <div className="space-y-2">
-                {(positionActions.concat(extraActions)).map((action) => {
+                {positionActions.concat(extraActions).map((action) => {
                   const isAttackHere = action.actionId === "__attack_here__";
-                  const isAttackAdj = action.actionId.startsWith("__attack_adj_");
+                  const isAttackAdj =
+                    action.actionId.startsWith("__attack_adj_");
                   if (isAttackHere) {
                     return (
                       <button
@@ -839,14 +986,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
                         onClick={() => {
                           // Reconstruct context to call attack here
-                          if (t.kind === 'permanent') {
-                            const [sx, sy] = t.at.split(',');
+                          if (t.kind === "permanent") {
+                            const [sx, sy] = t.at.split(",");
                             const at = t.at as string;
                             const idx = t.index as number;
-                            const px = Number(sx), py = Number(sy);
+                            const px = Number(sx),
+                              py = Number(sy);
                             const itm = (permanents[at] || [])[idx];
                             if (itm) {
-                              setAttackTargetChoice({ tile: { x: px, y: py }, attacker: { at, index: idx, instanceId: itm.instanceId ?? null, owner: itm.owner as 1 | 2 }, candidates: [] });
+                              setAttackTargetChoice({
+                                tile: { x: px, y: py },
+                                attacker: {
+                                  at,
+                                  index: idx,
+                                  instanceId: itm.instanceId ?? null,
+                                  owner: itm.owner as 1 | 2,
+                                },
+                                candidates: [],
+                              });
                             }
                           }
                           onClose();
@@ -863,17 +1020,34 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
                         onClick={() => {
                           const prefix = "__attack_adj_";
-                          const rest = action.actionId.startsWith(prefix) ? action.actionId.slice(prefix.length) : "";
-                          const coordsStr = rest.endsWith("__") ? rest.slice(0, -2) : rest;
+                          const rest = action.actionId.startsWith(prefix)
+                            ? action.actionId.slice(prefix.length)
+                            : "";
+                          const coordsStr = rest.endsWith("__")
+                            ? rest.slice(0, -2)
+                            : rest;
                           const parts = coordsStr.split("_");
                           const ax = Number(parts[0]);
                           const ay = Number(parts[1]);
-                          if (t.kind === 'permanent') {
+                          if (t.kind === "permanent") {
                             const at = t.at as string;
                             const idx = t.index as number;
                             const itm = (permanents[at] || [])[idx];
-                            if (itm && Number.isFinite(ax) && Number.isFinite(ay)) {
-                              setAttackTargetChoice({ tile: { x: ax, y: ay }, attacker: { at, index: idx, instanceId: itm.instanceId ?? null, owner: itm.owner as 1 | 2 }, candidates: [] });
+                            if (
+                              itm &&
+                              Number.isFinite(ax) &&
+                              Number.isFinite(ay)
+                            ) {
+                              setAttackTargetChoice({
+                                tile: { x: ax, y: ay },
+                                attacker: {
+                                  at,
+                                  index: idx,
+                                  instanceId: itm.instanceId ?? null,
+                                  owner: itm.owner as 1 | 2,
+                                },
+                                candidates: [],
+                              });
                             }
                           }
                           onClose();
@@ -887,24 +1061,33 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <button
                       key={action.actionId}
                       className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
-                        action.isEnabled 
-                          ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200" 
+                        action.isEnabled
+                          ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200"
                           : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
                       }`}
                       disabled={!action.isEnabled}
                       onClick={() => {
                         if (action.isEnabled && action.newPositionState) {
-                          updatePermanentState(action.targetPermanentId, action.newPositionState);
-                          log(`${header} ${action.displayText.toLowerCase()}${action.newPositionState === 'surface' ? 'ed' : 'ed'}`);
+                          updatePermanentState(
+                            action.targetPermanentId,
+                            action.newPositionState
+                          );
+                          log(
+                            `${header} ${action.displayText.toLowerCase()}${
+                              action.newPositionState === "surface"
+                                ? "ed"
+                                : "ed"
+                            }`
+                          );
                           onClose();
                         }
                       }}
                       title={action.description}
                     >
                       <span className="text-xs">
-                        {action.icon === 'arrow-down' && '↓'}
-                        {action.icon === 'arrow-up' && '↑'}
-                        {action.icon === 'waves' && '〜'}
+                        {action.icon === "arrow-down" && "↓"}
+                        {action.icon === "arrow-up" && "↑"}
+                        {action.icon === "waves" && "〜"}
                       </span>
                       <span>{action.displayText}</span>
                     </button>

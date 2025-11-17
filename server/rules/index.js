@@ -415,29 +415,7 @@ function validateAction(game, action, playerId, context) {
         }
       }
 
-      // Simple movement legality: detect one-step orthogonal move for the acting player
-      try {
-        const prevPer = (game && game.permanents) || {};
-        const touched = Object.keys(action.permanents);
-        if (touched.length === 2) {
-          const [k1, k2] = touched;
-          const a1 = Array.isArray(prevPer[k1]) ? prevPer[k1] : [];
-          const a2 = Array.isArray(prevPer[k2]) ? prevPer[k2] : [];
-          const n1 = Array.isArray(action.permanents[k1]) ? action.permanents[k1] : [];
-          const n2 = Array.isArray(action.permanents[k2]) ? action.permanents[k2] : [];
-          // Identify from/to keys by length delta
-          const d1 = (n1.length - a1.length);
-          const d2 = (n2.length - a2.length);
-          const fromKey = d1 < 0 ? k1 : (d2 < 0 ? k2 : null);
-          const toKey = d1 > 0 ? k1 : (d2 > 0 ? k2 : null);
-          if (fromKey && toKey) {
-            // Must be orthogonal step and within bounds
-            if (!isOrthogonalStep(game, fromKey, toKey)) {
-              return { ok: false, error: 'Illegal movement: must move orthogonally by 1 within bounds' };
-            }
-          }
-        }
-      } catch {}
+      // Movement adjacency enforcement removed: allow repositioning anywhere
     }
 
     // Removed: Permanents can now be placed on unsited cells (void)
@@ -498,24 +476,26 @@ function validateAction(game, action, playerId, context) {
       }
     }
 
-    // Threshold checks for newly placed permanents (basic)
+    // Threshold and timing checks for newly placed permanents (basic)
     if (action.permanents && typeof action.permanents === 'object' && meNum) {
-      // Timing: permanents may only be placed during Main phase by the active player
-      if (!(effectivePlayer === meNum && effectivePhase === 'Main')) {
-        return { ok: false, error: 'Permanents can only be played during your Main phase' };
-      }
-      // Only enforce thresholds for truly new placements; skip items that already exist on board (movement)
+      // Only enforce timing/thresholds for truly new placements; skip items that already exist on board (movement)
       const available = countThresholdsForPlayer(game, meNum);
       const { newItems } = markAndCountNewPlacements(game, action, meNum);
-      for (const p of newItems) {
-        const card = p && p.card ? p.card : null;
-        if (!card) continue;
-        const th = getThresholdsForCard(card);
-        if (!th) continue; // unknown => allow for now
-        if ((th.air || 0) > (available.air || 0)) return { ok: false, error: 'Insufficient Air thresholds' };
-        if ((th.earth || 0) > (available.earth || 0)) return { ok: false, error: 'Insufficient Earth thresholds' };
-        if ((th.fire || 0) > (available.fire || 0)) return { ok: false, error: 'Insufficient Fire thresholds' };
-        if ((th.water || 0) > (available.water || 0)) return { ok: false, error: 'Insufficient Water thresholds' };
+      if (newItems.length > 0) {
+        // Timing: permanents may only be *played* during Main phase by the active player
+        if (!(effectivePlayer === meNum && effectivePhase === 'Main')) {
+          return { ok: false, error: 'Permanents can only be played during your Main phase' };
+        }
+        for (const p of newItems) {
+          const card = p && p.card ? p.card : null;
+          if (!card) continue;
+          const th = getThresholdsForCard(card);
+          if (!th) continue; // unknown => allow for now
+          if ((th.air || 0) > (available.air || 0)) return { ok: false, error: 'Insufficient Air thresholds' };
+          if ((th.earth || 0) > (available.earth || 0)) return { ok: false, error: 'Insufficient Earth thresholds' };
+          if ((th.fire || 0) > (available.fire || 0)) return { ok: false, error: 'Insufficient Fire thresholds' };
+          if ((th.water || 0) > (available.water || 0)) return { ok: false, error: 'Insufficient Water thresholds' };
+        }
       }
     }
 

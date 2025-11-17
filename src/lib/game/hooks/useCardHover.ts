@@ -40,6 +40,11 @@ export function useCardHover(callbacks: HoverStateCallbacks) {
         clearHoverTimerRef.current = null;
       }
 
+      // If we're already showing this slug, avoid redundant updates
+      if (currentHoverCardRef.current === card.slug) {
+        return;
+      }
+
       // Show preview immediately and keep it shown while hovering
       currentHoverCardRef.current = card.slug;
       onShow(card);

@@ -97,11 +97,32 @@ export async function enrichPatchWithCosts<T extends Patch>(patch: T, prismaClie
 
   const permanents = (patch as Patch).permanents as Record<string, unknown> | undefined;
   if (permanents) {
-    const next: Record<string, unknown> = {};
-    for (const [seat, units] of Object.entries(permanents)) {
-      next[seat] = enrichCardArray(units);
+    // Check if this is a delta patch by looking for __remove markers
+    // Delta patches use instanceId-based merging and must preserve exact structure for echo filtering
+    const isDeltaPatch = Object.values(permanents).some((arr: unknown) => {
+      if (!Array.isArray(arr)) return false;
+      return arr.some((item: unknown) => {
+        if (!item || typeof item !== 'object') return false;
+        // Presence of __remove marker indicates this is a delta patch
+        return '__remove' in (item as Record<string, unknown>);
+      });
+    });
+
+    // Skip enrichment for delta patches to preserve echo filtering
+    // Full snapshots don't use __remove, so they'll still be enriched
+    if (!isDeltaPatch) {
+      const next: Record<string, unknown> = {};
+      for (const [seat, units] of Object.entries(permanents)) {
+        next[seat] = enrichCardArray(units);
+      }
+      enriched.permanents = next;
+    } else if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.log('[CardCosts] Skipping enrichment for delta patch (preserving echo filter)');
+      } catch {
+        // ignore
+      }
     }
-    enriched.permanents = next;
   }
 
   return enriched as T;

@@ -10,17 +10,17 @@ export async function loadDeckFor(
   setError: (error: string) => void
 ): Promise<boolean> {
   if (!deckId) return false;
-  
+
   try {
     const res = await fetch(`/api/decks/${encodeURIComponent(deckId)}`, {
       cache: "no-store",
     });
-    
+
     if (!res.ok) {
       setError("Failed to load deck");
       return false;
     }
-    
+
     const data = await res.json();
     const rawSpellbook: CardRef[] = Array.isArray(data?.spellbook)
       ? (data.spellbook as CardRef[])
@@ -28,11 +28,14 @@ export async function loadDeckFor(
     const rawAtlas: CardRef[] = Array.isArray(data?.atlas)
       ? (data.atlas as CardRef[])
       : [];
+    const rawCollection: CardRef[] = Array.isArray(data?.collection)
+      ? (data.collection as CardRef[])
+      : [];
 
     const isAvatar = (c: CardRef) =>
       typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");
     const avatars = [...rawSpellbook, ...rawAtlas].filter(isAvatar);
-    
+
     if (avatars.length !== 1) {
       setError(
         avatars.length === 0
@@ -41,15 +44,19 @@ export async function loadDeckFor(
       );
       return false;
     }
-    
+
     const avatar = avatars[0];
     const spellbook = rawSpellbook.filter((c: CardRef) => !isAvatar(c));
+
+    // Collection is optional and does not count towards minimums.
+    // Clamp to at most 10 cards to respect collection capacity even for legacy decks.
+    const collection = rawCollection.slice(0, 10);
 
     if (rawAtlas.length < 12) {
       setError("Atlas needs at least 12 sites");
       return false;
     }
-    
+
     if (spellbook.length < 24) {
       setError("Spellbook needs at least 24 cards (excluding Avatar)");
       return false;
@@ -64,13 +71,14 @@ export async function loadDeckFor(
       drawOpening,
     } = useGameStore.getState();
 
-    initLibraries(who, spellbook, rawAtlas);
+    // Initialize libraries, including initial collection zone
+    initLibraries(who, spellbook, rawAtlas, collection);
     shuffleSpellbook(who);
     shuffleAtlas(who);
     setAvatarCard(who, avatar);
     placeAvatarAtStart(who);
     drawOpening(who);
-    
+
     return true;
   } catch {
     setError("Error loading deck");
@@ -119,14 +127,19 @@ export async function loadSealedDeckFor(
     const isAvatar = (c: CardRef) => {
       if (typeof c?.type !== "string" || c.type.length === 0) {
         if (c.name && c.name.toLowerCase().includes("avatar")) {
-          console.warn("[loadSealedDeckFor] Card with 'avatar' in name but empty/null type:", { name: c.name, type: c.type });
+          console.warn(
+            "[loadSealedDeckFor] Card with 'avatar' in name but empty/null type:",
+            { name: c.name, type: c.type }
+          );
         }
         return false;
       }
       return c.type.toLowerCase().includes("avatar");
     };
     const isSite = (c: CardRef) =>
-      typeof c?.type === "string" && c.type.length > 0 && c.type.toLowerCase().includes("site");
+      typeof c?.type === "string" &&
+      c.type.length > 0 &&
+      c.type.toLowerCase().includes("site");
 
     // Prefer zone-based classification when zones are provided (constructed tournament decks)
     const anyZonesProvided = cards.some((c: CardRefWithZone) => !!c.__zone);
@@ -135,9 +148,12 @@ export async function loadSealedDeckFor(
     const avatars = cards.filter(isAvatar);
 
     if (anyZonesProvided) {
-      const atlasZ: CardRefWithZone[] = cards.filter((c: CardRefWithZone) => c.__zone === "atlas");
+      const atlasZ: CardRefWithZone[] = cards.filter(
+        (c: CardRefWithZone) => c.__zone === "atlas"
+      );
       const spellZ: CardRefWithZone[] = cards.filter(
-        (c: CardRefWithZone) => c.__zone === "spellbook" || c.__zone === "spell" || c.__zone == null
+        (c: CardRefWithZone) =>
+          c.__zone === "spellbook" || c.__zone === "spell" || c.__zone == null
       );
       rawAtlas = atlasZ;
       // Exclude avatar from spellbook later using isAvatar
@@ -158,7 +174,9 @@ export async function loadSealedDeckFor(
     if (avatars.length === 1) {
       avatar = avatars[0];
     } else {
-      console.warn("[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction");
+      console.warn(
+        "[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction"
+      );
     }
 
     if (rawAtlas.length < 12) {
@@ -169,29 +187,32 @@ export async function loadSealedDeckFor(
         totalCards: cards.length,
         anyZonesProvided,
         sampleAtlas: rawAtlas.slice(0, 3),
-        sampleSpellbook: spellbook.slice(0, 3).map(c => ({
-          name: c.name,
-          type: c.type,
-          cardId: (c as { cardId?: unknown }).cardId
-        })),
-        allCardsSample: cards.slice(0, 5).map(c => ({
+        sampleSpellbook: spellbook.slice(0, 3).map((c) => ({
           name: c.name,
           type: c.type,
           cardId: (c as { cardId?: unknown }).cardId,
-          __zone: (c as { __zone?: unknown }).__zone
-        }))
+        })),
+        allCardsSample: cards.slice(0, 5).map((c) => ({
+          name: c.name,
+          type: c.type,
+          cardId: (c as { cardId?: unknown }).cardId,
+          __zone: (c as { __zone?: unknown }).__zone,
+        })),
       });
       setError("Sealed deck needs at least 12 sites");
       return false;
     }
 
     if (spellbook.length < 24) {
-      console.error("[loadSealedDeckFor] Validation failed: not enough spells", {
-        atlasCount: rawAtlas.length,
-        spellbookCount: spellbook.length,
-        avatarsCount: avatars.length,
-        totalCards: cards.length
-      });
+      console.error(
+        "[loadSealedDeckFor] Validation failed: not enough spells",
+        {
+          atlasCount: rawAtlas.length,
+          spellbookCount: spellbook.length,
+          avatarsCount: avatars.length,
+          totalCards: cards.length,
+        }
+      );
       setError("Sealed deck needs at least 24 cards (excluding Avatar)");
       return false;
     }
@@ -208,13 +229,13 @@ export async function loadSealedDeckFor(
     initLibraries(who, spellbook, rawAtlas);
     shuffleSpellbook(who);
     shuffleAtlas(who);
-    
+
     // Only set avatar if we have one (draft/sealed might not have avatar yet)
     if (avatar) {
       setAvatarCard(who, avatar);
       placeAvatarAtStart(who);
     }
-    
+
     drawOpening(who);
 
     return true;
@@ -234,7 +255,7 @@ export async function loadTournamentConstructedDeck(
   deckData: unknown,
   setError: (error: string) => void
 ): Promise<boolean> {
-  if (!deckData || typeof deckData !== 'object') return false;
+  if (!deckData || typeof deckData !== "object") return false;
 
   try {
     const deck = deckData as { cards: Array<Record<string, unknown>> };
@@ -252,21 +273,21 @@ export async function loadTournamentConstructedDeck(
       const card = deckCard.card as Record<string, unknown>;
       const variant = deckCard.variant as Record<string, unknown> | null;
       const count = Number(deckCard.count || 1);
-      const zone = String(deckCard.zone || 'spellbook');
+      const zone = String(deckCard.zone || "spellbook");
 
       const cardRef: CardRef = {
         cardId: Number(card.id),
         variantId: variant ? Number(variant.id) : null,
         name: String(card.name),
-        type: String(card.type || variant?.typeText || ''), // Use card.type (metadata.type) first, not typeText (flavor text)
+        type: String(card.type || variant?.typeText || ""), // Use card.type (metadata.type) first, not typeText (flavor text)
         subTypes: (card.subTypes as string | null | undefined) || null,
-        slug: String(variant?.slug || card.slug || ''),
+        slug: String(variant?.slug || card.slug || ""),
         thresholds: (card.thresholds as Record<string, number>) || null,
       };
 
       // Add the card `count` times
       for (let i = 0; i < count; i++) {
-        if (zone === 'atlas') {
+        if (zone === "atlas") {
           rawAtlas.push(cardRef);
         } else {
           rawSpellbook.push(cardRef);
