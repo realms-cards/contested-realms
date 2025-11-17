@@ -96,20 +96,18 @@ function createLobbyFeature(deps) {
   }
 
   function upsertLobbyFromSerialized(obj) {
-    const lb =
-      lobbies.get(obj.id) ||
-      {
-        id: obj.id,
-        name: null,
-        hostId: null,
-        playerIds: new Set(),
-        status: "open",
-        maxPlayers: 2,
-        ready: new Set(),
-        visibility: "open",
-        plannedMatchType: "constructed",
-        lastActive: Date.now(),
-      };
+    const lb = lobbies.get(obj.id) || {
+      id: obj.id,
+      name: null,
+      hostId: null,
+      playerIds: new Set(),
+      status: "open",
+      maxPlayers: 2,
+      ready: new Set(),
+      visibility: "open",
+      plannedMatchType: "constructed",
+      lastActive: Date.now(),
+    };
     lb.name = obj.name;
     lb.hostId = obj.hostId;
     lb.status = obj.status;
@@ -147,9 +145,7 @@ function createLobbyFeature(deps) {
       id: lobby.id,
       name: lobby.name,
       hostId: lobby.hostId,
-      players: Array.from(lobby.playerIds)
-        .map(getPlayerInfo)
-        .filter(Boolean),
+      players: Array.from(lobby.playerIds).map(getPlayerInfo).filter(Boolean),
       status: lobby.status,
       maxPlayers: lobby.maxPlayers,
       visibility: lobby.visibility,
@@ -219,9 +215,7 @@ function createLobbyFeature(deps) {
     }
 
     let setMix = Array.isArray(asObj.setMix)
-      ? asObj.setMix
-          .map((setId) => String(setId || "").trim())
-          .filter(Boolean)
+      ? asObj.setMix.map((setId) => String(setId || "").trim()).filter(Boolean)
       : [];
     if (setMix.length === 0) {
       setMix = Object.keys(packCounts);
@@ -234,8 +228,7 @@ function createLobbyFeature(deps) {
     }
 
     const packCountSum = Object.values(packCounts).reduce(
-      (sum, value) =>
-        sum + (Number.isFinite(value) ? Number(value) : 0),
+      (sum, value) => sum + (Number.isFinite(value) ? Number(value) : 0),
       0
     );
     const packCount =
@@ -279,9 +272,7 @@ function createLobbyFeature(deps) {
 
     normalized.timer = Math.max(10, Number(asObj.timer) || 75);
     normalized.format =
-      typeof asObj.format === "string"
-        ? asObj.format
-        : "standard_2player";
+      typeof asObj.format === "string" ? asObj.format : "standard_2player";
     normalized.cardSource = Array.isArray(asObj.cardSource)
       ? asObj.cardSource.slice(0, 8)
       : [];
@@ -363,11 +354,9 @@ function createLobbyFeature(deps) {
         });
         try {
           console.info(
-            `[invite] denied (not_invited) inviter=${String(
-              lobby.hostId
-            ).slice(-6)} target=${String(player.id).slice(-6)} lobby=${
-              lobby.id
-            }`
+            `[invite] denied (not_invited) inviter=${String(lobby.hostId).slice(
+              -6
+            )} target=${String(player.id).slice(-6)} lobby=${lobby.id}`
           );
         } catch {}
         return;
@@ -375,6 +364,7 @@ function createLobbyFeature(deps) {
     }
 
     lobby.playerIds.add(player.id);
+    lobby.ready.add(player.id);
     player.lobbyId = lobby.id;
     socket.join(`lobby:${lobby.id}`);
 
@@ -567,7 +557,9 @@ function createLobbyFeature(deps) {
     try {
       lobby.status = "started";
     } catch {}
-    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: getLobbyInfo(lobby) });
+    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
+      lobby: getLobbyInfo(lobby),
+    });
     broadcastLobbies();
 
     if (matchType === "sealed" && match.sealedConfig) {
@@ -626,14 +618,16 @@ function createLobbyFeature(deps) {
               finish: typeof p.finish === "string" ? p.finish : undefined,
               product: typeof p.product === "string" ? p.product : undefined,
             }));
-            packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
+            packs.push({
+              id: `pack_${pid.slice(-4)}_${i}`,
+              set: setName,
+              cards,
+            });
           }
           sealedPacks[pid] = packs;
         }
         match.sealedPacks = sealedPacks;
-        console.log(
-          `[Sealed] Completed pack generation for match ${match.id}`
-        );
+        console.log(`[Sealed] Completed pack generation for match ${match.id}`);
       } catch (err) {
         console.error(
           `[Sealed] Error generating sealed packs for match ${match.id}:`,
@@ -693,12 +687,13 @@ function createLobbyFeature(deps) {
       const { hostId, socketId, options } = msg;
       const vis =
         options && options.visibility === "private" ? "private" : "open";
-      const maxPlayers =
-        Number.isInteger(options && options.maxPlayers)
-          ? Math.max(2, Math.min(8, options.maxPlayers))
-          : 2;
+      const maxPlayers = Number.isInteger(options && options.maxPlayers)
+        ? Math.max(2, Math.min(8, options.maxPlayers))
+        : 2;
       const name =
-        options && options.name ? String(options.name).trim().slice(0, 50) : null;
+        options && options.name
+          ? String(options.name).trim().slice(0, 50)
+          : null;
       const lobby = {
         id: rid("lobby"),
         name,
@@ -718,6 +713,7 @@ function createLobbyFeature(deps) {
         } catch {}
       }
       lobby.playerIds.add(hostId);
+      lobby.ready.add(hostId);
       const p = await ensurePlayerCached(hostId);
       try {
         p.lobbyId = lobby.id;
@@ -761,6 +757,7 @@ function createLobbyFeature(deps) {
         return;
       }
       lobby.playerIds.add(playerId);
+      lobby.ready.add(playerId);
       const p = await ensurePlayerCached(playerId);
       try {
         p.lobbyId = lobby.id;
@@ -1097,7 +1094,9 @@ function createLobbyFeature(deps) {
       const inviter = getPlayerBySocket(socket);
       if (!inviter) return;
       const targetId =
-        payload && payload.targetPlayerId ? String(payload.targetPlayerId) : null;
+        payload && payload.targetPlayerId
+          ? String(payload.targetPlayerId)
+          : null;
       const lobbyId = (payload && payload.lobbyId) || inviter.lobbyId;
       if (!targetId || !lobbyId) return;
       const lobby = lobbies.get(lobbyId);
@@ -1109,7 +1108,9 @@ function createLobbyFeature(deps) {
         });
         try {
           console.info(
-            `[invite] denied (not_host) inviter=${String(inviter.id).slice(-6)} target=${String(targetId).slice(-6)} lobby=${lobbyId}`
+            `[invite] denied (not_host) inviter=${String(inviter.id).slice(
+              -6
+            )} target=${String(targetId).slice(-6)} lobby=${lobbyId}`
           );
         } catch {}
         return;
@@ -1128,7 +1129,11 @@ function createLobbyFeature(deps) {
           });
           try {
             console.info(
-              `[invite] sent inviter=${String(inviter.id).slice(-6)} target=${String(targetId).slice(-6)} lobby=${lobbyId} visibility=${lobby.visibility}`
+              `[invite] sent inviter=${String(inviter.id).slice(
+                -6
+              )} target=${String(targetId).slice(
+                -6
+              )} lobby=${lobbyId} visibility=${lobby.visibility}`
             );
           } catch {}
         }
@@ -1185,10 +1190,9 @@ function createLobbyFeature(deps) {
         payload && typeof payload.displayName === "string"
           ? payload.displayName
           : "";
-      const displayName = (nameBase.trim() || `CPU Bot ${botId.slice(-4)}`).slice(
-        0,
-        40
-      );
+      const displayName = (
+        nameBase.trim() || `CPU Bot ${botId.slice(-4)}`
+      ).slice(0, 40);
       const serverUrl = `http://localhost:${PORT}`;
 
       try {
@@ -1245,7 +1249,11 @@ function createLobbyFeature(deps) {
           ? payload.playerId
           : null;
       let targetId = null;
-      if (requestedId && lobby.playerIds.has(requestedId) && isCpuPlayerId(requestedId)) {
+      if (
+        requestedId &&
+        lobby.playerIds.has(requestedId) &&
+        isCpuPlayerId(requestedId)
+      ) {
         targetId = requestedId;
       } else {
         for (const pid of lobby.playerIds) {
