@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
+import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
 import InvitesPanel from "@/components/online/InvitesPanel";
 import LobbiesCentral, {
   CreateTournamentConfig,
@@ -508,7 +509,7 @@ function LobbyPageContent({
       (!draftUseCube || !!draftConfig.cubeId),
     [draftAssigned, draftConfig.packCount, draftUseCube, draftConfig.cubeId]
   );
-  const chatRef = useRef<HTMLDivElement | null>(null);
+
   const prevLobbyIdRef = useRef<string | null>(null);
 
   // Overlay for configuring and confirming match start (host)
@@ -517,15 +518,6 @@ function LobbyPageContent({
 
   // Track previous match status to detect when match ends
   const prevMatchStatusRef = useRef<string | null>(null);
-
-  const lobbyMessages = chatLog.filter((m) => m.scope === "lobby");
-  const globalMessages = chatLog.filter((m) => m.scope === "global");
-  const activeMessages = chatTab === "lobby" ? lobbyMessages : globalMessages;
-
-  useEffect(() => {
-    const el = chatRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [chatTab, activeMessages.length]);
 
   // Switch default chat scope on lobby join/leave transitions only (not on every update)
   useEffect(() => {
@@ -1049,97 +1041,8 @@ function LobbyPageContent({
         )}
 
         {/* Social and Chat row */}
-        {/* We present Chat and Friends containers side-by-side on wide screens */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Chat Panel */}
-          <div className="bg-slate-900/60 rounded-xl ring-1 ring-slate-800 p-4">
-            <div className="flex items-center justify-between mb-2">
-              {/* tabs for Lobby/Global chat scopes */}
-              <div className="flex items-center gap-1">
-                <button
-                  className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                    chatTab === "lobby"
-                      ? "bg-white/15"
-                      : "hover:bg-white/10 opacity-80"
-                  }`}
-                  onClick={() => setChatTab("lobby")}
-                >
-                  Lobby
-                  {lobbyMessages.length > 0 && (
-                    <span className="ml-1 bg-emerald-500/70 text-white text-[10px] px-1 rounded-full">
-                      {lobbyMessages.length}
-                    </span>
-                  )}
-                </button>
-                <button
-                  className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                    chatTab === "global"
-                      ? "bg-white/15"
-                      : "hover:bg-white/10 opacity-80"
-                  }`}
-                  onClick={() => setChatTab("global")}
-                >
-                  Global
-                  {globalMessages.length > 0 && (
-                    <span className="ml-1 bg-sky-500/70 text-white text-[10px] px-1 rounded-full">
-                      {globalMessages.length}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div
-              ref={chatRef}
-              className="max-h-48 overflow-y-auto space-y-1 text-sm pr-1"
-            >
-              {activeMessages.length === 0 && (
-                <div className="opacity-60">No messages</div>
-              )}
-              {activeMessages.map((m, i) => (
-                <div key={i} className="opacity-90">
-                  <span className="font-medium">
-                    {m.from?.displayName ?? "System"}
-                  </span>
-                  : {m.content}
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 flex gap-2">
-              <input
-                className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder={
-                  chatTab === "global"
-                    ? "Type a global message"
-                    : "Type a message"
-                }
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && connected) {
-                    const msg = chatInput.trim();
-                    if (!msg) return;
-                    sendChat(msg, chatTab);
-                    setChatInput("");
-                  }
-                }}
-                disabled={!connected}
-              />
-              <button
-                className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => {
-                  const msg = chatInput.trim();
-                  if (!msg) return;
-                  sendChat(msg, chatTab);
-                  setChatInput("");
-                }}
-                disabled={!connected || !chatInput.trim()}
-              >
-                Send
-              </button>
-            </div>
-          </div>
-
+        {/* We present Friends/Invites here; chat is handled by the bottom-left LobbyChatConsole */}
+        <div className="grid grid-cols-1 gap-4">
           {/* Friends + Invites Panel */}
           <div
             className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}
@@ -1170,6 +1073,18 @@ function LobbyPageContent({
             />
           </div>
         </div>
+
+        {/* Bottom-left lobby chat console (global + lobby scopes) */}
+        <LobbyChatConsole
+          connected={connected}
+          chatLog={chatLog}
+          chatTab={chatTab}
+          setChatTab={setChatTab}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          onSendChat={(message, scope) => sendChat(message, scope)}
+          myPlayerId={me?.id ?? null}
+        />
         {/* Match Configuration Overlay (Host) */}
         {isHost && configOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
