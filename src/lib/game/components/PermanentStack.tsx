@@ -469,7 +469,7 @@ export function PermanentStack({
 
         return (
           <RigidBody
-            key={`perm-${key}-${idx}`}
+            key={p.instanceId ?? `perm:${key}:${idx}`}
             ref={(api) => {
               const id = (p.instanceId ?? `perm:${key}:${idx}`) as string;
               try {
