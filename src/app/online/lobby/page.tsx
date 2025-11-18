@@ -524,6 +524,13 @@ function LobbyPageContent({
   const [configOpen, setConfigOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
+  // Track whether the host has confirmed setup at least once for this lobby.
+  // Once confirmed, we can auto-start the match as soon as a second player
+  // joins (and all players are ready) without forcing the host through the
+  // setup overlay a second time.
+  const [setupConfirmedOnce, setSetupConfirmedOnce] = useState(false);
+  const autoStartAttemptedRef = useRef(false);
+
   // Track previous match status to detect when match ends
   const prevMatchStatusRef = useRef<string | null>(null);
 
@@ -537,6 +544,11 @@ function LobbyPageContent({
     } else if (prevId && !currId) {
       // Left a lobby
       setChatTab("global");
+    }
+    // Reset setup tracking when changing lobbies (join, leave, or switch)
+    if (prevId !== currId) {
+      setSetupConfirmedOnce(false);
+      autoStartAttemptedRef.current = false;
     }
     prevLobbyIdRef.current = currId;
   }, [lobby]);
@@ -559,6 +571,11 @@ function LobbyPageContent({
           setLeaveConfirmOpen(true);
         }
       }, 500);
+
+      // Allow auto-start to be used again for a subsequent match in the
+      // same lobby by resetting the attempt flag and setup confirmation.
+      autoStartAttemptedRef.current = false;
+      setSetupConfirmedOnce(false);
     }
 
     prevMatchStatusRef.current = currentStatus;
@@ -673,6 +690,73 @@ function LobbyPageContent({
     // Fallback
     return { label: "Join Match", disabled: false } as const;
   }, [match, hasSubmittedForMatch]);
+
+  // Auto-start logic: once the host has confirmed setup at least once for
+  // this lobby, automatically start the match as soon as there are at least
+  // two players in the lobby and all are ready.
+  useEffect(() => {
+    if (!isHost) return;
+    if (!setupConfirmedOnce) return;
+    if (!lobby || lobby.status !== "open") return;
+    if (match) return;
+    if (!hasAtLeastTwoPlayers || !allReady) return;
+    if (autoStartAttemptedRef.current) return;
+
+    // Do not attempt auto-start with invalid configurations
+    if (matchType === "sealed" && !sealedValid) return;
+    if (matchType === "draft" && !draftValid) return;
+
+    autoStartAttemptedRef.current = true;
+
+    if (matchType === "constructed") {
+      startMatch({ matchType: "constructed" });
+      return;
+    }
+
+    if (matchType === "draft") {
+      const activeSets = Object.entries(draftConfig.packCounts)
+        .filter(([, c]) => c > 0)
+        .map(([s]) => s);
+      const payload = {
+        ...draftConfig,
+        setMix: activeSets.length ? activeSets : draftConfig.setMix,
+      };
+      startMatch({ matchType: "draft", draftConfig: payload });
+      return;
+    }
+
+    // Sealed
+    const totalPacks = Object.values(sealedConfig.packCounts).reduce(
+      (sum, count) => sum + count,
+      0
+    );
+    const activeSets = Object.entries(sealedConfig.packCounts).filter(
+      ([, count]) => count > 0
+    );
+    if (activeSets.length === 0) return;
+    const setMix = activeSets.map(([set]) => set);
+    const legacySealedConfig = {
+      packCount: totalPacks,
+      setMix,
+      timeLimit: sealedConfig.timeLimit,
+      packCounts: sealedConfig.packCounts,
+      replaceAvatars: sealedConfig.replaceAvatars,
+    };
+    startMatch({ matchType: "sealed", sealedConfig: legacySealedConfig });
+  }, [
+    isHost,
+    setupConfirmedOnce,
+    lobby,
+    match,
+    hasAtLeastTwoPlayers,
+    allReady,
+    matchType,
+    startMatch,
+    draftConfig,
+    sealedConfig,
+    sealedValid,
+    draftValid,
+  ]);
 
   // Planned match summary (client-side, only reliable for host)
   const plannedSummary = useMemo(() => {
@@ -1529,6 +1613,7 @@ function LobbyPageContent({
                       // treat this as "confirm setup" only: close the overlay and
                       // let the host return to the lobby while waiting for others.
                       if (!hasAtLeastTwoPlayers || !allReady) {
+                        setSetupConfirmedOnce(true);
                         setConfigOpen(false);
                         return;
                       }
