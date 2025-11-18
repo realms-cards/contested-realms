@@ -389,14 +389,6 @@ export function validateAction(
         for (const key of Object.keys(sitesPatch)) {
           const nextTile = sitesPatch[key];
           const prevTile = currentSites[key];
-          if (
-            nextTile &&
-            nextTile.card &&
-            meNum &&
-            Number(nextTile.owner) !== meNum
-          ) {
-            return { ok: false, error: "Cannot place site owned by opponent" };
-          }
           if (nextTile && nextTile.card && meNum) {
             const sitesOwned = Object.values(currentSites).filter(
               (t) => t && t.card && Number(t.owner) === meNum
