@@ -44,6 +44,8 @@ export default function OnlineMulliganScreen({
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
   const myAvatar = avatars[myPlayerKey]?.card || null;
+  const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
+  const opponentAvatar = avatars[opponentKey]?.card || null;
   const isSecondSeat = (() => {
     const first = currentPlayer === 1 ? "p1" : "p2";
     return myPlayerKey === (first === "p1" ? "p2" : "p1");
@@ -108,24 +110,48 @@ export default function OnlineMulliganScreen({
             from the appropriate pile.
           </div>
         </div>
-        {myAvatar?.slug && (
-          <div className="flex-shrink-0 flex flex-col items-center sm:items-end">
-            <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
-              Your Avatar
-            </div>
-            <div
-              className="relative aspect-[3/4] w-20 sm:w-24 md:w-28 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
-              onMouseEnter={() => setPreviewCard(myAvatar)}
-              onMouseLeave={() => setPreviewCard(null)}
-            >
-              <Image
-                src={`/api/images/${myAvatar.slug}`}
-                alt={myAvatar.name}
-                fill
-                sizes="(max-width: 640px) 80px, 112px"
-                className="object-contain"
-              />
-            </div>
+        {(myAvatar?.slug || opponentAvatar?.slug) && (
+          <div className="flex-shrink-0 flex flex-row gap-4 items-center sm:items-end">
+            {myAvatar?.slug && (
+              <div className="flex flex-col items-center sm:items-end">
+                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
+                  Your Avatar
+                </div>
+                <div
+                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  onMouseEnter={() => setPreviewCard(myAvatar)}
+                  onMouseLeave={() => setPreviewCard(null)}
+                >
+                  <Image
+                    src={`/api/images/${myAvatar.slug}`}
+                    alt={myAvatar.name}
+                    fill
+                    sizes="(max-width: 640px) 64px, 96px"
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+            )}
+            {opponentAvatar?.slug && (
+              <div className="flex flex-col items-center sm:items-end">
+                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
+                  Opponent Avatar
+                </div>
+                <div
+                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  onMouseEnter={() => setPreviewCard(opponentAvatar)}
+                  onMouseLeave={() => setPreviewCard(null)}
+                >
+                  <Image
+                    src={`/api/images/${opponentAvatar.slug}`}
+                    alt={opponentAvatar.name}
+                    fill
+                    sizes="(max-width: 640px) 64px, 96px"
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

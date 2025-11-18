@@ -222,16 +222,20 @@ export default function EnhancedOnlineDraft3DScreen({
   }, []);
 
   // Enhanced Draft-3D Online Integration (declare before effects that reference it)
-  const { sendCardPreview, clearCardPreview, sendStackInteraction, isConnected } =
-    useDraft3DTransport({
-      transport,
-      sessionId: matchId || "unknown",
-      playerId: myPlayerId || "unknown",
-      onError: (error) => {
-        console.error("[EnhancedOnlineDraft3D] Transport error:", error);
-        setError(String(error));
-      },
-    });
+  const {
+    sendCardPreview,
+    clearCardPreview,
+    sendStackInteraction,
+    isConnected,
+  } = useDraft3DTransport({
+    transport,
+    sessionId: matchId || "unknown",
+    playerId: myPlayerId || "unknown",
+    onError: (error) => {
+      console.error("[EnhancedOnlineDraft3D] Transport error:", error);
+      setError(String(error));
+    },
+  });
 
   // Centralize network sending of hover preview: send once after a short debounce and only on true state changes
   useEffect(() => {
@@ -1343,6 +1347,17 @@ export default function EnhancedOnlineDraft3DScreen({
         }
       }
       availableSets = fallbackSets;
+    }
+    // For cube drafts, always label packs with the cube name rather than
+    // underlying card set names (Beta/Arthurian, etc.), so all players see
+    // consistent cube-based pack labels.
+    if (match?.draftConfig?.cubeId) {
+      const cubeLabel = match.draftConfig.cubeName || "Custom Cube";
+      if (availableSets.length > 0) {
+        availableSets = availableSets.map(() => cubeLabel);
+      } else {
+        availableSets = Array.from({ length: totalPacks }, () => cubeLabel);
+      }
     }
     const roundIdx = draftState.packIndex;
     // Only show packs that are not already used in earlier rounds

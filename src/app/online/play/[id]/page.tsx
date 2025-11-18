@@ -136,7 +136,13 @@ export default function OnlineMatchPage() {
     if (idx === 0) return "p1";
     if (idx === 1) return "p2";
     return null;
-  }, [myPlayerKey, myPlayerId, orderedPlayerIds, match?.playerIds, match?.players]);
+  }, [
+    myPlayerKey,
+    myPlayerId,
+    orderedPlayerIds,
+    match?.playerIds,
+    match?.players,
+  ]);
 
   const [spectatorSeat, setSpectatorSeat] = useState<PlayerKey>("p1");
   useEffect(() => {
@@ -155,8 +161,14 @@ export default function OnlineMatchPage() {
     } catch {}
   }, [isSpectatorView, matchId, spectatorSeat]);
 
-  const viewPlayerKey = useMemo(() => (isSpectatorView ? spectatorSeat : myPlayerKey), [isSpectatorView, spectatorSeat, myPlayerKey]);
-  const viewPlayerNumber = useMemo(() => (isSpectatorView ? (spectatorSeat === "p2" ? 2 : 1) : myPlayerNumber), [isSpectatorView, spectatorSeat, myPlayerNumber]);
+  const viewPlayerKey = useMemo(
+    () => (isSpectatorView ? spectatorSeat : myPlayerKey),
+    [isSpectatorView, spectatorSeat, myPlayerKey]
+  );
+  const viewPlayerNumber = useMemo(
+    () => (isSpectatorView ? (spectatorSeat === "p2" ? 2 : 1) : myPlayerNumber),
+    [isSpectatorView, spectatorSeat, myPlayerNumber]
+  );
 
   // Initialize actor seat and localPlayerId in store for ownership guards
   useEffect(() => {
@@ -173,15 +185,23 @@ export default function OnlineMatchPage() {
 
   // Spectator presence
   const [spectatorCount, setSpectatorCount] = useState<number | null>(null);
-  const [spectatorCanViewHands, setSpectatorCanViewHands] = useState<boolean>(false);
+  const [spectatorCanViewHands, setSpectatorCanViewHands] =
+    useState<boolean>(false);
   useEffect(() => {
     if (!transport?.on) return;
     const off = transport.on("message", (m) => {
-      const type = m && typeof m === "object" && (m as Record<string, unknown>).type;
+      const type =
+        m && typeof m === "object" && (m as Record<string, unknown>).type;
       if (type === "spectatorsUpdated") {
         const mid = (m as unknown as { matchId?: string }).matchId;
-        const count = (m as unknown as { count?: unknown }).count as number | undefined;
-        if (mid === matchId && typeof count === "number" && Number.isFinite(count)) {
+        const count = (m as unknown as { count?: unknown }).count as
+          | number
+          | undefined;
+        if (
+          mid === matchId &&
+          typeof count === "number" &&
+          Number.isFinite(count)
+        ) {
           setSpectatorCount(count);
         }
         return;
@@ -194,7 +214,9 @@ export default function OnlineMatchPage() {
       }
     });
     return () => {
-      try { off?.(); } catch {}
+      try {
+        off?.();
+      } catch {}
     };
   }, [transport, matchId]);
 
@@ -202,25 +224,29 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (!isSpectatorView) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        setSpectatorSeat((s) => (s === 'p1' ? 'p2' : 'p1'));
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        setSpectatorSeat((s) => (s === "p1" ? "p2" : "p1"));
         // Reset any accumulated spectator yaw so the baseline seat view is neutral
-        try { spectatorYawTargetRef.current = 0; } catch {}
-      } else if (e.key === 'ArrowLeft') {
+        try {
+          spectatorYawTargetRef.current = 0;
+        } catch {}
+      } else if (e.key === "ArrowLeft") {
         spectatorYawTargetRef.current -= 0.15;
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === "ArrowRight") {
         spectatorYawTargetRef.current += 0.15;
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [isSpectatorView]);
 
   const rtc = voice?.rtc ?? null;
   const matchOverlayTargetId = useMemo(() => {
     return match?.players?.find((p) => p.id && p.id !== myPlayerId)?.id ?? null;
   }, [match?.players, myPlayerId]);
-  const voiceRequestConnection = voice?.enabled ? voice.requestConnection : undefined;
+  const voiceRequestConnection = voice?.enabled
+    ? voice.requestConnection
+    : undefined;
 
   // Do not auto-join WebRTC. Users must click the Join control to request mic access and connect.
 
@@ -267,7 +293,12 @@ export default function OnlineMatchPage() {
 
   // Ensure we are in the correct match when landing on /online/play/[id]
   useEffect(() => {
-    console.log("[joinMatch effect] Checking conditions:", { connected, matchId, matchCurrentId: match?.id, joinAttempted: joinAttemptedForRef.current });
+    console.log("[joinMatch effect] Checking conditions:", {
+      connected,
+      matchId,
+      matchCurrentId: match?.id,
+      joinAttempted: joinAttemptedForRef.current,
+    });
 
     // If we were navigated from tournament matches, ensure the match exists on the socket server
     if (connected && matchId && transport) {
@@ -308,7 +339,9 @@ export default function OnlineMatchPage() {
       if (match?.id && match?.id !== matchId) {
         const serverMatchId = match.id;
         if (!sessionStorage.getItem(`force_reload_match_${serverMatchId}`)) {
-          console.log("[game] Switching to different match - forcing page reload for clean state");
+          console.log(
+            "[game] Switching to different match - forcing page reload for clean state"
+          );
           sessionStorage.setItem(`force_reload_match_${serverMatchId}`, "1");
           sessionStorage.removeItem(`force_reload_match_${matchId}`);
           history.replaceState(null, "", `/online/play/${serverMatchId}`);
@@ -322,7 +355,9 @@ export default function OnlineMatchPage() {
           useGameStore.getState().resetGameState();
           return;
         } else {
-          console.log("[game] After reload still have wrong match - resetting game state");
+          console.log(
+            "[game] After reload still have wrong match - resetting game state"
+          );
           useGameStore.getState().resetGameState();
           return;
         }
@@ -353,7 +388,15 @@ export default function OnlineMatchPage() {
     void (isSpectatorView && transport?.watchMatch
       ? transport.watchMatch(matchId)
       : joinMatch(matchId));
-  }, [connected, match?.id, matchId, joinMatch, leaveMatch, transport, isSpectatorView]);
+  }, [
+    connected,
+    match?.id,
+    matchId,
+    joinMatch,
+    leaveMatch,
+    transport,
+    isSpectatorView,
+  ]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -365,7 +408,6 @@ export default function OnlineMatchPage() {
     }
     lastConnectedRef.current = connected;
   }, [connected]);
-
 
   // Also reset one-shot guards if we are no longer in this match (e.g., user left)
   useEffect(() => {
@@ -386,7 +428,9 @@ export default function OnlineMatchPage() {
 
     // Perform local reset/resync only once per match for this page session.
     if (resetDoneForRef.current !== matchId) {
-      console.log("[game] Joining match - requesting resync (will reset state when snapshot arrives)");
+      console.log(
+        "[game] Joining match - requesting resync (will reset state when snapshot arrives)"
+      );
       // DON'T reset game state here - let the resync snapshot replace it cleanly
       // Resetting here causes a race: if we reset, then a patch arrives, then snapshot arrives,
       // the patch gets lost. Instead, the OnlineProvider will reset when applying the snapshot.
@@ -445,6 +489,7 @@ export default function OnlineMatchPage() {
   const storeD20Rolls = useGameStore((s) => s.d20Rolls);
   const storeActorKey = useGameStore((s) => s.actorKey);
   const storeMatchEnded = useGameStore((s) => s.matchEnded);
+  const storePermanents = useGameStore((s) => s.permanents);
   const showToolbox =
     !isSpectatorView &&
     match?.status === "in_progress" &&
@@ -510,19 +555,22 @@ export default function OnlineMatchPage() {
     !draftCompleted &&
     (!draftPhase || draftPhase !== "complete");
   const isDraftDeckConstruction =
-    isDraftMatch && (match?.status === "deck_construction" || draftCompleted || draftPhase === "complete");
+    isDraftMatch &&
+    (match?.status === "deck_construction" ||
+      draftCompleted ||
+      draftPhase === "complete");
 
   // Prevent showing draft component again once it's completed or if we already submitted a deck
   const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
 
   const tournamentId =
-    (match as unknown as { tournamentId?: string | null } | undefined)?.tournamentId ||
-    null;
+    (match as unknown as { tournamentId?: string | null } | undefined)
+      ?.tournamentId || null;
 
   // Auto-load any deck that the match server has already attached to us (sealed/draft/tournament rebuilt decks)
   useEffect(() => {
     if (prepared) return;
-    
+
     // If a resync is underway, wait for it to deliver the authoritative server snapshot
     // before doing any local deck loading.
     if (resyncing) {
@@ -532,10 +580,13 @@ export default function OnlineMatchPage() {
     // Simple flag-based approach: Skip deck loading only if we've already loaded a deck for this match.
     // This prevents skipping deck load when joining a fresh match after finishing a previous one.
     if (deckLoadedForMatchRef.current === matchId) {
-      console.log("[match] Deck already loaded for this match; skipping deck load", {
-        matchId,
-        status: match?.status,
-      });
+      console.log(
+        "[match] Deck already loaded for this match; skipping deck load",
+        {
+          matchId,
+          status: match?.status,
+        }
+      );
       setPrepared(true);
       return;
     }
@@ -545,7 +596,7 @@ export default function OnlineMatchPage() {
     // Empty game object {} should not be treated as meaningful state.
     const hasMeaningfulGameState = (() => {
       const game = (match as unknown as { game?: unknown })?.game;
-      if (!game || typeof game !== 'object') return false;
+      if (!game || typeof game !== "object") return false;
       const keys = Object.keys(game);
       // Empty object {} is not meaningful
       if (keys.length === 0) return false;
@@ -554,19 +605,32 @@ export default function OnlineMatchPage() {
       const hasActualRolls = (() => {
         try {
           const rolls = (game as Record<string, unknown>)?.d20Rolls;
-          if (!rolls || typeof rolls !== 'object') return false;
+          if (!rolls || typeof rolls !== "object") return false;
           const r = rolls as Record<string, unknown>;
-          return (r.p1 != null && r.p1 !== null) || (r.p2 != null && r.p2 !== null);
-        } catch { return false; }
+          return (
+            (r.p1 != null && r.p1 !== null) || (r.p2 != null && r.p2 !== null)
+          );
+        } catch {
+          return false;
+        }
       })();
-      return keys.some(k =>
-        k === 'zones' || k === 'board' || k === 'permanents' ||
-        k === 'libraries' || k === 'currentPlayer' || k === 'avatars' ||
-        k === 'mulligans'
-      ) || hasActualRolls;
+      return (
+        keys.some(
+          (k) =>
+            k === "zones" ||
+            k === "board" ||
+            k === "permanents" ||
+            k === "libraries" ||
+            k === "currentPlayer" ||
+            k === "avatars" ||
+            k === "mulligans"
+        ) || hasActualRolls
+      );
     })();
     if (hasMeaningfulGameState) {
-      console.log("[match] Server game snapshot present; skipping local deck autoload");
+      console.log(
+        "[match] Server game snapshot present; skipping local deck autoload"
+      );
       setPrepared(true);
       return;
     }
@@ -585,8 +649,10 @@ export default function OnlineMatchPage() {
     if (!rawDeck) return;
 
     console.log("[match] Auto-loading deck from match.playerDecks:", {
-      deckLength: Array.isArray(rawDeck) ? rawDeck.length : 'not an array',
-      sampleCards: Array.isArray(rawDeck) ? (rawDeck as Array<Record<string, unknown>>).slice(0, 3) : rawDeck
+      deckLength: Array.isArray(rawDeck) ? rawDeck.length : "not an array",
+      sampleCards: Array.isArray(rawDeck)
+        ? (rawDeck as Array<Record<string, unknown>>).slice(0, 3)
+        : rawDeck,
     });
 
     let cancelled = false;
@@ -599,17 +665,20 @@ export default function OnlineMatchPage() {
         // vs full card objects {cardId, name, type, ...}
         if (Array.isArray(rawDeck) && rawDeck.length > 0) {
           const firstCard = rawDeck[0] as Record<string, unknown>;
-          const isCondensedFormat = 'quantity' in firstCard && !('type' in firstCard);
+          const isCondensedFormat =
+            "quantity" in firstCard && !("type" in firstCard);
 
           if (isCondensedFormat) {
-            console.log("[match] Detected condensed tournament deck format, expanding to full cards...");
+            console.log(
+              "[match] Detected condensed tournament deck format, expanding to full cards..."
+            );
 
             // Extract unique card IDs
             const cardIds = Array.from(
               new Set(
                 (rawDeck as Array<{ cardId: string; quantity: number }>)
-                  .map(entry => Number(entry.cardId))
-                  .filter(n => Number.isFinite(n) && n > 0)
+                  .map((entry) => Number(entry.cardId))
+                  .filter((n) => Number.isFinite(n) && n > 0)
               )
             );
 
@@ -632,7 +701,7 @@ export default function OnlineMatchPage() {
                 }>;
 
                 const byId = new Map(
-                  metas.map(m => [
+                  metas.map((m) => [
                     m.cardId,
                     {
                       name: m.name,
@@ -642,17 +711,22 @@ export default function OnlineMatchPage() {
                       subTypes: m.subTypes || null,
                       cost: m.cost ?? null,
                       thresholds: m.thresholds ?? null,
-                    }
+                    },
                   ])
                 );
 
                 // Expand condensed format to full cards
                 const expandedDeck: Array<Record<string, unknown>> = [];
-                for (const entry of rawDeck as Array<{ cardId: string; quantity: number }>) {
+                for (const entry of rawDeck as Array<{
+                  cardId: string;
+                  quantity: number;
+                }>) {
                   const idNum = Number(entry.cardId);
                   const meta = byId.get(idNum);
                   if (!meta) {
-                    console.warn(`[match] Missing metadata for card ID ${idNum}`);
+                    console.warn(
+                      `[match] Missing metadata for card ID ${idNum}`
+                    );
                     continue;
                   }
                   const quantity = Math.max(1, Number(entry.quantity) || 0);
@@ -670,10 +744,16 @@ export default function OnlineMatchPage() {
                   }
                 }
 
-                console.log("[match] Expanded deck to", expandedDeck.length, "cards");
+                console.log(
+                  "[match] Expanded deck to",
+                  expandedDeck.length,
+                  "cards"
+                );
                 deckToLoad = expandedDeck;
               } else {
-                console.error("[match] Failed to fetch card metadata for condensed deck");
+                console.error(
+                  "[match] Failed to fetch card metadata for condensed deck"
+                );
               }
             }
           }
@@ -682,24 +762,39 @@ export default function OnlineMatchPage() {
         // Ensure the deck includes an Avatar so validation succeeds during setup
         if (Array.isArray(deckToLoad)) {
           const hasAvatar = deckToLoad.some((card) => {
-            const type = typeof (card as Record<string, unknown>)?.type === "string"
-              ? ((card as Record<string, unknown>).type as string)
-              : "";
+            const type =
+              typeof (card as Record<string, unknown>)?.type === "string"
+                ? ((card as Record<string, unknown>).type as string)
+                : "";
             return type.toLowerCase().includes("avatar");
           });
 
           if (!hasAvatar) {
-            const avatarCard =
-              (match as unknown as {
+            const avatarCard = (
+              match as unknown as {
                 game?: {
-                  avatars?: Record<string, { card?: Record<string, unknown> | null } | null>;
+                  avatars?: Record<
+                    string,
+                    { card?: Record<string, unknown> | null } | null
+                  >;
                 };
-              })?.game?.avatars?.[myPlayerKey]?.card;
+              }
+            )?.game?.avatars?.[myPlayerKey]?.card;
 
             if (avatarCard && typeof avatarCard === "object") {
               const avatarCardId = Number(
-                (avatarCard as { cardId?: number | string; id?: number | string }).cardId ??
-                  (avatarCard as { cardId?: number | string; id?: number | string }).id ??
+                (
+                  avatarCard as {
+                    cardId?: number | string;
+                    id?: number | string;
+                  }
+                ).cardId ??
+                  (
+                    avatarCard as {
+                      cardId?: number | string;
+                      id?: number | string;
+                    }
+                  ).id ??
                   0
               );
               if (Number.isFinite(avatarCardId) && avatarCardId > 0) {
@@ -709,27 +804,36 @@ export default function OnlineMatchPage() {
                     id: String(avatarCardId),
                     cardId: avatarCardId,
                     name:
-                      (avatarCard as { name?: string; cardName?: string }).name ||
-                      (avatarCard as { name?: string; cardName?: string }).cardName ||
+                      (avatarCard as { name?: string; cardName?: string })
+                        .name ||
+                      (avatarCard as { name?: string; cardName?: string })
+                        .cardName ||
                       "Avatar",
                     slug: (avatarCard as { slug?: string }).slug || "",
                     set:
                       (avatarCard as { set?: string; setName?: string }).set ||
-                      (avatarCard as { set?: string; setName?: string }).setName ||
+                      (avatarCard as { set?: string; setName?: string })
+                        .setName ||
                       "Beta",
                     type:
                       (avatarCard as { type?: string }).type &&
                       String((avatarCard as { type?: string }).type).length > 0
                         ? String((avatarCard as { type?: string }).type)
                         : "Avatar",
-                    thresholds: (avatarCard as { thresholds?: Record<string, number> | null }).thresholds || null,
+                    thresholds:
+                      (
+                        avatarCard as {
+                          thresholds?: Record<string, number> | null;
+                        }
+                      ).thresholds || null,
                   },
                 ];
                 console.log("[match] Injected avatar into deck for auto-load", {
                   cardId: avatarCardId,
                   name:
                     (avatarCard as { name?: string; cardName?: string }).name ||
-                    (avatarCard as { name?: string; cardName?: string }).cardName ||
+                    (avatarCard as { name?: string; cardName?: string })
+                      .cardName ||
                     "Avatar",
                 });
               }
@@ -751,14 +855,27 @@ export default function OnlineMatchPage() {
         useGameStore.getState().setPhase("Setup");
         setPrepared(true);
       } catch (error) {
-        console.error("[match] Failed to auto-load deck from match data:", error);
+        console.error(
+          "[match] Failed to auto-load deck from match data:",
+          error
+        );
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [prepared, match, matchId, match?.playerDecks, me?.id, myPlayerKey, storeActorKey, tournamentId, resyncing]);
+  }, [
+    prepared,
+    match,
+    matchId,
+    match?.playerDecks,
+    me?.id,
+    myPlayerKey,
+    storeActorKey,
+    tournamentId,
+    resyncing,
+  ]);
 
   // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
   useEffect(() => {
@@ -766,7 +883,8 @@ export default function OnlineMatchPage() {
     if (!transport?.submitDeck) return;
     if (!matchId || match?.id !== matchId) return;
     if (match?.matchType !== "constructed") return;
-    if (match?.status !== "waiting" && match?.status !== "deck_construction") return;
+    if (match?.status !== "waiting" && match?.status !== "deck_construction")
+      return;
     if (!me?.id || !myPlayerKey) return;
 
     // Reset attempts if tournament context changed
@@ -775,8 +893,9 @@ export default function OnlineMatchPage() {
       lastTournamentIdRef.current = tournamentId;
     }
 
-    const currentDeck =
-      (match?.playerDecks as Record<string, unknown> | undefined)?.[me.id];
+    const currentDeck = (
+      match?.playerDecks as Record<string, unknown> | undefined
+    )?.[me.id];
     if (currentDeck) {
       tournamentDeckSubmittedRef.current = tournamentId;
       return;
@@ -818,10 +937,23 @@ export default function OnlineMatchPage() {
           type?: string | null;
           subTypes?: string | null;
         }>;
-        console.log("[match] Fetched card metadata for", metas.length, "cards. Sample:", metas.slice(0, 3));
+        console.log(
+          "[match] Fetched card metadata for",
+          metas.length,
+          "cards. Sample:",
+          metas.slice(0, 3)
+        );
         const byId = new Map<
           number,
-          { name: string; slug: string; setName: string; type: string | null; subTypes: string | null; cost: number | null; thresholds: Record<string, number> | null }
+          {
+            name: string;
+            slug: string;
+            setName: string;
+            type: string | null;
+            subTypes: string | null;
+            cost: number | null;
+            thresholds: Record<string, number> | null;
+          }
         >();
         for (const meta of metas) {
           const cardType = meta.type || null;
@@ -833,25 +965,37 @@ export default function OnlineMatchPage() {
             type: cardType,
             subTypes: cardSubTypes,
             cost: (meta as { cost?: number | null }).cost ?? null,
-            thresholds: (meta as { thresholds?: Record<string, number> | null }).thresholds ?? null,
+            thresholds:
+              (meta as { thresholds?: Record<string, number> | null })
+                .thresholds ?? null,
           });
         }
 
-        console.log("[match] Building deck from list with", list.length, "unique cards");
+        console.log(
+          "[match] Building deck from list with",
+          list.length,
+          "unique cards"
+        );
         console.log("[match] Metadata map has", byId.size, "entries");
         console.log("[match] Sample list entry:", list[0]);
-        console.log("[match] Sample byId keys:", Array.from(byId.keys()).slice(0, 5));
+        console.log(
+          "[match] Sample byId keys:",
+          Array.from(byId.keys()).slice(0, 5)
+        );
 
         const deck: Array<Record<string, unknown>> = [];
         for (const entry of list) {
           const idNum = Number(entry.cardId);
           const meta = byId.get(idNum);
           if (!meta) {
-            console.error(`[match] Missing metadata for card ID ${idNum} (type: ${typeof entry.cardId})`, {
-              entry,
-              hasInMap: byId.has(idNum),
-              mapKeys: Array.from(byId.keys())
-            });
+            console.error(
+              `[match] Missing metadata for card ID ${idNum} (type: ${typeof entry.cardId})`,
+              {
+                entry,
+                hasInMap: byId.has(idNum),
+                mapKeys: Array.from(byId.keys()),
+              }
+            );
             continue;
           }
           const quantity = Math.max(1, Number(entry.quantity) || 0);
@@ -942,31 +1086,45 @@ export default function OnlineMatchPage() {
     // Check for meaningful server game state (not just empty {} or Setup phase data)
     const hasMeaningfulServerGameState = (() => {
       const game = (match as unknown as { game?: unknown })?.game;
-      if (!game || typeof game !== 'object') return false;
+      if (!game || typeof game !== "object") return false;
       const keys = Object.keys(game);
       if (keys.length === 0) return false;
       // d20Rolls with null values is NOT meaningful - it's initial state
       const hasActualRolls = (() => {
         try {
           const rolls = (game as Record<string, unknown>)?.d20Rolls;
-          if (!rolls || typeof rolls !== 'object') return false;
+          if (!rolls || typeof rolls !== "object") return false;
           const r = rolls as Record<string, unknown>;
-          return (r.p1 != null && r.p1 !== null) || (r.p2 != null && r.p2 !== null);
-        } catch { return false; }
+          return (
+            (r.p1 != null && r.p1 !== null) || (r.p2 != null && r.p2 !== null)
+          );
+        } catch {
+          return false;
+        }
       })();
-      return keys.some(k =>
-        k === 'zones' || k === 'board' || k === 'permanents' ||
-        k === 'libraries' || k === 'currentPlayer' || k === 'avatars' ||
-        k === 'mulligans'
-      ) || hasActualRolls;
+      return (
+        keys.some(
+          (k) =>
+            k === "zones" ||
+            k === "board" ||
+            k === "permanents" ||
+            k === "libraries" ||
+            k === "currentPlayer" ||
+            k === "avatars" ||
+            k === "mulligans"
+        ) || hasActualRolls
+      );
     })();
     // Reset game state for waiting matches to ensure D20 flow always shows
     // For deck_construction, only reset if there's no meaningful server state (to preserve sealed/draft data)
-    const shouldReset = match?.status === "waiting" ||
+    const shouldReset =
+      match?.status === "waiting" ||
       (match?.status === "deck_construction" && !hasMeaningfulServerGameState);
     if (shouldReset) {
       // Allow repeated resets even if matchId is the same, by keying on status/snapshot presence
-      const resetKey = `${matchId}:${match?.status}:${hasMeaningfulServerGameState ? 1 : 0}`;
+      const resetKey = `${matchId}:${match?.status}:${
+        hasMeaningfulServerGameState ? 1 : 0
+      }`;
       if (waitingResetDoneRef.current !== resetKey) {
         try {
           useGameStore.getState().resetGameState();
@@ -978,6 +1136,39 @@ export default function OnlineMatchPage() {
       }
     }
   }, [matchId, match, match?.id, match?.status, resyncing, setPrepared]);
+
+  useEffect(() => {
+    if (!matchId || match?.id !== matchId) return;
+    if (resyncing) return;
+    if (serverPhase !== "Setup") return;
+
+    const hasBoardState = (() => {
+      try {
+        const perms = storePermanents as unknown;
+        if (perms && typeof perms === "object") {
+          const keys = Object.keys(perms as Record<string, unknown>);
+          if (keys.length > 0) return true;
+        }
+      } catch {}
+      return false;
+    })();
+
+    if (!hasBoardState) return;
+
+    try {
+      useGameStore.getState().resetGameState();
+    } catch {}
+    setPrepared(false);
+    setD20RollingComplete(false);
+  }, [
+    matchId,
+    match?.id,
+    serverPhase,
+    resyncing,
+    storePermanents,
+    setPrepared,
+    setD20RollingComplete,
+  ]);
 
   // Auto-redirect to sealed editor for sealed matches in deck construction
   // But only if we haven't already submitted a deck (avoid redirect loop)
@@ -1207,7 +1398,7 @@ export default function OnlineMatchPage() {
       d20Complete,
       d20RollingComplete,
       matchStatus: match.status,
-      resyncing
+      resyncing,
     });
 
     if (ended) {
@@ -1226,10 +1417,15 @@ export default function OnlineMatchPage() {
       // D20 is complete when phase advances past Setup (to Start or Main)
       // This ensures both players sync when server advances phase
       if (!d20RollingComplete) setD20RollingComplete(true);
-    } else if (match.status === "waiting" || match.status === "deck_construction") {
+    } else if (
+      match.status === "waiting" ||
+      match.status === "deck_construction"
+    ) {
       desired = true;
       if (!gameActuallyStarted && serverPhase !== "Setup" && !d20Complete) {
-        try { useGameStore.getState().setPhase("Setup"); } catch {}
+        try {
+          useGameStore.getState().setPhase("Setup");
+        } catch {}
       }
     } else if (serverPhase === "Setup") {
       // Always show setup overlay during Setup phase, regardless of local d20RollingComplete
@@ -1244,15 +1440,29 @@ export default function OnlineMatchPage() {
     }
 
     if (desired !== setupOpen) setSetupOpen(desired);
-  }, [isSpectatorView, matchId, match, match?.id, match?.status, resyncing, shouldShowDraft, prepared, serverPhase, setupOpen, setPrepared, d20RollingComplete, setD20RollingComplete, storeSetupWinner, storeD20Rolls]);
+  }, [
+    isSpectatorView,
+    matchId,
+    match,
+    match?.id,
+    match?.status,
+    resyncing,
+    shouldShowDraft,
+    prepared,
+    serverPhase,
+    setupOpen,
+    setPrepared,
+    d20RollingComplete,
+    setD20RollingComplete,
+    storeSetupWinner,
+    storeD20Rolls,
+  ]);
 
   useEffect(() => {
     if (isSpectatorView) {
       setSetupOpen(false);
     }
   }, [isSpectatorView]);
-
-  
 
   // Reset setup wizard when entering a different match (fresh waiting match)
   const lastResetMatchRef = useRef<string | null>(null);
@@ -1304,8 +1514,6 @@ export default function OnlineMatchPage() {
   // D20 screen to reappear mid-game. Status transitions are cosmetic; the server sends
   // incremental patches via statePatch events to update the actual game state.
 
-  
-
   // Chat
   const [chatInput, setChatInput] = useState("");
 
@@ -1321,14 +1529,11 @@ export default function OnlineMatchPage() {
   const prevEndedRef = useRef(false);
 
   // Frozen context for the match end overlay so results don't change if roster updates
-  const [finalEndContext, setFinalEndContext] = useState<
-    | {
-        winner: PlayerKey | null;
-        playerNames: { p1: string; p2: string };
-        myPlayerKey: PlayerKey | null;
-      }
-    | null
-  >(null);
+  const [finalEndContext, setFinalEndContext] = useState<{
+    winner: PlayerKey | null;
+    playerNames: { p1: string; p2: string };
+    myPlayerKey: PlayerKey | null;
+  } | null>(null);
 
   // Debug: page mount/unmount
   useEffect(() => {
@@ -1398,17 +1603,17 @@ export default function OnlineMatchPage() {
     matW = baseGridH * MAT_RATIO;
   }
   const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
-const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
-// Extract store-derived dependencies for effects to satisfy ESLint
-const playersState = useGameStore((s) => s.players);
-const currentPlayerState = useGameStore((s) => s.currentPlayer);
-const canPanCamera =
-  !resyncing &&
-  !dragFromHand &&
-  !dragFromPile &&
-  !selected &&
-  !selectedPermanent &&
-  !selectedAvatar;
+  const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+  // Extract store-derived dependencies for effects to satisfy ESLint
+  const playersState = useGameStore((s) => s.players);
+  const currentPlayerState = useGameStore((s) => s.currentPlayer);
+  const canPanCamera =
+    !resyncing &&
+    !dragFromHand &&
+    !dragFromPile &&
+    !selected &&
+    !selectedPermanent &&
+    !selectedAvatar;
 
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1434,7 +1639,11 @@ const canPanCamera =
         const dist = Math.max(matW, matH) * 1.1;
         const tilt = naturalTiltAngle;
         const sign = viewPlayerNumber === 2 ? -1 : 1;
-        cam.position.set(0, Math.cos(tilt) * dist, sign * Math.sin(tilt) * dist);
+        cam.position.set(
+          0,
+          Math.cos(tilt) * dist,
+          sign * Math.sin(tilt) * dist
+        );
         cam.up.set(0, 1, 0);
       } else {
         // Reasonable default orbit position based on seat (slightly offset)
@@ -1473,7 +1682,14 @@ const canPanCamera =
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "BUTTON")) {
+      if (
+        t &&
+        (t.isContentEditable ||
+          t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.tagName === "BUTTON")
+      ) {
         return;
       }
       e.preventDefault();
@@ -1524,8 +1740,11 @@ const canPanCamera =
           const inProgress = match?.status === "in_progress";
           if (phaseNow !== "Main" && !inProgress) {
             try {
-              const tr = useGameStore.getState().transport as unknown as { mulliganDone?: () => void } | null;
-              if (tr && typeof tr.mulliganDone === "function") tr.mulliganDone();
+              const tr = useGameStore.getState().transport as unknown as {
+                mulliganDone?: () => void;
+              } | null;
+              if (tr && typeof tr.mulliganDone === "function")
+                tr.mulliganDone();
             } catch {}
             try {
               if (matchId) {
@@ -1654,7 +1873,9 @@ const canPanCamera =
   ]);
 
   const boardInteractionMode =
-    isSpectatorView || endedByMatchStatus || matchEnded ? "spectator" : "normal";
+    isSpectatorView || endedByMatchStatus || matchEnded
+      ? "spectator"
+      : "normal";
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
     if (!c) return;
@@ -1828,17 +2049,22 @@ const canPanCamera =
         <div className="absolute top-2 right-2 z-30">
           <div className="flex items-center gap-2">
             <div className="px-2 py-1 rounded bg-purple-600/80 text-white text-xs font-semibold shadow">
-              Spectating{typeof spectatorCount === 'number' ? ` (${spectatorCount})` : ''}
+              Spectating
+              {typeof spectatorCount === "number" ? ` (${spectatorCount})` : ""}
             </div>
             <div className="bg-black/40 rounded-md p-0.5">
               <button
-                className={`px-2 py-1 text-xs rounded ${spectatorSeat === "p1" ? "bg-white/20" : "hover:bg-white/10"}`}
+                className={`px-2 py-1 text-xs rounded ${
+                  spectatorSeat === "p1" ? "bg-white/20" : "hover:bg-white/10"
+                }`}
                 onClick={() => setSpectatorSeat("p1")}
               >
                 P1
               </button>
               <button
-                className={`ml-1 px-2 py-1 text-xs rounded ${spectatorSeat === "p2" ? "bg-white/20" : "hover:bg-white/10"}`}
+                className={`ml-1 px-2 py-1 text-xs rounded ${
+                  spectatorSeat === "p2" ? "bg-white/20" : "hover:bg-white/10"
+                }`}
                 onClick={() => setSpectatorSeat("p2")}
               >
                 P2
@@ -1865,9 +2091,12 @@ const canPanCamera =
             tournamentId ? (
               <div className="w-full max-w-xl mx-auto bg-slate-900/95 rounded-xl p-6">
                 <div className="text-center">
-                  <h2 className="text-2xl font-bold text-white mb-3">Preparing Tournament Deck…</h2>
+                  <h2 className="text-2xl font-bold text-white mb-3">
+                    Preparing Tournament Deck…
+                  </h2>
                   <div className="text-slate-300">
-                    Waiting for the server to attach your submitted deck. This may take a moment.
+                    Waiting for the server to attach your submitted deck. This
+                    may take a moment.
                   </div>
                 </div>
               </div>
@@ -1920,7 +2149,9 @@ const canPanCamera =
                 myPlayerKey={myPlayerKey}
                 playerNames={playerNames}
                 onPrepareComplete={() => setPrepared(true)}
-                matchType={match?.matchType as "constructed" | "sealed" | "draft"}
+                matchType={
+                  match?.matchType as "constructed" | "sealed" | "draft"
+                }
               />
             )
           ) : serverPhase === "Setup" ? (
@@ -2067,10 +2298,20 @@ const canPanCamera =
           <MatchEndOverlay
             isVisible={matchEndOverlayOpen}
             winner={finalEndContext ? finalEndContext.winner : winner}
-            playerNames={finalEndContext ? finalEndContext.playerNames : playerNames}
-            myPlayerKey={finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey}
-            reason={(match as unknown as { endReason?: string | null })?.endReason || undefined}
-            winnerId={(match as unknown as { winnerId?: string | null })?.winnerId || undefined}
+            playerNames={
+              finalEndContext ? finalEndContext.playerNames : playerNames
+            }
+            myPlayerKey={
+              finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey
+            }
+            reason={
+              (match as unknown as { endReason?: string | null })?.endReason ||
+              undefined
+            }
+            winnerId={
+              (match as unknown as { winnerId?: string | null })?.winnerId ||
+              undefined
+            }
             myPlayerId={myPlayerId || undefined}
             onClose={() => {
               setMatchEndOverlayOpen(false);
@@ -2121,7 +2362,10 @@ const canPanCamera =
                 {/* Interactive board (physics-enabled) */}
                 <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
                   <PhysicsProbe mid={match?.id} />
-                  <Board interactionMode={boardInteractionMode} enableBoardPings />
+                  <Board
+                    interactionMode={boardInteractionMode}
+                    enableBoardPings
+                  />
                 </Physics>
 
                 {/* Seat Video planes at player positions (fixed orientation toward board) */}
@@ -2171,10 +2415,14 @@ const canPanCamera =
                     matH={MAT_PIXEL_H}
                     viewerPlayerNumber={viewPlayerNumber}
                     // Own-hand visibility: players always see; spectators see only with commentator permit
-                    showCardBacks={isSpectatorView ? !spectatorCanViewHands : false}
+                    showCardBacks={
+                      isSpectatorView ? !spectatorCanViewHands : false
+                    }
                     // Commentator: bottom edge for oriented seat; Spectator (non-commentator): also use bottom edge for oriented seat
-                    placement={isSpectatorView ? 'edgeBottom' : undefined}
-                    flatCards={isSpectatorView ? Boolean(spectatorCanViewHands) : false}
+                    placement={isSpectatorView ? "edgeBottom" : undefined}
+                    flatCards={
+                      isSpectatorView ? Boolean(spectatorCanViewHands) : false
+                    }
                     showCardPreview={showCardPreview}
                     hideCardPreview={hideCardPreview}
                   />
@@ -2189,11 +2437,17 @@ const canPanCamera =
                         matW={MAT_PIXEL_W}
                         matH={MAT_PIXEL_H}
                         // Opponent-hand visibility: players see backs; spectators see faces only with commentator permit
-                        showCardBacks={isSpectatorView ? !spectatorCanViewHands : true}
+                        showCardBacks={
+                          isSpectatorView ? !spectatorCanViewHands : true
+                        }
                         viewerPlayerNumber={viewPlayerNumber}
                         // Commentator and non-commentator spectators: top edge for the opponent seat
-                        placement={isSpectatorView ? 'edgeTop' : undefined}
-                        flatCards={isSpectatorView ? Boolean(spectatorCanViewHands) : false}
+                        placement={isSpectatorView ? "edgeTop" : undefined}
+                        flatCards={
+                          isSpectatorView
+                            ? Boolean(spectatorCanViewHands)
+                            : false
+                        }
                         showCardPreview={showCardPreview}
                         hideCardPreview={hideCardPreview}
                       />
@@ -2232,7 +2486,9 @@ const canPanCamera =
                   minDistance={minDist}
                   maxDistance={maxDist}
                   minPolarAngle={
-                    cameraMode === "topdown" ? naturalTiltAngle : safeMinOrbitTilt
+                    cameraMode === "topdown"
+                      ? naturalTiltAngle
+                      : safeMinOrbitTilt
                   }
                   maxPolarAngle={
                     cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4
@@ -2240,10 +2496,18 @@ const canPanCamera =
                   // Adjust rotation constraints based on player position
                   // Default to P1 constraints if player number not determined yet
                   minAzimuthAngle={
-                    isSpectatorView ? -Infinity : viewPlayerNumber === 2 ? Math.PI - 0.5 : -0.5
+                    isSpectatorView
+                      ? -Infinity
+                      : viewPlayerNumber === 2
+                      ? Math.PI - 0.5
+                      : -0.5
                   }
                   maxAzimuthAngle={
-                    isSpectatorView ? Infinity : viewPlayerNumber === 2 ? Math.PI + 0.5 : 0.5
+                    isSpectatorView
+                      ? Infinity
+                      : viewPlayerNumber === 2
+                      ? Math.PI + 0.5
+                      : 0.5
                   }
                 />
                 {/* Smooth spectator rotation around board center */}
@@ -2261,69 +2525,76 @@ const canPanCamera =
             </div>
           )}
         </>
-        )}
+      )}
 
-        {/* Incoming Voice Request Dialog */}
-        {voice?.incomingRequest && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 shadow-2xl max-w-md">
-              <h3 className="text-lg font-bold text-white mb-2">
-                Incoming Voice Call
-              </h3>
-              <p className="text-slate-300 mb-4">
-                {voice.incomingRequest.from.displayName || 'A player'} wants to connect via voice chat.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-medium"
-                  onClick={() => {
-                    if (voice.respondToRequest && voice.incomingRequest) {
-                      voice.respondToRequest(
-                        voice.incomingRequest.requestId,
-                        voice.incomingRequest.from.id,
-                        false
-                      );
-                    }
-                  }}
-                >
-                  Decline
-                </button>
-                <button
-                  className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-medium"
-                  onClick={() => {
-                    if (voice.respondToRequest && voice.incomingRequest) {
-                      voice.respondToRequest(
-                        voice.incomingRequest.requestId,
-                        voice.incomingRequest.from.id,
-                        true
-                      );
-                    }
-                  }}
-                >
-                  Accept
-                </button>
-              </div>
+      {/* Incoming Voice Request Dialog */}
+      {voice?.incomingRequest && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 shadow-2xl max-w-md">
+            <h3 className="text-lg font-bold text-white mb-2">
+              Incoming Voice Call
+            </h3>
+            <p className="text-slate-300 mb-4">
+              {voice.incomingRequest.from.displayName || "A player"} wants to
+              connect via voice chat.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-medium"
+                onClick={() => {
+                  if (voice.respondToRequest && voice.incomingRequest) {
+                    voice.respondToRequest(
+                      voice.incomingRequest.requestId,
+                      voice.incomingRequest.from.id,
+                      false
+                    );
+                  }
+                }}
+              >
+                Decline
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-medium"
+                onClick={() => {
+                  if (voice.respondToRequest && voice.incomingRequest) {
+                    voice.respondToRequest(
+                      voice.incomingRequest.requestId,
+                      voice.incomingRequest.from.id,
+                      true
+                    );
+                  }
+                }}
+              >
+                Accept
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Floating user badge (top-right) with presence + volume control */}
-        <UserBadge variant="floating" />
-        {/* Video overlay (avatar hidden to avoid duplicate badge) */}
-        {voice?.enabled && (
-          <GlobalVideoOverlay
-            position="top-right"
-            showUserAvatar={false}
-            rtc={rtc}
-            onRequestConnection={voiceRequestConnection}
-            targetPlayerId={matchOverlayTargetId}
-          />
-        )}
-      </div>
+      {/* Floating user badge (top-right) with presence + volume control */}
+      <UserBadge variant="floating" />
+      {/* Video overlay (avatar hidden to avoid duplicate badge) */}
+      {voice?.enabled && (
+        <GlobalVideoOverlay
+          position="top-right"
+          showUserAvatar={false}
+          rtc={rtc}
+          onRequestConnection={voiceRequestConnection}
+          targetPlayerId={matchOverlayTargetId}
+        />
+      )}
+    </div>
   );
 }
 
-function KeyboardPanControls({ enabled = true, step = 0.4 }: { enabled?: boolean; step?: number }) {
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
   const { controls } = useThree((state) => ({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
