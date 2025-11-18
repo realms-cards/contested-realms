@@ -367,15 +367,23 @@ function LobbyPageContent({
         throw new Error("Failed to load cubes");
       }
       const data = await res.json().catch(() => null);
-      const candidateList: CubeSummaryInput[] = Array.isArray(
-        (data as { myCubes?: CubeSummaryInput[] } | null)?.myCubes
-      )
-        ? (data as { myCubes: CubeSummaryInput[] }).myCubes
-        : Array.isArray(data)
-        ? (data as CubeSummaryInput[])
-        : [];
+
+      const raw = (data || null) as
+        | { myCubes?: CubeSummaryInput[]; publicCubes?: CubeSummaryInput[] }
+        | CubeSummaryInput[]
+        | null;
+
+      let candidateList: CubeSummaryInput[] = [];
+      if (raw && !Array.isArray(raw)) {
+        const my = Array.isArray(raw.myCubes) ? raw.myCubes : [];
+        const pub = Array.isArray(raw.publicCubes) ? raw.publicCubes : [];
+        candidateList = [...my, ...pub];
+      } else if (Array.isArray(raw)) {
+        candidateList = raw;
+      }
+
       const normalizedSummaries = candidateList
-        .map((entry) => normalizeCubeSummary(entry, { isOwner: true }))
+        .map((entry) => normalizeCubeSummary(entry))
         .filter((cube) => cube.id.trim().length > 0);
       const normalized = normalizedSummaries.map((cube) => ({
         id: cube.id,
@@ -385,7 +393,7 @@ function LobbyPageContent({
       setAvailableCubes(normalized);
       if (!normalized.length) {
         setCubeError(
-          "You don't have any cubes yet. Visit the Cubes page to create one."
+          "No cubes are available yet. Visit the Cubes page to create one or explore public cubes."
         );
         setSelectedCubeId(null);
         setDraftConfig((prev) => ({
