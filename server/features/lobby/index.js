@@ -244,11 +244,25 @@ function createLobbyFeature(deps) {
         ? Math.floor(Number(asObj.packSize))
         : 15;
 
+    // Preserve cube metadata when present so clients can detect cube drafts
+    // correctly even after reload.
+    const cubeId =
+      typeof asObj.cubeId === "string" && asObj.cubeId
+        ? String(asObj.cubeId)
+        : null;
+    const cubeName =
+      typeof asObj.cubeName === "string" && asObj.cubeName
+        ? String(asObj.cubeName)
+        : null;
+
     const normalized = {
       setMix,
       packCount,
       packSize,
     };
+
+    if (cubeId) normalized.cubeId = cubeId;
+    if (cubeName) normalized.cubeName = cubeName;
 
     if (Object.keys(packCounts).length > 0) {
       normalized.packCounts = packCounts;

@@ -9,11 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
-import { 
-  type Pick3D, 
+import {
+  type Pick3D,
   type BoosterCard,
   type CardMeta,
-  computeStackPositions
+  computeStackPositions,
 } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { Physics } from "@/lib/game/physics";
@@ -47,12 +47,14 @@ export default function OnlineDraftScreen({
   playerNames,
   onDraftComplete,
 }: OnlineDraftScreenProps) {
-  console.log(`[DraftClient 2D] Component mounted - myPlayerKey:${myPlayerKey}`);
+  console.log(
+    `[DraftClient 2D] Component mounted - myPlayerKey:${myPlayerKey}`
+  );
   const { transport, match, me } = useOnline();
   const matchId = match?.id ?? null;
   const router = useRouter();
   const { updateScreenType } = useVideoOverlay();
-  
+
   // Draft UI state
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,21 +65,28 @@ export default function OnlineDraftScreen({
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [usedPacks, setUsedPacks] = useState<number[]>([]); // Track which pack indices have been used
-  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<number | null>(null); // Track if we've shown overlay for current round
-  
+  const [shownPackOverlayForRound, setShownPackOverlayForRound] = useState<
+    number | null
+  >(null); // Track if we've shown overlay for current round
+
   // Convert Card to BoosterCard format for Pick3D
-  const cardToBoosterCard = useCallback((card: Card): BoosterCard => ({
-    variantId: 0, // Not available in draft context
-    slug: card.slug,
-    finish: "Standard" as const,
-    product: "Draft",
-    rarity: (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") || "Ordinary",
-    type: card.type || null,
-    cardId: parseInt(card.id) || 0,
-    cardName: card.name,
-    setName: card.setName || "Beta", // Include set information from server
-  }), []);
-  
+  const cardToBoosterCard = useCallback(
+    (card: Card): BoosterCard => ({
+      variantId: 0, // Not available in draft context
+      slug: card.slug,
+      finish: "Standard" as const,
+      product: "Draft",
+      rarity:
+        (card.rarity as "Ordinary" | "Exceptional" | "Elite" | "Unique") ||
+        "Ordinary",
+      type: card.type || null,
+      cardId: parseInt(card.id) || 0,
+      cardName: card.name,
+      setName: card.setName || "Beta", // Include set information from server
+    }),
+    []
+  );
+
   // Draft game state (synchronized from server)
   const [draftState, setDraftState] = useState<DraftState>({
     phase: "waiting",
@@ -87,16 +96,23 @@ export default function OnlineDraftScreen({
     picks: [[], []],
     packDirection: "left",
     packChoice: [null, null],
-    waitingFor: []
+    waitingFor: [],
   });
 
   const myPlayerIndex = myPlayerKey === "p1" ? 0 : 1;
   const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as Card[];
   const myPicks = (draftState.picks[myPlayerIndex] || []) as Card[];
   // Determine if it's my turn to pick
-  const myPlayerId = useMemo(() => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null, [me?.id, match?.players, myPlayerIndex]);
+  const myPlayerId = useMemo(
+    () => me?.id ?? match?.players?.[myPlayerIndex]?.id ?? null,
+    [me?.id, match?.players, myPlayerIndex]
+  );
   const amPicker = useMemo(() => {
-    return draftState.phase === "picking" && !!myPlayerId && draftState.waitingFor.includes(myPlayerId);
+    return (
+      draftState.phase === "picking" &&
+      !!myPlayerId &&
+      draftState.waitingFor.includes(myPlayerId)
+    );
   }, [draftState.phase, draftState.waitingFor, myPlayerId]);
 
   // Camera controls
@@ -104,14 +120,16 @@ export default function OnlineDraftScreen({
 
   // Set screen type for video overlay
   useEffect(() => {
-    updateScreenType('draft');
+    updateScreenType("draft");
     return undefined;
   }, [updateScreenType]);
 
   // Initialize draft state from match on component mount (for rejoining players)
   useEffect(() => {
     if (match?.draftState) {
-      console.log(`[DraftClient 2D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`);
+      console.log(
+        `[DraftClient 2D] Initializing from match draft state: phase=${match.draftState.phase} pack=${match.draftState.packIndex} pick=${match.draftState.pickNumber}`
+      );
       setDraftState(match.draftState);
     }
     return undefined;
@@ -125,10 +143,17 @@ export default function OnlineDraftScreen({
       const draftState = state as DraftState;
       setDraftState(draftState);
       {
-        const myPackSize = (draftState.currentPacks?.[myPlayerIndex] || []).length;
-        console.log(`[DraftClient 2D] draftUpdate: phase=${draftState.phase} pack=${draftState.packIndex} pick=${draftState.pickNumber} myPack=${myPackSize} waitingFor=${draftState.waitingFor?.length ?? 0}`);
+        const myPackSize = (draftState.currentPacks?.[myPlayerIndex] || [])
+          .length;
+        console.log(
+          `[DraftClient 2D] draftUpdate: phase=${draftState.phase} pack=${
+            draftState.packIndex
+          } pick=${draftState.pickNumber} myPack=${myPackSize} waitingFor=${
+            draftState.waitingFor?.length ?? 0
+          }`
+        );
       }
-      
+
       // Clear staged pick when new pack arrives and handle auto-pick
       if (draftState.phase === "picking") {
         console.log(
@@ -136,44 +161,58 @@ export default function OnlineDraftScreen({
         );
         setStaged(null);
         setReady(false);
-        
+
         // Show pack choice overlay at the start of each pack (only once per round)
         const amPicker = draftState.waitingFor.includes(me?.id || "");
-        if (draftState.pickNumber === 1 && amPicker && !packChoiceOverlay && shownPackOverlayForRound !== draftState.packIndex) {
-          console.log(`[DraftClient 2D] Showing pack choice overlay for pack ${draftState.packIndex + 1}`);
+        if (
+          draftState.pickNumber === 1 &&
+          amPicker &&
+          !packChoiceOverlay &&
+          shownPackOverlayForRound !== draftState.packIndex
+        ) {
+          console.log(
+            `[DraftClient 2D] Showing pack choice overlay for pack ${
+              draftState.packIndex + 1
+            }`
+          );
           setPackChoiceOverlay(true);
           setShownPackOverlayForRound(draftState.packIndex);
           return; // Don't auto-pick when pack choice is needed
         }
-        
+
         // Auto-pick if only one card left in pack
-        const myPack = (draftState.currentPacks?.[myPlayerIndex] || []) as Card[];
+        const myPack = (draftState.currentPacks?.[myPlayerIndex] ||
+          []) as Card[];
         if (myPack.length === 1 && !staged && !ready) {
           const lastCard = myPack[0];
-          console.log(`[DraftClient 2D] Auto-picking last card: ${lastCard.name} (${lastCard.id})`);
-          
+          console.log(
+            `[DraftClient 2D] Auto-picking last card: ${lastCard.name} (${lastCard.id})`
+          );
+
           // Stage the card first
           setStaged(lastCard);
-          
+
           // Then auto-pick it after a short delay
           setTimeout(() => {
             if (!transport || !match) return;
-            
-            console.log(`[DraftClient 2D] Auto-makeDraftPick -> cardId=${lastCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber}`);
-            
+
+            console.log(
+              `[DraftClient 2D] Auto-makeDraftPick -> cardId=${lastCard.id} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+            );
+
             setReady(true);
-            
+
             try {
               transport.makeDraftPick({
                 matchId: match.id,
                 cardId: lastCard.id,
                 packIndex: draftState.packIndex,
-                pickNumber: draftState.pickNumber
+                pickNumber: draftState.pickNumber,
               });
             } catch (err) {
               console.error(`[DraftClient 2D] Auto-pick error:`, err);
             }
-            
+
             // Add auto-picked card to 3D board display
             const boosterCard = cardToBoosterCard(lastCard);
             const newPick: Pick3D = {
@@ -183,53 +222,87 @@ export default function OnlineDraftScreen({
               z: Math.random() * 4 - 2,
               zone: "Deck" as const,
             };
-            setPick3D(prev => [...prev, newPick]);
-            setNextPickId(prev => prev + 1);
+            setPick3D((prev) => [...prev, newPick]);
+            setNextPickId((prev) => prev + 1);
             setStaged(null);
           }, 500); // Small delay to show the staging visually
         }
       }
-      
+
       // Handle draft completion and transition to editor-3d
       if (draftState.phase === "complete") {
         const myFinalPicks = (draftState.picks[myPlayerIndex] || []) as Card[];
-        console.log(`[DraftClient 2D] Draft complete! Picked ${myFinalPicks.length} cards`);
-        
+        console.log(
+          `[DraftClient 2D] Draft complete! Picked ${myFinalPicks.length} cards`
+        );
+
         // Save draft picks to local storage for deck building
         try {
           if (matchId) {
-            localStorage.setItem(`draftedCards_${matchId}`, JSON.stringify(myFinalPicks));
-            console.log(`[DraftClient 2D] Draft data saved to localStorage for matchId: ${matchId}`);
+            localStorage.setItem(
+              `draftedCards_${matchId}`,
+              JSON.stringify(myFinalPicks)
+            );
+            console.log(
+              `[DraftClient 2D] Draft data saved to localStorage for matchId: ${matchId}`
+            );
           }
         } catch (err) {
           console.error(`[DraftClient 2D] Failed to save draft data:`, err);
         }
-        
+
         // Navigate to 3D editor in draft mode
         setTimeout(() => {
-          if (matchId) router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
+          if (matchId)
+            router.push(`/decks/editor-3d?draft=true&matchId=${matchId}`);
         }, 600);
-        
+
         onDraftComplete(myFinalPicks);
       }
     };
 
     // Register listener using the transport's on method
-    const unsubscribe = transport.on("draftUpdate" as keyof TransportEventMap, handleDraftUpdate);
+    const unsubscribe = transport.on(
+      "draftUpdate" as keyof TransportEventMap,
+      handleDraftUpdate
+    );
 
     return unsubscribe;
-  }, [transport, myPlayerIndex, onDraftComplete, matchId, match, staged, ready, me, packChoiceOverlay, usedPacks, shownPackOverlayForRound, cardToBoosterCard, nextPickId, router]);
+  }, [
+    transport,
+    myPlayerIndex,
+    onDraftComplete,
+    matchId,
+    match,
+    staged,
+    ready,
+    me,
+    packChoiceOverlay,
+    usedPacks,
+    shownPackOverlayForRound,
+    cardToBoosterCard,
+    nextPickId,
+    router,
+  ]);
 
   // Start draft when both players are ready
   const handleStartDraft = useCallback(async () => {
     if (!transport || !match) return;
-    
+
     setError(null);
     setLoading(true);
-    
+
     try {
-      const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15 };
-      console.log(`[DraftClient 2D] startDraft -> match=${match.id} cfg=${JSON.stringify(draftConfig)}`);
+      const draftConfig = match.draftConfig ?? {
+        setMix: ["Beta"],
+        packCount: 3,
+        packSize: 15,
+      };
+      console.log(
+        `[DraftClient 2D] startDraft -> match=${match.id} cfg=${JSON.stringify(
+          draftConfig
+        )}`
+      );
       await transport.startDraft?.({ matchId: match.id, draftConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start draft");
@@ -239,48 +312,63 @@ export default function OnlineDraftScreen({
   }, [transport, match]);
 
   // Handle card staging
-  const handleStageCard = useCallback((card: Card) => {
-    console.log(`[DraftClient 2D] handleStageCard called - phase:${draftState.phase} ready:${ready}`);
-    if (draftState.phase !== "picking" || ready) {
-      console.warn(`[DraftClient 2D] handleStageCard blocked - phase:${draftState.phase} ready:${ready}`);
-      return;
-    }
-    console.log(
-      `[DraftClient 2D] stagePick -> cardId=${card.id} name=${card.name} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
-    );
-    setStaged(card);
-    setReady(false);
-  }, [draftState.phase, ready, draftState.packIndex, draftState.pickNumber]);
+  const handleStageCard = useCallback(
+    (card: Card) => {
+      console.log(
+        `[DraftClient 2D] handleStageCard called - phase:${draftState.phase} ready:${ready}`
+      );
+      if (draftState.phase !== "picking" || ready) {
+        console.warn(
+          `[DraftClient 2D] handleStageCard blocked - phase:${draftState.phase} ready:${ready}`
+        );
+        return;
+      }
+      console.log(
+        `[DraftClient 2D] stagePick -> cardId=${card.id} name=${card.name} pack=${draftState.packIndex} pick=${draftState.pickNumber}`
+      );
+      setStaged(card);
+      setReady(false);
+    },
+    [draftState.phase, ready, draftState.packIndex, draftState.pickNumber]
+  );
 
   // Handle pick and pass when button is clicked
   const handlePickAndPass = useCallback(() => {
-    console.log(`[DraftClient 2D] handlePickAndPass called - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`);
-    
+    console.log(
+      `[DraftClient 2D] handlePickAndPass called - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`
+    );
+
     if (!staged || !transport || !match || ready) {
-      console.warn(`[DraftClient 2D] handlePickAndPass blocked - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`);
+      console.warn(
+        `[DraftClient 2D] handlePickAndPass blocked - staged:${!!staged} transport:${!!transport} match:${!!match} ready:${ready}`
+      );
       return;
     }
-    
-    console.log(`[DraftClient 2D] makeDraftPick -> cardId=${staged.id} pack=${draftState.packIndex} pick=${draftState.pickNumber} match=${match.id}`);
-    
+
+    console.log(
+      `[DraftClient 2D] makeDraftPick -> cardId=${staged.id} pack=${draftState.packIndex} pick=${draftState.pickNumber} match=${match.id}`
+    );
+
     setReady(true);
-    
+
     if (!transport.makeDraftPick) {
-      console.error(`[DraftClient 2D] transport.makeDraftPick is not available!`);
+      console.error(
+        `[DraftClient 2D] transport.makeDraftPick is not available!`
+      );
       return;
     }
-    
+
     try {
       transport.makeDraftPick({
         matchId: match.id,
         cardId: staged.id,
         packIndex: draftState.packIndex,
-        pickNumber: draftState.pickNumber
+        pickNumber: draftState.pickNumber,
       });
     } catch (err) {
       console.error(`[DraftClient 2D] makeDraftPick error:`, err);
     }
-    
+
     // Add picked card to 3D board display
     const boosterCard = cardToBoosterCard(staged);
     const newPick: Pick3D = {
@@ -290,79 +378,122 @@ export default function OnlineDraftScreen({
       z: Math.random() * 4 - 2,
       zone: "Deck" as const,
     };
-    setPick3D(prev => [...prev, newPick]);
-    setNextPickId(prev => prev + 1);
-    
+    setPick3D((prev) => [...prev, newPick]);
+    setNextPickId((prev) => prev + 1);
+
     // Clear staged after pick
     console.log(`[DraftClient 2D] pickAndPass -> cardId=${staged.id}`);
     setStaged(null);
-  }, [staged, transport, match, ready, draftState.packIndex, draftState.pickNumber, cardToBoosterCard, nextPickId]);
+  }, [
+    staged,
+    transport,
+    match,
+    ready,
+    draftState.packIndex,
+    draftState.pickNumber,
+    cardToBoosterCard,
+    nextPickId,
+  ]);
 
   // Keyboard event handling for spacebar pick and pass
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Only handle spacebar when a card is staged and it's the player's turn
-      if (event.code === 'Space' && staged && amPicker && !ready) {
+      if (event.code === "Space" && staged && amPicker && !ready) {
         event.preventDefault();
-        console.log(`[DraftClient 2D] Spacebar pressed - triggering pick and pass`);
+        console.log(
+          `[DraftClient 2D] Spacebar pressed - triggering pick and pass`
+        );
         handlePickAndPass();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [staged, ready, handlePickAndPass, amPicker]);
 
   // Create sorted stack positions for picked cards
   const stackedPositions = useMemo(() => {
-    return computeStackPositions(pick3D, {} as Record<number, CardMeta>, isSortingEnabled);
+    return computeStackPositions(
+      pick3D,
+      {} as Record<number, CardMeta>,
+      isSortingEnabled
+    );
   }, [pick3D, isSortingEnabled]);
 
   // Handle pack selection and notify server
-  const handlePackChoice = useCallback(async (packIndex: number) => {
-    if (!transport || !match) {
-      console.error(`[DraftClient 2D] Cannot choose pack - transport:${!!transport} match:${!!match}`);
-      return;
-    }
+  const handlePackChoice = useCallback(
+    async (packIndex: number) => {
+      if (!transport || !match) {
+        console.error(
+          `[DraftClient 2D] Cannot choose pack - transport:${!!transport} match:${!!match}`
+        );
+        return;
+      }
 
-    console.log(`[DraftClient 2D] Pack ${packIndex + 1} selected for round ${draftState.packIndex + 1}`);
-    
-    // Send pack choice to server
-    try {
-      // Determine the set choice based on pack index
-      const draftConfig = match.draftConfig ?? { setMix: ["Beta"], packCount: 3, packSize: 15, packCounts: {} };
-      // Build actual pack sequence from packCounts
-      const packSequence: string[] = [];
-      if (draftConfig.packCounts && typeof draftConfig.packCounts === 'object') {
-        for (const [setName, count] of Object.entries(draftConfig.packCounts)) {
-          for (let i = 0; i < count; i++) {
-            packSequence.push(setName);
+      console.log(
+        `[DraftClient 2D] Pack ${packIndex + 1} selected for round ${
+          draftState.packIndex + 1
+        }`
+      );
+
+      // Send pack choice to server
+      try {
+        // Determine the set choice based on pack index
+        const draftConfig = match.draftConfig ?? {
+          setMix: ["Beta"],
+          packCount: 3,
+          packSize: 15,
+          packCounts: {},
+        };
+        // Build actual pack sequence from packCounts
+        const packSequence: string[] = [];
+        if (
+          draftConfig.packCounts &&
+          typeof draftConfig.packCounts === "object"
+        ) {
+          for (const [setName, count] of Object.entries(
+            draftConfig.packCounts
+          )) {
+            for (let i = 0; i < count; i++) {
+              packSequence.push(setName);
+            }
           }
         }
-      }
-      // Use the exact set for this pack index, or fallback to setMix
-      const setChoice = packSequence[packIndex] || draftConfig.setMix[Math.min(packIndex, draftConfig.setMix.length - 1)] || "Beta";
-      
-      console.log(`[DraftClient 2D] chooseDraftPack -> setChoice=${setChoice} packIndex=${draftState.packIndex} match=${match.id}`);
-      
-      if (transport.chooseDraftPack) {
-        transport.chooseDraftPack({
-          matchId: match.id,
-          setChoice,
-          packIndex: draftState.packIndex
-        });
-      } else {
-        console.error(`[DraftClient 2D] chooseDraftPack method not available on transport`);
-      }
-    } catch (err) {
-      console.error(`[DraftClient 2D] chooseDraftPack error:`, err);
-    }
+        // Use the exact set for this pack index, or fallback to setMix
+        const setChoice =
+          packSequence[packIndex] ||
+          draftConfig.setMix[
+            Math.min(packIndex, draftConfig.setMix.length - 1)
+          ] ||
+          "Beta";
 
-    setUsedPacks(prev => [...prev, packIndex]);
-    setPackChoiceOverlay(false);
-  }, [draftState.packIndex, transport, match]);
+        console.log(
+          `[DraftClient 2D] chooseDraftPack -> setChoice=${setChoice} packIndex=${draftState.packIndex} match=${match.id}`
+        );
+
+        if (transport.chooseDraftPack) {
+          transport.chooseDraftPack({
+            matchId: match.id,
+            setChoice,
+            packIndex: draftState.packIndex,
+          });
+        } else {
+          console.error(
+            `[DraftClient 2D] chooseDraftPack method not available on transport`
+          );
+        }
+      } catch (err) {
+        console.error(`[DraftClient 2D] chooseDraftPack error:`, err);
+      }
+
+      setUsedPacks((prev) => [...prev, packIndex]);
+      setPackChoiceOverlay(false);
+    },
+    [draftState.packIndex, transport, match]
+  );
 
   // Get opponent info
   const opponentKey = myPlayerKey === "p1" ? "p2" : "p1";
@@ -380,10 +511,20 @@ export default function OnlineDraftScreen({
       }
     }
     // Fallback to setMix if packCounts is empty
-    const availableSets = packSequence.length > 0 ? packSequence : (match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"]);
+    let availableSets =
+      packSequence.length > 0
+        ? packSequence
+        : match?.draftConfig?.setMix || ["Beta", "Beta", "Beta"];
+
+    // For cube drafts, always label packs with the cube name rather than
+    // underlying card set names, so all players see consistent cube labels.
+    if (match?.draftConfig?.cubeId) {
+      const cubeLabel = match.draftConfig.cubeName || "Custom Cube";
+      availableSets = availableSets.map(() => cubeLabel);
+    }
     // Always show 3 packs, one for each round
     const packs = [0, 1, 2];
-    
+
     return (
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
@@ -393,7 +534,9 @@ export default function OnlineDraftScreen({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {packs.map((packIdx) => {
               const isUsed = usedPacks.includes(packIdx);
-              const setName = availableSets[packIdx] || availableSets[packIdx % availableSets.length]; // Use exact pack or cycle if needed
+              const setName =
+                availableSets[packIdx] ||
+                availableSets[packIdx % availableSets.length]; // Use exact pack or cycle if needed
               const assetName = (() => {
                 const s = (setName || "").toLowerCase();
                 if (s.includes("arthur")) return "arthurian-booster.png";
@@ -401,14 +544,16 @@ export default function OnlineDraftScreen({
                 if (s.includes("beta")) return "alphabeta-booster.png";
                 return "alphabeta-booster.png"; // Default
               })();
-              
+
               return (
                 <button
                   key={`pack-opt-${packIdx}`}
                   onClick={() => !isUsed && handlePackChoice(packIdx)}
                   disabled={isUsed}
                   className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left ${
-                    isUsed ? "opacity-40 cursor-not-allowed" : "hover:bg-black/50"
+                    isUsed
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-black/50"
                   }`}
                   aria-label={`${isUsed ? "Used" : "Open"} pack ${packIdx + 1}`}
                 >
@@ -451,7 +596,7 @@ export default function OnlineDraftScreen({
       <div className="w-full max-w-4xl mx-auto bg-slate-900/95 rounded-xl p-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
-          
+
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="bg-slate-800 rounded-lg p-6">
               <h3 className="text-xl font-semibold text-white mb-4">Players</h3>
@@ -466,24 +611,28 @@ export default function OnlineDraftScreen({
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Draft Settings</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Draft Settings
+              </h3>
               <div className="space-y-2 text-slate-300">
-                <div>Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}</div>
+                <div>
+                  Sets: {match?.draftConfig?.setMix?.join(", ") || "Beta"}
+                </div>
                 <div>Packs: 3</div>
                 <div>Pack size: 15 cards</div>
                 <div>Players: 2</div>
               </div>
             </div>
           </div>
-          
+
           {error && (
             <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
               {error}
             </div>
           )}
-          
+
           <button
             onClick={handleStartDraft}
             disabled={loading}
@@ -504,20 +653,23 @@ export default function OnlineDraftScreen({
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center space-x-6">
             <div className="text-white font-semibold">
-              Pack {draftState.packIndex + 1} / 3 • Pick {draftState.pickNumber} / 15
+              Pack {draftState.packIndex + 1} / 3 • Pick {draftState.pickNumber}{" "}
+              / 15
               {draftState.phase === "passing" && (
-                <span> • Passing {draftState.packDirection === "left" ? "Left" : "Right"}</span>
+                <span>
+                  {" "}
+                  • Passing{" "}
+                  {draftState.packDirection === "left" ? "Left" : "Right"}
+                </span>
               )}
             </div>
             <div className="text-slate-300">
               {myPack.length} cards remaining
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-4">
-            <div className="text-slate-300">
-              Your picks: {myPicks.length}
-            </div>
+            <div className="text-slate-300">Your picks: {myPicks.length}</div>
             <div className="text-slate-300">
               {playerNames[opponentKey]} picks: {opponentPicks.length}
             </div>
@@ -536,11 +688,15 @@ export default function OnlineDraftScreen({
             )}
           </div>
         </div>
-        
+
         {/* Pick status */}
         <div className="px-4 pb-4">
           {(() => {
-            console.log(`[DraftClient 2D] Render state - staged:${!!staged} phase:${draftState.phase} ready:${ready}`);
+            console.log(
+              `[DraftClient 2D] Render state - staged:${!!staged} phase:${
+                draftState.phase
+              } ready:${ready}`
+            );
             return null;
           })()}
           {staged ? (
@@ -556,12 +712,19 @@ export default function OnlineDraftScreen({
                 disabled={ready}
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white font-semibold rounded transition-colors"
               >
-                {ready ? `Waiting for ${draftState.waitingFor.length - 1} other player${draftState.waitingFor.length - 1 === 1 ? '' : 's'}...` : "Pick & Pass"}
+                {ready
+                  ? `Waiting for ${
+                      draftState.waitingFor.length - 1
+                    } other player${
+                      draftState.waitingFor.length - 1 === 1 ? "" : "s"
+                    }...`
+                  : "Pick & Pass"}
               </button>
             </div>
           ) : draftState.phase === "passing" ? (
             <div className="bg-yellow-900/50 border border-yellow-500 rounded-lg p-3 text-yellow-200">
-              Passing packs {draftState.packDirection === "left" ? "left" : "right"}...
+              Passing packs{" "}
+              {draftState.packDirection === "left" ? "left" : "right"}...
             </div>
           ) : (
             <div className="text-slate-400 text-center">
@@ -572,17 +735,17 @@ export default function OnlineDraftScreen({
       </div>
 
       {/* Pack choice button - only show before any picks are made */}
-      {draftState.packIndex < 3 && 
-       draftState.pickNumber === 1 && 
-       !staged && 
-       shownPackOverlayForRound !== draftState.packIndex && (
-        <button
-          onClick={() => setPackChoiceOverlay(true)}
-          className="absolute top-20 right-4 z-20 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
-        >
-          Choose Pack {draftState.packIndex + 1}
-        </button>
-      )}
+      {draftState.packIndex < 3 &&
+        draftState.pickNumber === 1 &&
+        !staged &&
+        shownPackOverlayForRound !== draftState.packIndex && (
+          <button
+            onClick={() => setPackChoiceOverlay(true)}
+            className="absolute top-20 right-4 z-20 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            Choose Pack {draftState.packIndex + 1}
+          </button>
+        )}
 
       {/* 3D Canvas */}
       <div className="absolute inset-0 w-full h-full pt-24">
@@ -594,16 +757,16 @@ export default function OnlineDraftScreen({
           <color attach="background" args={["#1e293b"]} />
           <ambientLight intensity={0.4} />
           <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
-          
+
           <Physics gravity={[0, -9.81, 0]}>
             {/* Current pack cards */}
             {myPack.map((card, idx) => (
               <group
                 key={`${card.id}-${draftState.packIndex}-${draftState.pickNumber}`}
                 position={[
-                  (idx % 5 - 2) * 2.2,
+                  ((idx % 5) - 2) * 2.2,
                   0.1,
-                  Math.floor(idx / 5) * -2.5
+                  Math.floor(idx / 5) * -2.5,
                 ]}
                 rotation={[0, 0, 0]}
               >
@@ -612,7 +775,9 @@ export default function OnlineDraftScreen({
                   width={1.5}
                   height={2.1}
                   onClick={() => {
-                    console.log(`[DraftClient 2D] Card clicked: ${card.name} (${card.id})`);
+                    console.log(
+                      `[DraftClient 2D] Card clicked: ${card.name} (${card.id})`
+                    );
                     handleStageCard(card);
                   }}
                   interactive={draftState.phase === "picking" && !ready}
@@ -620,7 +785,7 @@ export default function OnlineDraftScreen({
                 />
               </group>
             ))}
-            
+
             {/* Picked cards display (right side) */}
             {pick3D.slice(-15).map((pick, idx) => (
               <group
@@ -628,7 +793,7 @@ export default function OnlineDraftScreen({
                 position={[
                   8 + (idx % 3) * 1.1,
                   0.1 + idx * 0.05,
-                  (Math.floor(idx / 3) - 2) * 1.2
+                  (Math.floor(idx / 3) - 2) * 1.2,
                 ]}
                 rotation={[0, 0, 0]}
                 scale={[0.7, 0.7, 0.7]}
@@ -641,7 +806,7 @@ export default function OnlineDraftScreen({
                 />
               </group>
             ))}
-            
+
             {/* Ground plane */}
             <RigidBody type="fixed">
               <mesh receiveShadow position={[0, -0.5, 0]}>
@@ -649,7 +814,7 @@ export default function OnlineDraftScreen({
                 <meshStandardMaterial color="#334155" />
               </mesh>
             </RigidBody>
-            
+
             {/* Labels */}
             <Text
               font="/fantaisie_artistiqu.ttf"
@@ -661,7 +826,7 @@ export default function OnlineDraftScreen({
             >
               Current Pack
             </Text>
-            
+
             <Text
               font="/fantaisie_artistiqu.ttf"
               position={[8, 2, 0]}
@@ -673,17 +838,31 @@ export default function OnlineDraftScreen({
               Your Picks
             </Text>
           </Physics>
-          
+
           {/* Picked cards displayed on the board */}
           {pick3D.length > 0 && (
             <group>
               {pick3D.map((p) => {
-                const stackPos = stackedPositions?.get(p.id) || { x: p.x, z: p.z, stackIndex: 0, isVisible: true };
+                const stackPos = stackedPositions?.get(p.id) || {
+                  x: p.x,
+                  z: p.z,
+                  stackIndex: 0,
+                  isVisible: true,
+                };
                 if (!stackPos.isVisible) return null;
-                
-                const isSite = (p.card.type || "").toLowerCase().includes("site");
+
+                const isSite = (p.card.type || "")
+                  .toLowerCase()
+                  .includes("site");
                 return (
-                  <group key={`pick-${p.id}`} position={[stackPos.x, 0.01 + stackPos.stackIndex * 0.01, stackPos.z]}>
+                  <group
+                    key={`pick-${p.id}`}
+                    position={[
+                      stackPos.x,
+                      0.01 + stackPos.stackIndex * 0.01,
+                      stackPos.z,
+                    ]}
+                  >
                     <CardPlane
                       slug={p.card.slug}
                       width={isSite ? 3.5 : 2.5}
@@ -696,7 +875,7 @@ export default function OnlineDraftScreen({
               })}
             </group>
           )}
-          
+
           <OrbitControls
             ref={controlsRef}
             target={[0, 0, 0]}
@@ -706,15 +885,15 @@ export default function OnlineDraftScreen({
           />
         </Canvas>
       </div>
-      
+
       {/* Video Overlay */}
-      <GlobalVideoOverlay 
+      <GlobalVideoOverlay
         position="top-right"
         showUserAvatar={true}
         transport={transport}
         myPlayerId={me?.id || null}
         matchId={matchId}
-        userDisplayName={me?.displayName || ''}
+        userDisplayName={me?.displayName || ""}
         userAvatarUrl={undefined} // No avatar URL available yet
       />
     </div>
