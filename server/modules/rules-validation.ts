@@ -1,5 +1,6 @@
 "use strict";
 
+import * as path from "path";
 import type { AnyRecord, MatchPatch } from "../types";
 
 type SeatKey = "p1" | "p2";
@@ -10,6 +11,137 @@ type Thresholds = {
   earth?: number;
   fire?: number;
 };
+
+type CardLike = Record<string, unknown>;
+
+let CARDS_DB: CardLike[] | null = null;
+
+function loadCardsDb(): CardLike[] {
+  if (CARDS_DB) return CARDS_DB;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    CARDS_DB = require(path.join(
+      __dirname,
+      "..",
+      "..",
+      "data",
+      "cards_raw.json"
+    )) as CardLike[];
+  } catch {
+    CARDS_DB = [];
+  }
+  return CARDS_DB;
+}
+
+function getCardBySlug(slug: string | null): CardLike | null {
+  if (!slug) return null;
+  const db = loadCardsDb();
+  const needle = String(slug).toLowerCase();
+  for (const c of db) {
+    try {
+      const sets = Array.isArray((c as CardLike).sets)
+        ? ((c as CardLike).sets as unknown[])
+        : [];
+      for (const s of sets) {
+        const vs = (s as CardLike)?.variants as unknown[];
+        if (!Array.isArray(vs)) continue;
+        if (
+          vs.find(
+            (v) => String((v as CardLike).slug) === String(needle)
+          )
+        ) {
+          return c;
+        }
+      }
+    } catch {
+      // ignore malformed entries
+    }
+  }
+  return null;
+}
+
+function getCardByName(name: string | null): CardLike | null {
+  if (!name) return null;
+  const db = loadCardsDb();
+  const low = String(name).toLowerCase();
+  for (const c of db) {
+    try {
+      const nm = (c.name ? String(c.name) : "").toLowerCase();
+      if (nm === low) return c;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+function getThresholdsForCard(card: AnyRecord): Thresholds | null {
+  // Inline thresholds (preferred for tests)
+  if (card && card.thresholds && typeof card.thresholds === "object") {
+    return card.thresholds as Thresholds;
+  }
+  const slug =
+    card && card.slug ? String(card.slug) : null;
+  if (slug) {
+    const found = getCardBySlug(slug);
+    const meta =
+      (found &&
+        ((found.guardian as CardLike | undefined) ||
+          ((Array.isArray(found.sets) &&
+            found.sets[0] &&
+            (found.sets[0] as CardLike).metadata
+            ? ((found.sets[0] as CardLike)
+                .metadata as CardLike)
+            : null)))) ||
+      null;
+    if (meta && typeof meta.thresholds === "object") {
+      return meta.thresholds as Thresholds;
+    }
+  }
+  const nm =
+    card && card.name ? String(card.name) : null;
+  if (nm) {
+    const found = getCardByName(nm);
+    const meta =
+      (found &&
+        ((found.guardian as CardLike | undefined) ||
+          ((Array.isArray(found.sets) &&
+            found.sets[0] &&
+            (found.sets[0] as CardLike).metadata
+            ? ((found.sets[0] as CardLike)
+                .metadata as CardLike)
+            : null)))) ||
+      null;
+    if (meta && typeof meta.thresholds === "object") {
+      return meta.thresholds as Thresholds;
+    }
+  }
+  return null;
+}
+
+const THRESHOLD_KEYS: ReadonlyArray<keyof Thresholds> = [
+  "air",
+  "water",
+  "earth",
+  "fire",
+] as const;
+
+const THRESHOLD_GRANT_BY_NAME: Record<string, Thresholds> = {
+  "amethyst core": { air: 1 },
+  "aquamarine core": { water: 1 },
+  "onyx core": { earth: 1 },
+  "ruby core": { fire: 1 },
+};
+
+function accumulateThresholds(acc: Thresholds, src: Thresholds | null): void {
+  if (!src) return;
+  for (const k of THRESHOLD_KEYS) {
+    const v = Number(src[k] ?? 0);
+    if (Number.isFinite(v) && v !== 0) {
+      acc[k] = (acc[k] || 0) + v;
+    }
+  }
+}
 
 function parseCellKey(key: string): { x: number; y: number } | null {
   try {
@@ -97,21 +229,38 @@ function countThresholdsForPlayer(
       const tile = sites[key];
       if (!tile || Number(tile.owner) !== playerNum) continue;
       const card = tile.card as AnyRecord | undefined;
-      const th = card && typeof card.thresholds === "object"
-        ? (card.thresholds as Thresholds)
-        : null;
-      if (!th) continue;
-      for (const k of ["air", "water", "earth", "fire"] as const) {
-        const v = Number(th[k] ?? 0);
-        if (Number.isFinite(v) && v !== 0) {
-          out[k] = (out[k] || 0) + v;
-        }
+      const th =
+        card && typeof card.thresholds === "object"
+          ? (card.thresholds as Thresholds)
+          : null;
+      if (th) {
+        accumulateThresholds(out, th);
       }
     } catch {
       // ignore per-tile failures
     }
   }
-  // Permanents that grant thresholds are handled elsewhere (this mirrors JS behavior indirectly)
+  // Permanents that grant thresholds (e.g., cores)
+  const per =
+    (game.permanents as Record<string, unknown[]>) || {};
+  for (const cellKey of Object.keys(per)) {
+    const arrRaw = per[cellKey];
+    const arr = Array.isArray(arrRaw) ? arrRaw : [];
+    for (const p of arr) {
+      try {
+        const perm = (p || {}) as AnyRecord;
+        if (!perm || Number(perm.owner) !== playerNum) continue;
+        const nm = (perm.card && (perm.card as AnyRecord).name
+          ? String((perm.card as AnyRecord).name)
+          : ""
+        ).toLowerCase();
+        const grant = THRESHOLD_GRANT_BY_NAME[nm];
+        if (grant) accumulateThresholds(out, grant);
+      } catch {
+        // ignore malformed entries
+      }
+    }
+  }
   return out;
 }
 
@@ -380,22 +529,22 @@ export function validateAction(
         meNum
       );
       if (newItems.length > 0) {
+        // Timing: permanents may only be *played* during the acting player's own turn.
+        // We intentionally do NOT enforce a specific phase label here (the whole turn is playable).
         if (
-          !(
-            effectivePlayer === meNum &&
-            effectivePhase &&
-            effectivePhase === "Main"
-          )
+          typeof effectivePlayer === "number" &&
+          typeof meNum === "number" &&
+          effectivePlayer !== meNum
         ) {
           return {
             ok: false,
-            error: "Permanents can only be played during your Main phase",
+            error: "Permanents can only be played during your own turn",
           };
         }
         for (const p of newItems) {
           const card = (p.card || null) as AnyRecord | null;
           if (!card) continue;
-          const th = (card.thresholds || null) as Thresholds | null;
+          const th = getThresholdsForCard(card);
           if (!th) continue;
           if ((th.air || 0) > (available.air || 0))
             return { ok: false, error: "Insufficient Air thresholds" };
