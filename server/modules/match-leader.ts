@@ -211,6 +211,18 @@ interface MatchLeaderDeps {
     playerId: string,
     ctx: { match: MatchState }
   ) => MatchPatch | null | undefined;
+  ensureCosts: (
+    state: MatchGameState | undefined,
+    patch: MatchPatch,
+    playerId: string,
+    ctx: { match: MatchState }
+  ) => { ok: boolean; error?: string; autoPatch?: MatchPatch };
+  validateAction: (
+    state: MatchGameState | undefined,
+    patch: MatchPatch,
+    playerId: string,
+    ctx: { match: MatchState }
+  ) => { ok: boolean; error?: string };
   enrichPatchWithCosts: (
     patch: MatchPatch | null,
     prisma: PrismaClient
@@ -268,6 +280,7 @@ interface MatchLeaderDeps {
     options: Record<string, unknown>
   ) => Promise<void>;
   rulesEnforceMode: string;
+  rulesHelpersEnabled: boolean;
   interactionEnforcementEnabled: boolean;
   interactionKinds: Set<string>;
   interactionDecisions: Set<string>;
@@ -547,11 +560,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     applyTurnStart,
     applyGenesis,
     applyKeywordAnnotations,
+    ensureCosts,
+    validateAction,
     enrichPatchWithCosts,
     recordMatchAction,
     persistMatchUpdate,
     finalizeMatch,
     rulesEnforceMode,
+    rulesHelpersEnabled,
     interactionEnforcementEnabled,
     interactionKinds,
     interactionDecisions,
@@ -848,6 +864,135 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             } catch {
               // ignore
             }
+          }
+        }
+
+        if (!isSnapshot) {
+          try {
+            const costRes = ensureCosts(match.game, patchToApply, playerId, {
+              match,
+            });
+            if (costRes && costRes.autoPatch && rulesHelpersEnabled) {
+              patchToApply = deepMergeReplaceArrays(
+                patchToApply as Record<string, unknown>,
+                costRes.autoPatch as Record<string, unknown>
+              ) as MatchPatch;
+              try {
+                console.debug("[rules] ensureCosts autoPatch applied", {
+                  matchId,
+                  playerId,
+                  keys: Object.keys(costRes.autoPatch || {}),
+                  isSnapshot,
+                });
+              } catch {
+                // ignore debug logging failures
+              }
+            }
+            if (costRes && costRes.ok === false) {
+              if (enforce) {
+                if (actorSocketId) {
+                  io.to(actorSocketId).emit("error", {
+                    message: costRes.error || "Insufficient resources",
+                    code: "cost_unpaid",
+                  });
+                }
+                try {
+                  console.warn("[rules] ensureCosts rejected action", {
+                    matchId,
+                    playerId,
+                    error: costRes.error,
+                    isSnapshot,
+                  });
+                } catch {
+                  // ignore logging failures
+                }
+                return;
+              }
+              const warn = [
+                {
+                  id: 0,
+                  ts: Date.now(),
+                  text: `[Warning] ${
+                    costRes.error || "Insufficient resources"
+                  }`,
+                },
+              ];
+              const existingEvents = Array.isArray(patchToApply.events)
+                ? patchToApply.events
+                : [];
+              patchToApply = {
+                ...patchToApply,
+                events: [...existingEvents, ...warn],
+              };
+            }
+          } catch {
+            // ignore cost helper failures
+          }
+
+          try {
+            const validationResult = validateAction(
+              match.game,
+              patchToApply,
+              playerId,
+              { match }
+            );
+            if (!validationResult.ok) {
+              const msg = validationResult.error
+                ? String(validationResult.error)
+                : "";
+              try {
+                console.warn("[rules] validateAction rejected action", {
+                  matchId,
+                  playerId,
+                  error: msg,
+                  isSnapshot,
+                });
+              } catch {
+                // ignore logging failures
+              }
+
+              const mustReject = /Cannot tap or untap opponent/i.test(
+                msg || ""
+              );
+              if (mustReject) {
+                if (actorSocketId) {
+                  io.to(actorSocketId).emit("error", {
+                    message: msg || "Illegal tap action",
+                    code: "rules_violation",
+                  });
+                }
+                return;
+              }
+
+              if (enforce) {
+                if (actorSocketId) {
+                  io.to(actorSocketId).emit("error", {
+                    message: validationResult.error || "Rules violation",
+                    code: "rules_violation",
+                  });
+                }
+                return;
+              }
+
+              const warnEvent = [
+                {
+                  id: 0,
+                  ts: Date.now(),
+                  text: `[Warning] ${
+                    validationResult.error || "Potential rules issue"
+                  }`,
+                },
+              ];
+              const existingEvents = Array.isArray(patchToApply.events)
+                ? patchToApply.events
+                : [];
+              patchToApply = {
+                ...patchToApply,
+                events: [...existingEvents, ...warnEvent],
+              };
+            }
+          } catch {
+            // ignore validation failures
           }
         }
 
@@ -1277,13 +1422,65 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         const enrichedPatchToApply =
           (await enrichPatchWithCosts(patchToApply, prisma)) ?? patchToApply;
-        // Exclude sender from statePatch broadcast to prevent echo overwrites
+
+        const patchKeys = Object.keys(
+          (enrichedPatchToApply as unknown as Record<string, unknown>) || {}
+        );
+        const nonMetaKeys = patchKeys.filter(
+          (key) =>
+            key !== "__replaceKeys" && key !== "events" && key !== "eventSeq"
+        );
+        const hasD20RollsPatch = nonMetaKeys.includes("d20Rolls");
+        const d20OnlyPatch =
+          hasD20RollsPatch &&
+          nonMetaKeys.every(
+            (key) => key === "d20Rolls" || key === "setupWinner"
+          );
+
+        // Build an events-only patch for the acting player so they still see
+        // rule warnings and other log entries without receiving a full echo.
+        let eventsForSender: MatchPatch | null = null;
+        if (
+          enrichedPatchToApply.events &&
+          Array.isArray(enrichedPatchToApply.events)
+        ) {
+          const base: Record<string, unknown> = {
+            events: enrichedPatchToApply.events,
+          };
+          if (
+            Object.prototype.hasOwnProperty.call(
+              enrichedPatchToApply as Record<string, unknown>,
+              "eventSeq"
+            )
+          ) {
+            base.eventSeq = (
+              enrichedPatchToApply as Record<string, unknown>
+            ).eventSeq;
+          }
+          eventsForSender = base as MatchPatch;
+        }
+
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;
         if (senderSocketId) {
-          io.to(matchRoom)
-            .except(senderSocketId)
-            .emit("statePatch", { patch: enrichedPatchToApply, t: now });
+          if (d20OnlyPatch) {
+            io.to(matchRoom).emit("statePatch", {
+              patch: enrichedPatchToApply,
+              t: now,
+            });
+          } else {
+            // Exclude sender from full statePatch broadcast to prevent echo overwrites,
+            // but send an events-only patch to the acting player so they still see logs.
+            io.to(matchRoom)
+              .except(senderSocketId)
+              .emit("statePatch", { patch: enrichedPatchToApply, t: now });
+            if (eventsForSender) {
+              io.to(senderSocketId).emit("statePatch", {
+                patch: eventsForSender,
+                t: now,
+              });
+            }
+          }
         } else {
           io.to(matchRoom).emit("statePatch", {
             patch: enrichedPatchToApply,
@@ -1316,13 +1513,37 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       } else {
         const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
 
-        // Exclude sender from statePatch broadcast to prevent echo overwrites
+        // Build an events-only patch for the acting player (if any events exist)
+        let eventsForSender: MatchPatch | null = null;
+        if (enrichedPatch?.events && Array.isArray(enrichedPatch.events)) {
+          const base: Record<string, unknown> = {
+            events: enrichedPatch.events,
+          };
+          if (
+            Object.prototype.hasOwnProperty.call(
+              enrichedPatch as Record<string, unknown>,
+              "eventSeq"
+            )
+          ) {
+            base.eventSeq = (enrichedPatch as Record<string, unknown>).eventSeq;
+          }
+          eventsForSender = base as MatchPatch;
+        }
+
+        // Exclude sender from full statePatch broadcast to prevent echo overwrites,
+        // but send an events-only patch so they still see logs.
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;
         if (senderSocketId) {
           io.to(matchRoom)
             .except(senderSocketId)
             .emit("statePatch", { patch: enrichedPatch, t: now });
+          if (eventsForSender) {
+            io.to(senderSocketId).emit("statePatch", {
+              patch: eventsForSender,
+              t: now,
+            });
+          }
         } else {
           io.to(matchRoom).emit("statePatch", { patch: enrichedPatch, t: now });
         }
@@ -1343,7 +1564,27 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         prisma
       );
 
-      // Exclude sender from statePatch broadcast to prevent echo overwrites
+      // Build an events-only patch for the acting player (if any events exist)
+      let eventsForSender: MatchPatch | null = null;
+      if (enrichedIncoming?.events && Array.isArray(enrichedIncoming.events)) {
+        const base: Record<string, unknown> = {
+          events: enrichedIncoming.events,
+        };
+        if (
+          Object.prototype.hasOwnProperty.call(
+            enrichedIncoming as Record<string, unknown>,
+            "eventSeq"
+          )
+        ) {
+          base.eventSeq = (
+            enrichedIncoming as Record<string, unknown>
+          ).eventSeq;
+        }
+        eventsForSender = base as MatchPatch;
+      }
+
+      // Exclude sender from full statePatch broadcast to prevent echo overwrites,
+      // but send an events-only patch so they still see logs.
       const sender = players.get(playerId);
       const senderSocketId = sender?.socketId;
       const tNow = Date.now();
@@ -1351,6 +1592,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         io.to(matchRoom)
           .except(senderSocketId)
           .emit("statePatch", { patch: enrichedIncoming, t: tNow });
+        if (eventsForSender) {
+          io.to(senderSocketId).emit("statePatch", {
+            patch: eventsForSender,
+            t: tNow,
+          });
+        }
       } else {
         io.to(matchRoom).emit("statePatch", {
           patch: enrichedIncoming,
