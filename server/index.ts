@@ -76,9 +76,18 @@ const {
   validateAction,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ensureCosts,
-  applyMovementAndCombat,
   // eslint-disable-next-line @typescript-eslint/no-require-imports
 } = require("./rules");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { applyMovementAndCombat } = require("./modules/rules-movement");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const {
+  validateAction: validateActionTs,
+} = require("./modules/rules-validation");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const {
+  ensureCosts: ensureCostsTs,
+} = require("./modules/rules-costs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 
@@ -725,6 +734,10 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   applyTurnStart,
   applyGenesis,
   applyKeywordAnnotations,
+  // Use the new TypeScript validateAction for runtime enforcement/warnings
+  validateAction: validateActionTs,
+  // Use the new TypeScript ensureCosts for cost helpers/enforcement
+  ensureCosts: ensureCostsTs,
   enrichPatchWithCosts: enrichPatchWithCostsSafe,
   recordMatchAction,
   persistMatchUpdate,
@@ -733,6 +746,7 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
     options: Record<string, unknown>
   ) => Promise<void>,
   rulesEnforceMode: RULES_ENFORCE_MODE,
+  rulesHelpersEnabled: RULES_HELPERS_ENABLED,
   interactionEnforcementEnabled: INTERACTION_ENFORCEMENT_ENABLED,
   interactionKinds: INTERACTION_REQUEST_KINDS,
   interactionDecisions: INTERACTION_DECISIONS,
