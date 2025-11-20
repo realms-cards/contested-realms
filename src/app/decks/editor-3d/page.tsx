@@ -17,18 +17,20 @@ import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
+import { useOnline } from "@/app/online/online-context";
 import FloatingChat from "@/components/chat/FloatingChat";
-import CardPreview from "@/components/game/CardPreview";
 import { TournamentControls } from "@/components/deck-editor";
+import CardPreview from "@/components/game/CardPreview";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
+import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import {
   Pick3D,
   CardMeta,
   computeStackPositions,
+  categorizeCard,
 } from "@/lib/game/cardSorting";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
-import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { createInitialBoard } from "@/lib/game/store";
 
 const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
@@ -121,6 +123,7 @@ function AuthenticatedDeckEditor() {
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? "";
   const router = useRouter();
+  const { match, me } = useOnline();
 
   // Deck editor state (same as 2D version)
   const [decks, setDecks] = useState<DeckListItem[]>([]);
@@ -255,8 +258,19 @@ function AuthenticatedDeckEditor() {
     inProgress: boolean;
   }>({ processed: 0, total: 0, inProgress: false });
   const cardLookupCacheRef = useRef(new Map<string, SearchResult | null>());
+  // Cube draft helper: when true and a supported cube was used, expose its sideboard cards as standard options
+  const [cubeStandardCards, setCubeStandardCards] = useState<SearchResult[]>(
+    []
+  );
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
+
+  const [matchEndedBannerMessage, setMatchEndedBannerMessage] = useState<
+    string | null
+  >(null);
+  const [matchEndedBannerVisible, setMatchEndedBannerVisible] = useState(false);
+  const matchBannerPrevMatchIdRef = useRef<string | null>(null);
+  const matchBannerPrevStatusRef = useRef<string | null>(null);
 
   // Reliable navigation helper back to the match page
   const goBackToMatch = useCallback(
@@ -587,6 +601,77 @@ function AuthenticatedDeckEditor() {
       cancelled = true;
     };
   }, [isSealed, packs, resolveCardsForPack]);
+
+  useEffect(() => {
+    if (!match) {
+      matchBannerPrevMatchIdRef.current = null;
+      matchBannerPrevStatusRef.current = null;
+      return;
+    }
+
+    if (!isSealed && !isDraftMode) {
+      const currentId = (match as { id?: string | null }).id ?? null;
+      const currentStatus =
+        (match as { status?: string | null }).status ?? null;
+      matchBannerPrevMatchIdRef.current = currentId;
+      matchBannerPrevStatusRef.current = currentStatus;
+      return;
+    }
+
+    const currentId = (match as { id?: string | null }).id ?? null;
+    const currentStatus = (match as { status?: string | null }).status ?? null;
+    const prevId = matchBannerPrevMatchIdRef.current;
+    const prevStatus = matchBannerPrevStatusRef.current;
+
+    if (
+      currentId &&
+      currentStatus === "ended" &&
+      (prevId !== currentId || prevStatus !== "ended")
+    ) {
+      const reason = (match as { endReason?: string | null }).endReason ?? null;
+      const ratedRaw = (match as { rated?: boolean | null }).rated ?? null;
+      const winnerId = (match as { winnerId?: string | null }).winnerId ?? null;
+      const myId = me?.id ?? null;
+
+      let message: string | null = null;
+
+      if (reason === "forfeit") {
+        const isRated = ratedRaw !== false;
+        if (!isRated) {
+          if (myId && winnerId && winnerId === myId) {
+            message =
+              "Your opponent left early. This match will not count for global rankings.";
+          } else if (myId && winnerId && winnerId !== myId) {
+            message =
+              "You left this match early. This result will not count for global rankings.";
+          } else {
+            message =
+              "This match ended early and will not count for global rankings.";
+          }
+        } else {
+          if (myId && winnerId && winnerId === myId) {
+            message =
+              "Your opponent forfeited. You win by forfeit and this result counts for global rankings.";
+          } else if (myId && winnerId && winnerId !== myId) {
+            message =
+              "You forfeited the match. This result counts for global rankings.";
+          } else {
+            message = "This match ended due to forfeit.";
+          }
+        }
+      } else {
+        message = "Your event match has finished.";
+      }
+
+      if (message) {
+        setMatchEndedBannerMessage(message);
+        setMatchEndedBannerVisible(true);
+      }
+    }
+
+    matchBannerPrevMatchIdRef.current = currentId;
+    matchBannerPrevStatusRef.current = currentStatus;
+  }, [match, me, isSealed, isDraftMode]);
 
   // Prefetch standard sites and Spellslinger for current set or all sets in sealed/draft
   useEffect(() => {
@@ -1413,6 +1498,109 @@ function AuthenticatedDeckEditor() {
     fetchSearchResult,
   ]);
 
+  useEffect(() => {
+    const draft = searchParams?.get("draft");
+    const matchId = searchParams?.get("matchId");
+    const sessionId = searchParams?.get("sessionId");
+    const draftId = matchId || sessionId;
+
+    if (draft !== "true" || !draftId) {
+      setCubeStandardCards([]);
+      return;
+    }
+
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(`draftConfig_${draftId}`);
+    } catch {
+      raw = null;
+    }
+    if (!raw) {
+      setCubeStandardCards([]);
+      return;
+    }
+
+    type StoredDraftConfig = {
+      cubeId?: string | null;
+      cubeName?: string | null;
+      includeCubeSideboardInStandard?: boolean;
+    };
+
+    let cfg: StoredDraftConfig | null = null;
+    try {
+      const parsed = JSON.parse(raw) as StoredDraftConfig;
+      cfg = parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      cfg = null;
+    }
+
+    if (!cfg?.cubeId || !cfg.includeCubeSideboardInStandard) {
+      setCubeStandardCards([]);
+      return;
+    }
+
+    const cubeId = cfg.cubeId;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/cubes/${encodeURIComponent(cubeId)}`);
+        if (!res.ok) {
+          if (!cancelled) setCubeStandardCards([]);
+          return;
+        }
+        const payload = (await res.json()) as {
+          cards?: Array<{
+            cardId: number;
+            variantId: number | null;
+            setId: number | null;
+            count: number;
+            name: string;
+            slug: string | null;
+            setName: string | null;
+            type: string | null;
+            rarity: string | null;
+            zone?: string | null;
+          }>;
+        };
+
+        const rawCards = Array.isArray(payload?.cards) ? payload.cards : [];
+        const sideboardCards = rawCards.filter(
+          (c) => (c.zone ?? "main").toLowerCase() === "sideboard"
+        );
+
+        const converted: SearchResult[] = [];
+        for (const c of sideboardCards) {
+          const sr = convertCardDataToSearchResult(
+            {
+              slug: typeof c.slug === "string" ? c.slug : "",
+              cardName: c.name,
+              set: c.setName ?? "Beta",
+              cardId: c.cardId,
+              variantId: c.variantId ?? undefined,
+              finish: "Standard",
+              product: "Draft",
+              type: c.type,
+              rarity: c.rarity,
+            } as unknown as Record<string, unknown>,
+            c.setName ?? "Beta"
+          );
+          if (sr) converted.push(sr);
+        }
+
+        if (!cancelled) {
+          setCubeStandardCards(converted);
+        }
+      } catch {
+        if (!cancelled) setCubeStandardCards([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParamsKey, searchParams, convertCardDataToSearchResult]);
+
   // (moved) Load deck from URL parameter after loadDeck is declared
 
   // Tab state for cards view - default to "Your Deck"
@@ -1422,8 +1610,10 @@ function AuthenticatedDeckEditor() {
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
   // Tournament legal controls visibility
-  const [tournamentControlsVisible, setTournamentControlsVisible] =
-    useState(false);
+  const [tournamentControlsMode, setTournamentControlsMode] = useState<
+    "standard" | "cube" | null
+  >(null);
+  const tournamentControlsVisible = tournamentControlsMode !== null;
 
   // Context menu for card move actions (deck/sideboard/collection)
   const [contextMenu, setContextMenu] = useState<{
@@ -1548,20 +1738,26 @@ function AuthenticatedDeckEditor() {
       sites: 0,
       avatars: 0,
     };
-    for (const p of pick3D) {
-      const t = (p.card.type || "").toLowerCase();
-      if (t.includes("avatar")) res.avatars += 1;
-      else if (t.includes("site")) res.sites += 1;
-      else if (t.includes("creature") || t.includes("minion"))
-        res.creatures += 1;
-      else if (t.includes("spell")) res.spells += 1;
-    }
+
+    // Deck / sideboard counts from picks
     for (const item of Object.values(picks)) {
       if (item.zone === "Deck") res.deck += item.count;
       else if (item.zone === "Sideboard") res.sideboard += item.count;
     }
+
+    // Type counts should reflect only cards currently in the deck
+    for (const p of pick3D) {
+      if (p.zone !== "Deck") continue;
+      const meta = metaByCardId[p.card.cardId];
+      const category = categorizeCard(p.card, meta);
+      if (category === "creatures") res.creatures += 1;
+      else if (category === "spells") res.spells += 1;
+      else if (category === "sites") res.sites += 1;
+      else if (category === "avatars") res.avatars += 1;
+    }
+
     return res;
-  }, [pick3D, picks]);
+  }, [pick3D, picks, metaByCardId]);
 
   const { collectionCount, collectionCountsByCardId } = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -2184,7 +2380,7 @@ function AuthenticatedDeckEditor() {
 
       // Ensure the "Standard cards" overlay is closed and show the submission overlay
       try {
-        setTournamentControlsVisible(false);
+        setTournamentControlsMode(null);
       } catch {}
       setWaitingOverlayStage("submitting");
       setWaitingForOtherPlayers(true);
@@ -2358,7 +2554,7 @@ function AuthenticatedDeckEditor() {
 
       // Ensure the "Standard cards" overlay is closed and show the submission overlay
       try {
-        setTournamentControlsVisible(false);
+        setTournamentControlsMode(null);
       } catch {}
       setWaitingOverlayStage("submitting");
       setWaitingForOtherPlayers(true);
@@ -2905,6 +3101,150 @@ function AuthenticatedDeckEditor() {
   const positionsRef = useRef<Map<string, { z: number; x: number }>>(new Map());
   const zoneCountsRef = useRef<Map<string, number>>(new Map());
   const lastPicksCount = useRef(0);
+  const draftLayoutRef = useRef<Map<string, { x: number; z: number }> | null>(
+    null
+  );
+  const draftLayoutLoadedRef = useRef(false);
+
+  // Load draft-3d layout and stack preferences when arriving from draft
+  useEffect(() => {
+    const deckIdParam = searchParams?.get("id");
+    const fromDraft = searchParams?.get("from") === "draft";
+    if (!fromDraft || !deckIdParam) return;
+    if (draftLayoutLoadedRef.current) return;
+    draftLayoutLoadedRef.current = true;
+
+    if (typeof window === "undefined") return;
+
+    try {
+      const layoutKey = `draftLayout_deck_${deckIdParam}`;
+      const prefsKey = `draftStackPrefs_deck_${deckIdParam}`;
+      const rawPrefs = window.localStorage.getItem(prefsKey);
+      if (rawPrefs) {
+        try {
+          const prefs = JSON.parse(rawPrefs) as {
+            isSortingEnabled?: boolean;
+          } | null;
+          if (prefs && typeof prefs.isSortingEnabled === "boolean") {
+            setIsSortingEnabled(prefs.isSortingEnabled);
+          }
+        } catch (err) {
+          try {
+            console.warn("Failed to parse draft stack prefs:", err);
+          } catch {}
+        }
+      }
+
+      const rawLayout = window.localStorage.getItem(layoutKey);
+      if (!rawLayout) return;
+
+      try {
+        const parsed = JSON.parse(rawLayout) as Array<{
+          cardId: number;
+          zone?: Zone;
+          x: number;
+          z: number;
+        }>;
+        const map = new Map<string, { x: number; z: number }>();
+        for (const entry of parsed) {
+          if (!entry || typeof entry.cardId !== "number") continue;
+          const layoutZone: "Deck" | "Sideboard" =
+            entry.zone === "Deck" ? "Deck" : "Sideboard";
+          const key = `${entry.cardId}:${layoutZone}`;
+          if (!map.has(key)) {
+            map.set(key, { x: entry.x, z: entry.z });
+          }
+        }
+        if (map.size > 0) {
+          draftLayoutRef.current = map;
+        }
+      } catch (err) {
+        try {
+          console.warn("Failed to parse draft 3D layout for editor-3d:", err);
+        } catch {}
+      }
+    } catch (err) {
+      try {
+        console.warn("Error reading draft 3D layout from localStorage:", err);
+      } catch {}
+    }
+  }, [searchParams]);
+
+  // Load 3D draft layout and stack preferences for online/tournament draft flows
+  useEffect(() => {
+    const draft = searchParams?.get("draft");
+    const matchId = searchParams?.get("matchId");
+    const sessionId = searchParams?.get("sessionId");
+    const draftId = matchId || sessionId;
+
+    if (draft !== "true" || !draftId) return;
+    if (draftLayoutLoadedRef.current) return;
+    draftLayoutLoadedRef.current = true;
+
+    if (typeof window === "undefined") return;
+
+    try {
+      const layoutKey = `draftLayout_draft_${draftId}`;
+      const prefsKey = `draftStackPrefs_draft_${draftId}`;
+      const rawPrefs = window.localStorage.getItem(prefsKey);
+      if (rawPrefs) {
+        try {
+          const prefs = JSON.parse(rawPrefs) as {
+            isSortingEnabled?: boolean;
+          } | null;
+          if (prefs && typeof prefs.isSortingEnabled === "boolean") {
+            setIsSortingEnabled(prefs.isSortingEnabled);
+          }
+        } catch (err) {
+          try {
+            console.warn(
+              "[Draft Init] Failed to parse draft stack prefs (3D):",
+              err
+            );
+          } catch {}
+        }
+      }
+
+      const rawLayout = window.localStorage.getItem(layoutKey);
+      if (!rawLayout) return;
+
+      try {
+        const parsed = JSON.parse(rawLayout) as Array<{
+          cardId: number;
+          zone?: Zone;
+          x: number;
+          z: number;
+        }>;
+        const map = new Map<string, { x: number; z: number }>();
+        for (const entry of parsed) {
+          if (!entry || typeof entry.cardId !== "number") continue;
+          const layoutZone: "Deck" | "Sideboard" =
+            entry.zone === "Deck" ? "Deck" : "Sideboard";
+          const key = `${entry.cardId}:${layoutZone}`;
+          if (!map.has(key)) {
+            map.set(key, { x: entry.x, z: entry.z });
+          }
+        }
+        if (map.size > 0) {
+          draftLayoutRef.current = map;
+        }
+      } catch (err) {
+        try {
+          console.warn(
+            "[Draft Init] Failed to parse draft 3D layout for editor-3d:",
+            err
+          );
+        } catch {}
+      }
+    } catch (err) {
+      try {
+        console.warn(
+          "[Draft Init] Error reading draft 3D layout from localStorage:",
+          err
+        );
+      } catch {}
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     // Calculate total card count from picks
@@ -2955,25 +3295,49 @@ function AuthenticatedDeckEditor() {
 
         // Use logical zone from picks, but map non-deck zones (Sideboard/Collection)
         // into the Sideboard region for initial 3D layout placement.
-        const logicalZone = item.zone as Zone;
+        let logicalZone = item.zone as Zone;
         const layoutZone: "Deck" | "Sideboard" =
           logicalZone === "Deck" ? "Deck" : "Sideboard";
 
-        // Use existing position if available (sealed only) and per-zone cached positions
-        const existingPos = positionsRef.current.get(
-          `${item.cardId}:${layoutZone}`
-        );
-        const shouldPreservePosition =
-          !!existingPos && (isSealed || isDraftMode);
+        // Use existing position if available (sealed/draft) or draft-3d layout when arriving from draft.
+        // When restoring from a saved draft layout, fall back to any saved position
+        // for this cardId regardless of zone, since decks imported from draft may
+        // normalize all cards into a single logical zone (e.g. Sideboard).
+        const posKey = `${item.cardId}:${layoutZone}`;
+        const existingPos = positionsRef.current.get(posKey);
+        let layoutPos: { x: number; z: number } | undefined;
+        if (!existingPos && draftLayoutRef.current) {
+          layoutPos =
+            draftLayoutRef.current.get(posKey) ??
+            draftLayoutRef.current.get(`${item.cardId}:Deck`) ??
+            draftLayoutRef.current.get(`${item.cardId}:Sideboard`);
+        }
+        const useExisting = !!existingPos && (isSealed || isDraftMode);
+        const useLayout = !useExisting && !!layoutPos;
 
-        const x = shouldPreservePosition
-          ? existingPos.x
-          : -3 + Math.random() * 6;
-        const z = shouldPreservePosition
-          ? existingPos.z
-          : layoutZone === "Deck"
-          ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
-          : 0.5 + Math.random() * 3; // Sideboard/Collection layout zone: z from 0.5 to 3.5
+        let x: number;
+        let z: number;
+
+        if (useExisting && existingPos) {
+          x = existingPos.x;
+          z = existingPos.z;
+        } else if (useLayout && layoutPos) {
+          x = layoutPos.x;
+          z = layoutPos.z;
+          // For draft-mode decks built from a prior 3D draft, infer the
+          // initial logical zone from the saved Z position so that
+          // top-of-board cards (z < 0) start in the Deck zone and
+          // bottom-of-board cards (z >= 0) start in the Sideboard zone.
+          if (isDraftMode) {
+            logicalZone = layoutPos.z < 0 ? "Deck" : "Sideboard";
+          }
+        } else {
+          x = -3 + Math.random() * 6;
+          z =
+            layoutZone === "Deck"
+              ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
+              : 0.5 + Math.random() * 3; // Sideboard/Collection layout zone: z from 0.5 to 3.5
+        }
 
         newPick3D.push({
           id: id++,
@@ -2990,8 +3354,8 @@ function AuthenticatedDeckEditor() {
           },
           x,
           z,
-          // Keep the logical zone from picks so Collection cards can
-          // have their own dedicated fan layout while reusing the
+          // Keep the (possibly adjusted) logical zone so Collection cards
+          // can have their own dedicated fan layout while reusing the
           // Sideboard region for initial placement.
           zone: logicalZone,
         });
@@ -3937,10 +4301,10 @@ function AuthenticatedDeckEditor() {
                   <div className="text-green-300 text-xs px-2 mb-1">
                     From Deck ({contextMenu.deckCards.length}):
                   </div>
-                  {contextMenu.deckCards.map((card, index) => (
+                  {contextMenu.deckCards.map((card) => (
                     <button
                       key={card.id}
-                      className="w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                      className="w-full text-left px-2 py-1 text-xs text-blue-100 hover:bg-blue-700/40 rounded"
                       onClick={() => {
                         moveSpecificCardToSideboard(card.id);
                         setFeedbackMessage(
@@ -3950,7 +4314,7 @@ function AuthenticatedDeckEditor() {
                         setContextMenu(null);
                       }}
                     >
-                      Copy {index + 1} → Sideboard
+                      Move 1 copy → Sideboard
                     </button>
                   ))}
 
@@ -4046,6 +4410,44 @@ function AuthenticatedDeckEditor() {
           </div>
         )}
 
+        {matchEndedBannerVisible && matchEndedBannerMessage && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
+            <div className="flex items-start gap-3 rounded-lg bg-yellow-500/90 text-black px-4 py-3 shadow-lg border border-yellow-300 max-w-xl">
+              <div className="mt-0.5">
+                <svg
+                  className="w-4 h-4 text-black/80"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v4m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 5c-.77-1.33-2.69-1.33-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z"
+                  />
+                </svg>
+              </div>
+              <div className="text-sm">
+                <div className="font-semibold">Match update</div>
+                <div className="mt-0.5">{matchEndedBannerMessage}</div>
+                <div className="mt-1 text-xs text-black/80">
+                  You can keep editing and saving this deck even though the
+                  match has ended.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMatchEndedBannerVisible(false)}
+                className="ml-2 text-black/60 hover:text-black focus:outline-none"
+                aria-label="Dismiss match update"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Feedback Message */}
         {feedbackMessage && (
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
@@ -4074,8 +4476,16 @@ function AuthenticatedDeckEditor() {
             addToSideboardFromSearch={addToSideboardFromSearch}
             pick3DLength={pick3D.length}
             tournamentControlsVisible={tournamentControlsVisible}
-            toggleTournamentControls={() =>
-              setTournamentControlsVisible(!tournamentControlsVisible)
+            tournamentControlsMode={tournamentControlsMode}
+            onShowStandardCards={() =>
+              setTournamentControlsMode((prev) =>
+                prev === "standard" ? null : "standard"
+              )
+            }
+            onShowCubeExtras={() =>
+              setTournamentControlsMode((prev) =>
+                prev === "cube" ? null : "cube"
+              )
             }
             packs={packs}
             openPack={openPack}
@@ -4164,11 +4574,14 @@ function AuthenticatedDeckEditor() {
       <Suspense fallback={null}>
         <TournamentControls
           isVisible={tournamentControlsVisible}
-          onClose={() => setTournamentControlsVisible(false)}
+          mode={tournamentControlsMode ?? undefined}
+          onClose={() => setTournamentControlsMode(null)}
           spellslingerCard={spellslingerCard}
           standardSites={stdSites}
           onAddSpellslinger={addSpellslinger}
           onAddStandardSite={addStandardSiteByName}
+          cubeStandardCards={cubeStandardCards}
+          onAddCubeStandardCard={addToSideboardFromSearch}
         />
       </Suspense>
     </div>

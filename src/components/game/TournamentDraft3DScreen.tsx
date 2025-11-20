@@ -29,7 +29,6 @@ import {
   type Pick3D,
 } from "@/lib/game/cardSorting";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
-import MouseTracker from "@/lib/game/components/MouseTracker";
 import { CARD_LONG } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -161,6 +160,29 @@ export default function TournamentDraft3DScreen({
   useEffect(() => {
     pick3DRef.current = pick3D;
   }, [pick3D]);
+  const isSortingEnabledRef = useRef(isSortingEnabled);
+  useEffect(() => {
+    isSortingEnabledRef.current = isSortingEnabled;
+  }, [isSortingEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("draft3d_sorting_pref");
+      if (raw === "on") setIsSortingEnabled(true);
+      else if (raw === "off") setIsSortingEnabled(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "draft3d_sorting_pref",
+        isSortingEnabled ? "on" : "off"
+      );
+    } catch {}
+  }, [isSortingEnabled]);
 
   // Join the server room for this tournament draft session to receive real-time updates
   const joinSentRef = useRef(false);
@@ -316,6 +338,17 @@ export default function TournamentDraft3DScreen({
     if (!inPackSelection && !inNextRoundPicking) return;
     if (chosenPackForRoundRef.current.has(round)) return;
     if (!transport) return;
+
+    // If we're in pack_selection and actively showing the pack choice overlay
+    // for this round, wait for the player to pick a pack instead of auto-choosing.
+    if (
+      inPackSelection &&
+      packChoiceOverlay &&
+      shownPackOverlayForRound === round
+    ) {
+      return;
+    }
+
     try {
       transport.emit("chooseTournamentDraftPack", {
         sessionId: draftSessionId,
@@ -336,6 +369,8 @@ export default function TournamentDraft3DScreen({
     draftState.packIndex,
     draftSessionId,
     transport,
+    packChoiceOverlay,
+    shownPackOverlayForRound,
   ]);
   const autoPickTimerRef = useRef<number | null>(null);
 
@@ -364,10 +399,7 @@ export default function TournamentDraft3DScreen({
     }
     const update = () => {
       const deadline = startAt + tpp * 1000;
-      const remaining = Math.max(
-        0,
-        Math.floor((deadline - Date.now()) / 1000)
-      );
+      const remaining = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
       setPickTimeRemaining(remaining);
     };
     update();
@@ -477,6 +509,40 @@ export default function TournamentDraft3DScreen({
                   `draftedCardsResolved_${draftSessionId}`,
                   JSON.stringify(resolved)
                 );
+
+                // Persist 3D layout and stack preferences for deck editor (poll path)
+                try {
+                  const latestPick3D = Array.isArray(pick3DRef.current)
+                    ? pick3DRef.current
+                    : [];
+                  const layout =
+                    !isSortingEnabledRef.current && latestPick3D.length > 0
+                      ? latestPick3D.map((p) => ({
+                          cardId: p.card.cardId,
+                          zone: p.zone,
+                          x: p.x,
+                          z: p.z,
+                        }))
+                      : [];
+                  const layoutKey = `draftLayout_draft_${String(
+                    draftSessionId
+                  )}`;
+                  const prefsKey = `draftStackPrefs_draft_${String(
+                    draftSessionId
+                  )}`;
+                  localStorage.setItem(layoutKey, JSON.stringify(layout));
+                  localStorage.setItem(
+                    prefsKey,
+                    JSON.stringify({
+                      isSortingEnabled: isSortingEnabledRef.current,
+                    })
+                  );
+                } catch (layoutErr) {
+                  console.warn(
+                    "[TournamentDraft3D] Failed to persist 3D layout for editor-3d (poll path):",
+                    layoutErr
+                  );
+                }
               }
             } catch (err) {
               console.error(
@@ -567,16 +633,20 @@ export default function TournamentDraft3DScreen({
   }, []);
 
   // Enhanced Draft-3D Online Integration
-  const { sendCardPreview, clearCardPreview, sendStackInteraction, isConnected } =
-    useDraft3DTransport({
-      transport,
-      sessionId: draftSessionId,
-      playerId: myPlayerId,
-      onError: (error) => {
-        console.error("[TournamentDraft3D] Transport error:", error);
-        setError(String(error));
-      },
-    });
+  const {
+    sendCardPreview,
+    clearCardPreview,
+    sendStackInteraction,
+    isConnected,
+  } = useDraft3DTransport({
+    transport,
+    sessionId: draftSessionId,
+    playerId: myPlayerId,
+    onError: (error) => {
+      console.error("[TournamentDraft3D] Transport error:", error);
+      setError(String(error));
+    },
+  });
 
   // Centralize network sending of hover preview
   useEffect(() => {
@@ -692,7 +762,7 @@ export default function TournamentDraft3DScreen({
       currentHoverCardRef.current = null;
       setHoverPreview(null);
       clearHoverTimerRef.current = null;
-    }, 120);
+    }, 20);
   }, []);
 
   // Convert DraftCard to BoosterCard format
@@ -1232,6 +1302,38 @@ export default function TournamentDraft3DScreen({
                 JSON.stringify(resolved)
               );
             }
+
+            // Persist 3D layout and stack preferences for deck editor (socket path)
+            try {
+              const latestPick3D = Array.isArray(pick3DRef.current)
+                ? pick3DRef.current
+                : [];
+              const layout =
+                !isSortingEnabledRef.current && latestPick3D.length > 0
+                  ? latestPick3D.map((p) => ({
+                      cardId: p.card.cardId,
+                      zone: p.zone,
+                      x: p.x,
+                      z: p.z,
+                    }))
+                  : [];
+              const layoutKey = `draftLayout_draft_${String(draftSessionId)}`;
+              const prefsKey = `draftStackPrefs_draft_${String(
+                draftSessionId
+              )}`;
+              localStorage.setItem(layoutKey, JSON.stringify(layout));
+              localStorage.setItem(
+                prefsKey,
+                JSON.stringify({
+                  isSortingEnabled: isSortingEnabledRef.current,
+                })
+              );
+            } catch (layoutErr) {
+              console.warn(
+                "[TournamentDraft3D] Failed to persist 3D layout for editor-3d (socket path):",
+                layoutErr
+              );
+            }
           }
         } catch (err) {
           console.error(`[TournamentDraft3D] Failed to save draft data:`, err);
@@ -1582,21 +1684,6 @@ export default function TournamentDraft3DScreen({
             <Board noRaycast={true} interactionMode="spectator" />
           </Physics>
 
-          <MouseTracker
-            cards={pick3D}
-            onHover={(card) => {
-              if (card) {
-                showCardPreview({
-                  slug: card.slug,
-                  name: card.name,
-                  type: card.type,
-                });
-              } else {
-                hideCardPreview();
-              }
-            }}
-          />
-
           {/* Draft Pack Hand */}
           {draftState.phase !== "complete" &&
             !packChoiceOverlay &&
@@ -1799,8 +1886,8 @@ export default function TournamentDraft3DScreen({
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              MIDDLE: MOUSE.PAN,
-              RIGHT: MOUSE.ROTATE,
+              MIDDLE: MOUSE.DOLLY,
+              RIGHT: MOUSE.PAN,
             }}
             touches={{ TWO: TOUCH.PAN }}
           />

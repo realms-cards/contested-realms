@@ -1,7 +1,13 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { normalizeCubeSummary, type CubeSummaryInput } from "@/lib/cubes/normalizers";
-import { parseSorceryDeckText, toZones } from "@/lib/decks/parsers/sorcery-decktext";
+import {
+  normalizeCubeSummary,
+  type CubeSummaryInput,
+} from "@/lib/cubes/normalizers";
+import {
+  parseSorceryDeckText,
+  toCubeEntries,
+} from "@/lib/decks/parsers/sorcery-decktext";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -20,22 +26,27 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+    });
     if (!user) {
       return new Response(
         JSON.stringify({
           error:
             "Your account could not be found in the database. If you already have a user account, please sign out, clear your browser cookies and sign back in",
         }),
-        { status: 401, headers: { "content-type": "application/json" } },
+        { status: 401, headers: { "content-type": "application/json" } }
       );
     }
 
     if (process.env.NEXT_PUBLIC_ENABLE_TEXT_IMPORT !== "true") {
-      return new Response(JSON.stringify({ error: "Text import is disabled" }), {
-        status: 403,
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Text import is disabled" }),
+        {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }
+      );
     }
 
     const body = await req.json().catch(() => ({} as JSONObject));
@@ -43,22 +54,29 @@ export async function POST(req: NextRequest) {
     const overrideName = body?.name ? String(body.name).trim() : "";
 
     if (!rawText.trim()) {
-      return new Response(JSON.stringify({ error: "Provide cube text" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Provide cube text" }), {
+        status: 400,
+      });
     }
 
     const parsed = parseSorceryDeckText(rawText);
-    const entries = toZones(parsed);
+    const entries = toCubeEntries(parsed);
 
     type Aggregated = {
       cardId: number;
       setId: number | null;
       variantId: number | null;
       count: number;
+      zone: "main" | "sideboard";
     };
 
     const uniqueNames = Array.from(new Set(entries.map((e) => e.name)));
 
-    const nameToVariant = await batchFindVariants(uniqueNames, ["Alpha", "Beta", "Arthurian Legends"]);
+    const nameToVariant = await batchFindVariants(uniqueNames, [
+      "Alpha",
+      "Beta",
+      "Arthurian Legends",
+    ]);
 
     const aggregated = new Map<string, Aggregated>();
     const unresolved: { name: string; count: number }[] = [];
@@ -69,7 +87,8 @@ export async function POST(req: NextRequest) {
         unresolved.push({ name: entry.name, count: entry.count });
         continue;
       }
-      const key = `${found.cardId}:${found.variantId ?? "none"}`;
+      const zone = entry.cubeZone === "sideboard" ? "sideboard" : "main";
+      const key = `${found.cardId}:${found.variantId ?? "none"}:${zone}`;
       const prev = aggregated.get(key);
       if (prev) {
         prev.count += entry.count;
@@ -79,18 +98,23 @@ export async function POST(req: NextRequest) {
           setId: found.setId,
           variantId: found.variantId,
           count: entry.count,
+          zone,
         });
       }
     }
 
     if (unresolved.length) {
       return new Response(
-        JSON.stringify({ error: "Could not map some cards by name", unresolved }),
-        { status: 400, headers: { "content-type": "application/json" } },
+        JSON.stringify({
+          error: "Could not map some cards by name",
+          unresolved,
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
       );
     }
 
-    const cubeName = overrideName || `Cube Import ${new Date().toLocaleDateString()}`;
+    const cubeName =
+      overrideName || `Cube Import ${new Date().toLocaleDateString()}`;
 
     const cube = await prisma.cube.create({
       data: {
@@ -107,6 +131,7 @@ export async function POST(req: NextRequest) {
         setId: value.setId,
         variantId: value.variantId,
         count: value.count,
+        zone: value.zone,
       }))
       .filter((row) => row.count > 0);
 
@@ -139,11 +164,14 @@ function canonicalize(s: string): string {
 }
 
 async function batchFindVariants(names: string[], setPreference: string[]) {
-  const result = new Map<string, {
-    cardId: number;
-    variantId: number | null;
-    setId: number | null;
-  }>();
+  const result = new Map<
+    string,
+    {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+    }
+  >();
 
   if (!names.length) return result;
 
@@ -172,11 +200,15 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
   for (const name of names) {
     const canon = canonicalize(name);
     const matches = candidates.filter(
-      (c) => canonicalize(c.name) === canon || c.name === name,
+      (c) => canonicalize(c.name) === canon || c.name === name
     );
     if (!matches.length) continue;
 
-    let chosenVariant: { id: number | null; setId: number | null; cardId: number } | null = null;
+    let chosenVariant: {
+      id: number | null;
+      setId: number | null;
+      cardId: number;
+    } | null = null;
 
     for (const preferredSet of setPreference) {
       const withPreferred = matches
@@ -186,7 +218,7 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
             id: variant.id,
             setId: variant.setId,
             setName: variant.set?.name ?? null,
-          })),
+          }))
         )
         .find((variant) => variant.setName === preferredSet);
 

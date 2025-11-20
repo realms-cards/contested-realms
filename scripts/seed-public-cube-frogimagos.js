@@ -20,9 +20,9 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-const CUBE_NAME = "Public Cube - Arthurian Legends";
+const CUBE_NAME = "Frogimago's Cube";
 const CUBE_DESCRIPTION =
-  "Public cube built from Arthurian Legends and Beta cards (Spellslinger avatar).";
+  "Public cube built by Frogimago - contains playables only (from Arthurian Legends, Alpha and Beta).";
 
 /**
  * Cleaned-up cube list in Curiosa-style text format.
@@ -403,6 +403,7 @@ const CATEGORY_ORDER = [
   "Minion",
   "Magic",
   "Site",
+  "Sideboard",
 ];
 
 function normalizeName(raw) {
@@ -434,6 +435,8 @@ function canonicalizeCategory(raw) {
       return "Magic";
     case "site":
       return "Site";
+    case "sideboard":
+      return "Sideboard";
     default:
       return null;
   }
@@ -476,6 +479,7 @@ function parseSorceryDeckText(rawInput) {
     Minion: new Map(),
     Magic: new Map(),
     Site: new Map(),
+    Sideboard: new Map(),
   };
 
   const issues = [];
@@ -521,6 +525,7 @@ function parseSorceryDeckText(rawInput) {
     Minion: [],
     Magic: [],
     Site: [],
+    Sideboard: [],
   };
   const totalByCategory = {
     Avatar: 0,
@@ -529,6 +534,7 @@ function parseSorceryDeckText(rawInput) {
     Minion: 0,
     Magic: 0,
     Site: 0,
+    Sideboard: 0,
   };
 
   for (const cat of CATEGORY_ORDER) {
@@ -669,16 +675,30 @@ async function main() {
 
   const parsed = parseSorceryDeckText(CUBE_TEXT);
 
-  const aggregated = new Map();
-  for (const cat of CATEGORY_ORDER) {
+  const mainCategories = CATEGORY_ORDER.filter((c) => c !== "Sideboard");
+  const mainAggregated = new Map();
+  const sideboardAggregated = new Map();
+
+  for (const cat of mainCategories) {
     for (const entry of parsed.categories[cat]) {
       const key = entry.name;
-      const prev = aggregated.get(key) || 0;
-      aggregated.set(key, prev + entry.count);
+      const prev = mainAggregated.get(key) || 0;
+      mainAggregated.set(key, prev + entry.count);
     }
   }
 
-  const uniqueNames = Array.from(aggregated.keys());
+  for (const entry of parsed.categories.Sideboard) {
+    const key = entry.name;
+    const prev = sideboardAggregated.get(key) || 0;
+    sideboardAggregated.set(key, prev + entry.count);
+  }
+
+  const uniqueNames = Array.from(
+    new Set([
+      ...Array.from(mainAggregated.keys()),
+      ...Array.from(sideboardAggregated.keys()),
+    ])
+  );
   console.log(
     `[CubeSeed] Unique card names in cube text: ${uniqueNames.length}`
   );
@@ -690,11 +710,11 @@ async function main() {
     "Dragonlord",
   ]);
 
-  /** @type {Array<{ cardId: number, setId: number | null, variantId: number | null, count: number, name: string }>} */
+  /** @type {Array<{ cardId: number, setId: number | null, variantId: number | null, count: number, name: string, zone: "main" | "sideboard" }>} */
   const cardRows = [];
   const unresolved = [];
 
-  for (const [name, count] of aggregated.entries()) {
+  for (const [name, count] of mainAggregated.entries()) {
     const found = nameToVariant.get(name);
     if (!found) {
       unresolved.push({ name, count });
@@ -706,6 +726,23 @@ async function main() {
       variantId: found.variantId,
       count,
       name,
+      zone: "main",
+    });
+  }
+
+  for (const [name, count] of sideboardAggregated.entries()) {
+    const found = nameToVariant.get(name);
+    if (!found) {
+      unresolved.push({ name, count });
+      continue;
+    }
+    cardRows.push({
+      cardId: found.cardId,
+      setId: found.setId,
+      variantId: found.variantId,
+      count,
+      name,
+      zone: "sideboard",
     });
   }
 
@@ -760,6 +797,7 @@ async function main() {
           setId: r.setId,
           variantId: r.variantId,
           count: r.count,
+          zone: r.zone,
         })),
       });
     }

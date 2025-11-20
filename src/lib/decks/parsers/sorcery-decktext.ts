@@ -27,7 +27,8 @@ export type DeckTextCategory =
   | "Artifact"
   | "Minion"
   | "Magic"
-  | "Site";
+  | "Site"
+  | "Sideboard";
 
 export interface NameCount {
   name: string;
@@ -48,6 +49,7 @@ const CATEGORY_ORDER: DeckTextCategory[] = [
   "Minion",
   "Magic",
   "Site",
+  "Sideboard",
 ];
 
 function normalizeName(raw: string): string {
@@ -60,7 +62,9 @@ function normalizeName(raw: string): string {
 }
 
 function canonicalizeCategory(raw: string): DeckTextCategory | null {
-  const base = normalizeName(raw).toLowerCase().replace(/\s+\(.*\)$/, "");
+  const base = normalizeName(raw)
+    .toLowerCase()
+    .replace(/\s+\(.*\)$/, "");
   const word = base.split(/\s+/)[0] ?? base;
   const singular = word.endsWith("s") ? word.slice(0, -1) : word;
   switch (singular) {
@@ -77,6 +81,8 @@ function canonicalizeCategory(raw: string): DeckTextCategory | null {
       return "Magic";
     case "site":
       return "Site";
+    case "sideboard":
+      return "Sideboard";
     default:
       return null;
   }
@@ -94,7 +100,9 @@ function isOnlyDigits(line: string): boolean {
   return /^\d+$/.test(line.trim());
 }
 
-function parseCountAndName(line: string): { count: number; name: string } | null {
+function parseCountAndName(
+  line: string
+): { count: number; name: string } | null {
   // Accept either "1Druid" or "1 Druid"; require count at start
   const m = line.match(/^(\d+)\s*(.+)$/);
   if (!m) return null;
@@ -119,6 +127,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     Minion: new Map(),
     Magic: new Map(),
     Site: new Map(),
+    Sideboard: new Map(),
   };
 
   const issues: { type: "error" | "warning"; message: string }[] = [];
@@ -147,7 +156,10 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
       if (!current) {
         // If no current category, treat as warning and default to Magic (spellbook)
         current = "Magic";
-        issues.push({ type: "warning", message: `No category header before line: "${line}". Defaulted to Magic.` });
+        issues.push({
+          type: "warning",
+          message: `No category header before line: "${line}". Defaulted to Magic.`,
+        });
       }
       const map = categories[current];
       const key = normalizeName(parsed.name);
@@ -156,7 +168,10 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     }
 
     // Unknown line - ignore but record a warning
-    issues.push({ type: "warning", message: `Unrecognized line ignored: "${line}"` });
+    issues.push({
+      type: "warning",
+      message: `Unrecognized line ignored: "${line}"`,
+    });
   }
 
   const resultLists: Record<DeckTextCategory, NameCount[]> = {
@@ -166,6 +181,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     Minion: [],
     Magic: [],
     Site: [],
+    Sideboard: [],
   };
   const totalByCategory: Record<DeckTextCategory, number> = {
     Avatar: 0,
@@ -174,6 +190,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     Minion: 0,
     Magic: 0,
     Site: 0,
+    Sideboard: 0,
   };
 
   for (const cat of CATEGORY_ORDER) {
@@ -184,18 +201,26 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     totalByCategory[cat] = items.reduce((a, b) => a + b.count, 0);
   }
 
-  const totalCards = CATEGORY_ORDER.reduce((sum, c) => sum + totalByCategory[c], 0);
+  const totalCards = CATEGORY_ORDER.reduce(
+    (sum, c) => sum + totalByCategory[c],
+    0
+  );
 
   // Basic sanity checks
   if (totalByCategory.Avatar !== 1) {
-    issues.push({ type: "warning", message: `Expected exactly 1 Avatar, found ${totalByCategory.Avatar}` });
+    issues.push({
+      type: "warning",
+      message: `Expected exactly 1 Avatar, found ${totalByCategory.Avatar}`,
+    });
   }
 
   return { categories: resultLists, totalByCategory, totalCards, issues };
 }
 
 export type Zone = "Spellbook" | "Atlas";
-export interface ZoneEntry extends NameCount { zone: Zone }
+export interface ZoneEntry extends NameCount {
+  zone: Zone;
+}
 
 export function toZones(parsed: ParsedDeckText): ZoneEntry[] {
   const z: ZoneEntry[] = [];
@@ -209,4 +234,26 @@ export function toZones(parsed: ParsedDeckText): ZoneEntry[] {
   pushCat("Magic", "Spellbook");
   pushCat("Site", "Atlas");
   return z;
+}
+
+export type CubeZone = "main" | "sideboard";
+export interface CubeEntry extends NameCount {
+  cubeZone: CubeZone;
+}
+
+export function toCubeEntries(parsed: ParsedDeckText): CubeEntry[] {
+  const entries: CubeEntry[] = [];
+  const pushCat = (cat: DeckTextCategory, cubeZone: CubeZone) => {
+    for (const it of parsed.categories[cat]) entries.push({ ...it, cubeZone });
+  };
+  // All primary categories are part of the main cube pool
+  pushCat("Avatar", "main");
+  pushCat("Aura", "main");
+  pushCat("Artifact", "main");
+  pushCat("Minion", "main");
+  pushCat("Magic", "main");
+  pushCat("Site", "main");
+  // Optional sideboard section, if present in the text
+  pushCat("Sideboard", "sideboard");
+  return entries;
 }

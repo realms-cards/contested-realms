@@ -567,6 +567,26 @@ export default function OnlineMatchPage() {
     (match as unknown as { tournamentId?: string | null } | undefined)
       ?.tournamentId || null;
 
+  // Persist draft configuration so the deck editor can recover cube flags (e.g., includeCubeSideboardInStandard)
+  useEffect(() => {
+    if (!isDraftMatch) return;
+    if (!matchId) return;
+    const cfg = match?.draftConfig || null;
+    if (!cfg) return;
+    try {
+      const slim = {
+        cubeId: (cfg as { cubeId?: string | null }).cubeId ?? null,
+        cubeName: (cfg as { cubeName?: string | null }).cubeName ?? null,
+        includeCubeSideboardInStandard: (
+          cfg as {
+            includeCubeSideboardInStandard?: boolean;
+          }
+        ).includeCubeSideboardInStandard,
+      };
+      localStorage.setItem(`draftConfig_${matchId}`, JSON.stringify(slim));
+    } catch {}
+  }, [isDraftMatch, matchId, match?.draftConfig]);
+
   // Auto-load any deck that the match server has already attached to us (sealed/draft/tournament rebuilt decks)
   useEffect(() => {
     if (prepared) return;
@@ -2313,6 +2333,10 @@ export default function OnlineMatchPage() {
               undefined
             }
             myPlayerId={myPlayerId || undefined}
+            rated={
+              (match as unknown as { rated?: boolean | null })?.rated ??
+              undefined
+            }
             onClose={() => {
               setMatchEndOverlayOpen(false);
             }}

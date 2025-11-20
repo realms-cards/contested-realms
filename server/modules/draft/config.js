@@ -18,11 +18,18 @@
  * @returns {Promise<object>} Draft configuration with cube or set data
  */
 async function getDraftConfig(prisma, matchId, match) {
-  console.log('[DraftConfig] Getting config for match:', { matchId, matchType: match.matchType, tournamentId: match.tournamentId });
+  console.log("[DraftConfig] Getting config for match:", {
+    matchId,
+    matchType: match.matchType,
+    tournamentId: match.tournamentId,
+  });
 
   // For tournament drafts, always hydrate from DraftSession first
-  if (match.matchType === 'draft' && match.tournamentId) {
-    console.log('[DraftConfig] Loading from DraftSession for tournament draft:', { matchId, tournamentId: match.tournamentId });
+  if (match.matchType === "draft" && match.tournamentId) {
+    console.log(
+      "[DraftConfig] Loading from DraftSession for tournament draft:",
+      { matchId, tournamentId: match.tournamentId }
+    );
     try {
       const draftSession = await prisma.draftSession.findFirst({
         where: { tournamentId: match.tournamentId },
@@ -30,45 +37,63 @@ async function getDraftConfig(prisma, matchId, match) {
       });
 
       if (draftSession) {
-        // Extract cubeId from DraftSession settings
+        // Extract cubeId and sideboard flag from DraftSession settings
         const settings = draftSession.settings || {};
         const cubeId = settings.cubeId;
+        const includeCubeSideboardInStandard =
+          settings.includeCubeSideboardInStandard === true;
 
         // Build draftConfig from DraftSession
         const packConfig = draftSession.packConfiguration || [];
         const packCounts = {};
         for (const entry of packConfig) {
-          const setId = entry.setId || 'Beta';
+          const setId = entry.setId || "Beta";
           packCounts[setId] = (packCounts[setId] || 0) + (entry.packCount || 0);
         }
 
         const config = {
           cubeId: cubeId || undefined,
+          includeCubeSideboardInStandard:
+            includeCubeSideboardInStandard || undefined,
           packCounts,
           packCount: Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
           packSize: 15,
         };
 
-        console.log('[DraftConfig] Loaded from DraftSession:', { matchId, cubeId, packCount: config.packCount });
+        console.log("[DraftConfig] Loaded from DraftSession:", {
+          matchId,
+          cubeId,
+          packCount: config.packCount,
+        });
         return config;
       }
 
-      console.warn('[DraftConfig] No DraftSession found for tournament:', { tournamentId: match.tournamentId });
+      console.warn("[DraftConfig] No DraftSession found for tournament:", {
+        tournamentId: match.tournamentId,
+      });
     } catch (err) {
-      console.error('[DraftConfig] Failed to load from DraftSession:', err?.message || err);
-      throw new Error(`Failed to load draft config from DraftSession: ${err?.message || err}`);
+      console.error(
+        "[DraftConfig] Failed to load from DraftSession:",
+        err?.message || err
+      );
+      throw new Error(
+        `Failed to load draft config from DraftSession: ${err?.message || err}`
+      );
     }
   }
 
   // Fall back to match.draftConfig for casual drafts or if DraftSession not found
   if (match.draftConfig) {
-    console.log('[DraftConfig] Using existing match.draftConfig:', { matchId });
+    console.log("[DraftConfig] Using existing match.draftConfig:", { matchId });
     return match.draftConfig;
   }
 
   // Default configuration if nothing found
-  const defaultConfig = { setMix: ['Beta'], packCount: 3, packSize: 15 };
-  console.log('[DraftConfig] Using default config:', { matchId, config: defaultConfig });
+  const defaultConfig = { setMix: ["Beta"], packCount: 3, packSize: 15 };
+  console.log("[DraftConfig] Using default config:", {
+    matchId,
+    config: defaultConfig,
+  });
   return defaultConfig;
 }
 
@@ -80,7 +105,7 @@ async function getDraftConfig(prisma, matchId, match) {
  * @returns {Promise<object>} Cube configuration with card IDs
  */
 async function loadCubeConfiguration(prisma, cubeId) {
-  console.log('[DraftConfig] Loading cube configuration:', { cubeId });
+  console.log("[DraftConfig] Loading cube configuration:", { cubeId });
 
   try {
     const cube = await prisma.cube.findUnique({
@@ -109,10 +134,17 @@ async function loadCubeConfiguration(prisma, cubeId) {
       isPublic: cube.isPublic || false,
     };
 
-    console.log('[DraftConfig] Loaded cube:', { cubeId, name: cube.name, totalCards: config.totalCards });
+    console.log("[DraftConfig] Loaded cube:", {
+      cubeId,
+      name: cube.name,
+      totalCards: config.totalCards,
+    });
     return config;
   } catch (err) {
-    console.error('[DraftConfig] Failed to load cube:', { cubeId, error: err?.message || err });
+    console.error("[DraftConfig] Failed to load cube:", {
+      cubeId,
+      error: err?.message || err,
+    });
     throw err;
   }
 }
@@ -126,21 +158,32 @@ async function loadCubeConfiguration(prisma, cubeId) {
  * @param {object} match - In-memory match object
  * @param {function} hydrateMatchFromDatabase - Hydration function from server/index.js
  */
-async function ensureConfigLoaded(prisma, matchId, match, hydrateMatchFromDatabase) {
-  console.log('[DraftConfig] Ensuring config loaded for match:', { matchId, tournamentId: match.tournamentId });
+async function ensureConfigLoaded(
+  prisma,
+  matchId,
+  match,
+  hydrateMatchFromDatabase
+) {
+  console.log("[DraftConfig] Ensuring config loaded for match:", {
+    matchId,
+    tournamentId: match.tournamentId,
+  });
 
   // For tournament drafts, force hydration
-  if (match.tournamentId && match.matchType === 'draft') {
+  if (match.tournamentId && match.matchType === "draft") {
     try {
       await hydrateMatchFromDatabase(matchId, match);
-      console.log('[DraftConfig] Config hydrated from database:', {
+      console.log("[DraftConfig] Config hydrated from database:", {
         matchId,
         tournamentId: match.tournamentId,
         cubeId: match.draftConfig?.cubeId,
-        packCount: match.draftConfig?.packCount
+        packCount: match.draftConfig?.packCount,
       });
     } catch (err) {
-      console.error('[DraftConfig] Failed to hydrate config:', err?.message || err);
+      console.error(
+        "[DraftConfig] Failed to hydrate config:",
+        err?.message || err
+      );
       throw new Error(`Failed to ensure config loaded: ${err?.message || err}`);
     }
   }

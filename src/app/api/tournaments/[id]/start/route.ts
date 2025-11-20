@@ -1,38 +1,56 @@
-import { TournamentStatus as DBTournamentStatus, TournamentFormat as DBTournamentFormat } from '@prisma/client';
-import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
-import { TournamentDraftEngine } from '@/lib/services/tournament-draft-engine';
-import { deriveDraftSetupFromSettings } from '@/lib/tournament/draft-config';
+import {
+  TournamentStatus as DBTournamentStatus,
+  TournamentFormat as DBTournamentFormat,
+} from "@prisma/client";
+import { NextRequest } from "next/server";
+import { getServerAuthSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
+import { TournamentDraftEngine } from "@/lib/services/tournament-draft-engine";
+import { deriveDraftSetupFromSettings } from "@/lib/tournament/draft-config";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 // POST /api/tournaments/[id]/start
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const { id } = await params;
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
 
   try {
     const tournament = await prisma.tournament.findUnique({
       where: { id },
-      include: { registrations: true }
+      include: { registrations: true },
     });
 
     if (!tournament) {
-      return new Response(JSON.stringify({ error: 'Tournament not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: "Tournament not found" }), {
+        status: 404,
+      });
     }
 
     // Only tournament creator can start the tournament
     if (tournament.creatorId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Only tournament creator can start the tournament' }), { status: 403 });
+      return new Response(
+        JSON.stringify({
+          error: "Only tournament creator can start the tournament",
+        }),
+        { status: 403 }
+      );
     }
 
     if (tournament.status !== DBTournamentStatus.registering) {
-      return new Response(JSON.stringify({ error: 'Tournament already started' }), { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "Tournament already started" }),
+        { status: 400 }
+      );
     }
 
     // Require all seats to be filled before starting
@@ -52,20 +70,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       let draftSession = await prisma.draftSession.findFirst({
         where: { tournamentId: id },
-        include: { participants: true }
+        include: { participants: true },
       });
 
       if (!draftSession) {
         draftSession = await prisma.draftSession.create({
           data: {
             tournamentId: id,
-            status: 'waiting',
-            packConfiguration: JSON.parse(JSON.stringify(draftSetup.packConfiguration)),
-            settings: JSON.parse(JSON.stringify({
-              timePerPick: draftSetup.timePerPick,
-              deckBuildingTime: draftSetup.deckBuildingTime,
-              cubeId: draftSetup.cubeId, // Include cube ID for cube drafts
-            })),
+            status: "waiting",
+            packConfiguration: JSON.parse(
+              JSON.stringify(draftSetup.packConfiguration)
+            ),
+            settings: JSON.parse(
+              JSON.stringify({
+                timePerPick: draftSetup.timePerPick,
+                deckBuildingTime: draftSetup.deckBuildingTime,
+                cubeId: draftSetup.cubeId, // Include cube ID for cube drafts
+                includeCubeSideboardInStandard:
+                  draftSetup.includeCubeSideboardInStandard === true,
+              })
+            ),
           },
           include: { participants: true },
         });
@@ -73,25 +97,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       draftSessionId = draftSession.id;
 
-      const participantsByPlayer = new Map(draftSession.participants.map((p) => [p.playerId, p]));
+      const participantsByPlayer = new Map(
+        draftSession.participants.map((p) => [p.playerId, p])
+      );
       const sortedRegistrations = [...tournament.registrations].sort((a, b) => {
-        const aTime = a.registeredAt?.getTime?.() ?? new Date(a.registeredAt ?? new Date(0)).getTime();
-        const bTime = b.registeredAt?.getTime?.() ?? new Date(b.registeredAt ?? new Date(0)).getTime();
+        const aTime =
+          a.registeredAt?.getTime?.() ??
+          new Date(a.registeredAt ?? new Date(0)).getTime();
+        const bTime =
+          b.registeredAt?.getTime?.() ??
+          new Date(b.registeredAt ?? new Date(0)).getTime();
         return aTime - bTime;
       });
 
-      const participantOps = [] as Parameters<typeof prisma.draftParticipant.update>[0][];
-      const participantCreates = [] as Parameters<typeof prisma.draftParticipant.create>[0][];
-      const registrationOps = [] as Parameters<typeof prisma.tournamentRegistration.update>[0][];
+      const participantOps = [] as Parameters<
+        typeof prisma.draftParticipant.update
+      >[0][];
+      const participantCreates = [] as Parameters<
+        typeof prisma.draftParticipant.create
+      >[0][];
+      const registrationOps = [] as Parameters<
+        typeof prisma.tournamentRegistration.update
+      >[0][];
 
       let seatNumber = 1;
       for (const reg of sortedRegistrations) {
         const existing = participantsByPlayer.get(reg.playerId);
         if (existing) {
-          if (existing.seatNumber !== seatNumber || existing.status !== 'waiting') {
+          if (
+            existing.seatNumber !== seatNumber ||
+            existing.status !== "waiting"
+          ) {
             participantOps.push({
               where: { id: existing.id },
-              data: { seatNumber, status: 'waiting' },
+              data: { seatNumber, status: "waiting" },
             });
           }
         } else {
@@ -100,14 +139,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               draftSessionId: draftSession.id,
               playerId: reg.playerId,
               seatNumber,
-              status: 'waiting',
+              status: "waiting",
             },
           });
         }
 
-        const currentPrep = (reg.preparationData as Record<string, unknown> | null) ?? {};
+        const currentPrep =
+          (reg.preparationData as Record<string, unknown> | null) ?? {};
         const nextDraftData = {
-          ...(currentPrep.draft as Record<string, unknown> | undefined ?? {}),
+          ...((currentPrep.draft as Record<string, unknown> | undefined) ?? {}),
           draftSessionId: draftSession.id,
           seatNumber,
           draftCompleted: false,
@@ -117,12 +157,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         registrationOps.push({
           where: { id: reg.id },
           data: {
-            preparationStatus: 'inProgress',
+            preparationStatus: "inProgress",
             deckSubmitted: false,
-            preparationData: JSON.parse(JSON.stringify({
-              ...currentPrep,
-              draft: nextDraftData,
-            })),
+            preparationData: JSON.parse(
+              JSON.stringify({
+                ...currentPrep,
+                draft: nextDraftData,
+              })
+            ),
           },
         });
 
@@ -130,15 +172,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
 
       const txOps = [
-        ...participantCreates.map((args) => prisma.draftParticipant.create(args)),
+        ...participantCreates.map((args) =>
+          prisma.draftParticipant.create(args)
+        ),
         ...participantOps.map((args) => prisma.draftParticipant.update(args)),
-        ...registrationOps.map((args) => prisma.tournamentRegistration.update(args)),
+        ...registrationOps.map((args) =>
+          prisma.tournamentRegistration.update(args)
+        ),
       ];
       if (txOps.length > 0) {
         await prisma.$transaction(txOps);
       }
 
-      if (draftSession.status === 'waiting') {
+      if (draftSession.status === "waiting") {
         const engine = new TournamentDraftEngine(draftSession.id);
         await engine.initialize();
         await engine.broadcastStateUpdate();
@@ -148,7 +194,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Determine next status based on format
     // Change: constructed tournaments also enter 'preparing' so players can submit a deck used for ALL matches
     let nextStatus: DBTournamentStatus = DBTournamentStatus.preparing;
-    if (tournament.format === DBTournamentFormat.draft || tournament.format === DBTournamentFormat.sealed) {
+    if (
+      tournament.format === DBTournamentFormat.draft ||
+      tournament.format === DBTournamentFormat.sealed
+    ) {
       nextStatus = DBTournamentStatus.preparing;
     } else {
       // constructed
@@ -162,30 +211,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id },
       data: {
         status: nextStatus,
-        startedAt: new Date()
-      }
+        startedAt: new Date(),
+      },
     });
 
     // Broadcast phase change event via Socket.io (fire-and-forget so API response is instant)
     tournamentSocketService
-      .broadcastPhaseChanged(
-        id,
-        nextStatus,
-        {
-          previousStatus: tournament.status,
-          startedAt: updatedTournament.startedAt?.toISOString(),
-          format: tournament.format,
-          totalPlayers: tournament.registrations.length
-        }
-      )
+      .broadcastPhaseChanged(id, nextStatus, {
+        previousStatus: tournament.status,
+        startedAt: updatedTournament.startedAt?.toISOString(),
+        format: tournament.format,
+        totalPlayers: tournament.registrations.length,
+      })
       .catch((socketError) => {
-        console.warn('Failed to broadcast phase changed event:', socketError);
+        console.warn("Failed to broadcast phase changed event:", socketError);
       });
     // Also broadcast a full tournament snapshot so lists sync immediately
     tournamentSocketService
       .broadcastTournamentUpdateById(id)
       .catch((socketError) => {
-        console.warn('Failed to broadcast tournament update:', socketError);
+        console.warn("Failed to broadcast tournament update:", socketError);
       });
 
     if (draftSessionId) {
@@ -195,24 +240,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           totalPlayers: tournament.registrations.length,
         })
         .catch((socketError) => {
-          console.warn('Failed to broadcast draft ready event:', socketError);
+          console.warn("Failed to broadcast draft ready event:", socketError);
         });
     }
 
     // If we ever reintroduce direct start into 'active', re-add round creation here.
 
-    return new Response(JSON.stringify({
-      success: true,
-      tournamentId: id,
-      draftSessionId,
-      status: updatedTournament.status,
-      startedAt: updatedTournament.startedAt?.getTime()
-    }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        tournamentId: id,
+        draftSessionId,
+        status: updatedTournament.status,
+        startedAt: updatedTournament.startedAt?.getTime(),
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }
+    );
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
