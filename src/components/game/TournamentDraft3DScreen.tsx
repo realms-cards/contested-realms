@@ -165,6 +165,25 @@ export default function TournamentDraft3DScreen({
     isSortingEnabledRef.current = isSortingEnabled;
   }, [isSortingEnabled]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("draft3d_sorting_pref");
+      if (raw === "on") setIsSortingEnabled(true);
+      else if (raw === "off") setIsSortingEnabled(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "draft3d_sorting_pref",
+        isSortingEnabled ? "on" : "off"
+      );
+    } catch {}
+  }, [isSortingEnabled]);
+
   // Join the server room for this tournament draft session to receive real-time updates
   const joinSentRef = useRef(false);
   const joinAckTimeoutRef = useRef<number | null>(null);

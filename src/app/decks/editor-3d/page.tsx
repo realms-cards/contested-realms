@@ -3295,7 +3295,7 @@ function AuthenticatedDeckEditor() {
 
         // Use logical zone from picks, but map non-deck zones (Sideboard/Collection)
         // into the Sideboard region for initial 3D layout placement.
-        const logicalZone = item.zone as Zone;
+        let logicalZone = item.zone as Zone;
         const layoutZone: "Deck" | "Sideboard" =
           logicalZone === "Deck" ? "Deck" : "Sideboard";
 
@@ -3324,6 +3324,13 @@ function AuthenticatedDeckEditor() {
         } else if (useLayout && layoutPos) {
           x = layoutPos.x;
           z = layoutPos.z;
+          // For draft-mode decks built from a prior 3D draft, infer the
+          // initial logical zone from the saved Z position so that
+          // top-of-board cards (z < 0) start in the Deck zone and
+          // bottom-of-board cards (z >= 0) start in the Sideboard zone.
+          if (isDraftMode) {
+            logicalZone = layoutPos.z < 0 ? "Deck" : "Sideboard";
+          }
         } else {
           x = -3 + Math.random() * 6;
           z =
@@ -3347,8 +3354,8 @@ function AuthenticatedDeckEditor() {
           },
           x,
           z,
-          // Keep the logical zone from picks so Collection cards can
-          // have their own dedicated fan layout while reusing the
+          // Keep the (possibly adjusted) logical zone so Collection cards
+          // can have their own dedicated fan layout while reusing the
           // Sideboard region for initial placement.
           zone: logicalZone,
         });
