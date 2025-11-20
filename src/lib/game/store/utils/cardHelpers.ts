@@ -1,7 +1,8 @@
 import type { CardRef, PlayerKey, Thresholds } from "../types";
 import { newZoneCardInstanceId } from "./idHelpers";
 
-export function ensureCardInstanceId(card: CardRef): CardRef {
+export function ensureCardInstanceId(card: CardRef | null | undefined): CardRef | null {
+  if (!card) return null;
   if (card.instanceId && card.instanceId.length > 0) {
     return card;
   }
@@ -13,6 +14,10 @@ export function ensureCardInstanceId(card: CardRef): CardRef {
 
 export function prepareCardForSeat(card: CardRef, owner: PlayerKey): CardRef {
   const ensured = ensureCardInstanceId(card);
+  if (!ensured) {
+    // Fallback: create a new card ref with instance ID if input was invalid
+    return { ...card, instanceId: newZoneCardInstanceId(), owner };
+  }
   if (ensured.owner === owner) return ensured;
   return { ...ensured, owner };
 }

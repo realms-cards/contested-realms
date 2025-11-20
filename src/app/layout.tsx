@@ -11,6 +11,7 @@ import OnlineProvider from "@/components/providers/OnlineProvider";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
+import { ColorBlindProvider } from "@/lib/contexts/ColorBlindContext";
 import { LoadingProvider } from "@/lib/contexts/LoadingContext";
 import { SoundProvider } from "@/lib/contexts/SoundContext";
 import { ThemeProvider } from "@/lib/contexts/ThemeContext";
@@ -66,20 +67,22 @@ export default async function RootLayout({
         <LoadingProvider>
           <GlobalNetworkLoadingBridge />
           <ThemeProvider defaultMode="colorful">
-            <SoundProvider>
-              <AuthProvider session={session}>
-                <ThemeScope>
-                  <OnlineProvider>
-                    <RealtimeTournamentProvider>
-                      <VideoOverlayProvider>{children}</VideoOverlayProvider>
-                    </RealtimeTournamentProvider>
-                  </OnlineProvider>
-                </ThemeScope>
-                {/* Floating user badge on all non-online pages */}
-                <GlobalUserBadge />
-                {/* Theme toggle removed per design: muted colorful is the standard */}
-              </AuthProvider>
-            </SoundProvider>
+            <ColorBlindProvider>
+              <SoundProvider>
+                <AuthProvider session={session}>
+                  <ThemeScope>
+                    <OnlineProvider>
+                      <RealtimeTournamentProvider>
+                        <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                      </RealtimeTournamentProvider>
+                    </OnlineProvider>
+                  </ThemeScope>
+                  {/* Floating user badge on all non-online pages */}
+                  <GlobalUserBadge />
+                  {/* Theme toggle removed per design: muted colorful is the standard */}
+                </AuthProvider>
+              </SoundProvider>
+            </ColorBlindProvider>
           </ThemeProvider>
         </LoadingProvider>
         <SpeedInsights />
