@@ -12,20 +12,29 @@ type ApiCubeCard = {
   count: number;
   name: string;
   slug: string | null;
+  setName: string | null;
   type: string | null;
   rarity: string | null;
+  zone: string | null;
 };
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
 
   try {
     const { id } = await params;
     if (!id) {
-      return new Response(JSON.stringify({ error: "Missing id" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing id" }), {
+        status: 400,
+      });
     }
 
     const cube = await prisma.cube.findUnique({
@@ -43,14 +52,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     });
 
     if (!cube || (cube.userId !== session.user.id && !cube.isPublic)) {
-      return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+      });
     }
 
     const cardIdsWithSet = cube.cards
-      .map((c) => (c.setId == null ? null : { cardId: c.cardId, setId: c.setId }))
-      .filter((value): value is { cardId: number; setId: number } => value !== null);
+      .map((c) =>
+        c.setId == null ? null : { cardId: c.cardId, setId: c.setId }
+      )
+      .filter(
+        (value): value is { cardId: number; setId: number } => value !== null
+      );
 
-    const metaMap = new Map<string, { type: string | null; rarity: string | null }>();
+    const metaMap = new Map<
+      string,
+      { type: string | null; rarity: string | null }
+    >();
     if (cardIdsWithSet.length) {
       const metas = await prisma.cardSetMetadata.findMany({
         where: { OR: cardIdsWithSet },
@@ -67,6 +85,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const cards: ApiCubeCard[] = cube.cards.map((entry) => {
       const key = entry.setId ? `${entry.cardId}:${entry.setId}` : null;
       const meta = key ? metaMap.get(key) : null;
+      const zoneValue =
+        (entry as unknown as { zone?: string | null }).zone ?? "main";
       return {
         cardId: entry.cardId,
         variantId: entry.variantId ?? null,
@@ -74,8 +94,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         count: entry.count,
         name: entry.card?.name ?? "",
         slug: entry.variant?.slug ?? null,
+        setName: entry.set?.name ?? null,
         type: entry.variant?.typeText ?? meta?.type ?? null,
         rarity: meta?.rarity ?? null,
+        zone: zoneValue,
       };
     });
 
@@ -89,7 +111,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         ...summary,
         cards,
       }),
-      { status: 200, headers: { "content-type": "application/json" } },
+      { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -97,21 +119,32 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
 
   try {
     const { id } = await params;
     if (!id) {
-      return new Response(JSON.stringify({ error: "Missing id" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing id" }), {
+        status: 400,
+      });
     }
 
-    const cube = await prisma.cube.findFirst({ where: { id, userId: session.user.id } });
+    const cube = await prisma.cube.findFirst({
+      where: { id, userId: session.user.id },
+    });
     if (!cube) {
-      return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+      });
     }
 
     await prisma.cube.delete({ where: { id } });
@@ -122,28 +155,44 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
 
   try {
     const { id } = await params;
     if (!id) {
-      return new Response(JSON.stringify({ error: "Missing id" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing id" }), {
+        status: 400,
+      });
     }
 
-    const cube = await prisma.cube.findFirst({ where: { id, userId: session.user.id } });
+    const cube = await prisma.cube.findFirst({
+      where: { id, userId: session.user.id },
+    });
     if (!cube) {
-      return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+      });
     }
 
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const name = body?.name ? String(body.name).trim() : undefined;
-    const description = body?.description ? String(body.description).trim() : undefined;
-    const isPublic = body?.isPublic !== undefined ? Boolean(body.isPublic) : undefined;
-    const cards = Array.isArray(body?.cards) ? (body.cards as Array<Record<string, unknown>>) : [];
+    const description = body?.description
+      ? String(body.description).trim()
+      : undefined;
+    const isPublic =
+      body?.isPublic !== undefined ? Boolean(body.isPublic) : undefined;
+    const cards = Array.isArray(body?.cards)
+      ? (body.cards as Array<Record<string, unknown>>)
+      : [];
 
     const updated = await prisma.cube.update({
       where: { id },
@@ -164,7 +213,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
               const cardId = Number(card.cardId ?? card["cardId"] ?? 0);
               const count = Number(card.count ?? card["count"] ?? 0);
               if (!Number.isFinite(cardId) || cardId <= 0) return null;
-              const safeCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+              const safeCount =
+                Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
               if (safeCount <= 0) return null;
               const setIdRaw = card.setId ?? card["setId"];
               const variantIdRaw = card.variantId ?? card["variantId"];
@@ -172,17 +222,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                 cubeId: id,
                 cardId,
                 setId: setIdRaw == null ? null : Number(setIdRaw) || null,
-                variantId: variantIdRaw == null ? null : Number(variantIdRaw) || null,
+                variantId:
+                  variantIdRaw == null ? null : Number(variantIdRaw) || null,
                 count: safeCount,
               };
             })
-            .filter((row): row is {
-              cubeId: string;
-              cardId: number;
-              setId: number | null;
-              variantId: number | null;
-              count: number;
-            } => !!row),
+            .filter(
+              (
+                row
+              ): row is {
+                cubeId: string;
+                cardId: number;
+                setId: number | null;
+                variantId: number | null;
+                count: number;
+              } => !!row
+            ),
         }),
       ]);
     }

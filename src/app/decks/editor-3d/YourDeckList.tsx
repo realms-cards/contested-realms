@@ -352,7 +352,7 @@ export default function YourDeckList(props: YourDeckListProps) {
       : "grid-cols-5";
 
   return (
-    <div className="max-h-[calc(100vh-9rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
+    <div className="max-h-[calc(100vh-16rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
       {/* Controls */}
       <div className="sticky top-0 z-10 bg-black/90 backdrop-blur-sm p-2 rounded space-y-2 border border-white/10">
         {/* Column selector */}

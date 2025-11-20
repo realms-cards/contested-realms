@@ -729,6 +729,29 @@ export default function Draft3DPage() {
           botMsg = ` and bot deck ${dataBot.name} (id: ${dataBot.id})`;
       }
       setSaveMsg(`Saved deck ${data.name} (id: ${data.id})${botMsg}`);
+      try {
+        if (typeof window !== "undefined" && Array.isArray(pick3D)) {
+          const layout = !isSortingEnabled
+            ? pick3D.map((p) => ({
+                cardId: p.card.cardId,
+                zone: p.zone,
+                x: p.x,
+                z: p.z,
+              }))
+            : [];
+          const layoutKey = `draftLayout_deck_${String(data.id)}`;
+          const prefsKey = `draftStackPrefs_deck_${String(data.id)}`;
+          window.localStorage.setItem(layoutKey, JSON.stringify(layout));
+          window.localStorage.setItem(
+            prefsKey,
+            JSON.stringify({ isSortingEnabled })
+          );
+        }
+      } catch (err) {
+        try {
+          console.warn("Failed to persist draft 3D layout:", err);
+        } catch {}
+      }
       // Navigate to 3D deck editor with new deck loaded in draft completion mode
       console.log("Navigating to editor-3d with deck:", data.id);
       const editorUrl = `/decks/editor-3d?id=${encodeURIComponent(

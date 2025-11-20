@@ -38,17 +38,19 @@ function normalizePlayerInfo(raw: PlayerInfoInput) {
   };
 }
 
-export const PlayerInfoSchema = PlayerInfoInputSchema.transform(normalizePlayerInfo);
+export const PlayerInfoSchema =
+  PlayerInfoInputSchema.transform(normalizePlayerInfo);
 export type PlayerInfo = z.infer<typeof PlayerInfoSchema>;
 
 const TournamentPlayerInfoInputSchema = PlayerInfoInputSchema.extend({
   ready: z.boolean().optional(),
 });
 
-export const TournamentPlayerInfoSchema = TournamentPlayerInfoInputSchema.transform((raw) => ({
-  ...normalizePlayerInfo(raw),
-  ready: raw.ready ?? false,
-}));
+export const TournamentPlayerInfoSchema =
+  TournamentPlayerInfoInputSchema.transform((raw) => ({
+    ...normalizePlayerInfo(raw),
+    ready: raw.ready ?? false,
+  }));
 export type TournamentPlayerInfo = z.infer<typeof TournamentPlayerInfoSchema>;
 
 export const LobbyStatusSchema = z.enum(["open", "started", "closed"]);
@@ -72,7 +74,12 @@ export const LobbyInfoSchema = z.object({
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
-export const MatchStatusSchema = z.enum(["waiting", "deck_construction", "in_progress", "ended"]);
+export const MatchStatusSchema = z.enum([
+  "waiting",
+  "deck_construction",
+  "in_progress",
+  "ended",
+]);
 export type MatchStatus = z.infer<typeof MatchStatusSchema>;
 
 export const SealedConfigSchema = z.object({
@@ -94,6 +101,8 @@ export const DraftConfigSchema = z.object({
   packCounts: z.record(z.string(), z.number().int().min(0)).optional(),
   cubeId: z.string().optional().nullable(),
   cubeName: z.string().optional().nullable(),
+  // Optional: when true for cube drafts, offer cube sideboard cards in the standard card pool
+  includeCubeSideboardInStandard: z.boolean().optional(),
 });
 export type DraftConfig = z.infer<typeof DraftConfigSchema>;
 
@@ -122,7 +131,13 @@ export const SealedPackSchema = z.object({
 export type SealedPack = z.infer<typeof SealedPackSchema>;
 
 export const DraftStateSchema = z.object({
-  phase: z.enum(["waiting", "pack_selection", "picking", "passing", "complete"]),
+  phase: z.enum([
+    "waiting",
+    "pack_selection",
+    "picking",
+    "passing",
+    "complete",
+  ]),
   packIndex: z.number(),
   pickNumber: z.number(),
   currentPacks: z.array(z.array(z.unknown())).nullable(),
@@ -161,10 +176,20 @@ export const MatchInfoSchema = z.object({
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 
 // Tournament system types
-export const TournamentFormatSchema = z.enum(["swiss", "elimination", "round_robin"]);
+export const TournamentFormatSchema = z.enum([
+  "swiss",
+  "elimination",
+  "round_robin",
+]);
 export type TournamentFormat = z.infer<typeof TournamentFormatSchema>;
 
-export const TournamentStatusSchema = z.enum(["registering", "draft_phase", "sealed_phase", "playing", "completed"]);
+export const TournamentStatusSchema = z.enum([
+  "registering",
+  "draft_phase",
+  "sealed_phase",
+  "playing",
+  "completed",
+]);
 export type TournamentStatus = z.infer<typeof TournamentStatusSchema>;
 
 export const TournamentRoundSchema = z.object({
@@ -217,12 +242,12 @@ export const ChatScopeSchema = z.enum(["lobby", "match", "global"]);
 export type ChatScope = z.infer<typeof ChatScopeSchema>;
 
 // Client -> Server payloads
-export const HelloPayload = z.object({ 
+export const HelloPayload = z.object({
   displayName: z
     .string()
     .transform((s) => s.trim())
     .pipe(z.string().min(1).max(40)),
-  playerId: z.string().optional() // Persistent player ID for reconnection
+  playerId: z.string().optional(), // Persistent player ID for reconnection
 });
 export const CreateLobbyPayload = z.object({
   name: z.string().optional(),
@@ -235,9 +260,15 @@ export const LeaveMatchPayload = z.object({});
 export const ReadyPayload = z.object({ ready: z.boolean() });
 export const StartMatchPayload = z.object({});
 export const JoinMatchPayload = z.object({ matchId: z.string() });
-export const WatchMatchPayload = z.object({ matchId: z.string(), token: z.string().optional() });
+export const WatchMatchPayload = z.object({
+  matchId: z.string(),
+  token: z.string().optional(),
+});
 export const ActionPayload = z.object({ action: z.any() });
-export const ChatPayload = z.object({ content: z.string().min(1), scope: ChatScopeSchema.optional() });
+export const ChatPayload = z.object({
+  content: z.string().min(1),
+  scope: ChatScopeSchema.optional(),
+});
 export const ResyncRequestPayload = z.object({});
 export const PingPayload = z.object({ t: z.number() });
 // Mulligan sync: explicit per-player completion signal
@@ -287,7 +318,9 @@ export type ChatPayloadT = z.infer<typeof ChatPayload>;
 export type ResyncRequestPayloadT = z.infer<typeof ResyncRequestPayload>;
 export type PingPayloadT = z.infer<typeof PingPayload>;
 export type MulliganDonePayloadT = z.infer<typeof MulliganDonePayload>;
-export type SetLobbyVisibilityPayloadT = z.infer<typeof SetLobbyVisibilityPayload>;
+export type SetLobbyVisibilityPayloadT = z.infer<
+  typeof SetLobbyVisibilityPayload
+>;
 export type InviteToLobbyPayloadT = z.infer<typeof InviteToLobbyPayload>;
 export type RequestLobbiesPayloadT = z.infer<typeof RequestLobbiesPayload>;
 export type RequestPlayersPayloadT = z.infer<typeof RequestPlayersPayload>;
@@ -321,7 +354,10 @@ export const JoinedLobbyPayload = z.object({ lobby: LobbyInfoSchema });
 export const LobbyUpdatedPayload = z.object({ lobby: LobbyInfoSchema });
 export const LeftLobbyPayload = z.object({});
 export const MatchStartedPayload = z.object({ match: MatchInfoSchema });
-export const StatePatchPayload = z.object({ patch: z.any(), t: z.number().optional() });
+export const StatePatchPayload = z.object({
+  patch: z.any(),
+  t: z.number().optional(),
+});
 export const ServerChatPayload = z.object({
   from: PlayerInfoSchema.nullable(),
   content: z.string(),
@@ -336,17 +372,26 @@ export const ResyncSnapshotSchema = z.object({
   t: z.number().optional(),
 });
 export type ResyncSnapshot = z.infer<typeof ResyncSnapshotSchema>;
-export const ResyncResponsePayload = z.object({ snapshot: ResyncSnapshotSchema });
+export const ResyncResponsePayload = z.object({
+  snapshot: ResyncSnapshotSchema,
+});
 export const PongPayload = z.object({ t: z.number() });
-export const LobbiesUpdatedPayload = z.object({ lobbies: z.array(LobbyInfoSchema) });
-export const PlayerListPayload = z.object({ players: z.array(PlayerInfoSchema) });
+export const LobbiesUpdatedPayload = z.object({
+  lobbies: z.array(LobbyInfoSchema),
+});
+export const PlayerListPayload = z.object({
+  players: z.array(PlayerInfoSchema),
+});
 export const LobbyInvitePayload = z.object({
   lobbyId: z.string(),
   from: PlayerInfoSchema,
   visibility: LobbyVisibilitySchema,
   message: z.string().optional(),
 });
-export const ErrorPayload = z.object({ message: z.string(), code: z.string().optional() });
+export const ErrorPayload = z.object({
+  message: z.string(),
+  code: z.string().optional(),
+});
 
 export type WelcomePayloadT = z.infer<typeof WelcomePayload>;
 export type JoinedLobbyPayloadT = z.infer<typeof JoinedLobbyPayload>;

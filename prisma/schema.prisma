@@ -179,6 +179,7 @@ model CubeCard {
   setId     Int?
   variantId Int?
   count     Int
+  zone      String  @default("main")
 
   cube    Cube    @relation(fields: [cubeId], references: [id], onDelete: Cascade)
   card    Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
