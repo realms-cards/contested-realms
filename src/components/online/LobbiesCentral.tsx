@@ -342,6 +342,7 @@ export type CreateTournamentConfig = {
     cubeId?: string;
     pickTimeLimit?: number;
     constructionTimeLimit?: number;
+    includeCubeSideboardInStandard?: boolean;
   };
 };
 
@@ -493,6 +494,8 @@ export default function LobbiesCentral({
   ]);
   const [draftUseCube, setDraftUseCube] = useState<boolean>(false);
   const [draftCubeId, setDraftCubeId] = useState<string>("");
+  const [draftIncludeCubeSideboard, setDraftIncludeCubeSideboard] =
+    useState<boolean>(false);
   const [draftPickTimeLimit, setDraftPickTimeLimit] = useState<number>(60);
   const [draftConstructionTimeLimit, setDraftConstructionTimeLimit] =
     useState<number>(20);
@@ -518,17 +521,33 @@ export default function LobbiesCentral({
     setLoadingCubes(true);
     try {
       const res = await fetch("/api/cubes");
-      if (res.ok) {
-        const data = await res.json();
-        const cubes = (data.myCubes || []).map(
-          (cube: { id: string; name: string; cardCount: number }) => ({
-            id: cube.id,
-            name: cube.name,
-            cardCount: cube.cardCount,
-          })
-        );
-        setUserCubes(cubes);
+      if (!res.ok) return;
+
+      const data = await res.json().catch(() => null);
+
+      type CubeSummary = { id: string; name: string; cardCount?: number };
+
+      const raw = data as
+        | { myCubes?: CubeSummary[]; publicCubes?: CubeSummary[] }
+        | CubeSummary[]
+        | null;
+
+      let list: CubeSummary[] = [];
+      if (raw && !Array.isArray(raw)) {
+        const my = Array.isArray(raw.myCubes) ? raw.myCubes : [];
+        const pub = Array.isArray(raw.publicCubes) ? raw.publicCubes : [];
+        list = [...my, ...pub];
+      } else if (Array.isArray(raw)) {
+        list = raw;
       }
+
+      const cubes = list.map((cube) => ({
+        id: cube.id,
+        name: cube.name,
+        cardCount: cube.cardCount ?? 0,
+      }));
+
+      setUserCubes(cubes);
     } catch (error) {
       console.error("Failed to fetch cubes:", error);
     } finally {
@@ -1900,37 +1919,54 @@ export default function LobbiesCentral({
                   )}
 
                   {draftUseCube && (
-                    <div>
-                      <label className="block text-xs opacity-80 mb-1">
-                        Select Cube
+                    <>
+                      <div>
+                        <label className="block text-xs opacity-80 mb-1">
+                          Select Cube
+                        </label>
+                        {loadingCubes ? (
+                          <div className="text-xs text-slate-400 py-2">
+                            Loading cubes...
+                          </div>
+                        ) : userCubes.length === 0 ? (
+                          <div className="text-xs text-slate-400 py-2">
+                            No cubes found. Create a cube first to use for
+                            drafting.
+                          </div>
+                        ) : (
+                          <select
+                            value={draftCubeId}
+                            onChange={(e) => setDraftCubeId(e.target.value)}
+                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                          >
+                            <option value="">-- Select a cube --</option>
+                            {userCubes.map((cube) => (
+                              <option key={cube.id} value={cube.id}>
+                                {cube.name} ({cube.cardCount} cards)
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <p className="text-xs text-slate-400 mt-1">
+                          Choose one of your cubes for this draft tournament
+                        </p>
+                      </div>
+                      <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600"
+                          checked={draftIncludeCubeSideboard}
+                          onChange={(e) =>
+                            setDraftIncludeCubeSideboard(e.target.checked)
+                          }
+                        />
+                        <span>
+                          When drafting from a cube, offer the cube&apos;s
+                          sideboard cards in the standard card pool during
+                          deckbuilding.
+                        </span>
                       </label>
-                      {loadingCubes ? (
-                        <div className="text-xs text-slate-400 py-2">
-                          Loading cubes...
-                        </div>
-                      ) : userCubes.length === 0 ? (
-                        <div className="text-xs text-slate-400 py-2">
-                          No cubes found. Create a cube first to use for
-                          drafting.
-                        </div>
-                      ) : (
-                        <select
-                          value={draftCubeId}
-                          onChange={(e) => setDraftCubeId(e.target.value)}
-                          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                        >
-                          <option value="">-- Select a cube --</option>
-                          {userCubes.map((cube) => (
-                            <option key={cube.id} value={cube.id}>
-                              {cube.name} ({cube.cardCount} cards)
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <p className="text-xs text-slate-400 mt-1">
-                        Choose one of your cubes for this draft tournament
-                      </p>
-                    </div>
+                    </>
                   )}
 
                   {/* Draft Time Limits */}
@@ -2057,6 +2093,8 @@ export default function LobbiesCentral({
                           cubeId: draftCubeId,
                           pickTimeLimit: draftPickTimeLimit,
                           constructionTimeLimit: draftConstructionTimeLimit,
+                          includeCubeSideboardInStandard:
+                            draftIncludeCubeSideboard,
                         };
                       } else {
                         // Convert booster array to packCounts format

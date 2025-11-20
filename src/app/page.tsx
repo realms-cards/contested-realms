@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import AsciiBottomArt from "@/components/ui/AsciiBottomArt";
 import AsciiLogo from "@/components/ui/AsciiLogo";
 import AsciiPanel from "@/components/ui/AsciiPanel";
 import OtherRealms from "@/components/ui/OtherRealms";
 
 export default function Home() {
+  const router = useRouter();
+  const { data: session } = useSession();
   const [showAlphaBanner, setShowAlphaBanner] = useState(true);
   // Set home page title
   useEffect(() => {
@@ -50,6 +54,7 @@ export default function Home() {
             </div>
           </div>
         )}
+
         {/* ASCII Logotype */}
         <AsciiLogo className="max-w-4xl mx-auto" />
 
@@ -70,61 +75,61 @@ export default function Home() {
           </AsciiPanel>
           */}
 
-          {/* Contest a Realm (Online) */}
-          <AsciiPanel className="w-full p-5 md:p-6">
-            <Link
-              href="/online/lobby"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-5 md:py-6">
-                <h3 className="text-2xl font-semibold tracking-wide">
-                  Online Realms
-                </h3>
-              </div>
-            </Link>
-          </AsciiPanel>
+          {session ? (
+            <AsciiPanel className="max-w-4xl min-w-2xl p-5 md:p-6 justify-self-center">
+              <Link
+                href="/online/lobby"
+                className="group block hover:scale-[1.02] transition-transform duration-200"
+              >
+                <div className="flex items-center justify-center py-5 md:py-6">
+                  <h3 className="text-2xl font-semibold tracking-wide">
+                    Online Realms
+                  </h3>
+                </div>
+              </Link>
+            </AsciiPanel>
+          ) : (
+            <AsciiPanel className="w-4xl p-5 md:p-6 justify-self-center">
+              <button
+                type="button"
+                onClick={() => router.push("/auth/signin")}
+                className="group block w-full hover:scale-[1.02] transition-transform duration-200"
+              >
+                <div className="flex items-center justify-center py-5 md:py-6">
+                  <h3 className="text-2xl font-semibold tracking-wide">
+                    Sign In
+                  </h3>
+                </div>
+              </button>
+            </AsciiPanel>
+          )}
         </div>
 
         {/* Secondary Links */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 max-w-6xl mx-auto">
-          <AsciiPanel className="p-4 md:p-5">
-            <Link
-              href="/draft-3d"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-3 md:py-4">
-                <h4 className="text-lg font-semibold tracking-wide">
-                  Draft Simulator
-                </h4>
-              </div>
-            </Link>
+        {session && (
+          <AsciiPanel className="max-w-4xl min-w-2xl p-5 md:p-6 justify-self-center">
+            <div className="grid grid-cols-1 gap-3 md:gap-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-700/70">
+              <Link
+                href="/decks"
+                className="group block hover:scale-[1.02] transition-transform duration-200 px-2 md:px-4"
+              >
+                <div className="flex items-center justify-center py-3 md:py-4">
+                  <h4 className="text-lg font-semibold tracking-wide">
+                    {" "}
+                    Your Decks
+                  </h4>
+                </div>
+              </Link>
+            </div>
           </AsciiPanel>
-          <AsciiPanel className="p-4 md:p-5">
-            <Link
-              href="/decks"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-3 md:py-4">
-                <h4 className="text-lg font-semibold tracking-wide">Decks</h4>
-              </div>
-            </Link>
-          </AsciiPanel>
-          <AsciiPanel className="p-4 md:p-5">
-            <Link
-              href="/cubes"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-3 md:py-4">
-                <h4 className="text-lg font-semibold tracking-wide">Cubes</h4>
-              </div>
-            </Link>
-          </AsciiPanel>
-        </div>
+        )}
 
         {/* Other Realms (wide bottom element) */}
-        <div className="max-w-6xl mx-auto cursor-pointer">
-          <OtherRealms />
-        </div>
+        {session && (
+          <div className="min-w-2xl max-w-3xlp-5 md:p-6 justify-self-center cursor-pointer">
+            <OtherRealms />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="text-xs text-orange-300/80">
@@ -179,6 +184,7 @@ export default function Home() {
           </a>
         </div>
       </div>
+
       {/* Bottom ASCII art background */}
       <AsciiBottomArt opacityClass="text-white/12" maxVh={null} />
     </div>

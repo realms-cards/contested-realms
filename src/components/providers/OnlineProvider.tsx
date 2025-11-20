@@ -1,7 +1,13 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import type {
   OnlineContextValue,
@@ -26,14 +32,13 @@ import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
-
-
 export default function OnlineProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { startLoading: startGlobalLoading, stopLoading: stopGlobalLoading } = useLoadingContext();
+  const { startLoading: startGlobalLoading, stopLoading: stopGlobalLoading } =
+    useLoadingContext();
   const { data: session, status: sessionStatus } = useSession();
   const [connected, setConnected] = useState<boolean>(false);
   const [lobby, setLobby] = useState<LobbyInfo | null>(null);
@@ -44,14 +49,24 @@ export default function OnlineProvider({
   const [lobbies, setLobbies] = useState<LobbyInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   // HTTP-available players list (rich data)
-  const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
-  const [availablePlayersNextCursor, setAvailablePlayersNextCursor] = useState<string | null>(null);
-  const [availablePlayersLoading, setAvailablePlayersLoading] = useState<boolean>(false);
-  const availableQueryRef = useRef<{ q?: string; sort?: "recent" | "alphabetical" } | null>(null);
+  const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>(
+    []
+  );
+  const [availablePlayersNextCursor, setAvailablePlayersNextCursor] = useState<
+    string | null
+  >(null);
+  const [availablePlayersLoading, setAvailablePlayersLoading] =
+    useState<boolean>(false);
+  const availableQueryRef = useRef<{
+    q?: string;
+    sort?: "recent" | "alphabetical";
+  } | null>(null);
   // Cache a short-lived auth token for prioritization (JWT signed by NextAuth)
   const availableAuthRef = useRef<{ token: string; ts: number } | null>(null);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
-  const [availablePlayersError, setAvailablePlayersError] = useState<string | null>(null);
+  const [availablePlayersError, setAvailablePlayersError] = useState<
+    string | null
+  >(null);
   const [socialError, setSocialError] = useState<string | null>(null);
   const socialErrorTimer = useRef<number | null>(null);
   const [connToast, setConnToast] = useState<string | null>(null);
@@ -64,7 +79,9 @@ export default function OnlineProvider({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { message?: string } | undefined;
+      const detail = (e as CustomEvent).detail as
+        | { message?: string }
+        | undefined;
       if (detail?.message) {
         setAppToast(detail.message);
         window.setTimeout(() => setAppToast(null), 3500);
@@ -79,8 +96,10 @@ export default function OnlineProvider({
       }
     };
   }, []);
-  const [incomingVoiceRequest, setIncomingVoiceRequest] = useState<VoiceIncomingRequest | null>(null);
-  const [outgoingVoiceRequest, setOutgoingVoiceRequest] = useState<VoiceOutgoingRequest | null>(null);
+  const [incomingVoiceRequest, setIncomingVoiceRequest] =
+    useState<VoiceIncomingRequest | null>(null);
+  const [outgoingVoiceRequest, setOutgoingVoiceRequest] =
+    useState<VoiceOutgoingRequest | null>(null);
   // Track latest "me" across event handlers without re-subscribing
   const meRef = useRef<PlayerInfo | null>(null);
   // Track latest lobby across event handlers
@@ -89,7 +108,6 @@ export default function OnlineProvider({
   const matchRef = useRef<MatchInfo | null>(null);
   // Track which matches we've already logged a start message for (to avoid duplicates)
   const matchStartLoggedRef = useRef<Set<string>>(new Set());
-
 
   const transportRef = useRef<SocketTransport | null>(null);
   const transport = useMemo(() => {
@@ -103,12 +121,16 @@ export default function OnlineProvider({
     let mounted = true;
     let disconnectedSince: number | null = null;
     let toastTimerId: number | null = null;
-    
+
     const readConnected = () => {
       try {
-        const anyT = transport as unknown as { isConnected?: () => boolean; getConnectionState?: () => string };
+        const anyT = transport as unknown as {
+          isConnected?: () => boolean;
+          getConnectionState?: () => string;
+        };
         if (anyT?.isConnected) return !!anyT.isConnected();
-        if (anyT?.getConnectionState) return anyT.getConnectionState() === 'connected';
+        if (anyT?.getConnectionState)
+          return anyT.getConnectionState() === "connected";
         return false;
       } catch {
         return false;
@@ -128,7 +150,7 @@ export default function OnlineProvider({
             // Show toast after 3 seconds if still disconnected
             toastTimerId = window.setTimeout(() => {
               if (!mounted || prev) return; // Reconnected in the meantime
-              setConnToast('Lost connection to the server');
+              setConnToast("Lost connection to the server");
               window.setTimeout(() => setConnToast(null), 4000);
             }, 3000);
           }
@@ -143,7 +165,9 @@ export default function OnlineProvider({
       }
     };
     const id = window.setInterval(tick, 1000);
-    try { tick(); } catch {}
+    try {
+      tick();
+    } catch {}
     return () => {
       mounted = false;
       window.clearInterval(id);
@@ -200,9 +224,12 @@ export default function OnlineProvider({
 
     const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || "").trim();
     if (wsUrl) {
-      if (wsUrl.startsWith("ws://")) return wsUrl.replace(/^ws:\/\//, "http://");
-      if (wsUrl.startsWith("wss://")) return wsUrl.replace(/^wss:\/\//, "https://");
-      if (wsUrl.startsWith("http://") || wsUrl.startsWith("https://")) return wsUrl;
+      if (wsUrl.startsWith("ws://"))
+        return wsUrl.replace(/^ws:\/\//, "http://");
+      if (wsUrl.startsWith("wss://"))
+        return wsUrl.replace(/^wss:\/\//, "https://");
+      if (wsUrl.startsWith("http://") || wsUrl.startsWith("https://"))
+        return wsUrl;
     }
 
     if (typeof window !== "undefined" && window.location?.origin) {
@@ -229,19 +256,21 @@ export default function OnlineProvider({
 
   const voiceParticipantKey = useMemo(() => {
     const ids = voiceRtc.participantIds ?? [];
-    return ids.length > 0 ? ids.join('|') : '';
+    return ids.length > 0 ? ids.join("|") : "";
   }, [voiceRtc.participantIds]);
 
   const voiceParticipantIds = useMemo(() => {
     if (!voiceParticipantKey) return [] as string[];
-    return voiceParticipantKey.split('|').filter(Boolean);
+    return voiceParticipantKey.split("|").filter(Boolean);
   }, [voiceParticipantKey]);
 
   const voiceParticipantIdSet = useMemo(() => {
     return new Set(voiceParticipantIds);
   }, [voiceParticipantIds]);
 
-  const previousVoiceParticipantCountRef = useRef<number>(voiceParticipantIds.length);
+  const previousVoiceParticipantCountRef = useRef<number>(
+    voiceParticipantIds.length
+  );
 
   const voiceFeatureEnabled = voiceRtc.featureEnabled;
   const voiceState = voiceRtc.state;
@@ -250,7 +279,11 @@ export default function OnlineProvider({
   const attemptVoiceJoin = useCallback(() => {
     if (!voiceFeatureEnabled) return;
     // Join the voice room (announce presence) but don't auto-connect
-    if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
+    if (
+      voiceState === "idle" ||
+      voiceState === "failed" ||
+      voiceState === "closed"
+    ) {
       void voiceJoin();
     }
   }, [voiceFeatureEnabled, voiceJoin, voiceState]);
@@ -258,7 +291,11 @@ export default function OnlineProvider({
   const attemptVoiceConnection = useCallback(() => {
     if (!voiceFeatureEnabled) return;
     // Initiate actual WebRTC connection after approval
-    if (voiceState === "idle" || voiceState === "failed" || voiceState === "closed") {
+    if (
+      voiceState === "idle" ||
+      voiceState === "failed" ||
+      voiceState === "closed"
+    ) {
       void voiceRtc.initiateConnection();
     }
   }, [voiceFeatureEnabled, voiceRtc, voiceState]);
@@ -353,7 +390,13 @@ export default function OnlineProvider({
         attemptVoiceConnection();
       }
     },
-    [transport, attemptVoiceJoin, attemptVoiceConnection, setVoicePlaybackEnabled, voiceRtc.state]
+    [
+      transport,
+      attemptVoiceJoin,
+      attemptVoiceConnection,
+      setVoicePlaybackEnabled,
+      voiceRtc.state,
+    ]
   );
 
   const dismissOutgoingRequest = useCallback(() => {
@@ -406,7 +449,10 @@ export default function OnlineProvider({
         if (existing) return existing;
         return { id, displayName: `Player ${id.slice(-4)}` };
       })
-      .filter((peer, index, self) => peer.id && self.findIndex((p) => p.id === peer.id) === index);
+      .filter(
+        (peer, index, self) =>
+          peer.id && self.findIndex((p) => p.id === peer.id) === index
+      );
   }, [voiceParticipantIds, knownVoicePeers]);
 
   const voice = useMemo(
@@ -455,7 +501,8 @@ export default function OnlineProvider({
       };
       if (!data.requestId || !data.from || !data.from.id) return;
       const fallbackName =
-        typeof data.from.displayName === "string" && data.from.displayName.trim().length > 0
+        typeof data.from.displayName === "string" &&
+        data.from.displayName.trim().length > 0
           ? data.from.displayName
           : `Player ${String(data.from.id).slice(-4)}`;
 
@@ -467,7 +514,8 @@ export default function OnlineProvider({
         },
         lobbyId: data.lobbyId ?? null,
         matchId: data.matchId ?? null,
-        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        timestamp:
+          typeof data.timestamp === "number" ? data.timestamp : Date.now(),
       });
     };
 
@@ -484,7 +532,9 @@ export default function OnlineProvider({
       if (!requestId) return;
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
-        const resolvedTarget = data.targetId ? String(data.targetId) : prev.targetId;
+        const resolvedTarget = data.targetId
+          ? String(data.targetId)
+          : prev.targetId;
         if (prev.targetId !== resolvedTarget) return prev;
         return {
           requestId,
@@ -492,7 +542,8 @@ export default function OnlineProvider({
           lobbyId: data.lobbyId ?? prev.lobbyId,
           matchId: data.matchId ?? prev.matchId,
           status: "pending",
-          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+          timestamp:
+            typeof data.timestamp === "number" ? data.timestamp : Date.now(),
         };
       });
     };
@@ -511,7 +562,9 @@ export default function OnlineProvider({
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
         const matchesId = prev.targetId === responderId;
-        const matchesRequest = data.requestId ? prev.requestId === data.requestId : matchesId;
+        const matchesRequest = data.requestId
+          ? prev.requestId === data.requestId
+          : matchesId;
         if (!matchesId && !matchesRequest) return prev;
         return {
           requestId: data.requestId ?? prev.requestId ?? null,
@@ -519,7 +572,8 @@ export default function OnlineProvider({
           lobbyId: data.lobbyId ?? prev.lobbyId,
           matchId: data.matchId ?? prev.matchId,
           status: "accepted",
-          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+          timestamp:
+            typeof data.timestamp === "number" ? data.timestamp : Date.now(),
         };
       });
       setVoicePlaybackEnabled(true);
@@ -543,7 +597,9 @@ export default function OnlineProvider({
       setOutgoingVoiceRequest((prev) => {
         if (!prev) return prev;
         const matchesId = prev.targetId === responderId;
-        const matchesRequest = data.requestId ? prev.requestId === data.requestId : matchesId;
+        const matchesRequest = data.requestId
+          ? prev.requestId === data.requestId
+          : matchesId;
         if (!matchesId && !matchesRequest) return prev;
         return {
           requestId: data.requestId ?? prev.requestId ?? null,
@@ -551,7 +607,8 @@ export default function OnlineProvider({
           lobbyId: data.lobbyId ?? prev.lobbyId,
           matchId: data.matchId ?? prev.matchId,
           status: "declined",
-          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+          timestamp:
+            typeof data.timestamp === "number" ? data.timestamp : Date.now(),
         };
       });
     };
@@ -593,7 +650,8 @@ export default function OnlineProvider({
           lobbyId: data.lobbyId ?? prev.lobbyId,
           matchId: data.matchId ?? prev.matchId,
           status: "cancelled",
-          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+          timestamp:
+            typeof data.timestamp === "number" ? data.timestamp : Date.now(),
         };
       });
       setIncomingVoiceRequest((prev) => {
@@ -713,10 +771,17 @@ export default function OnlineProvider({
       return;
     }
 
-    const user = session.user as { id?: string | null; name?: string | null; email?: string | null; image?: string | null; };
+    const user = session.user as {
+      id?: string | null;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    };
 
     if (!user.id) {
-      console.error("User ID is missing from session, cannot connect to online services.");
+      console.error(
+        "User ID is missing from session, cannot connect to online services."
+      );
       return;
     }
 
@@ -725,7 +790,7 @@ export default function OnlineProvider({
     (async () => {
       try {
         await transport.connect({
-          displayName: user.name ?? 'Player',
+          displayName: user.name ?? "Player",
           playerId: user.id ?? undefined,
         });
         setConnected(true);
@@ -761,7 +826,9 @@ export default function OnlineProvider({
           if (curr) {
             const inList = p.lobbies.find((l) => l.id === curr.id);
             const meNow = meRef.current;
-            const stillMember = inList ? inList.players.some((pl) => pl.id === (meNow?.id || "")) : false;
+            const stillMember = inList
+              ? inList.players.some((pl) => pl.id === (meNow?.id || ""))
+              : false;
             if (!inList || !stillMember) {
               setLobby(null);
               setReady(false);
@@ -820,7 +887,9 @@ export default function OnlineProvider({
       // Apply incremental game state patches into the Zustand store
       transport.on("statePatch", (p) => {
         const patch = p.patch as Record<string, unknown>;
-        const permanentsData = patch.permanents as Record<string, unknown[]> | undefined;
+        const permanentsData = patch.permanents as
+          | Record<string, unknown[]>
+          | undefined;
         const permanentsSummary = permanentsData
           ? Object.entries(permanentsData)
               .map(([key, arr]) => {
@@ -906,20 +975,28 @@ export default function OnlineProvider({
                 transport.leaveMatch();
               } catch {}
               setMatch(null);
-              try { useGameStore.getState().setMatchId(null); } catch {}
+              try {
+                useGameStore.getState().setMatchId(null);
+              } catch {}
               return;
             } else {
               setMatch(snap.match);
-              try { useGameStore.getState().setMatchId(snap.match?.id ?? null); } catch {}
+              try {
+                useGameStore.getState().setMatchId(snap.match?.id ?? null);
+              } catch {}
             }
           } catch {
             setMatch(snap.match);
-            try { useGameStore.getState().setMatchId(snap.match?.id ?? null); } catch {}
+            try {
+              useGameStore.getState().setMatchId(snap.match?.id ?? null);
+            } catch {}
           }
         } else {
           // No match in snapshot means we're not in a game; do not apply snapshot
           allowApplyGame = false;
-          try { useGameStore.getState().setMatchId(null); } catch {}
+          try {
+            useGameStore.getState().setMatchId(null);
+          } catch {}
         }
 
         if (!snap?.lobby && !snap?.match) {
@@ -927,7 +1004,9 @@ export default function OnlineProvider({
           setMatch(null);
           setReady(false);
           allowApplyGame = false;
-          try { useGameStore.getState().setMatchId(null); } catch {}
+          try {
+            useGameStore.getState().setMatchId(null);
+          } catch {}
         }
 
         // Apply full game snapshot if provided and allowed
@@ -935,12 +1014,14 @@ export default function OnlineProvider({
           try {
             // Apply server snapshot as a full replacement using __replaceKeys
             // This avoids race conditions where patches arrive between reset and apply
-            console.log("[game] Applying server snapshot with full replacement");
+            console.log(
+              "[game] Applying server snapshot with full replacement"
+            );
             const gameSnapshot = snap.game as Record<string, unknown>;
             const replaceKeys = Object.keys(gameSnapshot);
             const snapshotWithReplace = {
               ...gameSnapshot,
-              __replaceKeys: replaceKeys
+              __replaceKeys: replaceKeys,
             };
 
             queueServerPatch(
@@ -991,11 +1072,19 @@ export default function OnlineProvider({
         if (currMatch && p.matchId === currMatch.id) {
           setMatch((prev) => {
             if (!prev || prev.id !== currMatch.id) return prev;
-            const next: MatchInfo & Record<string, unknown> = { ...prev, status: "ended" };
+            const next: MatchInfo & Record<string, unknown> = {
+              ...prev,
+              status: "ended",
+            };
             if (p && typeof p === "object" && "winnerId" in p && p.winnerId) {
               next.winnerId = (p as { winnerId: string }).winnerId;
             }
-            if (p && typeof p === "object" && "reason" in p && (p as { reason?: unknown }).reason) {
+            if (
+              p &&
+              typeof p === "object" &&
+              "reason" in p &&
+              (p as { reason?: unknown }).reason
+            ) {
               next.endReason = (p as { reason?: string }).reason;
             }
             if (p && typeof p === "object" && "result" in p) {
@@ -1010,25 +1099,49 @@ export default function OnlineProvider({
                 next.result = null;
               }
             }
+            if (p && typeof p === "object" && "rated" in p) {
+              const ratedValue = (p as { rated?: unknown }).rated;
+              if (typeof ratedValue === "boolean") {
+                (next as Record<string, unknown>).rated = ratedValue;
+              }
+            }
             return next as MatchInfo;
           });
-          useGameStore.getState().log(`Match ended: ${p.reason || "unknown reason"}`);
+          useGameStore
+            .getState()
+            .log(`Match ended: ${p.reason || "unknown reason"}`);
           try {
             const myId = meRef.current?.id || null;
             let msg: string | null = null;
-            if ((p as unknown as { reason?: string })?.reason === "forfeit") {
-              const winnerId = (p as unknown as { winnerId?: string | null })?.winnerId || null;
-              if (myId && winnerId && winnerId === myId) {
-                msg = "Your opponent forfeited. You win.";
-              } else if (myId && winnerId && winnerId !== myId) {
-                msg = "You forfeited the match.";
+            const reason = (p as { reason?: string | null })?.reason || null;
+            if (reason === "forfeit") {
+              const winnerId =
+                (p as { winnerId?: string | null })?.winnerId || null;
+              const ratedRaw = (p as { rated?: boolean | null })?.rated;
+              const isRated = ratedRaw !== false;
+              if (!isRated) {
+                if (myId && winnerId && winnerId === myId) {
+                  msg = "Your opponent left early. Match not counted.";
+                } else if (myId && winnerId && winnerId !== myId) {
+                  msg = "You left the match early. Match not counted.";
+                } else {
+                  msg = "Match ended early. Not counted for global scores.";
+                }
               } else {
-                msg = "Match ended due to forfeit.";
+                if (myId && winnerId && winnerId === myId) {
+                  msg = "Your opponent forfeited. You win.";
+                } else if (myId && winnerId && winnerId !== myId) {
+                  msg = "You forfeited the match.";
+                } else {
+                  msg = "Match ended due to forfeit.";
+                }
               }
             }
             if (msg) {
               localStorage.setItem("app:toast", msg);
-              window.dispatchEvent(new CustomEvent("app:toast", { detail: { message: msg } }));
+              window.dispatchEvent(
+                new CustomEvent("app:toast", { detail: { message: msg } })
+              );
             }
           } catch {}
         }
@@ -1036,19 +1149,27 @@ export default function OnlineProvider({
       transport.on("error", (p) => {
         console.warn("server error", p);
         try {
-          const code = (p as { code?: string })?.code || '';
-          const msg = (p as { message?: string })?.message || '';
-          if (code === 'not_host') {
-            setSocialError('Only the host can invite');
-          } else if (code === 'private_lobby') {
-            setSocialError('Lobby is private. You need an invite.');
-          } else if (code === 'target_in_match') {
-            setSocialError('Target is currently in a match');
-          } else if (msg && (msg.toLowerCase().includes('invite') || msg.toLowerCase().includes('host'))) {
+          const code = (p as { code?: string })?.code || "";
+          const msg = (p as { message?: string })?.message || "";
+          if (code === "not_host") {
+            setSocialError("Only the host can invite");
+          } else if (code === "private_lobby") {
+            setSocialError("Lobby is private. You need an invite.");
+          } else if (code === "target_in_match") {
+            setSocialError("Target is currently in a match");
+          } else if (
+            msg &&
+            (msg.toLowerCase().includes("invite") ||
+              msg.toLowerCase().includes("host"))
+          ) {
             setSocialError(msg);
           }
-          if (socialErrorTimer.current) window.clearTimeout(socialErrorTimer.current);
-          socialErrorTimer.current = window.setTimeout(() => setSocialError(null), 3000);
+          if (socialErrorTimer.current)
+            window.clearTimeout(socialErrorTimer.current);
+          socialErrorTimer.current = window.setTimeout(
+            () => setSocialError(null),
+            3000
+          );
         } catch {}
       })
     );
@@ -1063,73 +1184,94 @@ export default function OnlineProvider({
     };
   }, [transport, session, sessionStatus]);
 
-
   // HTTP available players fetcher
-  const requestAvailablePlayers = useCallback((opts?: { q?: string; sort?: "recent" | "alphabetical"; cursor?: string | null; reset?: boolean }) => {
-    const origin = getSocketHttpOrigin();
-    const q = opts?.q ?? availableQueryRef.current?.q ?? '';
-    const sort: 'recent' | 'alphabetical' = (opts?.sort ?? availableQueryRef.current?.sort ?? 'recent') as 'recent' | 'alphabetical';
-    const cursor = opts?.reset ? null : (opts?.cursor ?? availablePlayersNextCursor ?? null);
-    availableQueryRef.current = { q, sort };
+  const requestAvailablePlayers = useCallback(
+    (opts?: {
+      q?: string;
+      sort?: "recent" | "alphabetical";
+      cursor?: string | null;
+      reset?: boolean;
+    }) => {
+      const origin = getSocketHttpOrigin();
+      const q = opts?.q ?? availableQueryRef.current?.q ?? "";
+      const sort: "recent" | "alphabetical" = (opts?.sort ??
+        availableQueryRef.current?.sort ??
+        "recent") as "recent" | "alphabetical";
+      const cursor = opts?.reset
+        ? null
+        : opts?.cursor ?? availablePlayersNextCursor ?? null;
+      availableQueryRef.current = { q, sort };
 
-    (async () => {
-      try {
-        setAvailablePlayersLoading(true);
-        setAvailablePlayersError(null);
-        const url = new URL('/players/available', origin);
-        if (q) url.searchParams.set('q', q);
-        if (sort) url.searchParams.set('sort', sort);
-        if (cursor) url.searchParams.set('cursor', cursor);
-        url.searchParams.set('limit', '100');
-        // Build headers including Authorization Bearer from /api/socket-token (cached ~60s)
-        const headers: HeadersInit = { accept: 'application/json' };
+      (async () => {
         try {
-          const now = Date.now();
-          if (!availableAuthRef.current || (now - availableAuthRef.current.ts) > 60_000) {
-            const tokRes = await fetch('/api/socket-token');
-            if (tokRes.ok) {
-              const tokJson = await tokRes.json();
-              if (tokJson && typeof tokJson.token === 'string') {
-                availableAuthRef.current = { token: tokJson.token, ts: now };
+          setAvailablePlayersLoading(true);
+          setAvailablePlayersError(null);
+          const url = new URL("/players/available", origin);
+          if (q) url.searchParams.set("q", q);
+          if (sort) url.searchParams.set("sort", sort);
+          if (cursor) url.searchParams.set("cursor", cursor);
+          url.searchParams.set("limit", "100");
+          // Build headers including Authorization Bearer from /api/socket-token (cached ~60s)
+          const headers: HeadersInit = { accept: "application/json" };
+          try {
+            const now = Date.now();
+            if (
+              !availableAuthRef.current ||
+              now - availableAuthRef.current.ts > 60_000
+            ) {
+              const tokRes = await fetch("/api/socket-token");
+              if (tokRes.ok) {
+                const tokJson = await tokRes.json();
+                if (tokJson && typeof tokJson.token === "string") {
+                  availableAuthRef.current = { token: tokJson.token, ts: now };
+                }
               }
             }
-          }
-          if (availableAuthRef.current?.token) {
-            (headers as Record<string, string>).Authorization = `Bearer ${availableAuthRef.current.token}`;
-          }
-        } catch {}
-        const res = await fetch(url.toString(), { method: 'GET', headers });
-        if (!res.ok) {
-          throw new Error(`Failed to fetch players (${res.status})`);
-        }
-        const data = await res.json();
-        const items: AvailablePlayer[] = Array.isArray(data?.items) ? data.items : [];
-        const next: string | null = data?.nextCursor ?? null;
-        setAvailablePlayers((prev) => {
-          const base = opts?.reset ? [] as AvailablePlayer[] : prev;
-          const seen = new Set(base.map((p) => p.userId));
-          const merged: AvailablePlayer[] = [...base];
-          for (const it of items) {
-            if (!seen.has(it.userId)) {
-              seen.add(it.userId);
-              merged.push(it);
+            if (availableAuthRef.current?.token) {
+              (
+                headers as Record<string, string>
+              ).Authorization = `Bearer ${availableAuthRef.current.token}`;
             }
+          } catch {}
+          const res = await fetch(url.toString(), { method: "GET", headers });
+          if (!res.ok) {
+            throw new Error(`Failed to fetch players (${res.status})`);
           }
-          return merged;
-        });
-        setAvailablePlayersNextCursor(next);
-      } catch (e) {
-        console.warn('[online] requestPlayers failed', e);
-        const msg = e instanceof Error ? e.message : 'Failed to fetch players';
-        setAvailablePlayersError(msg);
-      } finally {
-        setAvailablePlayersLoading(false);
-      }
-    })();
-  }, [availablePlayersNextCursor, getSocketHttpOrigin]);
+          const data = await res.json();
+          const items: AvailablePlayer[] = Array.isArray(data?.items)
+            ? data.items
+            : [];
+          const next: string | null = data?.nextCursor ?? null;
+          setAvailablePlayers((prev) => {
+            const base = opts?.reset ? ([] as AvailablePlayer[]) : prev;
+            const seen = new Set(base.map((p) => p.userId));
+            const merged: AvailablePlayer[] = [...base];
+            for (const it of items) {
+              if (!seen.has(it.userId)) {
+                seen.add(it.userId);
+                merged.push(it);
+              }
+            }
+            return merged;
+          });
+          setAvailablePlayersNextCursor(next);
+        } catch (e) {
+          console.warn("[online] requestPlayers failed", e);
+          const msg =
+            e instanceof Error ? e.message : "Failed to fetch players";
+          setAvailablePlayersError(msg);
+        } finally {
+          setAvailablePlayersLoading(false);
+        }
+      })();
+    },
+    [availablePlayersNextCursor, getSocketHttpOrigin]
+  );
 
   // Stable ref to avoid re-subscribing socket handlers when pagination state changes
-  const requestAvailablePlayersRef = useRef<typeof requestAvailablePlayers | null>(null);
+  const requestAvailablePlayersRef = useRef<
+    typeof requestAvailablePlayers | null
+  >(null);
   useEffect(() => {
     requestAvailablePlayersRef.current = requestAvailablePlayers;
   }, [requestAvailablePlayers]);
@@ -1156,7 +1298,11 @@ export default function OnlineProvider({
       // Reset local ready state on lobby join; server updates will resync this shortly
       setReady(false);
     },
-    createLobby: async (options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }) => {
+    createLobby: async (options?: {
+      name?: string;
+      visibility?: LobbyVisibility;
+      maxPlayers?: number;
+    }) => {
       await transport.createLobby(options);
       // Reset local ready state on lobby creation; server updates will resync this shortly
       setReady(false);
