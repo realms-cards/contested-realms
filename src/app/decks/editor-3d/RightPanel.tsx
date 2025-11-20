@@ -78,7 +78,7 @@ export default function RightPanel(props: RightPanelProps) {
       : "w-[64rem]"; // ~1024px for 5 columns
 
   return (
-    <div className="absolute right-6 top-14 sm:top-16 pointer-events-none select-none">
+    <div className="absolute right-6 top-24 sm:top-28 pointer-events-none select-none">
       <div
         className={`${panelWidth} transition-all duration-300 ease-in-out ml-auto`}
       >

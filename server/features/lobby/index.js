@@ -263,6 +263,9 @@ function createLobbyFeature(deps) {
 
     if (cubeId) normalized.cubeId = cubeId;
     if (cubeName) normalized.cubeName = cubeName;
+    if (asObj.includeCubeSideboardInStandard === true) {
+      normalized.includeCubeSideboardInStandard = true;
+    }
 
     if (Object.keys(packCounts).length > 0) {
       normalized.packCounts = packCounts;

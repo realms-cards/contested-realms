@@ -98,11 +98,14 @@ export default function TournamentsPage() {
   // Time limit configuration
   const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
   const [draftPickTimeLimit, setDraftPickTimeLimit] = useState<number>(60);
-  const [draftConstructionTimeLimit, setDraftConstructionTimeLimit] = useState<number>(20);
+  const [draftConstructionTimeLimit, setDraftConstructionTimeLimit] =
+    useState<number>(20);
 
   // Cube draft support
   const [useCube, setUseCube] = useState(false);
   const [cubeId, setCubeId] = useState<string>("");
+  const [includeCubeSideboard, setIncludeCubeSideboard] =
+    useState<boolean>(false);
   const [cubes, setCubes] = useState<Array<{ id: string; name: string }>>([]);
 
   // Type guard helpers
@@ -232,7 +235,7 @@ export default function TournamentsPage() {
         });
         settingsOut.sealedConfig = {
           packCounts,
-          timeLimit: sealedTimeLimit
+          timeLimit: sealedTimeLimit,
         };
       } else if (form.format === "draft") {
         if (useCube && cubeId) {
@@ -241,7 +244,8 @@ export default function TournamentsPage() {
             cubeId,
             packCount: draftBoosterCount,
             pickTimeLimit: draftPickTimeLimit,
-            constructionTimeLimit: draftConstructionTimeLimit
+            constructionTimeLimit: draftConstructionTimeLimit,
+            includeCubeSideboardInStandard: includeCubeSideboard,
           };
         } else {
           // Regular set-based draft
@@ -253,7 +257,7 @@ export default function TournamentsPage() {
             packCount: draftBoosterCount,
             packCounts,
             pickTimeLimit: draftPickTimeLimit,
-            constructionTimeLimit: draftConstructionTimeLimit
+            constructionTimeLimit: draftConstructionTimeLimit,
           };
         }
       }
@@ -552,7 +556,8 @@ export default function TournamentsPage() {
                           <h3 className="font-fantaisie text-lg text-white truncate">
                             {tournament.name}
                           </h3>
-                          {(tournament as unknown as { isPrivate?: boolean }).isPrivate && (
+                          {(tournament as unknown as { isPrivate?: boolean })
+                            .isPrivate && (
                             <span className="text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
                               🔒 Private
                             </span>
@@ -813,11 +818,19 @@ export default function TournamentsPage() {
                         max={90}
                         step={5}
                         value={sealedTimeLimit}
-                        onChange={(e) => setSealedTimeLimit(Math.max(10, Math.min(90, parseInt(e.target.value) || 40)))}
+                        onChange={(e) =>
+                          setSealedTimeLimit(
+                            Math.max(
+                              10,
+                              Math.min(90, parseInt(e.target.value) || 40)
+                            )
+                          )
+                        }
                         className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <p className="text-slate-400 text-xs mt-1">
-                        Warning-only time limit for deck construction (10-90 minutes)
+                        Warning-only time limit for deck construction (10-90
+                        minutes)
                       </p>
                     </div>
                   </div>
@@ -840,27 +853,44 @@ export default function TournamentsPage() {
                     </label>
 
                     {useCube ? (
-                      /* Cube selector */
-                      <div>
-                        <label className="block text-slate-300 text-sm font-medium mb-2">
-                          Select Cube
+                      /* Cube selector + sideboard option */
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-slate-300 text-sm font-medium mb-2">
+                            Select Cube
+                          </label>
+                          <select
+                            value={cubeId}
+                            onChange={(e) => setCubeId(e.target.value)}
+                            disabled={cubes.length === 0}
+                            className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white disabled:opacity-50"
+                          >
+                            {cubes.length === 0 ? (
+                              <option value="">No cubes available</option>
+                            ) : (
+                              cubes.map((cube) => (
+                                <option key={cube.id} value={cube.id}>
+                                  {cube.name}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                        <label className="flex items-start gap-2 text-slate-300 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={includeCubeSideboard}
+                            onChange={(e) =>
+                              setIncludeCubeSideboard(e.target.checked)
+                            }
+                            className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500"
+                          />
+                          <span>
+                            When drafting from a cube, offer the cube&apos;s
+                            sideboard cards in the standard card pool during
+                            deckbuilding.
+                          </span>
                         </label>
-                        <select
-                          value={cubeId}
-                          onChange={(e) => setCubeId(e.target.value)}
-                          disabled={cubes.length === 0}
-                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white disabled:opacity-50"
-                        >
-                          {cubes.length === 0 ? (
-                            <option value="">No cubes available</option>
-                          ) : (
-                            cubes.map((cube) => (
-                              <option key={cube.id} value={cube.id}>
-                                {cube.name}
-                              </option>
-                            ))
-                          )}
-                        </select>
                       </div>
                     ) : (
                       /* Set-based booster configuration */
@@ -954,7 +984,14 @@ export default function TournamentsPage() {
                           max={300}
                           step={15}
                           value={draftPickTimeLimit}
-                          onChange={(e) => setDraftPickTimeLimit(Math.max(30, Math.min(300, parseInt(e.target.value) || 60)))}
+                          onChange={(e) =>
+                            setDraftPickTimeLimit(
+                              Math.max(
+                                30,
+                                Math.min(300, parseInt(e.target.value) || 60)
+                              )
+                            )
+                          }
                           className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <p className="text-slate-400 text-xs mt-1">
@@ -971,7 +1008,14 @@ export default function TournamentsPage() {
                           max={60}
                           step={5}
                           value={draftConstructionTimeLimit}
-                          onChange={(e) => setDraftConstructionTimeLimit(Math.max(10, Math.min(60, parseInt(e.target.value) || 20)))}
+                          onChange={(e) =>
+                            setDraftConstructionTimeLimit(
+                              Math.max(
+                                10,
+                                Math.min(60, parseInt(e.target.value) || 20)
+                              )
+                            )
+                          }
                           className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <p className="text-slate-400 text-xs mt-1">

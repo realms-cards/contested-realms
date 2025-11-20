@@ -69,6 +69,34 @@ export default function TournamentDraftSessionPage() {
     }
   }, [status, sessionId, router, fetchDraftSession]);
 
+  // Persist cube-related draft configuration so deck editor can recover cube extras
+  useEffect(() => {
+    if (!draftSession) return;
+    try {
+      const settings = draftSession.settings as unknown as {
+        cubeId?: string | null;
+        cubeName?: string | null;
+        includeCubeSideboardInStandard?: boolean;
+      };
+      const cubeId = settings?.cubeId ?? null;
+      if (!cubeId) return;
+
+      const slim = {
+        cubeId,
+        cubeName: settings?.cubeName ?? null,
+        includeCubeSideboardInStandard:
+          settings?.includeCubeSideboardInStandard === true,
+      };
+
+      localStorage.setItem(
+        `draftConfig_${draftSession.id}`,
+        JSON.stringify(slim)
+      );
+    } catch {
+      // Best-effort; deck editor will simply skip cube extras if this fails
+    }
+  }, [draftSession]);
+
   // Fallback: poll minimal state to detect completion and navigate to deck construction
   useEffect(() => {
     if (!sessionId || redirectedRef.current) return;
@@ -90,7 +118,9 @@ export default function TournamentDraftSessionPage() {
           try {
             if (Array.isArray(data?.myPicks)) {
               const playerId = session.user.id;
-              const storageSuffix = playerId ? `${sessionId}_${playerId}` : sessionId;
+              const storageSuffix = playerId
+                ? `${sessionId}_${playerId}`
+                : sessionId;
               localStorage.setItem(
                 `draftedCards_${storageSuffix}`,
                 JSON.stringify(data.myPicks)
@@ -115,9 +145,12 @@ export default function TournamentDraftSessionPage() {
                 const picks: DraftPick[] = data.myPicks as DraftPick[];
                 const bySet = new Map<string | null, Set<string>>();
                 for (const c of picks) {
-                  const slug = typeof c.slug === 'string' ? c.slug : '';
+                  const slug = typeof c.slug === "string" ? c.slug : "";
                   if (!slug) continue;
-                  const setName = (typeof c.setName === 'string' && c.setName) ? c.setName : null;
+                  const setName =
+                    typeof c.setName === "string" && c.setName
+                      ? c.setName
+                      : null;
                   let group = bySet.get(setName);
                   if (!group) {
                     group = new Set<string>();
@@ -125,12 +158,21 @@ export default function TournamentDraftSessionPage() {
                   }
                   group.add(slug);
                 }
-                const requests: Promise<Array<{ slug: string; cardId: number; cost: number | null; thresholds: Record<string, number> | null; attack: number | null; defence: number | null }>>[] = [];
+                const requests: Promise<
+                  Array<{
+                    slug: string;
+                    cardId: number;
+                    cost: number | null;
+                    thresholds: Record<string, number> | null;
+                    attack: number | null;
+                    defence: number | null;
+                  }>
+                >[] = [];
                 for (const [setName, slugs] of bySet.entries()) {
                   if (!slugs || slugs.size === 0) continue;
                   const params = new URLSearchParams();
-                  params.set('slugs', Array.from(slugs).join(','));
-                  if (setName) params.set('set', setName);
+                  params.set("slugs", Array.from(slugs).join(","));
+                  if (setName) params.set("set", setName);
                   requests.push(
                     fetch(`/api/cards/meta-by-variant?${params.toString()}`)
                       .then((r) => r.json())
@@ -143,21 +185,21 @@ export default function TournamentDraftSessionPage() {
                   const idBySlug = new Map<string, number>();
                   for (const r of rows) {
                     const cid = Number((r as { cardId: number }).cardId) || 0;
-                    const slug = String((r as { slug: string }).slug || '');
+                    const slug = String((r as { slug: string }).slug || "");
                     if (slug) idBySlug.set(slug, cid);
                   }
                   const resolved = picks
                     .map((c) => {
-                      const slug = typeof c.slug === 'string' ? c.slug : '';
-                      const cardId = slug ? (idBySlug.get(slug) || 0) : 0;
+                      const slug = typeof c.slug === "string" ? c.slug : "";
+                      const cardId = slug ? idBySlug.get(slug) || 0 : 0;
                       const name = (c.cardName || c.name) as string | undefined;
-                      const setName = (c.setName || 'Beta') as string;
+                      const setName = (c.setName || "Beta") as string;
                       return cardId > 0 && slug && name
                         ? {
                             variantId: 0,
                             slug,
-                            finish: 'Standard',
-                            product: 'Draft',
+                            finish: "Standard",
+                            product: "Draft",
                             cardId,
                             cardName: name,
                             set: setName,
@@ -205,7 +247,9 @@ export default function TournamentDraftSessionPage() {
 
   // Handle draft completion
   const handleDraftComplete = () => {
-    console.log("[DraftSessionPage] handleDraftComplete called, navigating to deck editor");
+    console.log(
+      "[DraftSessionPage] handleDraftComplete called, navigating to deck editor"
+    );
     // Navigate to deck construction
     if (draftSession) {
       const params = new URLSearchParams({
@@ -215,10 +259,15 @@ export default function TournamentDraftSessionPage() {
         sessionId: draftSession.id,
         playerId: session?.user.id ?? "",
       });
-      console.log("[DraftSessionPage] Pushing to:", `/decks/editor-3d?${params.toString()}`);
+      console.log(
+        "[DraftSessionPage] Pushing to:",
+        `/decks/editor-3d?${params.toString()}`
+      );
       router.push(`/decks/editor-3d?${params.toString()}`);
     } else {
-      console.warn("[DraftSessionPage] handleDraftComplete called but draftSession is null");
+      console.warn(
+        "[DraftSessionPage] handleDraftComplete called but draftSession is null"
+      );
     }
   };
 

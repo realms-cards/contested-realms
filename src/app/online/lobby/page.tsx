@@ -338,6 +338,7 @@ function LobbyPageContent({
     packCounts: Record<string, number>;
     cubeId: string | null;
     cubeName: string | null;
+    includeCubeSideboardInStandard?: boolean;
   }>(() => ({
     // Available sets restricted for now
     setMix: ["Beta"],
@@ -346,6 +347,7 @@ function LobbyPageContent({
     packCounts: { Beta: 3, "Arthurian Legends": 0 },
     cubeId: null,
     cubeName: null,
+    includeCubeSideboardInStandard: false,
   }));
   const [draftUseCube, setDraftUseCube] = useState(false);
   const [availableCubes, setAvailableCubes] = useState<CubeOption[]>([]);
@@ -446,6 +448,7 @@ function LobbyPageContent({
         cubeId: null,
         cubeName: null,
         packCounts: {},
+        includeCubeSideboardInStandard: false,
       }));
     } else {
       setDraftUseCube(false);
@@ -469,6 +472,9 @@ function LobbyPageContent({
           cubeName: null,
           packCounts: total === prev.packCount ? restore : fallback,
           setMix: total === prev.packCount ? prev.setMix : ["Beta"],
+          includeCubeSideboardInStandard: isHost
+            ? prev.includeCubeSideboardInStandard
+            : false,
         };
       });
     }
@@ -480,7 +486,13 @@ function LobbyPageContent({
       const cube = availableCubes.find((entry) => entry.id === cubeId) ?? null;
       setDraftConfig((prev) => {
         if (!cube) {
-          return { ...prev, cubeId: null, cubeName: null, packCounts: {} };
+          return {
+            ...prev,
+            cubeId: null,
+            cubeName: null,
+            packCounts: {},
+            includeCubeSideboardInStandard: false,
+          };
         }
         return {
           ...prev,
@@ -488,6 +500,7 @@ function LobbyPageContent({
           cubeName: cube.name,
           packCounts: { [cube.name]: prev.packCount },
           setMix: [cube.name],
+          includeCubeSideboardInStandard: prev.includeCubeSideboardInStandard,
         };
       });
     },
@@ -1312,6 +1325,27 @@ function LobbyPageContent({
                                   </Link>
                                   .
                                 </p>
+                                <label className="mt-2 flex items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded"
+                                    checked={
+                                      !!draftConfig.includeCubeSideboardInStandard
+                                    }
+                                    onChange={(e) =>
+                                      setDraftConfig((prev) => ({
+                                        ...prev,
+                                        includeCubeSideboardInStandard:
+                                          e.target.checked,
+                                      }))
+                                    }
+                                  />
+                                  <span>
+                                    When drafting from a cube, offer the
+                                    cube&apos;s sideboard cards in the standard
+                                    card pool during deckbuilding.
+                                  </span>
+                                </label>
                               </>
                             )}
                           </div>

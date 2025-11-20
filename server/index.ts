@@ -42,9 +42,7 @@ const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createLeaderboardService } = require("./modules/leaderboard");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {
-  createMatchRecordingService,
-} = require("./modules/match-recording");
+const { createMatchRecordingService } = require("./modules/match-recording");
 const {
   deepMergeReplaceArrays,
   dedupePermanents,
@@ -85,9 +83,7 @@ const {
   validateAction: validateActionTs,
 } = require("./modules/rules-validation");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {
-  ensureCosts: ensureCostsTs,
-} = require("./modules/rules-costs");
+const { ensureCosts: ensureCostsTs } = require("./modules/rules-costs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
 
@@ -616,11 +612,8 @@ const matchRecordingService = createMatchRecordingService({
   matchRecordings,
 });
 
-const {
-  startMatchRecording,
-  recordMatchAction,
-  finishMatchRecording,
-} = matchRecordingService;
+const { startMatchRecording, recordMatchAction, finishMatchRecording } =
+  matchRecordingService;
 
 const persistence = createPersistenceLayer({
   prisma,
@@ -1085,6 +1078,31 @@ async function finalizeMatch(
     loserId = null;
   }
 
+  // Determine whether this result should count towards global stats/leaderboard.
+  // For early forfeits (opponent leaves very early), we still end the match but do not
+  // record it as a rated result unless the game has progressed to at least turn 5.
+  const gameRaw = (match.game ?? null) as AnyRecord | null;
+  const gameTurnFromGame =
+    gameRaw && typeof gameRaw["turn"] === "number"
+      ? (gameRaw["turn"] as number)
+      : null;
+  const matchTurnRaw = (match as AnyRecord)["turn"];
+  const gameTurnFromMatch =
+    typeof matchTurnRaw === "number"
+      ? matchTurnRaw
+      : typeof matchTurnRaw === "string" && matchTurnRaw.trim() !== ""
+      ? Number(matchTurnRaw)
+      : null;
+  const gameTurn =
+    (gameTurnFromGame != null && Number.isFinite(gameTurnFromGame)
+      ? gameTurnFromGame
+      : gameTurnFromMatch != null && Number.isFinite(gameTurnFromMatch)
+      ? gameTurnFromMatch
+      : 1) || 1;
+  const isForfeitReason =
+    typeof options?.reason === "string" && options.reason === "forfeit";
+  const isRatedResult = !isForfeitReason || gameTurn >= 5;
+
   match.status = "ended";
   match.winnerId = winnerId || null;
   match.lastTs = now;
@@ -1135,6 +1153,7 @@ async function finalizeMatch(
         options && typeof options.reason === "string"
           ? options.reason
           : "normal_end",
+      rated: isRatedResult,
     });
   } catch {}
   try {
@@ -1206,7 +1225,9 @@ async function finalizeMatch(
 
   const leaderboardPayload = isDraw ? { isDraw: true } : { winnerId, loserId };
 
-  recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
+  if (isRatedResult) {
+    recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
+  }
 
   // If this is a tournament match, persist result into Tournament Match and update round completion
   if (match.tournamentId) {
@@ -1819,6 +1840,9 @@ async function hydrateMatchFromDatabase(
               ? (draftSession.settings as Record<string, unknown>)
               : {};
           const cubeId = toOptionalString(settings.cubeId);
+          const includeCubeSideboardInStandard =
+            (settings as { includeCubeSideboardInStandard?: boolean })
+              .includeCubeSideboardInStandard === true;
 
           // Build draftConfig from DraftSession
           type DraftPackConfigurationEntry = {
@@ -1844,6 +1868,8 @@ async function hydrateMatchFromDatabase(
 
           match.draftConfig = {
             cubeId: cubeId || undefined,
+            includeCubeSideboardInStandard:
+              includeCubeSideboardInStandard || undefined,
             packCounts,
             packCount:
               Object.values(packCounts).reduce((a, b) => a + b, 0) || 3,
@@ -4198,14 +4224,14 @@ io.on("connection", async (socket: SocketClient) => {
   });
 
   socket.on("disconnect", () => {
-      try {
-        const watchId = (
-          socket as unknown as { data?: { watchMatchId?: string } | undefined }
-        ).data?.watchMatchId;
-        if (typeof watchId === "string" && watchId.length > 0) {
-          void broadcastSpectatorsUpdated(io, watchId);
-        }
-      } catch {}
+    try {
+      const watchId = (
+        socket as unknown as { data?: { watchMatchId?: string } | undefined }
+      ).data?.watchMatchId;
+      if (typeof watchId === "string" && watchId.length > 0) {
+        void broadcastSpectatorsUpdated(io, watchId);
+      }
+    } catch {}
     const pid = playerIdBySocket.get(socket.id);
     if (!pid) return;
     const player = players.get(pid);

@@ -161,6 +161,11 @@ export default function EnhancedOnlineDraft3DScreen({
   useEffect(() => {
     pick3DRef.current = pick3D;
   }, [pick3D]);
+  const autoReadySentRef = useRef(false);
+  const isSortingEnabledRef = useRef(isSortingEnabled);
+  useEffect(() => {
+    isSortingEnabledRef.current = isSortingEnabled;
+  }, [isSortingEnabled]);
   const lastSavedPickCountRef = useRef(0);
 
   useEffect(() => {
@@ -502,41 +507,6 @@ export default function EnhancedOnlineDraft3DScreen({
     });
   }, [match?.draftState?.playerReady]);
 
-  // Client-side fallback: if both players are ready and we remain in 'waiting', auto-request start after ~1.1s
-  const hasStartedAutoStartRef = useRef(false);
-  useEffect(() => {
-    if (!transport || !matchId) return;
-    if (draftState.phase !== "waiting") return;
-    if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
-    if (hasStartedAutoStartRef.current) return; // Only attempt once
-
-    console.log(
-      "[EnhancedOnlineDraft3D] Both players ready, auto-starting draft in 1.1s"
-    );
-    hasStartedAutoStartRef.current = true;
-
-    const t = window.setTimeout(() => {
-      const baseCfg = match?.draftConfig ?? {
-        setMix: ["Beta"],
-        packCount: 3,
-        packSize: 15,
-      };
-      console.log(
-        "[EnhancedOnlineDraft3D] Calling startDraft with config:",
-        baseCfg
-      );
-      transport.startDraft?.({ matchId, draftConfig: baseCfg });
-    }, 1100);
-    return () => window.clearTimeout(t);
-  }, [
-    transport,
-    matchId,
-    draftState.phase,
-    playerReadyStates.p1,
-    playerReadyStates.p2,
-    match?.draftConfig,
-  ]);
-
   // Listen for server draft updates
   useEffect(() => {
     if (!transport) return;
@@ -587,6 +557,36 @@ export default function EnhancedOnlineDraft3DScreen({
               `draftedCardsResolved_${matchId}`,
               JSON.stringify(resolved)
             );
+
+            // Persist 3D layout and stack preferences for deck editor
+            try {
+              const latestPick3D = Array.isArray(pick3DRef.current)
+                ? pick3DRef.current
+                : [];
+              const layout =
+                !isSortingEnabledRef.current && latestPick3D.length > 0
+                  ? latestPick3D.map((p) => ({
+                      cardId: p.card.cardId,
+                      zone: p.zone,
+                      x: p.x,
+                      z: p.z,
+                    }))
+                  : [];
+              const layoutKey = `draftLayout_draft_${String(matchId)}`;
+              const prefsKey = `draftStackPrefs_draft_${String(matchId)}`;
+              localStorage.setItem(layoutKey, JSON.stringify(layout));
+              localStorage.setItem(
+                prefsKey,
+                JSON.stringify({
+                  isSortingEnabled: isSortingEnabledRef.current,
+                })
+              );
+            } catch (layoutErr) {
+              console.warn(
+                "[EnhancedOnlineDraft3D] Failed to persist 3D layout for editor-3d:",
+                layoutErr
+              );
+            }
           }
         } catch (err) {
           console.error(
@@ -1193,6 +1193,50 @@ export default function EnhancedOnlineDraft3DScreen({
     );
   }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
 
+  // Auto-ready the local player when entering the waiting lobby
+  useEffect(() => {
+    if (!transport || !matchId) return;
+    if (draftState.phase !== "waiting") return;
+    if (autoReadySentRef.current) return;
+    autoReadySentRef.current = true;
+
+    (async () => {
+      try {
+        await handleToggleReady();
+      } catch (err) {
+        try {
+          console.warn("[EnhancedOnlineDraft3D] Auto-ready failed:", err);
+        } catch {}
+      }
+    })();
+  }, [transport, matchId, draftState.phase, handleToggleReady]);
+
+  // Client-side: if both players are ready and we remain in 'waiting', auto-request start after ~1.1s
+  const hasStartedAutoStartRef = useRef(false);
+  useEffect(() => {
+    if (!transport || !matchId) return;
+    if (draftState.phase !== "waiting") return;
+    if (!playerReadyStates.p1 || !playerReadyStates.p2) return;
+    if (hasStartedAutoStartRef.current) return; // Only attempt once
+
+    console.log(
+      "[EnhancedOnlineDraft3D] Both players ready, auto-starting draft in 1.1s"
+    );
+    hasStartedAutoStartRef.current = true;
+
+    const t = window.setTimeout(() => {
+      void handleStartDraft();
+    }, 1100);
+    return () => window.clearTimeout(t);
+  }, [
+    transport,
+    matchId,
+    draftState.phase,
+    playerReadyStates.p1,
+    playerReadyStates.p2,
+    handleStartDraft,
+  ]);
+
   // Calculate stack sizes for hitbox optimization (from single-player)
   const stackSizes = useMemo(() => {
     if (!stackPositions) return new Map<string, number>();
@@ -1464,94 +1508,49 @@ export default function EnhancedOnlineDraft3DScreen({
       <div className="min-h-screen w-full bg-gradient-to-b from-slate-950 to-slate-900 flex items-center justify-center p-4">
         <div className="w-full max-w-4xl bg-slate-900/95 backdrop-blur-sm rounded-xl p-8 ring-1 ring-white/10 shadow-2xl relative">
           <UserBadge variant="floating" />
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-white mb-6">Draft Lobby</h2>
+          <div className="text-center space-y-6">
+            <h2 className="text-3xl font-bold text-white">Preparing Draft…</h2>
 
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-              <div className="bg-slate-800 rounded-lg p-6">
-                <h3 className="text-xl font-semibold text-white mb-4">
-                  Players
-                </h3>
-                <div className="space-y-3">
-                  {Object.entries(playerNames).map(([key, name]) => (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between"
-                    >
-                      <span className="text-slate-300">{name}</span>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={
-                            playerReadyStates[
-                              key as keyof typeof playerReadyStates
-                            ]
-                              ? "text-green-400"
-                              : "text-slate-400"
-                          }
-                        >
-                          {playerReadyStates[
-                            key as keyof typeof playerReadyStates
-                          ]
-                            ? "Ready"
-                            : "Not Ready"}
-                        </span>
-                        {myPlayerKey === key &&
-                          !playerReadyStates[
-                            key as keyof typeof playerReadyStates
-                          ] && (
-                            <button
-                              onClick={handleToggleReady}
-                              className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
-                            >
-                              Ready
-                            </button>
-                          )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <p className="text-slate-300">
+              Setting up draft between{" "}
+              <span className="font-semibold">{playerNames.p1}</span> and{" "}
+              <span className="font-semibold">{playerNames.p2}</span>. This
+              should only take a moment.
+            </p>
+
+            <div className="flex flex-col md:flex-row justify-center gap-8 text-sm text-slate-300">
+              <div>
+                <div className="font-semibold text-white mb-1">Players</div>
+                <div>{playerNames.p1}</div>
+                <div>{playerNames.p2}</div>
               </div>
-
-              <div className="bg-slate-800 rounded-lg p-6">
-                <h3 className="text-xl font-semibold text-white mb-4">
+              <div>
+                <div className="font-semibold text-white mb-1">
                   Draft Settings
-                </h3>
-                <div className="space-y-2 text-slate-300">
-                  <div>
-                    {match?.draftConfig?.cubeId
-                      ? `Cube: ${match?.draftConfig?.cubeName ?? "Custom Cube"}`
-                      : `Sets: ${(match?.draftConfig?.setMix ?? ["Beta"]).join(
-                          ", "
-                        )}`}
-                  </div>
-                  <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
-                  <div>
-                    Pack size: {match?.draftConfig?.packSize ?? 15} cards
-                  </div>
-                  <div>Players: 2</div>
                 </div>
+                <div>
+                  {match?.draftConfig?.cubeId
+                    ? `Cube: ${match?.draftConfig?.cubeName ?? "Custom Cube"}`
+                    : `Sets: ${(match?.draftConfig?.setMix ?? ["Beta"]).join(
+                        ", "
+                      )}`}
+                </div>
+                <div>Packs: {match?.draftConfig?.packCount ?? 3}</div>
+                <div>Pack size: {match?.draftConfig?.packSize ?? 15} cards</div>
               </div>
             </div>
 
-            {error && (
-              <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+            {error ? (
+              <div className="mt-4 inline-block px-4 py-2 rounded bg-red-900/60 border border-red-500 text-red-100 text-sm">
                 {error}
               </div>
+            ) : (
+              <div className="mt-4 text-slate-400 text-sm">
+                {loading
+                  ? "Starting draft…"
+                  : "Waiting for the server to start the draft…"}
+              </div>
             )}
-
-            <button
-              onClick={handleStartDraft}
-              disabled={
-                loading || !playerReadyStates.p1 || !playerReadyStates.p2
-              }
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              {loading
-                ? "Starting Draft..."
-                : !playerReadyStates.p1 || !playerReadyStates.p2
-                ? "Waiting for both players to be ready..."
-                : "Start Draft"}
-            </button>
           </div>
         </div>
       </div>
@@ -1802,7 +1801,6 @@ export default function EnhancedOnlineDraft3DScreen({
             minPolarAngle={0.05}
             maxPolarAngle={0.35}
             mouseButtons={{
-              LEFT: MOUSE.PAN,
               MIDDLE: MOUSE.DOLLY,
               RIGHT: MOUSE.PAN,
             }}
