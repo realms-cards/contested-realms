@@ -21,7 +21,10 @@ const readInitialMagicGuides = (): boolean => {
 
 type PreferenceSlice = Pick<
   GameState,
-  "interactionGuides" | "setInteractionGuides" | "magicGuides" | "setMagicGuides"
+  | "interactionGuides"
+  | "setInteractionGuides"
+  | "magicGuides"
+  | "setMagicGuides"
 >;
 
 export const createPreferenceSlice: StateCreator<

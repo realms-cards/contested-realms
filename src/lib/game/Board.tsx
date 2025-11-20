@@ -79,9 +79,7 @@ function findCardInstanceNode(object: Object3D | null): Object3D | null {
   return null;
 }
 
-function isPrimaryCardHit(
-  e: ThreeEvent<PointerEvent | MouseEvent>
-): boolean {
+function isPrimaryCardHit(e: ThreeEvent<PointerEvent | MouseEvent>): boolean {
   const intersections = e.intersections;
   if (!intersections || intersections.length === 0) {
     return true;
@@ -150,7 +148,9 @@ export default function Board({
   );
   const setPermanentOffset = useScopedStore((s) => s.setPermanentOffset);
   const movePermanentToZone = useScopedStore((s) => s.movePermanentToZone);
-  const moveAvatarToWithOffset = useScopedStore((s) => s.moveAvatarToWithOffset);
+  const moveAvatarToWithOffset = useScopedStore(
+    (s) => s.moveAvatarToWithOffset
+  );
   const contextMenu = useScopedStore((s) => s.contextMenu);
   const openContextMenu = useScopedStore((s) => s.openContextMenu);
   const selected = useScopedStore((s) => s.selectedCard);
@@ -168,7 +168,9 @@ export default function Board({
   const setDragFromHand = useScopedStore((s) => s.setDragFromHand);
   const setPreviewCard = useScopedStore((s) => s.setPreviewCard);
   const dragFromPile = useScopedStore((s) => s.dragFromPile);
-  const setLastPointerWorldPos = useScopedStore((s) => s.setLastPointerWorldPos);
+  const setLastPointerWorldPos = useScopedStore(
+    (s) => s.setLastPointerWorldPos
+  );
   const setDragFromPile = useScopedStore((s) => s.setDragFromPile);
   const playFromPileTo = useScopedStore((s) => s.playFromPileTo);
   const selectedAvatar = useScopedStore((s) => s.selectedAvatar);
@@ -375,13 +377,11 @@ export default function Board({
   // Compute first hits for projectile scope along cardinal directions from the caster
   const computeProjectileFirstHits = useCallback((): Record<
     "N" | "E" | "S" | "W",
-    | { kind: "permanent" | "avatar"; at: CellKey; index?: number }
-    | null
+    { kind: "permanent" | "avatar"; at: CellKey; index?: number } | null
   > => {
     const hits: Record<
       "N" | "E" | "S" | "W",
-      | { kind: "permanent" | "avatar"; at: CellKey; index?: number }
-      | null
+      { kind: "permanent" | "avatar"; at: CellKey; index?: number } | null
     > = { N: null, E: null, S: null, W: null };
     const pm = resolvedStoreApi.getState().pendingMagic;
     if (!pm) return hits;
@@ -418,11 +418,16 @@ export default function Board({
     const checkTile = (tx: number, ty: number) => {
       const k = `${tx},${ty}` as CellKey;
       try {
-        const list = (permanents[k] || []) as Array<{ attachedTo?: { at: CellKey; index: number } | null }>;
+        const list = (permanents[k] || []) as Array<{
+          attachedTo?: { at: CellKey; index: number } | null;
+        }>;
         if (list.length > 0) {
           // Scan from topmost downwards and pick the first non-attachment (host minion)
           for (let i = list.length - 1; i >= 0; i--) {
-            const it = list[i] as { attachedTo?: { at: CellKey; index: number } | null } | null | undefined;
+            const it = list[i] as
+              | { attachedTo?: { at: CellKey; index: number } | null }
+              | null
+              | undefined;
             if (it && !it.attachedTo) {
               return { kind: "permanent" as const, at: k, index: i };
             }
@@ -446,22 +451,34 @@ export default function Board({
     // North
     for (let yy = originY - 1; yy >= 0; yy--) {
       const hit = checkTile(originX, yy);
-      if (hit) { hits.N = hit; break; }
+      if (hit) {
+        hits.N = hit;
+        break;
+      }
     }
     // East
     for (let xx = originX + 1; xx < w; xx++) {
       const hit = checkTile(xx, originY);
-      if (hit) { hits.E = hit; break; }
+      if (hit) {
+        hits.E = hit;
+        break;
+      }
     }
     // South
     for (let yy = originY + 1; yy < h; yy++) {
       const hit = checkTile(originX, yy);
-      if (hit) { hits.S = hit; break; }
+      if (hit) {
+        hits.S = hit;
+        break;
+      }
     }
     // West
     for (let xx = originX - 1; xx >= 0; xx--) {
       const hit = checkTile(xx, originY);
-      if (hit) { hits.W = hit; break; }
+      if (hit) {
+        hits.W = hit;
+        break;
+      }
     }
     return hits;
   }, [avatars, board.size.h, board.size.w, permanents, resolvedStoreApi]);
@@ -621,30 +638,30 @@ export default function Board({
     handlePointerMoveRef,
     setLastPointerWorldPos,
   });
-useBoardDropManager({
-  board,
-  boardOffset: { x: offsetX, y: offsetY },
-  dragAvatar,
-  dragFromHand,
-  dragFromPile,
-  isSpectator,
-  permanents,
-  avatars,
-  interactionGuides,
-  metaByCardId,
-  fetchCardMeta,
-  moveSelectedPermanentToWithOffset,
-  setPermanentOffset,
-  movePermanentToZone,
-  setDragFromHand,
-  playCardFlip,
-  actorKey,
-  currentPlayer,
-  setAttackChoice,
-  dragContext: boardDragControls,
-  useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
-  lastPointerRef,
-});
+  useBoardDropManager({
+    board,
+    boardOffset: { x: offsetX, y: offsetY },
+    dragAvatar,
+    dragFromHand,
+    dragFromPile,
+    isSpectator,
+    permanents,
+    avatars,
+    interactionGuides,
+    metaByCardId,
+    fetchCardMeta,
+    moveSelectedPermanentToWithOffset,
+    setPermanentOffset,
+    movePermanentToZone,
+    setDragFromHand,
+    playCardFlip,
+    actorKey,
+    currentPlayer,
+    setAttackChoice,
+    dragContext: boardDragControls,
+    useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
+    lastPointerRef,
+  });
 
   // removed global pointerup fallback; drops are handled by tiles/cards precisely
 
@@ -703,7 +720,7 @@ useBoardDropManager({
     // Any tick change requests revert of the last cross-tile move
     revertLastCrossTileMove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revertCrossMoveTick]);  // Only run when tick counter changes, not when callback recreates
+  }, [revertCrossMoveTick]); // Only run when tick counter changes, not when callback recreates
 
   return (
     <group>

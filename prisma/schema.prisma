@@ -228,6 +228,7 @@ model User {
   stats         String? // Stored as a stringified JSON object
   shortId       String?   @unique
   presenceHidden Boolean  @default(false)
+  colorBlindMode Boolean  @default(false)
 
   accounts              Account[]
   sessions              Session[]

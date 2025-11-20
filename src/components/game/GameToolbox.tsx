@@ -6,9 +6,17 @@ import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
-import { useGameStore, type PlayerKey, type CardRef, type ServerPatchT } from "@/lib/game/store";
+import {
+  useGameStore,
+  type PlayerKey,
+  type CardRef,
+  type ServerPatchT,
+} from "@/lib/game/store";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
-import { generateInteractionRequestId, type InteractionRequestKind } from "@/lib/net/interactions";
+import {
+  generateInteractionRequestId,
+  type InteractionRequestKind,
+} from "@/lib/net/interactions";
 
 export type GameToolboxProps = {
   myPlayerId: string | null;
@@ -36,7 +44,8 @@ export default function GameToolbox({
   const localPlayerId = useGameStore((s) => s.localPlayerId);
   const transport = useGameStore((s) => s.transport);
 
-  const isOnline = !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
+  const isOnline =
+    !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
 
   // UI state
   const [open, setOpen] = useState(false);
@@ -59,10 +68,14 @@ export default function GameToolbox({
   const [scryCards, setScryCards] = useState<CardRef[]>([]);
   const [scryBottom, setScryBottom] = useState<Record<number, boolean>>({});
 
-  const [actionType, setActionType] = useState<"draw" | "peek" | "scry">("draw");
+  const [actionType, setActionType] = useState<"draw" | "peek" | "scry">(
+    "draw"
+  );
   const [fixOpen, setFixOpen] = useState<boolean>(false);
   const [unbanishSeat, setUnbanishSeat] = useState<PlayerKey>(mySeat ?? "p1");
-  const [unbanishTarget, setUnbanishTarget] = useState<"hand" | "graveyard">("hand");
+  const [unbanishTarget, setUnbanishTarget] = useState<"hand" | "graveyard">(
+    "hand"
+  );
 
   // Toolbox D20 overlay state
   const [d20Open, setD20Open] = useState(false);
@@ -114,17 +127,23 @@ export default function GameToolbox({
       } catch {}
     });
     return () => {
-      try { off?.(); } catch {}
+      try {
+        off?.();
+      } catch {}
     };
   }, [transport]);
 
-  const disabledOnlineOpponentScry = isOnline && mySeat != null && scrySeat !== mySeat;
+  const disabledOnlineOpponentScry =
+    isOnline && mySeat != null && scrySeat !== mySeat;
   const handleOpenScry = () => {
     if (disabledOnlineOpponentScry) {
       log("Online: cannot scry opponent piles");
       return;
     }
-    const cards = scryPile === "spellbook" ? zones[scrySeat]?.spellbook || [] : zones[scrySeat]?.atlas || [];
+    const cards =
+      scryPile === "spellbook"
+        ? zones[scrySeat]?.spellbook || []
+        : zones[scrySeat]?.atlas || [];
     const cnt = Math.max(1, Math.min(Math.floor(scryCount) || 1, cards.length));
     if (cnt <= 0) return;
     setScryCards(cards.slice(0, cnt));
@@ -139,7 +158,9 @@ export default function GameToolbox({
     });
   };
   const applyScry = () => {
-    const bottomIndexes = scryCards.map((_, i) => (scryBottom[i] ? i : -1)).filter((i) => i >= 0);
+    const bottomIndexes = scryCards
+      .map((_, i) => (scryBottom[i] ? i : -1))
+      .filter((i) => i >= 0);
     if (scryCards.length > 0) {
       scryMany(scrySeat, scryPile, scryCards.length, bottomIndexes);
     }
@@ -152,22 +173,32 @@ export default function GameToolbox({
     if (phase !== "Start") return;
     const key = `${turn}|${currentPlayer}|Start`;
     if (lastAutoSnapRef.current === key) return;
-    const hasForTurn = Array.isArray(snapshots) && snapshots.some((s) => s.kind === "auto" && s.turn === turn);
+    const hasForTurn =
+      Array.isArray(snapshots) &&
+      snapshots.some((s) => s.kind === "auto" && s.turn === turn);
     if (hasForTurn) {
       lastAutoSnapRef.current = key;
       return;
     }
     lastAutoSnapRef.current = key;
-    try { createSnapshot(`Turn ${turn} start (P${currentPlayer})`, "auto"); } catch {}
+    try {
+      createSnapshot(`Turn ${turn} start (P${currentPlayer})`, "auto");
+    } catch {}
   }, [phase, turn, currentPlayer, snapshots, createSnapshot]);
 
   // Derive snapshot lists
   const autoSnapshots = useMemo(
-    () => (Array.isArray(snapshots) ? snapshots.filter((s) => s.kind === "auto") : []),
+    () =>
+      Array.isArray(snapshots)
+        ? snapshots.filter((s) => s.kind === "auto")
+        : [],
     [snapshots]
   );
   const archiveSnapshots = useMemo(
-    () => (Array.isArray(snapshots) ? snapshots.filter((s) => (s.kind ?? "manual") === "manual") : []),
+    () =>
+      Array.isArray(snapshots)
+        ? snapshots.filter((s) => (s.kind ?? "manual") === "manual")
+        : [],
     [snapshots]
   );
   const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null);
@@ -177,19 +208,27 @@ export default function GameToolbox({
       return;
     }
     const latest = autoSnapshots[autoSnapshots.length - 1];
-    if (!selectedAutoId || !autoSnapshots.some((s) => s.id === selectedAutoId)) {
+    if (
+      !selectedAutoId ||
+      !autoSnapshots.some((s) => s.id === selectedAutoId)
+    ) {
       setSelectedAutoId(latest.id);
     }
   }, [autoSnapshots, selectedAutoId]);
 
   // Archive if none; otherwise restore the latest archive (board + cemetery only)
   const handleArchiveOrRestoreRealm = () => {
-    const item = archiveSnapshots.length > 0 ? archiveSnapshots[archiveSnapshots.length - 1] : null;
+    const item =
+      archiveSnapshots.length > 0
+        ? archiveSnapshots[archiveSnapshots.length - 1]
+        : null;
     if (!item) {
       createSnapshot("", "manual");
       return;
     }
-    const raw: Record<string, unknown> = JSON.parse(JSON.stringify(item.payload || {}));
+    const raw: Record<string, unknown> = JSON.parse(
+      JSON.stringify(item.payload || {})
+    );
     const allowed = [
       "board",
       "avatars",
@@ -202,21 +241,23 @@ export default function GameToolbox({
     const patch: Record<string, unknown> = {};
     const rawR = raw as Record<string, unknown>;
     for (const k of allowed) if (k in rawR) patch[k] = rawR[k];
-    const zp = raw.zones as | { p1?: { graveyard?: unknown[] }; p2?: { graveyard?: unknown[] } } | undefined;
+    const zp = raw.zones as
+      | { p1?: { graveyard?: unknown[] }; p2?: { graveyard?: unknown[] } }
+      | undefined;
     const zonesPartial: Record<string, unknown> = {};
     if (zp && (zp.p1?.graveyard || zp.p2?.graveyard)) {
-      zonesPartial.p1 = zp.p1 && zp.p1.graveyard ? { graveyard: zp.p1.graveyard } : {};
-      zonesPartial.p2 = zp.p2 && zp.p2.graveyard ? { graveyard: zp.p2.graveyard } : {};
+      zonesPartial.p1 =
+        zp.p1 && zp.p1.graveyard ? { graveyard: zp.p1.graveyard } : {};
+      zonesPartial.p2 =
+        zp.p2 && zp.p2.graveyard ? { graveyard: zp.p2.graveyard } : {};
       (patch as Record<string, unknown>)["zones"] = zonesPartial as unknown;
     }
     const replaceKeys = Object.keys(patch).filter((k) => k !== "zones");
     (patch as { __replaceKeys?: string[] }).__replaceKeys = replaceKeys;
     if (isOnline && mySeat && opponentSeat) {
-      requestConsent(
-        "restoreSnapshot",
-        `Restore the realm: ${item.title}`,
-        { snapshot: patch }
-      );
+      requestConsent("restoreSnapshot", `Restore the realm: ${item.title}`, {
+        snapshot: patch,
+      });
       return;
     }
     applyPatch(patch);
@@ -227,16 +268,18 @@ export default function GameToolbox({
   const handleRestoreSnapshot = () => {
     if (autoSnapshots.length === 0) return;
     const pool = autoSnapshots.slice(Math.max(autoSnapshots.length - 5, 0));
-    const item = (selectedAutoId ? pool.find((s) => s.id === selectedAutoId) : null) || pool[pool.length - 1];
-    const raw: Record<string, unknown> = JSON.parse(JSON.stringify(item.payload || {}));
+    const item =
+      (selectedAutoId ? pool.find((s) => s.id === selectedAutoId) : null) ||
+      pool[pool.length - 1];
+    const raw: Record<string, unknown> = JSON.parse(
+      JSON.stringify(item.payload || {})
+    );
     const keys = Object.keys(raw).filter((k) => k !== "__replaceKeys");
     (raw as { __replaceKeys?: string[] }).__replaceKeys = keys;
     if (isOnline && mySeat && opponentSeat) {
-      requestConsent(
-        "restoreSnapshot",
-        `Restore snapshot: ${item.title}`,
-        { snapshot: raw }
-      );
+      requestConsent("restoreSnapshot", `Restore snapshot: ${item.title}`, {
+        snapshot: raw,
+      });
       return;
     }
     applyPatch(raw);
@@ -248,22 +291,36 @@ export default function GameToolbox({
     const target = unbanishTarget;
     const cards = zones[seat]?.banished || [];
     if (cards.length === 0) return;
-    openSearchDialog(`${seat.toUpperCase()} Banished`, cards, (selected: CardRef) => {
-      const instanceId = selected?.instanceId ?? null;
-      if (!instanceId) return;
-      if (isOnline && mySeat && seat !== mySeat) {
-        const ttlMs = 20000;
-        const rid = requestConsent(
-          "unbanishCard",
-          `Request to return from banished to ${target}`,
-          { seat, instanceId, target, grant: { allowOpponentZoneWrite: true, targetSeat: seat, singleUse: true, expiresAt: Date.now() + ttlMs } as Record<string, unknown> }
-        );
-        if (rid) {
+    openSearchDialog(
+      `${seat.toUpperCase()} Banished`,
+      cards,
+      (selected: CardRef) => {
+        const instanceId = selected?.instanceId ?? null;
+        if (!instanceId) return;
+        if (isOnline && mySeat && seat !== mySeat) {
+          const ttlMs = 20000;
+          const rid = requestConsent(
+            "unbanishCard",
+            `Request to return from banished to ${target}`,
+            {
+              seat,
+              instanceId,
+              target,
+              grant: {
+                allowOpponentZoneWrite: true,
+                targetSeat: seat,
+                singleUse: true,
+                expiresAt: Date.now() + ttlMs,
+              } as Record<string, unknown>,
+            }
+          );
+          if (rid) {
+          }
+          return;
         }
-        return;
+        moveFromBanishedToZone(seat, instanceId, target);
       }
-      moveFromBanishedToZone(seat, instanceId, target);
-    });
+    );
   };
 
   // Track pending permission requests we initiated so we can react on approval
@@ -295,12 +352,20 @@ export default function GameToolbox({
   }, [interactionLog, zones]);
 
   // Helpers
-  function requireOnlineIds(): { from: string; to: string; mid: string } | null {
+  function requireOnlineIds(): {
+    from: string;
+    to: string;
+    mid: string;
+  } | null {
     if (!isOnline || !myPlayerId || !matchId || !opponentPlayerId) return null;
     return { from: myPlayerId, to: opponentPlayerId, mid: matchId };
   }
 
-  function requestConsent(kind: InteractionRequestKind, note: string, payload: Record<string, unknown>) {
+  function requestConsent(
+    kind: InteractionRequestKind,
+    note: string,
+    payload: Record<string, unknown>
+  ) {
     const ids = requireOnlineIds();
     if (!ids) return null;
     const requestId = generateInteractionRequestId("tool");
@@ -317,7 +382,7 @@ export default function GameToolbox({
   }
 
   // Actions
-  const isMyTurn = mySeat ? ((mySeat === "p1" ? 1 : 2) === currentPlayer) : false;
+  const isMyTurn = mySeat ? (mySeat === "p1" ? 1 : 2) === currentPlayer : false;
   const showInstantRequest = isOnline && !!mySeat && !isMyTurn;
 
   const handleRequestInstantSpell = () => {
@@ -362,17 +427,33 @@ export default function GameToolbox({
         { seat, pile, count: cnt, from }
       );
       if (rid) {
-        pendingRequestRef.current[rid] = { kind: "takeFromPile", seat, pile, count: cnt, from };
+        pendingRequestRef.current[rid] = {
+          kind: "takeFromPile",
+          seat,
+          pile,
+          count: cnt,
+          from,
+        };
       }
       return;
     }
     // Offline/hotseat fallback: open immediately
-    const cards = pile === "spellbook" ? zones[seat]?.spellbook || [] : zones[seat]?.atlas || [];
-    const slice = from === "top" ? cards.slice(0, cnt) : cards.slice(Math.max(0, cards.length - cnt));
-    useGameStore.getState().openPeekDialog(
-      `${seat.toUpperCase()} ${pile === "spellbook" ? "Spellbook" : "Atlas"} (${from})`,
-      slice
-    );
+    const cards =
+      pile === "spellbook"
+        ? zones[seat]?.spellbook || []
+        : zones[seat]?.atlas || [];
+    const slice =
+      from === "top"
+        ? cards.slice(0, cnt)
+        : cards.slice(Math.max(0, cards.length - cnt));
+    useGameStore
+      .getState()
+      .openPeekDialog(
+        `${seat.toUpperCase()} ${
+          pile === "spellbook" ? "Spellbook" : "Atlas"
+        } (${from})`,
+        slice
+      );
   };
 
   const handleInspectOpponentHand = () => {
@@ -380,21 +461,32 @@ export default function GameToolbox({
       // Offline: show the other seat from mySeat else default to p2
       const seat: PlayerKey = mySeat === "p1" ? "p2" : "p1";
       const cards = zones[seat]?.hand || [];
-      useGameStore.getState().openPeekDialog(`${seat.toUpperCase()} Hand`, [...cards]);
+      useGameStore
+        .getState()
+        .openPeekDialog(`${seat.toUpperCase()} Hand`, [...cards]);
       return;
     }
     if (isOnline) {
-      const rid = requestConsent("inspectHand", "Request to inspect hand", { seat: opponentSeat });
+      const rid = requestConsent("inspectHand", "Request to inspect hand", {
+        seat: opponentSeat,
+      });
       if (rid) {
-        pendingRequestRef.current[rid] = { kind: "inspectHand", seat: opponentSeat };
+        pendingRequestRef.current[rid] = {
+          kind: "inspectHand",
+          seat: opponentSeat,
+        };
       }
     } else {
       const cards = zones[opponentSeat]?.hand || [];
-      useGameStore.getState().openPeekDialog(`${opponentSeat.toUpperCase()} Hand`, [...cards]);
+      useGameStore
+        .getState()
+        .openPeekDialog(`${opponentSeat.toUpperCase()} Hand`, [...cards]);
     }
   };
 
-  const handleForcePosition = (target: "burrowed" | "submerged" | "surface") => {
+  const handleForcePosition = (
+    target: "burrowed" | "submerged" | "surface"
+  ) => {
     const sel = selectedPermanent;
     if (!sel) {
       log("Select a permanent on the board first");
@@ -406,7 +498,9 @@ export default function GameToolbox({
 
     const apply = () => {
       // Ensure ability and position exist, then update
-      const permanentId = permanents[sel.at]?.[sel.index]?.card?.cardId ?? (parseInt(xStr) * 1000 + sel.index);
+      const permanentId =
+        permanents[sel.at]?.[sel.index]?.card?.cardId ??
+        parseInt(xStr) * 1000 + sel.index;
       setPermanentAbility(permanentId, {
         permanentId,
         canBurrow: true,
@@ -426,11 +520,15 @@ export default function GameToolbox({
     };
 
     if (isOnline && mySeat && seat !== mySeat) {
-      const rid = requestConsent("manipulatePermanent", `Request to set position: ${target}`, {
-        at: sel.at,
-        index: sel.index,
-        newState: target,
-      });
+      const rid = requestConsent(
+        "manipulatePermanent",
+        `Request to set position: ${target}`,
+        {
+          at: sel.at,
+          index: sel.index,
+          newState: target,
+        }
+      );
       if (rid) {
         // When approved, simply apply locally (permanentPositions patch will sync)
         const unlisten = setInterval(() => {
@@ -441,18 +539,28 @@ export default function GameToolbox({
             const map = { ...pendingRequestRef.current };
             delete map[rid];
             pendingRequestRef.current = map;
-          } else if (entry && (entry.status === "declined" || entry.status === "cancelled")) {
+          } else if (
+            entry &&
+            (entry.status === "declined" || entry.status === "cancelled")
+          ) {
             clearInterval(unlisten as unknown as number);
           }
         }, 300);
-        pendingRequestRef.current[rid] = { kind: "takeFromPile", seat, pile: "spellbook", count: 0, from: "top" };
+        pendingRequestRef.current[rid] = {
+          kind: "takeFromPile",
+          seat,
+          pile: "spellbook",
+          count: 0,
+          from: "top",
+        };
       }
     } else {
       apply();
     }
   };
 
-  const disabledOnlineOpponentDraw = isOnline && mySeat != null && drawSeat !== mySeat;
+  const disabledOnlineOpponentDraw =
+    isOnline && mySeat != null && drawSeat !== mySeat;
 
   const startToolboxRoll = () => {
     const value = Math.floor(Math.random() * 20) + 1;
@@ -480,12 +588,16 @@ export default function GameToolbox({
 
   const collapsed = !open;
   const containerWidthClass = collapsed ? "w-56 sm:w-64" : "w-72 sm:w-80";
-  const headerPaddingClass = collapsed ? "px-2 py-1" : "px-2 py-1.5 sm:px-3 sm:py-2";
+  const headerPaddingClass = collapsed
+    ? "px-2 py-1"
+    : "px-2 py-1.5 sm:px-3 sm:py-2";
   const toggleBtnPaddingClass = collapsed ? "px-1.5 py-0.5" : "px-2 py-0.5";
 
   // Realm button presentation
   const isRealmArmed = archiveSnapshots.length > 0;
-  const realmBtnText = isRealmArmed ? "Restore the Realm" : "Archive the Realm (Kairos)";
+  const realmBtnText = isRealmArmed
+    ? "Restore the Realm"
+    : "Archive the Realm (Kairos)";
   const realmBtnClass = isRealmArmed
     ? "w-full rounded bg-amber-600/90 hover:bg-amber-500 py-1"
     : "w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1";
@@ -501,13 +613,16 @@ export default function GameToolbox({
           const now = nowMs;
           for (const entry of Object.values(interactionLog)) {
             if (!entry || entry.status !== "approved") continue;
-            if (!entry.request || entry.request.kind !== "instantSpell") continue;
+            if (!entry.request || entry.request.kind !== "instantSpell")
+              continue;
             const g = entry.grant as
               | { grantedTo?: string; expiresAt?: number; singleUse?: boolean }
               | null
               | undefined;
             if (!g) continue;
-            const isMe = localPlayerId ? g.grantedTo === localPlayerId : entry.direction === "outbound";
+            const isMe = localPlayerId
+              ? g.grantedTo === localPlayerId
+              : entry.direction === "outbound";
             if (!isMe) continue;
             if (typeof g.expiresAt === "number") {
               const left = g.expiresAt - now;
@@ -524,11 +639,14 @@ export default function GameToolbox({
         } catch {}
         const show = msLeft !== null && (hasExpiry ? msLeft > 0 : true);
         if (!show) return null;
-        const seconds = hasExpiry ? Math.ceil(Math.max(0, msLeft as number) / 1000) : null;
+        const seconds = hasExpiry
+          ? Math.ceil(Math.max(0, msLeft as number) / 1000)
+          : null;
         return (
           <div className="flex justify-end mb-2 pr-1">
             <div className="rounded-full bg-purple-600/90 px-3 py-1 text-[11px] font-medium shadow ring-1 ring-white/10">
-              Instant permission active{hasExpiry && seconds !== null ? ` · ${seconds}s` : ""}
+              Instant permission active
+              {hasExpiry && seconds !== null ? ` · ${seconds}s` : ""}
             </div>
           </div>
         );
@@ -543,8 +661,12 @@ export default function GameToolbox({
           <Wrench className="w-4 h-4" />
         </button>
       ) : (
-        <div className={`bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg ${containerWidthClass} max-w-[92vw] transition-all`}>
-          <div className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}>
+        <div
+          className={`bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg ${containerWidthClass} max-w-[92vw] transition-all`}
+        >
+          <div
+            className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}
+          >
             <div className="text-xs sm:text-sm font-semibold">Toolbox</div>
             <button
               className={`text-xs rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
@@ -571,34 +693,95 @@ export default function GameToolbox({
             {/* Combined pile action: Draw / Peek / Scry */}
             <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
               <div className="flex flex-wrap gap-2 mb-1">
-                <select value={actionType} onChange={(e) => setActionType(e.target.value as typeof actionType)} className="bg-white/10 rounded px-2 py-1">
+                <select
+                  value={actionType}
+                  onChange={(e) =>
+                    setActionType(e.target.value as typeof actionType)
+                  }
+                  className="bg-white/10 rounded px-2 py-1"
+                >
                   <option value="draw">Draw</option>
                   <option value="peek">Peek</option>
                   <option value="scry">Scry</option>
                 </select>
-                <select value={drawSeat} onChange={(e) => { const v = e.target.value as PlayerKey; setDrawSeat(v); setPeekSeat(v); setScrySeat(v); }} className="bg-white/10 rounded px-2 py-1">
+                <select
+                  value={drawSeat}
+                  onChange={(e) => {
+                    const v = e.target.value as PlayerKey;
+                    setDrawSeat(v);
+                    setPeekSeat(v);
+                    setScrySeat(v);
+                  }}
+                  className="bg-white/10 rounded px-2 py-1"
+                >
                   <option value="p1">P1</option>
                   <option value="p2">P2</option>
                 </select>
-                <select value={drawPile} onChange={(e) => { const v = e.target.value as "spellbook" | "atlas"; setDrawPile(v); setPeekPile(v); setScryPile(v); }} className="bg-white/10 rounded px-2 py-1">
+                <select
+                  value={drawPile}
+                  onChange={(e) => {
+                    const v = e.target.value as "spellbook" | "atlas";
+                    setDrawPile(v);
+                    setPeekPile(v);
+                    setScryPile(v);
+                  }}
+                  className="bg-white/10 rounded px-2 py-1"
+                >
                   <option value="spellbook">Spellbook</option>
                   <option value="atlas">Atlas</option>
                 </select>
-                <select value={drawFromWhere} onChange={(e) => { const v = e.target.value as "top" | "bottom"; setDrawFromWhere(v); setPeekFromWhere(v); }} className={`bg-white/10 rounded px-2 py-1 ${actionType === "scry" ? "opacity-50 pointer-events-none" : ""}`}>
+                <select
+                  value={drawFromWhere}
+                  onChange={(e) => {
+                    const v = e.target.value as "top" | "bottom";
+                    setDrawFromWhere(v);
+                    setPeekFromWhere(v);
+                  }}
+                  className={`bg-white/10 rounded px-2 py-1 ${
+                    actionType === "scry"
+                      ? "opacity-50 pointer-events-none"
+                      : ""
+                  }`}
+                >
                   <option value="top">Top</option>
                   <option value="bottom">Bottom</option>
                 </select>
-                <input type="number" min={1} max={20} value={drawCount} onChange={(e) => { const n = Number(e.target.value); setDrawCount(n); setPeekCount(n); setScryCount(n); }} className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1" />
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={drawCount}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setDrawCount(n);
+                    setPeekCount(n);
+                    setScryCount(n);
+                  }}
+                  className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1"
+                />
               </div>
               <button
-                className={`w-full rounded ${actionType === "draw" ? "bg-emerald-600/90 hover:bg-emerald-500" : "bg-white/15 hover:bg-white/25"} py-1 disabled:opacity-40`}
+                className={`w-full rounded ${
+                  actionType === "draw"
+                    ? "bg-emerald-600/90 hover:bg-emerald-500"
+                    : "bg-white/15 hover:bg-white/25"
+                } py-1 disabled:opacity-40`}
                 onClick={() => {
                   if (actionType === "draw") return handleDraw();
                   if (actionType === "peek") return handlePeekPile();
                   return handleOpenScry();
                 }}
-                disabled={(actionType === "draw" && disabledOnlineOpponentDraw) || (actionType === "scry" && disabledOnlineOpponentScry)}
-                title={(actionType === "draw" && disabledOnlineOpponentDraw) ? "Online: cannot draw from opponent piles" : (actionType === "scry" && disabledOnlineOpponentScry) ? "Online: cannot scry opponent piles" : ""}
+                disabled={
+                  (actionType === "draw" && disabledOnlineOpponentDraw) ||
+                  (actionType === "scry" && disabledOnlineOpponentScry)
+                }
+                title={
+                  actionType === "draw" && disabledOnlineOpponentDraw
+                    ? "Online: cannot draw from opponent piles"
+                    : actionType === "scry" && disabledOnlineOpponentScry
+                    ? "Online: cannot scry opponent piles"
+                    : ""
+                }
               >
                 {actionType === "draw"
                   ? `Draw • ${drawSeat.toUpperCase()} • ${drawPile} • ${drawFromWhere} • x${drawCount}`
@@ -609,32 +792,64 @@ export default function GameToolbox({
 
               {scryOpen && (
                 <div className="mt-2 rounded-xl bg-black/30 ring-1 ring-white/10 p-2">
-                  <div className="text-xs opacity-80 mb-2">Click to mark cards to put on bottom</div>
+                  <div className="text-xs opacity-80 mb-2">
+                    Click to mark cards to put on bottom
+                  </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {scryCards.map((c, i) => {
-                      const isSite = (c.type || "").toLowerCase().includes("site");
+                      const isSite = (c.type || "")
+                        .toLowerCase()
+                        .includes("site");
                       const onBottom = !!scryBottom[i];
                       return (
-                        <button key={i} className={`relative flex-shrink-0 ${onBottom ? "ring-2 ring-red-400" : "ring-1 ring-white/20"} rounded overflow-hidden`} onClick={() => toggleScryIndex(i)}>
-                          <div className={`${isSite ? "relative aspect-[4/3] w-20 sm:w-24" : "relative aspect-[3/4] w-16 sm:w-20"}`}>
+                        <button
+                          key={i}
+                          className={`relative flex-shrink-0 ${
+                            onBottom
+                              ? "ring-2 ring-red-400"
+                              : "ring-1 ring-white/20"
+                          } rounded overflow-hidden`}
+                          onClick={() => toggleScryIndex(i)}
+                        >
+                          <div
+                            className={`${
+                              isSite
+                                ? "relative aspect-[4/3] w-20 sm:w-24"
+                                : "relative aspect-[3/4] w-16 sm:w-20"
+                            }`}
+                          >
                             <Image
                               src={`/api/images/${c.slug}`}
                               alt={c.name}
                               fill
                               sizes="(max-width: 640px) 80px, 96px"
-                              className={`object-contain ${isSite ? "rotate-90" : ""}`}
+                              className={`object-contain ${
+                                isSite ? "rotate-90" : ""
+                              }`}
                             />
                           </div>
                           {onBottom && (
-                            <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center text-[10px] font-bold">BOTTOM</div>
+                            <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center text-[10px] font-bold">
+                              BOTTOM
+                            </div>
                           )}
                         </button>
                       );
                     })}
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <button className="flex-1 rounded bg-emerald-600/90 hover:bg-emerald-500 py-1" onClick={applyScry}>Apply</button>
-                    <button className="flex-1 rounded bg-white/10 hover:bg-white/20 py-1" onClick={() => setScryOpen(false)}>Cancel</button>
+                    <button
+                      className="flex-1 rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
+                      onClick={applyScry}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      className="flex-1 rounded bg-white/10 hover:bg-white/20 py-1"
+                      onClick={() => setScryOpen(false)}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               )}
@@ -646,7 +861,11 @@ export default function GameToolbox({
                 <button
                   className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1 inline-flex items-center justify-center gap-2"
                   onClick={handleInspectOpponentHand}
-                  title={isOnline ? "Requests opponent consent" : "Hotseat: opens the other hand"}
+                  title={
+                    isOnline
+                      ? "Requests opponent consent"
+                      : "Hotseat: opens the other hand"
+                  }
                 >
                   <Eye className="w-4 h-4" />
                   <span>Inspect Hand</span>
@@ -667,12 +886,32 @@ export default function GameToolbox({
             {/* Force Burrow/Submerge (moved under Inspect/D20) */}
             <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
               <div className="grid grid-cols-3 gap-2">
-                <button className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40" onClick={() => handleForcePosition("burrowed")} disabled={!selectedPermanent}>Burrow</button>
-                <button className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40" onClick={() => handleForcePosition("submerged")} disabled={!selectedPermanent}>Submerge</button>
-                <button className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40" onClick={() => handleForcePosition("surface")} disabled={!selectedPermanent}>Surface</button>
+                <button
+                  className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40"
+                  onClick={() => handleForcePosition("burrowed")}
+                  disabled={!selectedPermanent}
+                >
+                  Burrow
+                </button>
+                <button
+                  className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40"
+                  onClick={() => handleForcePosition("submerged")}
+                  disabled={!selectedPermanent}
+                >
+                  Submerge
+                </button>
+                <button
+                  className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40"
+                  onClick={() => handleForcePosition("surface")}
+                  disabled={!selectedPermanent}
+                >
+                  Surface
+                </button>
               </div>
               {!selectedPermanent && (
-                <div className="text-xs opacity-70 mt-1">Tip: select a permanent on the board first</div>
+                <div className="text-xs opacity-70 mt-1">
+                  Tip: select a permanent on the board first
+                </div>
               )}
             </div>
 
@@ -690,11 +929,25 @@ export default function GameToolbox({
                   {/* Return from Banished */}
                   <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
                     <div className="flex gap-2 mb-1">
-                      <select value={unbanishSeat} onChange={(e) => setUnbanishSeat(e.target.value as PlayerKey)} className="bg-white/10 rounded px-2 py-1">
+                      <select
+                        value={unbanishSeat}
+                        onChange={(e) =>
+                          setUnbanishSeat(e.target.value as PlayerKey)
+                        }
+                        className="bg-white/10 rounded px-2 py-1"
+                      >
                         <option value="p1">P1</option>
                         <option value="p2">P2</option>
                       </select>
-                      <select value={unbanishTarget} onChange={(e) => setUnbanishTarget(e.target.value as "hand" | "graveyard")} className="bg-white/10 rounded px-2 py-1">
+                      <select
+                        value={unbanishTarget}
+                        onChange={(e) =>
+                          setUnbanishTarget(
+                            e.target.value as "hand" | "graveyard"
+                          )
+                        }
+                        className="bg-white/10 rounded px-2 py-1"
+                      >
                         <option value="hand">Hand</option>
                         <option value="graveyard">Cemetery</option>
                       </select>
@@ -713,7 +966,9 @@ export default function GameToolbox({
                       <select
                         className="w-full mb-1 rounded bg-white/10 hover:bg-white/15 py-1 text-xs"
                         value={selectedAutoId ?? ""}
-                        onChange={(e) => setSelectedAutoId(e.target.value || null)}
+                        onChange={(e) =>
+                          setSelectedAutoId(e.target.value || null)
+                        }
                       >
                         {autoSnapshots
                           .slice(Math.max(autoSnapshots.length - 5, 0))
@@ -735,9 +990,15 @@ export default function GameToolbox({
                     {autoSnapshots.length > 0 && selectedAutoId && (
                       <div className="mt-1 text-xs opacity-70">
                         {(() => {
-                          const pool = autoSnapshots.slice(Math.max(autoSnapshots.length - 5, 0));
-                          const sel = pool.find((s) => s.id === selectedAutoId) || pool[pool.length - 1];
-                          return `${new Date(sel.ts).toLocaleTimeString()} · ${sel.title}`;
+                          const pool = autoSnapshots.slice(
+                            Math.max(autoSnapshots.length - 5, 0)
+                          );
+                          const sel =
+                            pool.find((s) => s.id === selectedAutoId) ||
+                            pool[pool.length - 1];
+                          return `${new Date(sel.ts).toLocaleTimeString()} · ${
+                            sel.title
+                          }`;
                         })()}
                       </div>
                     )}
@@ -756,7 +1017,6 @@ export default function GameToolbox({
                 {realmBtnText}
               </button>
             </div>
-            
           </div>
         </div>
       )}
@@ -772,7 +1032,9 @@ export default function GameToolbox({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base sm:text-lg font-semibold">Toolbox D20 Roll</h3>
+              <h3 className="text-base sm:text-lg font-semibold">
+                Toolbox D20 Roll
+              </h3>
               <button
                 className="text-sm text-zinc-400 hover:text-white"
                 onClick={() => {
@@ -807,7 +1069,8 @@ export default function GameToolbox({
             </div>
             {d20Value !== null && !d20Rolling && (
               <div className="mt-4 text-center text-sm text-zinc-300">
-                Result: <span className="font-semibold text-white">{d20Value}</span>
+                Result:{" "}
+                <span className="font-semibold text-white">{d20Value}</span>
               </div>
             )}
           </div>

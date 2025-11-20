@@ -119,9 +119,9 @@ export function mergeArrayByInstanceId(
         }
       }
     };
+    // Only use fallback matching when the base permanent has no instanceId
+    // This prevents incorrectly matching different permanents with the same card
     if (!id) {
-      ensureFallbackMatch();
-    } else if (!patchMap.has(id)) {
       ensureFallbackMatch();
     }
     if (id && patchMap.has(id)) {

@@ -1,9 +1,5 @@
 import type { StateCreator } from "zustand";
-import type {
-  GameState,
-  PlayerKey,
-  SerializedGame,
-} from "./types";
+import type { GameState, PlayerKey, SerializedGame } from "./types";
 import {
   loadSnapshotsFromStorageFor,
   saveSnapshotsToStorageFor,
@@ -75,6 +71,5 @@ export const createSessionSlice: StateCreator<
   },
 
   localPlayerId: null,
-  setLocalPlayerId: (id: string | null) =>
-    set({ localPlayerId: id ?? null }),
+  setLocalPlayerId: (id: string | null) => set({ localPlayerId: id ?? null }),
 });
