@@ -379,6 +379,25 @@ export default function OnlineDraft3DScreen({
     isSortingEnabledRef.current = isSortingEnabled;
   }, [isSortingEnabled]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("draft3d_sorting_pref");
+      if (raw === "on") setIsSortingEnabled(true);
+      else if (raw === "off") setIsSortingEnabled(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "draft3d_sorting_pref",
+        isSortingEnabled ? "on" : "off"
+      );
+    } catch {}
+  }, [isSortingEnabled]);
+
   // Card metadata for proper sorting (same as editor-3d)
   const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
     {}

@@ -157,6 +157,25 @@ export default function EnhancedOnlineDraft3DScreen({
   }, [draftState]);
   // Bootstrap from match snapshot once; subsequent updates come via transport draftUpdate
   const bootstrappedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("draft3d_sorting_pref");
+      if (raw === "on") setIsSortingEnabled(true);
+      else if (raw === "off") setIsSortingEnabled(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "draft3d_sorting_pref",
+        isSortingEnabled ? "on" : "off"
+      );
+    } catch {}
+  }, [isSortingEnabled]);
   const pick3DRef = useRef<Pick3D[]>(pick3D);
   useEffect(() => {
     pick3DRef.current = pick3D;

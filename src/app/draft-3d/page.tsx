@@ -542,6 +542,25 @@ export default function Draft3DPage() {
   // Sorting state
   const [isSortingEnabled, setIsSortingEnabled] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("draft3d_sorting_pref");
+      if (raw === "on") setIsSortingEnabled(true);
+      else if (raw === "off") setIsSortingEnabled(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "draft3d_sorting_pref",
+        isSortingEnabled ? "on" : "off"
+      );
+    } catch {}
+  }, [isSortingEnabled]);
   const autoPickGuardRef = useRef<string | null>(null);
   useEffect(() => {
     if (!yourPicks.length) {
