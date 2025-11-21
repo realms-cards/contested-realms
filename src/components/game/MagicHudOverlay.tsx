@@ -23,7 +23,9 @@ export default function MagicHudOverlay() {
   const resolveMagic = useGameStore((s) => s.resolveMagic);
   const cancelMagic = useGameStore((s) => s.cancelMagic);
 
-  if (!pendingMagic || !magicGuidesActive) return null;
+  if (!pendingMagic || !magicGuidesActive || pendingMagic.guidesSuppressed) {
+    return null;
+  }
 
   const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
   const actorIsActive = ownerSeat

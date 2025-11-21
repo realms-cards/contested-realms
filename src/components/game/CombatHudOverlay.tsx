@@ -33,6 +33,8 @@ export default function CombatHudOverlay() {
   const cancelCombat = useGameStore((s) => s.cancelCombat);
   const offerIntercept = useGameStore((s) => s.offerIntercept);
 
+  const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
+
   const actorIsActive =
     (actorKey === "p1" && currentPlayer === 1) ||
     (actorKey === "p2" && currentPlayer === 2);
@@ -621,6 +623,8 @@ export default function CombatHudOverlay() {
     const id = window.setTimeout(() => setLastCombatSummary(null), 12000);
     return () => window.clearTimeout(id);
   }, [lastCombatSummary, setLastCombatSummary]);
+
+  if (!combatGuidesActive) return null;
 
   return (
     <>

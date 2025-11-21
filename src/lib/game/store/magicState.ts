@@ -32,6 +32,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const spell = input.spell;
     const tile = input.tile;
     const createdAt = Date.now();
+    const magicGuidesActive = get().magicGuidesActive;
     const ownerSeat = seatFromOwner(spell.owner);
     const autoCaster =
       input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
@@ -46,6 +47,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         status: "choosingTarget",
         hints,
         createdAt,
+        guidesSuppressed: !magicGuidesActive,
       },
     } as Partial<GameState> as GameState);
     // Prefetch rules text early to avoid delay later

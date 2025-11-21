@@ -20,7 +20,7 @@ export function MagicTargetOverlay({
   highlightColor = "#ef4444",
   magicGuidesActive,
 }: MagicTargetOverlayProps) {
-  if (!pendingMagic || !magicGuidesActive) {
+  if (!pendingMagic || !magicGuidesActive || pendingMagic.guidesSuppressed) {
     return null;
   }
 

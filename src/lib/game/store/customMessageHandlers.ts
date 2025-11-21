@@ -53,6 +53,41 @@ export function handleCustomMessage(
     });
     return;
   }
+  if (t === "guidePref") {
+    const seatRaw = (msg as { seat?: unknown }).seat as unknown;
+    const seat =
+      seatRaw === "p1" || seatRaw === "p2" ? (seatRaw as PlayerKey) : null;
+    if (!seat) return;
+    const combat = !!(msg as { combatGuides?: unknown }).combatGuides;
+    const magic = !!(msg as { magicGuides?: unknown }).magicGuides;
+    set((s) => {
+      const prevCombatPrefs = {
+        p1: !!s.combatGuideSeatPrefs?.p1,
+        p2: !!s.combatGuideSeatPrefs?.p2,
+      };
+      const prevMagicPrefs = {
+        p1: !!s.magicGuideSeatPrefs?.p1,
+        p2: !!s.magicGuideSeatPrefs?.p2,
+      };
+      const nextCombatPrefs = { ...prevCombatPrefs, [seat]: combat } as Record<
+        PlayerKey,
+        boolean
+      >;
+      const nextMagicPrefs = { ...prevMagicPrefs, [seat]: magic } as Record<
+        PlayerKey,
+        boolean
+      >;
+      const nextCombatActive = nextCombatPrefs.p1 && nextCombatPrefs.p2;
+      const nextMagicActive = nextMagicPrefs.p1 && nextMagicPrefs.p2;
+      return {
+        combatGuideSeatPrefs: nextCombatPrefs,
+        magicGuideSeatPrefs: nextMagicPrefs,
+        combatGuidesActive: nextCombatActive,
+        magicGuidesActive: nextMagicActive,
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
   if (t === "magicDamage") {
     const dmgAny = (msg as { damage?: unknown }).damage as unknown;
     if (!Array.isArray(dmgAny)) return;
@@ -116,6 +151,7 @@ export function handleCustomMessage(
       return;
     const cardName = card?.name || "";
     const hints = extractMagicTargetingHintsSync(cardName, null);
+    const magicGuidesActive = get().magicGuidesActive;
     set({
       pendingMagic: {
         id: String(id),
@@ -132,6 +168,7 @@ export function handleCustomMessage(
         status: "choosingCaster",
         hints,
         createdAt: Date.now(),
+        guidesSuppressed: !magicGuidesActive,
       },
     } as Partial<GameState> as GameState);
     return;
@@ -400,6 +437,13 @@ export function handleCustomMessage(
     if (typeof text === "string" && text.trim().length > 0) {
       try {
         get().log(text);
+      } catch {}
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", { detail: { message: text } })
+          );
+        }
       } catch {}
     }
     return;

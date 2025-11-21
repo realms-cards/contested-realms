@@ -147,7 +147,9 @@ export function SiteCard({
     }
     if (
       magicGuidesActive &&
-      pendingMagic?.target &&
+      pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
+      pendingMagic.target &&
       pendingMagic.target.kind === "location" &&
       pendingMagic.target.at === tileKey
     ) {
@@ -157,6 +159,7 @@ export function SiteCard({
       !hl &&
       magicGuidesActive &&
       pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
       pendingMagic.status === "choosingTarget"
     ) {
       const hints = pendingMagic.hints;
