@@ -1096,6 +1096,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             p2: ensureAvatar(prevAvatars.p2, defaultAvatar),
           };
           const incomingAvatars = patchToApply.avatars ?? {};
+
+          // Ensure card property is preserved from previous state if not explicitly updated
           const normalizedAvatars: AvatarsState = {
             p1: ensureAvatar(
               incomingAvatars?.p1,
@@ -1106,6 +1108,34 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               fallbackAvatars.p2 ?? defaultAvatar
             ),
           };
+
+          // Preserve existing cards if not explicitly updated in the patch
+          if (
+            incomingAvatars?.p1 &&
+            !Object.prototype.hasOwnProperty.call(incomingAvatars.p1, "card") &&
+            prevAvatars.p1?.card &&
+            normalizedAvatars.p1
+          ) {
+            normalizedAvatars.p1 = {
+              card: prevAvatars.p1.card,
+              pos: normalizedAvatars.p1.pos,
+              tapped: normalizedAvatars.p1.tapped,
+              offset: normalizedAvatars.p1.offset,
+            };
+          }
+          if (
+            incomingAvatars?.p2 &&
+            !Object.prototype.hasOwnProperty.call(incomingAvatars.p2, "card") &&
+            prevAvatars.p2?.card &&
+            normalizedAvatars.p2
+          ) {
+            normalizedAvatars.p2 = {
+              card: prevAvatars.p2.card,
+              pos: normalizedAvatars.p2.pos,
+              tapped: normalizedAvatars.p2.tapped,
+              offset: normalizedAvatars.p2.offset,
+            };
+          }
 
           const prevPositions = match.game?.playerPositions ?? {
             p1: { playerId: 1, position: { x: 0, z: 0 } },

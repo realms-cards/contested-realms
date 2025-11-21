@@ -55,7 +55,6 @@ body,
 input,
 textarea,
 select,
-button,
 [role="textbox"],
 [contenteditable="true"],
 .select-text,
@@ -177,7 +176,8 @@ button,
 
 body[data-colorblind="true"] *[class*="bg-emerald-"],
 body[data-colorblind="true"] *[class*="bg-green-"] {
-  background-color: #0ea5e9 !important;
+  /* Darker blue for better contrast with white text (approx. sky-700) */
+  background-color: #0369a1 !important;
 }
 
 body[data-colorblind="true"] *[class*="text-emerald-"],
